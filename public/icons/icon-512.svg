@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A2540"/>
+      <stop offset="50%" stop-color="#0F3460"/>
+      <stop offset="100%" stop-color="#1A73E8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#0A2540"/>
+  <rect width="512" height="512" rx="112" fill="url(#g)" opacity="0.6"/>
+  <text x="256" y="265" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="192" font-weight="800" font-family="system-ui,-apple-system,sans-serif">DR</text>
+  <text x="256" y="395" text-anchor="middle" dominant-baseline="middle" fill="#60A5FA" font-size="38" font-weight="600" font-family="system-ui,-apple-system,sans-serif" letter-spacing="8">CREDENTIAL</text>
+</svg>

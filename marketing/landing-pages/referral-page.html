@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CredentialMD — Physician Referral Program</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', -apple-system, sans-serif; background: #0b1d2e; color: #fff; }
+  .container { max-width: 800px; margin: 0 auto; padding: 0 20px; }
+
+  /* Hero */
+  .hero { padding: 60px 0 40px; text-align: center; }
+  .hero .brand { color: #009688; font-size: 14px; font-weight: 800; letter-spacing: 3px; margin-bottom: 16px; }
+  .hero h1 { font-size: 42px; font-weight: 800; line-height: 1.15; margin-bottom: 16px; }
+  .hero h1 span { color: #ff6b6b; }
+  .hero .subtitle { color: #94a3b8; font-size: 18px; line-height: 1.5; max-width: 560px; margin: 0 auto; }
+
+  /* How it works */
+  .how-it-works { padding: 40px 0; }
+  .how-it-works h2 { text-align: center; font-size: 24px; margin-bottom: 32px; color: #009688; }
+  .steps { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+  .step { background: #132a3e; border-radius: 16px; padding: 28px 24px; flex: 1; min-width: 200px; max-width: 240px; text-align: center; border-top: 3px solid #009688; }
+  .step .num { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: #009688; color: #fff; font-size: 18px; font-weight: 800; margin-bottom: 12px; }
+  .step h3 { font-size: 16px; margin-bottom: 8px; }
+  .step p { color: #94a3b8; font-size: 13px; line-height: 1.5; }
+
+  /* Referral form */
+  .referral-form { padding: 40px 0; text-align: center; }
+  .form-card { background: #132a3e; border-radius: 20px; padding: 40px 32px; max-width: 500px; margin: 0 auto; }
+  .form-card h2 { font-size: 22px; margin-bottom: 8px; }
+  .form-card .sub { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+  .form-card input { width: 100%; padding: 14px 16px; border-radius: 10px; border: 1px solid #1e3a5f; background: #0b1d2e; color: #fff; font-size: 15px; font-family: 'DM Sans', sans-serif; margin-bottom: 12px; outline: none; }
+  .form-card input:focus { border-color: #009688; }
+  .form-card input::placeholder { color: #64748b; }
+  .form-card button { width: 100%; padding: 16px; border: none; border-radius: 10px; background: #009688; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.2s; }
+  .form-card button:hover { background: #00796b; }
+  .form-card .note { color: #64748b; font-size: 12px; margin-top: 12px; }
+
+  /* Ambassador section */
+  .ambassador { padding: 50px 0; text-align: center; }
+  .ambassador h2 { font-size: 28px; margin-bottom: 12px; }
+  .ambassador h2 span { color: #ffc107; }
+  .ambassador .sub { color: #94a3b8; font-size: 16px; margin-bottom: 32px; }
+  .perks { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; max-width: 700px; margin: 0 auto 32px; }
+  .perk { background: #132a3e; border-radius: 12px; padding: 20px 16px; flex: 1; min-width: 150px; max-width: 160px; border-left: 3px solid #ffc107; }
+  .perk .icon { font-size: 24px; margin-bottom: 8px; }
+  .perk h4 { font-size: 13px; margin-bottom: 4px; }
+  .perk p { color: #94a3b8; font-size: 11px; line-height: 1.4; }
+  .ambassador .apply-btn { display: inline-block; padding: 16px 40px; border-radius: 10px; background: #ffc107; color: #0b1d2e; font-size: 16px; font-weight: 700; text-decoration: none; transition: background 0.2s; }
+  .ambassador .apply-btn:hover { background: #ffca28; }
+
+  /* Earnings calculator */
+  .calculator { padding: 40px 0; }
+  .calc-card { background: #132a3e; border-radius: 20px; padding: 32px; max-width: 500px; margin: 0 auto; text-align: center; }
+  .calc-card h3 { font-size: 18px; margin-bottom: 16px; color: #009688; }
+  .calc-card label { color: #94a3b8; font-size: 13px; display: block; margin-bottom: 6px; }
+  .calc-card input[type="range"] { width: 80%; margin-bottom: 8px; accent-color: #009688; }
+  .calc-card .result { font-size: 36px; font-weight: 800; color: #26c6aa; margin-top: 16px; }
+  .calc-card .result-label { color: #94a3b8; font-size: 13px; }
+
+  /* Footer */
+  .footer { padding: 40px 0; text-align: center; border-top: 1px solid #1e3a5f; }
+  .footer .brand { color: #009688; font-size: 18px; font-weight: 800; letter-spacing: 2px; margin-bottom: 8px; }
+  .footer p { color: #64748b; font-size: 12px; }
+  .footer a { color: #94a3b8; text-decoration: underline; }
+
+  @media (max-width: 600px) {
+    .hero h1 { font-size: 28px; }
+    .steps { flex-direction: column; align-items: center; }
+    .step { max-width: 100%; }
+    .perks { flex-direction: column; align-items: center; }
+    .perk { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="brand">CREDENTIALMD</div>
+    <h1>Give a Month.<br><span>Get a Month.</span></h1>
+    <p class="subtitle">Share CredentialMD with a colleague. When they sign up for PRO, you both get a free month. Because the best recommendations come from physicians who actually use it.</p>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-it-works">
+    <h2>How It Works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Share Your Link</h3>
+        <p>Copy your unique referral link and send it to a colleague via text, email, or social media.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>They Sign Up</h3>
+        <p>Your colleague creates a free account and tries CredentialMD. No pressure, no tricks.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>Both Get Rewarded</h3>
+        <p>When they upgrade to PRO, you both get a free month. Simple as that.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Referral Form -->
+  <section class="referral-form">
+    <div class="form-card">
+      <h2>Get Your Referral Link</h2>
+      <p class="sub">Enter your email to generate your unique link.</p>
+      <input type="email" placeholder="your@email.com" id="referral-email">
+      <button onclick="generateLink()">Generate My Referral Link</button>
+      <div id="referral-result" style="display:none; margin-top:16px; padding:14px; background:#0b1d2e; border-radius:8px;">
+        <p style="font-size:12px; color:#94a3b8; margin-bottom:6px;">Your referral link:</p>
+        <p style="font-size:14px; color:#26c6aa; font-weight:700; word-break:break-all;" id="referral-link"></p>
+        <button onclick="copyLink()" style="margin-top:10px; padding:8px 20px; font-size:13px; background:#009688;">Copy Link</button>
+      </div>
+      <p class="note">Not a user yet? <a href="https://credentialmd.com" style="color:#009688;">Sign up free</a> first, then come back to refer.</p>
+    </div>
+  </section>
+
+  <!-- Ambassador Program -->
+  <section class="ambassador">
+    <h2>Want More? Become an <span>Ambassador</span></h2>
+    <p class="sub">For physicians with an audience. Earn 25% recurring revenue on every referral.</p>
+    <div class="perks">
+      <div class="perk">
+        <div class="icon">&#x1F4B0;</div>
+        <h4>25% Revenue Share</h4>
+        <p>Recurring monthly commission for every PRO subscriber you refer.</p>
+      </div>
+      <div class="perk">
+        <div class="icon">&#x267E;&#xFE0F;</div>
+        <h4>Free Lifetime PRO</h4>
+        <p>Your account is on us. Forever. $96/year value.</p>
+      </div>
+      <div class="perk">
+        <div class="icon">&#x1F680;</div>
+        <h4>Early Access</h4>
+        <p>Test new features before anyone else and shape the product.</p>
+      </div>
+      <div class="perk">
+        <div class="icon">&#x1F4CA;</div>
+        <h4>Tracking Dashboard</h4>
+        <p>See your referrals, conversions, and earnings in real time.</p>
+      </div>
+    </div>
+    <a href="mailto:ambassadors@credentialmd.com?subject=Ambassador%20Application&body=Hi%2C%20I%27m%20interested%20in%20the%20CredentialMD%20Ambassador%20Program.%0A%0AName%3A%20%0ASpecialty%3A%20%0ASocial%20media%20handles%3A%20%0AApproximate%20audience%20size%3A%20" class="apply-btn">Apply to Be an Ambassador</a>
+  </section>
+
+  <!-- Earnings Calculator -->
+  <section class="calculator">
+    <div class="calc-card">
+      <h3>Ambassador Earnings Calculator</h3>
+      <label>How many physicians could you refer per month?</label>
+      <input type="range" id="ref-slider" min="1" max="100" value="10" oninput="calcEarnings()">
+      <p style="color:#fff; font-size:14px;"><span id="ref-count">10</span> referrals/month</p>
+      <div class="result" id="earnings">$24/mo</div>
+      <p class="result-label">recurring monthly income</p>
+      <p style="color:#64748b; font-size:11px; margin-top:8px;">(Based on 25% of $7.99/mo and ~30% conversion to PRO)</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <section class="footer">
+    <div class="brand">CREDENTIALMD</div>
+    <p>Your credentials. One app. All 50 states.</p>
+    <p style="margin-top:8px;"><a href="https://credentialmd.com">credentialmd.com</a> &middot; <a href="https://twitter.com/credentialmd">Twitter</a> &middot; <a href="https://instagram.com/credentialmd">Instagram</a></p>
+  </section>
+
+</div>
+
+<script>
+function generateLink() {
+  const email = document.getElementById('referral-email').value;
+  if (!email) return;
+  const code = btoa(email).slice(0, 8).toLowerCase();
+  document.getElementById('referral-link').textContent = 'https://credentialmd.com/r/' + code;
+  document.getElementById('referral-result').style.display = 'block';
+}
+function copyLink() {
+  const link = document.getElementById('referral-link').textContent;
+  navigator.clipboard.writeText(link);
+  event.target.textContent = 'Copied!';
+  setTimeout(() => event.target.textContent = 'Copy Link', 2000);
+}
+function calcEarnings() {
+  const refs = parseInt(document.getElementById('ref-slider').value);
+  document.getElementById('ref-count').textContent = refs;
+  const monthly = Math.round(refs * 0.30 * 7.99 * 0.25 * 100) / 100;
+  document.getElementById('earnings').textContent = '$' + monthly.toFixed(0) + '/mo';
+}
+</script>
+</body>
+</html>

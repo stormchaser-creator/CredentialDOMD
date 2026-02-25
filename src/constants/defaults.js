@@ -1,0 +1,42 @@
+export const STORAGE_KEY = "credentialdomd-data";
+
+export const DEFAULT_SETTINGS = {
+  primaryState: "",
+  additionalStates: [],
+  reminderLeadDays: 90,
+  name: "",
+  npi: "",
+  degreeType: "DO",
+  specialties: [],
+  email: "",
+  phone: "",
+  theme: "light",
+  fontSize: "M",
+  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || "",
+  notifyEmail: true,
+  notifyText: true,
+  notifyFreqDays: 7,
+  lastNotified: null,
+  alertsFingerprint: null,
+  snoozedUntil: null,
+  lastCmeVerification: null,
+  cmeVerificationResults: {},
+  cmeVerificationAlerted: false,
+};
+
+export const DEFAULT_DATA = {
+  licenses: [],
+  cme: [],
+  privileges: [],
+  caseLogs: [],
+  insurance: [],
+  healthRecords: [],
+  education: [],
+  documents: [],
+  shareLog: [],
+  notificationLog: [],
+  workHistory: [],
+  peerReferences: [],
+  malpracticeHistory: [],
+  settings: { ...DEFAULT_SETTINGS },
+};

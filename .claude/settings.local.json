@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx xlsx-cli CME_Compliance_Database.xlsx)",
+      "Bash(npx xlsx-cli:*)",
+      "Bash(npx vite build:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)",
+      "Bash(xargs:*)",
+      "Bash(npm audit:*)",
+      "Bash(ls:*)",
+      "Bash(npx eslint:*)",
+      "Bash(unzip:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx netlify:*)",
+      "Bash(netlify status:*)",
+      "WebFetch(domain:npiregistry.cms.hhs.gov)",
+      "Bash(netlify deploy --prod --dir=dist)",
+      "WebFetch(domain:fastrvu.com)"
+    ]
+  }
+}

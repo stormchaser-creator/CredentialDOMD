@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CredentialMD — Your Career, One App</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#050a12;--bg2:#0a1628;--card:#0f1d32;--card2:#132a42;
+  --teal:#00d4aa;--teal-dim:rgba(0,212,170,0.08);--teal-glow:rgba(0,212,170,0.15);
+  --coral:#ff6b6b;--coral-dim:rgba(255,107,107,0.1);
+  --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.1);
+  --gold:#fbbf24;
+  --text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--border:#1e293b;
+  --font:'Inter',system-ui,-apple-system,sans-serif;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--bg);color:var(--text);overflow-x:hidden}
+a{color:var(--teal);text-decoration:none}
+
+/* Utility */
+.container{max-width:1200px;margin:0 auto;padding:0 24px}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:100px;font-size:12px;font-weight:600;letter-spacing:0.5px}
+
+/* Animated gradient mesh background */
+.hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-40%;left:-20%;width:80%;height:120%;background:radial-gradient(ellipse,rgba(0,212,170,0.06) 0%,transparent 70%);pointer-events:none}
+.hero::after{content:'';position:absolute;bottom:-30%;right:-15%;width:60%;height:100%;background:radial-gradient(ellipse,rgba(167,139,250,0.05) 0%,transparent 70%);pointer-events:none}
+
+/* Grid pattern overlay */
+.grid-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(30,41,59,0.3) 1px,transparent 1px),linear-gradient(90deg,rgba(30,41,59,0.3) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 80% 60% at 50% 40%,black 30%,transparent 100%);pointer-events:none}
+
+/* Floating orbs */
+.orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;animation:float 20s ease-in-out infinite}
+.orb-1{width:400px;height:400px;background:rgba(0,212,170,0.08);top:10%;right:10%;animation-delay:0s}
+.orb-2{width:300px;height:300px;background:rgba(167,139,250,0.06);bottom:20%;left:5%;animation-delay:-7s}
+.orb-3{width:250px;height:250px;background:rgba(255,107,107,0.04);top:50%;left:40%;animation-delay:-14s}
+@keyframes float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-40px) scale(1.05)}}
+
+/* Nav */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 0;backdrop-filter:blur(20px);background:rgba(5,10,18,0.7);border-bottom:1px solid rgba(30,41,59,0.5);transition:all 0.3s}
+nav .inner{display:flex;align-items:center;justify-content:space-between;max-width:1200px;margin:0 auto;padding:0 24px}
+.logo{font-size:18px;font-weight:800;letter-spacing:1px;color:var(--teal)}
+.logo span{color:var(--text)}
+nav .links{display:flex;gap:32px;align-items:center}
+nav .links a{color:var(--text2);font-size:14px;font-weight:500;transition:color 0.2s}
+nav .links a:hover{color:var(--text)}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border-radius:10px;background:var(--teal);color:var(--bg);font-weight:700;font-size:14px;border:none;cursor:pointer;transition:all 0.2s}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(0,212,170,0.25)}
+.btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border-radius:10px;background:transparent;color:var(--text);font-weight:600;font-size:14px;border:1px solid var(--border);cursor:pointer;transition:all 0.2s}
+.btn-secondary:hover{border-color:var(--text3);background:rgba(255,255,255,0.03)}
+
+/* Hero content */
+.hero-content{position:relative;z-index:2;max-width:680px}
+.hero-content .badge{background:var(--teal-dim);color:var(--teal);border:1px solid rgba(0,212,170,0.2);margin-bottom:24px}
+.hero-content h1{font-size:clamp(40px,6vw,72px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:20px}
+.hero-content h1 .grad{background:linear-gradient(135deg,var(--teal),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-content p{font-size:18px;color:var(--text2);line-height:1.7;max-width:520px;margin-bottom:32px}
+.hero-buttons{display:flex;gap:12px;flex-wrap:wrap}
+
+/* Phone mockup */
+.hero-phone{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:2;width:380px}
+.phone-frame{background:var(--card);border:2px solid var(--border);border-radius:36px;padding:12px;box-shadow:0 40px 100px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.03)}
+.phone-screen{background:var(--bg2);border-radius:26px;overflow:hidden;aspect-ratio:9/17.5}
+.phone-notch{width:120px;height:28px;background:var(--bg);border-radius:0 0 20px 20px;margin:0 auto}
+.phone-header{background:linear-gradient(135deg,#0f2940,#1a3a5c);padding:16px 16px 40px}
+.phone-header .name{font-size:11px;color:rgba(255,255,255,0.5);font-weight:600}
+.phone-header .title{font-size:20px;font-weight:800;color:#fff;letter-spacing:0.5px;margin-top:4px}
+.phone-pills{display:flex;gap:6px;margin-top:12px}
+.phone-pill{padding:6px 14px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,212,170,0.8)}
+.phone-pill.secondary{background:rgba(255,255,255,0.1)}
+.phone-body{background:var(--bg2);border-radius:20px 20px 0 0;margin-top:-24px;padding:16px 14px;position:relative}
+.credential-card{background:linear-gradient(135deg,#1e3a5f,#2563eb);border-radius:14px;padding:16px;margin-bottom:10px;position:relative;overflow:hidden}
+.credential-card::after{content:'';position:absolute;top:-15px;right:-15px;width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,0.06)}
+.credential-card .label{font-size:8px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.5);letter-spacing:1.5px}
+.credential-card .value{font-size:16px;font-weight:800;color:#fff;margin-top:2px}
+.credential-card .meta{display:flex;gap:16px;margin-top:10px;font-size:9px;color:rgba(255,255,255,0.6)}
+.credential-card .meta span{font-weight:600;color:#fff;display:block;font-size:12px;margin-top:1px}
+.mini-cards{display:flex;gap:6px;margin-bottom:10px}
+.mini-card{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.mini-card .tag{font-size:7px;font-weight:700;text-transform:uppercase;color:var(--teal);letter-spacing:0.5px}
+.mini-card .val{font-size:11px;font-weight:700;color:var(--text);margin-top:2px;font-family:monospace}
+.mini-card .exp{font-size:8px;color:var(--text3);margin-top:1px}
+.compliance-row{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+.compliance-row .state{font-size:12px;font-weight:700;color:var(--text)}
+.compliance-row .hours{font-size:11px;font-weight:700}
+.compliance-row .check{width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:10px}
+.green{color:#4ade80;background:rgba(74,222,128,0.15)}
+.red{color:#f87171;background:rgba(248,113,113,0.15)}
+.phone-tabbar{display:flex;justify-content:space-around;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:8px}
+.phone-tabbar .tab{text-align:center;font-size:8px;color:var(--text3);font-weight:500}
+.phone-tabbar .tab.active{color:var(--teal)}
+.phone-tabbar .tab .icon{font-size:16px;display:block;margin-bottom:1px}
+
+/* Stats bar */
+.stats-bar{padding:40px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(15,29,50,0.3)}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center}
+.stat .number{font-size:36px;font-weight:900;background:linear-gradient(135deg,var(--teal),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat .label{font-size:13px;color:var(--text3);margin-top:4px;font-weight:500}
+
+/* Features */
+.features{padding:100px 0}
+.section-header{text-align:center;margin-bottom:60px}
+.section-header .badge{background:var(--teal-dim);color:var(--teal);border:1px solid rgba(0,212,170,0.2);margin-bottom:16px}
+.section-header h2{font-size:clamp(28px,4vw,44px);font-weight:800;letter-spacing:-1px;margin-bottom:12px}
+.section-header p{font-size:16px;color:var(--text2);max-width:560px;margin:0 auto;line-height:1.6}
+
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feature-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 24px;transition:all 0.3s;position:relative;overflow:hidden}
+.feature-card:hover{border-color:rgba(0,212,170,0.3);transform:translateY(-4px);box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.feature-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--teal),transparent);opacity:0;transition:opacity 0.3s}
+.feature-card:hover::before{opacity:1}
+.feature-card .icon-wrap{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px}
+.feature-card h3{font-size:17px;font-weight:700;margin-bottom:8px}
+.feature-card p{font-size:13px;color:var(--text2);line-height:1.6}
+.icon-teal{background:var(--teal-dim);border:1px solid rgba(0,212,170,0.15)}
+.icon-coral{background:var(--coral-dim);border:1px solid rgba(255,107,107,0.15)}
+.icon-purple{background:var(--purple-dim);border:1px solid rgba(167,139,250,0.15)}
+
+/* Compliance section */
+.compliance{padding:100px 0;position:relative}
+.compliance-inner{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.compliance-visual{position:relative}
+.state-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.state-cell{aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:all 0.3s;cursor:default;border:1px solid transparent}
+.state-cell.compliant{background:rgba(74,222,128,0.1);color:#4ade80;border-color:rgba(74,222,128,0.2)}
+.state-cell.compliant:hover{background:rgba(74,222,128,0.2);transform:scale(1.1)}
+.state-cell.warning{background:rgba(251,191,36,0.1);color:#fbbf24;border-color:rgba(251,191,36,0.2)}
+.state-cell.warning:hover{background:rgba(251,191,36,0.2);transform:scale(1.1)}
+.state-cell.expired{background:rgba(248,113,113,0.1);color:#f87171;border-color:rgba(248,113,113,0.2)}
+.state-cell.expired:hover{background:rgba(248,113,113,0.2);transform:scale(1.1)}
+.state-cell.empty{background:var(--card);color:var(--text3)}
+
+/* Pricing */
+.pricing{padding:100px 0}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:960px;margin:0 auto}
+.price-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px 28px;transition:all 0.3s;position:relative}
+.price-card.featured{border-color:var(--teal);box-shadow:0 0 60px rgba(0,212,170,0.1)}
+.price-card.featured::before{content:'MOST POPULAR';position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--teal);color:var(--bg);font-size:10px;font-weight:800;padding:4px 16px;border-radius:100px;letter-spacing:1px}
+.price-card .tier{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.price-card .price{font-size:48px;font-weight:900;letter-spacing:-2px}
+.price-card .price span{font-size:16px;font-weight:500;color:var(--text3);letter-spacing:0}
+.price-card .desc{font-size:13px;color:var(--text2);margin:12px 0 24px;line-height:1.5}
+.price-card ul{list-style:none;margin-bottom:28px}
+.price-card li{font-size:13px;color:var(--text2);padding:8px 0;border-bottom:1px solid rgba(30,41,59,0.5);display:flex;align-items:center;gap:10px}
+.price-card li::before{content:'\2713';color:var(--teal);font-weight:700;font-size:14px}
+.price-card .btn{display:block;text-align:center;padding:14px;border-radius:12px;font-weight:700;font-size:14px;transition:all 0.2s;cursor:pointer;border:none;width:100%}
+.btn-fill{background:var(--teal);color:var(--bg)}
+.btn-fill:hover{box-shadow:0 8px 30px rgba(0,212,170,0.25);transform:translateY(-1px)}
+.btn-outline{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-outline:hover{border-color:var(--text3)}
+
+/* Testimonials */
+.testimonials{padding:80px 0;border-top:1px solid var(--border)}
+.testimonials-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.testimonial{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px}
+.testimonial .quote{font-size:14px;color:var(--text2);line-height:1.7;font-style:italic;margin-bottom:16px}
+.testimonial .author{display:flex;align-items:center;gap:10px}
+.testimonial .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+.testimonial .name{font-size:13px;font-weight:600}
+.testimonial .role{font-size:11px;color:var(--text3)}
+
+/* CTA */
+.final-cta{padding:100px 0;text-align:center;position:relative}
+.final-cta::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 50%,rgba(0,212,170,0.06),transparent);pointer-events:none}
+.final-cta h2{font-size:clamp(32px,5vw,52px);font-weight:900;letter-spacing:-1.5px;margin-bottom:16px}
+.final-cta p{font-size:18px;color:var(--text2);max-width:500px;margin:0 auto 32px;line-height:1.6}
+
+/* Footer */
+footer{padding:40px 0;border-top:1px solid var(--border);text-align:center}
+footer .logo{margin-bottom:12px}
+footer p{font-size:12px;color:var(--text3)}
+
+/* Responsive */
+@media(max-width:900px){
+  .hero-phone{display:none}
+  .features-grid,.testimonials-grid{grid-template-columns:1fr}
+  .pricing-grid{grid-template-columns:1fr}
+  .compliance-inner{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  nav .links a:not(.btn-primary){display:none}
+}
+@media(min-width:901px) and (max-width:1100px){
+  .hero-phone{width:300px;right:-20px}
+}
+
+/* Animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.animate{animation:fadeUp 0.8s ease forwards;opacity:0}
+.delay-1{animation-delay:0.1s}.delay-2{animation-delay:0.2s}.delay-3{animation-delay:0.3s}.delay-4{animation-delay:0.4s}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="inner">
+    <div class="logo">Credential<span>MD</span></div>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#compliance">Compliance</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#" class="btn-primary">Start Free</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="grid-bg"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="container" style="position:relative">
+    <div class="hero-content">
+      <div class="badge animate">&#x1F680; Now tracking all 50 states</div>
+      <h1 class="animate delay-1">Your entire<br>medical career.<br><span class="grad">One app.</span></h1>
+      <p class="animate delay-2">Licenses. CME. Privileges. Insurance. Case logs. Health records. State-by-state compliance for MDs and DOs — with topic-level tracking that actually knows your requirements.</p>
+      <div class="hero-buttons animate delay-3">
+        <button class="btn-primary" style="padding:14px 32px;font-size:16px">Start Free &rarr;</button>
+        <button class="btn-secondary">See How It Works</button>
+      </div>
+      <p class="animate delay-4" style="margin-top:16px;font-size:12px;color:var(--text3)">No credit card required &middot; Free tier forever &middot; Set up in 2 minutes</p>
+    </div>
+
+    <!-- Phone mockup -->
+    <div class="hero-phone animate delay-3">
+      <div class="phone-frame">
+        <div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-header">
+            <div class="name">Good morning</div>
+            <div class="title">CREDENTIALMD</div>
+            <div class="phone-pills">
+              <div class="phone-pill">&#x1F4E4; Upload</div>
+              <div class="phone-pill secondary">&#x2709; Quick Send</div>
+            </div>
+          </div>
+          <div class="phone-body">
+            <div class="credential-card">
+              <div class="label">Medical License</div>
+              <div class="value">Sarah Chen, MD</div>
+              <div class="meta">
+                <div>License #<span>MD-284719</span></div>
+                <div>State<span>CA</span></div>
+                <div>Expires<span>09/2027</span></div>
+              </div>
+            </div>
+            <div class="mini-cards">
+              <div class="mini-card">
+                <div class="tag">DEA</div>
+                <div class="val">FC2847193</div>
+                <div class="exp">Exp 11/2026</div>
+              </div>
+              <div class="mini-card">
+                <div class="tag" style="color:var(--purple)">Board Cert</div>
+                <div class="val">Int. Med</div>
+                <div class="exp">Exp 2028</div>
+              </div>
+            </div>
+            <div style="font-size:12px;font-weight:700;margin-bottom:6px">CME Compliance</div>
+            <div class="compliance-row">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="state">CA</span>
+                <span style="font-size:8px;color:var(--teal);font-weight:700">(PRIMARY)</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="hours green">42/50</span>
+                <div class="check green">&#x2713;</div>
+              </div>
+            </div>
+            <div class="compliance-row">
+              <span class="state">TX</span>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="hours" style="color:#fbbf24">38/48</span>
+                <div class="check" style="color:#fbbf24;background:rgba(251,191,36,0.15)">!</div>
+              </div>
+            </div>
+            <div class="phone-tabbar">
+              <div class="tab active"><span class="icon">&#x1F3E0;</span>Home</div>
+              <div class="tab"><span class="icon">&#x1F4F7;</span>Scan</div>
+              <div class="tab"><span class="icon">&#x2709;</span>Send</div>
+              <div class="tab"><span class="icon">&#x1F4CB;</span>Creds</div>
+              <div class="tab"><span class="icon">&#x2699;</span>More</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats-bar">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="number">50</div>
+        <div class="label">States tracked</div>
+      </div>
+      <div class="stat">
+        <div class="number">200+</div>
+        <div class="label">CME topic requirements</div>
+      </div>
+      <div class="stat">
+        <div class="number">7</div>
+        <div class="label">Credential categories</div>
+      </div>
+      <div class="stat">
+        <div class="number">30s</div>
+        <div class="label">To share credentials</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-header">
+      <div class="badge">Features</div>
+      <h2>Everything you need.<br>Nothing you don't.</h2>
+      <p>Built by a physician who was tired of the chaos. Every feature solves a real problem.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="icon-wrap icon-teal">&#x1FA63;</div>
+        <h3>All Credentials, One Place</h3>
+        <p>State licenses, DEA, board certs, CME, hospital privileges, malpractice insurance, case logs, health records, and education — all tracked together.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon-wrap icon-coral">&#x1F4CA;</div>
+        <h3>State-by-State Compliance</h3>
+        <p>We know every state's CME requirements — total hours, category minimums, AND topic-specific mandates. For MDs and DOs separately.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon-wrap icon-purple">&#x1F4E4;</div>
+        <h3>One-Tap Sharing</h3>
+        <p>Hospital asks for your credentials? Tap Share. Send via email, text, or clipboard — including linked documents. Done in seconds.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon-wrap icon-teal">&#x1F514;</div>
+        <h3>Smart Alerts</h3>
+        <p>Get notified at 90, 60, and 30 days before anything expires. Configurable by urgency. Never be surprised by a lapsed credential again.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon-wrap icon-coral">&#x1F4F1;</div>
+        <h3>Document Scanner</h3>
+        <p>Photograph certificates, licenses, and CME transcripts. Upload or capture directly. Documents link to the credential they belong to.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon-wrap icon-purple">&#x1F30E;</div>
+        <h3>Multi-State Tracking</h3>
+        <p>Licensed in 3 states? 5? 10? Track compliance across all of them simultaneously. See exactly what's missing for each state.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPLIANCE MAP -->
+<section class="compliance" id="compliance">
+  <div class="container">
+    <div class="compliance-inner">
+      <div>
+        <div class="badge" style="background:var(--teal-dim);color:var(--teal);border:1px solid rgba(0,212,170,0.2);margin-bottom:16px">Compliance Engine</div>
+        <h2 style="font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:16px">We know what<br>your state requires.</h2>
+        <p style="font-size:16px;color:var(--text2);line-height:1.7;margin-bottom:24px">Not just hours — topics. California wants pain management. Florida wants HIV/AIDS and medical errors. Texas wants ethics and opioid prescribing. We track every requirement, for every state, for MDs and DOs separately.</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:10px"><div class="check green" style="width:24px;height:24px;border-radius:8px;font-size:12px">&#x2713;</div><span style="font-size:14px">Total hour requirements per renewal cycle</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><div class="check green" style="width:24px;height:24px;border-radius:8px;font-size:12px">&#x2713;</div><span style="font-size:14px">Category 1 minimum requirements (AMA + AOA)</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><div class="check green" style="width:24px;height:24px;border-radius:8px;font-size:12px">&#x2713;</div><span style="font-size:14px">Topic-specific mandates (opioids, ethics, HIV, etc.)</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><div class="check green" style="width:24px;height:24px;border-radius:8px;font-size:12px">&#x2713;</div><span style="font-size:14px">Separate MD and DO board requirements</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><div class="check green" style="width:24px;height:24px;border-radius:8px;font-size:12px">&#x2713;</div><span style="font-size:14px">AOA national requirements for DOs</span></div>
+        </div>
+      </div>
+      <div class="compliance-visual">
+        <div class="state-grid" id="stateGrid"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="container">
+    <div class="section-header">
+      <div class="badge">Pricing</div>
+      <h2>Value-first pricing.</h2>
+      <p>We'd rather every physician in America could afford this than squeeze more money out of fewer people.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="tier" style="color:var(--text3)">Free</div>
+        <div class="price">$0<span> /forever</span></div>
+        <div class="desc">Get started. See the value. No time limit, no credit card.</div>
+        <ul>
+          <li>Track up to 5 credentials</li>
+          <li>1 state CME tracking</li>
+          <li>Basic expiration alerts</li>
+          <li>3 document uploads</li>
+        </ul>
+        <button class="btn btn-outline">Start Free</button>
+      </div>
+      <div class="price-card featured">
+        <div class="tier" style="color:var(--teal)">Pro</div>
+        <div class="price">$7.99<span> /month</span></div>
+        <div class="desc">Everything you need. Less than a coffee a week.</div>
+        <ul>
+          <li>Unlimited credentials</li>
+          <li>All 50 states compliance</li>
+          <li>Topic-level CME tracking</li>
+          <li>Unlimited doc scanning</li>
+          <li>Quick Share (email/text/copy)</li>
+          <li>Priority notifications</li>
+        </ul>
+        <button class="btn btn-fill">Get Pro &rarr;</button>
+      </div>
+      <div class="price-card">
+        <div class="tier" style="color:var(--purple)">Resident</div>
+        <div class="price">$3.99<span> /month</span></div>
+        <div class="desc">Full Pro features for verified residents and fellows.</div>
+        <ul>
+          <li>All Pro features included</li>
+          <li>Verified .edu email required</li>
+          <li>Build the habit early</li>
+          <li>Upgrade seamlessly as attending</li>
+        </ul>
+        <button class="btn btn-outline">Verify & Start</button>
+      </div>
+    </div>
+    <p style="text-align:center;margin-top:20px;font-size:13px;color:var(--text3)">Annual: $79.99/yr Pro (save 17%) &middot; $39.99/yr Resident &middot; Group rates for practices: $5.99/user/mo</p>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials">
+  <div class="container">
+    <div class="section-header">
+      <h2>Physicians trust CredentialMD</h2>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial">
+        <div class="quote">"I practice in 4 states. Before CredentialMD, I had a spreadsheet with 8 tabs and still missed a CME deadline. Now everything is in one app, and it tells me exactly what topics each state requires."</div>
+        <div class="author">
+          <div class="avatar" style="background:var(--teal-dim);color:var(--teal)">SK</div>
+          <div><div class="name">Dr. Sarah K.</div><div class="role">Internal Medicine &middot; 4 states</div></div>
+        </div>
+      </div>
+      <div class="testimonial">
+        <div class="quote">"As a DO, I've never found a tool that understood AOA category requirements. CredentialMD knows the difference between Cat 1-A and AMA Cat 1. Finally."</div>
+        <div class="author">
+          <div class="avatar" style="background:var(--purple-dim);color:var(--purple)">JP</div>
+          <div><div class="name">Dr. James P.</div><div class="role">Family Medicine, DO</div></div>
+        </div>
+      </div>
+      <div class="testimonial">
+        <div class="quote">"My credentialing coordinator asked for my updated docs and I sent everything in 30 seconds from my phone. She thought I had an assistant. Nope — just CredentialMD."</div>
+        <div class="author">
+          <div class="avatar" style="background:var(--coral-dim);color:var(--coral)">MR</div>
+          <div><div class="name">Dr. Maria R.</div><div class="role">General Surgery &middot; Locum tenens</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <div class="container" style="position:relative;z-index:2">
+    <h2>Ready to stop<br>managing chaos?</h2>
+    <p>Join thousands of physicians who track their credentials in one place. Free to start. No credit card required.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <button class="btn-primary" style="padding:16px 40px;font-size:16px">Start Free &rarr;</button>
+      <button class="btn-secondary" style="padding:16px 32px">Refer a Colleague</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="logo" style="font-size:20px">Credential<span>MD</span></div>
+    <p>Your credentials. One app. All 50 states.</p>
+    <p style="margin-top:12px">
+      <a href="#">Twitter</a> &middot; <a href="#">Instagram</a> &middot; <a href="#">LinkedIn</a> &middot; <a href="#">TikTok</a>
+    </p>
+    <p style="margin-top:16px">&copy; 2026 CredentialMD. All rights reserved. &middot; <a href="#">Privacy</a> &middot; <a href="#">Terms</a></p>
+  </div>
+</footer>
+
+<script>
+// Generate state compliance grid
+const states = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+const grid = document.getElementById('stateGrid');
+states.forEach((st, i) => {
+  const cell = document.createElement('div');
+  cell.className = 'state-cell';
+  // Assign random statuses for visual demo
+  const r = Math.random();
+  if (r < 0.6) cell.classList.add('compliant');
+  else if (r < 0.8) cell.classList.add('warning');
+  else if (r < 0.9) cell.classList.add('expired');
+  else cell.classList.add('empty');
+  cell.textContent = st;
+  grid.appendChild(cell);
+});
+
+// Simple scroll animation
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.style.opacity = '1'; });
+}, { threshold: 0.1 });
+document.querySelectorAll('.feature-card, .price-card, .testimonial').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+  observer.observe(el);
+});
+</script>
+</body>
+</html>
