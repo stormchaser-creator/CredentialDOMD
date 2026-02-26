@@ -186,7 +186,7 @@ function DocumentsSection() {
         <div style={{ padding: "18px", borderRadius: 14, backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, marginBottom: 16 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>API Key Required</div>
           <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
-            Document scanning uses AI to read your credentials and automatically file them. Add your Anthropic API key in Settings to get started.
+            Document scanning uses AI to read your credentials and automatically file them. Add your Gemini API key in Settings to get started.
           </div>
           <button onClick={() => navigate("more", "settings")} style={{
             padding: "10px 22px", borderRadius: 22, border: "none", fontSize: 14,

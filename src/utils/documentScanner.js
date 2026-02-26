@@ -1,9 +1,10 @@
-// Document analysis via Anthropic API
+// Document analysis via Gemini API
 // NOTE: These functions require an API key to be provided.
 // In production, calls should go through a backend proxy — never expose keys client-side.
 
-const MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5 MB (API limit is 5 MB)
+const MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5 MB
 const MAX_DIMENSION = 2048;
+const GEMINI_MODEL = "gemini-2.0-flash";
 
 function isValidDataUrl(url) {
   return typeof url === "string" && url.startsWith("data:") && url.includes(",");
@@ -71,9 +72,17 @@ function compressImage(dataUrl) {
 }
 
 function parseResponse(data) {
-  const text = data.content?.map(b => b.text || "").join("") || "";
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   const clean = text.replace(/```json|```/g, "").trim();
   return JSON.parse(clean);
+}
+
+function handleApiError(status) {
+  if (status === 400) throw new Error("Document could not be processed. Try a clearer image.");
+  if (status === 403) throw new Error("Invalid API key. Check your key in Settings.");
+  if (status === 429) throw new Error("Rate limited. Please wait a moment and try again.");
+  if (status >= 500) throw new Error("The AI service is temporarily unavailable. Try again later.");
+  throw new Error("Document analysis failed. Please try again.");
 }
 
 const SYSTEM_PROMPT = (degreeType) => `You are a medical credential document analyzer. Given an image of a medical document, you must:
@@ -110,7 +119,7 @@ Use YYYY-MM-DD dates. Omit fields that are not visible. Use 2-letter state abbre
 
 export async function analyzeDocument(imageData, degreeType, apiKey) {
   if (!apiKey) {
-    throw new Error("No API key configured. Add your Anthropic API key in Settings.");
+    throw new Error("No API key configured. Add your Gemini API key in Settings.");
   }
   if (!isValidDataUrl(imageData)) {
     throw new Error("Invalid image data. Please try uploading again.");
@@ -118,44 +127,27 @@ export async function analyzeDocument(imageData, degreeType, apiKey) {
 
   const compressed = await compressImage(imageData);
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: 2500,
-      system: SYSTEM_PROMPT(degreeType),
-      messages: [{
-        role: "user",
-        content: [
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType) }] },
+      contents: [{
+        parts: [
           {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: getMediaType(compressed),
+            inlineData: {
+              mimeType: getMediaType(compressed),
               data: extractBase64(compressed),
             },
           },
-          { type: "text", text: "Analyze this medical credential document. Return only JSON." },
+          { text: "Analyze this medical credential document. Return only JSON." },
         ],
       }],
+      generationConfig: { maxOutputTokens: 2500 },
     }),
   });
 
-  if (!response.ok) {
-    const status = response.status;
-    // Map status codes to user-friendly messages — don't leak API internals
-    if (status === 401) throw new Error("Invalid API key. Check your key in Settings.");
-    if (status === 429) throw new Error("Rate limited. Please wait a moment and try again.");
-    if (status === 400) throw new Error("Document could not be processed. Try a clearer image.");
-    if (status >= 500) throw new Error("The AI service is temporarily unavailable. Try again later.");
-    throw new Error("Document analysis failed. Please try again.");
-  }
+  if (!response.ok) handleApiError(response.status);
 
   const json = await response.json();
   const parsed = parseResponse(json);
@@ -168,49 +160,33 @@ export async function analyzeDocument(imageData, degreeType, apiKey) {
 
 export async function analyzePDF(pdfData, degreeType, apiKey) {
   if (!apiKey) {
-    throw new Error("No API key configured. Add your Anthropic API key in Settings.");
+    throw new Error("No API key configured. Add your Gemini API key in Settings.");
   }
   if (!isValidDataUrl(pdfData)) {
     throw new Error("Invalid PDF data. Please try uploading again.");
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: 2500,
-      system: SYSTEM_PROMPT(degreeType),
-      messages: [{
-        role: "user",
-        content: [
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType) }] },
+      contents: [{
+        parts: [
           {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
+            inlineData: {
+              mimeType: "application/pdf",
               data: extractBase64(pdfData),
             },
           },
-          { type: "text", text: `Analyze this medical credential document for a ${degreeType}. Return ONLY JSON.` },
+          { text: `Analyze this medical credential document for a ${degreeType}. Return ONLY JSON.` },
         ],
       }],
+      generationConfig: { maxOutputTokens: 2500 },
     }),
   });
 
-  if (!response.ok) {
-    const status = response.status;
-    if (status === 401) throw new Error("Invalid API key. Check your key in Settings.");
-    if (status === 429) throw new Error("Rate limited. Please wait a moment and try again.");
-    if (status === 400) throw new Error("PDF could not be processed. Try a different file.");
-    if (status >= 500) throw new Error("The AI service is temporarily unavailable. Try again later.");
-    throw new Error("Document analysis failed. Please try again.");
-  }
+  if (!response.ok) handleApiError(response.status);
 
   const json = await response.json();
   const parsed = parseResponse(json);

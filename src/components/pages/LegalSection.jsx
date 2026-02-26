@@ -96,7 +96,7 @@ function PrivacyPolicy({ T }) {
         <p style={{ marginTop: 6 }}>The only external services contacted are:</p>
         <ul style={{ paddingLeft: 18, marginTop: 4 }}>
           <li><strong>NPPES Registry</strong> (npiregistry.cms.hhs.gov) — for NPI lookup, a free public government API</li>
-          <li><strong>Anthropic API</strong> (api.anthropic.com) — for AI document scanning, only when you provide your own API key and initiate a scan</li>
+          <li><strong>Gemini API</strong> (generativelanguage.googleapis.com) — for AI document scanning, only when you provide your own API key and initiate a scan</li>
           <li><strong>Google Fonts</strong> (fonts.googleapis.com) — for loading the application typeface</li>
         </ul>
       </Section>
@@ -190,7 +190,7 @@ function TermsOfService({ T }) {
       </Section>
 
       <Section title="7. AI Document Scanning" T={T}>
-        <p>The AI document scanning feature uses the Anthropic API with a user-provided API key. You are responsible for your API key and any charges incurred. AI-extracted data should always be reviewed for accuracy before relying on it.</p>
+        <p>The AI document scanning feature uses the Gemini API with a user-provided API key. You are responsible for your API key and any charges incurred. AI-extracted data should always be reviewed for accuracy before relying on it.</p>
       </Section>
 
       <Section title="8. Intellectual Property" T={T}>

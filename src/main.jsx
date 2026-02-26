@@ -12,7 +12,7 @@ if (import.meta.env.PROD) {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
-    "connect-src 'self' https://api.anthropic.com https://npiregistry.cms.hhs.gov",
+    "connect-src 'self' https://generativelanguage.googleapis.com https://npiregistry.cms.hhs.gov",
     "img-src 'self' data: blob:",
   ].join("; ");
   document.head.prepend(csp);

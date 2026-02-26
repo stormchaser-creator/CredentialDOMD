@@ -1,7 +1,7 @@
 import { STORAGE_KEY, DEFAULT_DATA } from "../constants/defaults";
 import { getDeviceId, ensureProfile, loadFromSupabase, bulkSync, saveSettings as sbSaveSettings } from "../lib/supabase";
 
-const ENV_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
+const ENV_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 const COLLECTION_KEYS = [
   "licenses", "cme", "privileges", "insurance", "healthRecords",

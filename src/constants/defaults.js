@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS = {
   phone: "",
   theme: "light",
   fontSize: "M",
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || "",
+  apiKey: import.meta.env.VITE_GEMINI_API_KEY || "",
   notifyEmail: true,
   notifyText: true,
   notifyFreqDays: 7,

@@ -16,7 +16,7 @@ const FAQ_DATA = [
       },
       {
         q: "Does CredentialDOMD work offline?",
-        a: "Yes. Since all data is stored locally on your device, CredentialDOMD works fully offline. The only features that require an internet connection are the NPI Lookup (which queries the NPPES registry) and the AI Document Scanner (which uses the Anthropic API).",
+        a: "Yes. Since all data is stored locally on your device, CredentialDOMD works fully offline. The only features that require an internet connection are the NPI Lookup (which queries the NPPES registry) and the AI Document Scanner (which uses the Gemini API).",
       },
       {
         q: "How do I set up my profile?",
@@ -41,7 +41,7 @@ const FAQ_DATA = [
       },
       {
         q: "Can I scan documents to add credentials?",
-        a: "Yes. Go to the Scan tab, upload or photograph a credential document, and the AI will extract the relevant information (type, license number, dates, state, etc.) and pre-fill the form for you. This requires an Anthropic API key, which you can set in Settings.",
+        a: "Yes. Go to the Scan tab, upload or photograph a credential document, and the AI will extract the relevant information (type, license number, dates, state, etc.) and pre-fill the form for you. This requires a Gemini API key, which you can set in Settings.",
       },
       {
         q: "How do I share credentials with a hospital or employer?",
@@ -100,7 +100,7 @@ const FAQ_DATA = [
       },
       {
         q: "Does CredentialDOMD share my data with anyone?",
-        a: "No. Your data is stored exclusively on your device. Nothing is transmitted to any server. The only network requests the app makes are: (1) NPI Lookup calls the public NPPES API with just your NPI number, (2) Document scanning sends images to the Anthropic API if you use the AI scanner. Neither stores your data.",
+        a: "No. Your data is stored exclusively on your device. Nothing is transmitted to any server. The only network requests the app makes are: (1) NPI Lookup calls the public NPPES API with just your NPI number, (2) Document scanning sends images to the Gemini API if you use the AI scanner. Neither stores your data.",
       },
       {
         q: "What happens if I clear my browser data?",
