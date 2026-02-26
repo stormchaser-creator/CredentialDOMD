@@ -24,9 +24,22 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// Register service worker for PWA
+// Register service worker for PWA — force update on new deploys
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  window.addEventListener("load", async () => {
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+    reg.addEventListener("updatefound", () => {
+      const newWorker = reg.installing;
+      if (newWorker) {
+        newWorker.addEventListener("statechange", () => {
+          if (newWorker.state === "activated") {
+            window.location.reload();
+          }
+        });
+      }
+    });
   });
 }
