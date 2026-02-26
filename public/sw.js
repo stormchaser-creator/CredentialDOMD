@@ -1,4 +1,4 @@
-const CACHE_NAME = "credentialdomd-v1";
+const CACHE_NAME = "credentialdomd-v2";
 const PRECACHE_URLS = [
   "/",
   "/index.html",

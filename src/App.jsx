@@ -908,7 +908,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         backgroundColor: T.tabBar, borderTop: `1px solid ${T.tabBorder}`,
         display: "flex", justifyContent: "space-around", alignItems: "center",
         height: 64, paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        zIndex: 100, boxShadow: "0 -1px 8px rgba(0,0,0,0.04)",
+        zIndex: 100, boxShadow: "0 -1px 8px rgba(0,0,0,0.04)", overflow: "hidden",
       }}>
         {tabItems.map(t => {
           if (t.isCenter) {
@@ -918,7 +918,6 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                 backgroundColor: T.accent, color: "#fff",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer", boxShadow: "0 4px 12px rgba(26,115,232,0.35)",
-                transform: "translateY(-8px)",
               }}>
                 <PlusIcon />
               </button>
