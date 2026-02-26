@@ -14,7 +14,7 @@ import { generateId, formatDate } from "../../utils/helpers";
 import { computeCompliance } from "../../utils/compliance";
 
 function CMESection({ onShare }) {
-  const { data, setData, theme: T, allTrackedStates, navigate } = useApp();
+  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -37,12 +37,12 @@ function CMESection({ onShare }) {
 
   const handleSave = useCallback(() => {
     const entry = { ...form, id: editItem ? editItem.id : generateId() };
-    if (editItem) setData(d => ({ ...d, cme: d.cme.map(x => x.id === entry.id ? entry : x) }));
-    else setData(d => ({ ...d, cme: [...d.cme, entry] }));
+    if (editItem) editItemCtx("cme", entry);
+    else addItem("cme", entry);
     closeForm();
-  }, [form, editItem, setData, closeForm]);
+  }, [form, editItem, editItemCtx, addItem, closeForm]);
 
-  const handleDelete = useCallback((id) => setData(d => ({ ...d, cme: d.cme.filter(x => x.id !== id) })), [setData]);
+  const handleDelete = useCallback((id) => deleteItem("cme", id), [deleteItem]);
 
   const toggleTopic = useCallback((topic) => {
     setForm(f => {

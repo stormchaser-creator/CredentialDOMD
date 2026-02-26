@@ -34,6 +34,9 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 
+# Claude local settings
+.claude/settings.local.json
+
 # Mobile / Capacitor builds
 android/
 ios/

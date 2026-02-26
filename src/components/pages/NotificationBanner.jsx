@@ -5,7 +5,7 @@ import { generateAlerts, buildNotificationMessage, composeEmail, composeText } f
 import { MS_PER_DAY } from "../../utils/helpers";
 
 function NotificationBanner({ onOpenCenter, onGoSettings }) {
-  const { data, setData, theme: T } = useApp();
+  const { data, setData, updateSettings, addItem, theme: T } = useApp();
   const s = data.settings;
   const alerts = useMemo(() => generateAlerts(data), [data]);
 
@@ -80,7 +80,7 @@ function NotificationBanner({ onOpenCenter, onGoSettings }) {
                     if (inlineEmail.includes("@")) updates.email = inlineEmail;
                     if (inlinePhone.length >= 7) updates.phone = inlinePhone;
                     if (Object.keys(updates).length > 0) {
-                      setData(d => ({ ...d, settings: { ...d.settings, ...updates } }));
+                      updateSettings(updates);
                       setShowInlineSetup(false);
                     }
                   }} disabled={!inlineEmail.includes("@") && !(inlinePhone.length >= 7)} style={{
@@ -109,16 +109,13 @@ function NotificationBanner({ onOpenCenter, onGoSettings }) {
   const sendQuick = (method) => {
     if (method === "email" && s.email) composeEmail(s.email, msg.subject, msg.body);
     if (method === "text" && s.phone) composeText(s.phone, msg.body);
-    setData(d => ({
-      ...d,
-      settings: { ...d.settings, lastNotified: new Date().toISOString(), alertsFingerprint: alerts.fingerprint, snoozedUntil: null },
-      notificationLog: [...(d.notificationLog || []), { date: new Date().toISOString(), method, alertCount: alerts.count }],
-    }));
+    updateSettings({ lastNotified: new Date().toISOString(), alertsFingerprint: alerts.fingerprint, snoozedUntil: null });
+    addItem("notificationLog", { id: crypto.randomUUID(), date: new Date().toISOString(), method, alertCount: alerts.count });
   };
 
   const snooze = () => {
     const snoozeUntil = new Date(now.getTime() + alerts.effectiveFreqDays * MS_PER_DAY).toISOString();
-    setData(d => ({ ...d, settings: { ...d.settings, snoozedUntil: snoozeUntil, alertsFingerprint: alerts.fingerprint } }));
+    updateSettings({ snoozedUntil: snoozeUntil, alertsFingerprint: alerts.fingerprint });
   };
 
   const freqLabel = alerts.effectiveFreqDays === 1 ? "daily"

@@ -10,7 +10,7 @@ import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS } from "../.
 import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
 
 function HealthRecordsSection({ onShare }) {
-  const { data, setData, theme: T } = useApp();
+  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -36,12 +36,12 @@ function HealthRecordsSection({ onShare }) {
 
   const handleSave = useCallback(() => {
     const entry = { ...form, id: editItem ? editItem.id : generateId() };
-    if (editItem) setData(d => ({ ...d, healthRecords: (d.healthRecords || []).map(x => x.id === entry.id ? entry : x) }));
-    else setData(d => ({ ...d, healthRecords: [...(d.healthRecords || []), entry] }));
+    if (editItem) editItemCtx("healthRecords", entry);
+    else addItem("healthRecords", entry);
     closeForm();
-  }, [form, editItem, setData, closeForm]);
+  }, [form, editItem, editItemCtx, addItem, closeForm]);
 
-  const handleDelete = useCallback((id) => setData(d => ({ ...d, healthRecords: (d.healthRecords || []).filter(x => x.id !== id) })), [setData]);
+  const handleDelete = useCallback((id) => deleteItem("healthRecords", id), [deleteItem]);
 
   const typeOptions = useMemo(() => getHealthRecordTypes(form.category), [form.category]);
 

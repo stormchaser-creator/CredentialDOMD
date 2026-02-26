@@ -5,19 +5,33 @@ import { loadData, saveData } from "../utils/storage";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
 import { MS_PER_DAY } from "../utils/helpers";
+import {
+  insertItem as sbInsert,
+  updateItem as sbUpdate,
+  deleteItem as sbDelete,
+  saveSettings as sbSaveSettings,
+} from "../lib/supabase";
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children, onNavigate }) {
   const [data, setData] = useState(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
+  const userIdRef = useRef(null);
 
   // Load data on mount
   useEffect(() => {
-    loadData().then(d => { setData(d); setLoaded(true); });
+    loadData().then(d => {
+      if (d._userId) {
+        userIdRef.current = d._userId;
+        delete d._userId;
+      }
+      setData(d);
+      setLoaded(true);
+    });
   }, []);
 
-  // Persist on change (debounced)
+  // Persist to localStorage on change (debounced backup)
   const saveTimer = useRef(null);
   useEffect(() => {
     if (!loaded) return;
@@ -30,10 +44,11 @@ export function AppProvider({ children, onNavigate }) {
   const theme = useMemo(() => THEMES[data.settings.theme] || THEMES.light, [data.settings.theme]);
 
   const toggleTheme = useCallback(() => {
-    setData(d => ({
-      ...d,
-      settings: { ...d.settings, theme: d.settings.theme === "dark" ? "light" : "dark" },
-    }));
+    setData(d => {
+      const newTheme = d.settings.theme === "dark" ? "light" : "dark";
+      sbSaveSettings(userIdRef.current, { theme: newTheme }).catch(() => {});
+      return { ...d, settings: { ...d.settings, theme: newTheme } };
+    });
   }, []);
 
   // Convenience CRUD helpers
@@ -42,19 +57,30 @@ export function AppProvider({ children, onNavigate }) {
   }, []);
 
   const updateSettings = useCallback((updates) => {
-    setData(d => ({ ...d, settings: { ...d.settings, ...updates } }));
+    setData(d => {
+      const newSettings = { ...d.settings, ...updates };
+      // Sync to Supabase in background
+      sbSaveSettings(userIdRef.current, updates).catch(() => {});
+      return { ...d, settings: newSettings };
+    });
   }, []);
 
   const addItem = useCallback((key, item) => {
     updateSection(key, items => [...items, item]);
+    // Sync to Supabase
+    sbInsert(userIdRef.current, key, item).catch(() => {});
   }, [updateSection]);
 
   const editItem = useCallback((key, item) => {
     updateSection(key, items => items.map(x => x.id === item.id ? item : x));
+    // Sync to Supabase
+    sbUpdate(userIdRef.current, key, item).catch(() => {});
   }, [updateSection]);
 
-  const deleteItem = useCallback((key, id) => {
+  const deleteItemFn = useCallback((key, id) => {
     updateSection(key, items => items.filter(x => x.id !== id));
+    // Sync to Supabase
+    sbDelete(userIdRef.current, key, id).catch(() => {});
   }, [updateSection]);
 
   // Tracked states (memoized)
@@ -69,9 +95,9 @@ export function AppProvider({ children, onNavigate }) {
 
   const value = useMemo(() => ({
     data, setData, loaded, theme, toggleTheme,
-    updateSection, updateSettings, addItem, editItem, deleteItem,
-    allTrackedStates, navigate,
-  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItem, allTrackedStates, navigate]);
+    updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
+    allTrackedStates, navigate, userIdRef,
+  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

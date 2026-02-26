@@ -1,9 +1,10 @@
 import { useState, useRef, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { STORAGE_KEY } from "../../constants/defaults";
+import { bulkSync, saveSettings } from "../../lib/supabase";
 
 function DataExport() {
-  const { data, setData, theme: T } = useApp();
+  const { data, setData, userIdRef, theme: T } = useApp();
   const fileRef = useRef(null);
   const [importStatus, setImportStatus] = useState(null);
   const [exportStatus, setExportStatus] = useState(null);
@@ -143,6 +144,19 @@ function DataExport() {
           settings: { ...data.settings, ...(filtered.settings || {}) },
         };
         setData(merged);
+        // Sync imported data to Supabase
+        if (userIdRef?.current) {
+          const uid = userIdRef.current;
+          const COLLECTIONS = [
+            "licenses", "cme", "privileges", "insurance", "healthRecords",
+            "education", "caseLogs", "workHistory", "peerReferences",
+            "malpracticeHistory", "documents", "shareLog", "notificationLog",
+          ];
+          for (const key of COLLECTIONS) {
+            if (merged[key]?.length > 0) bulkSync(uid, key, merged[key]).catch(() => {});
+          }
+          if (merged.settings) saveSettings(uid, merged.settings).catch(() => {});
+        }
         setImportStatus("success");
         setTimeout(() => setImportStatus(null), 3000);
       } catch {

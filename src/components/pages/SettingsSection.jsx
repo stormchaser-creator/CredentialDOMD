@@ -14,11 +14,11 @@ import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/s
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, composeText } from "../../utils/notifications";
 
 function SettingsSection() {
-  const { data, setData, theme: T, allTrackedStates, navigate } = useApp();
+  const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
 
-  const update = (k, v) => setData(d => ({ ...d, settings: { ...d.settings, [k]: v } }));
+  const update = (k, v) => updateSettings({ [k]: v });
   const [addingState, setAddingState] = useState("");
   const [npiLoading, setNpiLoading] = useState(false);
   const [npiResults, setNpiResults] = useState(null); // array of search results
@@ -73,62 +73,60 @@ function SettingsSection() {
 
   // User selects a result — apply NPI + profile data + import licenses
   const applyNpiResult = (result) => {
-    const updates = { npi: result.npi };
+    const settingsUpdates = { npi: result.npi };
     if (result.firstName && result.lastName) {
-      updates.name = `${result.firstName} ${result.lastName}`;
+      settingsUpdates.name = `${result.firstName} ${result.lastName}`;
     }
     if (result.credential) {
       const cred = result.credential.toUpperCase();
-      if (cred.includes("DO")) updates.degreeType = "DO";
-      else if (cred.includes("MD")) updates.degreeType = "MD";
+      if (cred.includes("DO")) settingsUpdates.degreeType = "DO";
+      else if (cred.includes("MD")) settingsUpdates.degreeType = "MD";
     }
     if (result.address?.state) {
-      updates.primaryState = result.address.state;
+      settingsUpdates.primaryState = result.address.state;
     }
     if (result.address?.phone && !s.phone) {
-      updates.phone = result.address.phone;
+      settingsUpdates.phone = result.address.phone;
     }
 
     // Extract and import licenses from NPI taxonomies
     const npiLicenses = extractLicensesFromNPI(result);
-    let newLicenseCount = 0;
+    const curLicenses = data.licenses || [];
+    const newLicenses = npiLicenses
+      .filter(nl => !curLicenses.some(
+        el => el.licenseNumber === nl.licenseNumber && el.state === nl.state
+      ))
+      .map(nl => ({
+        id: generateId(),
+        type: "Medical License",
+        name: `${nl.state} Medical License`,
+        licenseNumber: nl.licenseNumber,
+        state: nl.state,
+        issuedDate: "",
+        expirationDate: "",
+        notes: "Imported from NPPES NPI Registry",
+        npiImported: true,
+      }));
 
-    setData(d => {
-      const curLicenses = d.licenses || [];
-      const newLicenses = npiLicenses
-        .filter(nl => !curLicenses.some(
-          el => el.licenseNumber === nl.licenseNumber && el.state === nl.state
-        ))
-        .map(nl => ({
-          id: generateId(),
-          type: "Medical License",
-          name: `${nl.state} Medical License`,
-          licenseNumber: nl.licenseNumber,
-          state: nl.state,
-          issuedDate: "",
-          expirationDate: "",
-          notes: "Imported from NPPES NPI Registry",
-          npiImported: true,
-        }));
-      newLicenseCount = newLicenses.length;
+    // Also set additionalStates from discovered license states
+    const licenseStates = npiLicenses.map(nl => nl.state);
+    const primary = settingsUpdates.primaryState || data.settings.primaryState;
+    const existingAdditional = data.settings.additionalStates || [];
+    const newAdditionalStates = [...new Set([
+      ...existingAdditional,
+      ...licenseStates.filter(st => st !== primary && !existingAdditional.includes(st)),
+    ])];
+    settingsUpdates.additionalStates = newAdditionalStates;
 
-      // Also set additionalStates from discovered license states
-      const licenseStates = npiLicenses.map(nl => nl.state);
-      const primary = updates.primaryState || d.settings.primaryState;
-      const existingAdditional = d.settings.additionalStates || [];
-      const newAdditionalStates = [...new Set([
-        ...existingAdditional,
-        ...licenseStates.filter(st => st !== primary && !existingAdditional.includes(st)),
-      ])];
+    // Add licenses via CRUD helper (syncs to Supabase)
+    for (const lic of newLicenses) {
+      addItem("licenses", lic);
+    }
+    // Update settings (syncs to Supabase)
+    updateSettings(settingsUpdates);
 
-      return {
-        ...d,
-        licenses: [...curLicenses, ...newLicenses],
-        settings: { ...d.settings, ...updates, additionalStates: newAdditionalStates },
-      };
-    });
-    if (newLicenseCount > 0) {
-      setLicenseImportMsg(`${newLicenseCount} license${newLicenseCount > 1 ? "s" : ""} imported from NPI registry`);
+    if (newLicenses.length > 0) {
+      setLicenseImportMsg(`${newLicenses.length} license${newLicenses.length > 1 ? "s" : ""} imported from NPI registry`);
       setTimeout(() => setLicenseImportMsg(null), 5000);
     }
     setNpiResults(null);
@@ -143,7 +141,7 @@ function SettingsSection() {
     if (st === s.primaryState) {
       const remaining = (s.additionalStates || []).filter(x => x !== st);
       if (remaining.length > 0) {
-        setData(d => ({ ...d, settings: { ...d.settings, primaryState: remaining[0], additionalStates: remaining.slice(1) } }));
+        updateSettings({ primaryState: remaining[0], additionalStates: remaining.slice(1) });
       }
       return;
     }
@@ -151,7 +149,7 @@ function SettingsSection() {
   };
   const makePrimary = (st) => {
     const others = allTrackedStates.filter(x => x !== st);
-    setData(d => ({ ...d, settings: { ...d.settings, primaryState: st, additionalStates: others } }));
+    updateSettings({ primaryState: st, additionalStates: others });
   };
 
   const availableStates = STATES.filter(st => !allTrackedStates.includes(st));

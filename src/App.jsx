@@ -56,7 +56,7 @@ export default function App() {
 }
 
 function AppInner({ tab, setTab, subPage, setSubPage }) {
-  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings } = useApp();
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");
@@ -73,7 +73,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
 
   const openShare = useCallback((item, section) => { setShareItem(item); setShareSection(section); }, []);
   const closeShare = useCallback(() => { setShareItem(null); setShareSection(null); }, []);
-  const logShare = useCallback((entry) => setData(d => ({ ...d, shareLog: [...(d.shareLog || []), entry] })), [setData]);
+  const logShare = useCallback((entry) => addItem("shareLog", { ...entry, id: entry.id || crypto.randomUUID() }), [addItem]);
 
   const linkedDocs = useMemo(() => {
     if (!shareItem || !shareSection) return [];
@@ -495,18 +495,13 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           if (!result) { setNpiImportMsg("No provider found for this NPI."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
           const npiLicenses = extractLicensesFromNPI(result);
           if (npiLicenses.length === 0) { setNpiImportMsg("No license data found in NPI registry."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
-          let importedCount = 0;
-          setData(d => {
-            const cur = d.licenses || [];
-            const newOnes = npiLicenses
-              .filter(nl => !cur.some(el => el.licenseNumber === nl.licenseNumber && el.state === nl.state))
-              .map(nl => ({ id: generateId(), type: "Medical License", name: `${nl.state} Medical License`, licenseNumber: nl.licenseNumber, state: nl.state, issuedDate: "", expirationDate: "", notes: "Imported from NPPES NPI Registry", npiImported: true }));
-            importedCount = newOnes.length;
-            if (newOnes.length === 0) return d;
-            return { ...d, licenses: [...cur, ...newOnes] };
-          });
-          if (importedCount === 0) { setNpiImportMsg("All licenses already imported."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
-          setNpiImportMsg(`${importedCount} license${importedCount > 1 ? "s" : ""} imported!`);
+          const cur = data.licenses || [];
+          const newOnes = npiLicenses
+            .filter(nl => !cur.some(el => el.licenseNumber === nl.licenseNumber && el.state === nl.state))
+            .map(nl => ({ id: generateId(), type: "Medical License", name: `${nl.state} Medical License`, licenseNumber: nl.licenseNumber, state: nl.state, issuedDate: "", expirationDate: "", notes: "Imported from NPPES NPI Registry", npiImported: true }));
+          if (newOnes.length === 0) { setNpiImportMsg("All licenses already imported."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
+          for (const lic of newOnes) addItem("licenses", lic);
+          setNpiImportMsg(`${newOnes.length} license${newOnes.length > 1 ? "s" : ""} imported!`);
           setTimeout(() => setNpiImportMsg(null), 5000);
         } catch (err) { setNpiImportMsg(err.message || "Import failed"); setTimeout(() => setNpiImportMsg(null), 4000); }
         finally { setNpiImporting(false); }
@@ -722,7 +717,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
               ].map(opt => {
                 const active = (data.settings.fontSize || "M") === opt.id;
                 return (
-                  <button key={opt.id} onClick={() => setData(d => ({ ...d, settings: { ...d.settings, fontSize: opt.id } }))} style={{
+                  <button key={opt.id} onClick={() => updateSettings({ fontSize: opt.id })} style={{
                     flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                     gap: 4, padding: "12px 4px", borderRadius: 12,
                     border: active ? `2px solid ${T.accent}` : `1px solid ${T.border}`,

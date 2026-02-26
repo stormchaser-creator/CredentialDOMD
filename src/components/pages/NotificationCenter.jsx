@@ -6,7 +6,7 @@ import { generateAlerts, buildNotificationMessage, composeEmail, composeText } f
 import { getItemLabel, formatDate, MS_PER_DAY } from "../../utils/helpers";
 
 function NotificationCenter({ open, onClose }) {
-  const { data, setData, theme: T } = useApp();
+  const { data, updateSettings, addItem, theme: T } = useApp();
   const [sending, setSending] = useState(null);
   const [sent, setSent] = useState(false);
 
@@ -22,11 +22,8 @@ function NotificationCenter({ open, onClose }) {
   const markSent = (method) => {
     setSending(method);
     setSent(true);
-    setData(d => ({
-      ...d,
-      settings: { ...d.settings, lastNotified: new Date().toISOString(), alertsFingerprint: alerts?.fingerprint || null, snoozedUntil: null },
-      notificationLog: [...(d.notificationLog || []), { date: new Date().toISOString(), method, alertCount: alerts?.count || 0 }],
-    }));
+    updateSettings({ lastNotified: new Date().toISOString(), alertsFingerprint: alerts?.fingerprint || null, snoozedUntil: null });
+    addItem("notificationLog", { id: crypto.randomUUID(), date: new Date().toISOString(), method, alertCount: alerts?.count || 0 });
   };
 
   if (!open) return null;

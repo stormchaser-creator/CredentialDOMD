@@ -9,7 +9,7 @@ import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
 import ScanReviewCard from "./ScanReviewCard";
 
 function DocumentsSection() {
-  const { data, setData, theme: T, navigate } = useApp();
+  const { data, setData, addItem, editItem, deleteItem: deleteItemCtx, theme: T, navigate } = useApp();
   const iS = useInputStyle();
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
@@ -105,13 +105,10 @@ function DocumentsSection() {
       });
 
       const docId = generateId();
-      setData(d => ({
-        ...d,
-        documents: [...d.documents, {
-          id: docId, name: file.name, type: file.type, size: file.size,
-          data: dataUrl, uploadedAt: new Date().toISOString(), linkedTo: "",
-        }],
-      }));
+      addItem("documents", {
+        id: docId, name: file.name, type: file.type, size: file.size,
+        data: dataUrl, uploadedAt: new Date().toISOString(), linkedTo: "",
+      });
 
       if ((file.type.startsWith("image/") || file.type === "application/pdf") && apiKey) {
         setScanning(true);
@@ -128,7 +125,7 @@ function DocumentsSection() {
         setScanError("Document saved but could not be analyzed. Add your API key in Settings to enable AI scanning.");
       }
     }
-  }, [apiKey, deg, setData]);
+  }, [apiKey, deg, addItem]);
 
   const capturePhoto = useCallback(() => {
     const video = videoRef.current;
@@ -156,17 +153,21 @@ function DocumentsSection() {
     const entry = { ...fields, id };
     if (section === "cme" && !entry.topics) entry.topics = [];
 
-    setData(d => ({
-      ...d,
-      [section]: [...d[section], entry],
-      documents: d.documents.map(doc => doc.id === docId ? { ...doc, linkedTo: `${section}:${id}` } : doc),
-    }));
+    // Add the credential entry
+    addItem(section, entry);
+    // Link the document to it
+    const doc = data.documents.find(d => d.id === docId);
+    if (doc) editItem("documents", { ...doc, linkedTo: `${section}:${id}` });
+
     setScanQueue(q => q.filter(item => item.docId !== docId));
   };
 
   const handleDiscard = (docId) => setScanQueue(q => q.filter(item => item.docId !== docId));
-  const deleteDoc = (id) => { if (window.confirm("Delete this document? This cannot be undone.")) setData(d => ({ ...d, documents: d.documents.filter(x => x.id !== id) })); };
-  const linkDoc = (id, val) => setData(d => ({ ...d, documents: d.documents.map(x => x.id === id ? { ...x, linkedTo: val } : x) }));
+  const deleteDoc = (id) => { if (window.confirm("Delete this document? This cannot be undone.")) deleteItemCtx("documents", id); };
+  const linkDoc = (id, val) => {
+    const doc = data.documents.find(d => d.id === id);
+    if (doc) editItem("documents", { ...doc, linkedTo: val });
+  };
 
   const btnStyle = {
     display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px",

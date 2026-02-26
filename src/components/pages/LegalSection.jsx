@@ -1,17 +1,22 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
+import { deleteAllData } from "../../lib/supabase";
 
 function LegalSection({ page }) {
-  const { data, setData, theme: T } = useApp();
+  const { data, setData, userIdRef, theme: T } = useApp();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
 
   // Permanently delete all user data
   const handleDeleteAllData = () => {
     if (deleteInput !== "DELETE") return;
-    // Clear all data from state, localStorage, and Capacitor storage
+    // Clear from localStorage and Capacitor
     localStorage.removeItem("credentialdomd-data");
     try { if (window.storage?.remove) window.storage.remove("credentialdomd-data"); } catch {}
+    // Clear from Supabase
+    if (userIdRef?.current) {
+      deleteAllData(userIdRef.current).catch(() => {});
+    }
     setData({
       licenses: [], cme: [], privileges: [], caseLogs: [], insurance: [],
       healthRecords: [], education: [], documents: [], shareLog: [],
