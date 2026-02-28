@@ -5,6 +5,17 @@ import "./styles/base.css";
 
 // Inject Content Security Policy in production only (Vite dev mode uses inline scripts)
 if (import.meta.env.PROD) {
+  const connectSources = [
+    "'self'",
+    "https://generativelanguage.googleapis.com",
+    "https://npiregistry.cms.hhs.gov",
+  ];
+  // Include the Supabase project URL if configured
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (supabaseUrl) {
+    connectSources.push(supabaseUrl);
+  }
+
   const csp = document.createElement("meta");
   csp.httpEquiv = "Content-Security-Policy";
   csp.content = [
@@ -12,7 +23,7 @@ if (import.meta.env.PROD) {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
-    "connect-src 'self' https://generativelanguage.googleapis.com https://npiregistry.cms.hhs.gov",
+    "connect-src " + connectSources.join(" "),
     "img-src 'self' data: blob:",
   ].join("; ");
   document.head.prepend(csp);

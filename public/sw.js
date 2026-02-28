@@ -36,10 +36,11 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
-  // Skip non-GET and cross-origin API calls
+  // Skip non-GET and cross-origin API calls (don't cache these)
   if (request.method !== "GET") return;
-  if (request.url.includes("api.anthropic.com")) return;
+  if (request.url.includes("generativelanguage.googleapis.com")) return;
   if (request.url.includes("npiregistry.cms.hhs.gov")) return;
+  if (request.url.includes("supabase.co")) return;
 
   // Navigation requests: network-first
   if (request.mode === "navigate") {
