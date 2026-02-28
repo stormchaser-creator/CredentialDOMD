@@ -19,7 +19,8 @@ import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
-import { NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection } from "./components/pages";
+import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection } from "./components/pages";
+import { supabase } from "./lib/supabase";
 import {
   STATES, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
@@ -56,7 +57,7 @@ export default function App() {
 }
 
 function AppInner({ tab, setTab, subPage, setSubPage }) {
-  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut } = useApp();
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");
@@ -136,6 +137,21 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     }).length;
     return { active: activeCount, expiring: soon.length, expired: expired.length, total: allCreds.length };
   }, [allCreds, soon, expired, data.settings.reminderLeadDays]);
+
+  // Auth gate: if Supabase is configured but user isn't authenticated, show login
+  if (authChecked && !user && supabase) {
+    return <AuthPage />;
+  }
+
+  // Still checking auth
+  if (!authChecked) return (
+    <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.textMuted }}>
+      <div style={{ textAlign: "center" }}>
+        <AsclepiusIcon size={40} color={T.accent} />
+        <div style={{ marginTop: 12, fontSize: 14, fontWeight: 500 }}>Loading...</div>
+      </div>
+    </div>
+  );
 
   if (!loaded) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.textMuted }}>
@@ -780,8 +796,21 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
             padding: "12px 16px", boxShadow: T.shadow1,
           }}>
-            <div style={{ fontSize: 13, color: T.textDim }}>CredentialDOMD v2.3 &middot; Data saved locally</div>
+            <div style={{ fontSize: 13, color: T.textDim }}>
+              CredentialDOMD v2.3 &middot; {user ? `Signed in as ${user.email}` : "Data saved locally"}
+            </div>
           </div>
+
+          {/* Sign Out (only when authenticated) */}
+          {user && (
+            <button onClick={() => signOut()} className="cmd-card-hover" style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              backgroundColor: T.dangerDim, border: `1px solid ${T.danger}30`,
+              borderRadius: 12, padding: "14px 16px", cursor: "pointer", width: "100%",
+            }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: T.danger }}>Sign Out</span>
+            </button>
+          )}
         </div>
       </div>
     );

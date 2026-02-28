@@ -3,30 +3,50 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// ─── Device ID ───────────────────────────────────────────────
-const DEVICE_KEY = "credentialdomd-device-id";
+// ─── Supabase Client ────────────────────────────────────────
+// No custom headers — Supabase Auth handles user identity via JWT.
+export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
 
-export function getDeviceId() {
-  let id = localStorage.getItem(DEVICE_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(DEVICE_KEY, id);
-  }
-  return id;
+// ─── Auth Helpers ───────────────────────────────────────────
+
+export async function signUp(email, password) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+  return data;
 }
 
-// Pass device_id as a custom header so Supabase RLS policies can scope
-// access to this device's data. See supabase-rls-fix.sql for details.
-// TODO: Replace with Supabase Auth (email/magic-link or OAuth) for real security.
-export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          "x-device-id": getDeviceId(),
-        },
-      },
-    })
-  : null;
+export async function signIn(email, password) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+export async function signOut() {
+  if (!supabase) return;
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+export async function resetPassword(email) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) throw error;
+}
+
+export async function getUser() {
+  if (!supabase) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
+export function onAuthStateChange(callback) {
+  if (!supabase) return { data: { subscription: { unsubscribe: () => {} } } };
+  return supabase.auth.onAuthStateChange(callback);
+}
 
 // ─── Case conversion ─────────────────────────────────────────
 function camelToSnake(str) {
@@ -129,24 +149,24 @@ function profileRowToSettings(row) {
   return settings;
 }
 
-// ─── Ensure profile exists ───────────────────────────────────
-export async function ensureProfile(deviceId) {
-  if (!supabase) return null;
+// ─── Ensure profile exists (now uses auth user id) ──────────
+export async function ensureProfile(userId) {
+  if (!supabase || !userId) return null;
 
-  // Check if profile exists
+  // Check if profile exists for this auth user
   const { data: existing } = await supabase
     .from("profiles")
     .select("*")
-    .eq("device_id", deviceId)
+    .eq("auth_user_id", userId)
     .maybeSingle();
 
   if (existing) return existing;
 
-  // Create new profile
+  // Create new profile linked to auth user
   const newId = crypto.randomUUID();
   const { data: created, error } = await supabase
     .from("profiles")
-    .insert({ id: newId, device_id: deviceId })
+    .insert({ id: newId, auth_user_id: userId })
     .select()
     .single();
 
@@ -158,19 +178,19 @@ export async function ensureProfile(deviceId) {
 }
 
 // ─── Load all data from Supabase ─────────────────────────────
-export async function loadFromSupabase(deviceId) {
-  if (!supabase) return null;
+export async function loadFromSupabase(userId) {
+  if (!supabase || !userId) return null;
 
-  // Get profile
+  // Get profile by auth user id
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("device_id", deviceId)
+    .eq("auth_user_id", userId)
     .maybeSingle();
 
   if (!profile) return null;
 
-  const userId = profile.id;
+  const profileId = profile.id;
   const settings = profileRowToSettings(profile);
 
   // Fetch all collections in parallel
@@ -180,7 +200,7 @@ export async function loadFromSupabase(deviceId) {
       supabase
         .from(tableName(key))
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", profileId)
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
           if (error) {
@@ -192,7 +212,7 @@ export async function loadFromSupabase(deviceId) {
     )
   );
 
-  const out = { settings, _userId: userId };
+  const out = { settings, _userId: profileId };
   for (const { key, rows } of results) {
     out[key] = rows.map((row) => {
       const camel = toCamelObj(row);

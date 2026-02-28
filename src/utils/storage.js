@@ -1,13 +1,6 @@
 import { STORAGE_KEY, DEFAULT_DATA } from "../constants/defaults";
-import { getDeviceId, ensureProfile, loadFromSupabase, bulkSync, saveSettings as sbSaveSettings } from "../lib/supabase";
 
 const ENV_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-
-const COLLECTION_KEYS = [
-  "licenses", "cme", "privileges", "insurance", "healthRecords",
-  "education", "caseLogs", "workHistory", "peerReferences",
-  "malpracticeHistory", "documents", "shareLog", "notificationLog",
-];
 
 function applyDefaults(data) {
   if (!data.settings.apiKey && ENV_API_KEY) {
@@ -31,66 +24,10 @@ function loadFromLocalStorage() {
   return null;
 }
 
+// loadData now only loads from localStorage/Capacitor (offline fallback).
+// Supabase loading is handled in AppContext after auth resolves.
 export async function loadData() {
-  const deviceId = getDeviceId();
-
-  // Try Supabase first
-  try {
-    const profile = await ensureProfile(deviceId);
-    if (profile) {
-      const sbData = await loadFromSupabase(deviceId);
-      if (sbData) {
-        const userId = sbData._userId;
-        delete sbData._userId;
-
-        // Merge with defaults
-        const merged = {
-          ...DEFAULT_DATA,
-          ...sbData,
-          settings: { ...DEFAULT_DATA.settings, ...(sbData.settings || {}) },
-        };
-
-        // Check if localStorage has data not yet in Supabase (first-time migration)
-        const local = loadFromLocalStorage();
-        if (local) {
-          let migrated = false;
-          for (const key of COLLECTION_KEYS) {
-            if (local[key]?.length > 0 && (!merged[key] || merged[key].length === 0)) {
-              merged[key] = local[key];
-              // Sync local data to Supabase
-              bulkSync(userId, key, local[key]).catch(() => {});
-              migrated = true;
-            }
-          }
-          // Migrate settings if Supabase profile is empty
-          if (!merged.settings.name && local.settings?.name) {
-            merged.settings = { ...merged.settings, ...local.settings };
-            sbSaveSettings(userId, merged.settings).catch(() => {});
-            migrated = true;
-          }
-          if (migrated) {
-            console.log("CredentialDOMD: Migrated localStorage data to Supabase");
-          }
-        }
-
-        // Store userId for future operations
-        merged._userId = userId;
-
-        // Keep localStorage as cache
-        try {
-          const cacheData = { ...merged };
-          delete cacheData._userId;
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(cacheData));
-        } catch { /* quota */ }
-
-        return applyDefaults(merged);
-      }
-    }
-  } catch (err) {
-    console.warn("CredentialDOMD: Supabase load failed, falling back to localStorage:", err.message);
-  }
-
-  // Fallback to localStorage
+  // Try localStorage first
   const local = loadFromLocalStorage();
   if (local) return applyDefaults(local);
 

@@ -6,10 +6,18 @@ import { generateAlerts, fireBrowserNotification, buildNotificationMessage } fro
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
 import { MS_PER_DAY } from "../utils/helpers";
 import {
+  supabase,
+  signIn as sbSignIn,
+  signUp as sbSignUp,
+  signOut as sbSignOut,
+  resetPassword as sbResetPassword,
+  ensureProfile,
+  loadFromSupabase,
   insertItem as sbInsert,
   updateItem as sbUpdate,
   deleteItem as sbDelete,
   saveSettings as sbSaveSettings,
+  bulkSync,
 } from "../lib/supabase";
 
 const AppContext = createContext(null);
@@ -17,18 +25,144 @@ const AppContext = createContext(null);
 export function AppProvider({ children, onNavigate }) {
   const [data, setData] = useState(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
+  const [user, setUser] = useState(undefined); // undefined = checking, null = not logged in, object = logged in
+  const [authChecked, setAuthChecked] = useState(false);
   const userIdRef = useRef(null);
 
-  // Load data on mount
+  // ─── Auth: check session on mount + subscribe to changes ───
   useEffect(() => {
-    loadData().then(d => {
-      if (d._userId) {
-        userIdRef.current = d._userId;
-        delete d._userId;
-      }
-      setData(d);
-      setLoaded(true);
+    if (!supabase) {
+      // No Supabase configured — skip auth, run in local-only mode
+      setUser(null);
+      setAuthChecked(true);
+      return;
+    }
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthChecked(true);
     });
+
+    // Listen for auth changes (sign in, sign out, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ─── Load data when user changes (sign in / sign out) ─────
+  useEffect(() => {
+    // Still checking auth — wait
+    if (!authChecked) return;
+
+    if (user) {
+      // Authenticated — load from Supabase using auth user id
+      loadDataForUser(user.id);
+    } else if (user === null) {
+      // Not authenticated (or no Supabase) — load from localStorage
+      loadLocalData();
+    }
+  }, [user, authChecked]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadDataForUser(authUserId) {
+    try {
+      // Ensure profile exists for this auth user
+      const profile = await ensureProfile(authUserId);
+      if (profile) {
+        const sbData = await loadFromSupabase(authUserId);
+        if (sbData) {
+          const profileId = sbData._userId;
+          delete sbData._userId;
+          userIdRef.current = profileId;
+
+          // Merge with defaults
+          const merged = {
+            ...DEFAULT_DATA,
+            ...sbData,
+            settings: { ...DEFAULT_DATA.settings, ...(sbData.settings || {}) },
+          };
+
+          // Check if localStorage has data not yet in Supabase (first-time migration)
+          const COLLECTION_KEYS = [
+            "licenses", "cme", "privileges", "insurance", "healthRecords",
+            "education", "caseLogs", "workHistory", "peerReferences",
+            "malpracticeHistory", "documents", "shareLog", "notificationLog",
+          ];
+          let local = null;
+          try {
+            const raw = localStorage.getItem("credentialdomd-data");
+            if (raw) local = JSON.parse(raw);
+          } catch { /* ignore */ }
+
+          if (local) {
+            let migrated = false;
+            for (const key of COLLECTION_KEYS) {
+              if (local[key]?.length > 0 && (!merged[key] || merged[key].length === 0)) {
+                merged[key] = local[key];
+                bulkSync(profileId, key, local[key]).catch(() => {});
+                migrated = true;
+              }
+            }
+            if (!merged.settings.name && local.settings?.name) {
+              merged.settings = { ...merged.settings, ...local.settings };
+              sbSaveSettings(profileId, merged.settings).catch(() => {});
+              migrated = true;
+            }
+            if (migrated) {
+              console.log("CredentialDOMD: Migrated localStorage data to Supabase");
+            }
+          }
+
+          setData(merged);
+          setLoaded(true);
+
+          // Cache to localStorage
+          try {
+            localStorage.setItem("credentialdomd-data", JSON.stringify(merged));
+          } catch { /* quota */ }
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("CredentialDOMD: Supabase load failed:", err.message);
+    }
+
+    // Fallback to local
+    loadLocalData();
+  }
+
+  async function loadLocalData() {
+    const d = await loadData();
+    if (d._userId) {
+      userIdRef.current = d._userId;
+      delete d._userId;
+    }
+    setData(d);
+    setLoaded(true);
+  }
+
+  // ─── Auth actions ─────────────────────────────────────────
+  const handleSignIn = useCallback(async (email, password) => {
+    return sbSignIn(email, password);
+  }, []);
+
+  const handleSignUp = useCallback(async (email, password) => {
+    return sbSignUp(email, password);
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    await sbSignOut();
+    // Reset state
+    userIdRef.current = null;
+    setData(DEFAULT_DATA);
+    setLoaded(false);
+    setUser(null);
+  }, []);
+
+  const handleResetPassword = useCallback(async (email) => {
+    return sbResetPassword(email);
   }, []);
 
   // Persist to localStorage on change (debounced backup)
@@ -97,7 +231,10 @@ export function AppProvider({ children, onNavigate }) {
     data, setData, loaded, theme, toggleTheme,
     updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
     allTrackedStates, navigate, userIdRef,
-  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate]);
+    // Auth
+    user, authChecked,
+    signIn: handleSignIn, signUp: handleSignUp, signOut: handleSignOut, resetPassword: handleResetPassword,
+  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignIn, handleSignUp, handleSignOut, handleResetPassword]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
