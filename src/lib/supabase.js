@@ -31,6 +31,16 @@ export async function signOut() {
   if (error) throw error;
 }
 
+export async function signInWithOAuth(provider) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: window.location.origin + "/" },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function resetPassword(email) {
   if (!supabase) throw new Error("Supabase is not configured");
   const { error } = await supabase.auth.resetPasswordForEmail(email);
