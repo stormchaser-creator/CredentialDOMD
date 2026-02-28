@@ -3,10 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
-
 // ─── Device ID ───────────────────────────────────────────────
 const DEVICE_KEY = "credentialdomd-device-id";
 
@@ -18,6 +14,19 @@ export function getDeviceId() {
   }
   return id;
 }
+
+// Pass device_id as a custom header so Supabase RLS policies can scope
+// access to this device's data. See supabase-rls-fix.sql for details.
+// TODO: Replace with Supabase Auth (email/magic-link or OAuth) for real security.
+export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          "x-device-id": getDeviceId(),
+        },
+      },
+    })
+  : null;
 
 // ─── Case conversion ─────────────────────────────────────────
 function camelToSnake(str) {
