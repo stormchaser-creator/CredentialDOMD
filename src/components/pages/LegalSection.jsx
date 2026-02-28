@@ -92,12 +92,17 @@ function PrivacyPolicy({ T }) {
       </Section>
 
       <Section title="2. How Your Data Is Stored" T={T}>
-        <p>All data is stored <strong>locally on your device</strong> using your browser's localStorage. Your credential data is <strong>never transmitted to our servers</strong> because we do not operate any servers that receive or store your data.</p>
-        <p style={{ marginTop: 6 }}>The only external services contacted are:</p>
+        <p>Your data is stored in two places:</p>
         <ul style={{ paddingLeft: 18, marginTop: 4 }}>
+          <li><strong>Locally on your device</strong> — in your browser's localStorage, serving as an offline cache so the app works without an internet connection.</li>
+          <li><strong>Supabase cloud database</strong> — a PostgreSQL database hosted by Supabase (supabase.com). Your credential data is synced to the cloud to enable cross-device access and backup. Data is encrypted in transit via HTTPS/TLS.</li>
+        </ul>
+        <p style={{ marginTop: 6 }}>The data synced to Supabase includes: your profile information, licenses, CME records, privileges, insurance, health records, education, case logs, work history, peer references, malpractice history, document metadata, and notification/share logs. Uploaded document images (the raw image data) are stored locally only and are not synced to the cloud.</p>
+        <p style={{ marginTop: 6 }}>External services contacted:</p>
+        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
+          <li><strong>Supabase</strong> — cloud database for data sync and backup</li>
           <li><strong>NPPES Registry</strong> (npiregistry.cms.hhs.gov) — for NPI lookup, a free public government API</li>
-          <li><strong>Gemini API</strong> (generativelanguage.googleapis.com) — for AI document scanning, only when you provide your own API key and initiate a scan</li>
-          <li><strong>Google Fonts</strong> (fonts.googleapis.com) — for loading the application typeface</li>
+          <li><strong>Gemini API</strong> (generativelanguage.googleapis.com) — for AI-powered document scanning and CPT code lookup, only when you provide your own API key and initiate a scan or lookup. Document images are sent to Google's Gemini API for analysis and are subject to Google's data handling policies.</li>
         </ul>
       </Section>
 
@@ -106,12 +111,18 @@ function PrivacyPolicy({ T }) {
       </Section>
 
       <Section title="4. Data Security" T={T}>
-        <p>Your data is stored locally and is as secure as your device and browser. We recommend:</p>
+        <p>Your data is protected by multiple layers:</p>
         <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li>Using a device with a passcode or biometric lock</li>
+          <li><strong>In transit:</strong> All communication with Supabase and external APIs uses HTTPS/TLS encryption.</li>
+          <li><strong>At rest (cloud):</strong> Supabase encrypts data at rest on their infrastructure. Row Level Security (RLS) policies restrict database access to your device's identifier.</li>
+          <li><strong>At rest (local):</strong> Local data is as secure as your device and browser. Use a device with a passcode or biometric lock.</li>
+        </ul>
+        <p style={{ marginTop: 6 }}>We recommend:</p>
+        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
           <li>Not using CredentialDOMD on shared or public computers</li>
           <li>Regularly backing up your data using the Export feature</li>
-          <li>Not sharing your API key with others</li>
+          <li>Not sharing your Gemini API key with others</li>
+          <li>Clearing browser data if you suspect unauthorized device access</li>
         </ul>
       </Section>
 
@@ -121,17 +132,17 @@ function PrivacyPolicy({ T }) {
       </Section>
 
       <Section title="6. Your Rights" T={T}>
-        <p>Because all data is stored locally on your device, you have full control:</p>
+        <p>You have full control over your data:</p>
         <ul style={{ paddingLeft: 18, marginTop: 4 }}>
           <li><strong>Access:</strong> All your data is visible within the app at all times</li>
           <li><strong>Export:</strong> Use Data & Backup to download all your data as JSON</li>
-          <li><strong>Delete:</strong> Use the Data Rights page to permanently delete all your data</li>
+          <li><strong>Delete:</strong> Use the Data Rights page to permanently delete all your data from both your device and the cloud database</li>
           <li><strong>Portability:</strong> Exported JSON files can be imported into any compatible system</li>
         </ul>
       </Section>
 
       <Section title="7. Cookies & Tracking" T={T}>
-        <p>CredentialDOMD does not use cookies, analytics, tracking pixels, or any form of user tracking. We do not collect usage statistics or behavioral data. Google Fonts may set cookies per Google's privacy policy.</p>
+        <p>CredentialDOMD does not use cookies, analytics, tracking pixels, or any form of user tracking. We do not collect usage statistics or behavioral data. All fonts are self-hosted and no external font services are contacted.</p>
       </Section>
 
       <Section title="8. Changes to This Policy" T={T}>
@@ -157,7 +168,7 @@ function TermsOfService({ T }) {
       </Section>
 
       <Section title="2. Description of Service" T={T}>
-        <p>CredentialDOMD is a personal credential management tool designed to help physicians organize, track, and share their professional credentials. The app stores data locally on your device and does not require an account or registration.</p>
+        <p>CredentialDOMD is a personal credential management tool designed to help physicians organize, track, and share their professional credentials. The app stores data locally on your device and syncs it to a cloud database for backup and cross-device access. It does not currently require an account or registration; access is scoped by a device identifier.</p>
       </Section>
 
       <Section title="3. Intended Use" T={T}>
@@ -229,9 +240,9 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 8 }}>Data Storage</h3>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.6 }}>
-          All your data is stored <strong>exclusively on this device</strong> in your browser's localStorage.
-          No data is sent to or stored on any external server. Clearing your browser data or
-          uninstalling the app will permanently remove all stored information.
+          Your data is stored locally on this device (as an offline cache) and synced to a Supabase
+          cloud database for backup and cross-device access. All transfers are encrypted via HTTPS.
+          Deleting your data below removes it from <strong>both</strong> this device and the cloud database.
         </p>
       </div>
 
