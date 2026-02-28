@@ -38,7 +38,8 @@ serve(async (req) => {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.supabase_user_id;
-      if (!userId) break;
+      const app = session.metadata?.app;
+      if (!userId || !app) break;
 
       if (session.mode === "subscription") {
         const sub = await stripe.subscriptions.retrieve(
@@ -48,89 +49,93 @@ serve(async (req) => {
 
         // Determine plan type from price
         let planType = "pro_monthly";
+        let status = "pro";
         const proAnnual = Deno.env.get("STRIPE_PRICE_ID_PRO_ANNUAL");
         const practice = Deno.env.get("STRIPE_PRICE_ID_PRACTICE");
         if (priceId === proAnnual) planType = "pro_annual";
-        if (priceId === practice) planType = "practice";
+        if (priceId === practice) {
+          planType = "practice";
+          status = "practice";
+        }
 
         await supabase
-          .from("profiles")
-          .update({
-            subscription_status: planType.startsWith("practice")
-              ? "practice"
-              : "pro",
+          .from("subscriptions")
+          .upsert({
+            auth_user_id: userId,
+            app,
+            status,
             plan_type: planType,
             subscription_id: sub.id,
-            subscription_period_end: new Date(
+            period_end: new Date(
               sub.current_period_end * 1000
             ).toISOString(),
             updated_at: now,
-          })
-          .eq("auth_user_id", userId);
+          }, { onConflict: "auth_user_id,app" });
       } else {
-        // One-time payment
+        // One-time payment (e.g. FluoroPath lifetime)
         await supabase
-          .from("profiles")
-          .update({
-            subscription_status: "pro",
+          .from("subscriptions")
+          .upsert({
+            auth_user_id: userId,
+            app,
+            status: "pro",
             plan_type: "pro_lifetime",
             updated_at: now,
-          })
-          .eq("auth_user_id", userId);
+          }, { onConflict: "auth_user_id,app" });
       }
       break;
     }
 
     case "customer.subscription.updated": {
       const sub = event.data.object as Stripe.Subscription;
-      const customerId = sub.customer as string;
 
       let status: string;
       if (sub.status === "active") status = "pro";
       else if (sub.status === "past_due") status = "past_due";
       else status = "canceled";
 
+      // Update by subscription_id (unique per subscription row)
       await supabase
-        .from("profiles")
+        .from("subscriptions")
         .update({
-          subscription_status: status,
-          subscription_period_end: new Date(
+          status,
+          period_end: new Date(
             sub.current_period_end * 1000
           ).toISOString(),
           updated_at: now,
         })
-        .eq("stripe_customer_id", customerId);
+        .eq("subscription_id", sub.id);
       break;
     }
 
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
-      const customerId = sub.customer as string;
 
       await supabase
-        .from("profiles")
+        .from("subscriptions")
         .update({
-          subscription_status: "free",
+          status: "free",
           plan_type: "free",
           subscription_id: null,
-          subscription_period_end: null,
+          period_end: null,
           updated_at: now,
         })
-        .eq("stripe_customer_id", customerId);
+        .eq("subscription_id", sub.id);
       break;
     }
 
     case "invoice.payment_failed": {
       const invoice = event.data.object as Stripe.Invoice;
-      const customerId = invoice.customer as string;
+      const subId = invoice.subscription as string;
+      if (!subId) break;
 
       await supabase
-        .from("profiles")
+        .from("subscriptions")
         .update({
-          subscription_status: "past_due",
+          status: "past_due",
           updated_at: now,
         })
-        .eq("stripe_customer_id", customerId);
+        .eq("subscription_id", subId);
       break;
     }
   }

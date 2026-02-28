@@ -20,14 +20,15 @@ export function useSubscription(user) {
     }
 
     supabase
-      .from("profiles")
-      .select("subscription_status, plan_type, subscription_period_end")
+      .from("subscriptions")
+      .select("status, plan_type, period_end")
       .eq("auth_user_id", user.id)
-      .single()
+      .eq("app", "credentialdomd")
+      .maybeSingle()
       .then(({ data }) => {
-        if (data?.subscription_status === "pro" || data?.subscription_status === "practice") {
-          setPlan(data.plan_type || data.subscription_status);
-          setPeriodEnd(data.subscription_period_end);
+        if (data?.status === "pro" || data?.status === "practice") {
+          setPlan(data.plan_type || data.status);
+          setPeriodEnd(data.period_end);
         } else {
           setPlan("free");
         }
@@ -46,6 +47,7 @@ export function useSubscription(user) {
       const res = await supabase.functions.invoke("create-checkout-session", {
         body: {
           priceId,
+          app: "credentialdomd",
           successUrl: window.location.origin + "/?upgraded=true",
           cancelUrl: window.location.origin + "/",
         },
