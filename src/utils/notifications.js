@@ -128,14 +128,14 @@ export function buildNotificationMessage(data, alerts) {
   };
 }
 
-export function fireBrowserNotification(title, _body, tag) {
+export function fireBrowserNotification(title, body, tag) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
   try {
     const icon = "data:image/svg+xml," + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#6366f1"/><text x="32" y="42" text-anchor="middle" fill="white" font-size="28" font-weight="800" font-family="sans-serif">MD</text></svg>'
     );
     const n = new Notification(title, {
-      body: "You have credential alerts. Open CredentialDOMD to review.",
+      body: body || "You have credential alerts. Open CredentialDOMD to review.",
       icon,
       tag: tag || "credentialdomd-alert",
       requireInteraction: false,
