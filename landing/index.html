@@ -310,22 +310,30 @@ nav {
 
 .hero-glow-1 {
   position: absolute;
-  width: 600px;
-  height: 600px;
+  width: 700px;
+  height: 700px;
   top: -10%;
   left: -5%;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.07) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.04) 40%, transparent 70%);
   pointer-events: none;
+  animation: orbFloat 8s ease-in-out infinite;
 }
 
 .hero-glow-2 {
   position: absolute;
-  width: 500px;
-  height: 500px;
+  width: 600px;
+  height: 600px;
   bottom: -15%;
   right: -5%;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.04) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(16, 185, 129, 0.05) 40%, transparent 70%);
   pointer-events: none;
+  animation: orbFloat 10s ease-in-out infinite reverse;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(20px, -20px) scale(1.05); }
+  66%  { transform: translate(-15px, 10px) scale(0.97); }
 }
 
 .hero .container {
@@ -2380,18 +2388,18 @@ footer {
         <div class="pricing-name">Pro</div>
         <div class="pricing-desc">For physicians who cannot afford to miss a deadline</div>
         <div class="pricing-price">
-          <div class="pricing-amount">$9.99<span class="pricing-period">/mo</span></div>
-          <div class="pricing-annual">$99/year &mdash; save $20</div>
+          <div class="pricing-amount">$29<span class="pricing-period">/mo</span></div>
+          <div class="pricing-annual">$199/year &mdash; save $149</div>
         </div>
         <ul class="pricing-features">
           <li><span class="check">&#10003;</span> <strong>Unlimited</strong> credentials</li>
+          <li><span class="check">&#10003;</span> Hospital privileges tracking</li>
+          <li><span class="check">&#10003;</span> Insurance &amp; malpractice records</li>
           <li><span class="check">&#10003;</span> AI document scanner</li>
-          <li><span class="check">&#10003;</span> 90/60/30/14/7-day priority alerts</li>
           <li><span class="check">&#10003;</span> CV generator + data export</li>
-          <li><span class="check">&#10003;</span> CPT/RVU code lookup</li>
           <li><span class="check">&#10003;</span> CME compliance tracking</li>
-          <li><span class="check">&#10003;</span> Insurance panel manager</li>
           <li><span class="check">&#10003;</span> Peer reference management</li>
+          <li><span class="check">&#10003;</span> Multi-device cloud sync</li>
           <li><span class="check">&#10003;</span> Offline PWA access</li>
         </ul>
         <a href="#get-started" class="btn-primary pricing-cta">Start Free Trial</a>
@@ -2400,22 +2408,100 @@ footer {
       <!-- Practice -->
       <div class="pricing-card animate-on-scroll">
         <div class="pricing-name">Practice</div>
-        <div class="pricing-desc">For managers handling multiple providers</div>
+        <div class="pricing-desc">For credentialing offices &amp; group practices</div>
         <div class="pricing-price">
-          <div class="pricing-amount">$29.99<span class="pricing-period">/mo</span></div>
-          <div class="pricing-annual">Per practice, up to 50 providers</div>
+          <div class="pricing-amount free" style="font-size: 32px; line-height: 1.1;">Custom</div>
+          <div class="pricing-period">contact us for pricing</div>
         </div>
         <ul class="pricing-features">
           <li><span class="check">&#10003;</span> Everything in Pro</li>
           <li><span class="check">&#10003;</span> Multi-provider dashboard</li>
           <li><span class="check">&#10003;</span> Team credential overview</li>
-          <li><span class="check">&#10003;</span> Bulk import + export</li>
           <li><span class="check">&#10003;</span> Practice-wide compliance score</li>
           <li><span class="check">&#10003;</span> Admin role management</li>
-          <li><span class="check">&#10003;</span> Priority support</li>
+          <li><span class="check">&#10003;</span> Provider invite &amp; onboarding</li>
+          <li><span class="check">&#10003;</span> Dedicated support</li>
         </ul>
-        <a href="#get-started" class="btn-secondary pricing-cta">Contact Us</a>
+        <a href="mailto:hello@credentialdomd.com?subject=Practice%20Plan%20Inquiry" class="btn-secondary pricing-cta">Contact Us</a>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COMPARISON ============ -->
+<section style="padding: 80px 0; background: var(--bg-elevated);">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center; margin-bottom: 48px;">
+      <div class="section-label">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        How We Compare
+      </div>
+      <h2 class="section-title">More comprehensive than anything else out there.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Mocingbird charges $199/month and only tracks licenses and CME. CredentialDOMD Pro is $29/month and covers everything.</p>
+    </div>
+
+    <div class="animate-on-scroll" style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 15px; min-width: 560px;">
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 14px 20px; color: var(--text-secondary); font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--border);">Feature</th>
+            <th style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 700; font-size: 14px; border-bottom: 2px solid var(--emerald); background: var(--emerald-dim);">CredentialDOMD Pro<br><span style="font-size: 12px; font-weight: 600; color: var(--emerald-light);">$29/mo</span></th>
+            <th style="text-align: center; padding: 14px 20px; color: var(--text-muted); font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border);">Mocingbird<br><span style="font-size: 12px; font-weight: 500;">$199/mo</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text-secondary);">Medical license tracking</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald);">✓</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text-secondary);">CME tracking &amp; compliance</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald);">✓</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text-secondary);">Document storage</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald);">✓</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">Hospital privileges tracking</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">Insurance &amp; malpractice records</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">AI document scanning</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">CV auto-generator</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">Case logs &amp; peer references</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">NPI registry lookup</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
+          <tr>
+            <td style="padding: 14px 20px; color: var(--text); font-weight: 700;">Monthly price</td>
+            <td style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 800; font-size: 17px; background: var(--emerald-dim);">$29</td>
+            <td style="text-align: center; padding: 14px 20px; color: var(--text-muted); font-weight: 700; font-size: 17px;">$199</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </section>

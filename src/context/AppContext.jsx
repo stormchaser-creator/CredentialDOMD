@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
+import { useSubscription } from "../hooks/useSubscription";
 import { loadData, saveData } from "../utils/storage";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
@@ -174,6 +175,9 @@ export function AppProvider({ children, onNavigate }) {
     return () => clearTimeout(saveTimer.current);
   }, [data, loaded]);
 
+  // ─── Subscription ─────────────────────────────────────────
+  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout, manage } = useSubscription(user ?? null);
+
   // Theme
   const theme = useMemo(() => THEMES[data.settings.theme] || THEMES.light, [data.settings.theme]);
 
@@ -234,7 +238,9 @@ export function AppProvider({ children, onNavigate }) {
     // Auth
     user, authChecked,
     signIn: handleSignIn, signUp: handleSignUp, signOut: handleSignOut, resetPassword: handleResetPassword,
-  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignIn, handleSignUp, handleSignOut, handleResetPassword]);
+    // Subscription
+    plan, isPro, isPractice, subLoading, periodEnd, checkout, manage,
+  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignIn, handleSignUp, handleSignOut, handleResetPassword, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

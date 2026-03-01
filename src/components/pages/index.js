@@ -4,3 +4,5 @@ export { default as NotificationBanner } from "./NotificationBanner";
 export { default as SettingsSection } from "./SettingsSection";
 export { default as FAQSection } from "./FAQSection";
 export { default as LegalSection } from "./LegalSection";
+export { default as PricingModal } from "./PricingModal";
+export { default as TeamSection } from "./TeamSection";

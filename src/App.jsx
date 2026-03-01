@@ -19,7 +19,7 @@ import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
-import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection } from "./components/pages";
+import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection } from "./components/pages";
 import { supabase } from "./lib/supabase";
 import {
   STATES, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
@@ -56,8 +56,48 @@ export default function App() {
   );
 }
 
+/* ─── Pro Gate Overlay ────────────────────────────────────────── */
+function ProGate({ T, onUpgrade, featureName }) {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 10,
+      backgroundColor: T.bg + "e8",
+      backdropFilter: "blur(4px)",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      borderRadius: 16, padding: "32px 24px", textAlign: "center",
+    }}>
+      <div style={{
+        width: 56, height: 56, borderRadius: 28,
+        background: "linear-gradient(135deg, #10b981, #3b82f6)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 24, marginBottom: 16,
+        boxShadow: "0 4px 16px rgba(16,185,129,0.3)",
+      }}>🔒</div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: T.text, marginBottom: 6 }}>
+        {featureName} — Pro Feature
+      </div>
+      <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 20, maxWidth: 260 }}>
+        Upgrade to Pro to unlock this feature and everything else CredentialDOMD has to offer.
+      </div>
+      <button
+        onClick={onUpgrade}
+        style={{
+          padding: "13px 28px", borderRadius: 14, border: "none",
+          background: "linear-gradient(135deg, #10b981, #059669)",
+          color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer",
+          boxShadow: "0 4px 14px rgba(16,185,129,0.35)",
+        }}
+      >
+        Upgrade to Pro →
+      </button>
+    </div>
+  );
+}
+
 function AppInner({ tab, setTab, subPage, setSubPage }) {
-  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage } = useApp();
+  const [showPricing, setShowPricing] = useState(false);
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");
@@ -171,8 +211,18 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           display: "flex", alignItems: "center", gap: 20,
           backgroundColor: T.card, borderRadius: 16, padding: "20px 24px",
           marginBottom: 16, boxShadow: T.shadow1,
+          position: "relative", overflow: "hidden",
         }}>
-          <ComplianceRing percent={compliancePercent} size={120} stroke={9} />
+          {/* Subtle gradient glow behind ring */}
+          <div style={{
+            position: "absolute", top: -40, left: -40,
+            width: 200, height: 200,
+            background: "radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }} />
+          <div className="cmd-ring-animated">
+            <ComplianceRing percent={compliancePercent} size={120} stroke={9} />
+          </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {credStats.active > 0 && (
@@ -220,7 +270,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Action Required</h3>
             <span style={{ fontSize: 12, fontWeight: 600, color: T.danger }}>{urgent.length} item{urgent.length !== 1 ? "s" : ""}</span>
           </div>
-          <div className="cmd-h-scroll" style={{ display: "flex", gap: 10, paddingBottom: 4 }}>
+          <div className="cmd-snap-scroll">
             {urgent.slice(0, 6).map(item => {
               const sc = getStatusColor(item.expirationDate);
               const isExpired = sc === "red";
@@ -478,11 +528,13 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   };
 
   /* ─── CREDENTIALS PAGE ───────────────────────────────────── */
+  const PRO_GATED = new Set(["privileges", "insurance", "caseLogs", "peerReferences", "malpracticeHistory"]);
+
   const credGroups = [
     { title: "Active Credentials", items: [
       { id: "licenses", label: "Licenses", icon: "\ud83e\udea3", count: data.licenses.length },
-      { id: "privileges", label: "Privileges", icon: "\ud83c\udfe5", count: data.privileges.length },
-      { id: "insurance", label: "Insurance", icon: "\ud83d\udee1\ufe0f", count: data.insurance.length },
+      { id: "privileges", label: "Privileges", icon: "\ud83c\udfe5", count: data.privileges.length, pro: true },
+      { id: "insurance", label: "Insurance", icon: "\ud83d\udee1\ufe0f", count: data.insurance.length, pro: true },
     ]},
     { title: "Continuing Education", items: [
       { id: "cme", label: "CME Credits", icon: "\ud83c\udf93", count: data.cme.length },
@@ -491,12 +543,12 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     { title: "Professional History", items: [
       { id: "education", label: "Education", icon: "\ud83c\udf93", count: (data.education || []).length },
       { id: "workHistory", label: "Work History", icon: "\ud83c\udfe2", count: (data.workHistory || []).length },
-      { id: "caseLogs", label: "Case Logs", icon: "\ud83d\udccb", count: (data.caseLogs || []).length },
+      { id: "caseLogs", label: "Case Logs", icon: "\ud83d\udccb", count: (data.caseLogs || []).length, pro: true },
     ]},
     { title: "Supporting Records", items: [
       { id: "healthRecords", label: "Health Records", icon: "\ud83d\udc89", count: (data.healthRecords || []).length },
-      { id: "peerReferences", label: "Peer References", icon: "\ud83d\udc65", count: (data.peerReferences || []).length },
-      { id: "malpracticeHistory", label: "Malpractice History", icon: "\ud83d\udccb", count: (data.malpracticeHistory || []).length },
+      { id: "peerReferences", label: "Peer References", icon: "\ud83d\udc65", count: (data.peerReferences || []).length, pro: true },
+      { id: "malpracticeHistory", label: "Malpractice History", icon: "\ud83d\udccb", count: (data.malpracticeHistory || []).length, pro: true },
     ]},
   ];
 
@@ -541,13 +593,23 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "cme") return <CMESection onShare={openShare} />;
     if (subPage === "findCme") return <CMEResourcesSection />;
     if (subPage?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={subPage.split(":")[1]} />;
-    if (subPage === "privileges") return <CrudSection title="Privileges" sectionKey="privileges" items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (subPage === "insurance") return <CrudSection title="Insurance" sectionKey="insurance" items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (subPage === "privileges") {
+      if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;
+      return <CrudSection title="Privileges" sectionKey="privileges" items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    }
+    if (subPage === "insurance") {
+      if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
+      return <CrudSection title="Insurance" sectionKey="insurance" items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    }
     if (subPage === "healthRecords") return <HealthRecordsSection onShare={openShare} />;
     if (subPage === "education") return <CrudSection title="Education" sectionKey="education" items={data.education || []} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "graduationDate", label: "Graduation Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (subPage === "caseLogs") return <CrudSection title="Case Logs" sectionKey="caseLogs" items={data.caseLogs || []} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set((data.workHistory || []).map(w => w.employer).filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => item.role ? <div style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginTop: 2 }}>{item.role}</div> : null} />;
+    if (subPage === "caseLogs") {
+      if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
+      return <CrudSection title="Case Logs" sectionKey="caseLogs" items={data.caseLogs || []} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set((data.workHistory || []).map(w => w.employer).filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => item.role ? <div style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginTop: 2 }}>{item.role}</div> : null} />;
+    }
     if (subPage === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "select", options: ["No", "Yes"] }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "peerReferences") {
+      if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Peer References" /></div>;
       const handleContactImport = async () => {
         if (!('contacts' in navigator && 'ContactsManager' in window)) { return; }
         try {
@@ -577,7 +639,10 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         <CrudSection title="Peer References" sectionKey="peerReferences" items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "yearsKnown", label: "Years Known" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
       </>);
     }
-    if (subPage === "malpracticeHistory") return <CrudSection title="Malpractice History" sectionKey="malpracticeHistory" items={data.malpracticeHistory || []} {...crud("malpracticeHistory")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No malpractice claims" emptySub="Track malpractice claims for consistent disclosure across applications." fields={[{ key: "dateOfIncident", label: "Date of Incident", type: "date" }, { key: "dateFiled", label: "Date Filed", type: "date" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "outcome", label: "Outcome", type: "select", options: MALPRACTICE_OUTCOMES }, { key: "settlementAmount", label: "Settlement Amount" }, { key: "description", label: "Description", type: "textarea" }, { key: "facility", label: "Facility" }, { key: "insuranceCarrier", label: "Insurance Carrier" }, { key: "dateResolved", label: "Date Resolved", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (subPage === "malpracticeHistory") {
+      if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Malpractice History" /></div>;
+      return <CrudSection title="Malpractice History" sectionKey="malpracticeHistory" items={data.malpracticeHistory || []} {...crud("malpracticeHistory")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No malpractice claims" emptySub="Track malpractice claims for consistent disclosure across applications." fields={[{ key: "dateOfIncident", label: "Date of Incident", type: "date" }, { key: "dateFiled", label: "Date Filed", type: "date" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "outcome", label: "Outcome", type: "select", options: MALPRACTICE_OUTCOMES }, { key: "settlementAmount", label: "Settlement Amount" }, { key: "description", label: "Description", type: "textarea" }, { key: "facility", label: "Facility" }, { key: "insuranceCarrier", label: "Insurance Carrier" }, { key: "dateResolved", label: "Date Resolved", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    }
 
     return (
       <div>
@@ -591,6 +656,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {sorted.map(p => {
                     const hasUrgent = [...expired, ...soon].filter(i => i._sec === p.id).length;
+                    const locked = p.pro && !isPro;
                     return (
                       <button key={p.id} onClick={() => setSubPage(p.id)} className="cmd-card-hover" style={{
                         display: "flex", alignItems: "center", gap: 12,
@@ -598,14 +664,19 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                         border: `1px solid ${p.accent ? T.accent : T.border}`,
                         borderRadius: 12, padding: "14px 16px", cursor: "pointer",
                         textAlign: "left", width: "100%", boxShadow: p.accent ? "none" : T.shadow1,
+                        opacity: locked ? 0.75 : 1,
                       }}>
-                        <span style={{ fontSize: 22, width: 32, textAlign: "center" }}>{p.icon}</span>
+                        <span style={{ fontSize: 22, width: 32, textAlign: "center" }}>{locked ? "🔒" : p.icon}</span>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 15, fontWeight: 600, color: p.accent ? T.accent : T.text }}>{p.label}</div>
-                          {p.count !== undefined && <div style={{ fontSize: 13, color: T.textDim }}>{p.count} item{p.count !== 1 ? "s" : ""}</div>}
-                          {p.accent && <div style={{ fontSize: 13, color: T.textMuted }}>Browse accredited CME providers</div>}
+                          {locked
+                            ? <div style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>Pro feature — Upgrade to unlock</div>
+                            : p.count !== undefined
+                              ? <div style={{ fontSize: 13, color: T.textDim }}>{p.count} item{p.count !== 1 ? "s" : ""}</div>
+                              : p.accent && <div style={{ fontSize: 13, color: T.textMuted }}>Browse accredited CME providers</div>
+                          }
                         </div>
-                        {hasUrgent > 0 && <span style={{ backgroundColor: T.danger, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 10 }}>{hasUrgent}</span>}
+                        {!locked && hasUrgent > 0 && <span style={{ backgroundColor: T.danger, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 10 }}>{hasUrgent}</span>}
                         <span style={{ color: p.accent ? T.accent : T.textDim, fontSize: 18 }}>{"\u203a"}</span>
                       </button>
                     );
@@ -634,6 +705,46 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
       <div>
         <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>More</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+          {/* ─── Plan Card ─────────────────────────────────────── */}
+          <div style={{
+            borderRadius: 16, padding: "16px 18px", marginBottom: 4,
+            background: isPractice
+              ? "linear-gradient(135deg, #7c3aed, #4f46e5)"
+              : isPro
+                ? "linear-gradient(135deg, #059669, #0d9488)"
+                : "linear-gradient(135deg, #1e293b, #334155)",
+            boxShadow: isPro ? "0 4px 16px rgba(5,150,105,0.25)" : "0 2px 8px rgba(0,0,0,0.2)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: isPro ? 10 : 0 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Current Plan</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
+                  {isPractice ? "Practice" : isPro ? "Pro" : "Free"}
+                </div>
+              </div>
+              {!isPro && (
+                <button onClick={() => setShowPricing(true)} style={{
+                  padding: "10px 18px", borderRadius: 12, border: "none",
+                  backgroundColor: "#10b981", color: "#fff",
+                  fontSize: 14, fontWeight: 700, cursor: "pointer",
+                  boxShadow: "0 2px 8px rgba(16,185,129,0.4)",
+                }}>
+                  Upgrade →
+                </button>
+              )}
+            </div>
+            {isPro && (
+              <button onClick={() => manage()} style={{
+                padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.25)",
+                backgroundColor: "rgba(255,255,255,0.1)", color: "#fff",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", width: "100%",
+              }}>
+                Manage Billing
+              </button>
+            )}
+          </div>
+
           {/* Generate CV */}
           <button onClick={() => setSubPage("cv")} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
@@ -822,6 +933,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
     if (tab === "credentials") return renderCredentials();
+    if (tab === "team") return <TeamSection />;
     if (tab === "more") return renderMore();
   };
 
@@ -831,11 +943,11 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     { id: "home", label: "Home", icon: <HomeIcon /> },
     { id: "credentials", label: "Credentials", icon: <CredsIcon /> },
     { id: "add", label: "Add", icon: <PlusIcon />, isCenter: true },
-    { id: "documents", label: "Documents", icon: <ScanIcon /> },
+    { id: "team", label: "Team", icon: <span style={{ fontSize: 18 }}>👥</span> },
     { id: "more", label: "More", icon: <MoreIcon /> },
   ];
 
-  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : "More";
+  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : tab === "team" ? "Team" : "More";
 
   const FONT_ZOOM = { S: 0.88, M: 1, L: 1.1, XL: 1.2, XXL: 1.35 };
   const fontZoom = FONT_ZOOM[data.settings.fontSize] || 1;
@@ -846,6 +958,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
       backgroundColor: T.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative",
     }}>
       <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
+      <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
       <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
 
       {/* ─── TOP BAR (56px) ────────────────────────────── */}
@@ -938,11 +1051,17 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           if (t.isCenter) {
             return (
               <button key={t.id} onClick={() => { setTab("documents"); setSubPage(null); }} style={{
-                width: 48, height: 48, borderRadius: 24, border: "none",
-                backgroundColor: T.accent, color: "#fff",
+                width: 50, height: 50, borderRadius: 25, border: "none",
+                background: "linear-gradient(135deg, #10b981, #059669)",
+                color: "#fff",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", boxShadow: "0 4px 12px rgba(26,115,232,0.35)",
-              }}>
+                cursor: "pointer",
+                boxShadow: "0 4px 14px rgba(16,185,129,0.45)",
+                transition: "transform 0.15s, box-shadow 0.15s",
+              }}
+              onMouseDown={e => { e.currentTarget.style.transform = "scale(0.94)"; }}
+              onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; }}
+              >
                 <PlusIcon />
               </button>
             );
@@ -953,10 +1072,24 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
               display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
               padding: "6px 12px", background: "none", border: "none", cursor: "pointer",
               color: active ? T.tabActive : T.tabInactive, fontSize: 11,
-              fontWeight: active ? 700 : 500, minWidth: 56,
+              fontWeight: active ? 700 : 500, minWidth: 56, position: "relative",
+              transition: "color 0.2s",
             }}>
-              <div style={{ opacity: active ? 1 : 0.6 }}>{t.icon}</div>
+              <div style={{
+                opacity: active ? 1 : 0.55,
+                transform: active ? "scale(1.1)" : "scale(1)",
+                transition: "opacity 0.2s, transform 0.2s",
+              }}>{t.icon}</div>
               {t.label}
+              {active && (
+                <div style={{
+                  position: "absolute", bottom: 0, left: "50%",
+                  transform: "translateX(-50%)",
+                  width: 4, height: 4, borderRadius: 2,
+                  backgroundColor: T.tabActive,
+                  animation: "fadeIn 0.2s ease-out both",
+                }} />
+              )}
             </button>
           );
         })}
