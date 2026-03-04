@@ -1,0 +1,25 @@
+# ============================================
+# .claudeignore for FluoroPath / CredentialDOMD
+# PURPOSE: Keep static assets and generated 
+# content out of context
+# ============================================
+
+# Landing pages (large static HTML)
+landing/
+
+# SEO state pages (CredentialDOMD only — 50 files)
+# Remove this line if actively working on state pages
+states/
+
+# Build artifacts
+node_modules/
+dist/
+build/
+.cache/
+
+# Git
+.git/
+
+# OS files
+.DS_Store
+Thumbs.db
