@@ -1,0 +1,1945 @@
+{
+  "states": [
+    {
+      "name": "Alabama",
+      "abbreviation": "AL",
+      "slug": "alabama",
+      "boardName": "Alabama Board of Medical Examiners",
+      "boardUrl": "https://www.albme.org",
+      "renewalCycle": "Annual",
+      "cmeHours": 25,
+      "cmeDetails": "25 AMA PRA Category 1 credits per year. At least 12.5 must be live activities. Must include 2 hours of controlled substances prescribing.",
+      "renewalFee": "$500",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "January",
+      "steps": [
+        "Complete 25 hours of AMA PRA Category 1 CME credits",
+        "Log into the ALBME online portal and complete the renewal application",
+        "Attest to CME compliance and answer practice questions",
+        "Pay the annual renewal fee",
+        "Receive confirmation and updated license"
+      ],
+      "pitfalls": [
+        "Alabama requires annual renewal, not biennial like most states",
+        "At least half of CME credits must be from live, in-person activities",
+        "Failure to renew by January 1 results in automatic license lapse"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I need to renew my Alabama medical license?",
+          "answer": "Alabama requires annual renewal. Your license must be renewed by January 1 each year."
+        },
+        {
+          "question": "Can I complete all my CME online in Alabama?",
+          "answer": "No. At least 12.5 of the required 25 CME hours must be from live, in-person activities."
+        },
+        {
+          "question": "What happens if I miss the Alabama renewal deadline?",
+          "answer": "If you fail to renew by January 1, your license lapses automatically. You may need to apply for reinstatement and pay additional fees."
+        }
+      ],
+      "relatedStates": ["mississippi", "tennessee", "georgia", "florida"]
+    },
+    {
+      "name": "Alaska",
+      "abbreviation": "AK",
+      "slug": "alaska",
+      "boardName": "Alaska State Medical Board",
+      "boardUrl": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx",
+      "renewalCycle": "Biennial",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle. Specific topic mandates may apply.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "4-6 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Alaska online licensing portal",
+        "Complete the renewal application and attest to CME compliance",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Alaska license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Alaska medical license?",
+          "answer": "Alaska requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Alaska require?",
+          "answer": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew my Alaska medical license online?",
+          "answer": "Yes, Alaska offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["washington", "hawaii", "oregon", "montana"]
+    },
+    {
+      "name": "Arizona",
+      "abbreviation": "AZ",
+      "slug": "arizona",
+      "boardName": "Arizona Medical Board",
+      "boardUrl": "https://www.azmd.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial renewal period. Topic-specific mandates may apply.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Log into the Arizona Medical Board online portal",
+        "Complete the renewal application and answer professional conduct questions",
+        "Pay the biennial renewal fee",
+        "Receive confirmation of renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Arizona license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Arizona medical license?",
+          "answer": "Arizona medical licenses must be renewed every two years (biennial)."
+        },
+        {
+          "question": "How many CME hours does Arizona require?",
+          "answer": "[RESEARCH NEEDED] Arizona requires approximately 40 hours of CME per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Arizona?",
+          "answer": "Yes, the Arizona Medical Board offers online renewal."
+        }
+      ],
+      "relatedStates": ["california", "nevada", "new-mexico", "colorado"]
+    },
+    {
+      "name": "Arkansas",
+      "abbreviation": "AR",
+      "slug": "arkansas",
+      "boardName": "Arkansas State Medical Board",
+      "boardUrl": "https://www.armedicalboard.org",
+      "renewalCycle": "Annual",
+      "cmeHours": 20,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 20 AMA PRA Category 1 CME credits per year.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the Arkansas State Medical Board portal",
+        "Complete the renewal application",
+        "Pay the annual renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Arkansas license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Arkansas medical license?",
+          "answer": "Arkansas requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Arkansas require?",
+          "answer": "[RESEARCH NEEDED] Approximately 20 hours of CME per year."
+        },
+        {
+          "question": "Can I renew my Arkansas medical license online?",
+          "answer": "Yes, online renewal is available through the Arkansas State Medical Board."
+        }
+      ],
+      "relatedStates": ["tennessee", "mississippi", "louisiana", "missouri"]
+    },
+    {
+      "name": "California",
+      "abbreviation": "CA",
+      "slug": "california",
+      "boardName": "Medical Board of California",
+      "boardUrl": "https://www.mbc.ca.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 50,
+      "cmeDetails": "50 hours of approved CME per biennial renewal cycle. Must include a one-time course in pain management and treatment of terminally ill patients (12 CME hours). CME verified through ACCME's PARS system.",
+      "renewalFee": "$1,206",
+      "processingTime": "4-6 weeks",
+      "renewalMonth": "Birth month (biennial)",
+      "steps": [
+        "Complete 50 hours of approved CME through ACCME-accredited providers",
+        "Ensure completion of one-time pain management/end-of-life care course (12 hours)",
+        "Log into the BreEZe online portal to begin your renewal application",
+        "Verify CME credits are reported in ACCME PARS system",
+        "Pay the $1,206 biennial renewal fee and submit your application"
+      ],
+      "pitfalls": [
+        "California has one of the highest renewal fees in the nation at $1,206 biennially",
+        "The one-time pain management/terminally ill course (12 hours) catches first-time renewers off guard",
+        "Renewals after June 30, 2025 must be submitted online through BreEZe -- paper applications no longer accepted",
+        "CME must be verified through ACCME PARS, so ensure your providers report to that system"
+      ],
+      "faqs": [
+        {
+          "question": "How much does it cost to renew my California medical license?",
+          "answer": "The total biennial renewal fee is $1,206, which includes the base fee of $1,151 plus mandatory assessments for the Steven M. Thompson Program ($25) and CURES ($30)."
+        },
+        {
+          "question": "How many CME hours do I need for California license renewal?",
+          "answer": "You need 50 hours of approved CME per biennial renewal cycle. Additionally, there is a one-time requirement to complete 12 hours of training in pain management and treatment of terminally ill patients."
+        },
+        {
+          "question": "Can I renew my California medical license online?",
+          "answer": "Yes. For licenses expiring on or after June 30, 2025, the Board requires all renewals to be submitted online through the BreEZe portal."
+        },
+        {
+          "question": "What happens if I let my California medical license expire?",
+          "answer": "If your license expires, you cannot practice medicine in California. You will need to apply for license restoration, which may include additional fees, a review of your practice history, and potentially retaking exams if your license has been expired for an extended period."
+        }
+      ],
+      "relatedStates": ["texas", "new-york", "florida", "arizona"]
+    },
+    {
+      "name": "Colorado",
+      "abbreviation": "CO",
+      "slug": "colorado",
+      "boardName": "Colorado Medical Board",
+      "boardUrl": "https://dpo.colorado.gov/MedicalBoard",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Log into the Colorado DORA online portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Colorado license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Colorado medical license?",
+          "answer": "Colorado requires biennial renewal every two years."
+        },
+        {
+          "question": "What CME is required in Colorado?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew my Colorado medical license online?",
+          "answer": "Yes, Colorado offers online renewal through the DORA portal."
+        }
+      ],
+      "relatedStates": ["utah", "arizona", "new-mexico", "wyoming"]
+    },
+    {
+      "name": "Connecticut",
+      "abbreviation": "CT",
+      "slug": "connecticut",
+      "boardName": "Connecticut Medical Examining Board",
+      "boardUrl": "https://portal.ct.gov/DPH/Practitioner-Licensing--Investigations/Medical-Examining-Board",
+      "renewalCycle": "Annual",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per renewal cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the Connecticut eLicense portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Connecticut license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Connecticut medical license?",
+          "answer": "Connecticut requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Connecticut require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in Connecticut?",
+          "answer": "Yes, Connecticut offers online renewal through the eLicense portal."
+        }
+      ],
+      "relatedStates": ["new-york", "massachusetts", "rhode-island", "new-jersey"]
+    },
+    {
+      "name": "Delaware",
+      "abbreviation": "DE",
+      "slug": "delaware",
+      "boardName": "Delaware Board of Medical Licensure and Discipline",
+      "boardUrl": "https://dpr.delaware.gov/boards/medicalpractice/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Delaware licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Delaware license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Delaware medical license?",
+          "answer": "Delaware requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Delaware require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Delaware?",
+          "answer": "Yes, Delaware offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["maryland", "pennsylvania", "new-jersey", "virginia"]
+    },
+    {
+      "name": "Florida",
+      "abbreviation": "FL",
+      "slug": "florida",
+      "boardName": "Florida Board of Medicine",
+      "boardUrl": "https://flboardofmedicine.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "40 hours of CME per biennial cycle. Must include 2 hours Prevention of Medical Errors (every cycle), 2 hours Prescribing Controlled Substances (if DEA-registered), and 2 hours Domestic Violence (every third renewal). First-time renewers only need specific mandatory courses.",
+      "renewalFee": "$379",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "January 31 (odd or even years by group)",
+      "steps": [
+        "Complete 40 hours of approved CME including all mandatory topic courses",
+        "Ensure mandatory courses are reported in CE Broker before applying",
+        "Log into the Florida Department of Health online portal",
+        "Complete the renewal application and answer professional conduct questions",
+        "Pay the $379 active renewal fee and submit"
+      ],
+      "pitfalls": [
+        "All CME must be tracked and reported through CE Broker before you can submit your renewal",
+        "The 2-hour Prevention of Medical Errors course is required every single renewal cycle",
+        "Domestic Violence training is required every third renewal -- easy to lose track of the schedule",
+        "Group 1 and Group 2 licenses expire on different dates, so confirm your group assignment"
+      ],
+      "faqs": [
+        {
+          "question": "How much does it cost to renew my Florida medical license?",
+          "answer": "The active license renewal fee is $379. Inactive status renewal is $149."
+        },
+        {
+          "question": "How many CME hours do I need for Florida license renewal?",
+          "answer": "You need 40 hours of CME per biennial cycle. This must include 2 hours of Prevention of Medical Errors and 2 hours of Prescribing Controlled Substances (if DEA-registered). Domestic Violence training (2 hours) is required every third renewal cycle."
+        },
+        {
+          "question": "What is CE Broker and do I need it?",
+          "answer": "CE Broker is Florida's electronic CME tracking system. All your continuing education must be documented in CE Broker before you can submit your renewal application. Many approved providers report directly, but you should verify your credits appear in the system."
+        },
+        {
+          "question": "When does my Florida medical license expire?",
+          "answer": "Florida uses a biennial cycle. Group 1 licenses expire January 31 of even years, and Group 2 licenses expire January 31 of odd years. Check your license for your group assignment."
+        }
+      ],
+      "relatedStates": ["texas", "california", "georgia", "new-york"]
+    },
+    {
+      "name": "Georgia",
+      "abbreviation": "GA",
+      "slug": "georgia",
+      "boardName": "Georgia Composite Medical Board",
+      "boardUrl": "https://medicalboard.georgia.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Georgia licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Georgia license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Georgia medical license?",
+          "answer": "Georgia requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Georgia require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Georgia?",
+          "answer": "Yes, Georgia offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["florida", "south-carolina", "alabama", "tennessee"]
+    },
+    {
+      "name": "Hawaii",
+      "abbreviation": "HI",
+      "slug": "hawaii",
+      "boardName": "Hawaii Medical Board",
+      "boardUrl": "https://cca.hawaii.gov/pvl/boards/medical/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "4-6 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Hawaii DCCA licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Hawaii license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Hawaii medical license?",
+          "answer": "Hawaii requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Hawaii require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Hawaii?",
+          "answer": "Yes, Hawaii offers online renewal through the DCCA portal."
+        }
+      ],
+      "relatedStates": ["california", "alaska", "washington", "oregon"]
+    },
+    {
+      "name": "Idaho",
+      "abbreviation": "ID",
+      "slug": "idaho",
+      "boardName": "Idaho Board of Medicine",
+      "boardUrl": "https://bom.idaho.gov",
+      "renewalCycle": "Annual",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the Idaho Board of Medicine portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Idaho license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Idaho medical license?",
+          "answer": "Idaho requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Idaho require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in Idaho?",
+          "answer": "Yes, Idaho offers online renewal through the Board of Medicine portal."
+        }
+      ],
+      "relatedStates": ["montana", "washington", "oregon", "utah"]
+    },
+    {
+      "name": "Illinois",
+      "abbreviation": "IL",
+      "slug": "illinois",
+      "boardName": "Illinois Department of Financial and Professional Regulation",
+      "boardUrl": "https://idfpr.illinois.gov",
+      "renewalCycle": "Triennial",
+      "cmeHours": 150,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 150 CME hours per triennial cycle (50 per year).",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the triennial cycle",
+        "Access the IDFPR online portal",
+        "Complete the renewal application",
+        "Pay the triennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "Illinois uses a triennial (3-year) renewal cycle, which is unusual among states",
+        "[RESEARCH NEEDED] Additional specific pitfalls"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Illinois medical license?",
+          "answer": "Illinois requires triennial (every 3 years) license renewal."
+        },
+        {
+          "question": "How many CME hours does Illinois require?",
+          "answer": "[RESEARCH NEEDED] Approximately 150 CME hours per triennial cycle."
+        },
+        {
+          "question": "Can I renew online in Illinois?",
+          "answer": "Yes, Illinois offers online renewal through the IDFPR portal."
+        }
+      ],
+      "relatedStates": ["indiana", "wisconsin", "iowa", "missouri"]
+    },
+    {
+      "name": "Indiana",
+      "abbreviation": "IN",
+      "slug": "indiana",
+      "boardName": "Indiana Medical Licensing Board",
+      "boardUrl": "https://www.in.gov/pla/professions/medical-licensing-board/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Indiana PLA online portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Indiana license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Indiana medical license?",
+          "answer": "Indiana requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Indiana require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Indiana?",
+          "answer": "Yes, Indiana offers online renewal through the PLA portal."
+        }
+      ],
+      "relatedStates": ["illinois", "ohio", "michigan", "kentucky"]
+    },
+    {
+      "name": "Iowa",
+      "abbreviation": "IA",
+      "slug": "iowa",
+      "boardName": "Iowa Board of Medicine",
+      "boardUrl": "https://medicalboard.iowa.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Iowa Board of Medicine portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Iowa license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Iowa medical license?",
+          "answer": "Iowa requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Iowa require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Iowa?",
+          "answer": "Yes, Iowa offers online renewal through the Board of Medicine portal."
+        }
+      ],
+      "relatedStates": ["nebraska", "illinois", "minnesota", "missouri"]
+    },
+    {
+      "name": "Kansas",
+      "abbreviation": "KS",
+      "slug": "kansas",
+      "boardName": "Kansas State Board of Healing Arts",
+      "boardUrl": "https://www.ksbha.org",
+      "renewalCycle": "Annual",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per renewal cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the Kansas SBHA portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Kansas license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Kansas medical license?",
+          "answer": "Kansas requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Kansas require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in Kansas?",
+          "answer": "Yes, Kansas offers online renewal through the SBHA portal."
+        }
+      ],
+      "relatedStates": ["missouri", "nebraska", "oklahoma", "colorado"]
+    },
+    {
+      "name": "Kentucky",
+      "abbreviation": "KY",
+      "slug": "kentucky",
+      "boardName": "Kentucky Board of Medical Licensure",
+      "boardUrl": "https://kbml.ky.gov",
+      "renewalCycle": "Annual",
+      "cmeHours": 60,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 60 CME hours per triennial cycle (reported at renewal).",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the KBML online portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Kentucky license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Kentucky medical license?",
+          "answer": "Kentucky requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Kentucky require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in Kentucky?",
+          "answer": "Yes, Kentucky offers online renewal through the KBML portal."
+        }
+      ],
+      "relatedStates": ["tennessee", "west-virginia", "virginia", "indiana"]
+    },
+    {
+      "name": "Louisiana",
+      "abbreviation": "LA",
+      "slug": "louisiana",
+      "boardName": "Louisiana State Board of Medical Examiners",
+      "boardUrl": "https://www.lsbme.la.gov",
+      "renewalCycle": "Annual",
+      "cmeHours": 20,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 20 AMA PRA Category 1 credits per year.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the LSBME online portal",
+        "Complete the renewal application",
+        "Pay the annual renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Louisiana license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Louisiana medical license?",
+          "answer": "Louisiana requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Louisiana require?",
+          "answer": "[RESEARCH NEEDED] Approximately 20 CME hours per year."
+        },
+        {
+          "question": "Can I renew online in Louisiana?",
+          "answer": "Yes, Louisiana offers online renewal through the LSBME portal."
+        }
+      ],
+      "relatedStates": ["texas", "mississippi", "arkansas", "alabama"]
+    },
+    {
+      "name": "Maine",
+      "abbreviation": "ME",
+      "slug": "maine",
+      "boardName": "Maine Board of Licensure in Medicine",
+      "boardUrl": "https://www.maine.gov/md/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Maine licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Maine license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Maine medical license?",
+          "answer": "Maine requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Maine require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Maine?",
+          "answer": "Yes, Maine offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["new-hampshire", "vermont", "massachusetts", "connecticut"]
+    },
+    {
+      "name": "Maryland",
+      "abbreviation": "MD",
+      "slug": "maryland",
+      "boardName": "Maryland Board of Physicians",
+      "boardUrl": "https://www.mbp.state.md.us",
+      "renewalCycle": "Biennial",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Maryland Board of Physicians portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Maryland license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Maryland medical license?",
+          "answer": "Maryland requires biennial renewal."
+        },
+        {
+          "question": "How many CME hours does Maryland require?",
+          "answer": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Maryland?",
+          "answer": "Yes, Maryland offers online renewal through the Board of Physicians portal."
+        }
+      ],
+      "relatedStates": ["virginia", "pennsylvania", "delaware", "west-virginia"]
+    },
+    {
+      "name": "Massachusetts",
+      "abbreviation": "MA",
+      "slug": "massachusetts",
+      "boardName": "Massachusetts Board of Registration in Medicine",
+      "boardUrl": "https://www.mass.gov/orgs/board-of-registration-in-medicine",
+      "renewalCycle": "Biennial",
+      "cmeHours": 100,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Massachusetts licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "Massachusetts requires 100 CME hours biennially, one of the highest in the nation",
+        "[RESEARCH NEEDED] Additional specific pitfalls"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Massachusetts medical license?",
+          "answer": "Massachusetts requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Massachusetts require?",
+          "answer": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Massachusetts?",
+          "answer": "Yes, Massachusetts offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["connecticut", "rhode-island", "new-york", "new-hampshire"]
+    },
+    {
+      "name": "Michigan",
+      "abbreviation": "MI",
+      "slug": "michigan",
+      "boardName": "Michigan Board of Medicine",
+      "boardUrl": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/medicine",
+      "renewalCycle": "Triennial",
+      "cmeHours": 150,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 150 CME hours per triennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the triennial cycle",
+        "Access the Michigan LARA online portal",
+        "Complete the renewal application",
+        "Pay the triennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "Michigan uses a triennial (3-year) renewal cycle",
+        "[RESEARCH NEEDED] Additional specific pitfalls"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Michigan medical license?",
+          "answer": "Michigan requires triennial (every 3 years) license renewal."
+        },
+        {
+          "question": "How many CME hours does Michigan require?",
+          "answer": "[RESEARCH NEEDED] Approximately 150 CME hours per triennial cycle."
+        },
+        {
+          "question": "Can I renew online in Michigan?",
+          "answer": "Yes, Michigan offers online renewal through the LARA portal."
+        }
+      ],
+      "relatedStates": ["ohio", "indiana", "wisconsin", "illinois"]
+    },
+    {
+      "name": "Minnesota",
+      "abbreviation": "MN",
+      "slug": "minnesota",
+      "boardName": "Minnesota Board of Medical Practice",
+      "boardUrl": "https://mn.gov/boards/medical-practice/",
+      "renewalCycle": "Annual",
+      "cmeHours": 75,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 75 CME hours per triennial reporting period.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the Minnesota Board of Medical Practice portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Minnesota license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Minnesota medical license?",
+          "answer": "Minnesota requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Minnesota require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in Minnesota?",
+          "answer": "Yes, Minnesota offers online renewal through the Board of Medical Practice portal."
+        }
+      ],
+      "relatedStates": ["wisconsin", "iowa", "north-dakota", "south-dakota"]
+    },
+    {
+      "name": "Mississippi",
+      "abbreviation": "MS",
+      "slug": "mississippi",
+      "boardName": "Mississippi State Board of Medical Licensure",
+      "boardUrl": "https://www.msbml.ms.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Mississippi licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Mississippi license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Mississippi medical license?",
+          "answer": "Mississippi requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Mississippi require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Mississippi?",
+          "answer": "Yes, Mississippi offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["alabama", "louisiana", "tennessee", "arkansas"]
+    },
+    {
+      "name": "Missouri",
+      "abbreviation": "MO",
+      "slug": "missouri",
+      "boardName": "Missouri State Board of Registration for the Healing Arts",
+      "boardUrl": "https://pr.mo.gov/healingarts.asp",
+      "renewalCycle": "Biennial",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Missouri licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Missouri license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Missouri medical license?",
+          "answer": "Missouri requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Missouri require?",
+          "answer": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Missouri?",
+          "answer": "Yes, Missouri offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["kansas", "illinois", "arkansas", "iowa"]
+    },
+    {
+      "name": "Montana",
+      "abbreviation": "MT",
+      "slug": "montana",
+      "boardName": "Montana Board of Medical Examiners",
+      "boardUrl": "https://boards.bsd.dli.mt.gov/medical-examiners",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Montana licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Montana license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Montana medical license?",
+          "answer": "Montana requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Montana require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Montana?",
+          "answer": "Yes, Montana offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["idaho", "wyoming", "north-dakota", "south-dakota"]
+    },
+    {
+      "name": "Nebraska",
+      "abbreviation": "NE",
+      "slug": "nebraska",
+      "boardName": "Nebraska Board of Medicine and Surgery",
+      "boardUrl": "https://dhhs.ne.gov/licensure/Pages/Medicine-and-Surgery.aspx",
+      "renewalCycle": "Biennial",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Nebraska DHHS licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Nebraska license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Nebraska medical license?",
+          "answer": "Nebraska requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Nebraska require?",
+          "answer": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Nebraska?",
+          "answer": "Yes, Nebraska offers online renewal through the DHHS portal."
+        }
+      ],
+      "relatedStates": ["iowa", "kansas", "south-dakota", "colorado"]
+    },
+    {
+      "name": "Nevada",
+      "abbreviation": "NV",
+      "slug": "nevada",
+      "boardName": "Nevada State Board of Medical Examiners",
+      "boardUrl": "https://medboard.nv.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Nevada Medical Board portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Nevada license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Nevada medical license?",
+          "answer": "Nevada requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Nevada require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Nevada?",
+          "answer": "Yes, Nevada offers online renewal through the Medical Board portal."
+        }
+      ],
+      "relatedStates": ["california", "arizona", "utah", "oregon"]
+    },
+    {
+      "name": "New Hampshire",
+      "abbreviation": "NH",
+      "slug": "new-hampshire",
+      "boardName": "New Hampshire Board of Medicine",
+      "boardUrl": "https://www.oplc.nh.gov/board-medicine",
+      "renewalCycle": "Biennial",
+      "cmeHours": 100,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the New Hampshire OPLC portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for New Hampshire license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my New Hampshire medical license?",
+          "answer": "New Hampshire requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does New Hampshire require?",
+          "answer": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in New Hampshire?",
+          "answer": "Yes, New Hampshire offers online renewal through the OPLC portal."
+        }
+      ],
+      "relatedStates": ["vermont", "maine", "massachusetts", "connecticut"]
+    },
+    {
+      "name": "New Jersey",
+      "abbreviation": "NJ",
+      "slug": "new-jersey",
+      "boardName": "New Jersey State Board of Medical Examiners",
+      "boardUrl": "https://www.njconsumeraffairs.gov/bme/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 100,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the New Jersey licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for New Jersey license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my New Jersey medical license?",
+          "answer": "New Jersey requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does New Jersey require?",
+          "answer": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in New Jersey?",
+          "answer": "Yes, New Jersey offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["new-york", "pennsylvania", "delaware", "connecticut"]
+    },
+    {
+      "name": "New Mexico",
+      "abbreviation": "NM",
+      "slug": "new-mexico",
+      "boardName": "New Mexico Medical Board",
+      "boardUrl": "https://www.nmmb.state.nm.us",
+      "renewalCycle": "Triennial",
+      "cmeHours": 75,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 75 CME hours per triennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the triennial cycle",
+        "Access the New Mexico Medical Board portal",
+        "Complete the renewal application",
+        "Pay the triennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "New Mexico uses a triennial (3-year) renewal cycle",
+        "[RESEARCH NEEDED] Additional specific pitfalls"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my New Mexico medical license?",
+          "answer": "New Mexico requires triennial (every 3 years) license renewal."
+        },
+        {
+          "question": "How many CME hours does New Mexico require?",
+          "answer": "[RESEARCH NEEDED] Approximately 75 CME hours per triennial cycle."
+        },
+        {
+          "question": "Can I renew online in New Mexico?",
+          "answer": "Yes, New Mexico offers online renewal through the Medical Board portal."
+        }
+      ],
+      "relatedStates": ["arizona", "texas", "colorado", "utah"]
+    },
+    {
+      "name": "New York",
+      "abbreviation": "NY",
+      "slug": "new-york",
+      "boardName": "New York State Education Department (NYSED) Office of the Professions",
+      "boardUrl": "https://www.op.nysed.gov/professions/physicians",
+      "renewalCycle": "Biennial",
+      "cmeHours": 0,
+      "cmeDetails": "New York does not require a specific number of CME hours for license renewal. However, physicians must complete mandatory training in infection control and barrier precautions every 4 years, child abuse identification and reporting (one-time, 2 hours), and pain management/opioid prescribing (3 hours every 3 years for controlled substance prescribers).",
+      "renewalFee": "$600",
+      "processingTime": "4-8 weeks",
+      "renewalMonth": "Based on registration period",
+      "steps": [
+        "Complete all mandatory training requirements (infection control, child abuse, pain management)",
+        "Access the NYSED Online Services portal for license renewal",
+        "Complete the renewal application and answer professional conduct questions",
+        "Pay the $600 biennial registration fee",
+        "Receive confirmation of renewed registration"
+      ],
+      "pitfalls": [
+        "New York does not require general CME hours, but has multiple specific mandatory training requirements that are easy to overlook",
+        "The $600 biennial fee is one of the highest in the country",
+        "Infection control training must be renewed every 4 years, not every 2 years with the license -- easy to lose track",
+        "DEA-registered practitioners have additional one-time 8-hour training requirement on substance use disorders"
+      ],
+      "faqs": [
+        {
+          "question": "Does New York require CME for medical license renewal?",
+          "answer": "New York does not mandate a specific number of CME credit hours for general license renewal. However, there are several mandatory training requirements: infection control and barrier precautions (every 4 years), child abuse identification and reporting (one-time, 2 hours), and pain management/opioid prescribing (3 hours every 3 years for controlled substance prescribers)."
+        },
+        {
+          "question": "How much does it cost to renew my New York medical license?",
+          "answer": "The biennial registration fee for physicians in New York is $600, making it one of the highest renewal fees in the country."
+        },
+        {
+          "question": "Can I renew my New York medical license online?",
+          "answer": "Yes, New York offers online renewal through the NYSED Online Services portal. You will need to complete the application, answer professional conduct questions, and pay the fee electronically."
+        },
+        {
+          "question": "What is the infection control training requirement in New York?",
+          "answer": "All physicians must complete infection control and barrier precautions training every four years. This is separate from the biennial license renewal cycle, so you need to track this requirement independently."
+        }
+      ],
+      "relatedStates": ["new-jersey", "connecticut", "pennsylvania", "california"]
+    },
+    {
+      "name": "North Carolina",
+      "abbreviation": "NC",
+      "slug": "north-carolina",
+      "boardName": "North Carolina Medical Board",
+      "boardUrl": "https://www.ncmedboard.org",
+      "renewalCycle": "Annual",
+      "cmeHours": 60,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 60 CME hours per triennial reporting period.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the NCMB online portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for North Carolina license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my North Carolina medical license?",
+          "answer": "North Carolina requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does North Carolina require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in North Carolina?",
+          "answer": "Yes, North Carolina offers online renewal through the NCMB portal."
+        }
+      ],
+      "relatedStates": ["south-carolina", "virginia", "tennessee", "georgia"]
+    },
+    {
+      "name": "North Dakota",
+      "abbreviation": "ND",
+      "slug": "north-dakota",
+      "boardName": "North Dakota Board of Medicine",
+      "boardUrl": "https://www.ndbom.org",
+      "renewalCycle": "Annual",
+      "cmeHours": 60,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 60 CME hours per triennial reporting period.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the North Dakota Board of Medicine portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for North Dakota license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my North Dakota medical license?",
+          "answer": "North Dakota requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does North Dakota require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in North Dakota?",
+          "answer": "Yes, North Dakota offers online renewal through the Board of Medicine portal."
+        }
+      ],
+      "relatedStates": ["south-dakota", "minnesota", "montana", "wyoming"]
+    },
+    {
+      "name": "Ohio",
+      "abbreviation": "OH",
+      "slug": "ohio",
+      "boardName": "State Medical Board of Ohio",
+      "boardUrl": "https://med.ohio.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 100,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Ohio eLicense portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Ohio license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Ohio medical license?",
+          "answer": "Ohio requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Ohio require?",
+          "answer": "[RESEARCH NEEDED] Approximately 100 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Ohio?",
+          "answer": "Yes, Ohio offers online renewal through the eLicense portal."
+        }
+      ],
+      "relatedStates": ["pennsylvania", "michigan", "indiana", "west-virginia"]
+    },
+    {
+      "name": "Oklahoma",
+      "abbreviation": "OK",
+      "slug": "oklahoma",
+      "boardName": "Oklahoma State Board of Medical Licensure and Supervision",
+      "boardUrl": "https://www.okmedicalboard.org",
+      "renewalCycle": "Annual",
+      "cmeHours": 60,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 60 CME hours per triennial reporting period.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the Oklahoma Medical Board portal",
+        "Complete the renewal application",
+        "Pay the renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Oklahoma license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Oklahoma medical license?",
+          "answer": "Oklahoma requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does Oklahoma require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in Oklahoma?",
+          "answer": "Yes, Oklahoma offers online renewal through the Medical Board portal."
+        }
+      ],
+      "relatedStates": ["texas", "kansas", "arkansas", "missouri"]
+    },
+    {
+      "name": "Oregon",
+      "abbreviation": "OR",
+      "slug": "oregon",
+      "boardName": "Oregon Medical Board",
+      "boardUrl": "https://www.oregon.gov/omb/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 60,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 60 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Oregon Medical Board portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Oregon license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Oregon medical license?",
+          "answer": "Oregon requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Oregon require?",
+          "answer": "[RESEARCH NEEDED] Approximately 60 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Oregon?",
+          "answer": "Yes, Oregon offers online renewal through the Medical Board portal."
+        }
+      ],
+      "relatedStates": ["washington", "california", "nevada", "idaho"]
+    },
+    {
+      "name": "Pennsylvania",
+      "abbreviation": "PA",
+      "slug": "pennsylvania",
+      "boardName": "Pennsylvania State Board of Medicine",
+      "boardUrl": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 100,
+      "cmeDetails": "100 credit hours per biennial cycle. Must include 12 credits in patient safety or risk management, 2 credits in mandated child abuse recognition and reporting (DHS-approved), and 2 credits in pain management, addiction identification, or opioid prescribing practices.",
+      "renewalFee": "$360",
+      "processingTime": "4-6 weeks",
+      "renewalMonth": "December 31 (even years for MDs)",
+      "steps": [
+        "Complete 100 hours of CME including all mandatory topic requirements",
+        "Ensure completion of 12 hours in patient safety/risk management",
+        "Complete DHS-approved 2-hour child abuse recognition and reporting course",
+        "Log into the Pennsylvania Licensing System (PALS) and complete the renewal application",
+        "Pay the $360 biennial renewal fee and submit"
+      ],
+      "pitfalls": [
+        "Pennsylvania requires 100 CME hours biennially -- one of the highest requirements in the nation",
+        "The 12-hour patient safety/risk management requirement is a significant portion that must be specifically categorized",
+        "The child abuse course must be approved by the Pennsylvania Department of Human Services (DHS), not just any provider",
+        "MDs and DOs have different renewal deadlines -- MDs by December 31, DOs by October 31"
+      ],
+      "faqs": [
+        {
+          "question": "How many CME hours does Pennsylvania require for medical license renewal?",
+          "answer": "Pennsylvania requires 100 credit hours per biennial renewal period. This includes 12 hours in patient safety or risk management, 2 hours in mandated child abuse recognition and reporting, and 2 hours in pain management, addiction identification, or opioid prescribing."
+        },
+        {
+          "question": "How much does it cost to renew my Pennsylvania medical license?",
+          "answer": "The biennial renewal fee for MDs is $360. DOs pay $450. These fees may be updated periodically by the State Board of Medicine."
+        },
+        {
+          "question": "When does my Pennsylvania medical license expire?",
+          "answer": "For MDs, the license cycle runs from January 1 of odd years through December 31 of the following even year. You must renew by December 31 of the even year. For DOs, the deadline is October 31 of even years."
+        },
+        {
+          "question": "What happens if I don't complete my CME by the renewal deadline?",
+          "answer": "If you fail to complete the required 100 CME hours by your renewal deadline, you cannot renew your license. Practicing without a valid license is a violation of Pennsylvania law and may result in disciplinary action and additional fees for reinstatement."
+        }
+      ],
+      "relatedStates": ["new-york", "new-jersey", "ohio", "maryland"]
+    },
+    {
+      "name": "Rhode Island",
+      "abbreviation": "RI",
+      "slug": "rhode-island",
+      "boardName": "Rhode Island Board of Medical Licensure and Discipline",
+      "boardUrl": "https://health.ri.gov/licenses/detail.php?id=201",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Rhode Island licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Rhode Island license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Rhode Island medical license?",
+          "answer": "Rhode Island requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Rhode Island require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Rhode Island?",
+          "answer": "Yes, Rhode Island offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["massachusetts", "connecticut", "new-york", "new-hampshire"]
+    },
+    {
+      "name": "South Carolina",
+      "abbreviation": "SC",
+      "slug": "south-carolina",
+      "boardName": "South Carolina Board of Medical Examiners",
+      "boardUrl": "https://llr.sc.gov/med/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the South Carolina LLR portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for South Carolina license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my South Carolina medical license?",
+          "answer": "South Carolina requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does South Carolina require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in South Carolina?",
+          "answer": "Yes, South Carolina offers online renewal through the LLR portal."
+        }
+      ],
+      "relatedStates": ["north-carolina", "georgia", "virginia", "tennessee"]
+    },
+    {
+      "name": "South Dakota",
+      "abbreviation": "SD",
+      "slug": "south-dakota",
+      "boardName": "South Dakota Board of Medical and Osteopathic Examiners",
+      "boardUrl": "https://www.sdbmoe.gov",
+      "renewalCycle": "Annual",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial reporting period.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours",
+        "Access the South Dakota BMOE portal",
+        "Complete the renewal application",
+        "Pay the annual renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for South Dakota license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my South Dakota medical license?",
+          "answer": "South Dakota requires annual license renewal."
+        },
+        {
+          "question": "How many CME hours does South Dakota require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in South Dakota?",
+          "answer": "Yes, South Dakota offers online renewal through the BMOE portal."
+        }
+      ],
+      "relatedStates": ["north-dakota", "minnesota", "nebraska", "wyoming"]
+    },
+    {
+      "name": "Tennessee",
+      "abbreviation": "TN",
+      "slug": "tennessee",
+      "boardName": "Tennessee Board of Medical Examiners",
+      "boardUrl": "https://www.tn.gov/health/health-program-areas/health-professional-boards/me-board.html",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Tennessee licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Tennessee license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Tennessee medical license?",
+          "answer": "Tennessee requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Tennessee require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Tennessee?",
+          "answer": "Yes, Tennessee offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["kentucky", "virginia", "north-carolina", "georgia"]
+    },
+    {
+      "name": "Texas",
+      "abbreviation": "TX",
+      "slug": "texas",
+      "boardName": "Texas Medical Board (TMB)",
+      "boardUrl": "https://www.tmb.state.tx.us",
+      "renewalCycle": "Biennial",
+      "cmeHours": 48,
+      "cmeDetails": "48 CME credits per 24-month biennial registration period. At least 24 must be formal Category 1 or 1A courses. Beginning September 1, 2026, physicians performing forensic exams on sexual assault survivors must complete 2 hours of CME in forensic evidence collection. All CME verified through CE Broker.",
+      "renewalFee": "$491",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "Based on registration period",
+      "steps": [
+        "Complete 48 hours of CME credits with at least 24 in formal Category 1/1A courses",
+        "Ensure all CME is reported and verifiable in CE Broker",
+        "Log into the Texas Medical Board online portal and begin your renewal application",
+        "Complete the biennial registration form and answer practice questions",
+        "Pay the $491 biennial registration fee and submit"
+      ],
+      "pitfalls": [
+        "At least half of your 48 CME credits must be in formal Category 1 or 1A courses -- informal credits alone won't suffice",
+        "TMB verifies CME compliance through CE Broker; if your credits aren't in the system, you cannot renew",
+        "The 24-month CME timeline is tied to your registration period, not the calendar year",
+        "New forensic evidence collection CME requirement takes effect September 1, 2026 for qualifying physicians"
+      ],
+      "faqs": [
+        {
+          "question": "How many CME hours does Texas require for medical license renewal?",
+          "answer": "Texas requires 48 CME credits per 24-month biennial registration period. At least 24 of those credits must be in formal, Category 1 or 1A courses."
+        },
+        {
+          "question": "How much does it cost to renew my Texas medical license?",
+          "answer": "The total biennial registration fee is approximately $491, which includes the TMB base fee ($370), Senate Bill 104 fee ($80), Prescription Monitoring Program fee ($11.48), National Practitioner Data Bank fee ($21), Physician Health Program fee ($7), and Office of Patient Protection fee ($2)."
+        },
+        {
+          "question": "What is CE Broker and why does it matter for Texas renewal?",
+          "answer": "CE Broker is the electronic system the Texas Medical Board uses to verify CME compliance. If your completed CME credits are not reported in CE Broker, the TMB cannot verify compliance and you will be unable to renew your license."
+        },
+        {
+          "question": "Can I complete all my Texas CME online?",
+          "answer": "You can complete some credits online, but at least 24 of your 48 required credits must be in formal, Category 1 or 1A courses. Check with your CME provider to confirm their courses meet TMB formal category requirements."
+        }
+      ],
+      "relatedStates": ["california", "florida", "new-york", "louisiana"]
+    },
+    {
+      "name": "Utah",
+      "abbreviation": "UT",
+      "slug": "utah",
+      "boardName": "Utah Division of Occupational and Professional Licensing",
+      "boardUrl": "https://dopl.utah.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 40,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Utah DOPL portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Utah license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Utah medical license?",
+          "answer": "Utah requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Utah require?",
+          "answer": "[RESEARCH NEEDED] Approximately 40 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Utah?",
+          "answer": "Yes, Utah offers online renewal through the DOPL portal."
+        }
+      ],
+      "relatedStates": ["colorado", "nevada", "arizona", "idaho"]
+    },
+    {
+      "name": "Vermont",
+      "abbreviation": "VT",
+      "slug": "vermont",
+      "boardName": "Vermont Board of Medical Practice",
+      "boardUrl": "https://sos.vermont.gov/medical-board/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 30,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 30 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Vermont licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Vermont license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Vermont medical license?",
+          "answer": "Vermont requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Vermont require?",
+          "answer": "[RESEARCH NEEDED] Approximately 30 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Vermont?",
+          "answer": "Yes, Vermont offers online renewal through their licensing portal."
+        }
+      ],
+      "relatedStates": ["new-hampshire", "maine", "massachusetts", "new-york"]
+    },
+    {
+      "name": "Virginia",
+      "abbreviation": "VA",
+      "slug": "virginia",
+      "boardName": "Virginia Board of Medicine",
+      "boardUrl": "https://www.dhp.virginia.gov/medicine/",
+      "renewalCycle": "Biennial",
+      "cmeHours": 60,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 60 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Virginia DHP online portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Virginia license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Virginia medical license?",
+          "answer": "Virginia requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Virginia require?",
+          "answer": "[RESEARCH NEEDED] Approximately 60 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Virginia?",
+          "answer": "Yes, Virginia offers online renewal through the DHP portal."
+        }
+      ],
+      "relatedStates": ["maryland", "west-virginia", "north-carolina", "pennsylvania"]
+    },
+    {
+      "name": "Washington",
+      "abbreviation": "WA",
+      "slug": "washington",
+      "boardName": "Washington Medical Commission",
+      "boardUrl": "https://wmc.wa.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 200,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 200 CME hours per quadrennial reporting period (reported at biennial renewal).",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the reporting period",
+        "Access the Washington DOH licensing portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Washington license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Washington medical license?",
+          "answer": "Washington requires biennial renewal, but CME is reported on a quadrennial cycle."
+        },
+        {
+          "question": "How many CME hours does Washington require?",
+          "answer": "[RESEARCH NEEDED] Specific CME requirements to be confirmed."
+        },
+        {
+          "question": "Can I renew online in Washington?",
+          "answer": "Yes, Washington offers online renewal through the DOH portal."
+        }
+      ],
+      "relatedStates": ["oregon", "california", "idaho", "alaska"]
+    },
+    {
+      "name": "West Virginia",
+      "abbreviation": "WV",
+      "slug": "west-virginia",
+      "boardName": "West Virginia Board of Medicine",
+      "boardUrl": "https://wvbom.wv.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 50,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the West Virginia Board of Medicine portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for West Virginia license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my West Virginia medical license?",
+          "answer": "West Virginia requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does West Virginia require?",
+          "answer": "[RESEARCH NEEDED] Approximately 50 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in West Virginia?",
+          "answer": "Yes, West Virginia offers online renewal through the Board of Medicine portal."
+        }
+      ],
+      "relatedStates": ["virginia", "pennsylvania", "ohio", "kentucky"]
+    },
+    {
+      "name": "Wisconsin",
+      "abbreviation": "WI",
+      "slug": "wisconsin",
+      "boardName": "Wisconsin Medical Examining Board",
+      "boardUrl": "https://dsps.wi.gov/pages/BoardsCouncils/MedicalExaminingBoard/Default.aspx",
+      "renewalCycle": "Biennial",
+      "cmeHours": 30,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 30 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Wisconsin DSPS portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Wisconsin license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Wisconsin medical license?",
+          "answer": "Wisconsin requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Wisconsin require?",
+          "answer": "[RESEARCH NEEDED] Approximately 30 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Wisconsin?",
+          "answer": "Yes, Wisconsin offers online renewal through the DSPS portal."
+        }
+      ],
+      "relatedStates": ["minnesota", "illinois", "michigan", "iowa"]
+    },
+    {
+      "name": "Wyoming",
+      "abbreviation": "WY",
+      "slug": "wyoming",
+      "boardName": "Wyoming Board of Medicine",
+      "boardUrl": "https://wyomedboard.wyo.gov",
+      "renewalCycle": "Biennial",
+      "cmeHours": 60,
+      "cmeDetails": "[RESEARCH NEEDED] Approximately 60 CME hours per biennial cycle.",
+      "renewalFee": "[RESEARCH NEEDED]",
+      "processingTime": "2-4 weeks",
+      "renewalMonth": "[RESEARCH NEEDED]",
+      "steps": [
+        "Complete required CME hours during the biennial cycle",
+        "Access the Wyoming Board of Medicine portal",
+        "Complete the renewal application",
+        "Pay the biennial renewal fee",
+        "Receive your renewed license"
+      ],
+      "pitfalls": [
+        "[RESEARCH NEEDED] Specific pitfalls for Wyoming license renewal"
+      ],
+      "faqs": [
+        {
+          "question": "How often do I renew my Wyoming medical license?",
+          "answer": "Wyoming requires biennial renewal every two years."
+        },
+        {
+          "question": "How many CME hours does Wyoming require?",
+          "answer": "[RESEARCH NEEDED] Approximately 60 CME hours per biennial cycle."
+        },
+        {
+          "question": "Can I renew online in Wyoming?",
+          "answer": "Yes, Wyoming offers online renewal through the Board of Medicine portal."
+        }
+      ],
+      "relatedStates": ["montana", "colorado", "utah", "south-dakota"]
+    }
+  ]
+}

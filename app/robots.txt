@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /landing/
+Allow: /states/
+Disallow: /app/
+
+Sitemap: https://credentialdomd.com/sitemap.xml
