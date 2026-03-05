@@ -2367,7 +2367,7 @@ footer {
     <div class="animate-on-scroll" style="text-align: center; margin-bottom: 40px;">
       <div style="display: inline-flex; align-items: center; gap: 12px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 50px; padding: 10px 24px;">
         <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 8px var(--emerald); animation: pulse 2s infinite;"></span>
-        <span style="color: var(--text-secondary); font-size: 14px;"><strong style="color: var(--emerald); font-size: 16px;">294</strong> of 294 founding spots remaining</span>
+        <span style="color: var(--text-secondary); font-size: 14px;"><strong style="color: var(--emerald); font-size: 16px;" data-founding-remaining>294</strong> of 294 founding spots remaining</span>
       </div>
     </div>
 
@@ -2410,9 +2410,9 @@ footer {
           <!-- Progress bar -->
           <div style="margin-top: 12px;">
             <div style="height: 5px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden;">
-              <div style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--emerald), #059669); border-radius: 99px;"></div>
+              <div data-founding-progress style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--emerald), #059669); border-radius: 99px; transition: width 0.5s ease;"></div>
             </div>
-            <div style="text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px;">0 / 294 claimed</div>
+            <div style="text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px;" data-founding-claimed>0 / 294 claimed</div>
           </div>
         </div>
 
@@ -3249,7 +3249,9 @@ footer {
 <!-- ============ SCRIPTS ============ -->
 <script>
 // Signup form handler (posts to Google Sheets via Apps Script)
-var SHEET_URL = ''; // Will be set once Apps Script is deployed
+var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
+var TOTAL_FOUNDING_SPOTS = 294;
 
 function handleSignup(event, type) {
   event.preventDefault();
@@ -3296,32 +3298,72 @@ function handleSignup(event, type) {
   btn.textContent = 'Sending...';
   btn.disabled = true;
 
-  // Store signup locally and show confirmation
-  // Signups are stored in localStorage until Supabase/Sheets backend is wired
-  var signups = JSON.parse(localStorage.getItem('credentialdomd_signups') || '[]');
-  signups.push(data);
-  localStorage.setItem('credentialdomd_signups', JSON.stringify(signups));
-
-  if (SHEET_URL) {
-    fetch(SHEET_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    }).catch(function() {});
-  }
-
-  msgEl.style.display = 'block';
-  msgEl.style.color = 'var(--emerald)';
-  msgEl.textContent = type === 'founding'
-    ? '✓ You\'re in! We\'ll be in touch with your founding member details.'
-    : '✓ You\'re on the waitlist! We\'ll notify you at launch.';
-  form.reset();
-  btn.textContent = origText;
-  btn.disabled = false;
+  // Post to Supabase
+  fetch(SUPABASE_URL + '/rest/v1/founding_signups', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify({
+      type: data.type,
+      name: data.name,
+      email: data.email
+    })
+  }).then(function(res) {
+    if (!res.ok) throw new Error('Signup failed');
+    return res.json();
+  }).then(function() {
+    msgEl.style.display = 'block';
+    msgEl.style.color = 'var(--emerald)';
+    msgEl.textContent = type === 'founding'
+      ? '✓ You\'re in! We\'ll be in touch with your founding member details.'
+      : '✓ You\'re on the waitlist! We\'ll notify you at launch.';
+    form.reset();
+    btn.textContent = origText;
+    btn.disabled = false;
+    updateFoundingCounter();
+  }).catch(function(err) {
+    msgEl.style.display = 'block';
+    msgEl.style.color = '#ef4444';
+    msgEl.textContent = 'Something went wrong. Please try again or email hello@credentialdomd.com.';
+    btn.textContent = origText;
+    btn.disabled = false;
+  });
 
   return false;
 }
+
+// Live founding counter from Supabase
+function updateFoundingCounter() {
+  fetch(SUPABASE_URL + '/rest/v1/founding_signups?select=type&type=eq.founding', {
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Prefer': 'count=exact'
+    }
+  }).then(function(res) {
+    var range = res.headers.get('content-range');
+    var total = range ? parseInt(range.split('/')[1]) : 0;
+    var remaining = TOTAL_FOUNDING_SPOTS - total;
+    var claimed = total;
+
+    // Update counter text
+    var counterEl = document.querySelector('[data-founding-remaining]');
+    if (counterEl) counterEl.textContent = remaining;
+    var claimedEl = document.querySelector('[data-founding-claimed]');
+    if (claimedEl) claimedEl.textContent = claimed + ' / ' + TOTAL_FOUNDING_SPOTS + ' claimed';
+
+    // Update progress bar
+    var progressEl = document.querySelector('[data-founding-progress]');
+    if (progressEl) progressEl.style.width = Math.min((claimed / TOTAL_FOUNDING_SPOTS) * 100, 100) + '%';
+  }).catch(function() {});
+}
+
+// Load counter on page load
+document.addEventListener('DOMContentLoaded', updateFoundingCounter);
 
 // FAQ toggle
 function toggleFaq(btn) {
