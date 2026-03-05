@@ -2155,7 +2155,7 @@ footer {
     <div class="value-stack-total animate-on-scroll">
       <p class="struck">Total stand-alone value: $654</p>
       <div class="price">$9.99<span class="price-period">/month</span></div>
-      <p class="price-note">Or $99/year (save $20). Free tier available.</p>
+      <p class="price-note">Founding members start at $1.99/mo — locked for life.</p>
     </div>
   </div>
 </section>
@@ -2357,75 +2357,102 @@ footer {
     <div class="animate-on-scroll">
       <div class="section-label">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
-        Simple Pricing
+        Pre-Release
       </div>
-      <h2 class="section-title">Less than a single lost billing day.</h2>
-      <p class="section-subtitle">If you only have 2-3 credentials, you probably don't need this. But if you have more &mdash; and most physicians do &mdash; the math is obvious.</p>
+      <h2 class="section-title">Be one of the first 99.</h2>
+      <p class="section-subtitle">CredentialDOMD is coming soon. Founding members lock in the lowest price &mdash; forever. Your rate never increases.</p>
     </div>
 
-    <div class="pricing-grid">
-      <!-- Free -->
-      <div class="pricing-card animate-on-scroll">
-        <div class="pricing-name">Free</div>
-        <div class="pricing-desc">Get started and see the value</div>
-        <div class="pricing-price">
-          <div class="pricing-amount free">$0</div>
-          <div class="pricing-period">forever</div>
-        </div>
-        <ul class="pricing-features">
-          <li><span class="check">&#10003;</span> Track up to 5 credentials</li>
-          <li><span class="check">&#10003;</span> Basic expiration alerts</li>
-          <li><span class="check">&#10003;</span> Credential Health Score</li>
-          <li><span class="check">&#10003;</span> NPI lookup</li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">AI document scanner</span></li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">CV generator</span></li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">Priority alerts</span></li>
-        </ul>
-        <a href="#get-started" class="btn-secondary pricing-cta">Start Free</a>
+    <!-- Spot counter -->
+    <div class="animate-on-scroll" style="text-align: center; margin-bottom: 40px;">
+      <div style="display: inline-flex; align-items: center; gap: 12px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 50px; padding: 10px 24px;">
+        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 8px var(--emerald); animation: pulse 2s infinite;"></span>
+        <span style="color: var(--text-secondary); font-size: 14px;"><strong style="color: var(--emerald); font-size: 16px;">99</strong> of 99 founding spots remaining</span>
       </div>
+    </div>
 
-      <!-- Pro -->
-      <div class="pricing-card featured animate-on-scroll">
-        <div class="pricing-popular">Most Popular</div>
-        <div class="pricing-name">Pro</div>
-        <div class="pricing-desc">For physicians who cannot afford to miss a deadline</div>
+    <div class="pricing-grid" style="grid-template-columns: 1fr 1fr; max-width: 860px; margin: 0 auto;">
+
+      <!-- Founding Member (featured) -->
+      <div class="pricing-card featured animate-on-scroll" style="position: relative;">
+        <div class="pricing-popular" style="background: linear-gradient(135deg, var(--emerald), #059669);">&#9733; Founding Member</div>
+        <div class="pricing-name">Founding Member</div>
+        <div class="pricing-desc">Lock in the lowest price — forever</div>
+
         <div class="pricing-price">
-          <div class="pricing-amount">$29<span class="pricing-period">/mo</span></div>
-          <div class="pricing-annual">$199/year &mdash; save $149</div>
+          <div class="pricing-amount">$1.99<span class="pricing-period">/mo</span></div>
+          <div class="pricing-annual" style="color: var(--emerald-light);">Your price never goes up. Guaranteed.</div>
         </div>
+
+        <!-- Tier ladder -->
+        <div style="margin: 16px 0 20px; padding: 14px 16px; background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.15); border-radius: 10px; font-size: 13px;">
+          <div style="color: var(--text-secondary); font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px;">Price goes up as spots fill</div>
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="display: flex; justify-content: space-between; color: var(--emerald); font-weight: 700;">
+              <span>&#9658; Spots 1–19</span><span>$1.99/mo</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+              <span>Spots 20–29</span><span>$2.99/mo</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+              <span>Spots 30–39</span><span>$3.99/mo</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+              <span>Spots 40–49</span><span>$4.99/mo</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
+              <span>Spots 50–59</span><span>$5.99/mo</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: var(--text-muted); font-size: 12px;">
+              <span>Spots 60–99</span><span>up to $9.99/mo</span>
+            </div>
+          </div>
+          <!-- Progress bar -->
+          <div style="margin-top: 12px;">
+            <div style="height: 5px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden;">
+              <div style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--emerald), #059669); border-radius: 99px;"></div>
+            </div>
+            <div style="text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px;">0 / 99 claimed</div>
+          </div>
+        </div>
+
         <ul class="pricing-features">
           <li><span class="check">&#10003;</span> <strong>Unlimited</strong> credentials</li>
-          <li><span class="check">&#10003;</span> Hospital privileges tracking</li>
-          <li><span class="check">&#10003;</span> Insurance &amp; malpractice records</li>
           <li><span class="check">&#10003;</span> AI document scanner</li>
           <li><span class="check">&#10003;</span> CV generator + data export</li>
           <li><span class="check">&#10003;</span> CME compliance tracking</li>
-          <li><span class="check">&#10003;</span> Peer reference management</li>
           <li><span class="check">&#10003;</span> Multi-device cloud sync</li>
-          <li><span class="check">&#10003;</span> Offline PWA access</li>
+          <li><span class="check">&#10003;</span> Priority alerts</li>
+          <li><span class="check">&#10003;</span> Hospital privileges tracking</li>
+          <li><span class="check">&#10003;</span> Insurance &amp; malpractice records</li>
         </ul>
-        <a href="#get-started" class="btn-primary pricing-cta">Start Free Trial</a>
+
+        <div style="margin: 16px 0; padding: 12px 14px; background: rgba(16,185,129,0.06); border-left: 3px solid var(--emerald); border-radius: 6px; font-size: 13px; color: var(--text-secondary);">
+          <strong style="color: var(--emerald);">&#128737; Money-back guarantee.</strong> If we don&rsquo;t meet your expectations, money back. No questions asked.
+        </div>
+
+        <a href="mailto:hello@credentialdomd.com?subject=Founding%20Member%20Spot" class="btn-primary pricing-cta" style="font-weight: 700; letter-spacing: 0.02em;">
+          Claim Your Founding Spot &rarr;
+        </a>
       </div>
 
-      <!-- Practice -->
+      <!-- Waitlist -->
       <div class="pricing-card animate-on-scroll">
-        <div class="pricing-name">Practice</div>
-        <div class="pricing-desc">For credentialing offices &amp; group practices</div>
+        <div class="pricing-name">Waitlist</div>
+        <div class="pricing-desc">Not ready to commit? Get notified when we launch.</div>
         <div class="pricing-price">
-          <div class="pricing-amount free" style="font-size: 32px; line-height: 1.1;">Custom</div>
-          <div class="pricing-period">contact us for pricing</div>
+          <div class="pricing-amount free">$0</div>
+          <div class="pricing-period">no commitment</div>
         </div>
         <ul class="pricing-features">
-          <li><span class="check">&#10003;</span> Everything in Pro</li>
-          <li><span class="check">&#10003;</span> Multi-provider dashboard</li>
-          <li><span class="check">&#10003;</span> Team credential overview</li>
-          <li><span class="check">&#10003;</span> Practice-wide compliance score</li>
-          <li><span class="check">&#10003;</span> Admin role management</li>
-          <li><span class="check">&#10003;</span> Provider invite &amp; onboarding</li>
-          <li><span class="check">&#10003;</span> Dedicated support</li>
+          <li><span class="check">&#10003;</span> First access when we launch</li>
+          <li><span class="check">&#10003;</span> Launch-day discount</li>
+          <li><span class="check">&#10003;</span> No credit card required</li>
+          <li><span class="check">&#10003;</span> Early product updates</li>
         </ul>
-        <a href="mailto:hello@credentialdomd.com?subject=Practice%20Plan%20Inquiry" class="btn-secondary pricing-cta">Contact Us</a>
+        <a href="mailto:hello@credentialdomd.com?subject=Waitlist" class="btn-secondary pricing-cta">Join the Waitlist</a>
       </div>
+
     </div>
   </div>
 </section>
@@ -2439,7 +2466,7 @@ footer {
         How We Compare
       </div>
       <h2 class="section-title">More comprehensive than anything else out there.</h2>
-      <p class="section-subtitle" style="margin: 0 auto;">Mocingbird charges $199/month and only tracks licenses and CME. CredentialDOMD Pro is $29/month and covers everything.</p>
+      <p class="section-subtitle" style="margin: 0 auto;">Mocingbird charges $199/month and only tracks licenses and CME. CredentialDOMD Founding Members start at $1.99/month and covers everything.</p>
     </div>
 
     <div class="animate-on-scroll" style="overflow-x: auto;">
@@ -2447,7 +2474,7 @@ footer {
         <thead>
           <tr>
             <th style="text-align: left; padding: 14px 20px; color: var(--text-secondary); font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--border);">Feature</th>
-            <th style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 700; font-size: 14px; border-bottom: 2px solid var(--emerald); background: var(--emerald-dim);">CredentialDOMD Pro<br><span style="font-size: 12px; font-weight: 600; color: var(--emerald-light);">$29/mo</span></th>
+            <th style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 700; font-size: 14px; border-bottom: 2px solid var(--emerald); background: var(--emerald-dim);">CredentialDOMD Pro<br><span style="font-size: 12px; font-weight: 600; color: var(--emerald-light);">From $1.99/mo</span></th>
             <th style="text-align: center; padding: 14px 20px; color: var(--text-muted); font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border);">Mocingbird<br><span style="font-size: 12px; font-weight: 500;">$199/mo</span></th>
           </tr>
         </thead>
@@ -2499,7 +2526,7 @@ footer {
           </tr>
           <tr>
             <td style="padding: 14px 20px; color: var(--text); font-weight: 700;">Monthly price</td>
-            <td style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 800; font-size: 17px; background: var(--emerald-dim);">$29</td>
+            <td style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 800; font-size: 17px; background: var(--emerald-dim);">From $1.99</td>
             <td style="text-align: center; padding: 14px 20px; color: var(--text-muted); font-weight: 700; font-size: 17px;">$199</td>
           </tr>
         </tbody>
@@ -2537,6 +2564,18 @@ footer {
     </div>
 
     <div class="faq-grid">
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          What does CredentialDOMD NOT do?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">
+            We are a credential tracking and reminder service. We do NOT: renew credentials on your behalf, submit applications to licensing boards, file paperwork with hospitals or insurance companies, guarantee compliance with any regulatory body, or replace your credentialing office. We help you stay organized and never miss a deadline &mdash; but completing renewals is always your responsibility. See our full Terms of Service for details.
+          </div>
+        </div>
+      </div>
+
       <div class="faq-item">
         <button class="faq-question" onclick="toggleFaq(this)">
           Is my credential data secure?
@@ -3104,13 +3143,15 @@ footer {
       <p class="section-subtitle">Find out what it is. Set up takes 15 minutes. Then it runs itself.</p>
 
       <div class="final-cta-buttons">
-        <a href="#" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
-          Check Your Credential Health &mdash; Free
+        <a href="mailto:hello@credentialdomd.com?subject=Founding%20Member%20Spot" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
+          Claim Your Founding Member Spot
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
         </a>
       </div>
 
-      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">No credit card required. Free tier includes up to 5 credentials.</p>
+      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">
+        or <a href="mailto:hello@credentialdomd.com?subject=Waitlist" style="color: var(--emerald); text-decoration: underline; text-underline-offset: 3px;">join the waitlist</a> &mdash; no commitment, no credit card required.
+      </p>
     </div>
   </div>
 </section>
