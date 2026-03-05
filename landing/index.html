@@ -3116,6 +3116,52 @@ footer {
 </section>
 
 <!-- ============ FOOTER ============ -->
+<!-- ============ TERMS OF SERVICE ============ -->
+<section id="terms" class="section" style="padding: 60px 0;">
+  <div class="container" style="max-width: 800px;">
+    <h2 class="section-title" style="font-size: 28px; margin-bottom: 32px;">Terms of Service</h2>
+    <div style="color: var(--text-secondary); line-height: 1.8; font-size: 15px;">
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">1. Service Description</h3>
+      <p>CredentialDOMD is a credential <strong>tracking and reminder</strong> service for physicians and healthcare professionals. We help you monitor renewal dates, organize your credentials, and receive timely reminders so nothing expires unnoticed.</p>
+
+      <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 20px; margin: 24px 0;">
+        <p style="color: var(--emerald); font-weight: 600; margin-bottom: 8px;">⚠️ Important Limitation</p>
+        <p><strong>CredentialDOMD does not renew credentials on your behalf.</strong> We provide tracking, reminders, and organizational tools to support your renewal process. The responsibility for completing all credential renewals — including medical licenses, DEA registrations, board certifications, hospital privileges, and any other professional credentials — remains solely with you, the credential holder.</p>
+      </div>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">2. No Guarantee of Compliance</h3>
+      <p>While CredentialDOMD is designed to help you stay ahead of renewal deadlines, we do not guarantee that use of our service will prevent credential lapses, compliance failures, or any resulting consequences. Reminder delivery depends on accurate data entry and functional notification channels. You are responsible for verifying all renewal dates and completing all renewals independently.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">3. Your Responsibilities</h3>
+      <ul style="margin-left: 20px; margin-bottom: 16px;">
+        <li style="margin-bottom: 8px;">Provide accurate credential information including correct expiration dates</li>
+        <li style="margin-bottom: 8px;">Update your records when credentials are renewed or modified</li>
+        <li style="margin-bottom: 8px;">Complete all renewal processes directly with the issuing authority</li>
+        <li style="margin-bottom: 8px;">Maintain current contact information for receiving reminders</li>
+        <li style="margin-bottom: 8px;">Verify credential status independently and not rely solely on CredentialDOMD</li>
+      </ul>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">4. Data Privacy</h3>
+      <p>Your credential data is encrypted and stored securely. We do not sell, share, or distribute your personal or professional information to third parties. Your data is used exclusively to provide the tracking and reminder services you have subscribed to.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">5. AI-Assisted Operations</h3>
+      <p>CredentialDOMD uses artificial intelligence to assist with credential tracking, data organization, and communication. All AI operations are supervised by the founding team. We are transparent about our use of AI technology — it is a core part of how we deliver fast, accurate, and affordable service.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">6. Limitation of Liability</h3>
+      <p>CredentialDOMD shall not be liable for any missed renewals, credential lapses, lost income, legal penalties, or other damages arising from use of or reliance on our service. Our service is provided "as is" as a tracking and reminder tool. Maximum liability is limited to the amount you have paid for the service in the preceding 12 months.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">7. Cancellation</h3>
+      <p>You may cancel your subscription at any time. Upon cancellation, you retain access through the end of your current billing period. Your data can be exported or deleted upon request.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">8. Changes to Terms</h3>
+      <p>We may update these terms as our service evolves. Material changes will be communicated via email with at least 30 days notice. Continued use of the service after changes take effect constitutes acceptance.</p>
+
+      <p style="margin-top: 32px; color: var(--text-muted); font-size: 13px;">Last updated: March 2026</p>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="container">
     <div class="footer-inner">
@@ -3127,7 +3173,7 @@ footer {
         <a href="#manifesto">Our Mission</a>
         <a href="#about">About</a>
         <a href="#">Privacy Policy</a>
-        <a href="#">Terms of Service</a>
+        <a href="#terms">Terms of Service</a>
         <a href="#">Contact</a>
         <a href="#">Support</a>
       </div>
@@ -3172,7 +3218,7 @@ function toggleFaq(btn) {
   });
 })();
 
-// Smooth scroll for anchor links
+// Smooth scroll for anchor links + close mobile menu on click
 document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
   anchor.addEventListener('click', function(e) {
     e.preventDefault();
@@ -3180,6 +3226,9 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+    // Close mobile menu after clicking a link
+    var navLinks = document.querySelector('.nav-links');
+    if (navLinks) navLinks.classList.remove('mobile-open');
   });
 });
 
