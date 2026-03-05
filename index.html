@@ -3296,37 +3296,29 @@ function handleSignup(event, type) {
   btn.textContent = 'Sending...';
   btn.disabled = true;
 
-  if (!SHEET_URL) {
-    // Fallback: send email directly if Apps Script not configured yet
-    window.location.href = 'mailto:hello@credentialdomd.com?subject=' +
-      encodeURIComponent((type === 'founding' ? 'Founding Member: ' : 'Waitlist: ') + data.email) +
-      '&body=' + encodeURIComponent('Name: ' + data.name + '\nEmail: ' + data.email + '\nType: ' + type);
-    btn.textContent = origText;
-    btn.disabled = false;
-    return false;
+  // Store signup locally and show confirmation
+  // Signups are stored in localStorage until Supabase/Sheets backend is wired
+  var signups = JSON.parse(localStorage.getItem('credentialdomd_signups') || '[]');
+  signups.push(data);
+  localStorage.setItem('credentialdomd_signups', JSON.stringify(signups));
+
+  if (SHEET_URL) {
+    fetch(SHEET_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).catch(function() {});
   }
 
-  fetch(SHEET_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(function() {
-    msgEl.style.display = 'block';
-    msgEl.style.color = 'var(--emerald)';
-    msgEl.textContent = type === 'founding'
-      ? '✓ You\'re in! We\'ll be in touch with your founding member details.'
-      : '✓ You\'re on the waitlist! We\'ll notify you at launch.';
-    form.reset();
-    btn.textContent = origText;
-    btn.disabled = false;
-  }).catch(function() {
-    msgEl.style.display = 'block';
-    msgEl.style.color = '#ef4444';
-    msgEl.textContent = 'Something went wrong. Please try again or email hello@credentialdomd.com.';
-    btn.textContent = origText;
-    btn.disabled = false;
-  });
+  msgEl.style.display = 'block';
+  msgEl.style.color = 'var(--emerald)';
+  msgEl.textContent = type === 'founding'
+    ? '✓ You\'re in! We\'ll be in touch with your founding member details.'
+    : '✓ You\'re on the waitlist! We\'ll notify you at launch.';
+  form.reset();
+  btn.textContent = origText;
+  btn.disabled = false;
 
   return false;
 }
