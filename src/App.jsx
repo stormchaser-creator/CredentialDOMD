@@ -19,7 +19,8 @@ import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
-import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection } from "./components/pages";
+import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage } from "./components/pages";
+import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import { supabase } from "./lib/supabase";
 import {
   STATES, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
@@ -700,6 +701,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;
     if (subPage === "data-rights") return <LegalSection page="data-rights" />;
+    if (subPage === "cancellation") return <CancellationPage />;
 
     return (
       <div>
@@ -912,6 +914,18 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             </div>
           </div>
 
+          {/* Cancel Subscription (only when authenticated + subscribed) */}
+          {user && isPro && (
+            <button onClick={() => setSubPage("cancellation")} className="cmd-card-hover" style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              backgroundColor: T.card, border: `1px solid ${T.border}`,
+              borderRadius: 12, padding: "14px 16px", cursor: "pointer", width: "100%",
+              boxShadow: T.shadow1,
+            }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: T.textDim }}>Cancel Subscription</span>
+            </button>
+          )}
+
           {/* Sign Out (only when authenticated) */}
           {user && (
             <button onClick={() => signOut()} className="cmd-card-hover" style={{
@@ -991,7 +1005,10 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                   {data.settings.name ? data.settings.name.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "MD"}
                 </div>
                 <div>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>{pageTitle}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>{pageTitle}</div>
+                    {tab === "home" && data.settings.isFoundingMember && <FoundingMemberBadge size="small" />}
+                  </div>
                   {tab === "home" && data.settings.name && (
                     <div style={{ fontSize: 12, color: T.textMuted }}>{data.settings.name}{data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}</div>
                   )}
