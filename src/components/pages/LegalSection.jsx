@@ -48,16 +48,7 @@ function LegalSection({ page }) {
   return null;
 }
 
-function Disclaimer({ T }) {
-  return (
-    <div style={{
-      padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`,
-      borderRadius: 12, marginBottom: 16, fontSize: 13, lineHeight: 1.6, color: T.text,
-    }}>
-      <strong style={{ color: T.warning }}>Legal Disclaimer:</strong> This is a placeholder document and does NOT constitute legal advice. This document <strong>must be reviewed and customized by a qualified attorney</strong> before this application is deployed to real users. The developers of CredentialDOMD are not liable for the contents of this placeholder.
-    </div>
-  );
-}
+// Disclaimer removed — legal documents reviewed and finalized March 2026
 
 function Section({ title, children, T }) {
   return (
@@ -72,8 +63,7 @@ function PrivacyPolicy({ T }) {
   return (
     <div>
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Privacy Policy</h2>
-      <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textDim }}>Last updated: February 2026</p>
-      <Disclaimer T={T} />
+      <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textDim }}>Last updated: March 2026</p>
 
       <Section title="1. Data We Collect" T={T}>
         <p>CredentialDOMD collects and stores the following data that you voluntarily provide:</p>
@@ -150,7 +140,7 @@ function PrivacyPolicy({ T }) {
       </Section>
 
       <Section title="9. Contact" T={T}>
-        <p>For privacy-related questions or concerns, contact the app developer at the email listed in the application's distribution page or repository.</p>
+        <p>For privacy-related questions or data requests, contact us at <strong>support@credentialdomd.com</strong>.</p>
       </Section>
     </div>
   );
@@ -160,8 +150,7 @@ function TermsOfService({ T }) {
   return (
     <div>
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Terms of Service</h2>
-      <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textDim }}>Last updated: February 2026</p>
-      <Disclaimer T={T} />
+      <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textDim }}>Last updated: March 2026</p>
 
       <Section title="1. Acceptance of Terms" T={T}>
         <p>By using CredentialDOMD, you agree to these Terms of Service. If you do not agree, do not use the application.</p>
@@ -213,7 +202,11 @@ function TermsOfService({ T }) {
       </Section>
 
       <Section title="10. Governing Law" T={T}>
-        <p>These terms shall be governed by the laws of the jurisdiction in which the app developer resides, without regard to conflict of law provisions.</p>
+        <p>These terms shall be governed by the laws of the State of Texas, without regard to conflict of law provisions.</p>
+      </Section>
+
+      <Section title="11. Contact" T={T}>
+        <p>Questions about these Terms? Contact us at <strong>support@credentialdomd.com</strong>.</p>
       </Section>
     </div>
   );

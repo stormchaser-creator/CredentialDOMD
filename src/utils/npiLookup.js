@@ -1,41 +1,38 @@
 // NPI Registry API (NPPES) - Free, no API key required
 // Documentation: https://npiregistry.cms.hhs.gov/api-page
 //
-// The NPPES API does NOT set CORS headers, so direct browser fetch is blocked.
+// CORS handling:
 // In dev: Vite proxy at /npi-api → npiregistry.cms.hhs.gov/api
-// In prod: We use a public CORS proxy as fallback.
+// In prod: Supabase Edge Function npi-proxy (deployed with --no-verify-jwt)
 
-const PROD_DIRECT = "https://npiregistry.cms.hhs.gov/api/?version=2.1";
-
+const NPPES_BASE = "https://npiregistry.cms.hhs.gov/api/?version=2.1";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const isDev = import.meta.env.DEV;
 
 /**
  * Fetch NPI data with CORS handling.
- * In dev mode: Vite proxy at /npi-api avoids CORS.
- * In production: Direct fetch (works in Capacitor/native contexts),
- *   or if CORS blocked, shows actionable error.
- *   NOTE: For web production deployment, deploy a serverless proxy
- *   (Cloudflare Worker / Vercel Edge Function) and update PROD_PROXY_URL.
+ * Dev: Vite proxy. Prod: Supabase npi-proxy edge function.
  */
 async function fetchNPI(url) {
   if (isDev) {
-    // In dev, rewrite the URL to go through Vite proxy
     const proxyUrl = url.replace("https://npiregistry.cms.hhs.gov/api/", "/npi-api/");
     const res = await fetch(proxyUrl);
     if (!res.ok) throw new Error(`NPPES API error: ${res.status}`);
     return res.json();
   }
 
-  // Production: try direct fetch (works in Capacitor native apps, no CORS)
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw Object.assign(new Error(`NPPES API error: ${res.status}`), { isApiError: true });
-    return res.json();
-  } catch (err) {
-    if (err.isApiError) throw err;
-    // Network/CORS error — provide guidance
-    throw new Error("NPI lookup is not available in this browser context. The NPPES registry blocks direct browser access. This feature works fully in the mobile app.");
-  }
+  // Production: route through our Supabase Edge Function proxy
+  const params = new URL(url).searchParams.toString();
+  const proxyUrl = `${SUPABASE_URL}/functions/v1/npi-proxy?${params}`;
+  const res = await fetch(proxyUrl, {
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) throw new Error(`NPI proxy error: ${res.status}`);
+  return res.json();
 }
 
 /**
@@ -47,7 +44,7 @@ export async function lookupNPI(npi) {
     throw new Error("NPI must be a 10-digit number");
   }
 
-  const url = `${PROD_DIRECT}&number=${npi.trim()}`;
+  const url = `${NPPES_BASE}&number=${npi.trim()}`;
   const data = await fetchNPI(url);
 
   if (data.result_count === 0 || !data.results?.length) {
@@ -119,7 +116,7 @@ export async function searchNPI({ firstName, lastName, state, limit = 20 }) {
   if (state) params.set("state", state);
   params.set("enumeration_type", "NPI-1"); // Individual only
 
-  const url = `https://npiregistry.cms.hhs.gov/api/?${params}`;
+  const url = `${NPPES_BASE.replace("?version=2.1", "")}?${params}`;
   const data = await fetchNPI(url);
   if (!data.results?.length) return [];
 
