@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CredentialDOMD — You Never Think About Credentials Again</title>
+<title>CredentialDOMD — Physician Credential Tracking | Never Miss a Renewal</title>
 <meta name="description" content="Physician credential management that runs itself. Track every license, certification, and privilege across all 50 states. Built by a board-certified neurosurgeon.">
 <meta name="keywords" content="physician credentialing, medical license tracking, CME tracking, hospital privileges, locum tenens credentials, DEA registration, board certification">
 
@@ -21,6 +21,8 @@
 <meta name="twitter:title" content="CredentialDOMD — You Never Think About Credentials Again">
 <meta name="twitter:description" content="One missed renewal cost a physician $47,000. Your credentialing system should prevent that.">
 <meta name="twitter:image" content="https://credentialdomd.com/og-image.png">
+
+<link rel="canonical" href="https://credentialdomd.com">
 
 <!-- Favicon -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231a1a2e'/><text x='16' y='21' text-anchor='middle' fill='%2310b981' font-size='16' font-weight='800' font-family='system-ui'>D</text></svg>">
@@ -1780,6 +1782,111 @@ footer {
   animation: pulseGlow 4s ease-in-out infinite;
 }
 </style>
+
+<!-- Schema.org: SoftwareApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "CredentialDOMD",
+  "description": "Physician credential management that runs itself. Track every license, certification, and privilege across all 50 states. Built by a board-certified neurosurgeon.",
+  "url": "https://credentialdomd.com",
+  "applicationCategory": "MedicalApplication",
+  "operatingSystem": "Web, iOS, Android",
+  "author": {
+    "@type": "Person",
+    "name": "Eric Whitney, DO",
+    "jobTitle": "Board-Certified Neurosurgeon",
+    "url": "https://credentialdomd.com"
+  },
+  "offers": {
+    "@type": "Offer",
+    "price": "1.99",
+    "priceCurrency": "USD",
+    "priceSpecification": {
+      "@type": "UnitPriceSpecification",
+      "price": "1.99",
+      "priceCurrency": "USD",
+      "unitText": "MONTH"
+    },
+    "description": "Founding Member rate — locked for life"
+  }
+}
+</script>
+
+<!-- Schema.org: FAQPage -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What does CredentialDOMD NOT do?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "We are a credential tracking and reminder service. We do NOT: renew credentials on your behalf, submit applications to licensing boards, file paperwork with hospitals or insurance companies, guarantee compliance with any regulatory body, or replace your credentialing office. We help you stay organized and never miss a deadline — but completing renewals is always your responsibility."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my credential data secure?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. All data is encrypted at rest and in transit. We use Supabase with row-level security — your data is isolated to your account. We never share, sell, or access your credential information. You can export or delete all of your data at any time. We are built on the same infrastructure used by HIPAA-compliant healthcare applications."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does this work for my state?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. CredentialDOMD supports all 50 states plus DC, Guam, Puerto Rico, and the US Virgin Islands. Each state's specific licensing requirements, CME mandates, and renewal cycles are built into the system. If you practice across multiple states, we track each one independently."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can my practice manager use this for our whole group?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. A Practice tier for group practices and credentialing offices is coming soon. Join the waitlist and you'll be the first to know when it launches."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What about CAQH?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "CredentialDOMD complements CAQH, it does not replace it. We track the same credential data CAQH requires — so when it is time to update your CAQH profile, everything you need is already organized and current. Think of us as the source of truth that makes CAQH updates a five-minute task instead of a two-hour ordeal."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does the AI document scanner work?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Take a photo of any credential document — medical license, DEA registration, board certificate, insurance card. Our Gemini-powered AI reads the document, extracts the credential type, issuing authority, license number, issue date, and expiration date, then populates your profile automatically. You review and confirm. It takes about 10 seconds per document."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I use this offline?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. CredentialDOMD is a Progressive Web App (PWA). Install it on your phone like a native app. Your credential data is cached locally, so you can access all of your information even without an internet connection — perfect for pulling up a license number in a hospital basement. Data syncs automatically when you are back online."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What if I only have a few credentials?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "If you have fewer than 5 credentials and they all renew at the same time, a calendar reminder might be enough. Our Free tier handles up to 5 credentials if you want the Credential Health Score and basic alerts. But if you have more than 5, or you credential at multiple hospitals, or you manage insurance panels — the math changes quickly. One missed renewal costs more than a decade of Pro subscriptions."
+      }
+    }
+  ]
+}
+</script>
 </head>
 
 <body>
@@ -2437,7 +2544,7 @@ footer {
           <strong style="color: var(--emerald);">&#128737; Money-back guarantee.</strong> If we don&rsquo;t meet your expectations, money back. No questions asked.
         </div>
 
-        <a href="mailto:hello@credentialdomd.com?subject=Founding%20Member%20Spot" class="btn-primary pricing-cta" style="font-weight: 700; letter-spacing: 0.02em;">
+        <a href="https://credentialdomd.com/app" class="btn-primary pricing-cta" style="font-weight: 700; letter-spacing: 0.02em;">
           Claim Your Founding Spot &rarr;
         </a>
       </div>
@@ -3223,6 +3330,17 @@ footer {
         <a href="#terms">Terms of Service</a>
         <a href="#">Contact</a>
         <a href="#">Support</a>
+      </div>
+    </div>
+    <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-subtle);">
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px;">State Physician License Guides</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px 24px;">
+        <a href="/states/california" style="font-size: 13px; color: var(--text-muted);">California</a>
+        <a href="/states/texas" style="font-size: 13px; color: var(--text-muted);">Texas</a>
+        <a href="/states/florida" style="font-size: 13px; color: var(--text-muted);">Florida</a>
+        <a href="/states/new-york" style="font-size: 13px; color: var(--text-muted);">New York</a>
+        <a href="/states/illinois" style="font-size: 13px; color: var(--text-muted);">Illinois</a>
+        <a href="/states/pennsylvania" style="font-size: 13px; color: var(--text-muted);">Pennsylvania</a>
       </div>
     </div>
   </div>
