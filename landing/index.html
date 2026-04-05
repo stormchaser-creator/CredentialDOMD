@@ -2474,7 +2474,7 @@ footer {
     <div class="animate-on-scroll" style="text-align: center; margin-bottom: 40px;">
       <div style="display: inline-flex; align-items: center; gap: 12px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); border-radius: 50px; padding: 10px 24px;">
         <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 8px var(--emerald); animation: pulse 2s infinite;"></span>
-        <span style="color: var(--text-secondary); font-size: 14px;"><strong style="color: var(--emerald); font-size: 16px;">333</strong> founding spots remaining</span>
+        <span style="color: var(--text-secondary); font-size: 14px;"><strong style="color: var(--emerald); font-size: 16px;" id="founding-remaining-count">333</strong> founding spots remaining</span>
       </div>
     </div>
 
@@ -3453,5 +3453,25 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
 }
 </style>
 
+<script>
+(function() {
+  var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
+  fetch(SUPABASE_URL + '/functions/v1/founding-count')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var claimed = data.claimed || 0;
+      var total = data.total || 333;
+      var remaining = total - claimed;
+      var pct = Math.min((claimed / total) * 100, 100);
+      var bar = document.getElementById('founding-progress-bar');
+      var text = document.getElementById('founding-progress-text');
+      var counter = document.getElementById('founding-remaining-count');
+      if (bar) bar.style.width = pct + '%';
+      if (text) text.textContent = claimed + ' / ' + total + ' claimed';
+      if (counter) counter.textContent = remaining;
+    })
+    .catch(function() { /* keep static fallback */ });
+})();
+</script>
 </body>
 </html>
