@@ -35,7 +35,7 @@ export async function signInWithOAuth(provider) {
   if (!supabase) throw new Error("Supabase is not configured");
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: window.location.origin + "/" },
+    options: { redirectTo: window.location.origin + "/app/" },
   });
   if (error) throw error;
   return data;

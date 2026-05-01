@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--host"],
       "port": 5173
+    },
+    {
+      "name": "gh-pages-static",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "serve", "/Users/whit_1/Desktop/CredentialDOMD/.claude/worktrees/gh-pages-fix", "-l", "4173", "--no-clipboard"],
+      "port": 4173
     }
   ]
 }
