@@ -3297,6 +3297,63 @@ footer {
   </div>
 </section>
 
+<!-- ============ PRIVACY POLICY ============ -->
+<section id="privacy" class="section" style="padding: 60px 0; border-top: 1px solid rgba(148, 163, 184, 0.1);">
+  <div class="container" style="max-width: 800px;">
+    <h2 class="section-title" style="font-size: 28px; margin-bottom: 32px;">Privacy Policy</h2>
+    <div style="color: var(--text-secondary); line-height: 1.8; font-size: 15px;">
+
+      <p>CredentialDOMD ("we", "us", "our") provides credential tracking and reminder services for healthcare professionals. This Privacy Policy explains what we collect, how we use it, and your rights.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">1. Information We Collect</h3>
+      <ul style="margin-left: 20px; margin-bottom: 16px;">
+        <li style="margin-bottom: 8px;"><strong>Account information:</strong> name, email, NPI number, primary state, specialties, and other profile details you provide.</li>
+        <li style="margin-bottom: 8px;"><strong>Credential data:</strong> licenses, CME hours, hospital privileges, insurance, case logs, education, work history, peer references, and any documents you upload.</li>
+        <li style="margin-bottom: 8px;"><strong>Usage data:</strong> basic technical information (browser, device type, time of access) needed to operate the service securely.</li>
+        <li style="margin-bottom: 8px;"><strong>Waitlist / founding member signups:</strong> name and email submitted via signup forms on this site.</li>
+      </ul>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">2. How We Use Your Information</h3>
+      <p>We use your information solely to provide and improve the service: tracking your credentials, sending renewal reminders, generating CVs and reports, syncing data across your devices, and responding to support requests. We do not use your data for advertising and we do not build profiles of you for any purpose other than delivering the service you signed up for.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">3. How Your Data Is Stored</h3>
+      <p>Your data is stored in a Supabase-hosted PostgreSQL database with row-level security: your records are isolated to your account and cannot be read by other users. Data is encrypted in transit via HTTPS/TLS. Documents you upload (license images, certificates) are stored locally in your browser by default; cloud sync is optional.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">4. AI Document Scanning</h3>
+      <p>If you use the AI document scanner, the image you submit is sent to a third-party AI provider (Anthropic or Google) for the sole purpose of extracting credential information. We do not retain copies of these images on our servers, and the AI providers we use contractually agree not to train on submitted data. You can choose not to use this feature; all manual entry options remain available.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">5. Third-Party Services</h3>
+      <ul style="margin-left: 20px; margin-bottom: 16px;">
+        <li style="margin-bottom: 8px;"><strong>Supabase</strong> — database and authentication</li>
+        <li style="margin-bottom: 8px;"><strong>Stripe</strong> — payment processing for paid plans (we never see or store your card details)</li>
+        <li style="margin-bottom: 8px;"><strong>Anthropic / Google</strong> — AI document scanning (only when you use the feature)</li>
+        <li style="margin-bottom: 8px;"><strong>NPPES / NPI Registry (CMS)</strong> — public NPI lookup, no personal data is sent</li>
+      </ul>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">6. What We Do Not Do</h3>
+      <ul style="margin-left: 20px; margin-bottom: 16px;">
+        <li style="margin-bottom: 8px;">We do not sell your data. Ever.</li>
+        <li style="margin-bottom: 8px;">We do not share your credential data with employers, hospitals, insurers, or any third party without your explicit instruction.</li>
+        <li style="margin-bottom: 8px;">We do not run third-party advertising or analytics trackers.</li>
+      </ul>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">7. Your Rights</h3>
+      <p>You can access, correct, export, or delete your data at any time. Account deletion removes all your records from our database. Email <a href="mailto:ericwhitneyai@gmail.com" style="color: var(--emerald);">ericwhitneyai@gmail.com</a> for any data request and we will respond within 30 days.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">8. HIPAA &amp; Regulatory Note</h3>
+      <p>CredentialDOMD is a personal credential-management tool for the credential holder. It is not a covered entity or business associate under HIPAA, and it is not intended for storing protected health information about patients. Do not upload patient records, PHI, or any data subject to HIPAA into the service.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">9. Changes to This Policy</h3>
+      <p>We may update this Privacy Policy as the service evolves. Material changes will be communicated by email with at least 30 days notice. Continued use after changes take effect constitutes acceptance.</p>
+
+      <h3 style="color: var(--text-primary); font-size: 18px; margin: 24px 0 12px;">10. Contact</h3>
+      <p>Questions about this policy or your data? Email <a href="mailto:ericwhitneyai@gmail.com" style="color: var(--emerald);">ericwhitneyai@gmail.com</a>.</p>
+
+      <p style="margin-top: 32px; color: var(--text-muted); font-size: 13px;">Last updated: May 2026</p>
+    </div>
+  </div>
+</section>
+
 <!-- ============ FOOTER ============ -->
 <!-- ============ TERMS OF SERVICE ============ -->
 <section id="terms" class="section" style="padding: 60px 0;">
@@ -3354,10 +3411,10 @@ footer {
       <div class="footer-links">
         <a href="#manifesto">Our Mission</a>
         <a href="#about">About</a>
-        <a href="#">Privacy Policy</a>
+        <a href="#privacy">Privacy Policy</a>
         <a href="#terms">Terms of Service</a>
-        <a href="#">Contact</a>
-        <a href="#">Support</a>
+        <a href="mailto:ericwhitneyai@gmail.com">Contact</a>
+        <a href="mailto:ericwhitneyai@gmail.com?subject=CredentialDOMD%20Support">Support</a>
       </div>
     </div>
   </div>
