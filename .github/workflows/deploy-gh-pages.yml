@@ -1,0 +1,116 @@
+name: Deploy to GitHub Pages
+
+# Auto-deploys credentialdomd.com on every push to main.
+# - Marketing landing (landing/index.html)        → gh-pages root /index.html
+# - State landing pages (landing/states/*.html)   → gh-pages /states/
+# - React SPA (npm run build → dist/)             → gh-pages /app/
+# - SEO files (public/sitemap.xml, robots.txt)    → gh-pages root
+#
+# Preserves: CNAME, .nojekyll, dr-whitney-headshot.jpg, docs/, dist/ (legacy),
+# anything else already in gh-pages that this workflow doesn't touch.
+#
+# Manual deploy: Actions tab → Deploy to GitHub Pages → Run workflow.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Don't trigger on doc-only changes; broaden if needed.
+      - 'src/**'
+      - 'landing/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+      - '.github/workflows/deploy-gh-pages.yml'
+  workflow_dispatch: {}
+
+# Prevent overlapping deploys.
+concurrency:
+  group: deploy-gh-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          path: src
+          fetch-depth: 1
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install deps
+        working-directory: src
+        run: npm install --legacy-peer-deps
+
+      - name: Build React app with /app/ base path
+        working-directory: src
+        run: npm run build -- --base=/app/
+
+      - name: Sync build artifacts to gh-pages
+        run: |
+          set -euo pipefail
+
+          # Marketing landing page → gh-pages root
+          cp src/landing/index.html gh-pages/index.html
+
+          # 50 state landing pages → gh-pages /states
+          rm -rf gh-pages/states
+          if [ -d src/landing/states ]; then
+            cp -R src/landing/states gh-pages/states
+          fi
+
+          # React SPA build → gh-pages /app
+          rm -rf gh-pages/app
+          mkdir gh-pages/app
+          cp -R src/dist/. gh-pages/app/
+
+          # SEO files at root
+          cp src/public/sitemap.xml gh-pages/sitemap.xml
+          cp src/public/robots.txt gh-pages/robots.txt
+
+          # GitHub Pages essentials (force, in case overwritten)
+          echo 'credentialdomd.com' > gh-pages/CNAME
+          touch gh-pages/.nojekyll
+
+      - name: Commit and push if changed
+        working-directory: gh-pages
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to deploy"
+            exit 0
+          fi
+          SHA=$(cd ../src && git rev-parse --short HEAD)
+          MSG=$(cd ../src && git log -1 --pretty=%s | tr -d '"' | cut -c1-72)
+          git commit -m "Auto-deploy ${SHA}: ${MSG}"
+          git push origin gh-pages
+
+      - name: Summary
+        run: |
+          echo "### Deploy complete" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source commit:** \`$(cd src && git rev-parse --short HEAD)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Site:** https://credentialdomd.com/" >> $GITHUB_STEP_SUMMARY
+          echo "- **App:** https://credentialdomd.com/app/" >> $GITHUB_STEP_SUMMARY
+          echo "- **GH Pages takes 30-60s to invalidate cache after this commit lands**" >> $GITHUB_STEP_SUMMARY
