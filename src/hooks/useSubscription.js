@@ -22,21 +22,56 @@ const VALID_TIER_IDS = new Set(Object.keys(TIERS));
 
 // Dev mode: stripe not yet wired, allow tier switching via localStorage.
 const MOCK_STORAGE_KEY = "credentialdomd-mock-tier";
+const PREVIEW_STORAGE_KEY = "credentialdomd-preview-tier";
 export const IS_DEV_MODE =
   import.meta.env.DEV && !import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+
+// Founder-only preview override. Visit /app/?preview_tier=locum to flip the
+// active tier in localStorage so you can test tier-locked features (Locum
+// dashboard, etc.) before Stripe is wired. Visit /app/?preview_tier=clear
+// to reset. Persists across reloads until cleared.
+function isValidTier(t) {
+  return typeof t === "string" && VALID_TIER_IDS.has(t);
+}
+
+function readPreviewTierFromURL() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("preview_tier");
+    if (!t) return null;
+    if (t === "clear") {
+      localStorage.removeItem(PREVIEW_STORAGE_KEY);
+      return null;
+    }
+    if (isValidTier(t)) {
+      localStorage.setItem(PREVIEW_STORAGE_KEY, t);
+      return t;
+    }
+  } catch {}
+  return null;
+}
+
+function getPreviewTier() {
+  const fromUrl = readPreviewTierFromURL();
+  if (fromUrl) return fromUrl;
+  try { return localStorage.getItem(PREVIEW_STORAGE_KEY) || null; }
+  catch { return null; }
+}
 
 function getMockTier() {
   try { return localStorage.getItem(MOCK_STORAGE_KEY) || "free"; }
   catch { return "free"; }
 }
 
-function isValidTier(t) {
-  return typeof t === "string" && VALID_TIER_IDS.has(t);
-}
-
 export function useSubscription(user) {
-  const [tier, setTier] = useState(() => IS_DEV_MODE ? getMockTier() : "free");
-  const [loading, setLoading] = useState(!IS_DEV_MODE);
+  // Founder-only preview override (URL or localStorage). Beats Stripe-resolved tier.
+  const previewTier = typeof window !== "undefined" ? getPreviewTier() : null;
+  const [tier, setTier] = useState(() => {
+    if (previewTier) return previewTier;
+    if (IS_DEV_MODE) return getMockTier();
+    return "free";
+  });
+  const [loading, setLoading] = useState(!IS_DEV_MODE && !previewTier);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [foundingLockEndsAt, setFoundingLockEndsAt] = useState(null);
@@ -66,6 +101,10 @@ export function useSubscription(user) {
   // Load real subscription state from Supabase
   useEffect(() => {
     if (IS_DEV_MODE) { setLoading(false); return; }
+    // If founder-only preview override is active, don't overwrite the tier
+    // with whatever Supabase returns. Used to test tier-locked features
+    // before Stripe is wired.
+    if (previewTier) { setLoading(false); return; }
     if (!user || !supabase) {
       setTier("free");
       setLoading(false);
