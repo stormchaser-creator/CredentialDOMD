@@ -2,6 +2,28 @@
   command = "npm run build"
   publish = "dist"
 
+# Static landing + state pages must serve their .html before SPA fallback.
+# Order matters — first match wins.
+[[redirects]]
+  from = "/states/:state"
+  to = "/landing/states/:state.html"
+  status = 200
+  force = false
+
+[[redirects]]
+  from = "/states"
+  to = "/landing/states/index.html"
+  status = 200
+  force = false
+
+[[redirects]]
+  from = "/landing"
+  to = "/landing/index.html"
+  status = 200
+  force = false
+
+# SPA fallback — anything that didn't match above (and isn't a static asset)
+# routes to the React app.
 [[redirects]]
   from = "/*"
   to = "/index.html"

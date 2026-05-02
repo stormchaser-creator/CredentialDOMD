@@ -43,32 +43,54 @@ serve(async (req) => {
 
       if (session.mode === "subscription") {
         const sub = await stripe.subscriptions.retrieve(
-          session.subscription as string
+          session.subscription as string,
+          { expand: ["items.data.price.product"] }
         );
-        const priceId = sub.items.data[0]?.price?.id;
+        const priceObj = sub.items.data[0]?.price;
+        const lookupKey = priceObj?.lookup_key ?? "";
+        const product = priceObj?.product as { metadata?: Record<string, string> } | undefined;
 
-        // Determine plan type from price
-        let planType = "pro_monthly";
-        let status = "pro";
-        const proAnnual = Deno.env.get("STRIPE_PRICE_ID_PRO_ANNUAL");
-        const practice = Deno.env.get("STRIPE_PRICE_ID_PRACTICE");
-        if (priceId === proAnnual) planType = "pro_annual";
-        if (priceId === practice) {
-          planType = "practice";
-          status = "practice";
-        }
+        // Architecture D: tier comes from product.metadata.tier (canonical source).
+        // Lookup key is the secondary/billing-cadence signal.
+        const tier = product?.metadata?.tier ?? "solo";
+        const billingCadence = priceObj?.recurring?.interval === "year" ? "annual" : "monthly";
+
+        // Founding-tier subscribers get a 24-month locked window.
+        const lockMonths = parseInt(product?.metadata?.lock_months ?? "0", 10);
+        const lockEndsAt = lockMonths > 0
+          ? new Date(Date.now() + lockMonths * 30.44 * 24 * 60 * 60 * 1000).toISOString()
+          : null;
+
+        // Trial state passes through from Stripe.
+        const trialEndsAt = sub.trial_end
+          ? new Date(sub.trial_end * 1000).toISOString()
+          : null;
 
         await supabase
           .from("subscriptions")
           .upsert({
             auth_user_id: userId,
             app,
-            status,
-            plan_type: planType,
+            tier,
+            // Legacy columns for backward compatibility while migration is pending:
+            status: tier === "founding" || tier === "solo" || tier === "locum" ? "pro"
+                  : tier === "practice" || tier === "group" ? "practice"
+                  : tier,
+            plan_type: tier === "solo" && billingCadence === "annual" ? "pro_annual"
+                     : tier === "solo" ? "pro_monthly"
+                     : tier,
             subscription_id: sub.id,
-            period_end: new Date(
-              sub.current_period_end * 1000
-            ).toISOString(),
+            period_end: new Date(sub.current_period_end * 1000).toISOString(),
+            trial_ends_at: trialEndsAt,
+            founding_lock_ends_at: lockEndsAt,
+            seat_count: sub.items.data[0]?.quantity ?? 1,
+            metadata: {
+              lookup_key: lookupKey,
+              billing_cadence: billingCadence,
+              stripe_product_id: priceObj?.product && typeof priceObj.product === "object"
+                ? (priceObj.product as { id?: string }).id
+                : undefined,
+            },
             updated_at: now,
           }, { onConflict: "auth_user_id,app" });
       } else {

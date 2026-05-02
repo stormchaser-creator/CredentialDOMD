@@ -12,9 +12,12 @@ Enterprise platforms cost $10K+/year and serve credentialing departments. CME tr
 
 Nobody built the tool that physicians themselves actually need: a single app that tracks everything — licenses, CME with state-specific topic compliance, hospital privileges, malpractice insurance, case logs, health records — across all 50 states.
 
-So we built it. $7.99/month. Free to start.
+So we built it. Founding Member Price: $4.99/mo. Price goes up after every 50 signups.
 
 Because the person who spent 11 years training to save lives shouldn't have to spend another 15 hours a year on credential paperwork.
+
+Your price is locked forever. It will never go up.
+30-day money-back guarantee. No questions asked.
 
 credentialmd.com
 
@@ -34,6 +37,8 @@ And the #1 cause of delays? Missing or expired documentation that the physician 
 CredentialMD sends alerts before anything expires. One app for every credential, every state.
 
 This isn't a nice-to-have. It's career insurance for less than $2/week.
+
+Founding Member Price: $4.99/mo. Limited to the first 50 physicians.
 
 ---
 
@@ -68,7 +73,7 @@ We just launched our referral program, and it's simple:
 
 Give a month, get a month.
 
-Share CredentialMD with a colleague. When they sign up for PRO, you both get a free month.
+Share CredentialMD with a colleague. When they sign up, you both get a month free. Their price locks in at the current rate.
 
 No complicated tiers. No points systems. Just physicians helping physicians.
 
@@ -104,12 +109,14 @@ There is no widely-adopted tool that gives individual physicians a unified view 
 **The Solution We're Building:**
 CredentialMD is a mobile-first credential management app built specifically for individual physicians. It tracks every credential type, knows the CME requirements for all 50 states (including topic-specific mandates and MD/DO distinctions), and lets physicians share their credentials with any institution in one tap.
 
-The pricing reflects our values: $7.99/month for full access, with a free tier and a $3.99/month resident plan. We believe every physician should be able to afford credential management, not just hospitals with six-figure software budgets.
+The pricing reflects our values: Starting at $4.99/mo for Founding Members (limited to first 50 physicians), with price increases of $2 per 50-user cohort up to $14.99/mo. We stay $5 under every competitor. 30-day money-back guarantee. Price Lock Guarantee — your rate never increases.
 
 **CTA:**
-If you're a physician managing credentials across multiple states or institutions, or if you've ever been surprised by an expiration you didn't see coming — try CredentialMD free at credentialmd.com.
+If you're a physician managing credentials across multiple states or institutions, or if you've ever been surprised by an expiration you didn't see coming — start for $4.99/mo at credentialmd.com.
 
-And if you know a colleague who needs this: our referral program gives both of you a free month of PRO.
+30-day money-back guarantee. Founding Member pricing — limited spots.
+
+And if you know a colleague who needs this: our referral program gives both of you a free month.
 
 ---
 

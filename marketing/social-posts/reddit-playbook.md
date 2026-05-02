@@ -34,13 +34,13 @@
 "Most CME trackers just count hours. The problem is each state has different TOPIC requirements (California wants pain management, Florida wants HIV/AIDS + medical errors, etc.). I found CredentialMD which tracks topic-level compliance for all 50 states. Has been more useful than anything else I've tried."
 
 ### When someone asks about multi-state licensing:
-"Practicing in multiple states is a credentialing nightmare. Each state has different CME requirements, different renewal cycles, different topic mandates. I use CredentialMD to track all of them in one app — it knows the differences between MD and DO requirements too. Free tier available if you want to try it."
+"Practicing in multiple states is a credentialing nightmare. Each state has different CME requirements, different renewal cycles, different topic mandates. I use CredentialMD to track all of them in one app — it knows the differences between MD and DO requirements too. 30-day money-back guarantee if you want to try it."
 
 ### When someone asks about locum tenens credentialing:
 "Locums credentialing is its own special hell. I've been using CredentialMD to keep everything organized — licenses, CME, privileges, insurance, case logs — across all my states. The Quick Share feature is actually useful when a new facility asks for your credential packet."
 
 ### When a resident asks about getting organized:
-"Start tracking everything now. Seriously. When you're an attending and credentialing asks for your documentation, you'll thank yourself. I use CredentialMD ($3.99/mo for residents) — it tracks licenses, CME, everything. But even if you don't use an app, at minimum keep a spreadsheet. Future you will appreciate it."
+"Start tracking everything now. Seriously. When you're an attending and credentialing asks for your documentation, you'll thank yourself. I use CredentialMD ($4.99/mo Founding Member Price, price locked forever) — it tracks licenses, CME, everything. But even if you don't use an app, at minimum keep a spreadsheet. Future you will appreciate it."
 
 ---
 
@@ -62,7 +62,7 @@ What's everyone else doing? Anyone found an actual system that works?
 
 Your program tracks your hours. But nobody is tracking YOUR credentials for you — the licenses, CME, health records, etc. that you'll need when you start applying for attending positions and hospital privileges.
 
-Start a system now. Even a spreadsheet works. But there are also apps designed for this (I use CredentialMD — it has a resident plan for $3.99/mo).
+Start a system now. Even a spreadsheet works. But there are also apps designed for this (I use CredentialMD — Founding Member Price is $4.99/mo (price locked forever)).
 
 Trust me, your credentialing process will go so much smoother if you have 3-4 years of organized documentation ready to go.
 

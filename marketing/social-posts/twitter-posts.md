@@ -22,7 +22,7 @@ Things I learned the hard way: all of it
 
 CredentialMD tracks your licenses, CME, privileges, insurance, case logs — all 50 states.
 
-$7.99/mo. Less than your hospital cafeteria salad.
+Founding Member Price: $4.99/mo. Price locked forever. 30-day money-back guarantee.
 
 #MedTwitter #Residency
 
@@ -41,7 +41,7 @@ THREAD: Your state's CME requirements are probably weirder than you think. 🧵
 
 5/ Most "CME trackers" don't know any of this. They count hours. CredentialMD tracks topic-level compliance for every state, MD and DO.
 
-Free to start. credentialmd.com
+Founding Member Price: $4.99/mo. Limited to first 50 physicians. credentialmd.com
 
 ---
 
@@ -50,6 +50,8 @@ me: I'm very organized
 also me: *has 3 expired credentials I found out about from my credentialing coordinator's passive-aggressive email*
 
 CredentialMD sends you alerts before things expire. Revolutionary concept.
+
+$4.99/mo Founding Member Price. 30-day money-back guarantee.
 
 ---
 
@@ -60,7 +62,7 @@ When's your birthday?
 
 Do you know if it's current?
 
-CredentialMD does. Try it free → credentialmd.com
+CredentialMD does. Start for $4.99/mo → credentialmd.com
 
 ---
 
@@ -133,7 +135,7 @@ This is why CredentialMD exists.
 **Post 12 — Referral Launch**
 New: Give a month, get a month.
 
-Share CredentialMD with a colleague. When they sign up for PRO, you both get a free month.
+Share CredentialMD with a colleague. When they sign up, you both get a month free. Their price locks in at the current rate.
 
 Because the best marketing is one physician telling another: "This actually works."
 
@@ -141,12 +143,12 @@ credentialmd.com/refer
 
 ---
 
-**Post 13 — Resident Focus**
-To every resident drowning in credential paperwork while working 80-hour weeks:
+**Post 13 — Early Adopter**
+To every physician building their credential system from the ground up:
 
-CredentialMD Resident plan. $3.99/mo. Full features. No trial. No gotcha.
+CredentialMD. $4.99/mo Founding Member Price (limited spots). Price locked forever. 30-day money-back guarantee.
 
-Your program tracks your hours. We track everything else.
+We track licenses, CME, privileges, insurance, case logs, health records. You focus on medicine.
 
 ---
 
@@ -162,6 +164,6 @@ What if you never had to dig through emails, filing cabinets, or state board por
 
 What if every credential, every CME hour, every expiration date was just... there?
 
-That's CredentialMD. Free to start. $7.99/mo for everything.
+That's CredentialMD. Founding Member Price: $4.99/mo. Price locked forever. 30-day money-back guarantee.
 
 credentialmd.com

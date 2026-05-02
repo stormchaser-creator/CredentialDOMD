@@ -15,7 +15,7 @@ function EmptyState({ icon, title, subtitle, onAction, actionLabel }) {
             display: "inline-flex", alignItems: "center", gap: 6, padding: "12px 24px",
             borderRadius: 10, border: "none", fontSize: 15, fontWeight: 600,
             cursor: "pointer", backgroundColor: T.accent, color: "#fff",
-            boxShadow: "0 2px 8px rgba(26,115,232,0.25)",
+            boxShadow: "0 2px 8px rgba(16,185,129,0.3)",
           }}
         >
           {actionLabel}

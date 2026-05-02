@@ -1,34 +1,33 @@
 // CredentialDOMD Design System — Theme Tokens
-// "Modern Medical Trust" palette
-// All colors verified WCAG AA compliant (4.5:1 text, 3:1 UI)
+// Palette matched to landing page: deep navy + emerald green primary
 
 export const THEMES = {
   light: {
     // ─── Surfaces ──────────────────────────────────────────
-    bg: "#F8FAFC",
+    bg: "#F0FDF8",
     card: "#FFFFFF",
-    cardHover: "#F8FAFC",
+    cardHover: "#F0FDF8",
     cardGlow: "0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)",
-    input: "#F1F5F9",
-    inputBorder: "#E2E8F0",
-    border: "#E2E8F0",
-    borderFocus: "#1A73E8",
-    overlay: "rgba(15,23,42,0.4)",
+    input: "#F0FDF8",
+    inputBorder: "#D1FAE5",
+    border: "#D1FAE5",
+    borderFocus: "#10b981",
+    overlay: "rgba(0,20,15,0.4)",
     modalBg: "#FFFFFF",
 
     // ─── Text ──────────────────────────────────────────────
     text: "#0F172A",
-    textMuted: "#475569",
-    textDim: "#94A3B8",
+    textMuted: "#374151",
+    textDim: "#6B7280",
 
-    // ─── Primary (Blue) ────────────────────────────────────
-    accent: "#1A73E8",
-    accentHover: "#1557B0",
-    accentDim: "#E8F0FE",
-    accentGlow: "rgba(26,115,232,0.08)",
-    accentSoft: "#E8F0FE",
+    // ─── Primary (Emerald) — matches landing page ──────────
+    accent: "#10b981",
+    accentHover: "#059669",
+    accentDim: "rgba(16,185,129,0.08)",
+    accentGlow: "rgba(16,185,129,0.12)",
+    accentSoft: "rgba(16,185,129,0.06)",
 
-    // ─── Secondary (Teal) ──────────────────────────────────
+    // ─── Secondary ─────────────────────────────────────────
     teal: "#0D9488",
     tealDim: "#CCFBF1",
 
@@ -44,9 +43,10 @@ export const THEMES = {
     neutral: "#6B7280",
     neutralDim: "#F3F4F6",
 
-    // ─── Accent Warm (urgent CTAs) ─────────────────────────
-    warm: "#E8634A",
-    warmDim: "#FEF2F2",
+    // ─── Accent Warm ───────────────────────────────────────
+    warm: "#FF6B35",
+    warmDim: "#FFF4ED",
+    warmGlow: "rgba(255,107,53,0.12)",
 
     // ─── Share ─────────────────────────────────────────────
     share: "#7c3aed",
@@ -54,102 +54,103 @@ export const THEMES = {
     shareGlow: "rgba(124,58,237,0.08)",
 
     // ─── Header ────────────────────────────────────────────
-    header: "#0A2540",
-    headerGradient: "linear-gradient(135deg, #0A2540 0%, #0F3460 50%, #1A73E8 100%)",
-    headerGlow: "0 4px 20px rgba(10,37,64,0.12)",
+    header: "#064E3B",
+    headerGradient: "linear-gradient(135deg, #064E3B 0%, #065F46 50%, #10b981 100%)",
+    headerGlow: "0 4px 20px rgba(16,185,129,0.12)",
     headerText: "#FFFFFF",
     headerSub: "rgba(255,255,255,0.65)",
 
     // ─── Tab Bar ───────────────────────────────────────────
     tabBar: "#FFFFFF",
-    tabBorder: "#E2E8F0",
-    tabActive: "#1A73E8",
-    tabInactive: "#94A3B8",
+    tabBorder: "#D1FAE5",
+    tabActive: "#10b981",
+    tabInactive: "#6B7280",
 
     // ─── Gradients ─────────────────────────────────────────
-    pillGradient: "linear-gradient(135deg, #1A73E8, #3B82F6)",
-    licenseGradient: "linear-gradient(135deg, #0A2540 0%, #0F3460 40%, #1A73E8 100%)",
-    ringGradient: { from: "#0D9488", to: "#1A73E8" },
+    pillGradient: "linear-gradient(135deg, #10b981, #059669)",
+    licenseGradient: "linear-gradient(135deg, #064E3B 0%, #065F46 40%, #10b981 100%)",
+    ringGradient: { from: "#10b981", to: "#059669" },
 
     // ─── Shadows ───────────────────────────────────────────
-    shadow1: "0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)",
-    shadow2: "0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.06)",
-    shadow3: "0 12px 24px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04)",
-    shadow4: "0 20px 40px rgba(0,0,0,0.08), 0 8px 16px rgba(0,0,0,0.04)",
+    shadow1: "0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.08)",
+    shadow2: "0 4px 8px rgba(0,0,0,0.06), 0 2px 4px rgba(0,0,0,0.06)",
+    shadow3: "0 12px 24px rgba(0,0,0,0.08), 0 4px 8px rgba(0,0,0,0.04)",
+    shadow4: "0 20px 40px rgba(0,0,0,0.10), 0 8px 16px rgba(0,0,0,0.05)",
   },
 
   dark: {
-    // ─── Surfaces ──────────────────────────────────────────
-    bg: "#0B1221",
-    card: "#151E2E",
-    cardHover: "#1A2538",
+    // ─── Surfaces — exact match to landing page ─────────────
+    bg: "#0d0d1a",
+    card: "#16162b",
+    cardHover: "#1e1e3a",
     cardGlow: "none",
-    input: "#1E293B",
-    inputBorder: "#2D3B50",
-    border: "#2D3B50",
-    borderFocus: "#60A5FA",
-    overlay: "rgba(0,0,0,0.6)",
-    modalBg: "#151E2E",
+    input: "#1a1a2e",
+    inputBorder: "#2a2a4a",
+    border: "#2a2a4a",
+    borderFocus: "#10b981",
+    overlay: "rgba(0,0,0,0.7)",
+    modalBg: "#16162b",
 
-    // ─── Text ──────────────────────────────────────────────
-    text: "#E2E8F0",
-    textMuted: "#94A3B8",
-    textDim: "#64748B",
+    // ─── Text — exact match to landing page ────────────────
+    text: "#f1f5f9",
+    textMuted: "#94a3b8",
+    textDim: "#64748b",
 
-    // ─── Primary (Blue) ────────────────────────────────────
-    accent: "#60A5FA",
-    accentHover: "#93C5FD",
-    accentDim: "#1E3A5F",
-    accentGlow: "rgba(96,165,250,0.12)",
-    accentSoft: "#172554",
+    // ─── Primary (Emerald) — exact match to landing page ───
+    accent: "#10b981",
+    accentHover: "#34d399",
+    accentDim: "rgba(16,185,129,0.08)",
+    accentGlow: "rgba(16,185,129,0.15)",
+    accentSoft: "rgba(16,185,129,0.06)",
 
-    // ─── Secondary (Teal) ──────────────────────────────────
+    // ─── Secondary ─────────────────────────────────────────
     teal: "#5EEAD4",
     tealDim: "#064E3B",
 
     // ─── Status ────────────────────────────────────────────
-    success: "#34D399",
-    successDim: "#064E3B",
-    danger: "#F87171",
-    dangerDim: "#7F1D1D",
-    warning: "#FBBF24",
-    warningDim: "#78350F",
-    info: "#60A5FA",
-    infoDim: "#1E3A5F",
+    success: "#34d399",
+    successDim: "rgba(52,211,153,0.12)",
+    danger: "#f87171",
+    dangerDim: "rgba(248,113,113,0.12)",
+    warning: "#fbbf24",
+    warningDim: "rgba(251,191,36,0.12)",
+    info: "#60a5fa",
+    infoDim: "rgba(96,165,250,0.12)",
     neutral: "#9CA3AF",
-    neutralDim: "#374151",
+    neutralDim: "rgba(156,163,175,0.12)",
 
     // ─── Accent Warm ───────────────────────────────────────
     warm: "#FB923C",
-    warmDim: "#7C2D12",
+    warmDim: "rgba(251,146,60,0.12)",
+    warmGlow: "rgba(251,146,60,0.15)",
 
     // ─── Share ─────────────────────────────────────────────
-    share: "#A78BFA",
-    shareDim: "#2D1A5E",
+    share: "#a78bfa",
+    shareDim: "rgba(167,139,250,0.12)",
     shareGlow: "rgba(167,139,250,0.15)",
 
     // ─── Header ────────────────────────────────────────────
-    header: "#0B1221",
-    headerGradient: "linear-gradient(135deg, #0B1221 0%, #0F1D36 50%, #1E3A6E 100%)",
-    headerGlow: "0 4px 20px rgba(0,0,0,0.3)",
-    headerText: "#E2E8F0",
-    headerSub: "rgba(226,232,240,0.55)",
+    header: "#0d0d1a",
+    headerGradient: "linear-gradient(135deg, #0d0d1a 0%, #16162b 50%, #1e1e3a 100%)",
+    headerGlow: "0 4px 20px rgba(0,0,0,0.4)",
+    headerText: "#f1f5f9",
+    headerSub: "rgba(241,245,249,0.55)",
 
     // ─── Tab Bar ───────────────────────────────────────────
-    tabBar: "#151E2E",
-    tabBorder: "#2D3B50",
-    tabActive: "#60A5FA",
-    tabInactive: "#64748B",
+    tabBar: "#16162b",
+    tabBorder: "#2a2a4a",
+    tabActive: "#10b981",
+    tabInactive: "#64748b",
 
     // ─── Gradients ─────────────────────────────────────────
-    pillGradient: "linear-gradient(135deg, #2563EB, #3B82F6)",
-    licenseGradient: "linear-gradient(135deg, #0B1221 0%, #162040 40%, #1E3A6E 100%)",
-    ringGradient: { from: "#5EEAD4", to: "#60A5FA" },
+    pillGradient: "linear-gradient(135deg, #10b981, #059669)",
+    licenseGradient: "linear-gradient(135deg, #0d0d1a 0%, #16162b 40%, #1e2a1e 100%)",
+    ringGradient: { from: "#10b981", to: "#34d399" },
 
-    // ─── Shadows ───────────────────────────────────────────
-    shadow1: "none",
-    shadow2: "none",
-    shadow3: "0 4px 16px rgba(0,0,0,0.4)",
-    shadow4: "0 8px 32px rgba(0,0,0,0.5)",
+    // ─── Shadows — deeper to match landing page ─────────────
+    shadow1: "0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2)",
+    shadow2: "0 4px 12px rgba(0,0,0,0.3), 0 2px 6px rgba(0,0,0,0.2)",
+    shadow3: "0 16px 48px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.2)",
+    shadow4: "0 24px 64px rgba(0,0,0,0.5)",
   },
 };

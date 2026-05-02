@@ -8,6 +8,12 @@ const STATUS_COLORS = {
   removed: { bg: "rgba(100,116,139,0.12)", text: "#64748b" },
 };
 
+const SAMPLE_MEMBERS = [
+  { id: "s1", member_email: "dr.smith@hospital.com", role: "provider", status: "active", invited_at: "2025-11-15T00:00:00Z", compliance: 92 },
+  { id: "s2", member_email: "dr.jones@hospital.com", role: "provider", status: "active", invited_at: "2025-12-01T00:00:00Z", compliance: 78 },
+  { id: "s3", member_email: "dr.patel@hospital.com", role: "provider", status: "invited", invited_at: "2026-01-20T00:00:00Z", compliance: 0 },
+];
+
 function MiniRing({ percent = 0, size = 40, stroke = 4 }) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -29,6 +35,112 @@ function MiniRing({ percent = 0, size = 40, stroke = 4 }) {
   );
 }
 
+// ─── Preview for non-Practice users ──────────────────────────
+function TeamPreview({ T, onUpgrade }) {
+  return (
+    <div className="cmd-fade-in">
+      <p style={{ fontSize: 14, color: T.textMuted, margin: "0 0 20px" }}>
+        Manage provider credentials across your practice.
+      </p>
+
+      {/* Preview stats (dimmed) */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, opacity: 0.6 }}>
+        {[
+          { label: "Active", value: 2, color: "#10b981" },
+          { label: "Invited", value: 1, color: "#f59e0b" },
+          { label: "Total", value: 3, color: T.accent },
+        ].map(s => (
+          <div key={s.label} style={{
+            flex: 1, backgroundColor: T.card, borderRadius: 12,
+            padding: "14px 12px", textAlign: "center", border: `1px solid ${T.border}`,
+          }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 600 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sample member list (read-only preview) */}
+      <div style={{ position: "relative" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {SAMPLE_MEMBERS.map(m => {
+            const sc = STATUS_COLORS[m.status] || STATUS_COLORS.invited;
+            const nameInitials = m.member_email.slice(0, 2).toUpperCase();
+            return (
+              <div key={m.id} style={{
+                backgroundColor: T.card, borderRadius: 14,
+                border: `1px solid ${T.border}`, padding: "14px 16px",
+                display: "flex", alignItems: "center", gap: 12,
+                opacity: 0.55, pointerEvents: "none",
+              }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 20,
+                  background: T.pillGradient,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0,
+                }}>{nameInitials}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {m.member_email}
+                  </div>
+                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
+                    {m.role} · Invited {new Date(m.invited_at).toLocaleDateString()}
+                  </div>
+                </div>
+                {m.compliance > 0 && <MiniRing percent={m.compliance} size={36} stroke={3} />}
+                <span style={{
+                  padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                  backgroundColor: sc.bg, color: sc.text, flexShrink: 0, textTransform: "capitalize",
+                }}>{m.status}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Overlay with CTA */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: `linear-gradient(to bottom, transparent 0%, ${T.bg}dd 50%, ${T.bg} 100%)`,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+          paddingBottom: 16, borderRadius: 14,
+        }}>
+          <div style={{
+            backgroundColor: T.card, borderRadius: 16, padding: "24px 20px",
+            border: `1px solid ${T.border}`, textAlign: "center",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12)", maxWidth: 320, width: "100%",
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>👥</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: T.text, marginBottom: 6 }}>
+              Team Dashboard
+            </div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+              Invite colleagues, view team compliance at a glance, and manage provider credentials from one dashboard.
+            </div>
+            <button
+              onClick={onUpgrade}
+              style={{
+                width: "100%", padding: "13px 24px", borderRadius: 12, border: "none",
+                background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+                color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer",
+                boxShadow: "0 4px 16px rgba(139,92,246,0.3)",
+                transition: "opacity 0.15s, transform 0.15s",
+              }}
+              onMouseOver={e => { e.currentTarget.style.opacity = "0.9"; e.currentTarget.style.transform = "scale(0.98)"; }}
+              onMouseOut={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "scale(1)"; }}
+            >
+              Unlock Team Dashboard
+            </button>
+            <div style={{ fontSize: 12, color: T.textDim, marginTop: 10 }}>
+              Available on Practice plan
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full Team Dashboard (Practice plan) ─────────────────────
 export default function TeamSection() {
   const { theme: T, user, isPractice, plan, checkout } = useApp();
   const [members, setMembers] = useState([]);
@@ -37,6 +149,7 @@ export default function TeamSection() {
   const [inviting, setInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [showPricing, setShowPricing] = useState(false);
 
   const loadMembers = useCallback(async () => {
     if (!supabase || !user) return;
@@ -86,56 +199,25 @@ export default function TeamSection() {
     setMembers(m => m.filter(x => x.id !== id));
   };
 
-  // ─── Practice Gate ──────────────────────────────────────────────
+  // ─── Non-Practice users get the preview ──────────────────────
   if (!isPractice) {
     return (
-      <div style={{ padding: "24px 0" }}>
-        <div style={{
-          borderRadius: 20, padding: "40px 24px",
-          background: "linear-gradient(135deg, #1e1b4b, #312e81)",
-          textAlign: "center",
-          boxShadow: "0 8px 32px rgba(139,92,246,0.2)",
-        }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: 32,
-            background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 28, margin: "0 auto 16px",
-            boxShadow: "0 4px 16px rgba(139,92,246,0.4)",
-          }}>👥</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 8 }}>
-            Team Dashboard
-          </div>
-          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.7)", marginBottom: 8, maxWidth: 300, margin: "0 auto 20px" }}>
-            Manage multiple providers, view team compliance, and invite colleagues — all from one dashboard.
-          </div>
-          <div style={{ fontSize: 13, color: "#a78bfa", fontWeight: 600, marginBottom: 20 }}>
-            Practice plan feature
-          </div>
-          <button
-            onClick={() => checkout("practice")}
-            style={{
-              padding: "13px 28px", borderRadius: 14, border: "none",
-              background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
-              color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer",
-              boxShadow: "0 4px 16px rgba(139,92,246,0.4)",
-            }}
-          >
-            Contact Us for Practice Plan →
-          </button>
-        </div>
-      </div>
+      <>
+        <TeamPreview T={T} onUpgrade={() => setShowPricing(true)} />
+        {showPricing && (
+          <PricingModalInline open={showPricing} onClose={() => setShowPricing(false)} />
+        )}
+      </>
     );
   }
 
-  // ─── Stats ──────────────────────────────────────────────────────
+  // ─── Practice Dashboard ──────────────────────────────────────
   const activeCount  = members.filter(m => m.status === "active").length;
   const invitedCount = members.filter(m => m.status === "invited").length;
   const filtered = filter === "all" ? members : members.filter(m => m.status === filter);
 
   return (
     <div className="cmd-fade-in">
-      <h2 style={{ fontSize: 20, fontWeight: 800, color: T.text, margin: "0 0 4px" }}>Team</h2>
       <p style={{ fontSize: 14, color: T.textMuted, margin: "0 0 20px" }}>
         Manage provider credentials across your practice.
       </p>
@@ -183,7 +265,7 @@ export default function TeamSection() {
             disabled={!inviteEmail.trim() || inviting}
             style={{
               padding: "11px 18px", borderRadius: 10, border: "none",
-              backgroundColor: "#10b981", color: "#fff",
+              backgroundColor: T.accent, color: "#fff",
               fontSize: 14, fontWeight: 700, cursor: inviting ? "wait" : "pointer",
               opacity: (!inviteEmail.trim() || inviting) ? 0.6 : 1,
               flexShrink: 0,
@@ -253,7 +335,7 @@ export default function TeamSection() {
                 {/* Avatar */}
                 <div style={{
                   width: 40, height: 40, borderRadius: 20,
-                  background: "linear-gradient(135deg, #10b981, #059669)",
+                  background: T.pillGradient,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0,
                 }}>
@@ -297,6 +379,133 @@ export default function TeamSection() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// Lightweight wrapper to lazy-import PricingModal when needed
+function PricingModalInline({ open, onClose }) {
+  const { theme: T, plan, checkout, isPro, isPractice, isDevMode } = useApp();
+  const [mockMsg, setMockMsg] = useState(null);
+  if (!open) return null;
+
+  const PLANS = [
+    {
+      key: "practice",
+      name: "Practice",
+      price: "Custom",
+      period: "pricing",
+      tagline: "For credentialing offices & group practices",
+      accent: "#8b5cf6",
+      accentDim: "rgba(139,92,246,0.12)",
+      features: [
+        "Everything in Pro",
+        "Team provider dashboard",
+        "Multi-provider compliance view",
+        "Provider invite & management",
+        "Aggregate compliance reports",
+        "Audit logs",
+        "Dedicated support",
+      ],
+      cta: isDevMode ? "Activate Practice" : "Contact Us",
+      ctaKey: "practice",
+      isEnterprise: !isDevMode,
+    },
+  ];
+
+  const handleCTA = async (p) => {
+    if (p.isEnterprise) {
+      window.open("mailto:hello@credentialdomd.com?subject=Practice%20Plan%20Inquiry", "_blank");
+      return;
+    }
+    if (!p.ctaKey) return;
+    const result = await checkout(p.ctaKey);
+    if (result?.mock) {
+      setMockMsg(`Switched to ${result.plan} plan`);
+      setTimeout(() => { setMockMsg(null); onClose(); }, 1200);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        backgroundColor: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxWidth: 400, width: "100%",
+          backgroundColor: T.card, borderRadius: 20,
+          padding: "24px 20px",
+          animation: "popIn 0.28s cubic-bezier(0.34,1.56,0.64,1)",
+        }}
+      >
+        <h3 style={{ fontSize: 20, fontWeight: 800, color: T.text, margin: "0 0 4px", textAlign: "center" }}>
+          Upgrade to Practice
+        </h3>
+        <p style={{ fontSize: 13, color: T.textMuted, margin: "0 0 16px", textAlign: "center" }}>
+          Everything your credentialing office needs.
+        </p>
+
+        {isDevMode && (
+          <div style={{
+            marginBottom: 12, padding: "8px 12px", borderRadius: 10,
+            backgroundColor: "rgba(251,146,60,0.12)", border: "1px solid rgba(251,146,60,0.3)",
+            fontSize: 12, fontWeight: 600, color: "#fb923c", textAlign: "center",
+          }}>
+            Dev Mode — instant plan switch
+          </div>
+        )}
+
+        {mockMsg && (
+          <div style={{
+            marginBottom: 12, padding: "10px 12px", borderRadius: 10,
+            backgroundColor: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)",
+            fontSize: 13, fontWeight: 700, color: "#10b981", textAlign: "center",
+          }}>
+            ✓ {mockMsg}
+          </div>
+        )}
+
+        {PLANS[0].features.map(f => (
+          <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+            <span style={{ color: "#8b5cf6", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>✓</span>
+            <span style={{ fontSize: 13, color: T.text }}>{f}</span>
+          </div>
+        ))}
+
+        <button
+          onClick={() => handleCTA(PLANS[0])}
+          style={{
+            width: "100%", padding: "13px", borderRadius: 12, border: "none",
+            background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+            color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer",
+            marginTop: 16, boxShadow: "0 4px 16px rgba(139,92,246,0.3)",
+            transition: "opacity 0.15s",
+          }}
+          onMouseOver={e => e.currentTarget.style.opacity = "0.9"}
+          onMouseOut={e => e.currentTarget.style.opacity = "1"}
+        >
+          {PLANS[0].cta} →
+        </button>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%", padding: "10px", border: "none",
+            backgroundColor: "transparent", color: T.textDim,
+            fontSize: 13, cursor: "pointer", marginTop: 8,
+          }}
+        >
+          Maybe later
+        </button>
+      </div>
     </div>
   );
 }

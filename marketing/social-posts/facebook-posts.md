@@ -28,7 +28,7 @@ If you're a DO, it gets even more complex — many states have separate DO board
 
 I found a free checklist that breaks down the top 15 states' requirements: [link to lead magnet PDF]
 
-Also, if anyone wants an app that tracks all of this automatically: credentialmd.com. I've been using it and it's $7.99/mo for everything.
+Also, if anyone wants an app that tracks all of this automatically: credentialmd.com. I've been using it and it's $4.99/mo for Founding Members (price locked forever, 30-day money-back guarantee).
 
 ---
 
@@ -41,7 +41,7 @@ Two weeks off the OR schedule. Two weeks of lost revenue. Two weeks of stress.
 
 All because I didn't have a system that tracked everything in one place and sent me alerts.
 
-I built a system now (using an app called CredentialMD), and I haven't had a surprise like that since. If anyone else has been through something similar — you're not alone, and there are solutions.
+I built a system now (using an app called CredentialMD at $4.99/mo for Founding Members), and I haven't had a surprise like that since. If anyone else has been through something similar — you're not alone, and there are solutions.
 
 ---
 
@@ -50,9 +50,9 @@ I built a system now (using an app called CredentialMD), and I haven't had a sur
 
 For anyone who's been hearing me talk about CredentialMD (sorry, I'm genuinely enthusiastic about it) — they just launched a referral program:
 
-Share with a colleague → when they sign up for PRO → you both get a free month.
+Share with a colleague → when they sign up → you both get a free month. Their price locks in at the current rate.
 
-I've been using it to track my licenses, CME (it knows the topic-specific requirements for every state, MD and DO), hospital privileges, and malpractice insurance. $7.99/mo or free for the basic tier.
+I've been using it to track my licenses, CME (it knows the topic-specific requirements for every state, MD and DO), hospital privileges, and malpractice insurance. Founding Member Price: $4.99/mo. Price locked forever. 30-day money-back guarantee.
 
 My referral link is [link]. No pressure, just sharing something that's made my life easier.
 
@@ -68,7 +68,7 @@ CredentialMD is a mobile-first app that helps physicians track every credential 
 
 We know the CME requirements for all 50 states, including topic-specific mandates for MDs and DOs. We send alerts before things expire. And we let you share credentials with any institution in one tap.
 
-Free to start. $7.99/mo for PRO. $3.99/mo for residents.
+Founding Member Price: $4.99/mo (limited to first 50 physicians). Your price is locked forever. 30-day money-back guarantee.
 
 Because you didn't go to med school to manage paperwork.
 
@@ -83,7 +83,7 @@ CredentialMD tracks this (and every other credential) and sends you alerts at 90
 
 Never be surprised by a lapsed credential again.
 
-Try it free: credentialmd.com
+Start for $4.99/mo: credentialmd.com
 
 ---
 
@@ -92,18 +92,17 @@ Try it free: credentialmd.com
 
 — Dr. K., Internal Medicine
 
-Start free: credentialmd.com
+Start for $4.99/mo: credentialmd.com
 
 ---
 
 ### Page Post 4: Pricing Transparency
 Let's talk pricing.
 
-We could charge $200+/year like some competitors. But that's not who we are.
+We could charge $20+/month like competitors. But that's not who we are.
 
-CredentialMD PRO: $7.99/month
-CredentialMD Resident: $3.99/month
-CredentialMD Free: $0, forever
+CredentialMD Physician: $4.99/mo (Founding) → up to $14.99/mo
+No free tier. 30-day money-back guarantee. Price Lock Guarantee.
 
 We'd rather every physician in America could afford this than squeeze more money out of fewer people.
 

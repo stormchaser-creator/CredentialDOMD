@@ -38,12 +38,77 @@ serve(async (req) => {
       });
     }
 
-    const { priceId, app, successUrl, cancelUrl } = await req.json();
+    const { priceId, lookupKey, app, successUrl, cancelUrl, metadata: clientMetadata } = await req.json();
     if (!app || !["fluoropath", "credentialdomd"].includes(app)) {
       return new Response(JSON.stringify({ error: "Invalid app parameter" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Resolve lookupKey → priceId if needed (Architecture D uses lookup_keys
+    // so the React app doesn't have to know the actual price_… string).
+    let resolvedPriceId = priceId;
+    if (!resolvedPriceId && lookupKey) {
+      const prices = await stripe.prices.list({
+        lookup_keys: [lookupKey],
+        active: true,
+        limit: 1,
+      });
+      if (!prices.data.length) {
+        return new Response(JSON.stringify({
+          error: `No active price found for lookup_key='${lookupKey}'. Run scripts/create-stripe-products.sh first.`
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      resolvedPriceId = prices.data[0].id;
+    }
+    if (!resolvedPriceId) {
+      return new Response(JSON.stringify({ error: "Either priceId or lookupKey is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Server-side cap enforcement for the Founding cohort.
+    // If the lookup_key is one of the founding ones, count active subscribers
+    // and reject the 101st attempt.
+    if (lookupKey === "founding_monthly_usd_v1" || lookupKey === "founding_annual_usd_v1") {
+      const FOUNDING_CAP = 100;
+      const active = await stripe.subscriptions.list({
+        price: resolvedPriceId,
+        status: "all",
+        limit: 100,
+      });
+      const counted = active.data.filter(
+        (s) => ["active", "trialing", "past_due"].includes(s.status)
+      ).length;
+      // Also count the sibling lookup key (monthly + annual share the cap)
+      const siblingKey = lookupKey === "founding_monthly_usd_v1"
+        ? "founding_annual_usd_v1"
+        : "founding_monthly_usd_v1";
+      const siblingPrices = await stripe.prices.list({ lookup_keys: [siblingKey], active: true, limit: 1 });
+      let siblingCount = 0;
+      if (siblingPrices.data[0]) {
+        const siblingSubs = await stripe.subscriptions.list({
+          price: siblingPrices.data[0].id,
+          status: "all",
+          limit: 100,
+        });
+        siblingCount = siblingSubs.data.filter(
+          (s) => ["active", "trialing", "past_due"].includes(s.status)
+        ).length;
+      }
+      if (counted + siblingCount >= FOUNDING_CAP) {
+        return new Response(JSON.stringify({
+          error: "Founding cohort is full. The 100 spots have been claimed.",
+        }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Get or create Stripe customer
@@ -73,16 +138,33 @@ serve(async (req) => {
     }
 
     // Determine mode from price type
-    const price = await stripe.prices.retrieve(priceId);
+    const price = await stripe.prices.retrieve(resolvedPriceId);
     const mode = price.type === "recurring" ? "subscription" : "payment";
+
+    // Trial period: read from price.recurring.trial_period_days if set on the price.
+    const trialDays = price.recurring?.trial_period_days ?? 0;
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: resolvedPriceId, quantity: 1 }],
       mode,
       success_url: successUrl || `${req.headers.get("origin")}/`,
       cancel_url: cancelUrl || `${req.headers.get("origin")}/`,
-      metadata: { supabase_user_id: user.id, app },
+      metadata: {
+        supabase_user_id: user.id,
+        app,
+        lookup_key: lookupKey ?? "",
+        ...(clientMetadata ?? {}),
+      },
+      subscription_data: mode === "subscription" && trialDays > 0 ? {
+        trial_period_days: trialDays,
+        metadata: {
+          supabase_user_id: user.id,
+          app,
+          lookup_key: lookupKey ?? "",
+          ...(clientMetadata ?? {}),
+        },
+      } : undefined,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {

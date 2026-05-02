@@ -6,8 +6,8 @@
 ## THE OFFER
 
 **For Physician Ambassadors:**
-- Free lifetime PRO account ($96/year value)
-- 25% revenue share on every referred PRO subscriber (recurring, as long as they're subscribed)
+- Free lifetime Physician account ($59.88/year value at Founding Member rate)
+- 25% revenue share on every referred subscriber (recurring, as long as they're subscribed)
 - Unique referral link + tracking dashboard
 - Early access to new features
 - "Founding Ambassador" badge + listing on our website
@@ -34,11 +34,11 @@ CredentialMD tracks licenses, CME (with state-specific topic compliance for all 
 
 We're building an ambassador program and I'd love to offer you:
 
-- Free lifetime PRO access
+- Free lifetime Physician account access
 - 25% recurring revenue share on every physician you refer
 - Zero scripts or obligations — just post when it genuinely makes sense
 
-We're priced at $7.99/mo (residents: $3.99/mo), so this isn't a hard sell for your audience. It's legitimately affordable and useful.
+We're priced at $4.99/mo for Founding Members and stay $5 under competitors forever, so this isn't a hard sell for your audience. It's legitimately affordable and useful.
 
 Would you be open to trying the app and seeing if it's something worth sharing? No strings attached.
 
@@ -59,11 +59,11 @@ Hi Dr. [Name],
 
 Short version: we built a mobile app that tracks every physician credential in one place — licenses, CME with state-specific topic requirements, privileges, insurance, case logs, health records. All 50 states. MD and DO.
 
-We're $7.99/mo (not $200+/yr like competitors) because we believe every physician should be able to afford this, not just hospitals with big budgets.
+We're $4.99/mo for Founding Members (competitors charge $20+/mo) because we believe every physician should be able to afford this, not just hospitals with big budgets.
 
 We're looking for 50 founding physician ambassadors. The deal:
 
-- Free lifetime PRO
+- Free lifetime Physician account
 - 25% revenue share on referrals (recurring)
 - No posting requirements — just share when it makes sense
 
@@ -76,7 +76,7 @@ Founder, CredentialMD
 
 ## OUTREACH EMAIL TEMPLATE #3 — Residency Program Director
 
-**Subject:** Free credential tracking for your residents
+**Subject:** Physician credential tracking for your residents
 
 Hi Dr. [Name],
 
@@ -104,7 +104,7 @@ Founder, CredentialMD
 Hey Dr. [Name] — love your content on [topic]. Quick q: have you ever found a good app for tracking all your credentials (not just CME)? We built one and I'd love your take on it. Happy to give you free access if you're curious.
 
 **DM 2 — Follow-up if interested:**
-Awesome! Here's the deal — CredentialMD tracks licenses, CME (state-specific topic compliance, all 50 states), privileges, insurance, case logs, health records. Mobile-first. $7.99/mo for users, but yours is free permanently. If you end up liking it, we have an ambassador program: 25% recurring revenue share on anyone you refer. No obligations. Let me set you up?
+Awesome! Here's the deal — CredentialMD tracks licenses, CME (state-specific topic compliance, all 50 states), privileges, insurance, case logs, health records. Mobile-first. $4.99/mo Founding Member Price for users, but yours is free permanently. If you end up liking it, we have an ambassador program: 25% recurring revenue share on anyone you refer. No obligations. Let me set you up?
 
 ---
 
@@ -160,9 +160,10 @@ Awesome! Here's the deal — CredentialMD tracks licenses, CME (state-specific t
 | Peer Referral | 1 free month each | Any user who refers a friend |
 
 **Example earnings for a Founding Ambassador:**
-- Refer 50 physicians to PRO ($7.99/mo)
-- 25% of $7.99 = $2.00/user/month
-- 50 users × $2.00 = $100/month recurring
-- That's $1,200/year for posting about an app you actually use
+- Refer 50 physicians at Founding Member rate ($4.99/mo)
+- 25% of $4.99 = $1.25/user/month (at Founding rate, scaling to $3.75/mo at cap rate)
+- 50 users × $1.25 = $62.50/month recurring at Founding rate
+- That's $750/year for posting about an app you actually use
+- As rate increases, your per-user commission scales: up to 25% of $14.99 = $3.75/user/month at cap
 
-**For high-volume ambassadors (100+ referrals):** Potential $200+/month passive income.
+**For high-volume ambassadors (100+ referrals):** Potential $125-375/month passive income depending on cohort pricing.

@@ -4,6 +4,43 @@ import { AsclepiusIcon } from "../shared/Icons";
 
 const FAQ_DATA = [
   {
+    category: "Pricing & Billing",
+    items: [
+      {
+        q: "Is the free tier really free forever?",
+        a: "Yes. Up to 5 credentials, no expiration, no credit card. Upgrade only when you need more.",
+      },
+      {
+        q: "Why is there a free tier for residents?",
+        a: "Because residents earn $60K and already pay for board prep. Once you graduate, the system flips you to Solo at $19/mo automatically. You can cancel anytime.",
+      },
+      {
+        q: "Can I deduct CredentialDoMD on my taxes?",
+        a: "If you are a 1099 locum or self-employed physician, yes. We export an itemized deduction memo on the Locum tier.",
+      },
+      {
+        q: "What is the Founding Physician tier?",
+        a: "The first 100 physicians lock in $12/mo for 24 months. After 24 months, you convert to Solo at the standard rate. The slots are limited and counted live.",
+      },
+      {
+        q: "Why is Solo $19/mo and not $9?",
+        a: "Because a tool that touches your license has to be reliable, secure, and supported. We priced it the same as Doximity Dialer Pro and AMBOSS clinician.",
+      },
+      {
+        q: "How does Practice billing work?",
+        a: "$39 per provider per month, billed annually. A 5-provider practice pays $39 × 5 × 12 = $2,340/year, billed once.",
+      },
+      {
+        q: "Can I cancel anytime?",
+        a: "Yes. Monthly cancels at the end of the current cycle. Annual cancels at end of term.",
+      },
+      {
+        q: "Do you store my documents securely?",
+        a: "Yes. AES-256 at rest, TLS 1.3 in transit, US-region only. We sign BAAs on Practice and above.",
+      },
+    ],
+  },
+  {
     category: "Getting Started",
     items: [
       {

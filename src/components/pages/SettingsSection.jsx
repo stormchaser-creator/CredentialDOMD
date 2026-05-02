@@ -14,7 +14,7 @@ import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/s
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, composeText } from "../../utils/notifications";
 
 function SettingsSection() {
-  const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate } = useApp();
+  const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate, plan, setMockPlan, isDevMode } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
 
@@ -375,6 +375,47 @@ function SettingsSection() {
           <input type="number" value={s.reminderLeadDays} onChange={e => update("reminderLeadDays", parseInt(e.target.value) || 90)} style={{ ...iS, maxWidth: 140 }} />
         </Field>
       </div>
+
+      {/* Dev Tools — only in dev mode */}
+      {isDevMode && (
+        <div style={{
+          backgroundColor: T.card, border: `1px dashed rgba(251,146,60,0.4)`, borderRadius: 14,
+          padding: 18, marginBottom: 14, boxShadow: T.shadow1,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 14 }}>🛠</span>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fb923c", margin: 0 }}>Dev Tools</h3>
+          </div>
+          <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14 }}>
+            Stripe keys not configured. Switch plans locally to test all UI states.
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {["free", "pro", "practice"].map(p => {
+              const isActive = plan === p;
+              const colors = { free: "#64748b", pro: "#10b981", practice: "#8b5cf6" };
+              return (
+                <button
+                  key={p}
+                  onClick={() => setMockPlan(p)}
+                  style={{
+                    flex: 1, padding: "12px 8px", borderRadius: 12, border: "none",
+                    cursor: "pointer", textAlign: "center", transition: "all 0.15s",
+                    backgroundColor: isActive ? colors[p] : T.input,
+                    color: isActive ? "#fff" : T.textMuted,
+                    fontWeight: isActive ? 700 : 500, fontSize: 14,
+                    boxShadow: isActive ? `0 4px 12px ${colors[p]}40` : "none",
+                  }}
+                >
+                  {isActive ? "✓ " : ""}{p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: T.textDim, marginTop: 10, textAlign: "center" }}>
+            Current: <span style={{ fontWeight: 700, color: T.text }}>{plan}</span> · Changes persist across refresh
+          </div>
+        </div>
+      )}
 
       {/* CME Requirements */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, boxShadow: T.shadow1 }}>

@@ -34,27 +34,35 @@ export const FileIcon = memo(() => svg(<><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0
 export const ExternalLinkIcon = memo(() => svg(<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>, 14));
 export const GraduationIcon = memo(() => svg(<><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></>, 18));
 
-// Rod of Asclepius — single serpent wrapped around a staff
-export const AsclepiusIcon = memo(({ size = 28, color }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Staff */}
-    <line x1="16" y1="3" x2="16" y2="29" stroke={color || "currentColor"} strokeWidth="2.2" strokeLinecap="round" />
-    {/* Staff top ornament */}
-    <circle cx="16" cy="3" r="1.5" fill={color || "currentColor"} />
-    {/* Serpent body — sinuous S-curves wrapping around the staff */}
-    <path
-      d="M16 8 C20 8, 22 10, 22 12 C22 14, 20 15.5, 16 15.5 C12 15.5, 10 17, 10 19 C10 21, 12 22.5, 16 22.5 C20 22.5, 22 24, 22 25.5"
-      stroke={color || "currentColor"}
-      strokeWidth="2"
-      strokeLinecap="round"
-      fill="none"
-    />
-    {/* Serpent head */}
-    <circle cx="22" cy="25.5" r="1.8" fill={color || "currentColor"} />
-    {/* Serpent eye */}
-    <circle cx="22.6" cy="25" r="0.5" fill={color === "#fff" || color === "#ffffff" ? "#1a2744" : "#fff"} />
-  </svg>
-));
+// Rod of Asclepius — bold filled design matching reference image
+export const AsclepiusIcon = memo(({ size = 28, color }) => {
+  const c = color || "currentColor";
+  const eyeC = (c === "#fff" || c === "#ffffff") ? "#065F46" : "#fff";
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* T-bar crosspiece */}
+      <rect x="9" y="2" width="14" height="2.5" rx="1.25" fill={c} />
+      {/* Staff shaft */}
+      <rect x="14.5" y="2" width="3" height="28" rx="1.5" fill={c} />
+
+      {/* Snake head — horizontal oval at upper right, touching staff */}
+      <ellipse cx="21" cy="9" rx="4.5" ry="2.8" fill={c} />
+      {/* Eye */}
+      <circle cx="22.8" cy="7.8" r="0.9" fill={eyeC} />
+
+      {/* First coil — right side of staff */}
+      <path
+        d="M16 12 C23 12 25.5 16 22 18.5 C19.5 20 16 20 16 20"
+        stroke={c} strokeWidth="2.8" strokeLinecap="round" fill="none"
+      />
+      {/* Second coil — left side of staff */}
+      <path
+        d="M16 20 C9 20 6.5 24 10.5 26.5 C12.5 27.8 16 28 16 28"
+        stroke={c} strokeWidth="2.8" strokeLinecap="round" fill="none"
+      />
+    </svg>
+  );
+});
 
 // Logo lockup — Rod of Asclepius + CREDENTIALMD text
 export const LogoMark = memo(({ color = "#fff", accentColor, size = "default" }) => {

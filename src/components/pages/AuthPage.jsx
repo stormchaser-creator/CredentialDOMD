@@ -144,13 +144,13 @@ function AuthPage({ onAuthSuccess }) {
     fontSize: 16,
     fontWeight: 700,
     color: "#FFFFFF",
-    background: "linear-gradient(135deg, #0D9488, #1A73E8)",
+    background: "linear-gradient(135deg, #10b981, #059669)",
     border: "none",
     borderRadius: 12,
     cursor: loading ? "not-allowed" : "pointer",
     opacity: loading ? 0.7 : 1,
     transition: "opacity 0.2s, transform 0.1s",
-    boxShadow: "0 4px 12px rgba(26,115,232,0.25)",
+    boxShadow: "0 4px 12px rgba(16,185,129,0.3)",
   };
 
   const linkStyle = {
@@ -185,12 +185,12 @@ function AuthPage({ onAuthSuccess }) {
             width: 64,
             height: 64,
             borderRadius: 20,
-            background: "linear-gradient(135deg, #0A2540 0%, #0F3460 50%, #1A73E8 100%)",
+            background: "linear-gradient(135deg, #10b981, #059669)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             margin: "0 auto 16px",
-            boxShadow: "0 8px 24px rgba(10,37,64,0.2)",
+            boxShadow: "0 8px 24px rgba(16,185,129,0.25)",
           }}>
             <AsclepiusIcon size={34} color="#FFFFFF" />
           </div>

@@ -3,12 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>CredentialDOMD</title>
+    <title>CredentialDoMD — Credential tracking for physicians, by a physician</title>
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://credentialdomd.com/" />
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0A2540" />
-    <meta name="description" content="Physician credential management — track licenses, CME, privileges, and more." />
+    <meta name="description" content="Track every license, DEA, board cert, and hospital privilege across all 50 states. Built by a neurosurgeon. Free for 5 credentials. $19/month for unlimited." />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://credentialdomd.com/" />
+    <meta property="og:title" content="CredentialDoMD — Credential tracking for physicians, by a physician" />
+    <meta property="og:description" content="Track every license, DEA, board cert, and hospital privilege across all 50 states. Built by a neurosurgeon." />
+    <meta property="og:image" content="https://credentialdomd.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="CredentialDoMD" />
+    <meta name="twitter:description" content="Credential tracking for physicians, by a physician." />
+    <meta name="twitter:image" content="https://credentialdomd.com/og-image.png" />
+
+    <!-- Google Search Console verification (replace content with HTML-tag token from GSC, or remove if using DNS TXT verification) -->
+    <!-- <meta name="google-site-verification" content="REPLACE_WITH_GSC_TOKEN" /> -->
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -18,6 +39,41 @@
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+
+    <!-- Schema.org Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "CredentialDoMD",
+      "url": "https://credentialdomd.com",
+      "logo": "https://credentialdomd.com/icons/icon-192.svg",
+      "description": "Credential tracking for physicians, by a physician.",
+      "founder": {
+        "@type": "Person",
+        "name": "Eric Whitney",
+        "honorificSuffix": "MD",
+        "jobTitle": "Founder",
+        "description": "Board-certified neurosurgeon"
+      }
+    }
+    </script>
+
+    <!-- Google Analytics 4 (env-driven; no-op when VITE_GA4_MEASUREMENT_ID is unset) -->
+    <script type="module">
+      const gaId = import.meta.env.VITE_GA4_MEASUREMENT_ID;
+      if (gaId) {
+        const s = document.createElement('script');
+        s.async = true;
+        s.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`;
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){ window.dataLayer.push(arguments); }
+        window.gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', gaId, { anonymize_ip: true });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

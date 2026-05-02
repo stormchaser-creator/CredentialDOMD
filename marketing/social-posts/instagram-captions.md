@@ -12,7 +12,7 @@
 **Slide 4:** New York → 2 hrs infection control + 3 hrs pain/palliative care + 1 hr implicit bias
 **Slide 5:** Texas → 48 hrs/2 yrs + ethics + opioids + forensic evidence collection
 **Slide 6:** And if you're a DO? Different requirements in most states.
-**Slide 7 (CTA):** "CredentialMD tracks all of this — for all 50 states. MD and DO. Free to start. Link in bio."
+**Slide 7 (CTA):** "CredentialMD tracks all of this — for all 50 states. MD and DO. Starting at $4.99/mo. Link in bio."
 
 **Caption:** Every state has different CME requirements. Many have topic-specific mandates you might not know about. CredentialMD tracks the details so you don't have to guess. Link in bio 🔗
 
@@ -44,7 +44,7 @@
 **Slide 3:** BEFORE: credentialing coordinator asking for documents you can't find
 **Slide 4:** BEFORE: spreadsheet with 6 tabs and 3 expired entries
 **Slide 5:** AFTER: Open app → everything's there → tap Share → done
-**Slide 6 (CTA):** "$7.99/mo. Less than one hospital cafeteria coffee per week."
+**Slide 6 (CTA):** "$4.99/mo for Founding Members. Price locked forever. 30-day money-back guarantee."
 
 **Caption:** Your credentialing coordinator will think you got your life together. Your secret is safe with us. 🤫 Link in bio.
 
@@ -67,7 +67,7 @@
 "...done."
 
 [Text overlay: Your credentials. One app. One tap.]
-[Text overlay: credentialmd.com | Free to start]
+[Text overlay: credentialmd.com | Starting at $4.99/mo]
 
 **Audio suggestion:** Use trending "expectation vs reality" or transition audio
 
@@ -115,4 +115,4 @@
 
 [Cut to: CredentialMD showing all 6 states with compliance status]
 [Text: "One app. Every state. Topic-level compliance."]
-[CTA: "$7.99/mo — credentialmd.com"]
+[CTA: "$4.99/mo Founding Member Price — credentialmd.com"]

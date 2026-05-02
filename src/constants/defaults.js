@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS = {
   specialties: [],
   email: "",
   phone: "",
-  theme: "light",
+  theme: "dark",
   fontSize: "M",
   apiKey: import.meta.env.VITE_GEMINI_API_KEY || "",
   notifyEmail: true,

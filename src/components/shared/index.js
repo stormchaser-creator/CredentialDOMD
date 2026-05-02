@@ -6,4 +6,5 @@ export { default as StatusBadge } from "./StatusBadge";
 export { default as ComplianceBar } from "./ComplianceBar";
 export { default as ComplianceRing } from "./ComplianceRing";
 export { default as StatCard } from "./StatCard";
+export { default as SideNav } from "./SideNav";
 export * from "./Icons";

@@ -4,10 +4,10 @@
 ---
 
 ### TikTok 1: "It's giving..." (trending audio)
-"It's giving... $240/year for an app that only tracks CME"
+"It's giving... $20+/mo for an app that only tracks CME"
 [disappointed face]
 
-"It's giving... CredentialMD for $7.99/mo and it tracks EVERYTHING"
+"It's giving... CredentialMD for $4.99/mo Founding Member Price and it tracks EVERYTHING"
 [chef's kiss]
 
 #MedTok #ResidentLife #CredentialMD #PhysicianLife
@@ -20,8 +20,8 @@
 1. An app that tracks ALL your credentials, not just CME
 2. State-by-state compliance that knows YOUR specific requirements
 3. One tap to share credentials with any hospital
-4. $7.99/mo instead of $200+/yr for less features
-5. A resident plan for $3.99 because residents are already broke
+4. $4.99/mo Founding Member Price, capped at $14.99/mo (competitors charge $20+/mo)
+5. 30-day money-back guarantee. Price Lock Guarantee — your rate never goes up
 
 [Text: CredentialMD | Link in bio]
 
@@ -40,7 +40,7 @@
 [Goes home on time because they're not digging through files]
 
 [Text: "You could live like this too"]
-[CTA: credentialmd.com | Free to start]
+[CTA: credentialmd.com | $4.99/mo Founding Member Price]
 
 ---
 
