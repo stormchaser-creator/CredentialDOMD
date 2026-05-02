@@ -20,7 +20,8 @@ import { HealthRecordsSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
 import { LocumDashboard } from "./components/features";
-import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage } from "./components/pages";
+import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, FeedbackModal, SupportModal, AdminDashboard } from "./components/pages";
+import { isAdminUser } from "./lib/admin";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import { supabase } from "./lib/supabase";
 import {
@@ -100,6 +101,8 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage }) {
   const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage } = useApp();
   const [showPricing, setShowPricing] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");
@@ -703,6 +706,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "terms") return <LegalSection page="terms" />;
     if (subPage === "data-rights") return <LegalSection page="data-rights" />;
     if (subPage === "cancellation") return <CancellationPage />;
+    if (subPage === "admin") return <AdminDashboard />;
 
     return (
       <div>
@@ -803,6 +807,57 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Settings</span>
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
+
+          {/* Send feedback */}
+          {user && (
+            <button onClick={() => setShowFeedback(true)} className="cmd-card-hover" style={{
+              display: "flex", alignItems: "center", gap: 12,
+              backgroundColor: T.card, border: `1px solid ${T.border}`,
+              borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+              boxShadow: T.shadow1,
+            }}>
+              <span style={{ fontSize: 20 }}>{"\ud83d\udcac"}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Send feedback</div>
+                <div style={{ fontSize: 13, color: T.textDim }}>The founder reads every one</div>
+              </div>
+              <span style={{ color: T.textDim }}>{"\u203a"}</span>
+            </button>
+          )}
+
+          {/* Get help / report a problem */}
+          {user && (
+            <button onClick={() => setShowSupport(true)} className="cmd-card-hover" style={{
+              display: "flex", alignItems: "center", gap: 12,
+              backgroundColor: T.card, border: `1px solid ${T.border}`,
+              borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+              boxShadow: T.shadow1,
+            }}>
+              <span style={{ fontSize: 20 }}>{"\ud83c\udd98"}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Get help</div>
+                <div style={{ fontSize: 13, color: T.textDim }}>Bug, billing question, anything</div>
+              </div>
+              <span style={{ color: T.textDim }}>{"\u203a"}</span>
+            </button>
+          )}
+
+          {/* Admin (founders only) */}
+          {isAdminUser(user) && (
+            <button onClick={() => setSubPage("admin")} className="cmd-card-hover" style={{
+              display: "flex", alignItems: "center", gap: 12,
+              backgroundColor: T.card, border: `2px solid ${T.accent}`,
+              borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+              boxShadow: T.shadow1,
+            }}>
+              <span style={{ fontSize: 20 }}>{"\ud83d\udd11"}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.accent }}>Admin</div>
+                <div style={{ fontSize: 13, color: T.textDim }}>Tickets, feedback, signups</div>
+              </div>
+              <span style={{ color: T.accent }}>{"\u203a"}</span>
+            </button>
+          )}
 
           {/* Theme Toggle */}
           <div style={{
@@ -982,6 +1037,8 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     }}>
       <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
       <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
+      <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
+      <SupportModal open={showSupport} onClose={() => setShowSupport(false)} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
       <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
 
       {/* ─── TOP BAR (56px) ────────────────────────────── */}

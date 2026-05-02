@@ -7,3 +7,6 @@ export { default as LegalSection } from "./LegalSection";
 export { default as PricingModal } from "./PricingModal";
 export { default as TeamSection } from "./TeamSection";
 export { default as CancellationPage } from "./CancellationPage";
+export { default as FeedbackModal } from "./FeedbackModal";
+export { default as SupportModal } from "./SupportModal";
+export { default as AdminDashboard } from "./AdminDashboard";
