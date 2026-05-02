@@ -19,6 +19,7 @@ import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
+import { LocumDashboard } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage } from "./components/pages";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import { supabase } from "./lib/supabase";
@@ -947,21 +948,29 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
     if (tab === "credentials") return renderCredentials();
+    if (tab === "locum") return <LocumDashboard />;
     if (tab === "team") return <TeamSection />;
     if (tab === "more") return renderMore();
   };
 
   const showBack = (tab === "credentials" && subPage) || (tab === "more" && subPage);
 
+  // Bottom-nav slot 4: Locum (for tier === "locum") OR Team (for practice/group) OR Team default.
+  // Eric is a locum so this lights up for him.
+  const isLocumTier = plan === "locum";
+  const slot4 = isLocumTier
+    ? { id: "locum", label: "Locum", icon: <span style={{ fontSize: 18 }}>🏥</span> }
+    : { id: "team", label: "Team", icon: <span style={{ fontSize: 18 }}>👥</span> };
+
   const tabItems = [
     { id: "home", label: "Home", icon: <HomeIcon /> },
     { id: "credentials", label: "Credentials", icon: <CredsIcon /> },
     { id: "add", label: "Add", icon: <PlusIcon />, isCenter: true },
-    { id: "team", label: "Team", icon: <span style={{ fontSize: 18 }}>👥</span> },
+    slot4,
     { id: "more", label: "More", icon: <MoreIcon /> },
   ];
 
-  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : tab === "team" ? "Team" : "More";
+  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : tab === "locum" ? "Locum" : tab === "team" ? "Team" : "More";
 
   const FONT_ZOOM = { S: 0.88, M: 1, L: 1.1, XL: 1.2, XXL: 1.35 };
   const fontZoom = FONT_ZOOM[data.settings.fontSize] || 1;

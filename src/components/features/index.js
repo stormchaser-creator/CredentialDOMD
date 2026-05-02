@@ -10,3 +10,4 @@ export { default as DataExport } from "./DataExport";
 export { default as CPTCodePicker } from "./CPTCodePicker";
 export { default as CPTLookup } from "./CPTLookup";
 export { default as PeerNotify } from "./PeerNotify";
+export { LocumDashboard, MultiStateMatrix, HospitalRotations, DeductionMemo } from "./locum";

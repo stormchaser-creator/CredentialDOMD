@@ -38,5 +38,8 @@ export const DEFAULT_DATA = {
   workHistory: [],
   peerReferences: [],
   malpracticeHistory: [],
+  // Locum tier features
+  rotations: [],     // [{ id, hospital, city, state, startDate, endDate, role, agency, notes }]
+  deductibles: [],   // [{ id, date, category, description, amount, taxYear }]
   settings: { ...DEFAULT_SETTINGS },
 };
