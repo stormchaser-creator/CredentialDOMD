@@ -63,6 +63,13 @@ jobs:
 
       - name: Build React app with /app/ base path
         working-directory: src
+        env:
+          # Supabase anon key + URL — public-safe, but stored as repo secrets
+          # so the values aren't committed to git. Vite inlines anything
+          # prefixed VITE_* into the client bundle at build time.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GA4_MEASUREMENT_ID: ${{ secrets.VITE_GA4_MEASUREMENT_ID }}
         run: npm run build -- --base=/app/
 
       - name: Sync build artifacts to gh-pages
