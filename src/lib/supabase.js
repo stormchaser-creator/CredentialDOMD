@@ -41,6 +41,27 @@ export async function signInWithOAuth(provider) {
   return data;
 }
 
+/**
+ * Send a magic-link sign-in email. The user clicks the link → lands back at
+ * window.location.origin authenticated, no password required.
+ *
+ * Used as the default "frictionless" sign-in path while OAuth providers
+ * (Google, etc.) are not configured.
+ */
+export async function signInWithMagicLink(email) {
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      // Land back at /app/ after the user clicks the email link.
+      emailRedirectTo: window.location.origin + "/app/",
+      // Allow new-user signup via magic link.
+      shouldCreateUser: true,
+    },
+  });
+  if (error) throw error;
+}
+
 export async function resetPassword(email) {
   if (!supabase) throw new Error("Supabase is not configured");
   const { error } = await supabase.auth.resetPasswordForEmail(email);
