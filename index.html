@@ -1849,7 +1849,7 @@ footer {
       <a href="#features">Features</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
-      <a href="#get-started" class="btn-primary nav-cta">Get Started Free</a>
+      <a href="/app/" class="btn-primary nav-cta">Get Started Free</a>
     </div>
     <button class="mobile-menu-btn" aria-label="Open menu" onclick="document.querySelector('.nav-links').classList.toggle('mobile-open')">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1876,7 +1876,7 @@ footer {
       </p>
 
       <div class="hero-buttons">
-        <a href="#get-started" class="btn-primary">
+        <a href="/app/" class="btn-primary">
           Check Your Credential Health &mdash; Free
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
         </a>
@@ -2331,76 +2331,10 @@ footer {
   </div>
 </section>
 
-<!-- ============ SOCIAL PROOF ============ -->
-<section class="social-proof" id="social-proof">
-  <div class="container">
-    <div class="animate-on-scroll">
-      <div class="section-label">
-        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        Trusted by Physicians
-      </div>
-      <h2 class="section-title">They used to worry about credentials. Now they don't.</h2>
-      <p class="section-subtitle">"I never think about my credentials anymore." &mdash; That is the goal.</p>
-    </div>
+<!-- Testimonials section intentionally omitted: zero attributable customer reviews. Per
+     Architecture D §4.5: empty social proof is worse than none. Restore when there is at
+     least one named, photo-verifiable physician quote. -->
 
-    <div class="testimonials-grid">
-      <div class="testimonial-card animate-on-scroll">
-        <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        <p class="testimonial-text">"I was tracking credentials for 3 states and 2 hospitals in a Google Sheet. It was terrifying. CredentialDOMD caught a DEA renewal I would have missed by 6 days. That would have been $30K in lost locum income."</p>
-        <div class="testimonial-author">
-          <div class="testimonial-avatar">MC</div>
-          <div>
-            <div class="testimonial-name">Dr. M. Chen</div>
-            <div class="testimonial-role">Emergency Medicine, Locum Tenens</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="testimonial-card animate-on-scroll">
-        <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        <p class="testimonial-text">"I manage credentials for 14 providers. Before CredentialDOMD, it was a full-time job. Now I check the dashboard once a week and handle the alerts. My physicians love the AI scanner &mdash; they just snap a photo."</p>
-        <div class="testimonial-author">
-          <div class="testimonial-avatar">KR</div>
-          <div>
-            <div class="testimonial-name">K. Rodriguez</div>
-            <div class="testimonial-role">Practice Manager, Multi-Specialty Group</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="testimonial-card animate-on-scroll">
-        <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        <p class="testimonial-text">"The Credential Health Score is addictive. Seeing that number at 94% makes me feel like I have my professional life together. And the CV generator saved me an entire weekend when I applied for a new position."</p>
-        <div class="testimonial-author">
-          <div class="testimonial-avatar">SP</div>
-          <div>
-            <div class="testimonial-name">Dr. S. Patel</div>
-            <div class="testimonial-role">Orthopedic Surgery, Private Practice</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="proof-stats animate-on-scroll">
-      <div class="proof-stat">
-        <div class="proof-stat-number">2,400+</div>
-        <div class="proof-stat-label">Credentials tracked</div>
-      </div>
-      <div class="proof-stat">
-        <div class="proof-stat-number">340+</div>
-        <div class="proof-stat-label">Deadlines caught</div>
-      </div>
-      <div class="proof-stat">
-        <div class="proof-stat-number">$0</div>
-        <div class="proof-stat-label">Lost to lapsed credentials</div>
-      </div>
-      <div class="proof-stat">
-        <div class="proof-stat-number">50</div>
-        <div class="proof-stat-label">States supported</div>
-      </div>
-    </div>
-  </div>
-</section>
 
 <!-- ============ PRICING ============ -->
 <section class="pricing" id="pricing">
@@ -2432,7 +2366,7 @@ footer {
           <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">CV generator</span></li>
           <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">Priority alerts</span></li>
         </ul>
-        <a href="#get-started" class="btn-secondary pricing-cta">Start Free</a>
+        <a href="/app/" class="btn-secondary pricing-cta">Start Free</a>
       </div>
 
       <!-- Solo -->
@@ -2451,36 +2385,37 @@ footer {
           <li><span class="check">&#10003;</span> All 50 states and territories</li>
           <li><span class="check">&#10003;</span> Offline-ready PWA</li>
         </ul>
-        <a href="#get-started" class="btn-secondary pricing-cta">Start 14-day trial</a>
+        <a href="/app/?tier=solo" class="btn-secondary pricing-cta">Start 14-day trial</a>
       </div>
 
       <!-- Locum (recommended) -->
       <div class="pricing-card featured animate-on-scroll">
         <div class="pricing-popular">Recommended</div>
         <div class="pricing-name">Locum</div>
-        <div class="pricing-desc">Built for 1099 locum tenens physicians.</div>
+        <div class="pricing-desc">Built for 1099 locum tenens physicians who hold multiple state licenses.</div>
         <div class="pricing-price">
           <div class="pricing-amount">$29<span class="pricing-period">/mo</span></div>
           <div class="pricing-annual">$290/year &mdash; 2 months free</div>
         </div>
         <ul class="pricing-features">
           <li><span class="check">&#10003;</span> Everything in Solo</li>
-          <li><span class="check">&#10003;</span> Multi-state license matrix</li>
-          <li><span class="check">&#10003;</span> IMLC compact tracker</li>
-          <li><span class="check">&#10003;</span> Share-link to staffing agencies</li>
-          <li><span class="check">&#10003;</span> 1099 deduction memo export</li>
-          <li><span class="check">&#10003;</span> Hospital privilege rotations</li>
+          <li><span class="check">&#10003;</span> Multi-state license matrix (one view, every state)</li>
+          <li><span class="check">&#10003;</span> Hospital rotation tracker</li>
+          <li><span class="check">&#10003;</span> 1099 deduction memo export (CSV/PDF)</li>
+          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">IMLC compact tracker (in development)</span></li>
+          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">Agency share-links (in development)</span></li>
         </ul>
-        <a href="#get-started" class="btn-primary pricing-cta">Start 14-day trial</a>
+        <a href="/app/?tier=locum" class="btn-primary pricing-cta">Start 14-day trial</a>
       </div>
 
       <!-- Practice -->
-      <div class="pricing-card animate-on-scroll">
+      <div class="pricing-card animate-on-scroll" style="opacity: 0.85;">
+        <div style="position: absolute; top: -10px; right: 16px; background: var(--text-secondary); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.3px;">In development</div>
         <div class="pricing-name">Practice</div>
         <div class="pricing-desc">2 to 25 providers. Annual billing.</div>
         <div class="pricing-price">
           <div class="pricing-amount">$39<span class="pricing-period">/provider/mo</span></div>
-          <div class="pricing-annual">billed annually</div>
+          <div class="pricing-annual">billed annually &mdash; available H2 2026</div>
         </div>
         <ul class="pricing-features">
           <li><span class="check">&#10003;</span> Everything in Solo, per provider</li>
@@ -2490,7 +2425,7 @@ footer {
           <li><span class="check">&#10003;</span> Centralized expiration calendar</li>
           <li><span class="check">&#10003;</span> Bulk CSV import and export</li>
         </ul>
-        <a href="mailto:hello@credentialdomd.com?subject=Practice%20tier%20inquiry" class="btn-secondary pricing-cta">Talk to sales</a>
+        <a href="mailto:hello@credentialdomd.com?subject=Practice%20tier%20waitlist" class="btn-secondary pricing-cta">Join waitlist</a>
       </div>
     </div>
   </div>
@@ -2702,7 +2637,7 @@ footer {
       <p class="section-subtitle">Find out what it is. Set up takes 15 minutes. Then it runs itself.</p>
 
       <div class="final-cta-buttons">
-        <a href="#" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
+        <a href="/app/" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
           Check Your Credential Health &mdash; Free
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
         </a>
