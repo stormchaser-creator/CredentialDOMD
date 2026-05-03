@@ -3,81 +3,42 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// ─── Supabase Client ────────────────────────────────────────
-// No custom headers — Supabase Auth handles user identity via JWT.
-export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
-
-// ─── Auth Helpers ───────────────────────────────────────────
-
-export async function signUp(email, password) {
-  if (!supabase) throw new Error("Supabase is not configured");
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) throw error;
-  return data;
-}
-
-export async function signIn(email, password) {
-  if (!supabase) throw new Error("Supabase is not configured");
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return data;
-}
-
-export async function signOut() {
-  if (!supabase) return;
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
-}
-
-export async function signInWithOAuth(provider) {
-  if (!supabase) throw new Error("Supabase is not configured");
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider,
-    options: { redirectTo: window.location.origin + "/" },
-  });
-  if (error) throw error;
-  return data;
-}
-
 /**
- * Send a magic-link sign-in email. The user clicks the link → lands back at
- * window.location.origin authenticated, no password required.
+ * Pulls a fresh Supabase-flavored JWT from Clerk on every request.
  *
- * Used as the default "frictionless" sign-in path while OAuth providers
- * (Google, etc.) are not configured.
+ * Clerk attaches itself to `window.Clerk` once <ClerkProvider> mounts. The
+ * "supabase" template (configured in the Clerk dashboard — see
+ * CLERK-SUPABASE-SETUP.md) signs the JWT with the Supabase JWT secret so
+ * Postgres / RLS accept it. RLS policies that read `auth.uid()` see the
+ * `sub` claim — which the template populates with the Clerk user id.
  */
-export async function signInWithMagicLink(email) {
-  if (!supabase) throw new Error("Supabase is not configured");
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      // Land back at /app/ after the user clicks the email link.
-      emailRedirectTo: window.location.origin + "/app/",
-      // Allow new-user signup via magic link.
-      shouldCreateUser: true,
-    },
-  });
-  if (error) throw error;
+async function getClerkSupabaseToken() {
+  if (typeof window === "undefined") return null;
+  const session = window.Clerk?.session;
+  if (!session) return null;
+  try {
+    return await session.getToken({ template: "supabase" });
+  } catch (err) {
+    console.warn("Failed to mint Supabase token from Clerk:", err.message);
+    return null;
+  }
 }
 
-export async function resetPassword(email) {
-  if (!supabase) throw new Error("Supabase is not configured");
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-  if (error) throw error;
-}
-
-export async function getUser() {
-  if (!supabase) return null;
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-}
-
-export function onAuthStateChange(callback) {
-  if (!supabase) return { data: { subscription: { unsubscribe: () => {} } } };
-  return supabase.auth.onAuthStateChange(callback);
-}
+// ─── Supabase Client ────────────────────────────────────────
+// `accessToken` callback is invoked on every request — supabase-js v2 calls
+// it before each fetch to attach the Authorization header. This is what
+// keeps RLS authenticated as the Clerk user.
+export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      accessToken: getClerkSupabaseToken,
+      auth: {
+        // Clerk owns sessions now — disable supabase-js's own session mgmt.
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    })
+  : null;
 
 // ─── Case conversion ─────────────────────────────────────────
 function camelToSnake(str) {
