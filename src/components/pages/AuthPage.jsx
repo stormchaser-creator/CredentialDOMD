@@ -1,168 +1,23 @@
-import { useState, memo } from "react";
+import { memo, useState } from "react";
+import { SignIn, SignUp } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
 import { AsclepiusIcon } from "../shared/Icons";
-import { signIn, signUp, resetPassword, signInWithMagicLink, supabase } from "../../lib/supabase";
 
-function AuthPage({ onAuthSuccess }) {
-  const [mode, setMode] = useState("signin"); // "signin" | "signup" | "reset"
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  // Use light theme for auth page (user hasn't loaded preferences yet)
+/**
+ * Auth landing page — wraps Clerk's hosted <SignIn /> / <SignUp /> components
+ * inside the CredentialDOMD shell (logo, brand chrome, footer).
+ *
+ * Clerk owns email+password, magic links, OAuth, password reset, and account
+ * verification, so this file only needs to handle the brand wrapper and the
+ * sign-in / sign-up tab toggle.
+ *
+ * Routing: the app is served at /app/ on gh-pages and has no React Router,
+ * so we use Clerk's `routing="hash"` mode which keeps everything inside the
+ * URL hash (#/factor-one, #/verify-email, etc.) instead of mutating paths.
+ */
+function AuthPage() {
+  const [mode, setMode] = useState("signin"); // "signin" | "signup"
   const T = THEMES.light;
-
-  // If Supabase is not configured, skip auth entirely
-  if (!supabase) {
-    // Let the app load without auth (offline/local mode)
-    if (onAuthSuccess) onAuthSuccess(null);
-    return null;
-  }
-
-  const clearMessages = () => {
-    setError("");
-    setInfo("");
-  };
-
-  const handleSignIn = async (e) => {
-    e.preventDefault();
-    clearMessages();
-
-    if (!email.trim()) {
-      setError("Please enter your email address.");
-      return;
-    }
-    if (!password) {
-      setError("Please enter your password.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await signIn(email.trim(), password);
-      // Auth state change listener in AppContext will handle the rest
-    } catch (err) {
-      if (err.message?.includes("Invalid login")) {
-        setError("Invalid email or password. Please try again.");
-      } else if (err.message?.includes("Email not confirmed")) {
-        setError("Please check your email to confirm your account before signing in.");
-      } else {
-        setError(err.message || "Sign in failed. Please try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async (e) => {
-    e.preventDefault();
-    clearMessages();
-
-    if (!email.trim()) {
-      setError("Please enter your email address.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await signUp(email.trim(), password);
-      if (data?.user?.identities?.length === 0) {
-        setError("An account with this email already exists. Try signing in instead.");
-      } else if (data?.session) {
-        // Auto-confirmed — auth state change will handle it
-      } else {
-        setInfo("Check your email for a confirmation link, then sign in.");
-        setMode("signin");
-        setPassword("");
-        setConfirmPassword("");
-      }
-    } catch (err) {
-      if (err.message?.includes("already registered")) {
-        setError("An account with this email already exists. Try signing in instead.");
-      } else {
-        setError(err.message || "Sign up failed. Please try again.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReset = async (e) => {
-    e.preventDefault();
-    clearMessages();
-
-    if (!email.trim()) {
-      setError("Please enter your email address.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await resetPassword(email.trim());
-      setInfo("Password reset email sent. Check your inbox.");
-    } catch (err) {
-      setError(err.message || "Failed to send reset email. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const switchMode = (newMode) => {
-    clearMessages();
-    setPassword("");
-    setConfirmPassword("");
-    setMode(newMode);
-  };
-
-  const inputStyle = {
-    width: "100%",
-    padding: "14px 16px",
-    fontSize: 15,
-    fontWeight: 500,
-    color: T.text,
-    backgroundColor: T.input,
-    border: `1px solid ${T.inputBorder}`,
-    borderRadius: 12,
-    outline: "none",
-    transition: "border-color 0.2s",
-  };
-
-  const buttonStyle = {
-    width: "100%",
-    padding: "14px 16px",
-    fontSize: 16,
-    fontWeight: 700,
-    color: "#FFFFFF",
-    background: "linear-gradient(135deg, #10b981, #059669)",
-    border: "none",
-    borderRadius: 12,
-    cursor: loading ? "not-allowed" : "pointer",
-    opacity: loading ? 0.7 : 1,
-    transition: "opacity 0.2s, transform 0.1s",
-    boxShadow: "0 4px 12px rgba(16,185,129,0.3)",
-  };
-
-  const linkStyle = {
-    color: T.accent,
-    fontWeight: 600,
-    fontSize: 14,
-    cursor: "pointer",
-    background: "none",
-    border: "none",
-    padding: 0,
-    textDecoration: "none",
-  };
 
   return (
     <div style={{
@@ -175,313 +30,117 @@ function AuthPage({ onAuthSuccess }) {
       justifyContent: "center",
       padding: "24px 20px",
     }}>
-      <div className="cmd-fade-in" style={{
-        width: "100%",
-        maxWidth: 400,
-      }}>
+      <div className="cmd-fade-in" style={{ width: "100%", maxWidth: 440 }}>
         {/* Logo + App Name */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
           <div style={{
-            width: 64,
-            height: 64,
-            borderRadius: 20,
+            width: 64, height: 64, borderRadius: 20,
             background: "linear-gradient(135deg, #10b981, #059669)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            display: "flex", alignItems: "center", justifyContent: "center",
             margin: "0 auto 16px",
             boxShadow: "0 8px 24px rgba(16,185,129,0.25)",
           }}>
             <AsclepiusIcon size={34} color="#FFFFFF" />
           </div>
           <h1 style={{
-            fontSize: 24,
-            fontWeight: 800,
-            color: T.text,
-            margin: "0 0 4px",
-            letterSpacing: "-0.02em",
+            fontSize: 24, fontWeight: 800, color: T.text,
+            margin: "0 0 4px", letterSpacing: "-0.02em",
           }}>
             Credential<span style={{ color: T.accent }}>DOMD</span>
           </h1>
-          <p style={{
-            fontSize: 14,
-            color: T.textMuted,
-            margin: 0,
-            fontWeight: 500,
-          }}>
+          <p style={{ fontSize: 14, color: T.textMuted, margin: 0, fontWeight: 500 }}>
             Physician Credential Management
           </p>
         </div>
 
-        {/* Card */}
+        {/* Mode toggle */}
         <div style={{
-          backgroundColor: T.card,
-          borderRadius: 16,
-          padding: "28px 24px",
-          boxShadow: T.shadow2,
-          border: `1px solid ${T.border}`,
+          display: "flex", gap: 0, marginBottom: 16,
+          backgroundColor: T.input, borderRadius: 10, padding: 3,
         }}>
-          {/* Mode tabs */}
-          {mode !== "reset" && (
-            <div style={{
-              display: "flex",
-              gap: 0,
-              marginBottom: 24,
-              backgroundColor: T.input,
-              borderRadius: 10,
-              padding: 3,
-            }}>
-              <button
-                onClick={() => switchMode("signin")}
-                style={{
-                  flex: 1,
-                  padding: "10px 0",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: mode === "signin" ? T.accent : T.textMuted,
-                  backgroundColor: mode === "signin" ? T.card : "transparent",
-                  border: "none",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                  boxShadow: mode === "signin" ? T.shadow1 : "none",
-                }}
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => switchMode("signup")}
-                style={{
-                  flex: 1,
-                  padding: "10px 0",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: mode === "signup" ? T.accent : T.textMuted,
-                  backgroundColor: mode === "signup" ? T.card : "transparent",
-                  border: "none",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                  boxShadow: mode === "signup" ? T.shadow1 : "none",
-                }}
-              >
-                Create Account
-              </button>
-            </div>
+          <button
+            onClick={() => setMode("signin")}
+            style={{
+              flex: 1, padding: "10px 0", fontSize: 14, fontWeight: 700,
+              color: mode === "signin" ? T.accent : T.textMuted,
+              backgroundColor: mode === "signin" ? T.card : "transparent",
+              border: "none", borderRadius: 8, cursor: "pointer",
+              transition: "all 0.2s",
+              boxShadow: mode === "signin" ? T.shadow1 : "none",
+            }}
+          >
+            Sign In
+          </button>
+          <button
+            onClick={() => setMode("signup")}
+            style={{
+              flex: 1, padding: "10px 0", fontSize: 14, fontWeight: 700,
+              color: mode === "signup" ? T.accent : T.textMuted,
+              backgroundColor: mode === "signup" ? T.card : "transparent",
+              border: "none", borderRadius: 8, cursor: "pointer",
+              transition: "all 0.2s",
+              boxShadow: mode === "signup" ? T.shadow1 : "none",
+            }}
+          >
+            Create Account
+          </button>
+        </div>
+
+        {/* Clerk widget */}
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          {mode === "signin" ? (
+            <SignIn
+              routing="hash"
+              signUpUrl="#sign-up"
+              fallbackRedirectUrl="/app/"
+              appearance={{
+                elements: {
+                  rootBox: { width: "100%" },
+                  card: {
+                    backgroundColor: T.card,
+                    border: `1px solid ${T.border}`,
+                    boxShadow: T.shadow2,
+                    borderRadius: 16,
+                  },
+                },
+                variables: {
+                  colorPrimary: "#10b981",
+                  colorText: T.text,
+                  colorBackground: T.card,
+                  borderRadius: "12px",
+                },
+              }}
+            />
+          ) : (
+            <SignUp
+              routing="hash"
+              signInUrl="#sign-in"
+              fallbackRedirectUrl="/app/"
+              appearance={{
+                elements: {
+                  rootBox: { width: "100%" },
+                  card: {
+                    backgroundColor: T.card,
+                    border: `1px solid ${T.border}`,
+                    boxShadow: T.shadow2,
+                    borderRadius: 16,
+                  },
+                },
+                variables: {
+                  colorPrimary: "#10b981",
+                  colorText: T.text,
+                  colorBackground: T.card,
+                  borderRadius: "12px",
+                },
+              }}
+            />
           )}
-
-          {mode === "reset" && (
-            <div style={{ marginBottom: 20 }}>
-              <button onClick={() => switchMode("signin")} style={{
-                ...linkStyle,
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                marginBottom: 8,
-              }}>
-                &larr; Back to Sign In
-              </button>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: T.text, margin: 0 }}>
-                Reset Password
-              </h2>
-              <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4, lineHeight: 1.4 }}>
-                Enter your email and we will send you a link to reset your password.
-              </p>
-            </div>
-          )}
-
-          {/* Magic-link sign-in (shown on signin + signup, not on password reset) */}
-          {mode !== "reset" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-              <button
-                type="button"
-                onClick={async () => {
-                  clearMessages();
-                  if (!email.trim()) {
-                    setError("Enter your email above first, then tap the magic-link button.");
-                    return;
-                  }
-                  setLoading(true);
-                  try {
-                    await signInWithMagicLink(email.trim());
-                    setInfo(`Magic link sent to ${email.trim()}. Check your inbox — the link signs you in.`);
-                  } catch (err) {
-                    setError(err.message || "Could not send magic link. Try again or use email + password.");
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  fontSize: 15,
-                  fontWeight: 600,
-                  color: T.text,
-                  backgroundColor: T.input,
-                  border: `1px solid ${T.inputBorder}`,
-                  borderRadius: 12,
-                  cursor: loading ? "not-allowed" : "pointer",
-                  opacity: loading ? 0.6 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 10,
-                  transition: "background-color 0.2s",
-                  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
-                Email me a sign-in link
-              </button>
-              {/* Divider */}
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                margin: "4px 0",
-              }}>
-                <div style={{ flex: 1, height: 1, backgroundColor: T.border }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  or use a password
-                </span>
-                <div style={{ flex: 1, height: 1, backgroundColor: T.border }} />
-              </div>
-            </div>
-          )}
-
-          {/* Error message */}
-          {error && (
-            <div style={{
-              padding: "12px 14px",
-              backgroundColor: T.dangerDim,
-              border: `1px solid ${T.danger}20`,
-              borderRadius: 10,
-              marginBottom: 16,
-              fontSize: 13,
-              fontWeight: 500,
-              color: T.danger,
-              lineHeight: 1.4,
-            }}>
-              {error}
-            </div>
-          )}
-
-          {/* Info message */}
-          {info && (
-            <div style={{
-              padding: "12px 14px",
-              backgroundColor: T.successDim,
-              border: `1px solid ${T.success}20`,
-              borderRadius: 10,
-              marginBottom: 16,
-              fontSize: 13,
-              fontWeight: 500,
-              color: T.success,
-              lineHeight: 1.4,
-            }}>
-              {info}
-            </div>
-          )}
-
-          {/* Forms */}
-          <form onSubmit={mode === "signin" ? handleSignIn : mode === "signup" ? handleSignUp : handleReset}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {/* Email */}
-              <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  style={inputStyle}
-                  onFocus={(e) => { e.target.style.borderColor = T.borderFocus; }}
-                  onBlur={(e) => { e.target.style.borderColor = T.inputBorder; }}
-                />
-              </div>
-
-              {/* Password (not shown for reset) */}
-              {mode !== "reset" && (
-                <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === "signup" ? "At least 6 characters" : "Enter your password"}
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    style={inputStyle}
-                    onFocus={(e) => { e.target.style.borderColor = T.borderFocus; }}
-                    onBlur={(e) => { e.target.style.borderColor = T.inputBorder; }}
-                  />
-                </div>
-              )}
-
-              {/* Confirm password (signup only) */}
-              {mode === "signup" && (
-                <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>
-                    Confirm Password
-                  </label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter your password"
-                    autoComplete="new-password"
-                    style={inputStyle}
-                    onFocus={(e) => { e.target.style.borderColor = T.borderFocus; }}
-                    onBlur={(e) => { e.target.style.borderColor = T.inputBorder; }}
-                  />
-                </div>
-              )}
-
-              {/* Forgot password link (signin only) */}
-              {mode === "signin" && (
-                <div style={{ textAlign: "right", marginTop: -4 }}>
-                  <button type="button" onClick={() => switchMode("reset")} style={linkStyle}>
-                    Forgot password?
-                  </button>
-                </div>
-              )}
-
-              {/* Submit button */}
-              <button
-                type="submit"
-                disabled={loading}
-                style={{ ...buttonStyle, marginTop: 4 }}
-              >
-                {loading ? (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ animation: "pulse 1.2s ease-in-out infinite" }}>
-                      {mode === "signin" ? "Signing in..." : mode === "signup" ? "Creating account..." : "Sending..."}
-                    </span>
-                  </span>
-                ) : (
-                  mode === "signin" ? "Sign In" : mode === "signup" ? "Create Account" : "Send Reset Link"
-                )}
-              </button>
-            </div>
-          </form>
         </div>
 
         {/* Footer */}
         <div style={{
-          textAlign: "center",
-          marginTop: 24,
-          fontSize: 12,
-          color: T.textDim,
-          lineHeight: 1.5,
+          textAlign: "center", marginTop: 24,
+          fontSize: 12, color: T.textDim, lineHeight: 1.5,
         }}>
           Your data is encrypted and stored securely.
           <br />

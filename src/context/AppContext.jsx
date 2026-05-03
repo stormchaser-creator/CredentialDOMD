@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useUser, useClerk } from "@clerk/clerk-react";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
@@ -8,10 +9,6 @@ import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } fro
 import { MS_PER_DAY } from "../utils/helpers";
 import {
   supabase,
-  signIn as sbSignIn,
-  signUp as sbSignUp,
-  signOut as sbSignOut,
-  resetPassword as sbResetPassword,
   ensureProfile,
   loadFromSupabase,
   insertItem as sbInsert,
@@ -23,49 +20,46 @@ import {
 
 const AppContext = createContext(null);
 
+/**
+ * Normalize Clerk's user → the `{ id, email }` shape the rest of the app
+ * already expects. Keeps downstream code (admin checks, banners, support
+ * forms) untouched during the Supabase-Auth → Clerk migration.
+ */
+function normalizeClerkUser(clerkUser) {
+  if (!clerkUser) return null;
+  return {
+    id: clerkUser.id,
+    email: clerkUser.primaryEmailAddress?.emailAddress
+      || clerkUser.emailAddresses?.[0]?.emailAddress
+      || null,
+    fullName: clerkUser.fullName || null,
+    imageUrl: clerkUser.imageUrl || null,
+  };
+}
+
 export function AppProvider({ children, onNavigate }) {
   const [data, setData] = useState(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
-  const [user, setUser] = useState(undefined); // undefined = checking, null = not logged in, object = logged in
-  const [authChecked, setAuthChecked] = useState(false);
   const userIdRef = useRef(null);
 
-  // ─── Auth: check session on mount + subscribe to changes ───
-  useEffect(() => {
-    if (!supabase) {
-      // No Supabase configured — skip auth, run in local-only mode
-      setUser(null);
-      setAuthChecked(true);
-      return;
-    }
+  // ─── Auth: read from Clerk ────────────────────────────────
+  const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
+  const { signOut: clerkSignOut } = useClerk();
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setAuthChecked(true);
-    });
-
-    // Listen for auth changes (sign in, sign out, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const user = useMemo(() => normalizeClerkUser(isSignedIn ? clerkUser : null), [isSignedIn, clerkUser]);
+  const authChecked = clerkLoaded;
 
   // ─── Load data when user changes (sign in / sign out) ─────
   useEffect(() => {
-    // Still checking auth — wait
     if (!authChecked) return;
 
     if (user) {
-      // Authenticated — load from Supabase using auth user id
       loadDataForUser(user.id);
-    } else if (user === null) {
-      // Not authenticated (or no Supabase) — load from localStorage
+    } else {
+      // Not authenticated — load from localStorage (offline / pre-signin)
       loadLocalData();
     }
-  }, [user, authChecked]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, authChecked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadDataForUser(authUserId) {
     try {
@@ -144,27 +138,17 @@ export function AppProvider({ children, onNavigate }) {
     setLoaded(true);
   }
 
-  // ─── Auth actions ─────────────────────────────────────────
-  const handleSignIn = useCallback(async (email, password) => {
-    return sbSignIn(email, password);
-  }, []);
-
-  const handleSignUp = useCallback(async (email, password) => {
-    return sbSignUp(email, password);
-  }, []);
-
+  // ─── Auth actions (Clerk) ─────────────────────────────────
   const handleSignOut = useCallback(async () => {
-    await sbSignOut();
-    // Reset state
+    try {
+      await clerkSignOut();
+    } catch (err) {
+      console.warn("Sign out failed:", err.message);
+    }
     userIdRef.current = null;
     setData(DEFAULT_DATA);
     setLoaded(false);
-    setUser(null);
-  }, []);
-
-  const handleResetPassword = useCallback(async (email) => {
-    return sbResetPassword(email);
-  }, []);
+  }, [clerkSignOut]);
 
   // Persist to localStorage on change (debounced backup)
   const saveTimer = useRef(null);
@@ -237,10 +221,10 @@ export function AppProvider({ children, onNavigate }) {
     allTrackedStates, navigate, userIdRef,
     // Auth
     user, authChecked,
-    signIn: handleSignIn, signUp: handleSignUp, signOut: handleSignOut, resetPassword: handleResetPassword,
+    signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode,
-  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignIn, handleSignUp, handleSignOut, handleResetPassword, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode]);
+  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

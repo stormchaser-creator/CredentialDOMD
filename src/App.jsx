@@ -23,7 +23,7 @@ import { LocumDashboard } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, FeedbackModal, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
-import { supabase } from "./lib/supabase";
+import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import {
   STATES, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
@@ -53,9 +53,16 @@ export default function App() {
   const handleNavigate = useCallback((t, sub) => { setTab(t); setSubPage(sub); }, []);
 
   return (
-    <AppProvider onNavigate={handleNavigate}>
-      <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} />
-    </AppProvider>
+    <>
+      <SignedOut>
+        <AuthPage />
+      </SignedOut>
+      <SignedIn>
+        <AppProvider onNavigate={handleNavigate}>
+          <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} />
+        </AppProvider>
+      </SignedIn>
+    </>
   );
 }
 
@@ -183,12 +190,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     return { active: activeCount, expiring: soon.length, expired: expired.length, total: allCreds.length };
   }, [allCreds, soon, expired, data.settings.reminderLeadDays]);
 
-  // Auth gate: if Supabase is configured but user isn't authenticated, show login
-  if (authChecked && !user && supabase) {
-    return <AuthPage />;
-  }
-
-  // Still checking auth
+  // Still checking auth (Clerk SDK still bootstrapping)
   if (!authChecked) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.textMuted }}>
       <div style={{ textAlign: "center" }}>
