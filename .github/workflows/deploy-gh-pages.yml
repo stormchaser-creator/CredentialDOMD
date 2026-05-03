@@ -70,6 +70,14 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_GA4_MEASUREMENT_ID: ${{ secrets.VITE_GA4_MEASUREMENT_ID }}
+          # Clerk publishable key — pk_test_* / pk_live_* are public-safe
+          # (designed to ship in the client bundle). Stored as a repo secret
+          # so the value isn't committed to git. Without it, ClerkProvider
+          # initializes with no key and the app shows the sign-in shell with
+          # no widget rendered. Set the secret in:
+          #   GitHub → Settings → Secrets and variables → Actions →
+          #   New repository secret → name VITE_CLERK_PUBLISHABLE_KEY
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
         run: npm run build -- --base=/app/
 
       - name: Sync build artifacts to gh-pages
