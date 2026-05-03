@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { useUser } from "@clerk/clerk-react";
 import { supabase } from "../lib/supabase";
 import { TIERS, getTier } from "../utils/pricingEngine";
 import { tierIncludesFeature, FEATURES } from "../utils/featureMap";
@@ -63,7 +64,14 @@ function getMockTier() {
   catch { return "free"; }
 }
 
-export function useSubscription(user) {
+export function useSubscription(userOverride) {
+  // Pull the auth user straight from Clerk. The optional `userOverride`
+  // argument is a back-compat hatch for AppContext, which used to pass a
+  // Supabase-Auth user object in. Either source resolves to a Clerk user id.
+  const { user: clerkUser, isSignedIn } = useUser();
+  const user = userOverride
+    ?? (isSignedIn ? { id: clerkUser?.id, email: clerkUser?.primaryEmailAddress?.emailAddress } : null);
+
   // Founder-only preview override (URL or localStorage). Beats Stripe-resolved tier.
   const previewTier = typeof window !== "undefined" ? getPreviewTier() : null;
   const [tier, setTier] = useState(() => {
