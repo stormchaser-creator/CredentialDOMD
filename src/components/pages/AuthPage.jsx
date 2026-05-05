@@ -96,18 +96,6 @@ function AuthPage() {
               appearance={{
                 elements: {
                   rootBox: { width: "100%" },
-                  // Google sign-in is hidden while we're on a development Clerk
-                  // instance — Clerk's shared dev OAuth proxy (clerk.shared.lcl.dev)
-                  // can't hand off a session to the production credentialdomd.com
-                  // origin, so the button looked broken. Email + password and email
-                  // magic link both work fine on the dev instance. Remove these
-                  // overrides once we're on a production Clerk instance with our
-                  // own Google OAuth credentials. See PRODUCTION-CUTOVER.md.
-                  socialButtons: { display: "none" },
-                  socialButtonsRoot: { display: "none" },
-                  socialButtonsBlockButton: { display: "none" },
-                  socialButtonsIconButton: { display: "none" },
-                  dividerRow: { display: "none" },
                   card: {
                     backgroundColor: T.card,
                     border: `1px solid ${T.border}`,
@@ -131,18 +119,6 @@ function AuthPage() {
               appearance={{
                 elements: {
                   rootBox: { width: "100%" },
-                  // Google sign-in is hidden while we're on a development Clerk
-                  // instance — Clerk's shared dev OAuth proxy (clerk.shared.lcl.dev)
-                  // can't hand off a session to the production credentialdomd.com
-                  // origin, so the button looked broken. Email + password and email
-                  // magic link both work fine on the dev instance. Remove these
-                  // overrides once we're on a production Clerk instance with our
-                  // own Google OAuth credentials. See PRODUCTION-CUTOVER.md.
-                  socialButtons: { display: "none" },
-                  socialButtonsRoot: { display: "none" },
-                  socialButtonsBlockButton: { display: "none" },
-                  socialButtonsIconButton: { display: "none" },
-                  dividerRow: { display: "none" },
                   card: {
                     backgroundColor: T.card,
                     border: `1px solid ${T.border}`,
