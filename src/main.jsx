@@ -22,6 +22,8 @@ if (import.meta.env.PROD) {
     "https://*.clerk.accounts.dev",
     "https://*.clerk.com",
     "https://clerk-telemetry.com",
+    // Clerk's Smart CAPTCHA is Cloudflare Turnstile — its widget posts back here.
+    "https://challenges.cloudflare.com",
   ];
   // Include the Supabase project URL if configured
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -34,12 +36,14 @@ if (import.meta.env.PROD) {
   csp.content = [
     "default-src 'self'",
     // Clerk injects a small bootstrap script that needs to run on the page.
-    "script-src 'self' https://*.clerk.accounts.dev https://*.clerk.com",
+    // Cloudflare Turnstile (Clerk's CAPTCHA) ships its bootstrap from challenges.cloudflare.com.
+    "script-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "connect-src " + connectSources.join(" "),
     "img-src 'self' data: blob: https://img.clerk.com",
-    "frame-src https://*.clerk.accounts.dev https://*.clerk.com",
+    // Turnstile renders the challenge in an iframe from challenges.cloudflare.com.
+    "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
     "worker-src 'self' blob:",
   ].join("; ");
   document.head.prepend(csp);
