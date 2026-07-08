@@ -29,11 +29,14 @@ export default function PricingModal({ open, onClose }) {
   const [foundingClaimed, setFoundingClaimed] = useState(0);
   const [mockMsg, setMockMsg] = useState(null);
 
-  // TODO: Wire to Supabase Edge Function /api/founding/count once deployed.
-  // For now, default to 0 (founding tier hidden) — switch to fetch when ready.
+  // Founding counter comes from the founding-count Edge Function. The site is
+  // static (GitHub Pages, no rewrites), so hit Supabase directly. On any
+  // failure claimed stays 0 and the founding tier remains hidden.
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/founding/count")
+    const base = import.meta.env.VITE_SUPABASE_URL;
+    if (!base) return () => { cancelled = true; };
+    fetch(`${base}/functions/v1/founding-count`)
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (!cancelled && typeof j?.claimed === "number") setFoundingClaimed(j.claimed); })
       .catch(() => {});
