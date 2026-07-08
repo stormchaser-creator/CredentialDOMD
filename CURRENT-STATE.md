@@ -1,5 +1,27 @@
 # CredentialDOMD — Current State
 
+## UPDATE 2026-07-08 — autonomy prep session (Claude, Studio)
+
+**Done this session (no credentials needed):**
+- `founding-count` edge function fixed: counts `tier='founding'` active subs, cap 100 (was legacy `pro/practice` + 333). Source fixed; **still needs deploy**.
+- `PricingModal.jsx` founding-counter fetch now hits the Supabase functions URL directly — the old relative `/api/founding/count` could never work on static GitHub Pages, so the founding tier was permanently invisible.
+- All 12 marketing docs synced to Architecture D ($12/100/24-mo lock); fabricated "12 signed up in week one" claim removed; `COMPETITIVE_PRICING.md` + `LAUNCH_PLAYBOOK.md` banner-marked SUPERSEDED.
+- AutoAIBiz venture config (venture.yaml, use-cases.yaml, outreach templates) synced to Architecture D — agents no longer quote $1.99.
+- AutoAIBiz learning daemon installed as launchd service (`com.autoaibiz.learning`); venture competence 9/13 → 11/13 (ledger + maven fixed; compass + justice still short of "competent").
+- Supabase CLI + Stripe CLI installed on the Studio (were absent).
+- NOTE: remote main had a full **Clerk auth migration** (phases 1–3) the Studio checkout didn't have; local work rebased on top and pushed. Sections below describing "Supabase Auth" are pre-Clerk.
+
+**Eric's remaining launch steps (in order, ~1 hour):**
+1. `stripe login`
+2. `cd ~/Projects/CredentialDOMD && STRIPE_MODE=test ./scripts/create-stripe-products.sh` → verify → run live
+3. Stripe dashboard → Webhooks → add `https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/stripe-webhook` (checkout.session.completed, customer.subscription.updated, customer.subscription.deleted) → copy `whsec_…`
+4. `supabase login`
+5. `export STRIPE_SECRET_KEY=sk_live_… STRIPE_WEBHOOK_SECRET=whsec_… && ./scripts/set-supabase-secrets.sh`
+6. `./scripts/deploy-functions.sh` (deploys the fixed founding-count too)
+7. Test purchase with a Stripe test card; confirm row lands in `subscriptions`
+
+---
+
 **Date:** 2026-05-04
 **Author:** Cowork session (Claude), reading the actual repo (no carryover from prior summaries)
 **Purpose:** ground-truth status so Eric can decide next steps
