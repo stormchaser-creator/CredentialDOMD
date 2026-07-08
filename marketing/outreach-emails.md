@@ -20,7 +20,7 @@ It's called **CredentialDOMD** -- a platform for physicians to manage their own 
 
 I know you hold licenses in [X states / Texas and [state]] -- keeping up with the CME requirements for each is brutal, especially when the reporting cycles don't line up. That's exactly the problem this solves.
 
-I'm opening it to 333 founding members at **$1.99/month, locked forever** (it'll be $29/month after). No annual commitment, no pitch calls -- just a link.
+I'm opening it to the first 100 physicians at **$12/month, locked for 24 months** (Solo pricing is $19/month once founding closes). There's a 14-day trial, no pitch calls -- just a link.
 
 If this sounds like something you'd use, I'd love for you to grab a spot before they're gone:
 **[founding member link]**
@@ -45,7 +45,7 @@ One thing I didn't mention: CredentialDOMD texts you **90 days before your Texas
 
 It also tracks MOC requirements by board, so you're not manually cross-referencing ABIM or ABS timelines mid-quarter.
 
-Still **$1.99/month founding rate**, still only 333 spots. If you want in:
+Still **$12/month Founding Physician rate**, still only 100 spots. If you want in:
 **[founding member link]**
 
 -- Eric
@@ -62,9 +62,9 @@ Hey [First Name] --
 
 Last note on this, I promise.
 
-12 physicians signed up in the first week. Spots are going faster than I expected.
+Founding Physician pricing is capped at the first 100 physicians.
 
-If credential tracking is on your radar at all, now's the time -- **$1.99/month, locked forever**, vs. $29 once founding closes.
+If credential tracking is on your radar at all, now's the time -- **$12/month, locked for 24 months**, vs. $19/month once founding closes.
 
 **[founding member link]**
 
@@ -81,8 +81,8 @@ After that I'll leave you alone.
 - Add one real shared context in the opener (conference, residency year, shared hospital system)
 - If they're in a specialty with heavy MOC (cardiology, surgery, IM) -- lean into that instead of multi-state CME
 
-**On the social proof number (Email 3):**
-- Update "12 physicians" to whatever the real count is at send time -- even "7" is more credible than a round number
+**On scarcity (Email 3):**
+- The 100-physician Founding Physician cap is a genuine constraint -- lead with it. Do NOT invent signup counts or other social proof; only cite real numbers if you have them.
 
 **Subject line alt for Email 1 if the relationship is closer:**
 - *"Built something you might actually want"*

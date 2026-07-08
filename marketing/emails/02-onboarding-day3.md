@@ -19,7 +19,7 @@ If you run into anything that doesn't work the way it should, reply here. I'm th
 
 — Whit
 
-P.S. — If you just haven't had time, no worries. Your $1.99/month rate is locked in regardless. There's no rush.
+P.S. — If you just haven't had time, no worries. Your $12/month Founding Physician rate is locked in for 24 months regardless. There's no rush.
 
 ---
 *CredentialDOMD | credentialdomd.com*

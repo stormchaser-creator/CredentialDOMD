@@ -5,7 +5,7 @@
 ---
 
 ## The Only Number That Matters Right Now
-**333 founding members at $1.99/month**
+**100 Founding Physicians at $12/month**
 
 Everything on this page serves that number.
 
@@ -14,7 +14,7 @@ Everything on this page serves that number.
 ## What Needs to Happen (In Order)
 
 ### GATE 1 — Stripe Live (Whit: 20 min)
-- [ ] Create product in Stripe: "CredentialDOMD Founding Member" $1.99/month
+- [ ] Create product in Stripe: "CredentialDOMD Founding Physician" $12/month ($120/year)
 - [ ] Get Price ID → send to Eli
 - [ ] Get Secret Key + Webhook Secret → send to Eli
 - **Eli handles:** Vercel env vars, Supabase secrets, webhook config, end-to-end test
@@ -75,7 +75,7 @@ Everything on this page serves that number.
 | Landing page visits | 200 | 1,000 |
 | App signups (free) | 20 | 100 |
 | Email inquiries | 5 | 20 |
-| MRR | $9.95 | $49.75 |
+| MRR | $60 | $300 |
 
 ---
 

@@ -1,4 +1,7 @@
 # CredentialDOMD — Competitive Pricing Analysis
+
+> **SUPERSEDED (2026-07-08):** Pricing below reflects the legacy cohort model. Current pricing is Architecture D — see src/utils/pricingConstants.js. Strategy rationale retained for history.
+
 **Research agent:** compass.competitive_intel + maven.deep_research
 **Date:** 2026-03-19
 **Task:** Find all direct competitors targeting individual physicians. Price CredentialDOMD 20% below lowest comparable.
@@ -76,22 +79,21 @@ These serve hospitals and groups, not individual doctors:
 - **Monthly:** **$13/month** (saves physician $3.58/mo vs Mocingbird, and offers 3x more features)
 - **Annual:** **$129/year** (saves $70/year vs Mocingbird)
 
-### Founding Member Pricing (already on site — keep as-is)
-The escalating founding member model is brilliant and should NOT change:
-- Spots 1–19: $1.99/mo (locked forever)
-- Spots 20–29: $2.99/mo
-- Spots 30–39: $3.99/mo
-- Spots 40–49: $4.99/mo
-- Spots 50–59: $5.99/mo
-- Spots 60–99: up to $9.99/mo
+*(Superseded: Architecture D adopted Solo at **$19/month ($190/year)** and Locum at **$29/month ($290/year)**. The $13/$129 figures above are the original research recommendation, retained for history.)*
 
-Even $9.99/mo (max founding price) is **40% below Mocingbird** with dramatically more features.
+### Founding Member Pricing
+Architecture D replaced the escalating cohort ladder with a flat **Founding Physician** tier:
+- **$12/month ($120/year)**, locked for 24 months, first 100 physicians only, then auto-converts to Solo ($19/month) at month 25.
+
+Even at $12/mo, founding pricing is well below Mocingbird ($16.58/mo) with dramatically more features.
+
+*(Legacy note, retained for history: the original research recommended an escalating founding ladder stepping from ~$1.99/mo up to ~$9.99/mo as spots filled. That model is superseded — see the banner at the top.)*
 
 ---
 
 ## Positioning Statement
 > "Mocingbird charges $199/year and only tracks licenses and CME.
-> CredentialDOMD founding members start at $1.99/month and covers everything —
+> CredentialDOMD Founding Physicians start at $12/month and covers everything —
 > hospital privileges, malpractice insurance, AI document scanning, CV generation,
 > multi-device sync, and state-specific CME requirements for all 50 states."
 

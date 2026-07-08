@@ -1,6 +1,6 @@
 # Physician Community Outreach Plan
 **CredentialDOMD — Founding Member Acquisition**
-**Goal:** 333 founding members at $1.99/mo
+**Goal:** 100 Founding Physicians at $12/mo
 
 ---
 
@@ -81,6 +81,6 @@
 
 1. **Whit posts, not a brand.** Physicians trust physicians. Every post should come from Whit Whitney DO, not "CredentialDOMD."
 2. **Lead with the pain, not the product.** "One missed renewal cost a physician $47,000" before any product mention.
-3. **333 founding members is a real constraint.** The scarcity is genuine — use it.
+3. **100 Founding Physicians is a real constraint.** The scarcity is genuine — use it.
 4. **Reply to everyone.** Every comment, every question, every DM. This is how you get the first 50.
 5. **Never say "check out my app."** Say "I built something" and let them ask.

@@ -25,7 +25,7 @@ The average physician holds privileges at 2–4 institutions and is licensed in 
 | **Multi-state CME tracking** | Manual spreadsheets | Automatic, per-state | Not built for individuals |
 | **Renewal alerts** | Calendar reminders you set yourself | Proactive, 90/60/30-day alerts | Alerts go to admin staff |
 | **Portability** | Nothing moves with you | Your record moves with you | Locked to the employer |
-| **Cost** | Free (but costs you time) | $1.99/month | $500–$5,000/year (billed to employer) |
+| **Cost** | Free (but costs you time) | $19/month (Solo; Founding Physician $12/mo) | $500–$5,000/year (billed to employer) |
 | **CAQH sync** | Manual re-entry | Integrated | Varies |
 | **Built for physicians** | No | Yes | No |
 
@@ -46,9 +46,9 @@ License expirations, DEA renewals, board certifications, hospital privileges —
 
 ## Founding Member Offer
 
-> **$1.99/month — locked forever.**
-> This price never increases for founding members. No conditions. No fine print.
-> **333 spots available.**
+> **$12/month — locked for 24 months.**
+> Available to the first 100 physicians. At month 25 your plan converts to the standard Solo rate ($19/month).
+> **100 spots available.**
 
 Founding members also get direct input into the product roadmap, priority support, and early access to every new feature before general release.
 
@@ -56,7 +56,7 @@ Founding members also get direct input into the product roadmap, priority suppor
 
 **[Join at credentialdomd.com](https://credentialdomd.com)**
 
-*333 founding member spots. First come, first locked.*
+*100 Founding Physician spots. First come, first locked.*
 
 ---
 

@@ -13,9 +13,9 @@ Quick ask: do you know one other physician who deals with the same credentialing
 
 Not a mass referral thing. Just — if you have a colleague, partner, or friend who would find this useful, forwarding this email or sharing credentialdomd.com takes 10 seconds.
 
-Right now we have [X] founding members. We're building toward 333. Every physician who joins at this stage gets the $1.99/month rate — locked forever. After 333, it goes to $11.99.
+We're building toward our first 100 Founding Physicians. Every physician who joins at this stage gets the $12/month rate — locked for 24 months. After the 100 founding spots fill, new members pay the standard Solo rate of $19/month.
 
-If you refer someone who signs up, I'll extend your $1.99 rate for an extra year on top of the lifetime lock. Just have them mention your name or email when they sign up.
+If you refer someone who signs up, I'll extend your $12 rate for an extra year beyond the 24-month founding lock. Just have them mention your name or email when they sign up.
 
 That's it. No affiliate codes, no dashboards, no complexity.
 

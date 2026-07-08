@@ -21,7 +21,7 @@ So I built CredentialDOMD — a credential tracking app that monitors every lice
 
 It took 6 months and a lot of late nights. Today it's live.
 
-First 333 physicians who sign up get $1.99/month — locked in forever. After that it's $11.99.
+First 100 physicians who sign up get $12/month — locked for 24 months. After that it's the standard Solo rate of $19.
 
 If you've ever had a credentialing close call, this is for you.
 
@@ -38,9 +38,9 @@ The math on credentialing is brutal:
 - At $300/hr opportunity cost, that's $7,200/year in credentialing time
 - One lapsed credential = 30-90 days of lost billing = $15,000-$90,000
 
-CredentialDOMD costs $1.99/month for founding members.
+CredentialDOMD costs $12/month for Founding Physicians.
 
-That's $23.88/year to protect tens of thousands in annual billing.
+That's $120/year to protect tens of thousands in annual billing.
 
 I built it as a neurosurgeon who lived this math. Launching now.
 
@@ -90,7 +90,7 @@ Spreadsheet? Calendar reminders? Hospital credentialing office? Sticky notes? Ju
 
 ## Twitter/X (Short Posts)
 
-1. "One missed medical license renewal = 30-90 days without hospital privileges = $15K-$90K in lost billing. I built a $1.99/mo fix. 333 founding member spots. credentialdomd.com"
+1. "One missed medical license renewal = 30-90 days without hospital privileges = $15K-$90K in lost billing. I built a $12/mo fix. 100 founding spots. credentialdomd.com"
 
 2. "I'm a neurosurgeon who shipped software. The hardest part wasn't the code — it was learning that 'credentialing' means completely different things to MDs vs DOs vs the hospital vs the insurance panel."
 
@@ -107,7 +107,7 @@ Fellow physicians — I built something and I want honest feedback before I push
 
 CredentialDOMD: credential tracking for all 50 states, automated alerts, document vault, AI scanner. Built because I had too many close calls with renewal dates as a neurosurgeon practicing in multiple states.
 
-First 333 physicians get $1.99/month locked in forever. Looking for early feedback from colleagues.
+First 100 physicians get $12/month locked for 24 months. Looking for early feedback from colleagues.
 
 credentialdomd.com — DMs open.
 

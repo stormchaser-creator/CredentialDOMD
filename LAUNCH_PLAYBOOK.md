@@ -1,4 +1,7 @@
 # CredentialDOMD — Business Launch Playbook
+
+> **SUPERSEDED (2026-07-08):** Pricing below reflects the legacy cohort model. Current pricing is Architecture D — see src/utils/pricingConstants.js. Strategy rationale retained for history.
+
 **Research agent:** compass.market_research + signal.brand_architect
 **Date:** 2026-03-19
 **Purpose:** Full pre-launch business checklist — what must be done before the first paying customer
@@ -77,8 +80,8 @@ Required:
 
 ### Stripe Setup Steps (in order)
 1. Log into dashboard.stripe.com
-2. Create product: **"CredentialDOMD Founding Member"**
-3. Add price: **$1.99/month** recurring (this is Spot 1-19 price)
+2. Create product: **"CredentialDOMD Founding Physician"**
+3. Add price: **$12/month** ($120/year) recurring (Architecture D Founding Physician price)
 4. Get the Price ID (looks like `price_1ABC...`)
 5. Add to Vercel: Settings → Environment Variables → `VITE_STRIPE_PRICE_FOUNDING`
 6. Set Supabase secrets via CLI
@@ -87,12 +90,10 @@ Required:
 9. Confirm subscription status updates in DB
 10. Switch to live mode
 
-### Founding Member Price Escalation Logic
-The site already shows the tiered pricing. Need to decide:
-- Is the escalation manual (you update the price as spots fill)?
-- Or automatic (app tracks spot count and charges accordingly)?
+### Founding Physician Logic
+Under Architecture D there is no escalating cohort ladder. Founding Physician pricing is a flat **$12/month ($120/year)** for the first 100 physicians, locked for 24 months, then auto-converting to Solo ($19/month) at month 25.
 
-**Recommendation:** Manual for now. Start at $1.99, update when 19 spots claimed.
+*(Legacy note, retained for history: the original model used a manually escalated price that stepped up as spots filled. That model is superseded — see the banner at the top.)*
 
 ---
 

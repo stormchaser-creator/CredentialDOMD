@@ -39,15 +39,15 @@ CAQH ProView is built for hospitals and payers to pull your credentials — you 
 
 ---
 
-**Q: What does "founding member" mean?**
-Founding members lock in their price forever — whatever you pay today is what you pay for the lifetime of your account, regardless of future price increases. You also get early access to new features and a direct line to shape the product roadmap.
+**Q: What does "Founding Physician" mean?**
+Founding Physician pricing is available to the first 100 physicians only. You lock in **$12/month (or $120/year)** for 24 months; at month 25 your plan converts to the standard Solo rate ($19/month). You also get early access to new features and a direct line to shape the product roadmap.
 
 ---
 
 **Q: Can my practice use CredentialDOMD for multiple providers?**
-A practice-tier plan for multi-provider credential management is on the roadmap and coming soon. In the meantime, each physician on your team can sign up individually as a founding member to lock in the best pricing before it launches.
+Yes. Multi-provider plans are billed annually per provider: **Practice** is $39/provider/month for 2–25 seats, **Group** is $29/provider/month for 26–100 seats, and **Enterprise** (100+ seats) is available by contacting sales.
 
 ---
 
 **Q: How much does it cost?**
-Founding member pricing is **$1.99/month** — locked permanently for as long as you remain a member. That's less than a cup of coffee to never miss a license renewal or CME deadline again.
+There's a **free plan** ($0, up to 5 credentials, free forever). Paid individual plans are **Solo at $19/month ($190/year)** and **Locum at $29/month ($290/year)** — both include a 14-day trial, and annual billing gives you two months free. Residents and Fellows use CredentialDOMD free with ACGME/AOA verification. The first 100 physicians can claim **Founding Physician pricing at $12/month ($120/year)**, locked for 24 months.

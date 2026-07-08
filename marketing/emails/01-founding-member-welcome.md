@@ -7,9 +7,9 @@
 
 [First Name],
 
-You just locked in $1.99/month — forever.
+You just locked in $12/month for 24 months.
 
-That's not a promo price. That's your price, for as long as you're a member. When we hit 333 founding members and the price goes to $11.99, yours stays at $1.99.
+That's your Founding Physician rate — one of only 100 founding spots. When founding closes, new members pay the standard Solo rate of $19/month. At month 25 your plan converts to that Solo rate too, so you get two years of physician-founder pricing locked in.
 
 Here's what to do in the next 5 minutes:
 
