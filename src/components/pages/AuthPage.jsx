@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
 import { AsclepiusIcon } from "../shared/Icons";
@@ -35,8 +35,31 @@ const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
   : {};
 
 function AuthPage() {
-  const [mode, setMode] = useState("signin"); // "signin" | "signup"
+  const [mode, setMode] = useState(() =>
+    window.location.hash.includes("sign-up") ? "signup" : "signin"
+  ); // "signin" | "signup"
   const T = THEMES.light;
+
+  // Clerk's own footer links ("Don't have an account? Sign up" / "Already
+  // have an account? Sign in") navigate to #sign-up / #sign-in. The card
+  // shown is controlled by our tab state, so mirror those hash changes into
+  // it — otherwise the links change the URL but nothing on screen.
+  useEffect(() => {
+    const onHashChange = () => {
+      const h = window.location.hash;
+      if (h.includes("sign-up")) {
+        setMode("signup");
+        // Clear the marker so Clerk's hash router starts clean.
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      } else if (h.includes("sign-in")) {
+        setMode("signin");
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    };
+    onHashChange();
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   return (
     <div style={{
