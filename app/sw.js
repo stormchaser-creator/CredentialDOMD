@@ -1,7 +1,7 @@
-// 20260714T1756-0f7dc3f is replaced at build time (see stampBuildId in vite.config.js).
+// 20260714T1804-c074132 is replaced at build time (see stampBuildId in vite.config.js).
 // Because the id changes every deploy, this file's bytes change every deploy,
 // which is what makes the browser fire `updatefound` and install the new SW.
-const BUILD_ID = "20260714T1756-0f7dc3f";
+const BUILD_ID = "20260714T1804-c074132";
 const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
@@ -14,13 +14,16 @@ const PRECACHE_URLS = [
   "./icons/icon-512.svg",
 ];
 
-// Install: precache shell (bypass the HTTP cache so we never precache staleness)
+// Install: precache shell (bypass the HTTP cache so we never precache staleness).
+// skipWaiting → the new worker activates immediately (CallSync-style silent
+// updates); the page reload is handled by UpdatePrompt.
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
       cache.addAll(PRECACHE_URLS.map((u) => new Request(u, { cache: "no-cache" })))
     )
   );
+  self.skipWaiting();
 });
 
 // Activate: clean caches from previous builds
