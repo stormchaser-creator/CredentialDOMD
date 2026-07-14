@@ -14,13 +14,16 @@ const PRECACHE_URLS = [
   "./icons/icon-512.svg",
 ];
 
-// Install: precache shell (bypass the HTTP cache so we never precache staleness)
+// Install: precache shell (bypass the HTTP cache so we never precache staleness).
+// skipWaiting → the new worker activates immediately (CallSync-style silent
+// updates); the page reload is handled by UpdatePrompt.
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
       cache.addAll(PRECACHE_URLS.map((u) => new Request(u, { cache: "no-cache" })))
     )
   );
+  self.skipWaiting();
 });
 
 // Activate: clean caches from previous builds

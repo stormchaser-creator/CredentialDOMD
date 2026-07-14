@@ -1,21 +1,25 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * UpdatePrompt — invisible watcher that pops up a single button when a new
- * version of the app has been deployed. Tapping it reloads with fresh data.
+ * UpdatePrompt — CallSync-style silent auto-update.
  *
- * How it knows an update exists: every deploy stamps a unique build id into
- * the app bundle and into version.json on the server. This component quietly
- * compares the two — when the app opens, whenever the tab regains focus, and
- * every 15 minutes. It also watches the service worker, which detects new
- * deploys on its own. On mismatch, the green pill appears; tapping it
- * activates the new service worker, clears every cache, and reloads.
+ * Every deploy stamps a unique build id into the bundle and version.json.
+ * This watcher compares them when the app opens and whenever it regains
+ * focus; on mismatch it updates AUTOMATICALLY — activate new SW, wipe
+ * caches, reload — showing only a brief "Updating…" toast.
  *
- * When the app is current, this renders nothing at all.
+ * Safety valves:
+ *  - One auto-attempt per build id per session (sessionStorage guard). If
+ *    the page still isn't current after an auto-reload (e.g. the CDN cache
+ *    hasn't caught up yet), we don't loop — we fall back to a tappable
+ *    "New version — tap to update" pill.
+ *  - Updates found by the 15-minute background timer also show the pill
+ *    instead of yanking the page out from under the user mid-task.
  */
 
 const CURRENT_BUILD = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
+const AUTO_GUARD_PREFIX = "cmd-auto-update-";
 
 async function getRegistration() {
   if (!("serviceWorker" in navigator)) return null;
@@ -38,9 +42,17 @@ async function fetchDeployedBuild() {
   }
 }
 
+function autoAttempted(build) {
+  try { return sessionStorage.getItem(AUTO_GUARD_PREFIX + build) !== null; }
+  catch { return true; } // storage unavailable → never auto-reload (pill only)
+}
+
+function markAutoAttempt(build) {
+  try { sessionStorage.setItem(AUTO_GUARD_PREFIX + build, "1"); } catch { /* noop */ }
+}
+
 function UpdatePrompt() {
-  const [updateReady, setUpdateReady] = useState(false);
-  const [applying, setApplying] = useState(false);
+  const [mode, setMode] = useState("idle"); // idle | updating | pill
   const reloading = useRef(false);
 
   const doReload = useCallback(() => {
@@ -49,24 +61,9 @@ function UpdatePrompt() {
     window.location.reload();
   }, []);
 
-  const check = useCallback(async () => {
-    const reg = await getRegistration();
-    try { await reg?.update(); } catch { /* offline — version.json still decides */ }
-
-    if (reg?.waiting) {
-      setUpdateReady(true);
-      return;
-    }
-
-    const deployed = await fetchDeployedBuild();
-    if (deployed && CURRENT_BUILD !== "dev" && deployed !== CURRENT_BUILD) {
-      setUpdateReady(true);
-    }
-  }, []);
-
-  // Apply the update: activate any waiting SW, wipe caches, reload fresh.
+  // Activate any waiting SW, wipe caches, reload fresh.
   const applyUpdate = useCallback(async () => {
-    setApplying(true);
+    setMode("updating");
     const reg = await getRegistration();
 
     if (reg?.waiting) {
@@ -81,34 +78,55 @@ function UpdatePrompt() {
       }
     } catch { /* cache wipe is best-effort */ }
 
-    setTimeout(doReload, 800);
+    setTimeout(doReload, 600);
   }, [doReload]);
+
+  // silent=true (open/focus): auto-update. silent=false (timer): show pill.
+  const check = useCallback(async (silent) => {
+    const reg = await getRegistration();
+    try { await reg?.update(); } catch { /* offline — version.json still decides */ }
+
+    let newBuild = null;
+    const deployed = await fetchDeployedBuild();
+    if (deployed && CURRENT_BUILD !== "dev" && deployed !== CURRENT_BUILD) {
+      newBuild = deployed;
+    } else if (reg?.waiting) {
+      newBuild = "sw-waiting";
+    }
+    if (!newBuild) return;
+
+    if (silent && !autoAttempted(newBuild)) {
+      markAutoAttempt(newBuild);
+      applyUpdate();
+    } else {
+      setMode((m) => (m === "updating" ? m : "pill"));
+    }
+  }, [applyUpdate]);
 
   useEffect(() => {
     let disposed = false;
 
-    // Surface a background-installed update immediately.
+    // A SW installed in the background also triggers the same flow.
     (async () => {
       const reg = await getRegistration();
       if (!reg || disposed) return;
-      if (reg.waiting) setUpdateReady(true);
       reg.addEventListener("updatefound", () => {
         const sw = reg.installing;
         if (!sw) return;
         sw.addEventListener("statechange", () => {
           if (sw.state === "installed" && navigator.serviceWorker.controller) {
-            setUpdateReady(true);
+            check(true);
           }
         });
       });
     })();
 
-    check();
+    check(true); // app opened
 
-    const onFocus = () => { if (document.visibilityState !== "hidden") check(); };
+    const onFocus = () => { if (document.visibilityState !== "hidden") check(true); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
-    const interval = setInterval(check, CHECK_INTERVAL_MS);
+    const interval = setInterval(() => check(false), CHECK_INTERVAL_MS);
 
     return () => {
       disposed = true;
@@ -118,14 +136,15 @@ function UpdatePrompt() {
     };
   }, [check]);
 
-  // Current version → render nothing.
-  if (!updateReady) return null;
+  if (mode === "idle") return null;
+
+  const updating = mode === "updating";
 
   return (
     <button
-      onClick={applyUpdate}
-      disabled={applying}
-      aria-label="Update app to the new version"
+      onClick={updating ? undefined : applyUpdate}
+      disabled={updating}
+      aria-label={updating ? "Updating the app" : "Update app to the new version"}
       style={{
         position: "fixed",
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 76px)",
@@ -139,7 +158,7 @@ function UpdatePrompt() {
         padding: "0 20px",
         borderRadius: 22,
         border: "none",
-        cursor: "pointer",
+        cursor: updating ? "default" : "pointer",
         fontSize: 14,
         fontWeight: 700,
         fontFamily: "inherit",
@@ -152,12 +171,12 @@ function UpdatePrompt() {
       <svg
         width="16" height="16" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-        style={applying ? { animation: "cmd-upd-spin 0.8s linear infinite" } : undefined}
+        style={updating ? { animation: "cmd-upd-spin 0.8s linear infinite" } : undefined}
       >
         <polyline points="23 4 23 10 17 10" />
         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
       </svg>
-      <span>{applying ? "Updating…" : "New version — tap to update"}</span>
+      <span>{updating ? "Updating…" : "New version — tap to update"}</span>
       <style>{`@keyframes cmd-upd-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </button>
   );
