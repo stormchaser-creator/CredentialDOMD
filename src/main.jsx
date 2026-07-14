@@ -68,22 +68,22 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// Register service worker for PWA — force update on new deploys
+// Register service worker for PWA. The path is BASE_URL-relative because the
+// app deploys under /app/ on gh-pages — the old hardcoded "/sw.js" 404'd
+// there, so production never actually had a service worker. Update detection
+// and the refresh UX live in components/shared/UpdatePrompt.jsx; this only
+// registers and periodically nudges the registration.
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", async () => {
-    const reg = await navigator.serviceWorker.register("/sw.js");
-    if (reg.waiting) {
-      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    try {
+      const reg = await navigator.serviceWorker.register(
+        `${import.meta.env.BASE_URL}sw.js`
+      );
+      // Ask the browser to re-check sw.js on each full page load — combined
+      // with the build-id stamp in sw.js this makes every deploy detectable.
+      reg.update().catch(() => {});
+    } catch (err) {
+      console.warn("Service worker registration failed:", err);
     }
-    reg.addEventListener("updatefound", () => {
-      const newWorker = reg.installing;
-      if (newWorker) {
-        newWorker.addEventListener("statechange", () => {
-          if (newWorker.state === "activated") {
-            window.location.reload();
-          }
-        });
-      }
-    });
   });
 }

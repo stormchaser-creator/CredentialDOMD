@@ -23,6 +23,7 @@ import { LocumDashboard } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, FeedbackModal, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
+import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import {
   STATES, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
@@ -62,6 +63,9 @@ export default function App() {
           <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} />
         </AppProvider>
       </SignedIn>
+      {/* Update check/refresh button — outside the auth gate so a stale
+          bundle can be refreshed from the sign-in screen too. */}
+      <UpdatePrompt />
     </>
   );
 }
