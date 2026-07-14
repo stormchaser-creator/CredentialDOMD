@@ -1,23 +1,17 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * UpdatePrompt — persistent update button + "update available" banner.
+ * UpdatePrompt — invisible watcher that pops up a single button when a new
+ * version of the app has been deployed. Tapping it reloads with fresh data.
  *
- * The app is a PWA on GitHub Pages: HTML is served with max-age=600 and the
- * service worker caches assets, so a freshly deployed build can take a while
- * to reach an open tab (or an installed home-screen app). This component
- * closes that gap three ways:
+ * How it knows an update exists: every deploy stamps a unique build id into
+ * the app bundle and into version.json on the server. This component quietly
+ * compares the two — when the app opens, whenever the tab regains focus, and
+ * every 15 minutes. It also watches the service worker, which detects new
+ * deploys on its own. On mismatch, the green pill appears; tapping it
+ * activates the new service worker, clears every cache, and reloads.
  *
- *   1. Detects a waiting/installing service worker and offers a one-tap
- *      refresh (posts SKIP_WAITING, reloads on controllerchange).
- *   2. Polls version.json (cache: no-store, so it bypasses every cache layer)
- *      on mount, on tab focus, and every 15 minutes, comparing the deployed
- *      build id against the one compiled into this bundle (__APP_BUILD_ID__).
- *   3. Always shows a small ↻ button (bottom-right) so the user can force a
- *      check + hard refresh at any time — clearing SW caches before reload.
- *
- * States: idle → checking → "update" (green pill, tap to apply) or a brief
- * "Up to date" flash after a manual check that found nothing.
+ * When the app is current, this renders nothing at all.
  */
 
 const CURRENT_BUILD = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
@@ -45,7 +39,8 @@ async function fetchDeployedBuild() {
 }
 
 function UpdatePrompt() {
-  const [status, setStatus] = useState("idle"); // idle | checking | update | current
+  const [updateReady, setUpdateReady] = useState(false);
+  const [applying, setApplying] = useState(false);
   const reloading = useRef(false);
 
   const doReload = useCallback(() => {
@@ -54,40 +49,27 @@ function UpdatePrompt() {
     window.location.reload();
   }, []);
 
-  // Core check: nudge the SW registration and compare deployed build id.
-  const check = useCallback(async (manual) => {
-    if (manual) setStatus("checking");
-
+  const check = useCallback(async () => {
     const reg = await getRegistration();
-    try { await reg?.update(); } catch { /* offline or SW not registered — version.json still decides */ }
+    try { await reg?.update(); } catch { /* offline — version.json still decides */ }
 
     if (reg?.waiting) {
-      setStatus("update");
+      setUpdateReady(true);
       return;
     }
 
     const deployed = await fetchDeployedBuild();
     if (deployed && CURRENT_BUILD !== "dev" && deployed !== CURRENT_BUILD) {
-      setStatus("update");
-      return;
-    }
-
-    if (manual) {
-      setStatus("current");
-      setTimeout(() => setStatus((s) => (s === "current" ? "idle" : s)), 2000);
-    } else {
-      setStatus((s) => (s === "update" ? s : "idle"));
+      setUpdateReady(true);
     }
   }, []);
 
-  // Apply the update: activate any waiting SW, wipe SW caches, reload.
+  // Apply the update: activate any waiting SW, wipe caches, reload fresh.
   const applyUpdate = useCallback(async () => {
-    setStatus("checking");
+    setApplying(true);
     const reg = await getRegistration();
 
     if (reg?.waiting) {
-      // Reload once the new SW takes control; fall through to the timed
-      // reload below in case controllerchange never fires.
       navigator.serviceWorker.addEventListener("controllerchange", doReload, { once: true });
       reg.waiting.postMessage({ type: "SKIP_WAITING" });
     }
@@ -105,29 +87,28 @@ function UpdatePrompt() {
   useEffect(() => {
     let disposed = false;
 
-    // Watch the SW lifecycle so a background-installed update surfaces
-    // without waiting for the next poll.
+    // Surface a background-installed update immediately.
     (async () => {
       const reg = await getRegistration();
       if (!reg || disposed) return;
-      if (reg.waiting) setStatus("update");
+      if (reg.waiting) setUpdateReady(true);
       reg.addEventListener("updatefound", () => {
         const sw = reg.installing;
         if (!sw) return;
         sw.addEventListener("statechange", () => {
           if (sw.state === "installed" && navigator.serviceWorker.controller) {
-            setStatus("update");
+            setUpdateReady(true);
           }
         });
       });
     })();
 
-    check(false);
+    check();
 
-    const onFocus = () => { if (document.visibilityState !== "hidden") check(false); };
+    const onFocus = () => { if (document.visibilityState !== "hidden") check(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
-    const interval = setInterval(() => check(false), CHECK_INTERVAL_MS);
+    const interval = setInterval(check, CHECK_INTERVAL_MS);
 
     return () => {
       disposed = true;
@@ -137,53 +118,47 @@ function UpdatePrompt() {
     };
   }, [check]);
 
-  const isUpdate = status === "update";
-  const isChecking = status === "checking";
-  const isCurrent = status === "current";
+  // Current version → render nothing.
+  if (!updateReady) return null;
 
   return (
     <button
-      onClick={isUpdate ? applyUpdate : () => check(true)}
-      title={isUpdate ? "A new version is ready — tap to update" : `Check for updates (build ${CURRENT_BUILD})`}
-      aria-label={isUpdate ? "Update app to the new version" : "Check for app updates"}
+      onClick={applyUpdate}
+      disabled={applying}
+      aria-label="Update app to the new version"
       style={{
         position: "fixed",
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 76px)",
-        right: 14,
+        left: "50%",
+        transform: "translateX(-50%)",
         zIndex: 150,
         display: "flex",
         alignItems: "center",
         gap: 8,
-        height: 40,
-        padding: isUpdate || isCurrent ? "0 16px" : 0,
-        width: isUpdate || isCurrent ? "auto" : 40,
-        justifyContent: "center",
-        borderRadius: 20,
-        border: isUpdate ? "none" : "1px solid rgba(0,0,0,0.08)",
+        height: 44,
+        padding: "0 20px",
+        borderRadius: 22,
+        border: "none",
         cursor: "pointer",
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: 700,
         fontFamily: "inherit",
-        color: isUpdate ? "#ffffff" : "#6b7280",
-        backgroundColor: isUpdate ? "#10b981" : "rgba(255,255,255,0.92)",
-        boxShadow: isUpdate
-          ? "0 6px 20px rgba(16,185,129,0.4)"
-          : "0 2px 10px rgba(0,0,0,0.12)",
-        backdropFilter: "blur(6px)",
-        transition: "all 0.25s ease",
+        color: "#ffffff",
+        backgroundColor: "#10b981",
+        boxShadow: "0 6px 24px rgba(16,185,129,0.45)",
+        whiteSpace: "nowrap",
       }}
     >
       <svg
         width="16" height="16" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-        style={isChecking ? { animation: "cmd-spin 0.8s linear infinite" } : undefined}
+        style={applying ? { animation: "cmd-upd-spin 0.8s linear infinite" } : undefined}
       >
         <polyline points="23 4 23 10 17 10" />
         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
       </svg>
-      {isUpdate && <span>Update available</span>}
-      {isCurrent && <span>Up to date</span>}
-      <style>{`@keyframes cmd-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <span>{applying ? "Updating…" : "New version — tap to update"}</span>
+      <style>{`@keyframes cmd-upd-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </button>
   );
 }
