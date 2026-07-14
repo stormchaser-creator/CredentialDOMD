@@ -218,9 +218,12 @@ export function useSubscription(userOverride) {
     });
     if (res.data?.url) {
       window.location.href = res.data.url;
-    } else if (res.error) {
-      console.error("Checkout error:", res.error);
+      return { ok: true };
     }
+    // No checkout URL — payments not reachable (function undeployed, Stripe
+    // not configured, or network error). Tell the caller so the UI can say so.
+    console.error("Checkout error:", res.error ?? "no checkout URL returned");
+    return { ok: false, error: "checkout_unavailable" };
   }, [setMockTier]);
 
   const manage = useCallback(async () => {

@@ -12,8 +12,9 @@ const ADMIN_EMAILS = new Set([
 ]);
 
 export function isAdminUser(user) {
-  if (!user || !user.email) return false;
-  return ADMIN_EMAILS.has(user.email.toLowerCase());
+  if (!user) return false;
+  const candidates = [user.email, ...(user.emails || [])].filter(Boolean);
+  return candidates.some((e) => ADMIN_EMAILS.has(e.toLowerCase()));
 }
 
 /** Convenience for invoking edge functions with the user's JWT. */

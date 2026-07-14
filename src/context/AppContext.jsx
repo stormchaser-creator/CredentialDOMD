@@ -32,6 +32,11 @@ function normalizeClerkUser(clerkUser) {
     email: clerkUser.primaryEmailAddress?.emailAddress
       || clerkUser.emailAddresses?.[0]?.emailAddress
       || null,
+    // Every address on the account — the admin gate matches any of them,
+    // so which one happens to be "primary" in Clerk doesn't matter.
+    emails: (clerkUser.emailAddresses || [])
+      .map((e) => e?.emailAddress)
+      .filter(Boolean),
     fullName: clerkUser.fullName || null,
     imageUrl: clerkUser.imageUrl || null,
   };

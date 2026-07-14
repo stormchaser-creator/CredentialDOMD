@@ -58,6 +58,11 @@ export default function PricingModal({ open, onClose }) {
     if (result?.mock) {
       setMockMsg(`Switched to ${t.name}`);
       setTimeout(() => { setMockMsg(null); onClose(); }, 1200);
+    } else if (result?.ok === false) {
+      // Checkout couldn't start (payments not live / network issue) —
+      // never leave the user with a button that visibly does nothing.
+      setMockMsg("Payments aren't available right now — please email hello@credentialdomd.com and we'll set you up.");
+      setTimeout(() => setMockMsg(null), 5000);
     }
   };
 
