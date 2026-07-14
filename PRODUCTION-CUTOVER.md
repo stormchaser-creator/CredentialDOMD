@@ -120,10 +120,10 @@ Once the run is green, hard-reload `credentialdomd.com/app/` and confirm:
 - DevTools → Network → first Clerk request: hostname is
   `clerk.credentialdomd.com`, not `dynamic-goshawk-87.clerk.accounts.dev`.
 
-After confirmation, **un-hide the Google button.** Open
-`src/components/pages/AuthPage.jsx`, delete the `socialButtons*` and
-`dividerRow` overrides in both the `<SignIn />` and `<SignUp />`
-appearance blocks (search for "Google sign-in is hidden"), commit, push.
+The Google button un-hides itself: as of 2026-07-08 the overrides in
+`src/components/pages/AuthPage.jsx` are gated on the publishable key
+type (`pk_test_` hides, `pk_live_` shows). No code change needed at
+cutover — the button appears automatically with the new key.
 
 ---
 
@@ -164,9 +164,15 @@ supabase secrets set CLERK_WEBHOOK_SECRET=whsec_… \
   Smart CAPTCHA on email/password sign-up if it ever fires.
 - ✅ `setup-clerk-supabase.sh` exists at the repo root and works against
   whichever instance you point it at (paste the matching `sk_*` key).
-- ✅ Google sign-in button is hidden on both Sign In and Sign Up so users
-  aren't blocked while you do the cutover. Email + password + magic link
-  work on the dev instance.
+- ✅ Google sign-in button auto-hides while the app runs on a `pk_test_`
+  key and auto-shows on `pk_live_` (2026-07-08). Email + password + magic
+  link work on the dev instance meanwhile.
+- ✅ Supabase already trusts the DEV Clerk issuer via Third-Party Auth
+  (see CLERK-SUPABASE-SETUP.md §2a). In Phase 5 you must ALSO register the
+  production issuer (`https://clerk.credentialdomd.com`) the same way —
+  dashboard: Authentication → Sign In / Up → Third Party Auth → Add
+  provider → Clerk, or the Management API call in that doc with the prod
+  issuer/JWKS URLs.
 - ✅ `VITE_CLERK_PUBLISHABLE_KEY` GitHub repo secret already exists
   (currently the dev `pk_test_…`); just overwrite with `pk_live_…` in
   Phase 4.

@@ -15,6 +15,25 @@ import { AsclepiusIcon } from "../shared/Icons";
  * so we use Clerk's `routing="hash"` mode which keeps everything inside the
  * URL hash (#/factor-one, #/verify-email, etc.) instead of mutating paths.
  */
+// Social (Google) sign-in only works on a *production* Clerk instance.
+// On a dev instance (pk_test_…), OAuth routes through Clerk's shared proxy at
+// clerk.shared.lcl.dev, which cannot hand a session back to credentialdomd.com —
+// the user authenticates on Google's side but never gets signed in here.
+// Gate on the key type so the button hides itself on dev keys and reappears
+// automatically once the pk_live_ key ships. Cutover steps: PRODUCTION-CUTOVER.md.
+const IS_DEV_CLERK_INSTANCE =
+  (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? "").startsWith("pk_test_");
+
+const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
+  ? {
+      socialButtons: { display: "none" },
+      socialButtonsRoot: { display: "none" },
+      socialButtonsBlockButton: { display: "none" },
+      socialButtonsIconButton: { display: "none" },
+      dividerRow: { display: "none" },
+    }
+  : {};
+
 function AuthPage() {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
   const T = THEMES.light;
@@ -96,6 +115,7 @@ function AuthPage() {
               appearance={{
                 elements: {
                   rootBox: { width: "100%" },
+                  ...HIDE_SOCIAL_ELEMENTS,
                   card: {
                     backgroundColor: T.card,
                     border: `1px solid ${T.border}`,
@@ -119,6 +139,7 @@ function AuthPage() {
               appearance={{
                 elements: {
                   rootBox: { width: "100%" },
+                  ...HIDE_SOCIAL_ELEMENTS,
                   card: {
                     backgroundColor: T.card,
                     border: `1px solid ${T.border}`,
