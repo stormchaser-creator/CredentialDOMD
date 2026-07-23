@@ -100,21 +100,31 @@ export function AppProvider({ children, onNavigate }) {
           } catch { /* ignore */ }
 
           if (local) {
-            let migrated = false;
+            // Self-healing sync: any item that exists on this device but not
+            // in the cloud gets pushed up on every load — a save whose cloud
+            // write failed (offline, stale schema cache, old app version) is
+            // retried automatically instead of being stranded on-device.
+            // Trade-off: an item deleted in the cloud can be resurrected by a
+            // device holding a stale copy; acceptable while data loss is the
+            // greater risk.
+            let pushed = 0;
             for (const key of COLLECTION_KEYS) {
-              if (local[key]?.length > 0 && (!merged[key] || merged[key].length === 0)) {
-                merged[key] = local[key];
-                bulkSync(profileId, key, local[key]).catch(() => {});
-                migrated = true;
+              const localItems = local[key] || [];
+              if (localItems.length === 0) continue;
+              const cloudIds = new Set((merged[key] || []).map(x => x?.id));
+              const missing = localItems.filter(x => x?.id && !cloudIds.has(x.id));
+              if (missing.length > 0) {
+                merged[key] = [...(merged[key] || []), ...missing];
+                bulkSync(profileId, key, missing).catch(() => {});
+                pushed += missing.length;
               }
             }
             if (!merged.settings.name && local.settings?.name) {
               merged.settings = { ...merged.settings, ...local.settings };
               sbSaveSettings(profileId, merged.settings).catch(() => {});
-              migrated = true;
             }
-            if (migrated) {
-              console.log("CredentialDOMD: Migrated localStorage data to Supabase");
+            if (pushed > 0) {
+              console.log(`CredentialDOMD: pushed ${pushed} local item(s) to cloud`);
             }
           }
 
