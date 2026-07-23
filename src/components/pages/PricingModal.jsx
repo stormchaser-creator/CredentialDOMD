@@ -80,6 +80,7 @@ export default function PricingModal({ open, onClose }) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
+          position: "relative",
           width: "100%", maxWidth: 720,
           backgroundColor: T.card,
           borderRadius: "24px 24px 0 0",
@@ -92,6 +93,23 @@ export default function PricingModal({ open, onClose }) {
         <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 0" }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: T.border }} />
         </div>
+
+        {/* Close — the sheet covers the whole screen on phones, so tapping
+            outside isn't available there; an explicit ✕ is required. */}
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute", top: 10, right: 12,
+            width: 36, height: 36, borderRadius: 18,
+            border: "none", cursor: "pointer",
+            backgroundColor: T.input, color: T.textMuted,
+            fontSize: 18, fontWeight: 700, lineHeight: "36px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          ✕
+        </button>
 
         {/* Header */}
         <div style={{ padding: "16px 20px 0", textAlign: "center" }}>

@@ -24,6 +24,11 @@ const VALID_TIER_IDS = new Set(Object.keys(TIERS));
 // Dev mode: stripe not yet wired, allow tier switching via localStorage.
 const MOCK_STORAGE_KEY = "credentialdomd-mock-tier";
 const PREVIEW_STORAGE_KEY = "credentialdomd-preview-tier";
+// TEMPORARY pre-launch unlock: every signed-in user gets the full Locum
+// feature set while the app is being polished (single-user phase).
+// Set to false before public launch so tiers gate normally again.
+export const UNLOCK_ALL_FEATURES = true;
+
 export const IS_DEV_MODE =
   import.meta.env.DEV && !import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 
@@ -235,17 +240,20 @@ export function useSubscription(userOverride) {
     if (res.data?.url) window.location.href = res.data.url;
   }, []);
 
-  // Derived state
-  const tierObject = getTier(tier);
-  const isPaid = tier !== "free" && tier !== "resident";
-  const isFreeAtLimit = tier === "free" && credentialUsage >= (tierObject?.credentialLimit ?? Infinity);
+  // Derived state.
+  // While UNLOCK_ALL_FEATURES is on, everyone is treated as Locum (the full
+  // individual feature set) regardless of what the subscriptions table says.
+  const effectiveTier = UNLOCK_ALL_FEATURES ? "locum" : tier;
+  const tierObject = getTier(effectiveTier);
+  const isPaid = effectiveTier !== "free" && effectiveTier !== "resident";
+  const isFreeAtLimit = effectiveTier === "free" && credentialUsage >= (tierObject?.credentialLimit ?? Infinity);
   const isTrialing = trialEndsAt && new Date(trialEndsAt) > new Date();
-  const isFoundingLocked = tier === "founding" && foundingLockEndsAt &&
+  const isFoundingLocked = effectiveTier === "founding" && foundingLockEndsAt &&
     new Date(foundingLockEndsAt) > new Date();
   const willConvertToTier = tierObject?.convertToTier ?? null;
-  const willConvertOn = tier === "founding"
+  const willConvertOn = effectiveTier === "founding"
     ? foundingLockEndsAt
-    : tier === "resident" && graduationDate
+    : effectiveTier === "resident" && graduationDate
       ? new Date(new Date(graduationDate).getTime() + 90 * 24 * 60 * 60 * 1000).toISOString()
       : null;
 
@@ -258,7 +266,7 @@ export function useSubscription(userOverride) {
 
   return {
     // Identity
-    tier,
+    tier: effectiveTier,
     tierObject,
 
     // Status flags
@@ -295,9 +303,9 @@ export function useSubscription(userOverride) {
     isDevMode: IS_DEV_MODE,
 
     // Backward-compat for code that still expects a `plan` string
-    plan: tier,
+    plan: effectiveTier,
     isPro: isPaid,
-    isPractice: tier === "practice" || tier === "group",
+    isPractice: effectiveTier === "practice" || effectiveTier === "group",
     setMockPlan: setMockTier,  // legacy alias
   };
 }
