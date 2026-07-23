@@ -79,9 +79,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     setModalCameraOpen(false);
   }, []);
 
+  const requireApiKey = useCallback(() => {
+    if (data.settings.apiKey) return true;
+    setScanIsError(true);
+    setScanMsg("Add your AI key first (Settings \u2192 API key) so documents can be read and auto-filled.");
+    return false;
+  }, [data.settings.apiKey]);
+
   const handleUpload = useCallback(async (files) => {
     const apiKey = data.settings.apiKey;
     const deg = data.settings.degreeType;
+    if (!apiKey) { requireApiKey(); return; }
 
     for (const file of Array.from(files)) {
       const dataUrl = await new Promise((resolve, reject) => {
@@ -243,14 +251,14 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
           <input type="file" ref={modalCameraRef} accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={() => uploadRef.current?.click()} style={{
+            <button onClick={() => requireApiKey() && uploadRef.current?.click()} style={{
               display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px",
               borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600,
               cursor: "pointer", backgroundColor: T.accent, color: "#fff",
             }}>
               <UploadIcon /> Upload
             </button>
-            <button onClick={openModalCamera} style={{
+            <button onClick={() => requireApiKey() && openModalCamera()} style={{
               display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px",
               borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600,
               cursor: "pointer", backgroundColor: T.accent, color: "#fff",

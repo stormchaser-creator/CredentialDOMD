@@ -67,6 +67,14 @@ function DocumentsSection() {
   const deg = data.settings.degreeType;
   const apiKey = data.settings.apiKey;
 
+  // Uploads are blocked until an AI key exists — a document that can't be
+  // read just sits unprocessed, so require the key up front.
+  const requireApiKey = () => {
+    if (apiKey) return true;
+    setScanError("Add your AI key first (Settings \u2192 API key). Documents are read and filed automatically when uploaded, which needs the key.");
+    return false;
+  };
+
   const linkables = [
     ...data.licenses.map(l => ({ value: `licenses:${l.id}`, label: `License: ${l.name || l.type}` })),
     ...data.privileges.map(p => ({ value: `privileges:${p.id}`, label: `Privilege: ${p.name || p.type} - ${p.facility}` })),
@@ -77,6 +85,7 @@ function DocumentsSection() {
   ];
 
   const handleFiles = useCallback(async (files) => {
+    if (!requireApiKey()) return;
     setScanError(null);
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
     const MAX_BATCH = 10;
@@ -200,8 +209,8 @@ function DocumentsSection() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <input type="file" ref={fileRef} multiple accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
         <input type="file" ref={cameraRef} accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
-        <button onClick={() => fileRef.current?.click()} style={btnStyle}><UploadIcon /> Upload</button>
-        <button onClick={openCamera} style={btnStyle}><CameraIcon /> Camera</button>
+        <button onClick={() => requireApiKey() && fileRef.current?.click()} style={btnStyle}><UploadIcon /> Upload</button>
+        <button onClick={() => requireApiKey() && openCamera()} style={btnStyle}><CameraIcon /> Camera</button>
       </div>
 
       {/* Live camera viewfinder */}
