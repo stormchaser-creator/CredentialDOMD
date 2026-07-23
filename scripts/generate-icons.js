@@ -1,35 +1,32 @@
-// Generate PWA icons as SVG files (will be served directly)
+// Generate PWA icons — white medical cross on emerald, matching the app brand.
+// One master design; every size/variant derives from it.
 import { writeFileSync } from "fs";
 
 const makeSVG = (size, maskable = false) => {
-  const padding = maskable ? size * 0.1 : 0;
-  const inner = size - padding * 2;
+  // Maskable icons must be full-bleed (the OS applies its own mask).
   const rx = maskable ? 0 : Math.round(size * 0.22);
-  const fontSize = Math.round(inner * 0.35);
-  const subSize = Math.round(inner * 0.12);
-  const cx = size / 2;
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <rect x="${padding}" y="${padding}" width="${inner}" height="${inner}" rx="${rx}" fill="#0A2540"/>
-  <rect x="${padding}" y="${padding}" width="${inner}" height="${inner}" rx="${rx}" fill="url(#g)" opacity="0.6"/>
+  const s = size;
+  // Cross geometry: arm thickness 24% of tile, length 62% of tile.
+  const t = s * 0.24;
+  const L = s * 0.62;
+  const cx = s / 2;
+  const r = t * 0.28; // rounded arm ends
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0A2540"/>
-      <stop offset="50%" stop-color="#0F3460"/>
-      <stop offset="100%" stop-color="#1A73E8"/>
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#047857"/>
     </linearGradient>
   </defs>
-  <text x="${cx}" y="${cx + fontSize * 0.12}" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="${fontSize}" font-weight="800" font-family="system-ui, -apple-system, sans-serif">MD</text>
-  <text x="${cx}" y="${cx + fontSize * 0.12 + fontSize * 0.7}" text-anchor="middle" dominant-baseline="middle" fill="#60A5FA" font-size="${subSize}" font-weight="600" font-family="system-ui, -apple-system, sans-serif" letter-spacing="2">CREDENTIAL</text>
+  <rect width="${s}" height="${s}" rx="${rx}" fill="url(#g)"/>
+  <rect x="${cx - t / 2}" y="${cx - L / 2}" width="${t}" height="${L}" rx="${r}" fill="#ffffff"/>
+  <rect x="${cx - L / 2}" y="${cx - t / 2}" width="${L}" height="${t}" rx="${r}" fill="#ffffff"/>
 </svg>`;
 };
 
-const sizes = [192, 512];
 const dir = new URL("../public/icons/", import.meta.url).pathname;
-
-for (const s of sizes) {
+for (const s of [192, 512]) {
   writeFileSync(`${dir}icon-${s}.svg`, makeSVG(s, false));
   writeFileSync(`${dir}icon-maskable-${s}.svg`, makeSVG(s, true));
 }
-
-console.log("Icons generated.");
+console.log("icons written");

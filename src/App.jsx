@@ -1133,7 +1133,11 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         width: "100%", maxWidth: 480,
         backgroundColor: T.tabBar, borderTop: `1px solid ${T.tabBorder}`,
         display: "flex", justifyContent: "space-around", alignItems: "center",
-        height: 64, paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        // Safe-area padding must ADD to the bar height (border-box would
+        // otherwise carve it out of the 64px and squash the buttons on
+        // iPhones in standalone/home-screen mode).
+        height: "calc(64px + env(safe-area-inset-bottom, 0px))",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
         zIndex: 100, boxShadow: "0 -1px 8px rgba(0,0,0,0.04)", overflow: "hidden",
       }}>
         {tabItems.map(t => {

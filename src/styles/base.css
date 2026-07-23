@@ -452,7 +452,9 @@ img, svg {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 64px;
+  /* Safe-area inset adds to the height — with border-box it would
+     otherwise be carved out of 64px and squash the buttons on iPhone. */
+  height: calc(64px + env(safe-area-inset-bottom, 0));
   z-index: 100;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
