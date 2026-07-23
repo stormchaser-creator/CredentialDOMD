@@ -44,22 +44,16 @@ function HealthRecordsSection({ onShare }) {
 
     // Same behavior as every other credential form: attached files are
     // saved to Documents and linked to this record.
-    if (attachedDocs.length > 0) {
-      setData(d => ({
-        ...d,
-        documents: [
-          ...d.documents,
-          ...attachedDocs.map(doc => ({
-            id: generateId(),
-            name: doc.name, type: doc.type, size: doc.size, data: doc.data,
-            uploadedAt: new Date().toISOString(),
-            linkedTo: `healthRecords:${itemId}`,
-          })),
-        ],
-      }));
+    for (const doc of attachedDocs) {
+      addItem("documents", {
+        id: generateId(),
+        name: doc.name, type: doc.type, size: doc.size, data: doc.data,
+        uploadedAt: new Date().toISOString(),
+        linkedTo: `healthRecords:${itemId}`,
+      });
     }
     closeForm();
-  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs, setData]);
+  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs]);
 
   const handleDelete = useCallback((id) => deleteItem("healthRecords", id), [deleteItem]);
 

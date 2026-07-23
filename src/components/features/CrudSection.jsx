@@ -11,7 +11,7 @@ import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
 import CPTCodePicker from "./CPTCodePicker";
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone }) {
-  const { data, setData, theme: T } = useApp();
+  const { data, setData, addItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -160,26 +160,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     if (editItem) onEdit({ ...editItem, ...form });
     else onAdd({ ...form, id: itemId });
 
-    // Save attached documents and link them
-    if (attachedDocs.length > 0) {
-      setData(d => ({
-        ...d,
-        documents: [
-          ...d.documents,
-          ...attachedDocs.map(doc => ({
-            id: generateId(),
-            name: doc.name,
-            type: doc.type,
-            size: doc.size,
-            data: doc.data,
-            uploadedAt: new Date().toISOString(),
-            linkedTo: `${sectionKey}:${itemId}`,
-          })),
-        ],
-      }));
+    // Save attached documents and link them — addItem syncs each to cloud
+    for (const doc of attachedDocs) {
+      addItem("documents", {
+        id: generateId(),
+        name: doc.name, type: doc.type, size: doc.size, data: doc.data,
+        uploadedAt: new Date().toISOString(),
+        linkedTo: `${sectionKey}:${itemId}`,
+      });
     }
     closeForm();
-  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, setData]);
+  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem]);
 
   const setField = useCallback((key, value) => {
     setForm(p => ({ ...p, [key]: value }));

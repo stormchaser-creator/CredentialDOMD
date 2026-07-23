@@ -23,6 +23,7 @@ function Contracts() {
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({});
   const [attachedDocs, setAttachedDocs] = useState([]);
+  const [formError, setFormError] = useState(null);
 
   const items = data.locumContracts || [];
 
@@ -34,6 +35,13 @@ function Contracts() {
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
   const handleSave = useCallback(() => {
+    // Don't let an empty agreement slip through silently — that's how a
+    // blocked upload turned into a blank contract.
+    if (!form.facility && !parseFloat(form.callStipend) && !parseFloat(form.hourlyRate)) {
+      setFormError("Nothing is filled in yet — upload the agreement (AI fills the form) or enter the facility and rates.");
+      return;
+    }
+    setFormError(null);
     const itemId = editItem ? editItem.id : generateId();
     const entry = {
       ...form,
@@ -50,22 +58,17 @@ function Contracts() {
     if (editItem) editCtx("locumContracts", entry);
     else addItem("locumContracts", entry);
 
-    if (attachedDocs.length > 0) {
-      setData(d => ({
-        ...d,
-        documents: [
-          ...d.documents,
-          ...attachedDocs.map(doc => ({
-            id: generateId(),
-            name: doc.name, type: doc.type, size: doc.size, data: doc.data,
-            uploadedAt: new Date().toISOString(),
-            linkedTo: `locumContracts:${itemId}`,
-          })),
-        ],
-      }));
+    for (const doc of attachedDocs) {
+      // addItem → immediate cloud insert + file upload to Storage
+      addItem("documents", {
+        id: generateId(),
+        name: doc.name, type: doc.type, size: doc.size, data: doc.data,
+        uploadedAt: new Date().toISOString(),
+        linkedTo: `locumContracts:${itemId}`,
+      });
     }
     closeForm();
-  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs, setData]);
+  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs]);
 
   const linkedDocCount = useCallback(
     (id) => (data.documents || []).filter(d => d.linkedTo === `locumContracts:${id}`).length,
@@ -112,6 +115,9 @@ function Contracts() {
         </div>
         <Field label="Key terms / notes" hint="Cancellation clause, guaranteed hours, travel, etc."><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 60, resize: "vertical" }} /></Field>
         <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} analyzer={analyzeAgreement} />
+        {formError && (
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{formError}</div>
+        )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{editItem ? "Save" : "Add"}</button>

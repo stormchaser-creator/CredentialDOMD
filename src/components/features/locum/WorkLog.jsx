@@ -20,7 +20,7 @@ import { generateId, formatDate, copyToClipboard } from "../../../utils/helpers"
  */
 
 const TIMER_KEY = "credentialdomd-live-timer";
-const WORK_TYPES = ["Call", "Shift", "Procedure", "Rounding", "Admin", "Travel"];
+const WORK_TYPES = ["Call", "Shift", "Procedure", "Rounding", "Orientation", "Admin", "Travel"];
 
 function loadTimer() {
   try { return JSON.parse(localStorage.getItem(TIMER_KEY)) || null; } catch { return null; }
@@ -122,6 +122,13 @@ function WorkLog() {
     }
 
     for (const e of others) {
+      // Orientation covered by a flat fee bills $0 as time (the fee itself
+      // is its own line on the first invoice); otherwise it's hourly work.
+      if (e.type === "Orientation" && (c.orientationFee || 0) > 0) {
+        totalMin += e.billedMin || 0;
+        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min — covered by orientation fee`, amount: 0 });
+        continue;
+      }
       const rate = rateFor(e.type, c);
       const amt = ((e.billedMin || 0) / 60) * rate;
       totalMin += e.billedMin || 0; total += amt;
