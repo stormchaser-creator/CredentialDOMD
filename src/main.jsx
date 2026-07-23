@@ -18,6 +18,8 @@ if (import.meta.env.PROD) {
     "'self'",
     "https://generativelanguage.googleapis.com",
     "https://npiregistry.cms.hhs.gov",
+    // NIH/NLM mirror of the NPI registry — used in production (NPPES has no CORS)
+    "https://clinicaltables.nlm.nih.gov",
     // Clerk frontend API (the *.clerk.accounts.dev / *.clerk.com hosts the SDK calls)
     "https://*.clerk.accounts.dev",
     "https://*.clerk.com",

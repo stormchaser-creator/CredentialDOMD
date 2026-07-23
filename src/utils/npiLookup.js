@@ -22,17 +22,58 @@ async function fetchNPI(url) {
     return res.json();
   }
 
-  // Production: route through our Supabase Edge Function proxy
-  const params = new URL(url).searchParams.toString();
-  const proxyUrl = `${SUPABASE_URL}/functions/v1/npi-proxy?${params}`;
-  const res = await fetch(proxyUrl, {
-    headers: {
-      "apikey": SUPABASE_ANON_KEY,
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+  // Production: NPPES itself sends no CORS headers, so query the NIH/NLM
+  // Clinical Tables mirror of the same registry (CORS: *) and translate its
+  // response into NPPES shape so the rest of this module stays unchanged.
+  const q = new URL(url).searchParams;
+  const nlm = new URL("https://clinicaltables.nlm.nih.gov/api/npi_idv/v3/search");
+  const number = q.get("number");
+  if (number) {
+    nlm.searchParams.set("terms", number);
+  } else {
+    nlm.searchParams.set("terms", `${q.get("last_name") || ""} ${q.get("first_name") || ""}`.trim());
+    if (q.get("state")) nlm.searchParams.set("q", `addr_practice.state:${q.get("state")}`);
+  }
+  nlm.searchParams.set("maxList", q.get("limit") || "20");
+  nlm.searchParams.set("ef", [
+    "NPI", "name.first", "name.last", "name.credential", "gender", "licenses",
+    "addr_practice.line1", "addr_practice.line2", "addr_practice.city",
+    "addr_practice.state", "addr_practice.zip", "addr_practice.phone",
+  ].join(","));
+
+  const res = await fetch(nlm.toString());
+  if (!res.ok) throw new Error(`NPI lookup error: ${res.status}`);
+  const [count, npis, extra] = await res.json();
+  const f = (key, i) => extra?.[key]?.[i] ?? "";
+
+  const results = (npis || []).map((npi, i) => ({
+    number: f("NPI", i) || npi,
+    enumeration_type: "NPI-1",
+    basic: {
+      first_name: f("name.first", i),
+      last_name: f("name.last", i),
+      credential: f("name.credential", i),
+      gender: f("gender", i),
     },
-  });
-  if (!res.ok) throw new Error(`NPI proxy error: ${res.status}`);
-  return res.json();
+    addresses: [{
+      address_purpose: "LOCATION",
+      address_1: f("addr_practice.line1", i),
+      address_2: f("addr_practice.line2", i),
+      city: f("addr_practice.city", i),
+      state: f("addr_practice.state", i),
+      postal_code: f("addr_practice.zip", i),
+      telephone_number: f("addr_practice.phone", i),
+    }],
+    taxonomies: (extra?.licenses?.[i] || []).map((lic) => ({
+      code: lic?.taxonomy?.code || "",
+      desc: lic?.taxonomy?.classification || "",
+      license: lic?.lic_number || "",
+      state: lic?.lic_state || "",
+      primary: lic?.is_primary_taxonomy === "Y",
+    })),
+  }));
+
+  return { result_count: count ?? results.length, results };
 }
 
 /**

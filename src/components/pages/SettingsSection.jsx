@@ -248,7 +248,7 @@ function SettingsSection() {
         </Field>
         <Field label="Email" hint="For share emails"><input type="email" name="email" autoComplete="email" value={s.email || ""} onChange={e => update("email", e.target.value)} style={iS} placeholder="your@email.com" /></Field>
         <Field label="Phone" hint="For share texts"><input type="tel" name="tel" autoComplete="tel" value={s.phone || ""} onChange={e => update("phone", e.target.value)} style={iS} placeholder="(555) 123-4567" /></Field>
-        <Field label="API Key (Gemini)" hint="Required for AI document scanning. Get one at aistudio.google.com/apikey">
+        <Field label="API Key (Gemini)" hint={s.apiKey ? "Saved \u2713 \u2014 saves automatically as you type. AI scanning is enabled." : "Required for AI document scanning. Get one free at aistudio.google.com/apikey \u2014 saves automatically, no save button needed."}>
           <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza..." />
         </Field>
       </div>

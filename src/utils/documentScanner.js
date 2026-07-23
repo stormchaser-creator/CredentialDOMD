@@ -4,7 +4,7 @@
 
 const MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5 MB
 const MAX_DIMENSION = 2048;
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 function isValidDataUrl(url) {
   return typeof url === "string" && url.startsWith("data:") && url.includes(",");
@@ -81,6 +81,7 @@ function handleApiError(status) {
   if (status === 400) throw new Error("Document could not be processed. Try a clearer image.");
   if (status === 403) throw new Error("Invalid API key. Check your key in Settings.");
   if (status === 429) throw new Error("Rate limited. Please wait a moment and try again.");
+  if (status === 404) throw new Error("The AI model was not found — your API key may not have access, or the app needs an update.");
   if (status >= 500) throw new Error("The AI service is temporarily unavailable. Try again later.");
   throw new Error("Document analysis failed. Please try again.");
 }
