@@ -207,3 +207,18 @@ ALTER TABLE locum_contracts
   ADD COLUMN IF NOT EXISTS overage_hourly_rate NUMERIC(10,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS orientation_fee NUMERIC(10,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS orientation_billed BOOLEAN DEFAULT false;
+
+-- Deletion ledger (applied live 2026-07-23): deletes recorded here are
+-- authoritative — devices prune tombstoned items and never re-push them,
+-- so a delete on one device can't be resurrected by a stale device.
+CREATE TABLE IF NOT EXISTS deleted_items (
+  item_id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  collection TEXT,
+  deleted_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_deleted_items_user ON deleted_items(user_id);
+ALTER TABLE deleted_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS deleted_items_owner ON deleted_items;
+CREATE POLICY deleted_items_owner ON deleted_items FOR ALL TO authenticated
+  USING (user_id = public.current_profile_id()) WITH CHECK (user_id = public.current_profile_id());

@@ -18,6 +18,8 @@ import {
   bulkSync,
   uploadDocumentFile,
   downloadDocumentFile,
+  recordTombstone,
+  listTombstones,
 } from "../lib/supabase";
 
 const AppContext = createContext(null);
@@ -48,6 +50,8 @@ export function AppProvider({ children, onNavigate }) {
   const [data, setData] = useState(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
   const userIdRef = useRef(null);
+  const dataRef = useRef(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
 
   // ─── Auth: read from Clerk ────────────────────────────────
   const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
@@ -99,6 +103,15 @@ export function AppProvider({ children, onNavigate }) {
             if (raw) local = JSON.parse(raw);
           } catch { /* ignore */ }
 
+          // Deletion ledger: anything deleted anywhere stays deleted.
+          let tombstones = new Set();
+          try { tombstones = await listTombstones(profileId); } catch { /* offline */ }
+          if (tombstones.size > 0) {
+            for (const key of COLLECTION_KEYS) {
+              if (merged[key]?.length) merged[key] = merged[key].filter(x => !tombstones.has(x?.id));
+            }
+          }
+
           if (local) {
             // Self-healing sync: any item that exists on this device but not
             // in the cloud gets pushed up on every load — a save whose cloud
@@ -112,7 +125,7 @@ export function AppProvider({ children, onNavigate }) {
               const localItems = local[key] || [];
               if (localItems.length === 0) continue;
               const cloudIds = new Set((merged[key] || []).map(x => x?.id));
-              const missing = localItems.filter(x => x?.id && !cloudIds.has(x.id));
+              const missing = localItems.filter(x => x?.id && !cloudIds.has(x.id) && !tombstones.has(x.id));
               if (missing.length > 0) {
                 merged[key] = [...(merged[key] || []), ...missing];
                 bulkSync(profileId, key, missing).catch(() => {});
@@ -127,6 +140,21 @@ export function AppProvider({ children, onNavigate }) {
               console.log(`CredentialDOMD: pushed ${pushed} local item(s) to cloud`);
             }
           }
+
+          // Link sweep: a document pointing at an item that no longer exists
+          // becomes unlinked (visible in Files) instead of phantom-linked.
+          const liveIds = new Set();
+          for (const key of COLLECTION_KEYS) {
+            if (key === "documents") continue;
+            for (const x of merged[key] || []) if (x?.id) liveIds.add(`${key}:${x.id}`);
+          }
+          merged.documents = (merged.documents || []).map(d => {
+            if (d.linkedTo && !liveIds.has(d.linkedTo)) {
+              sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }).catch(() => {});
+              return { ...d, linkedTo: "" };
+            }
+            return d;
+          });
 
           setData(merged);
           setLoaded(true);
@@ -243,9 +271,21 @@ export function AppProvider({ children, onNavigate }) {
   }, [updateSection]);
 
   const deleteItemFn = useCallback((key, id) => {
+    const profileId = userIdRef.current;
+    // Cascade: documents attached to this item are deleted with it —
+    // row, cloud file, and tombstone — so nothing orphans.
+    if (key !== "documents") {
+      const linkedDocs = (dataRef.current.documents || []).filter(d => d.linkedTo === `${key}:${id}`);
+      for (const doc of linkedDocs) {
+        updateSection("documents", items => items.filter(x => x.id !== doc.id));
+        sbDelete(profileId, "documents", doc.id).catch(() => {});
+        recordTombstone(profileId, "documents", doc.id).catch(() => {});
+      }
+    }
     updateSection(key, items => items.filter(x => x.id !== id));
-    // Sync to Supabase
-    sbDelete(userIdRef.current, key, id).catch(() => {});
+    sbDelete(profileId, key, id).catch(() => {});
+    // The tombstone makes this delete final across every device.
+    recordTombstone(profileId, key, id).catch(() => {});
   }, [updateSection]);
 
   // Tracked states (memoized)

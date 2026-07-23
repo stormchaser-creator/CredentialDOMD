@@ -352,6 +352,28 @@ export async function bulkSync(userId, collectionKey, items) {
   if (error) console.warn(`Failed to bulk sync ${collectionKey}:`, error.message);
 }
 
+// ─── Deletion ledger ─────────────────────────────────────────
+// A delete recorded here is final across all devices: loads prune these ids
+// and the self-healing push skips them, so stale devices can't resurrect.
+export async function recordTombstone(userId, collectionKey, itemId) {
+  if (!supabase || !userId || !itemId) return;
+  const { error } = await supabase.from("deleted_items").upsert(
+    { item_id: itemId, user_id: userId, collection: collectionKey },
+    { onConflict: "item_id" }
+  );
+  if (error) console.warn("Failed to record deletion:", error.message);
+}
+
+export async function listTombstones(userId) {
+  if (!supabase || !userId) return new Set();
+  const { data, error } = await supabase
+    .from("deleted_items")
+    .select("item_id")
+    .eq("user_id", userId);
+  if (error || !data) return new Set();
+  return new Set(data.map((r) => r.item_id));
+}
+
 // ─── Delete all user data ────────────────────────────────────
 export async function deleteAllData(userId) {
   if (!supabase || !userId) return;
