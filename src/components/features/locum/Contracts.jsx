@@ -7,6 +7,7 @@ import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, EditIcon, TrashIcon, FileIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
 import DocAttach from "../DocAttach";
+import { analyzeAgreement } from "../../../utils/documentScanner";
 
 /**
  * Contracts — locum agreements with the terms that drive billing.
@@ -39,6 +40,10 @@ function Contracts() {
       id: itemId,
       hourlyRate: parseFloat(form.hourlyRate) || 0,
       callHourlyRate: parseFloat(form.callHourlyRate) || 0,
+      callStipend: parseFloat(form.callStipend) || 0,
+      stipendHours: parseFloat(form.stipendHours) || 0,
+      overageHourlyRate: parseFloat(form.overageHourlyRate) || 0,
+      orientationFee: parseFloat(form.orientationFee) || 0,
       incrementMinutes: parseInt(form.incrementMinutes, 10) || 15,
       minCallMinutes: parseInt(form.minCallMinutes, 10) || 15,
     };
@@ -90,15 +95,23 @@ function Contracts() {
           <Field label="End Date"><input type="date" value={form.endDate || ""} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} style={iS} /></Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Field label="Hourly rate ($/hr)"><input type="number" inputMode="decimal" value={form.hourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, hourlyRate: e.target.value }))} style={iS} placeholder="250" /></Field>
-          <Field label="Call rate ($/hr)" hint="Blank = same as hourly"><input type="number" inputMode="decimal" value={form.callHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, callHourlyRate: e.target.value }))} style={iS} placeholder="150" /></Field>
+          <Field label="Call stipend ($/day)" hint="Flat amount per on-call day"><input type="number" inputMode="decimal" value={form.callStipend ?? ""} onChange={e => setForm(f => ({ ...f, callStipend: e.target.value }))} style={iS} placeholder="3000" /></Field>
+          <Field label="Stipend covers (hours)"><input type="number" inputMode="decimal" value={form.stipendHours ?? ""} onChange={e => setForm(f => ({ ...f, stipendHours: e.target.value }))} style={iS} placeholder="4" /></Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <Field label="After-stipend rate ($/hr)" hint="Hours beyond the stipend"><input type="number" inputMode="decimal" value={form.overageHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, overageHourlyRate: e.target.value }))} style={iS} placeholder="300" /></Field>
+          <Field label="Orientation fee ($, one-time)"><input type="number" inputMode="decimal" value={form.orientationFee ?? ""} onChange={e => setForm(f => ({ ...f, orientationFee: e.target.value }))} style={iS} placeholder="0" /></Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <Field label="Hourly rate ($/hr)" hint="Regular non-call work"><input type="number" inputMode="decimal" value={form.hourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, hourlyRate: e.target.value }))} style={iS} placeholder="250" /></Field>
+          <Field label="Flat call rate ($/hr)" hint="Only if no stipend model"><input type="number" inputMode="decimal" value={form.callHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, callHourlyRate: e.target.value }))} style={iS} placeholder="150" /></Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="Billing increment (min)" hint="Time rounds UP to this"><input type="number" inputMode="numeric" value={form.incrementMinutes ?? 15} onChange={e => setForm(f => ({ ...f, incrementMinutes: e.target.value }))} style={iS} /></Field>
           <Field label="Minimum per call (min)"><input type="number" inputMode="numeric" value={form.minCallMinutes ?? 15} onChange={e => setForm(f => ({ ...f, minCallMinutes: e.target.value }))} style={iS} /></Field>
         </div>
         <Field label="Key terms / notes" hint="Cancellation clause, guaranteed hours, travel, etc."><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 60, resize: "vertical" }} /></Field>
-        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} />
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} analyzer={analyzeAgreement} />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{editItem ? "Save" : "Add"}</button>
@@ -120,8 +133,11 @@ function Contracts() {
                     {[
                       item.agency,
                       item.startDate && `${formatDate(item.startDate)}${item.endDate ? " – " + formatDate(item.endDate) : ""}`,
+                      item.callStipend ? `$${item.callStipend}/call day (first ${item.stipendHours || 0}h)` : null,
+                      item.overageHourlyRate ? `then $${item.overageHourlyRate}/hr` : null,
                       item.hourlyRate ? `$${item.hourlyRate}/hr` : null,
-                      item.callHourlyRate ? `call $${item.callHourlyRate}/hr` : null,
+                      !item.callStipend && item.callHourlyRate ? `call $${item.callHourlyRate}/hr` : null,
+                      item.orientationFee ? `orientation $${item.orientationFee}` : null,
                       `${item.incrementMinutes || 15}-min increments`,
                     ].filter(Boolean).join(" · ")}
                   </div>

@@ -17,7 +17,7 @@ import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
  *  - setForm(fn): form state setter — extracted fields are merged in
  *  - attachedDocs / setAttachedDocs: pending files, saved+linked by the parent
  */
-function DocAttach({ setForm, attachedDocs, setAttachedDocs }) {
+function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer }) {
   const { data, theme: T } = useApp();
   const uploadRef = useRef(null);
   const cameraRef = useRef(null);
@@ -51,9 +51,11 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs }) {
         setMsg(null);
         setIsError(false);
         try {
-          const result = file.type === "application/pdf"
-            ? await analyzePDF(dataUrl, deg, apiKey)
-            : await analyzeDocument(dataUrl, deg, apiKey);
+          const result = analyzer
+            ? await analyzer(dataUrl, apiKey)
+            : file.type === "application/pdf"
+              ? await analyzePDF(dataUrl, deg, apiKey)
+              : await analyzeDocument(dataUrl, deg, apiKey);
           const extracted = result?.extracted || result?.fields;
           if (extracted && typeof extracted === "object") {
             setForm((prev) => {
@@ -75,7 +77,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs }) {
         setScanning(false);
       }
     }
-  }, [data.settings.apiKey, data.settings.degreeType, requireApiKey, setAttachedDocs, setForm]);
+  }, [data.settings.apiKey, data.settings.degreeType, requireApiKey, setAttachedDocs, setForm, analyzer]);
 
   return (
     <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>

@@ -197,3 +197,13 @@ BEGIN
 END $$;
 CREATE POLICY subscriptions_owner_select ON subscriptions FOR SELECT TO authenticated
   USING (auth_user_id = (auth.jwt()->>'sub'));
+
+-- Stipend-model contract terms (applied live 2026-07-23):
+-- call stipend per coverage day covering the first N hours, overage rate
+-- beyond them, and a one-time orientation fee billed on first invoice.
+ALTER TABLE locum_contracts
+  ADD COLUMN IF NOT EXISTS call_stipend NUMERIC(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS stipend_hours NUMERIC(6,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS overage_hourly_rate NUMERIC(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS orientation_fee NUMERIC(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS orientation_billed BOOLEAN DEFAULT false;

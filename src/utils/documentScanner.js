@@ -197,3 +197,69 @@ export async function analyzePDF(pdfData, degreeType, apiKey) {
   }
   return result;
 }
+
+// ─── Locum agreement analyzer ────────────────────────────────────────────
+// Extracts the billing terms a locum contract runs on. Unlike credential
+// documents, agreements aren't classified — the caller already knows what
+// this is; we only pull the fields the Contracts form uses.
+
+const AGREEMENT_PROMPT = `You are analyzing a locum tenens / physician services agreement.
+Extract the business and billing terms. Return ONLY valid JSON (no markdown, no backticks).
+
+Fields to extract (omit any not present):
+- facility: hospital or practice name the physician works AT
+- agency: staffing agency, if the agreement is through one
+- billTo: billing/AP contact email if listed
+- startDate, endDate: assignment period (YYYY-MM-DD)
+- hourlyRate: flat hourly rate in dollars for regular (non-call) work, number only
+- callStipend: flat amount paid per on-call day/shift (e.g. "$3000 for the first 4 hours" -> 3000), number only
+- stipendHours: how many worked hours the call stipend covers (e.g. 4), number
+- overageHourlyRate: hourly rate in dollars for time BEYOND the stipend hours (e.g. 300), number
+- callHourlyRate: simple per-hour call rate in dollars IF the contract uses flat hourly call pay instead of a stipend
+- orientationFee: one-time orientation/onboarding payment in dollars, number
+- incrementMinutes: billing increment in minutes if stated (e.g. 15)
+- minCallMinutes: minimum billable time per call if stated, in minutes
+- notes: 1-3 sentence summary of other key terms (cancellation clause, travel, guaranteed hours, malpractice coverage)
+
+Return JSON: { "extracted": { ...fields }, "confidence": "high"|"medium"|"low" }
+Numbers must be plain numbers without $ signs or commas.`;
+
+export async function analyzeAgreement(dataUrl, apiKey) {
+  if (!apiKey) {
+    throw new Error("No API key configured. Add your Gemini API key in Settings.");
+  }
+  if (!isValidDataUrl(dataUrl)) {
+    throw new Error("Invalid file data. Please try uploading again.");
+  }
+  const isPdf = dataUrl.startsWith("data:application/pdf");
+  const payload = isPdf ? dataUrl : await compressImage(dataUrl);
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: AGREEMENT_PROMPT }] },
+      contents: [{
+        parts: [
+          {
+            inlineData: {
+              mimeType: isPdf ? "application/pdf" : getMediaType(payload),
+              data: extractBase64(payload),
+            },
+          },
+          { text: "Extract the locum agreement terms. Return only JSON." },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 2000 },
+    }),
+  });
+
+  if (!response.ok) handleApiError(response.status);
+
+  const json = await response.json();
+  const parsed = parseResponse(json);
+  if (!parsed || typeof parsed.extracted !== "object") {
+    throw new Error("Could not read agreement terms from this document.");
+  }
+  return parsed;
+}

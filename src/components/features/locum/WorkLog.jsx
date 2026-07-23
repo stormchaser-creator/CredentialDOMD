@@ -76,6 +76,67 @@ function WorkLog() {
     return type === "Call" ? (c.callHourlyRate || c.hourlyRate || 0) : (c.hourlyRate || 0);
   }, []);
 
+  /**
+   * Billing engine. Two call models:
+   *  - Stipend (callStipend > 0): each date with call coverage bills the flat
+   *    stipend, which covers the first stipendHours of call work; call time
+   *    beyond that bills at overageHourlyRate. "CallDay" entries mark
+   *    coverage on days with zero phone calls.
+   *  - Flat: every Call entry bills at callHourlyRate (or hourlyRate).
+   * Non-call work always bills hourly. Orientation fee bills once, on the
+   * first invoice for the contract.
+   */
+  const computeBilling = useCallback((c, list, includeOrientation) => {
+    if (!c) return { lines: [], total: 0, totalMin: 0, orientationIncluded: false };
+    const lines = [];
+    let total = 0, totalMin = 0;
+    const stipendModel = (c.callStipend || 0) > 0;
+
+    const callish = list.filter(e => e.type === "Call" || e.type === "CallDay");
+    const others = list.filter(e => e.type !== "Call" && e.type !== "CallDay");
+
+    if (stipendModel) {
+      const byDate = {};
+      for (const e of callish) (byDate[e.date] = byDate[e.date] || []).push(e);
+      for (const date of Object.keys(byDate).sort()) {
+        const dayEntries = byDate[date];
+        const calls = dayEntries.filter(e => e.type === "Call");
+        const callMin = calls.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+        totalMin += callMin;
+        total += c.callStipend;
+        lines.push({ date, label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h)`, detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged", amount: c.callStipend });
+        const overMin = Math.max(0, callMin - (c.stipendHours || 0) * 60);
+        if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
+          const amt = (overMin / 60) * c.overageHourlyRate;
+          total += amt;
+          lines.push({ date, label: `Call time beyond stipend`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+        }
+      }
+    } else {
+      for (const e of callish.filter(x => x.type === "Call")) {
+        const rate = rateFor("Call", c);
+        const amt = ((e.billedMin || 0) / 60) * rate;
+        totalMin += e.billedMin || 0; total += amt;
+        lines.push({ date: e.date, label: `Call${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt });
+      }
+    }
+
+    for (const e of others) {
+      const rate = rateFor(e.type, c);
+      const amt = ((e.billedMin || 0) / 60) * rate;
+      totalMin += e.billedMin || 0; total += amt;
+      lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt });
+    }
+
+    let orientationIncluded = false;
+    if (includeOrientation && (c.orientationFee || 0) > 0 && !c.orientationBilled) {
+      total += c.orientationFee;
+      orientationIncluded = true;
+      lines.push({ date: null, label: "Orientation (one-time)", detail: "", amount: c.orientationFee });
+    }
+    return { lines, total, totalMin, orientationIncluded };
+  }, [rateFor]);
+
   const startTimer = useCallback((type) => {
     if (!contract) return;
     const t = { contractId: contract.id, type, startedAt: new Date().toISOString() };
@@ -136,8 +197,8 @@ function WorkLog() {
   );
   const unbilled = useMemo(() => contractEntries.filter(e => !e.invoiceId), [contractEntries]);
   const unbilledTotal = useMemo(
-    () => unbilled.reduce((sum, e) => sum + (e.billedMin / 60) * rateFor(e.type, contract), 0),
-    [unbilled, contract, rateFor]
+    () => computeBilling(contract, unbilled, true).total,
+    [unbilled, contract, computeBilling]
   );
 
   const buildInvoice = useCallback(() => {
@@ -153,28 +214,31 @@ function WorkLog() {
     if (s.email) lines.push(`Email: ${s.email}`);
     lines.push(`To: ${contract.facility}${contract.agency ? " (via " + contract.agency + ")" : ""}`);
     lines.push(`Period: ${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`);
-    lines.push(`Terms: billed in ${contract.incrementMinutes || 15}-minute increments` +
+    lines.push(`Terms: ` +
+      ((contract.callStipend || 0) > 0
+        ? `${money(contract.callStipend)} per call day covering first ${contract.stipendHours || 0}h, then ${money(contract.overageHourlyRate || 0)}/hr; `
+        : "") +
+      `billed in ${contract.incrementMinutes || 15}-minute increments` +
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : ""));
     lines.push(div);
-    let totalMin = 0, total = 0;
-    for (const e of unbilled) {
-      const rate = rateFor(e.type, contract);
-      const amt = (e.billedMin / 60) * rate;
-      totalMin += e.billedMin; total += amt;
-      const when = e.startTime ? `${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : "";
-      lines.push(`${formatDate(e.date)}  ${e.type}${e.description ? " — " + e.description : ""}`);
-      lines.push(`   ${when ? when + " · " : ""}${e.billedMin} min billed @ ${money(rate)}/hr = ${money(amt)}`);
+    const billing = computeBilling(contract, unbilled, true);
+    for (const l of billing.lines) {
+      lines.push(`${l.date ? formatDate(l.date) + "  " : ""}${l.label}`);
+      lines.push(`   ${l.detail ? l.detail + " = " : ""}${money(l.amount)}`);
     }
     lines.push(div);
-    lines.push(`Total time billed: ${(totalMin / 60).toFixed(2)} hours`);
-    lines.push(`TOTAL DUE: ${money(total)}`);
+    lines.push(`Total call/work time: ${(billing.totalMin / 60).toFixed(2)} hours`);
+    lines.push(`TOTAL DUE: ${money(billing.total)}`);
     lines.push("", `Generated by CredentialDOMD · ${new Date().toLocaleDateString()}`);
-    setInvoicePreview({ text: lines.join("\n"), entryIds: unbilled.map(e => e.id), total, number: num });
-  }, [contract, unbilled, data.settings, data.invoices, rateFor]);
+    setInvoicePreview({ text: lines.join("\n"), entryIds: unbilled.map(e => e.id), total: billing.total, number: num, orientationIncluded: billing.orientationIncluded });
+  }, [contract, unbilled, data.settings, data.invoices, computeBilling]);
 
   const markBilledAndLog = useCallback((method) => {
     if (!invoicePreview) return;
     const invId = generateId();
+    if (invoicePreview.orientationIncluded && contract) {
+      editItem("locumContracts", { ...contract, orientationBilled: true });
+    }
     for (const id of invoicePreview.entryIds) {
       const e = entries.find(x => x.id === id);
       if (e) editItem("workLog", { ...e, invoiceId: invId });
@@ -268,6 +332,20 @@ function WorkLog() {
             }}>
               📞 Got a call — start timer
             </button>
+            {(contract?.callStipend || 0) > 0 && !contractEntries.some(e => e.date === new Date().toISOString().slice(0, 10) && (e.type === "Call" || e.type === "CallDay")) && (
+              <button onClick={() => addItem("workLog", {
+                id: generateId(), contractId: contract.id, type: "CallDay",
+                date: new Date().toISOString().slice(0, 10),
+                startTime: null, endTime: null, durationMin: 0, billedMin: 0,
+                description: "On-call coverage", invoiceId: null,
+              })} style={{
+                width: "100%", padding: "12px", borderRadius: 12, marginBottom: 8,
+                border: `2px solid ${T.accent}`, backgroundColor: "transparent",
+                color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
+              }}>
+                🏥 I'm on call today — bill the stipend
+              </button>
+            )}
             <div style={{ display: "flex", gap: 6 }}>
               {["Shift", "Procedure", "Rounding"].map(t2 => (
                 <button key={t2} onClick={() => startTimer(t2)} style={{
