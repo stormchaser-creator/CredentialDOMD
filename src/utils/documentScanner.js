@@ -21,7 +21,7 @@ function extractBase64(dataUrl) {
   return dataUrl.split(",")[1];
 }
 
-const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "unknown"];
+const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "unknown"];
 
 function validateResponse(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
@@ -112,6 +112,8 @@ ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical Licens
 - "education": Diploma, degree certificate, graduation certificate, fellowship completion, residency completion, training certificate
   Fields: type (MUST be one of: "Doctor of Osteopathic Medicine (DO)", "Doctor of Medicine (MD)", "Bachelor of Science (BS)", "Bachelor of Arts (BA)", "Master of Science (MS)", "Master of Public Health (MPH)", "Fellowship Certificate", "Residency Certificate", "Internship Certificate", "Other"), name (display name, e.g. "DO Diploma - PCOM"), institution (school/program name), graduationDate (YYYY-MM-DD), fieldOfStudy (specialty or major), honors (e.g. "Cum Laude")
   IMPORTANT: Diplomas and degrees do NOT expire. Do NOT put the graduation date in expirationDate. Use the graduationDate field instead.
+- "agreement": Locum tenens agreement, physician services agreement, independent contractor agreement, employment/coverage contract with a hospital or staffing agency
+  Fields: facility (hospital/practice the physician works AT), agency (staffing agency if any), billTo (billing/AP email if listed), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), hourlyRate (number, $/hr for regular non-call work), callStipend (number — flat amount per on-call day, e.g. "$3000 for the first 4 hours" -> 3000), stipendHours (number of hours the stipend covers, e.g. 4), overageHourlyRate (number, $/hr for call time BEYOND the stipend hours), callHourlyRate (number, only if flat hourly call pay with no stipend), orientationFee (number, one-time orientation payment), incrementMinutes (billing increment if stated, e.g. 15), minCallMinutes (minimum billable minutes per call if stated), notes (1-2 sentence summary of other key terms). Numbers must be plain numbers without $ or commas.
 - "unknown": Cannot determine document type
 
 The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : "an MD"}.

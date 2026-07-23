@@ -36,6 +36,20 @@ const FIELD_DEFS = {
     { key: "institution", label: "Institution" }, { key: "graduationDate", label: "Graduation Date", type: "date" },
     { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" },
   ],
+  agreement: [
+    { key: "facility", label: "Hospital / Facility" }, { key: "agency", label: "Agency" },
+    { key: "billTo", label: "Invoice recipient email" },
+    { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" },
+    { key: "callStipend", label: "Call stipend ($/day)", type: "number" },
+    { key: "stipendHours", label: "Stipend covers (hours)", type: "number" },
+    { key: "overageHourlyRate", label: "After-stipend rate ($/hr)", type: "number" },
+    { key: "orientationFee", label: "Orientation fee ($, one-time)", type: "number" },
+    { key: "hourlyRate", label: "Hourly rate ($/hr)", type: "number" },
+    { key: "callHourlyRate", label: "Flat call rate ($/hr)", type: "number" },
+    { key: "incrementMinutes", label: "Billing increment (min)", type: "number" },
+    { key: "minCallMinutes", label: "Minimum per call (min)", type: "number" },
+    { key: "notes", label: "Key terms / notes" },
+  ],
 };
 
 const TYPE_OPTIONS = {
@@ -86,7 +100,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       {/* Reclassify */}
       <div style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: 4, borderBottom: `1px solid ${T.border}` }}>
         <span style={{ fontSize: 12, color: T.textDim, marginRight: 6 }}>Not right?</span>
-        {["license", "cme", "privilege", "insurance", "healthRecord", "education"].map(dt => (
+        {["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement"].map(dt => (
           <button key={dt} onClick={() => setDocType(dt)} style={{
             padding: "4px 10px", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
             backgroundColor: dt === docType ? meta.color : T.input,

@@ -179,5 +179,6 @@ export const SECTION_META = {
   insurance: { label: "Insurance Policy", icon: "\ud83d\udee1\ufe0f", color: "#ef4444", section: "insurance" },
   healthRecord: { label: "Health Record", icon: "\ud83d\udc89", color: "#ec4899", section: "healthRecords" },
   education: { label: "Education / Training", icon: "\ud83c\udf93", color: "#8b5cf6", section: "education" },
+  agreement: { label: "Locum Agreement", icon: "\ud83d\udcdd", color: "#0ea5e9", section: "locumContracts" },
   unknown: { label: "Unrecognized Document", icon: "\u2753", color: "#6b7280", section: null },
 };

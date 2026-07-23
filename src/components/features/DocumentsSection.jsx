@@ -82,6 +82,7 @@ function DocumentsSection() {
     ...data.cme.map(c => ({ value: `cme:${c.id}`, label: `CME: ${c.title || c.category}` })),
     ...(data.healthRecords || []).map(h => ({ value: `healthRecords:${h.id}`, label: `Health: ${h.name || h.type || h.category}` })),
     ...(data.education || []).map(e => ({ value: `education:${e.id}`, label: `Education: ${e.name || e.type || e.institution}` })),
+    ...(data.locumContracts || []).map(c => ({ value: `locumContracts:${c.id}`, label: `Agreement: ${c.facility || "Contract"}` })),
   ];
 
   const handleFiles = useCallback(async (files) => {
@@ -161,6 +162,14 @@ function DocumentsSection() {
     if (!section) return;
     const entry = { ...fields, id };
     if (section === "cme" && !entry.topics) entry.topics = [];
+    if (section === "locumContracts") {
+      // Contract terms drive billing math — coerce to numbers with defaults.
+      for (const k of ["hourlyRate", "callHourlyRate", "callStipend", "stipendHours", "overageHourlyRate", "orientationFee"]) {
+        entry[k] = parseFloat(entry[k]) || 0;
+      }
+      entry.incrementMinutes = parseInt(entry.incrementMinutes, 10) || 15;
+      entry.minCallMinutes = parseInt(entry.minCallMinutes, 10) || 15;
+    }
 
     // Add the credential entry
     addItem(section, entry);
@@ -284,7 +293,7 @@ function DocumentsSection() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {data.documents.map(doc => {
               const sectionKey = doc.linkedTo?.split(":")[0];
-              const metaKey = sectionKey === "licenses" ? "license" : sectionKey === "cme" ? "cme" : sectionKey === "privileges" ? "privilege" : sectionKey === "insurance" ? "insurance" : sectionKey === "healthRecords" ? "healthRecord" : sectionKey === "education" ? "education" : "unknown";
+              const metaKey = sectionKey === "licenses" ? "license" : sectionKey === "cme" ? "cme" : sectionKey === "privileges" ? "privilege" : sectionKey === "insurance" ? "insurance" : sectionKey === "healthRecords" ? "healthRecord" : sectionKey === "education" ? "education" : sectionKey === "locumContracts" ? "agreement" : "unknown";
               const linkedMeta = doc.linkedTo ? SECTION_META[metaKey] : null;
 
               return (
