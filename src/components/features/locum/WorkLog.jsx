@@ -357,7 +357,6 @@ function WorkLog() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {contractEntries.slice(0, 50).map(e => {
-            const amt = (e.billedMin / 60) * rateFor(e.type, contract);
             return (
               <div key={e.id} style={{
                 display: "flex", alignItems: "center", gap: 10,
@@ -374,7 +373,7 @@ function WorkLog() {
                     {formatDate(e.date)}{e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · {e.durationMin} min → billed {e.billedMin} min
                   </div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: T.accent, flexShrink: 0 }}>{money(amt)}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{e.billedMin}m</div>
                 {!e.invoiceId && (
                   <button onClick={() => { if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{
                     padding: "5px 7px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
