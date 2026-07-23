@@ -52,6 +52,7 @@ function Contracts() {
       stipendHours: parseFloat(form.stipendHours) || 0,
       overageHourlyRate: parseFloat(form.overageHourlyRate) || 0,
       orientationFee: parseFloat(form.orientationFee) || 0,
+      orientationHourlyRate: parseFloat(form.orientationHourlyRate) || 0,
       incrementMinutes: parseInt(form.incrementMinutes, 10) || 15,
       minCallMinutes: parseInt(form.minCallMinutes, 10) || 15,
     };
@@ -103,7 +104,11 @@ function Contracts() {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="After-stipend rate ($/hr)" hint="Hours beyond the stipend"><input type="number" inputMode="decimal" value={form.overageHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, overageHourlyRate: e.target.value }))} style={iS} placeholder="300" /></Field>
-          <Field label="Orientation fee ($, one-time)"><input type="number" inputMode="decimal" value={form.orientationFee ?? ""} onChange={e => setForm(f => ({ ...f, orientationFee: e.target.value }))} style={iS} placeholder="0" /></Field>
+          <Field label="Orientation rate ($/hr)" hint="If orientation is paid hourly"><input type="number" inputMode="decimal" value={form.orientationHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, orientationHourlyRate: e.target.value }))} style={iS} placeholder="150" /></Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <Field label="Orientation fee ($, one-time)" hint="If flat instead of hourly"><input type="number" inputMode="decimal" value={form.orientationFee ?? ""} onChange={e => setForm(f => ({ ...f, orientationFee: e.target.value }))} style={iS} placeholder="0" /></Field>
+          <div />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="Hourly rate ($/hr)" hint="Regular non-call work"><input type="number" inputMode="decimal" value={form.hourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, hourlyRate: e.target.value }))} style={iS} placeholder="250" /></Field>
@@ -143,6 +148,7 @@ function Contracts() {
                       item.overageHourlyRate ? `then $${item.overageHourlyRate}/hr` : null,
                       item.hourlyRate ? `$${item.hourlyRate}/hr` : null,
                       !item.callStipend && item.callHourlyRate ? `call $${item.callHourlyRate}/hr` : null,
+                      item.orientationHourlyRate ? `orientation $${item.orientationHourlyRate}/hr` : null,
                       item.orientationFee ? `orientation $${item.orientationFee}` : null,
                       `${item.incrementMinutes || 15}-min increments`,
                     ].filter(Boolean).join(" · ")}

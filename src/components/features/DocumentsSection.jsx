@@ -164,7 +164,7 @@ function DocumentsSection() {
     if (section === "cme" && !entry.topics) entry.topics = [];
     if (section === "locumContracts") {
       // Contract terms drive billing math — coerce to numbers with defaults.
-      for (const k of ["hourlyRate", "callHourlyRate", "callStipend", "stipendHours", "overageHourlyRate", "orientationFee"]) {
+      for (const k of ["hourlyRate", "callHourlyRate", "callStipend", "stipendHours", "overageHourlyRate", "orientationFee", "orientationHourlyRate"]) {
         entry[k] = parseFloat(entry[k]) || 0;
       }
       entry.incrementMinutes = parseInt(entry.incrementMinutes, 10) || 15;

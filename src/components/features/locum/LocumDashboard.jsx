@@ -13,7 +13,6 @@
 import { useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import MultiStateMatrix from "./MultiStateMatrix";
-import HospitalRotations from "./HospitalRotations";
 import DeductionMemo from "./DeductionMemo";
 import WorkLog from "./WorkLog";
 import Contracts from "./Contracts";
@@ -22,7 +21,6 @@ const SUBTABS = [
   { id: "work", label: "Work" },
   { id: "contracts", label: "Contracts" },
   { id: "matrix", label: "Matrix" },
-  { id: "rotations", label: "Rotations" },
   { id: "deductions", label: "Deductions" },
 ];
 
@@ -73,7 +71,6 @@ export default function LocumDashboard() {
       {sub === "work" && <WorkLog />}
       {sub === "contracts" && <Contracts />}
       {sub === "matrix" && <MultiStateMatrix />}
-      {sub === "rotations" && <HospitalRotations />}
       {sub === "deductions" && <DeductionMemo />}
     </div>
   );

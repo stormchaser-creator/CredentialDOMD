@@ -222,3 +222,11 @@ ALTER TABLE deleted_items ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS deleted_items_owner ON deleted_items;
 CREATE POLICY deleted_items_owner ON deleted_items FOR ALL TO authenticated
   USING (user_id = public.current_profile_id()) WITH CHECK (user_id = public.current_profile_id());
+
+-- Hourly orientation pay (Eric's Penrose agreement: orientation @ $150/hr)
+-- + missing timestamp columns that silently failed every documents /
+-- share_log / notification_log insert (applied live 2026-07-23).
+ALTER TABLE locum_contracts ADD COLUMN IF NOT EXISTS orientation_hourly_rate NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE share_log ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(), ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE notification_log ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(), ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();

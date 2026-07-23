@@ -122,8 +122,15 @@ function WorkLog() {
     }
 
     for (const e of others) {
-      // Orientation covered by a flat fee bills $0 as time (the fee itself
-      // is its own line on the first invoice); otherwise it's hourly work.
+      // Orientation: hourly orientation rate if the contract has one;
+      // else covered by a flat fee ($0 as time — the fee is its own line);
+      // else plain hourly work.
+      if (e.type === "Orientation" && (c.orientationHourlyRate || 0) > 0) {
+        const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
+        totalMin += e.billedMin || 0; total += amt;
+        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt });
+        continue;
+      }
       if (e.type === "Orientation" && (c.orientationFee || 0) > 0) {
         totalMin += e.billedMin || 0;
         lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min — covered by orientation fee`, amount: 0 });

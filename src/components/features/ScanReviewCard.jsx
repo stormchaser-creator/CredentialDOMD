@@ -43,6 +43,7 @@ const FIELD_DEFS = {
     { key: "callStipend", label: "Call stipend ($/day)", type: "number" },
     { key: "stipendHours", label: "Stipend covers (hours)", type: "number" },
     { key: "overageHourlyRate", label: "After-stipend rate ($/hr)", type: "number" },
+    { key: "orientationHourlyRate", label: "Orientation rate ($/hr)", type: "number" },
     { key: "orientationFee", label: "Orientation fee ($, one-time)", type: "number" },
     { key: "hourlyRate", label: "Hourly rate ($/hr)", type: "number" },
     { key: "callHourlyRate", label: "Flat call rate ($/hr)", type: "number" },
