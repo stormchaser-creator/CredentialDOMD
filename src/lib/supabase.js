@@ -234,6 +234,55 @@ export async function saveSettings(userId, settings) {
   if (error) console.warn("Failed to save settings:", error.message);
 }
 
+// ─── Document file storage (bucket: documents, path: <clerkSub>/<docId>) ──
+// The documents table syncs metadata; the file bytes go to Storage so a
+// lost phone doesn't mean lost scans. Path is deterministic from the doc id.
+
+function dataUrlToBlob(dataUrl) {
+  try {
+    const [head, b64] = dataUrl.split(",");
+    if (!b64) return null;
+    const mime = head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  } catch { return null; }
+}
+
+function clerkSub() {
+  return (typeof window !== "undefined" && window.Clerk?.user?.id) || null;
+}
+
+export function documentStoragePath(docId) {
+  const sub = clerkSub();
+  return sub ? `${sub}/${docId}` : null;
+}
+
+export async function uploadDocumentFile(item) {
+  if (!supabase || !item?.data) return null;
+  const path = documentStoragePath(item.id);
+  if (!path) return null;
+  const blob = dataUrlToBlob(item.data);
+  if (!blob) return null;
+  const { error } = await supabase.storage.from("documents")
+    .upload(path, blob, { contentType: item.type || blob.type, upsert: true });
+  if (error) { console.warn("Document file upload failed:", error.message); return null; }
+  return path;
+}
+
+export async function downloadDocumentFile(storagePath) {
+  if (!supabase || !storagePath) return null;
+  const { data, error } = await supabase.storage.from("documents").download(storagePath);
+  if (error || !data) return null;
+  return await new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = (e) => resolve(e.target.result);
+    r.onerror = () => resolve(null);
+    r.readAsDataURL(data);
+  });
+}
+
 // ─── Collection CRUD ─────────────────────────────────────────
 export async function insertItem(userId, collectionKey, item) {
   if (!supabase || !userId) return;
@@ -244,6 +293,13 @@ export async function insertItem(userId, collectionKey, item) {
   row.user_id = userId;
   row.created_at = new Date().toISOString();
   row.updated_at = row.created_at;
+  // Documents: push the file bytes to Storage and record where they live.
+  if (collectionKey === "documents" && item.data) {
+    const path = await uploadDocumentFile(item);
+    if (path) row.storage_path = path;
+    row.mime_type = item.type || null;
+    row.size_bytes = item.size || null;
+  }
   const { error } = await supabase.from(table).insert(row);
   if (error) console.warn(`Failed to insert ${collectionKey}:`, error.message);
 }
@@ -266,6 +322,10 @@ export async function updateItem(userId, collectionKey, item) {
 
 export async function deleteItem(userId, collectionKey, itemId) {
   if (!supabase || !userId) return;
+  if (collectionKey === "documents") {
+    const path = documentStoragePath(itemId);
+    if (path) supabase.storage.from("documents").remove([path]).catch(() => {});
+  }
   const table = tableName(collectionKey);
   const { error } = await supabase
     .from(table)

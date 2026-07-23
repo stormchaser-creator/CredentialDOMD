@@ -16,6 +16,8 @@ import {
   deleteItem as sbDelete,
   saveSettings as sbSaveSettings,
   bulkSync,
+  uploadDocumentFile,
+  downloadDocumentFile,
 } from "../lib/supabase";
 
 const AppContext = createContext(null);
@@ -123,6 +125,11 @@ export function AppProvider({ children, onNavigate }) {
           try {
             localStorage.setItem("credentialdomd-data", JSON.stringify(merged));
           } catch { /* quota */ }
+
+          // Background: reconcile document FILES with cloud storage.
+          //  - file on this device but not in the cloud → upload it
+          //  - metadata synced from another device without bytes → download
+          reconcileDocumentFiles(profileId, merged.documents || []);
           return;
         }
       }
@@ -132,6 +139,26 @@ export function AppProvider({ children, onNavigate }) {
 
     // Fallback to local
     loadLocalData();
+  }
+
+  async function reconcileDocumentFiles(profileId, docs) {
+    for (const doc of docs) {
+      try {
+        if (doc.data && !doc.storagePath) {
+          const path = await uploadDocumentFile(doc);
+          if (path) {
+            const updated = { ...doc, storagePath: path };
+            setData(d => ({ ...d, documents: d.documents.map(x => x.id === doc.id ? updated : x) }));
+            sbUpdate(profileId, "documents", { id: doc.id, storagePath: path }).catch(() => {});
+          }
+        } else if (!doc.data && doc.storagePath) {
+          const dataUrl = await downloadDocumentFile(doc.storagePath);
+          if (dataUrl) {
+            setData(d => ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, data: dataUrl } : x) }));
+          }
+        }
+      } catch { /* per-file best effort — retried on next load */ }
+    }
   }
 
   async function loadLocalData() {
