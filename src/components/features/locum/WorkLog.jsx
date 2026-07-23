@@ -353,19 +353,20 @@ function WorkLog() {
                 🏥 I'm on call today — bill the stipend
               </button>
             )}
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
               {["Shift", "Procedure", "Rounding"].map(t2 => (
                 <button key={t2} onClick={() => startTimer(t2)} style={{
                   flex: 1, padding: "10px 0", borderRadius: 10, border: `1px solid ${T.border}`,
                   backgroundColor: "transparent", color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer",
                 }}>{t2}</button>
               ))}
-              <button onClick={() => { setManual({ type: "Call", date: new Date().toISOString().slice(0, 10) }); setShowManual(true); }} style={{
-                flex: 1, padding: "10px 0", borderRadius: 10, border: `1px solid ${T.border}`,
-                backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4,
-              }}><PlusIcon /> Manual</button>
             </div>
+            <button onClick={() => { setManual({ type: "Call", date: new Date().toISOString().slice(0, 10) }); setShowManual(true); }} style={{
+              width: "100%", padding: "12px", borderRadius: 12,
+              border: `1px solid ${T.border}`, backgroundColor: T.input,
+              color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+            }}><PlusIcon /> Log past time — e.g. 90 min of orientation</button>
           </>
         )}
       </div>
@@ -385,7 +386,7 @@ function WorkLog() {
       )}
 
       {/* Manual entry modal */}
-      <Modal open={showManual} onClose={() => setShowManual(false)} title="Log work">
+      <Modal open={showManual} onClose={() => setShowManual(false)} title="Log past time">
         <Field label="Type">
           <select value={manual.type || "Call"} onChange={e => setManual(m => ({ ...m, type: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
             {WORK_TYPES.map(t2 => <option key={t2} value={t2}>{t2}</option>)}
