@@ -82,6 +82,9 @@ const TABLE_MAP = {
   documents: "documents",
   shareLog: "share_log",
   notificationLog: "notification_log",
+  locumContracts: "locum_contracts",
+  workLog: "work_log",
+  invoices: "invoices",
 };
 
 function tableName(key) {

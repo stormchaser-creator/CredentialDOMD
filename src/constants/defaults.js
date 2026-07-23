@@ -41,5 +41,8 @@ export const DEFAULT_DATA = {
   // Locum tier features
   rotations: [],     // [{ id, hospital, city, state, startDate, endDate, role, agency, notes }]
   deductibles: [],   // [{ id, date, category, description, amount, taxYear }]
+  locumContracts: [], // [{ id, facility, agency, billTo, startDate, endDate, hourlyRate, callHourlyRate, incrementMinutes, minCallMinutes, notes }]
+  workLog: [],        // [{ id, contractId, type, date, startTime, endTime, durationMin, billedMin, description, invoiceId }]
+  invoices: [],       // [{ id, number, contractId, periodStart, periodEnd, entryIds, totalMinutes, totalAmount, sentAt }]
   settings: { ...DEFAULT_SETTINGS },
 };

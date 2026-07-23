@@ -15,8 +15,12 @@ import { useApp } from "../../../context/AppContext";
 import MultiStateMatrix from "./MultiStateMatrix";
 import HospitalRotations from "./HospitalRotations";
 import DeductionMemo from "./DeductionMemo";
+import WorkLog from "./WorkLog";
+import Contracts from "./Contracts";
 
 const SUBTABS = [
+  { id: "work", label: "Work" },
+  { id: "contracts", label: "Contracts" },
   { id: "matrix", label: "Matrix" },
   { id: "rotations", label: "Rotations" },
   { id: "deductions", label: "Deductions" },
@@ -24,7 +28,7 @@ const SUBTABS = [
 
 export default function LocumDashboard() {
   const { theme: T, plan, isDevMode } = useApp();
-  const [sub, setSub] = useState("matrix");
+  const [sub, setSub] = useState("work");
 
   const isLocum = plan === "locum" || isDevMode;
 
@@ -56,7 +60,7 @@ export default function LocumDashboard() {
               flex: 1, padding: "8px", borderRadius: 8, border: "none",
               backgroundColor: sub === t.id ? T.card : "transparent",
               color: sub === t.id ? T.text : T.textMuted,
-              fontSize: 13, fontWeight: 700, cursor: "pointer",
+              fontSize: 12, fontWeight: 700, cursor: "pointer",
               boxShadow: sub === t.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
               transition: "all 0.15s",
             }}
@@ -66,6 +70,8 @@ export default function LocumDashboard() {
         ))}
       </div>
 
+      {sub === "work" && <WorkLog />}
+      {sub === "contracts" && <Contracts />}
       {sub === "matrix" && <MultiStateMatrix />}
       {sub === "rotations" && <HospitalRotations />}
       {sub === "deductions" && <DeductionMemo />}
@@ -98,7 +104,7 @@ function UpgradeCard({ T }) {
           style={{
             padding: "10px 16px", borderRadius: 10, border: "none",
             backgroundColor: T.accent, color: "#fff",
-            fontSize: 13, fontWeight: 700, cursor: "pointer",
+            fontSize: 12, fontWeight: 700, cursor: "pointer",
           }}
         >
           See Locum tier features

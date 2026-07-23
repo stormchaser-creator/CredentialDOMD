@@ -89,6 +89,7 @@ export function AppProvider({ children, onNavigate }) {
             "licenses", "cme", "privileges", "insurance", "healthRecords",
             "education", "caseLogs", "workHistory", "peerReferences",
             "malpracticeHistory", "documents", "shareLog", "notificationLog",
+            "rotations", "deductibles", "locumContracts", "workLog", "invoices",
           ];
           let local = null;
           try {
