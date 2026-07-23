@@ -8,13 +8,15 @@ import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
 import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS } from "../../constants/credentialTypes";
 import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
+import DocAttach from "./DocAttach";
 
 function HealthRecordsSection({ onShare }) {
-  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T } = useApp();
+  const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({});
+  const [attachedDocs, setAttachedDocs] = useState([]);
   const [filter, setFilter] = useState("all");
 
   const items = data.healthRecords || [];
@@ -30,16 +32,34 @@ function HealthRecordsSection({ onShare }) {
     return c;
   }, [items]);
 
-  const openAdd = useCallback(() => { setForm({ category: filter !== "all" ? filter : "" }); setEditItem(null); setShowForm(true); }, [filter]);
-  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setShowForm(true); }, []);
-  const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); }, []);
+  const openAdd = useCallback(() => { setForm({ category: filter !== "all" ? filter : "" }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, [filter]);
+  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
   const handleSave = useCallback(() => {
-    const entry = { ...form, id: editItem ? editItem.id : generateId() };
+    const itemId = editItem ? editItem.id : generateId();
+    const entry = { ...form, id: itemId };
     if (editItem) editItemCtx("healthRecords", entry);
     else addItem("healthRecords", entry);
+
+    // Same behavior as every other credential form: attached files are
+    // saved to Documents and linked to this record.
+    if (attachedDocs.length > 0) {
+      setData(d => ({
+        ...d,
+        documents: [
+          ...d.documents,
+          ...attachedDocs.map(doc => ({
+            id: generateId(),
+            name: doc.name, type: doc.type, size: doc.size, data: doc.data,
+            uploadedAt: new Date().toISOString(),
+            linkedTo: `healthRecords:${itemId}`,
+          })),
+        ],
+      }));
+    }
     closeForm();
-  }, [form, editItem, editItemCtx, addItem, closeForm]);
+  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs, setData]);
 
   const handleDelete = useCallback((id) => deleteItem("healthRecords", id), [deleteItem]);
 
@@ -109,6 +129,7 @@ function HealthRecordsSection({ onShare }) {
         <Field label="Lot / Batch #"><input value={form.lotNumber || ""} onChange={e => setForm(f => ({ ...f, lotNumber: e.target.value }))} style={iS} /></Field>
         <Field label="Administrator / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Employee Health, Hospital Name" /></Field>
         <Field label="Notes"><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 50, resize: "vertical" }} /></Field>
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{editItem ? "Save" : "Add"}</button>

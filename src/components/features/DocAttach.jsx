@@ -1,0 +1,124 @@
+import { useRef, useState, useCallback, memo } from "react";
+import { useApp } from "../../context/AppContext";
+import { UploadIcon, CameraIcon, FileIcon, TrashIcon } from "../shared/Icons";
+import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
+
+/**
+ * DocAttach — the ONE way to attach + scan documents from inside any
+ * credential form. Upload or photograph a document; the AI reads it,
+ * auto-fills the surrounding form (never overwriting fields the user
+ * already typed), and the file is linked to the credential on save.
+ *
+ * Used by CrudSection-style forms and HealthRecordsSection alike so every
+ * section behaves identically. The Files tab remains the "classify
+ * anything" entry point (upload there → AI decides which section it is).
+ *
+ * Props:
+ *  - setForm(fn): form state setter — extracted fields are merged in
+ *  - attachedDocs / setAttachedDocs: pending files, saved+linked by the parent
+ */
+function DocAttach({ setForm, attachedDocs, setAttachedDocs }) {
+  const { data, theme: T } = useApp();
+  const uploadRef = useRef(null);
+  const cameraRef = useRef(null);
+  const [scanning, setScanning] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [isError, setIsError] = useState(false);
+
+  const requireApiKey = useCallback(() => {
+    if (data.settings.apiKey) return true;
+    setIsError(true);
+    setMsg("Add your AI key first (Settings → API key) so documents can be read and auto-filled.");
+    return false;
+  }, [data.settings.apiKey]);
+
+  const handleFiles = useCallback(async (files) => {
+    const apiKey = data.settings.apiKey;
+    const deg = data.settings.degreeType;
+    if (!apiKey) { requireApiKey(); return; }
+
+    for (const file of Array.from(files)) {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      setAttachedDocs((prev) => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
+
+      if (file.type.startsWith("image/") || file.type === "application/pdf") {
+        setScanning(true);
+        setMsg(null);
+        setIsError(false);
+        try {
+          const result = file.type === "application/pdf"
+            ? await analyzePDF(dataUrl, deg, apiKey)
+            : await analyzeDocument(dataUrl, deg, apiKey);
+          const extracted = result?.extracted || result?.fields;
+          if (extracted && typeof extracted === "object") {
+            setForm((prev) => {
+              const merged = { ...prev };
+              for (const [k, v] of Object.entries(extracted)) {
+                if (v != null && v !== "" && (merged[k] == null || merged[k] === "")) merged[k] = v;
+              }
+              return merged;
+            });
+            setMsg("Document read — fields auto-filled. Review before saving.");
+          } else {
+            setIsError(true);
+            setMsg("Attached, but no fields could be read from this document.");
+          }
+        } catch (err) {
+          setIsError(true);
+          setMsg(err.message || "Attached, but the document could not be read.");
+        }
+        setScanning(false);
+      }
+    }
+  }, [data.settings.apiKey, data.settings.degreeType, requireApiKey, setAttachedDocs, setForm]);
+
+  return (
+    <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>
+      <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx" style={{ display: "none" }}
+        onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
+      <input type="file" ref={cameraRef} accept="image/*" capture="environment" style={{ display: "none" }}
+        onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={() => requireApiKey() && uploadRef.current?.click()} style={{
+          display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px",
+          borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600,
+          cursor: "pointer", backgroundColor: T.accent, color: "#fff",
+        }}><UploadIcon /> Upload</button>
+        <button onClick={() => requireApiKey() && cameraRef.current?.click()} style={{
+          display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px",
+          borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600,
+          cursor: "pointer", backgroundColor: T.accent, color: "#fff",
+        }}><CameraIcon /> Camera</button>
+      </div>
+      <div style={{ fontSize: 13, color: T.textDim, marginTop: 8 }}>
+        {scanning ? "Reading document…" : "Upload or photograph — AI will auto-fill the form"}
+      </div>
+      {msg && (
+        <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6, color: isError ? T.danger : T.success }}>{msg}</div>
+      )}
+      {attachedDocs.length > 0 && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+          {attachedDocs.map((doc, i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", gap: 8, padding: "6px 10px",
+              border: `1px solid ${T.border}`, borderRadius: 8, fontSize: 13, color: T.text,
+            }}>
+              <FileIcon />
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
+              <button onClick={() => setAttachedDocs((prev) => prev.filter((_, j) => j !== i))} style={{
+                border: "none", backgroundColor: "transparent", color: T.danger, cursor: "pointer", display: "flex", padding: 2,
+              }}><TrashIcon /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default memo(DocAttach);
