@@ -362,23 +362,28 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           borderRadius: 12, padding: "12px 16px", marginBottom: 14,
         }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-            \u26a0 {missingExpiration.length} record{missingExpiration.length > 1 ? "s" : ""} missing an expiration date
+            ⚠️ {missingExpiration.length} record{missingExpiration.length > 1 ? "s" : ""} missing an expiration date
           </div>
           <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
-            The app can't warn you before these lapse until the dates are added.
+            Tap a record below, then use its pencil to add the expiration date. Until then the app can't warn you before it lapses.
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {missingExpiration.slice(0, 5).map(({ item, sec, label }) => (
+            {missingExpiration.slice(0, 5).map(({ item, sec, label }) => {
+              const secLabel = sec === "licenses" ? "License" : sec === "privileges" ? "Privilege" : sec === "insurance" ? "Insurance" : "Health record";
+              return (
               <button key={item.id} onClick={() => { setTab("credentials"); setSubPage(sec); }} style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 padding: "8px 10px", borderRadius: 8, border: "none",
                 backgroundColor: T.card, color: T.text, fontSize: 13, fontWeight: 600,
                 cursor: "pointer", textAlign: "left",
               }}>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-                <span style={{ color: T.warning, flexShrink: 0, fontWeight: 700 }}>Add date \u2192</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span style={{ color: T.textMuted, fontWeight: 700 }}>{secLabel}: </span>{label}
+                </span>
+                <span style={{ color: T.warning, flexShrink: 0, fontWeight: 700 }}>Add date →</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
