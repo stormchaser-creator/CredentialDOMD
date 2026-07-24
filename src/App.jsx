@@ -244,6 +244,18 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     return out;
   }, [data.licenses, data.privileges, data.insurance, data.healthRecords, data.settings.name]);
 
+  // States where a DEA registration (or other state credential) exists but no
+  // medical license record does — CME/renewal tracking can't cover that state
+  // until the license itself is in the app.
+  const statesMissingLicense = useMemo(() => {
+    const licensed = new Set((data.licenses || []).filter(l => l.state && /medical license/i.test(l.type || "")).map(l => l.state));
+    const out = new Set();
+    for (const l of data.licenses || []) {
+      if (l.state && !licensed.has(l.state)) out.add(l.state);
+    }
+    return [...out];
+  }, [data.licenses]);
+
   // Per-state CME compliance, anchored to each license's renewal window,
   // sorted soonest-deadline-first. Drives the home cards AND the ring.
   const stateComps = useMemo(() =>
@@ -473,6 +485,21 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             }}>Find CME</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {statesMissingLicense.map(st => (
+              <button key={`ml-${st}`} onClick={() => { setTab("credentials"); setSubPage("licenses"); }} style={{
+                textAlign: "left", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`,
+                borderRadius: 14, padding: "12px 14px", cursor: "pointer",
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>
+                  {st}: no medical license on file
+                </div>
+                <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
+                  You have a {st} credential (like a DEA registration) but the {st} medical
+                  license itself isn't in the app — add it and {st} CME &amp; renewal tracking
+                  turn on automatically. Tap to add it.
+                </div>
+              </button>
+            ))}
             {stateComps.map(({ st, comp, lic }) => {
               const unmetTopics = comp.topicResults.filter(t => !t.met);
               const dl = comp.daysLeft;
