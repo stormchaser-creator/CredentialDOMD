@@ -11,7 +11,7 @@ import { getCMECategories } from "../../constants/credentialTypes";
 import { AOA_NATIONAL } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
 import { generateId, formatDate } from "../../utils/helpers";
-import { computeCompliance } from "../../utils/compliance";
+import { complianceFor } from "../../utils/compliance";
 
 function CMESection({ onShare }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate } = useApp();
@@ -55,7 +55,7 @@ function CMESection({ onShare }) {
     if (!showCompliance) return [];
     return allTrackedStates.map(st => ({
       state: st,
-      compliance: computeCompliance(data.cme, st, deg),
+      compliance: complianceFor(data, st),
     }));
   }, [showCompliance, allTrackedStates, data.cme, deg]);
 
@@ -244,7 +244,7 @@ function CMESection({ onShare }) {
                 <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
                   <button onClick={() => onShare(item, "cme")} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
                   <button onClick={() => openEdit(item)} style={{ padding: "5px 7px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                  <button onClick={() => { if (window.confirm("Delete this CME entry? This cannot be undone.")) handleDelete(item.id); }} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <button onClick={() => { if (window.confirm("Delete this CME entry? Its attached certificate (if any) will be deleted too. This cannot be undone.")) handleDelete(item.id); }} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                 </div>
               </div>
             </div>

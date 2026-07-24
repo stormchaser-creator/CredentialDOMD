@@ -1,4 +1,4 @@
-import { computeCompliance } from "./compliance";
+import { complianceFor } from "./compliance";
 import { getItemLabel, formatDate, MS_PER_DAY } from "./helpers";
 
 export function generateAlerts(data) {
@@ -27,13 +27,13 @@ export function generateAlerts(data) {
   const cmeIssues = [];
 
   allStates.forEach(st => {
-    const comp = computeCompliance(data.cme, st, deg);
+    const comp = complianceFor(data, st);
     if (!comp.fullyCompliant) {
       const issues = [];
       if (!comp.totalMet && !comp.noGeneralReq) issues.push(`${comp.totalEarned}/${comp.totalRequired} total hrs`);
       if (!comp.cat1Met && comp.cat1Required > 0) issues.push(`Cat 1: ${comp.cat1Earned}/${comp.cat1Required} hrs`);
       comp.topicResults.filter(t => !t.met).forEach(t => issues.push(`${t.topic}: ${t.earned}/${t.required} hrs`));
-      if (issues.length) cmeIssues.push({ state: st, issues });
+      if (issues.length) cmeIssues.push({ state: st, issues, daysLeft: comp.daysLeft });
     }
   });
 
@@ -44,8 +44,12 @@ export function generateAlerts(data) {
     ? Math.min(...soon.map(s => Math.ceil((new Date(s.expirationDate) - now) / MS_PER_DAY)))
     : Infinity;
 
-  const priority = expired.length > 0 ? "critical"
-    : closestDays <= 30 ? "high"
+  // CME shortfalls escalate as the license renewal approaches.
+  const cmeClosest = cmeIssues.length
+    ? Math.min(...cmeIssues.map(ci => ci.daysLeft ?? Infinity))
+    : Infinity;
+  const priority = (expired.length > 0 || cmeClosest <= 30) ? "critical"
+    : (closestDays <= 30 || cmeClosest <= 90) ? "high"
     : "medium";
 
   // Escalation: more urgent = more frequent
@@ -61,7 +65,7 @@ export function generateAlerts(data) {
   const fpParts = [
     ...expired.map(i => `exp:${i._sec}:${i.expirationDate}`),
     ...soon.map(i => `soon:${i._sec}:${i.expirationDate}`),
-    ...cmeIssues.map(ci => `cme:${ci.state}:${ci.issues.length}`),
+    ...cmeIssues.map(ci => `cme:${ci.state}:${ci.issues.length}:${ci.daysLeft ?? "x"}`),
   ];
   const fingerprint = fpParts.sort().join("|");
 
@@ -101,6 +105,7 @@ export function buildNotificationMessage(data, alerts) {
   if (alerts.cmeIssues.length > 0) {
     lines.push("", "\ud83d\udccb CME COMPLIANCE GAPS:");
     alerts.cmeIssues.forEach(ci => {
+      // renewal countdown for context
       lines.push(`  ${ci.state}:`);
       ci.issues.forEach(issue => lines.push(`    - ${issue}`));
     });

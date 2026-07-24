@@ -23,7 +23,7 @@ function buildCredentialRows(data) {
       Type: "License",
       "Issuing Authority": lic.issuingAuthority || lic.board || "",
       "License/Cert #": lic.licenseNumber || "",
-      "Issue Date": lic.issueDate || "",
+      "Issue Date": lic.issuedDate || lic.issueDate || "",
       "Expiration Date": lic.expirationDate || "",
       Status: lic.status || "",
       State: lic.state || "",
@@ -37,7 +37,7 @@ function buildCredentialRows(data) {
       Type: "Privilege",
       "Issuing Authority": priv.hospital || priv.facility || "",
       "License/Cert #": priv.privilegeNumber || "",
-      "Issue Date": priv.issueDate || priv.startDate || "",
+      "Issue Date": priv.appointmentDate || priv.issueDate || priv.startDate || "",
       "Expiration Date": priv.expirationDate || "",
       Status: priv.status || "",
       State: priv.state || "",
@@ -190,17 +190,18 @@ export async function generateCredentialZip(data) {
 
   // Add documents if they have file data
   for (const doc of data.documents || []) {
-    if (!doc.fileData && !doc.url) continue;
+    if (!doc.data && !doc.fileData && !doc.url) continue;
     const folder = categorizeDocument(doc);
-    const ext = doc.fileType?.includes("pdf") ? ".pdf"
-      : doc.fileType?.includes("png") ? ".png"
-      : doc.fileType?.includes("jpeg") || doc.fileType?.includes("jpg") ? ".jpg"
+    const mimeT = doc.type || doc.fileType;
+    const ext = mimeT?.includes("pdf") ? ".pdf"
+      : mimeT?.includes("png") ? ".png"
+      : mimeT?.includes("jpeg") || mimeT?.includes("jpg") ? ".jpg"
       : "";
     const filename = sanitizeFilename(doc.name || doc.title) + ext;
 
-    if (doc.fileData) {
+    if (doc.data || doc.fileData) {
       // Base64 encoded file data
-      const base64 = doc.fileData.includes(",") ? doc.fileData.split(",")[1] : doc.fileData;
+      const base64 = doc.fileData.includes(",") ? (doc.data || doc.fileData).split(",")[1] : doc.fileData;
       root.file(`${folder}/${filename}`, base64, { base64: true });
     }
   }

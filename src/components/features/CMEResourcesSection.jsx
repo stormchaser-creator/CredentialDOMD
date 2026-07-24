@@ -2,7 +2,7 @@ import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { SearchIcon, ExternalLinkIcon, GraduationIcon, CheckIcon } from "../shared/Icons";
 import { CME_PROVIDERS, getProvidersForTopic, getMateActProviders, getDualAccreditedProviders } from "../../constants/cmeProviders";
-import { computeCompliance } from "../../utils/compliance";
+import { complianceFor } from "../../utils/compliance";
 import { getProviderVerificationStatus } from "../../utils/cmeVerification";
 
 const PRICING_COLORS = {
@@ -29,7 +29,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
   const unmetTopics = useMemo(() => {
     const topics = new Set();
     allTrackedStates.forEach(st => {
-      const comp = computeCompliance(data.cme, st, deg);
+      const comp = complianceFor(data, st);
       comp.topicResults.filter(t => !t.met).forEach(t => topics.add(t.topic));
     });
     return [...topics];
@@ -39,7 +39,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
   const allRequiredTopics = useMemo(() => {
     const topics = new Set();
     allTrackedStates.forEach(st => {
-      const comp = computeCompliance(data.cme, st, deg);
+      const comp = complianceFor(data, st);
       comp.topicResults.forEach(t => topics.add(t.topic));
     });
     return [...topics].sort();
@@ -48,7 +48,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
   // Per-state compliance gaps for personalized header
   const perStateGaps = useMemo(() => {
     return allTrackedStates.map(st => {
-      const comp = computeCompliance(data.cme, st, deg);
+      const comp = complianceFor(data, st);
       const unmet = comp.topicResults.filter(t => !t.met);
       const hoursGap = comp.noGeneralReq ? 0 : Math.max(0, comp.totalRequired - comp.totalEarned);
       const cat1Gap = comp.cat1Required > 0 ? Math.max(0, comp.cat1Required - comp.cat1Earned) : 0;

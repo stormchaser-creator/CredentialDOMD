@@ -1,7 +1,8 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
-import { SECTION_META, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES } from "../../constants/credentialTypes";
+import { SECTION_META, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../../constants/credentialTypes";
+import { CME_TOPICS } from "../../constants/cmeTopics";
 
 const FIELD_DEFS = {
   license: [
@@ -55,6 +56,7 @@ const FIELD_DEFS = {
 
 const TYPE_OPTIONS = {
   license: (deg) => getLicenseTypes(deg),
+  cmeCategory: (deg) => (deg === "DO" ? CME_CATEGORIES_DO : CME_CATEGORIES_MD),
   privilege: () => PRIVILEGE_TYPES,
   insurance: () => INSURANCE_TYPES,
   healthRecord: (_deg, edited) => getHealthRecordTypes(edited?.category),
@@ -123,7 +125,16 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
             {fields.map(f => (
               <div key={f.key}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 2 }}>{f.label}</div>
-                {f.key === "category" && docType === "healthRecord" ? (
+                {f.key === "category" && docType === "cme" ? (
+                  <select
+                    value={edited[f.key] || ""}
+                    onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
+                    style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
+                  >
+                    <option value="">Select category...</option>
+                    {TYPE_OPTIONS.cmeCategory(data.settings.degreeType).map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : f.key === "category" && docType === "healthRecord" ? (
                   <select
                     value={edited[f.key] || ""}
                     onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value, type: "" }))}
@@ -160,13 +171,26 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                 )}
               </div>
             ))}
-            {docType === "cme" && edited.topics?.length > 0 && (
+            {docType === "cme" && (
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>Detected Topics</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>
+                  Topics — tap to toggle (state mandates count only when tagged)
+                </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                  {edited.topics.map(t => (
-                    <span key={t} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 8, backgroundColor: T.accentGlow, color: T.accent, fontWeight: 600 }}>{t}</span>
-                  ))}
+                  {CME_TOPICS.filter(t => t !== "General / No Specific Topic").map(t => {
+                    const on = (edited.topics || []).includes(t);
+                    return (
+                      <button key={t} onClick={() => setEdited(p => ({
+                        ...p,
+                        topics: on ? (p.topics || []).filter(x => x !== t) : [...(p.topics || []), t],
+                      }))} style={{
+                        fontSize: 12, padding: "4px 10px", borderRadius: 10, cursor: "pointer", fontWeight: 600,
+                        border: `1px solid ${on ? T.accent : T.border}`,
+                        backgroundColor: on ? T.accent : "transparent",
+                        color: on ? "#fff" : T.textMuted,
+                      }}>{t}</button>
+                    );
+                  })}
                 </div>
               </div>
             )}

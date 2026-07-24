@@ -14,7 +14,7 @@
 
 import { useMemo } from "react";
 import { useApp } from "../../../context/AppContext";
-import { computeCompliance } from "../../../utils/compliance";
+import { complianceFor } from "../../../utils/compliance";
 import { STATE_REQS } from "../../../constants/stateRequirements";
 import { STATES } from "../../../constants/states";
 
@@ -67,7 +67,7 @@ export default function MultiStateMatrix() {
       );
 
       // CME compliance for this state
-      const cmeData = computeCompliance(data.cme || [], state, degreeType);
+      const cmeData = complianceFor(data, state);
 
       // Privileges in this state
       const privCount = (data.privileges || []).filter(

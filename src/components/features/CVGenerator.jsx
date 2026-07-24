@@ -2,7 +2,7 @@ import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { AsclepiusIcon, ExternalLinkIcon } from "../shared/Icons";
 import { formatDate, copyToClipboard } from "../../utils/helpers";
-import { computeCompliance } from "../../utils/compliance";
+import { complianceFor } from "../../utils/compliance";
 
 const CV_TEMPLATES = [
   { id: "clinical", name: "Clinical CV", description: "Standard format for hospital credentialing" },
@@ -111,7 +111,7 @@ function CVGenerator() {
       // State compliance summary
       if (allTrackedStates.length > 0) {
         allTrackedStates.forEach(st => {
-          const comp = computeCompliance(data.cme, st, deg);
+          const comp = complianceFor(data, st);
           cmeItems.push({
             primary: `${st} Compliance: ${comp.fullyCompliant ? "Met" : "In Progress"}`,
             secondary: comp.noGeneralReq ? "Topic-specific requirements" : `${comp.totalEarned}/${comp.totalRequired} hours`,
