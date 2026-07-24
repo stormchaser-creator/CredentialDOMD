@@ -147,8 +147,9 @@ function WorkLog() {
    * Non-call work always bills hourly. Orientation fee bills once, on the
    * first invoice for the contract.
    */
-  const computeBilling = useCallback((c, list, includeOrientation) => {
+  const computeBilling = useCallback((c, list, includeOrientation, allList) => {
     if (!c) return { lines: [], total: 0, totalMin: 0, orientationIncluded: false };
+    const all = allList || list;
     const lines = [];
     let total = 0, totalMin = 0;
     const stipendModel = (c.callStipend || 0) > 0;
@@ -156,8 +157,20 @@ function WorkLog() {
     const callish = list.filter(e => e.type === "Call" || e.type === "CallDay");
     const others = list.filter(e => e.type !== "Call" && e.type !== "CallDay");
 
-    // Coverage windows by call day — any work type inside one is stipend-paid
+    // Coverage windows by call day, built from ALL entries (billed and not) —
+    // a window stays in force for work logged after its day was invoiced
     const windowsByDate = {};
+    if (stipendModel) {
+      for (const e of all) {
+        if (e.type === "CallDay" && e.startTime) {
+          const k = callDayOf(e);
+          if (!windowsByDate[k]) {
+            const ws = new Date(e.startTime);
+            windowsByDate[k] = { start: ws, end: e.endTime ? new Date(e.endTime) : new Date(ws.getTime() + (c.stipendHours || 0) * 3600e3) };
+          }
+        }
+      }
+    }
 
     if (stipendModel) {
       const byDate = {};
@@ -165,32 +178,40 @@ function WorkLog() {
       for (const date of Object.keys(byDate).sort()) {
         const dayEntries = byDate[date];
         const calls = dayEntries.filter(e => e.type === "Call");
-        const cd = dayEntries.find(e => e.type === "CallDay" && e.startTime);
+        const win = windowsByDate[date] || null;
         const callMin = calls.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
         totalMin += callMin;
-        total += c.callStipend;
 
-        if (cd) {
-          // WINDOW model: stipend buys the coverage window (start → start +
-          // stipend hours). Call time inside is included; time outside the
-          // window bills at the after-stipend rate.
-          const winStart = new Date(cd.startTime);
-          const winEnd = cd.endTime ? new Date(cd.endTime) : new Date(winStart.getTime() + (c.stipendHours || 0) * 3600e3);
-          windowsByDate[date] = { start: winStart, end: winEnd };
+        // The stipend bills ONCE per coverage day — if a prior invoice
+        // already billed this day's coverage, don't charge it again for
+        // late-logged calls.
+        const stipendBilled = all.some(e => e.invoiceId && (e.type === "CallDay" || e.type === "Call") && callDayOf(e) === date);
+        if (!stipendBilled) {
+          total += c.callStipend;
+          lines.push(win ? {
+            date,
+            label: `Call coverage — stipend`,
+            detail: `${fmtTime(win.start)}–${fmtTime(win.end)} window · ${calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged"}`,
+            amount: c.callStipend,
+          } : {
+            date,
+            label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h worked)`,
+            detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged",
+            amount: c.callStipend,
+          });
+        }
+
+        if (win) {
+          // WINDOW model: stipend buys the coverage window. Call time inside
+          // is included; time outside bills at the after-stipend rate.
           let outsideRaw = 0;
           for (const e of calls) {
             if (!e.startTime) continue;
             const es = new Date(e.startTime);
-            const ee = e.endTime ? new Date(e.endTime) : es;
-            if (ee > winEnd) outsideRaw += Math.round((ee - Math.max(es, winEnd)) / 60000);
-            if (es < winStart) outsideRaw += Math.round((Math.min(ee, winStart) - es) / 60000);
+            const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
+            if (ee > win.end) outsideRaw += Math.round((ee - Math.max(es, win.end)) / 60000);
+            if (es < win.start) outsideRaw += Math.round((Math.min(ee, win.start) - es) / 60000);
           }
-          lines.push({
-            date,
-            label: `Call coverage — stipend`,
-            detail: `${fmtTime(winStart)}–${fmtTime(winEnd)} window · ${calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged"}`,
-            amount: c.callStipend,
-          });
           const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
           if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
             const amt = (overMin / 60) * c.overageHourlyRate;
@@ -198,9 +219,11 @@ function WorkLog() {
             lines.push({ date, label: `Call time outside covered window`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
           }
         } else {
-          // No window logged: stipend covers the first N worked hours.
-          lines.push({ date, label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h worked)`, detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged", amount: c.callStipend });
-          const overMin = Math.max(0, callMin - (c.stipendHours || 0) * 60);
+          // No window logged: stipend covers the first N worked hours —
+          // minutes billed on earlier invoices count toward the allowance.
+          const priorMin = all.filter(e => e.invoiceId && e.type === "Call" && callDayOf(e) === date).reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+          const allowance = (c.stipendHours || 0) * 60;
+          const overMin = Math.max(0, priorMin + callMin - allowance) - Math.max(0, priorMin - allowance);
           if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
             const amt = (overMin / 60) * c.overageHourlyRate;
             total += amt;
@@ -234,16 +257,22 @@ function WorkLog() {
       }
       // On a stipend-covered call day, the stipend already pays for ALL work
       // inside the coverage window — shift, procedure, rounding, anything.
-      // Only the portion outside the window bills, at the after-stipend rate.
-      const win = windowsByDate[callDayOf(e)];
+      // Only the portion outside the window bills. Orientation is excluded:
+      // it always bills under its own terms above (or plain hourly below).
+      const win = e.type !== "Orientation" ? windowsByDate[callDayOf(e)] : null;
       if (win) {
         const billed = e.billedMin || 0;
+        const winMin = Math.max(0, Math.round((win.end - win.start) / 60000));
         let outsideRaw = 0;
         if (e.startTime) {
           const es = new Date(e.startTime);
           const ee = e.endTime ? new Date(e.endTime) : new Date(es.getTime() + (e.durationMin || billed) * 60000);
           if (ee > win.end) outsideRaw += Math.round((ee - Math.max(es, win.end)) / 60000);
           if (es < win.start) outsideRaw += Math.round((Math.min(ee, win.start) - es) / 60000);
+        } else {
+          // No start/stop logged: counts as inside the window, but never
+          // more of it than the window can actually hold
+          outsideRaw = Math.max(0, billed - winMin);
         }
         const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
         totalMin += billed;
@@ -252,10 +281,14 @@ function WorkLog() {
           lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${coveredMin} min — covered by call stipend`, amount: 0 });
         }
         if (overMin > 0) {
-          const rate = (c.overageHourlyRate || 0) > 0 ? c.overageHourlyRate : rateFor(e.type, c);
-          const amt = (overMin / 60) * rate;
-          total += amt;
-          lines.push({ date: e.date, label: `${e.type} outside covered window${e.description ? " — " + e.description : ""}`, detail: `${overMin} min @ ${money(rate)}/hr`, amount: amt });
+          // Work outside the window bills at its own hourly rate when the
+          // contract has one; the after-stipend rate is the fallback
+          const rate = rateFor(e.type, c) || c.overageHourlyRate || 0;
+          if (rate > 0) {
+            const amt = (overMin / 60) * rate;
+            total += amt;
+            lines.push({ date: e.date, label: `${e.type} outside covered window${e.description ? " — " + e.description : ""}`, detail: `${overMin} min @ ${money(rate)}/hr`, amount: amt });
+          }
         }
         continue;
       }
@@ -315,10 +348,13 @@ function WorkLog() {
     setTimer(null); saveTimer(null);
   }, [timer, contracts, contract, addItem, windowForDay, showNotice]);
 
-  const noticeForCall = useCallback((cId, startIso, endIso) => {
-    if (!startIso) return;
-    const w = windowForDay(cId, callDayOf({ startTime: startIso }));
+  const noticeForCall = useCallback((cId, startIso, endIso, dateKey) => {
+    const w = windowForDay(cId, startIso ? callDayOf({ startTime: startIso }) : dateKey);
     if (!w) return;
+    if (!startIso) {
+      showNotice(`Heads up: that day has covered call hours (${fmtTime(w.start)}–${fmtTime(w.end)}). Time logged without start/stop times counts as inside the window — stipend-paid, no extra charge. Add exact times if part of it was outside.`);
+      return;
+    }
     const es = new Date(startIso), ee = endIso ? new Date(endIso) : es;
     if (es >= w.start && ee <= w.end) {
       showNotice(`Heads up: that time is inside your covered call window (${fmtTime(w.start)}–${fmtTime(w.end)}) — it's already billed by the stipend, no extra charge.`);
@@ -354,7 +390,7 @@ function WorkLog() {
           durationMin: rawMin, billedMin,
           description: manual.description || "",
         });
-        if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso);
+        if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso, manual.date);
       }
       setShowManual(false); setManual({});
       return;
@@ -379,7 +415,7 @@ function WorkLog() {
       description: manual.description || "",
       invoiceId: null,
     });
-    if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso);
+    if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso, manual.date);
     rememberContract(target.id);
     setShowManual(false); setManual({});
   }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice]);
@@ -406,7 +442,7 @@ function WorkLog() {
   );
   const unbilled = useMemo(() => contractEntries.filter(e => !e.invoiceId), [contractEntries]);
   const unbilledTotal = useMemo(
-    () => computeBilling(contract, unbilled, true).total,
+    () => computeBilling(contract, unbilled, true, contractEntries).total,
     [unbilled, contract, computeBilling]
   );
 
@@ -430,7 +466,7 @@ function WorkLog() {
       `billed in ${contract.incrementMinutes || 15}-minute increments` +
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : ""));
     lines.push(div);
-    const billing = computeBilling(contract, unbilled, true);
+    const billing = computeBilling(contract, unbilled, true, contractEntries);
     for (const l of billing.lines) {
       lines.push(`${l.date ? formatDate(l.date) + "  " : ""}${l.label}`);
       lines.push(`   ${l.detail ? l.detail + " = " : ""}${money(l.amount)}`);
@@ -768,8 +804,9 @@ function WorkLog() {
             // instead of showing a billed amount that isn't charged extra
             const w = !isCoverage && e.type !== "Orientation" ? windowForDay(e.contractId, callDayOf(e)) : null;
             const es = e.startTime ? new Date(e.startTime) : null;
-            const ee = e.endTime ? new Date(e.endTime) : es;
-            const covered = !!w && (!es || (es >= w.start && ee <= w.end));
+            const ee = e.endTime ? new Date(e.endTime) : (es && e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
+            const winMin = w ? Math.max(0, Math.round((w.end - w.start) / 60000)) : 0;
+            const covered = !!w && (es ? (es >= w.start && ee <= w.end) : (e.billedMin || 0) <= winMin);
             return (
               <div key={e.id} style={{
                 display: "flex", alignItems: "center", gap: 10,

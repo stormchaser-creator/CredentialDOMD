@@ -173,6 +173,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const [viewItem, setViewItem] = useState(null);
   const [lightbox, setLightbox] = useState(null);
 
+  // Escape must close the lightbox, not the modal underneath it — capture
+  // phase so this runs before Modal's own document-level Escape handler
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); setLightbox(null); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [lightbox]);
+
   const linkedDocs = useCallback(
     (item) => (data.documents || []).filter(d => d.linkedTo === `${sectionKey}:${item.id}`),
     [data.documents, sectionKey]
@@ -327,13 +338,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
               {linkedDocs(editItem).map(doc => (
                 <div key={doc.id}
-                  onClick={() => doc.type?.startsWith("image/") && doc.data ? setLightbox(doc) : openPdfDoc(doc)}
-                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, backgroundColor: T.card, border: `1px solid ${T.border}`, cursor: "pointer" }}>
+                  onClick={() => { if (!doc.data) return; if (doc.type?.startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, backgroundColor: T.card, border: `1px solid ${T.border}`, cursor: doc.data ? "pointer" : "default" }}>
                   {doc.type?.startsWith("image/") && doc.data
                     ? <img src={doc.data} alt={doc.name} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
-                    : <span style={{ fontSize: 20 }}>📕</span>}
+                    : <span style={{ fontSize: 20 }}>{doc.data ? "📕" : "⏳"}</span>}
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
-                  <span style={{ fontSize: 11, color: T.textDim, marginLeft: "auto", flexShrink: 0 }}>attached</span>
+                  <span style={{ fontSize: 11, color: T.textDim, marginLeft: "auto", flexShrink: 0 }}>{doc.data ? "attached" : "syncing…"}</span>
                 </div>
               ))}
             </div>
@@ -377,9 +388,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
                 <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{f.label}</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                  {f.type === "date"
-                    ? new Date(viewItem[f.key] + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                    : String(viewItem[f.key])}
+                  {(() => {
+                    const v = viewItem[f.key];
+                    if (f.type !== "date") return String(v);
+                    const d = new Date(v + "T00:00:00");
+                    return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  })()}
                 </span>
               </div>
             ))}
@@ -387,7 +401,16 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Documents</div>
                 {linkedDocs(viewItem).map(doc => (
-                  doc.type?.startsWith("image/") && doc.data ? (
+                  !doc.data ? (
+                    <div key={doc.id} style={{
+                      display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px",
+                      borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input,
+                      color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8,
+                    }}>
+                      <span style={{ fontSize: 16 }}>{"⏳"}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} — downloading from cloud, check back shortly</span>
+                    </div>
+                  ) : doc.type?.startsWith("image/") ? (
                     <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
                       style={{ width: "100%", borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 8, cursor: "zoom-in", display: "block" }} />
                   ) : (
@@ -465,7 +488,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                         Needs review — tap edit to add expiration date, issued date, and verify details
                       </div>
                     )}
-                    {renderExtra?.(item)}
+                    {renderExtra && <div onClick={(e) => e.stopPropagation()}>{renderExtra(item)}</div>}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
