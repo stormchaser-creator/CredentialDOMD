@@ -348,6 +348,15 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                   <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.expired} Expired</span>
                 </div>
               )}
+              {/* The ring counts CME cycles too — say so when they're the drag */}
+              {stateComps.some(x => !x.comp.fullyCompliant) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning }} />
+                  <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>
+                    CME behind: {stateComps.filter(x => !x.comp.fullyCompliant).map(x => x.st).join(", ")}
+                  </span>
+                </div>
+              )}
               {credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && (
                 <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>All credentials current</div>
               )}
