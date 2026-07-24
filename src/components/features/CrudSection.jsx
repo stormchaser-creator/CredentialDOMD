@@ -6,7 +6,7 @@ import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
 import CPTCodePicker from "./CPTCodePicker";
 
@@ -381,7 +381,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       </Modal>
 
       {/* Read-only detail view — opened by tapping anywhere on a card */}
-      <Modal open={!!viewItem} onClose={() => setViewItem(null)} title={viewItem ? (viewItem.name || viewItem.title || viewItem.category || viewItem.type || "Details") : "Details"}>
+      <Modal open={!!viewItem} onClose={() => setViewItem(null)} title={viewItem ? describeItem(viewItem, data.settings.name) : "Details"}>
         {viewItem && (
           <>
             {fields.filter(f => viewItem[f.key]).map(f => (
@@ -476,7 +476,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                       fontSize: 15, fontWeight: 600, color: T.text,
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                     }}>
-                      {item.name || item.title || item.category || item.type || "Untitled"}
+                      {describeItem(item, data.settings.name) || "Untitled"}
                     </div>
                     <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
                       {[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber].filter(Boolean).join(" \u00b7 ")}

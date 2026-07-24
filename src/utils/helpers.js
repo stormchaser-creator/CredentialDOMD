@@ -113,10 +113,28 @@ export function getItemLabel(item) {
  * missing or just the physician's name, build a label from what the
  * credential actually is: type/title + state/facility/institution.
  */
+/**
+ * A scanned credential often carries the PHYSICIAN'S name in its name field
+ * ("WHITNEY, ERIC", "Eric E. Whitney, DO") — useless as a label. Detect any
+ * variant of the person's name (case, commas, middle names/initials, degree
+ * suffixes) and label by type + state instead.
+ */
+function isPersonName(name, physicianName) {
+  if (!name || !physicianName) return false;
+  const strip = (s) => s.toLowerCase().replace(/[.,()]/g, " ").split(/\s+/)
+    .filter(t => t && !["do", "md", "jr", "sr", "ii", "iii", "iv", "phd", "np", "pa"].includes(t));
+  const a = strip(name), b = strip(physicianName);
+  if (!a.length || !b.length) return false;
+  // Every word of the shorter name must appear in the longer one, allowing
+  // middle initials to match full middle names ("e" ~ "edwin")
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.every(t =>
+    long.includes(t) || (t.length === 1 && long.some(u => u.startsWith(t)))
+  );
+}
+
 export function describeItem(item, physicianName) {
-  const isOwnName = item.name && physicianName &&
-    item.name.trim().toLowerCase() === physicianName.trim().toLowerCase();
-  if (item.name && !isOwnName) return item.name;
+  if (item.name && !isPersonName(item.name, physicianName)) return item.name;
   const base = item.type || item.title || item.category || "Credential";
   const where = item.state || item.facility || item.institution || item.provider || "";
   return where ? `${base} — ${where}` : base;
