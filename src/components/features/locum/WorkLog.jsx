@@ -20,6 +20,7 @@ import { generateId, formatDate, copyToClipboard } from "../../../utils/helpers"
  */
 
 const TIMER_KEY = "credentialdomd-live-timer";
+const LAST_CONTRACT_KEY = "credentialdomd-last-contract";
 const WORK_TYPES = ["Call", "Shift", "Procedure", "Rounding", "Orientation", "Admin", "Travel"];
 
 function loadTimer() {
@@ -72,7 +73,25 @@ function WorkLog() {
   const contracts = data.locumContracts || [];
   const entries = data.workLog || [];
 
-  const [contractId, setContractId] = useState(() => loadTimer()?.contractId || contracts[0]?.id || "");
+  // Default to: running timer's contract → explicitly remembered pick →
+  // the contract of the most recent log entry → first contract.
+  const [contractId, setContractId] = useState(() => {
+    try {
+      return loadTimer()?.contractId || localStorage.getItem(LAST_CONTRACT_KEY) || "";
+    } catch { return ""; }
+  });
+  const rememberContract = useCallback((id) => {
+    setContractId(id);
+    try { localStorage.setItem(LAST_CONTRACT_KEY, id); } catch { /* noop */ }
+  }, []);
+  const lastLoggedContractId = useMemo(() => {
+    let best = null, bestKey = "";
+    for (const e of entries) {
+      const k = e.startTime || e.date || "";
+      if (k > bestKey) { bestKey = k; best = e.contractId; }
+    }
+    return best;
+  }, [entries]);
   const [timer, setTimer] = useState(loadTimer);
   const [now, setNow] = useState(Date.now());
   const [showManual, setShowManual] = useState(false);
@@ -80,7 +99,9 @@ function WorkLog() {
   const [invoicePreview, setInvoicePreview] = useState(null); // { text, entryIds, total, contract }
   const [sent, setSent] = useState(false);
 
-  const contract = contracts.find(c => c.id === contractId) || contracts[0] || null;
+  const contract = contracts.find(c => c.id === contractId)
+    || contracts.find(c => c.id === lastLoggedContractId)
+    || contracts[0] || null;
 
   // Tick while a timer runs
   useEffect(() => {
@@ -173,7 +194,8 @@ function WorkLog() {
     if (!contract) return;
     const t = { contractId: contract.id, type, startedAt: new Date().toISOString() };
     setTimer(t); saveTimer(t);
-  }, [contract]);
+    rememberContract(contract.id);
+  }, [contract, rememberContract]);
 
   const stopTimer = useCallback(() => {
     if (!timer) return;
@@ -221,8 +243,9 @@ function WorkLog() {
       description: manual.description || "",
       invoiceId: null,
     });
+    rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, addItem]);
+  }, [contract, contracts, manual, addItem, rememberContract]);
 
   const contractEntries = useMemo(
     () => entries.filter(e => e.contractId === (contract?.id)).sort((a, b) => (b.startTime || b.date).localeCompare(a.startTime || a.date)),
@@ -329,7 +352,7 @@ function WorkLog() {
           <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 4 }}>
             Logging against
           </div>
-          <select value={contract?.id || ""} onChange={e => setContractId(e.target.value)} style={{ ...iS, appearance: "auto" }}>
+          <select value={contract?.id || ""} onChange={e => rememberContract(e.target.value)} style={{ ...iS, appearance: "auto" }}>
             {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
           </select>
         </div>

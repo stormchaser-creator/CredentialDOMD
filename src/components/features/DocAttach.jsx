@@ -44,6 +44,15 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer }) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      const dup = (data.documents || []).find(d =>
+        (d.data && d.data.length === dataUrl.length && d.data === dataUrl) ||
+        (d.name === file.name && d.size === file.size)
+      );
+      if (dup) {
+        setIsError(true);
+        setMsg(`"${file.name}" is already uploaded${dup.linkedTo ? " and linked to a credential" : ""}. Skipped duplicate.`);
+        continue;
+      }
       setAttachedDocs((prev) => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
 
       if (file.type.startsWith("image/") || file.type === "application/pdf") {
@@ -77,7 +86,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer }) {
         setScanning(false);
       }
     }
-  }, [data.settings.apiKey, data.settings.degreeType, requireApiKey, setAttachedDocs, setForm, analyzer]);
+  }, [data.settings.apiKey, data.settings.degreeType, data.documents, requireApiKey, setAttachedDocs, setForm, analyzer]);
 
   return (
     <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>

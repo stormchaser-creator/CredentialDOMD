@@ -115,6 +115,14 @@ function DocumentsSection() {
       });
 
       const docId = generateId();
+      const dup = (data.documents || []).find(d =>
+        (d.data && d.data.length === dataUrl.length && d.data === dataUrl) ||
+        (d.name === file.name && d.size === file.size)
+      );
+      if (dup) {
+        setScanError(`"${file.name}" is already uploaded${dup.linkedTo ? " (and linked)" : " — find it below and use File with AI"}. Skipped duplicate.`);
+        continue;
+      }
       addItem("documents", {
         id: docId, name: file.name, type: file.type, size: file.size,
         data: dataUrl, uploadedAt: new Date().toISOString(), linkedTo: "",
@@ -135,7 +143,7 @@ function DocumentsSection() {
         setScanError("Document saved but could not be analyzed. Add your API key in Settings to enable AI scanning.");
       }
     }
-  }, [apiKey, deg, addItem]);
+  }, [apiKey, deg, addItem, data.documents]);
 
   const capturePhoto = useCallback(() => {
     const video = videoRef.current;
