@@ -10,7 +10,7 @@ import { generateId, getStatusColor, getStatusLabel } from "../../utils/helpers"
 import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
 import CPTCodePicker from "./CPTCodePicker";
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone }) {
   const { data, setData, addItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -31,6 +31,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setShowForm(true); }, []);
 
   // Auto-open add form when triggered from outside (e.g., home page "Add Your License" card)
+  // Deep-link: open a specific record's edit form (e.g. from the Home
+  // missing-expiration card).
+  useEffect(() => {
+    if (!autoEditId) return;
+    const it = items.find(x => x.id === autoEditId);
+    if (it) {
+      openEdit(it);
+      onAutoEditDone?.();
+    }
+  }, [autoEditId, items, openEdit, onAutoEditDone]);
+
   useEffect(() => {
     if (autoOpen) {
       openAdd();

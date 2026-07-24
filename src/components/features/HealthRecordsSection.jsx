@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo } from "react";
+import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
@@ -10,7 +10,7 @@ import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS } from "../.
 import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
 
-function HealthRecordsSection({ onShare }) {
+function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
   const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -64,6 +64,12 @@ function HealthRecordsSection({ onShare }) {
   }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs]);
 
   const handleDelete = useCallback((id) => deleteItem("healthRecords", id), [deleteItem]);
+
+  useEffect(() => {
+    if (!autoEditId) return;
+    const it = items.find(x => x.id === autoEditId);
+    if (it) { openEdit(it); onAutoEditDone?.(); }
+  }, [autoEditId, items, openEdit, onAutoEditDone]);
 
   const typeOptions = useMemo(() => getHealthRecordTypes(form.category), [form.category]);
 

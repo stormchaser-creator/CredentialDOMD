@@ -120,6 +120,8 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   const [shareFilter, setShareFilter] = useState("all");
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
   const [autoAddLicense, setAutoAddLicense] = useState(false);
+  // {sec, id} — opens that record's edit form after navigating (Home → fix-it links)
+  const [autoEditTarget, setAutoEditTarget] = useState(null);
   const [npiImporting, setNpiImporting] = useState(false);
   const [npiImportMsg, setNpiImportMsg] = useState(null);
 
@@ -371,7 +373,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             {missingExpiration.slice(0, 5).map(({ item, sec, label }) => {
               const secLabel = sec === "licenses" ? "License" : sec === "privileges" ? "Privilege" : sec === "insurance" ? "Insurance" : "Health record";
               return (
-              <button key={item.id} onClick={() => { setTab("credentials"); setSubPage(sec); }} style={{
+              <button key={item.id} onClick={() => { setTab("credentials"); setSubPage(sec); setAutoEditTarget({ sec, id: item.id }); }} style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 padding: "8px 10px", borderRadius: 8, border: "none",
                 backgroundColor: T.card, color: T.text, fontSize: 13, fontWeight: 600,
@@ -747,7 +749,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           </div>
         )}
         {npiImportMsg && <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: npiImportMsg.includes("imported") ? T.success : T.warning, backgroundColor: npiImportMsg.includes("imported") ? T.successDim : T.warningDim }}>{npiImportMsg}</div>}
-        <CrudSection title="Licenses" sectionKey="licenses" items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: "Display Name", placeholder: "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />
+        <CrudSection title="Licenses" sectionKey="licenses" autoEditId={autoEditTarget?.sec === "licenses" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: "Display Name", placeholder: "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />
       </>);
     }
     if (subPage === "cme") return <CMESection onShare={openShare} />;
@@ -755,13 +757,13 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={subPage.split(":")[1]} />;
     if (subPage === "privileges") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;
-      return <CrudSection title="Privileges" sectionKey="privileges" items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+      return <CrudSection title="Privileges" sectionKey="privileges" autoEditId={autoEditTarget?.sec === "privileges" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
     if (subPage === "insurance") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
-      return <CrudSection title="Insurance" sectionKey="insurance" items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+      return <CrudSection title="Insurance" sectionKey="insurance" autoEditId={autoEditTarget?.sec === "insurance" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
-    if (subPage === "healthRecords") return <HealthRecordsSection onShare={openShare} />;
+    if (subPage === "healthRecords") return <HealthRecordsSection onShare={openShare} autoEditId={autoEditTarget?.sec === "healthRecords" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} />;
     if (subPage === "education") return <CrudSection title="Education" sectionKey="education" items={data.education || []} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "graduationDate", label: "Graduation Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "caseLogs") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
