@@ -567,7 +567,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                       padding: "6px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8,
                       border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer",
                     }}>
-                      \ud83d\udce4 Renewal packet
+                      {"\ud83d\udce4"} Renewal packet
                     </button>
                   </div>
                 </div>
