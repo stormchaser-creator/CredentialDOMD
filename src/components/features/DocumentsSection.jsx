@@ -21,6 +21,74 @@ function DocumentsSection() {
   const [scanError, setScanError] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bundleMsg, setBundleMsg] = useState(null);
+
+  const toggleSelected = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Bundle-send: one share sheet carrying ALL selected files, with a cover
+  // note listing the contents — instead of sharing documents one by one.
+  const sendBundle = useCallback(async () => {
+    const docs = data.documents.filter(d => selectedIds.has(d.id));
+    if (docs.length === 0) return;
+    const missing = docs.filter(d => !d.data);
+    if (missing.length > 0) {
+      setBundleMsg(`${missing.length} file(s) haven't downloaded to this device yet — try again in a moment.`);
+      return;
+    }
+    const files = docs.map(doc => {
+      try {
+        const [head, b64] = doc.data.split(",");
+        const mime = doc.type || head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return new File([arr], doc.name || "document", { type: mime });
+      } catch { return null; }
+    }).filter(Boolean);
+
+    const sName = data.settings?.name ? `${data.settings.name}, ${data.settings.degreeType || "MD"}` : "Physician";
+    const text = [
+      "To whom it may concern,",
+      "",
+      `Please find attached the credential document packet for ${sName}${data.settings?.npi ? " (NPI " + data.settings.npi + ")" : ""}:`,
+      "",
+      ...docs.map((d, i) => `  ${i + 1}. ${d.name}`),
+      "",
+      `Sent via CredentialDOMD · ${new Date().toLocaleDateString()}`,
+    ].join("\n");
+    const title = `Credential packet — ${sName} (${docs.length} documents)`;
+
+    if (navigator.share && navigator.canShare?.({ files })) {
+      try {
+        await navigator.share({ files, title, text });
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        setBundleMsg("Sharing failed — try fewer or smaller files.");
+        return;
+      }
+    } else {
+      setBundleMsg("This browser can't attach files to a share. Use the app on your phone, or send documents individually.");
+      return;
+    }
+    addItem("shareLog", {
+      id: generateId(),
+      itemId: null,
+      itemName: `Packet (${docs.length} documents)`,
+      section: "documents", method: "share", recipient: "",
+      sentAt: new Date().toISOString(),
+    });
+    setBundleMsg(`Sent ${docs.length} documents as one packet.`);
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, [data.documents, data.settings, selectedIds, addItem]);
 
   const openCamera = useCallback(async () => {
     // On mobile, use native camera capture
@@ -320,19 +388,58 @@ function DocumentsSection() {
         <EmptyState icon={"\ud83d\udcc1"} title="No documents" subtitle="Upload, scan, or photograph your credentials. AI will read and file them automatically." />
       ) : data.documents.length > 0 && (
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", marginBottom: 10 }}>
-            Stored Documents ({data.documents.length})
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.textMuted, textTransform: "uppercase" }}>
+              Stored Documents ({data.documents.length})
+            </div>
+            <button onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()); setBundleMsg(null); }} style={{
+              padding: "6px 14px", borderRadius: 16, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${selectMode ? T.accent : T.border}`,
+              backgroundColor: selectMode ? T.accent : "transparent",
+              color: selectMode ? "#fff" : T.textMuted,
+            }}>
+              {selectMode ? "Cancel" : "Select to send"}
+            </button>
           </div>
+          {bundleMsg && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.accent, marginBottom: 10 }}>{bundleMsg}</div>
+          )}
+          {selectMode && (
+            <button onClick={sendBundle} disabled={selectedIds.size === 0} style={{
+              width: "100%", padding: "14px", borderRadius: 12, border: "none", marginBottom: 10,
+              background: selectedIds.size === 0 ? T.border : "linear-gradient(135deg, #10b981, #059669)",
+              color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer",
+            }}>
+              Send {selectedIds.size || ""} document{selectedIds.size === 1 ? "" : "s"} as one packet
+            </button>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {data.documents.map(doc => {
               const sectionKey = doc.linkedTo?.split(":")[0];
               const metaKey = sectionKey === "licenses" ? "license" : sectionKey === "cme" ? "cme" : sectionKey === "privileges" ? "privilege" : sectionKey === "insurance" ? "insurance" : sectionKey === "healthRecords" ? "healthRecord" : sectionKey === "education" ? "education" : sectionKey === "locumContracts" ? "agreement" : "unknown";
               const linkedMeta = doc.linkedTo ? SECTION_META[metaKey] : null;
 
+              const isSelected = selectedIds.has(doc.id);
               return (
-                <div key={doc.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "12px 16px", boxShadow: T.shadow1 }}>
+                <div key={doc.id}
+                  onClick={selectMode ? () => toggleSelected(doc.id) : undefined}
+                  style={{
+                    backgroundColor: T.card,
+                    border: `1px solid ${selectMode && isSelected ? T.accent : T.border}`,
+                    borderRadius: 14, padding: "12px 16px", boxShadow: T.shadow1,
+                    cursor: selectMode ? "pointer" : "default",
+                  }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                      {selectMode && (
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 11, flexShrink: 0,
+                          border: `2px solid ${isSelected ? T.accent : T.border}`,
+                          backgroundColor: isSelected ? T.accent : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          color: "#fff", fontSize: 13, fontWeight: 800,
+                        }}>{isSelected ? "✓" : ""}</div>
+                      )}
                       <span style={{ fontSize: 20 }}>{doc.type?.includes("pdf") ? "\ud83d\udcd5" : doc.type?.includes("image") ? "\ud83d\uddbc" : "\ud83d\udcc4"}</span>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{doc.name}</div>
@@ -342,7 +449,9 @@ function DocumentsSection() {
                         </div>
                       </div>
                     </div>
-                    <button onClick={() => deleteDoc(doc.id)} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                    {!selectMode && (
+                      <button onClick={() => deleteDoc(doc.id)} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                    )}
                   </div>
                   {!doc.linkedTo && (
                     <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>

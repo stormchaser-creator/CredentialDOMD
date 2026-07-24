@@ -107,6 +107,21 @@ export function getItemLabel(item) {
   return item.name || item.type || item.title || item.category || item.facility || "Credential";
 }
 
+/**
+ * Descriptive label for lists. AI scans sometimes put the PHYSICIAN'S name in
+ * item.name ("Eric Whitney"), which makes every row read the same. If name is
+ * missing or just the physician's name, build a label from what the
+ * credential actually is: type/title + state/facility/institution.
+ */
+export function describeItem(item, physicianName) {
+  const isOwnName = item.name && physicianName &&
+    item.name.trim().toLowerCase() === physicianName.trim().toLowerCase();
+  if (item.name && !isOwnName) return item.name;
+  const base = item.type || item.title || item.category || "Credential";
+  const where = item.state || item.facility || item.institution || item.provider || "";
+  return where ? `${base} — ${where}` : base;
+}
+
 export async function copyToClipboard(text) {
   try { await navigator.clipboard.writeText(text); }
   catch {

@@ -31,7 +31,7 @@ import {
 } from "./constants";
 import { AOA_NATIONAL } from "./constants/boardRequirements";
 import {
-  generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY,
+  generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem,
 } from "./utils/helpers";
 import { computeCompliance } from "./utils/compliance";
 import { generateAlerts } from "./utils/notifications";
@@ -296,7 +296,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                     <StatusBadge status={isExpired ? "expired" : "expiring"} customLabel={getStatusLabel(item.expirationDate)} />
                   </div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {item.name || item.type || item.title}
+                    {describeItem(item, data.settings.name)}
                   </div>
                   <div style={{ fontSize: 12, color: T.textMuted }}>
                     {item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : ""}
@@ -331,7 +331,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                   <StatusDot color={sc} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {item.name || item.type || "Untitled"}
+                      {describeItem(item, data.settings.name)}
                     </div>
                     <div style={{ fontSize: 13, color: T.textMuted, marginTop: 1 }}>
                       {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : null].filter(Boolean).join(" \u00b7 ")}
@@ -520,7 +520,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                 cursor: "pointer", boxShadow: T.shadow1,
               }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{item.name || item.type || item.title || item.category}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{describeItem(item, data.settings.name)}</div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
                     <span style={{ display: "inline-block", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase", backgroundColor: T.shareDim, color: T.share, marginRight: 6 }}>{item._cat}</span>
                     {[item.state, item.facility, item.provider, item.institution].filter(Boolean).join(" \u00b7 ")}

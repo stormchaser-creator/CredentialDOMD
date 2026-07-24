@@ -118,7 +118,8 @@ ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical Licens
 
 The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : "an MD"}.
 Return JSON: { "documentType": "...", "confidence": "high"|"medium"|"low", "extracted": { ...fields }, "notes": "..." }
-Use YYYY-MM-DD dates. Omit fields that are not visible. Use 2-letter state abbreviations.`;
+Use YYYY-MM-DD dates. Omit fields that are not visible. Use 2-letter state abbreviations.
+IMPORTANT: the "name" field is a DISPLAY LABEL describing the credential itself (e.g. "CO Medical License", "DEA Registration", "MMR Vaccination", "DO Diploma - PCOM") — NEVER the physician's own name. Do not put a person's name in "name".`;
 
 export async function analyzeDocument(imageData, degreeType, apiKey) {
   if (!apiKey) {
