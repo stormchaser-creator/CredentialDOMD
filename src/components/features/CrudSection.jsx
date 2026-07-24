@@ -38,6 +38,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     }
   }, [autoOpen, openAdd, onAutoOpenDone]);
   const closeForm = useCallback(() => {
+    setRequiredError(null);
     if (modalStreamRef.current) { modalStreamRef.current.getTracks().forEach(t => t.stop()); modalStreamRef.current = null; }
     setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false);
   }, []);
@@ -155,7 +156,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     handleUpload([file]);
   }, [closeModalCamera, handleUpload]);
 
+  const [requiredError, setRequiredError] = useState(null);
+
   const handleSave = useCallback(() => {
+    // The whole point is knowing when things expire — expiring record
+    // types can't be saved without their dates.
+    const missing = fields.filter(f => f.required && !form[f.key]);
+    if (missing.length > 0) {
+      setRequiredError(`Required: ${missing.map(f => f.label).join(", ")}. Expiration dates are how the app warns you before anything lapses.`);
+      return;
+    }
+    setRequiredError(null);
     const itemId = editItem ? editItem.id : generateId();
     if (editItem) onEdit({ ...editItem, ...form });
     else onAdd({ ...form, id: itemId });
@@ -170,7 +181,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       });
     }
     closeForm();
-  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem]);
+  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields]);
 
   const setField = useCallback((key, value) => {
     setForm(p => ({ ...p, [key]: value }));
@@ -191,7 +202,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit" : "Add"}>
         {fields.map(f => (
-          <Field key={f.key} label={f.label}>
+          <Field key={f.key} label={f.label + (f.required ? " *" : "")}>
             {f.type === "select" ? (
               <select
                 value={form[f.key] || ""}
@@ -296,6 +307,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             </div>
           )}
         </div>
+        {requiredError && (
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{requiredError}</div>
+        )}
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{

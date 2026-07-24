@@ -36,7 +36,15 @@ function HealthRecordsSection({ onShare }) {
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
+  const [reqError, setReqError] = useState(null);
+
   const handleSave = useCallback(() => {
+    // TB tests and fit tests expire — the date is the whole point.
+    if ((form.category === "TB Test" || form.category === "Fit Test") && !form.expirationDate) {
+      setReqError(`${form.category}s expire — enter the expiration date so the app can warn you before it lapses.`);
+      return;
+    }
+    setReqError(null);
     const itemId = editItem ? editItem.id : generateId();
     const entry = { ...form, id: itemId };
     if (editItem) editItemCtx("healthRecords", entry);
@@ -124,6 +132,9 @@ function HealthRecordsSection({ onShare }) {
         <Field label="Administrator / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Employee Health, Hospital Name" /></Field>
         <Field label="Notes"><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 50, resize: "vertical" }} /></Field>
         <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} />
+        {reqError && (
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{reqError}</div>
+        )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{editItem ? "Save" : "Add"}</button>

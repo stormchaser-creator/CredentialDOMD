@@ -217,8 +217,17 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
 
       {/* Actions */}
       {docType !== "unknown" ? (
-        <div style={{ padding: "0 18px 16px", display: "flex", gap: 10 }}>
-          <button onClick={() => onSave(docType, edited, imageData, fileName)} style={{
+        <div style={{ padding: "0 18px 16px" }}>
+          {["license", "privilege", "insurance"].includes(docType) && !edited.expirationDate && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
+              This {SECTION_META[docType].label.toLowerCase()} expires — enter the expiration date above before saving so the app can warn you in time.
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 10 }}>
+          <button
+            disabled={["license", "privilege", "insurance"].includes(docType) && !edited.expirationDate}
+            onClick={() => onSave(docType, edited, imageData, fileName)} style={{
+            opacity: ["license", "privilege", "insurance"].includes(docType) && !edited.expirationDate ? 0.5 : 1,
             flex: 1, padding: "12px", borderRadius: 12, border: "none", backgroundColor: meta.color, color: "#fff",
             fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}>
@@ -228,6 +237,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
             padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent",
             color: T.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}>Discard</button>
+          </div>
         </div>
       ) : (
         <div style={{ padding: "0 18px 16px" }}>

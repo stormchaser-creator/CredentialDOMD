@@ -23,13 +23,15 @@ export const STATE_REQS = {
   CA: { md: { total: 50, cycle: 2, cat1min: 50, cat1note: "All Cat 1 approved", topics: [
     { topic: "Pain Management", hours: 12.0, note: "One-time 12 hrs pain management/terminally ill (by 2nd renewal)" },
     { topic: "Geriatric Medicine", hours: 0, note: "geriatrics if >25% patients 65+" },
-  ], notes: "One-time 12 hrs pain management/terminally ill (by 2nd renewal); geriatrics if >25% patients 65+", rollover: "No", moc: "ABMS cert/recert = 4 yrs (100 hrs) credit", source: "Cal. Code Reg. tit. 16, \u00a7 1336" }, do: { total: 50, cycle: 2, cat1min: 20, cat1note: "20 hrs AOA Cat 1A or 1B", topics: [
+    { topic: "Implicit Bias", hours: 0, note: "AB 241 — CME must include implicit bias content (verified 2026-07)" },
+  ], notes: "One-time 12 hrs pain management/terminally ill (by 2nd renewal); geriatrics if >25% patients 65+; implicit bias content required (AB 241)", rollover: "No", moc: "ABMS cert/recert = 4 yrs (100 hrs) credit", source: "Cal. Code Reg. tit. 16, \u00a7 1336; AB 241" }, do: { total: 50, cycle: 2, cat1min: 20, cat1note: "20 hrs AOA Cat 1A or 1B", topics: [
     { topic: "Pain Management", hours: 12.0, note: "One-time 12 hrs pain management/terminally ill" },
     { topic: "Substance Use Disorders", hours: 0, note: "Schedule II addiction risks course each cycle" },
-  ], notes: "One-time 12 hrs pain management/terminally ill; Schedule II addiction risks course each cycle", rollover: "No", moc: "No", source: "OPSC Guidance" } },
-  CO: { total: 30, cycle: 2, cat1min: 0, cat1note: "AMA Cat 1 or equivalent", topics: [
-    { topic: "Opioid Prescribing", hours: 2.0, note: "2 hrs opioid prescribing/PDMP (unless no opioid prescribing)" },
-  ], notes: "2 hrs opioid prescribing/PDMP (unless no opioid prescribing)", rollover: "No", moc: "National board cert with equivalent SUD training accepted", source: "HB 1153 (2024); SB 228 (2019)" },
+    { topic: "Implicit Bias", hours: 0, note: "AB 241 — CME must include implicit bias content" },
+  ], notes: "One-time 12 hrs pain management/terminally ill; Schedule II addiction risks course; implicit bias content (AB 241). 50/2yr + 20 AOA 1-A/1-B verified vs OMBC 2026-07", rollover: "No", moc: "No", source: "OMBC (Cal. B&P Code \u00a7 2454.5); AB 241" } },
+  CO: { total: 30, cycle: 2, cat1min: 30, cat1note: "All 30 hrs must be AMA PRA Category 1 (HB 24-1153, effective Jan 1 2026)", topics: [
+    { topic: "Substance Use Disorders", hours: 2.0, note: "2 hrs substance use disorder training each renewal" },
+  ], notes: "30 hrs AMA PRA Cat 1 per 2-yr renewal + 2 hrs SUD training; Board audits up to 5% of renewals annually starting 2026 (verified vs CO Medical Society / DORA guidance 2026-07)", rollover: "No", moc: "National board cert with equivalent SUD training accepted", source: "HB 24-1153 (effective 2026-01-01)" },
   CT: { total: 50, cycle: 2, cat1min: 0, cat1note: "Not specified", topics: [
     { topic: "Infection Control", hours: 1.0, note: "1 hr each infectious disease, risk management (first renewal then every 6 yrs)" },
     { topic: "Suicide Prevention", hours: 0, note: "behavioral health/suicide prevention" },

@@ -98,8 +98,8 @@ export const ABMS_MOC = {
     hours: 20,
     cycle: 1,
     unit: "AMA PRA Cat 1/year",
-    assessment: "Oral exam + written exam",
-    notes: "Annual requirement; relevant to neurosurgery practice",
+    assessment: "Annual: patient safety module + Self-Assessment Learning Tool + Chief of Staff questionnaire (Adaptive Learning Tool); no exam travel",
+    notes: "20 AMA PRA Cat 1 credits every year, NO carryover between years (ABNS Continuous Certification, verified 2026-07)",
   },
   ABNM: {
     name: "Nuclear Medicine",
