@@ -101,7 +101,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       {/* Reclassify */}
       <div style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: 4, rowGap: 6, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
         <span style={{ fontSize: 12, color: T.textDim, marginRight: 6 }}>Not right?</span>
-        {["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement"].map(dt => (
+        {Object.keys(SECTION_META).filter(k => k !== "unknown").map(dt => (
           <button key={dt} onClick={() => setDocType(dt)} style={{
             padding: "4px 10px", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
             backgroundColor: dt === docType ? meta.color : T.input,

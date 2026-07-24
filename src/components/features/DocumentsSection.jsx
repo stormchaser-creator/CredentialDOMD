@@ -159,7 +159,10 @@ function DocumentsSection() {
   const handleSave = (docType, fields, _imageData, _fileName, docId) => {
     const id = generateId();
     const section = SECTION_META[docType]?.section;
-    if (!section) return;
+    if (!section) {
+      setScanError(`Cannot file "${docType}" — this app version doesn't know that category. Update the app (reload) and re-scan.`);
+      return;
+    }
     const entry = { ...fields, id };
     if (section === "cme" && !entry.topics) entry.topics = [];
     if (section === "locumContracts") {
@@ -181,6 +184,28 @@ function DocumentsSection() {
   };
 
   const handleDiscard = (docId) => setScanQueue(q => q.filter(item => item.docId !== docId));
+
+  // Re-run AI filing on an ALREADY-STORED document — recovery path for
+  // uploads whose review step was lost (stale build, refresh, killed PWA).
+  const rescanDoc = useCallback(async (doc) => {
+    if (!requireApiKey()) return;
+    if (!doc.data) {
+      setScanError("This file's contents haven't downloaded to this device yet. Give sync a moment and try again.");
+      return;
+    }
+    setScanning(true);
+    setScanError(null);
+    try {
+      const isPdf = doc.type === "application/pdf" || doc.data.startsWith("data:application/pdf");
+      const result = isPdf
+        ? await analyzePDF(doc.data, deg, apiKey)
+        : await analyzeDocument(doc.data, deg, apiKey);
+      setScanQueue(q => q.some(i => i.docId === doc.id) ? q : [...q, { result, imageData: doc.data, fileName: doc.name, docId: doc.id }]);
+    } catch (err) {
+      setScanError(err.message || "Could not read this document.");
+    }
+    setScanning(false);
+  }, [apiKey, deg, requireApiKey]);
   const deleteDoc = (id) => { if (window.confirm("Delete this document? This cannot be undone.")) deleteItemCtx("documents", id); };
   const linkDoc = (id, val) => {
     const doc = data.documents.find(d => d.id === id);
@@ -312,8 +337,16 @@ function DocumentsSection() {
                     <button onClick={() => deleteDoc(doc.id)} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                   </div>
                   {!doc.linkedTo && (
-                    <div style={{ marginTop: 6 }}>
-                      <select value={doc.linkedTo || ""} onChange={e => linkDoc(doc.id, e.target.value)} style={{ ...iS, fontSize: 14, padding: "6px 10px", appearance: "auto" }}>
+                    <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
+                      {doc.data && (doc.type?.startsWith("image/") || doc.type === "application/pdf") && (
+                        <button onClick={() => rescanDoc(doc)} disabled={scanning} style={{
+                          flexShrink: 0, padding: "7px 12px", borderRadius: 8, border: "none",
+                          backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                        }}>
+                          {scanning ? "Reading…" : "File with AI"}
+                        </button>
+                      )}
+                      <select value={doc.linkedTo || ""} onChange={e => linkDoc(doc.id, e.target.value)} style={{ ...iS, fontSize: 14, padding: "6px 10px", appearance: "auto", flex: 1, minWidth: 0 }}>
                         <option value="">Link to credential...</option>
                         {linkables.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                       </select>

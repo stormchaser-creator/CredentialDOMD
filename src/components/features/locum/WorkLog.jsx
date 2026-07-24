@@ -29,6 +29,24 @@ function saveTimer(t) {
   try { t ? localStorage.setItem(TIMER_KEY, JSON.stringify(t)) : localStorage.removeItem(TIMER_KEY); } catch { /* noop */ }
 }
 
+// Local calendar date (YYYY-MM-DD) — entries were previously dated with the
+// UTC slice of the ISO timestamp, which shifts evening work to the next day
+// in US timezones.
+function localDate(d) {
+  const x = new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+}
+
+// 24-hour call runs 7:00am–7:00am, so work before 7am belongs to the
+// PREVIOUS day's call coverage (and its stipend).
+const CALL_DAY_START_HOUR = 7;
+function callDayOf(e) {
+  if (e.startTime) {
+    return localDate(new Date(new Date(e.startTime).getTime() - CALL_DAY_START_HOUR * 3600 * 1000));
+  }
+  return e.date;
+}
+
 function roundUp(rawMin, increment, minimum) {
   const inc = increment > 0 ? increment : 15;
   return Math.max(minimum || 0, Math.ceil(rawMin / inc) * inc || inc);
@@ -97,7 +115,7 @@ function WorkLog() {
 
     if (stipendModel) {
       const byDate = {};
-      for (const e of callish) (byDate[e.date] = byDate[e.date] || []).push(e);
+      for (const e of callish) { const k = callDayOf(e); (byDate[k] = byDate[k] || []).push(e); }
       for (const date of Object.keys(byDate).sort()) {
         const dayEntries = byDate[date];
         const calls = dayEntries.filter(e => e.type === "Call");
@@ -168,7 +186,7 @@ function WorkLog() {
       id: generateId(),
       contractId: timer.contractId,
       type: timer.type,
-      date: timer.startedAt.slice(0, 10),
+      date: localDate(timer.startedAt),
       startTime: timer.startedAt,
       endTime: end.toISOString(),
       durationMin: rawMin,
@@ -180,7 +198,8 @@ function WorkLog() {
   }, [timer, contracts, contract, addItem]);
 
   const saveManual = useCallback(() => {
-    if (!contract || !manual.date) return;
+    const target = contracts.find(x => x.id === manual.contractId) || contract;
+    if (!target || !manual.date) return;
     const startIso = manual.start ? `${manual.date}T${manual.start}` : null;
     const endIso = manual.end ? `${manual.date}T${manual.end}` : null;
     let rawMin = parseInt(manual.durationMin, 10) || 0;
@@ -189,10 +208,10 @@ function WorkLog() {
     }
     if (!rawMin) return;
     const type = manual.type || "Call";
-    const billedMin = roundUp(rawMin, contract.incrementMinutes || 15, type === "Call" ? (contract.minCallMinutes || 15) : 0);
+    const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
     addItem("workLog", {
       id: generateId(),
-      contractId: contract.id,
+      contractId: target.id,
       type,
       date: manual.date,
       startTime: startIso ? new Date(startIso).toISOString() : null,
@@ -203,7 +222,7 @@ function WorkLog() {
       invoiceId: null,
     });
     setShowManual(false); setManual({});
-  }, [contract, manual, addItem]);
+  }, [contract, contracts, manual, addItem]);
 
   const contractEntries = useMemo(
     () => entries.filter(e => e.contractId === (contract?.id)).sort((a, b) => (b.startTime || b.date).localeCompare(a.startTime || a.date)),
@@ -230,7 +249,7 @@ function WorkLog() {
     lines.push(`Period: ${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`);
     lines.push(`Terms: ` +
       ((contract.callStipend || 0) > 0
-        ? `${money(contract.callStipend)} per call day covering first ${contract.stipendHours || 0}h, then ${money(contract.overageHourlyRate || 0)}/hr; `
+        ? `${money(contract.callStipend)} per call day (7am\u20137am) covering first ${contract.stipendHours || 0}h, then ${money(contract.overageHourlyRate || 0)}/hr; `
         : "") +
       `billed in ${contract.incrementMinutes || 15}-minute increments` +
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : ""));
@@ -297,17 +316,23 @@ function WorkLog() {
   }
 
   const elapsed = timer ? Math.floor((now - new Date(timer.startedAt)) / 1000) : 0;
-  const liveBilled = timer && contract
-    ? roundUp(Math.max(1, Math.ceil(elapsed / 60)), contract.incrementMinutes || 15, timer.type === "Call" ? (contract.minCallMinutes || 15) : 0)
+  const timerContract = timer ? (contracts.find(c => c.id === timer.contractId) || contract) : contract;
+  const liveBilled = timer && timerContract
+    ? roundUp(Math.max(1, Math.ceil(elapsed / 60)), timerContract.incrementMinutes || 15, timer.type === "Call" ? (timerContract.minCallMinutes || 15) : 0)
     : 0;
 
   return (
     <div>
-      {/* Contract picker */}
-      {contracts.length > 1 && (
-        <select value={contract?.id || ""} onChange={e => setContractId(e.target.value)} style={{ ...iS, appearance: "auto", marginBottom: 12 }}>
-          {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
-        </select>
+      {/* Contract picker — always visible so it's clear what work bills against */}
+      {contracts.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 4 }}>
+            Logging against
+          </div>
+          <select value={contract?.id || ""} onChange={e => setContractId(e.target.value)} style={{ ...iS, appearance: "auto" }}>
+            {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
+          </select>
+        </div>
       )}
 
       {/* Timer */}
@@ -319,6 +344,9 @@ function WorkLog() {
           <>
             <div style={{ fontSize: 13, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 1 }}>
               {timer.type} in progress
+            </div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 2 }}>
+              {timerContract?.facility}
             </div>
             <div style={{ fontSize: 40, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums", margin: "6px 0 2px" }}>
               {fmtClock(elapsed)}
@@ -394,6 +422,13 @@ function WorkLog() {
 
       {/* Manual entry modal */}
       <Modal open={showManual} onClose={() => setShowManual(false)} title="Log past time">
+        {contracts.length > 1 && (
+          <Field label="Contract">
+            <select value={manual.contractId || contract?.id || ""} onChange={e => setManual(m2 => ({ ...m2, contractId: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
+              {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Type">
           <select value={manual.type || "Call"} onChange={e => setManual(m => ({ ...m, type: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
             {WORK_TYPES.map(t2 => <option key={t2} value={t2}>{t2}</option>)}

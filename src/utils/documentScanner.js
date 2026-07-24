@@ -113,7 +113,7 @@ ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical Licens
   Fields: type (MUST be one of: "Doctor of Osteopathic Medicine (DO)", "Doctor of Medicine (MD)", "Bachelor of Science (BS)", "Bachelor of Arts (BA)", "Master of Science (MS)", "Master of Public Health (MPH)", "Fellowship Certificate", "Residency Certificate", "Internship Certificate", "Other"), name (display name, e.g. "DO Diploma - PCOM"), institution (school/program name), graduationDate (YYYY-MM-DD), fieldOfStudy (specialty or major), honors (e.g. "Cum Laude")
   IMPORTANT: Diplomas and degrees do NOT expire. Do NOT put the graduation date in expirationDate. Use the graduationDate field instead.
 - "agreement": Locum tenens agreement, physician services agreement, independent contractor agreement, employment/coverage contract with a hospital or staffing agency
-  Fields: facility (hospital/practice the physician works AT), agency (staffing agency if any), billTo (billing/AP email if listed), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), hourlyRate (number, $/hr for regular non-call work), callStipend (number — flat amount per on-call day, e.g. "$3000 for the first 4 hours" -> 3000), stipendHours (number of hours the stipend covers, e.g. 4), overageHourlyRate (number, $/hr for call time BEYOND the stipend hours), callHourlyRate (number, only if flat hourly call pay with no stipend), orientationFee (number, one-time orientation payment — CHECK CAREFULLY: orientation/onboarding/EMR-training compensation is often buried in a rate schedule, fee table, exhibit, or addendum near the END of the agreement; phrases include "orientation", "onboarding", "EMR training", "credentialing day". If orientation is a flat amount, put it here. If orientation is paid HOURLY, put the hourly dollar rate in orientationHourlyRate instead), orientationHourlyRate (number, $/hr for orientation/onboarding time when paid hourly), incrementMinutes (billing increment if stated, e.g. 15), minCallMinutes (minimum billable minutes per call if stated), notes (1-2 sentence summary of other key terms, INCLUDING any orientation pay arrangement not captured above). Numbers must be plain numbers without $ or commas. Read ALL pages including exhibits and rate schedules before answering.
+  Fields: facility (hospital/practice the physician works AT), agency (staffing agency if any), billTo (billing/AP email if listed), startDate (YYYY-MM-DD, earliest coverage start), endDate (YYYY-MM-DD, latest coverage end; if there are MULTIPLE separate coverage blocks, list every block with its dates in notes), hourlyRate (number, $/hr for regular non-call work), callStipend (number — flat amount per on-call day, e.g. "$3000 for the first 4 hours" -> 3000), stipendHours (number of hours the stipend covers, e.g. 4), overageHourlyRate (number, $/hr for call time BEYOND the stipend hours), callHourlyRate (number, only if flat hourly call pay with no stipend), orientationFee (number, one-time orientation payment — CHECK CAREFULLY: orientation/onboarding/EMR-training compensation is often buried in a rate schedule, fee table, exhibit, or addendum near the END of the agreement; phrases include "orientation", "onboarding", "EMR training", "credentialing day". If orientation is a flat amount, put it here. If orientation is paid HOURLY, put the hourly dollar rate in orientationHourlyRate instead), orientationHourlyRate (number, $/hr for orientation/onboarding time when paid hourly), incrementMinutes (billing increment if stated, e.g. 15), minCallMinutes (minimum billable minutes per call if stated), notes (1-2 sentence summary of other key terms, INCLUDING any orientation pay arrangement not captured above). Numbers must be plain numbers without $ or commas. Read ALL pages including exhibits and rate schedules before answering.
 - "unknown": Cannot determine document type
 
 The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : "an MD"}.
@@ -146,7 +146,7 @@ export async function analyzeDocument(imageData, degreeType, apiKey) {
           { text: "Analyze this medical credential document. Return only JSON." },
         ],
       }],
-      generationConfig: { maxOutputTokens: 2500 },
+      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
 
@@ -185,7 +185,7 @@ export async function analyzePDF(pdfData, degreeType, apiKey) {
           { text: `Analyze this medical credential document for a ${degreeType}. Return ONLY JSON.` },
         ],
       }],
-      generationConfig: { maxOutputTokens: 2500 },
+      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
 
@@ -212,7 +212,7 @@ Fields to extract (omit any not present):
 - facility: hospital or practice name the physician works AT
 - agency: staffing agency, if the agreement is through one
 - billTo: billing/AP contact email if listed
-- startDate, endDate: assignment period (YYYY-MM-DD)
+- startDate, endDate: assignment period (YYYY-MM-DD; earliest start / latest end — if multiple separate coverage blocks exist, list each block's dates in notes)
 - hourlyRate: flat hourly rate in dollars for regular (non-call) work, number only
 - callStipend: flat amount paid per on-call day/shift (e.g. "$3000 for the first 4 hours" -> 3000), number only
 - stipendHours: how many worked hours the call stipend covers (e.g. 4), number
@@ -253,7 +253,7 @@ export async function analyzeAgreement(dataUrl, apiKey) {
           { text: "Extract the locum agreement terms. Return only JSON." },
         ],
       }],
-      generationConfig: { maxOutputTokens: 2000 },
+      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
 
