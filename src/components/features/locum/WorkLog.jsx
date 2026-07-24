@@ -156,6 +156,9 @@ function WorkLog() {
     const callish = list.filter(e => e.type === "Call" || e.type === "CallDay");
     const others = list.filter(e => e.type !== "Call" && e.type !== "CallDay");
 
+    // Coverage windows by call day — any work type inside one is stipend-paid
+    const windowsByDate = {};
+
     if (stipendModel) {
       const byDate = {};
       for (const e of callish) { const k = callDayOf(e); (byDate[k] = byDate[k] || []).push(e); }
@@ -173,6 +176,7 @@ function WorkLog() {
           // window bills at the after-stipend rate.
           const winStart = new Date(cd.startTime);
           const winEnd = cd.endTime ? new Date(cd.endTime) : new Date(winStart.getTime() + (c.stipendHours || 0) * 3600e3);
+          windowsByDate[date] = { start: winStart, end: winEnd };
           let outsideRaw = 0;
           for (const e of calls) {
             if (!e.startTime) continue;
@@ -228,6 +232,33 @@ function WorkLog() {
         lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min — covered by orientation fee`, amount: 0 });
         continue;
       }
+      // On a stipend-covered call day, the stipend already pays for ALL work
+      // inside the coverage window — shift, procedure, rounding, anything.
+      // Only the portion outside the window bills, at the after-stipend rate.
+      const win = windowsByDate[callDayOf(e)];
+      if (win) {
+        const billed = e.billedMin || 0;
+        let outsideRaw = 0;
+        if (e.startTime) {
+          const es = new Date(e.startTime);
+          const ee = e.endTime ? new Date(e.endTime) : new Date(es.getTime() + (e.durationMin || billed) * 60000);
+          if (ee > win.end) outsideRaw += Math.round((ee - Math.max(es, win.end)) / 60000);
+          if (es < win.start) outsideRaw += Math.round((Math.min(ee, win.start) - es) / 60000);
+        }
+        const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
+        totalMin += billed;
+        const coveredMin = Math.max(0, billed - overMin);
+        if (coveredMin > 0 || overMin === 0) {
+          lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${coveredMin} min — covered by call stipend`, amount: 0 });
+        }
+        if (overMin > 0) {
+          const rate = (c.overageHourlyRate || 0) > 0 ? c.overageHourlyRate : rateFor(e.type, c);
+          const amt = (overMin / 60) * rate;
+          total += amt;
+          lines.push({ date: e.date, label: `${e.type} outside covered window${e.description ? " — " + e.description : ""}`, detail: `${overMin} min @ ${money(rate)}/hr`, amount: amt });
+        }
+        continue;
+      }
       const rate = rateFor(e.type, c);
       const amt = ((e.billedMin || 0) / 60) * rate;
       totalMin += e.billedMin || 0; total += amt;
@@ -257,6 +288,10 @@ function WorkLog() {
     const start = new Date(timer.startedAt);
     const rawMin = Math.max(1, Math.round((end - start) / 60000));
     const billedMin = roundUp(rawMin, c?.incrementMinutes || 15, timer.type === "Call" ? (c?.minCallMinutes || 15) : 0);
+    // A stray tap shouldn't turn seconds into a billed increment
+    if ((end - start) < 120000 && !window.confirm(
+      `Only ${Math.round((end - start) / 1000)} seconds on the clock — logging bills ${billedMin} min. Log it? (Cancel keeps the timer running.)`
+    )) return;
     addItem("workLog", {
       id: generateId(),
       contractId: timer.contractId,
@@ -269,12 +304,12 @@ function WorkLog() {
       description: "",
       invoiceId: null,
     });
-    if (timer.type === "Call") {
+    {
       const w = windowForDay(timer.contractId, callDayOf({ startTime: timer.startedAt }));
       if (w && start >= w.start && end <= w.end) {
-        showNotice(`This call falls inside your covered window (${fmtTime(w.start)}–${fmtTime(w.end)}) — included in the stipend, no extra charge.`);
+        showNotice(`This time falls inside your covered window (${fmtTime(w.start)}–${fmtTime(w.end)}) — included in the stipend, no extra charge.`);
       } else if (w && end > w.end) {
-        showNotice(`Part of this call is after your covered window (ends ${fmtTime(w.end)}) — that portion bills at the after-stipend rate.`);
+        showNotice(`Part of this time is after your covered window (ends ${fmtTime(w.end)}) — that portion bills at the after-stipend rate.`);
       }
     }
     setTimer(null); saveTimer(null);
@@ -319,7 +354,7 @@ function WorkLog() {
           durationMin: rawMin, billedMin,
           description: manual.description || "",
         });
-        if (type === "Call") noticeForCall(target.id, startIso, endIso);
+        if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso);
       }
       setShowManual(false); setManual({});
       return;
@@ -344,7 +379,7 @@ function WorkLog() {
       description: manual.description || "",
       invoiceId: null,
     });
-    if (type === "Call") noticeForCall(target.id, startIso, endIso);
+    if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso);
     rememberContract(target.id);
     setShowManual(false); setManual({});
   }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice]);
@@ -501,6 +536,13 @@ function WorkLog() {
               fontSize: 17, fontWeight: 800, cursor: "pointer",
             }}>
               Stop & Log
+            </button>
+            <button onClick={() => { if (window.confirm("Discard this timer without logging any time?")) { setTimer(null); saveTimer(null); } }} style={{
+              width: "100%", padding: "10px", borderRadius: 12, border: "none", marginTop: 8,
+              backgroundColor: "transparent", color: T.textMuted,
+              fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>
+              Discard — started by mistake
             </button>
           </>
         ) : (
@@ -722,6 +764,12 @@ function WorkLog() {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {contractEntries.slice(0, 50).map(e => {
             const isCoverage = e.type === "CallDay";
+            // Work fully inside a covered window is stipend-paid — say so
+            // instead of showing a billed amount that isn't charged extra
+            const w = !isCoverage && e.type !== "Orientation" ? windowForDay(e.contractId, callDayOf(e)) : null;
+            const es = e.startTime ? new Date(e.startTime) : null;
+            const ee = e.endTime ? new Date(e.endTime) : es;
+            const covered = !!w && (!es || (es >= w.start && ee <= w.end));
             return (
               <div key={e.id} style={{
                 display: "flex", alignItems: "center", gap: 10,
@@ -738,11 +786,11 @@ function WorkLog() {
                   <div style={{ fontSize: 12, color: T.textDim }}>
                     {isCoverage
                       ? `${formatDate(e.date)}${e.startTime ? ` · covered window ${fmtTime(e.startTime)}–${e.endTime ? fmtTime(e.endTime) : ""}` : ""} · calls in this window are included`
-                      : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min → billed ${e.billedMin} min`}
+                      : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · inside covered window — paid by stipend" : ` → billed ${e.billedMin} min`}`}
                   </div>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  {isCoverage ? `stipend ${money(contract?.callStipend || 0)}` : `${e.billedMin}m`}
+                  {isCoverage ? `stipend ${money(contract?.callStipend || 0)}` : covered ? "covered" : `${e.billedMin}m`}
                 </div>
                 {!e.invoiceId && (
                   <button onClick={() => openEditEntry(e)} style={{

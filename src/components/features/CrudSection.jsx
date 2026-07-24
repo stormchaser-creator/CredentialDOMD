@@ -169,6 +169,25 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
   const [requiredError, setRequiredError] = useState(null);
 
+  // Tap-anywhere detail view + full-screen picture viewer
+  const [viewItem, setViewItem] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
+
+  const linkedDocs = useCallback(
+    (item) => (data.documents || []).filter(d => d.linkedTo === `${sectionKey}:${item.id}`),
+    [data.documents, sectionKey]
+  );
+
+  // Data URLs don't open directly in iOS Safari — convert to a blob URL
+  const openPdfDoc = useCallback((doc) => {
+    if (!doc.data) return;
+    const byteStr = atob(doc.data.split(",")[1]);
+    const arr = new Uint8Array(byteStr.length);
+    for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    window.open(url, "_blank");
+  }, []);
+
   const handleSave = useCallback(() => {
     // The whole point is knowing when things expire — expiring record
     // types can't be saved without their dates.
@@ -303,6 +322,22 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               {scanMsg}
             </div>
           )}
+          {/* Documents already linked to this record — tap to view */}
+          {editItem && linkedDocs(editItem).length > 0 && (
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+              {linkedDocs(editItem).map(doc => (
+                <div key={doc.id}
+                  onClick={() => doc.type?.startsWith("image/") && doc.data ? setLightbox(doc) : openPdfDoc(doc)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, backgroundColor: T.card, border: `1px solid ${T.border}`, cursor: "pointer" }}>
+                  {doc.type?.startsWith("image/") && doc.data
+                    ? <img src={doc.data} alt={doc.name} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+                    : <span style={{ fontSize: 20 }}>📕</span>}
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
+                  <span style={{ fontSize: 11, color: T.textDim, marginLeft: "auto", flexShrink: 0 }}>attached</span>
+                </div>
+              ))}
+            </div>
+          )}
           {attachedDocs.length > 0 && (
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
               {attachedDocs.map((doc, i) => (
@@ -334,6 +369,64 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         </div>
       </Modal>
 
+      {/* Read-only detail view — opened by tapping anywhere on a card */}
+      <Modal open={!!viewItem} onClose={() => setViewItem(null)} title={viewItem ? (viewItem.name || viewItem.title || viewItem.category || viewItem.type || "Details") : "Details"}>
+        {viewItem && (
+          <>
+            {fields.filter(f => viewItem[f.key]).map(f => (
+              <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{f.label}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                  {f.type === "date"
+                    ? new Date(viewItem[f.key] + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : String(viewItem[f.key])}
+                </span>
+              </div>
+            ))}
+            {linkedDocs(viewItem).length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Documents</div>
+                {linkedDocs(viewItem).map(doc => (
+                  doc.type?.startsWith("image/") && doc.data ? (
+                    <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
+                      style={{ width: "100%", borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 8, cursor: "zoom-in", display: "block" }} />
+                  ) : (
+                    <button key={doc.id} onClick={() => openPdfDoc(doc)} style={{
+                      display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px",
+                      borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                      color: T.text, fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 8, textAlign: "left",
+                    }}>
+                      <span style={{ fontSize: 16 }}>📕</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
+                    </button>
+                  )
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button onClick={() => { const it = viewItem; setViewItem(null); onShare(it, sectionKey); }} style={{
+                padding: "12px 18px", borderRadius: 10, border: "none",
+                backgroundColor: T.shareGlow, color: T.share, fontSize: 15, fontWeight: 600, cursor: "pointer",
+              }}>Send</button>
+              <button onClick={() => { const it = viewItem; setViewItem(null); openEdit(it); }} style={{
+                padding: "12px 18px", borderRadius: 10, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer",
+              }}>Edit</button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      {/* Full-screen picture viewer */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{
+          position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
+        }}>
+          <img src={lightbox.data} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+        </div>
+      )}
+
       {items.length === 0 ? (
         <EmptyState icon={emptyIcon} title={emptyTitle} subtitle={emptySub} onAction={openAdd} actionLabel="Add" />
       ) : (
@@ -342,11 +435,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             const color = getStatusColor(item.expirationDate);
             const needsReview = item.npiImported && !item.expirationDate;
             return (
-              <div key={item.id} style={{
+              <div key={item.id} onClick={() => setViewItem(item)} style={{
                 backgroundColor: T.card, border: `1px solid ${needsReview ? T.danger : T.border}`,
                 borderRadius: 14, padding: "14px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-                boxShadow: T.shadow1,
+                boxShadow: T.shadow1, cursor: "pointer",
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
                   {needsReview ? <StatusDot color="red" /> : item.expirationDate ? <StatusDot color={color} /> : null}
@@ -376,9 +469,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                  <button onClick={() => onShare(item, sectionKey)} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-                  <button onClick={() => openEdit(item)} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                  <button onClick={() => { if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
+                  <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
+                  <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                 </div>
               </div>
             );
