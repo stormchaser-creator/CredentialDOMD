@@ -2,9 +2,11 @@
  * LocumDashboard — top-level Locum tier view.
  *
  * Sub-tabs:
- *   1. Matrix     — Multi-state license matrix (the flagship)
- *   2. Rotations  — Hospital rotation tracker
+ *   1. Work       — call timer + time log
+ *   2. Contracts  — facility agreements
  *   3. Deductions — 1099 expense ledger + export
+ * (The multi-state license matrix lives under Credentials — it is core
+ * multi-license tracking, not locum-specific.)
  *
  * Visible only when subscription tier === "locum". Solo/Free/Practice users
  * who land here get a friendly upsell card.
@@ -12,7 +14,6 @@
 
 import { useState } from "react";
 import { useApp } from "../../../context/AppContext";
-import MultiStateMatrix from "./MultiStateMatrix";
 import DeductionMemo from "./DeductionMemo";
 import WorkLog from "./WorkLog";
 import Contracts from "./Contracts";
@@ -20,7 +21,6 @@ import Contracts from "./Contracts";
 const SUBTABS = [
   { id: "work", label: "Work" },
   { id: "contracts", label: "Contracts" },
-  { id: "matrix", label: "Matrix" },
   { id: "deductions", label: "Deductions" },
 ];
 
@@ -70,7 +70,6 @@ export default function LocumDashboard() {
 
       {sub === "work" && <WorkLog />}
       {sub === "contracts" && <Contracts />}
-      {sub === "matrix" && <MultiStateMatrix />}
       {sub === "deductions" && <DeductionMemo />}
     </div>
   );

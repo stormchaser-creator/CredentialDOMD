@@ -19,7 +19,7 @@ import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
-import { LocumDashboard } from "./components/features";
+import { LocumDashboard, MultiStateMatrix } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, FeedbackModal, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
@@ -461,8 +461,9 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         </div>
       )}
 
-      {/* CME Compliance */}
-      {allTrackedStates.length > 0 && data.cme.length > 0 && (
+      {/* CME Compliance — shown for every tracked state even with zero CME
+          logged; "30 hrs to go" is exactly what an empty cycle needs to say */}
+      {allTrackedStates.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>CME Progress</h3>
@@ -695,6 +696,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   const credGroups = [
     { title: "Active Credentials", items: [
       { id: "licenses", label: "Licenses", icon: "\ud83e\udea3", count: data.licenses.length },
+      { id: "matrix", label: "Multi-State Matrix", icon: "\ud83d\uddfa\ufe0f" },
       { id: "privileges", label: "Privileges", icon: "\ud83c\udfe5", count: data.privileges.length, pro: true },
       { id: "insurance", label: "Insurance", icon: "\ud83d\udee1\ufe0f", count: data.insurance.length, pro: true },
     ]},
@@ -754,6 +756,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     }
     if (subPage === "cme") return <CMESection onShare={openShare} />;
     if (subPage === "findCme") return <CMEResourcesSection />;
+    if (subPage === "matrix") return <MultiStateMatrix />;
     if (subPage?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={subPage.split(":")[1]} />;
     if (subPage === "privileges") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;

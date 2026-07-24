@@ -288,11 +288,17 @@ export function AppProvider({ children, onNavigate }) {
     recordTombstone(profileId, key, id).catch(() => {});
   }, [updateSection]);
 
-  // Tracked states (memoized)
-  const allTrackedStates = useMemo(
-    () => [data.settings.primaryState, ...(data.settings.additionalStates || [])].filter(Boolean),
-    [data.settings.primaryState, data.settings.additionalStates]
-  );
+  // Tracked states: Settings picks plus every state where a medical license
+  // actually exists — adding a license auto-tracks its state's CME.
+  const allTrackedStates = useMemo(() => {
+    const states = new Set(
+      [data.settings.primaryState, ...(data.settings.additionalStates || [])].filter(Boolean)
+    );
+    for (const l of data.licenses || []) {
+      if (l.state && /medical license/i.test(l.type || "")) states.add(l.state);
+    }
+    return [...states];
+  }, [data.settings.primaryState, data.settings.additionalStates, data.licenses]);
 
   const navigate = useCallback((tab, sub) => {
     if (onNavigate) onNavigate(tab, sub || null);
