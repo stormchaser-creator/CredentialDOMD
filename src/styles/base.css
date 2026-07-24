@@ -638,3 +638,30 @@ img, svg {
     padding-bottom: calc(80px + env(safe-area-inset-bottom, 0));
   }
 }
+
+
+/* ─── Portrait lock (phones) ─────────────────────────────────
+   iOS ignores the manifest orientation field, so a real lock is
+   impossible in a web app. Instead: in phone-sized landscape, cover the
+   app with a rotate prompt. max-height keeps iPads/desktop unaffected. */
+#rotate-lock { display: none; }
+@media screen and (orientation: landscape) and (max-height: 500px) {
+  #rotate-lock {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    align-items: center;
+    justify-content: center;
+    background-color: #0b1221;
+    color: #e5e7eb;
+    text-align: center;
+  }
+  .rotate-lock-icon { font-size: 44px; animation: rotate-nudge 1.6s ease-in-out infinite; }
+  .rotate-lock-title { font-size: 18px; font-weight: 800; margin-top: 10px; }
+  .rotate-lock-sub { font-size: 14px; color: #94a3b8; margin-top: 4px; }
+  @keyframes rotate-nudge {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-90deg); }
+  }
+}
