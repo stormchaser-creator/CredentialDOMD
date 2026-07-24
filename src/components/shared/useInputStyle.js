@@ -10,7 +10,7 @@ export function useInputStyle() {
     border: `1px solid ${T.inputBorder}`,
     borderRadius: 10,
     color: T.text,
-    fontSize: 15,
+    fontSize: 16,  // 16px minimum — below that iOS Safari auto-zooms on focus
     outline: "none",
     boxSizing: "border-box",
     transition: "border-color 0.2s ease",

@@ -396,7 +396,7 @@ function WorkLog() {
                 }}>{t2}</button>
               ))}
             </div>
-            <button onClick={() => { setManual({ type: "Call", date: new Date().toISOString().slice(0, 10) }); setShowManual(true); }} style={{
+            <button onClick={() => { setManual({ type: "Call", date: localDate(new Date()) }); setShowManual(true); }} style={{
               width: "100%", padding: "12px", borderRadius: 12,
               border: `1px solid ${T.border}`, backgroundColor: T.input,
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
@@ -429,23 +429,82 @@ function WorkLog() {
             </select>
           </Field>
         )}
+
+        {/* Type — one tap */}
         <Field label="Type">
-          <select value={manual.type || "Call"} onChange={e => setManual(m => ({ ...m, type: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
-            {WORK_TYPES.map(t2 => <option key={t2} value={t2}>{t2}</option>)}
-          </select>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {WORK_TYPES.map(t2 => (
+              <button key={t2} onClick={() => setManual(m2 => ({ ...m2, type: t2 }))} style={{
+                padding: "9px 14px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                border: `1px solid ${(manual.type || "Call") === t2 ? T.accent : T.border}`,
+                backgroundColor: (manual.type || "Call") === t2 ? T.accent : "transparent",
+                color: (manual.type || "Call") === t2 ? "#fff" : T.textMuted,
+              }}>{t2}</button>
+            ))}
+          </div>
         </Field>
-        <Field label="Date"><input type="date" value={manual.date || ""} onChange={e => setManual(m => ({ ...m, date: e.target.value }))} style={iS} /></Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Field label="Start time"><input type="time" value={manual.start || ""} onChange={e => setManual(m => ({ ...m, start: e.target.value }))} style={iS} /></Field>
-          <Field label="End time"><input type="time" value={manual.end || ""} onChange={e => setManual(m => ({ ...m, end: e.target.value }))} style={iS} /></Field>
-        </div>
-        <Field label="…or duration (minutes)" hint="Use this if you don't remember exact times">
-          <input type="number" inputMode="numeric" value={manual.durationMin || ""} onChange={e => setManual(m => ({ ...m, durationMin: e.target.value }))} style={iS} placeholder="e.g. 20" />
+
+        {/* Date — Today / Yesterday, or pick */}
+        <Field label="Date">
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            {[{ l: "Today", d: localDate(new Date()) }, { l: "Yesterday", d: localDate(Date.now() - 86400000) }].map(o => (
+              <button key={o.l} onClick={() => setManual(m2 => ({ ...m2, date: o.d, pickDate: false }))} style={{
+                flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                border: `1px solid ${manual.date === o.d && !manual.pickDate ? T.accent : T.border}`,
+                backgroundColor: manual.date === o.d && !manual.pickDate ? T.accent : "transparent",
+                color: manual.date === o.d && !manual.pickDate ? "#fff" : T.textMuted,
+              }}>{o.l}</button>
+            ))}
+            <button onClick={() => setManual(m2 => ({ ...m2, pickDate: !m2.pickDate }))} style={{
+              flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${manual.pickDate ? T.accent : T.border}`,
+              backgroundColor: "transparent", color: manual.pickDate ? T.accent : T.textMuted,
+            }}>Other…</button>
+          </div>
+          {manual.pickDate && (
+            <input type="date" value={manual.date || ""} onChange={e => setManual(m2 => ({ ...m2, date: e.target.value }))} style={{ ...iS, marginTop: 6 }} />
+          )}
         </Field>
-        <Field label="Description"><input value={manual.description || ""} onChange={e => setManual(m => ({ ...m, description: e.target.value }))} style={iS} placeholder="e.g. ED consult — head CT review" /></Field>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-          <button onClick={() => setShowManual(false)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-          <button onClick={saveManual} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Log it</button>
+
+        {/* Duration — one tap */}
+        <Field label="How long">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {[15, 30, 45, 60, 90, 120, 240, 480, 720].map(mins => (
+              <button key={mins} onClick={() => setManual(m2 => ({ ...m2, durationMin: String(mins), exact: false }))} style={{
+                padding: "10px 13px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                fontVariantNumeric: "tabular-nums",
+                border: `1px solid ${manual.durationMin === String(mins) && !manual.exact ? T.accent : T.border}`,
+                backgroundColor: manual.durationMin === String(mins) && !manual.exact ? T.accent : "transparent",
+                color: manual.durationMin === String(mins) && !manual.exact ? "#fff" : T.textMuted,
+              }}>{mins < 60 ? `${mins}m` : `${mins / 60}h`}</button>
+            ))}
+            <button onClick={() => setManual(m2 => ({ ...m2, exact: !m2.exact }))} style={{
+              padding: "10px 13px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${manual.exact ? T.accent : T.border}`,
+              backgroundColor: "transparent", color: manual.exact ? T.accent : T.textMuted,
+            }}>Exact…</button>
+          </div>
+          {manual.exact && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <Field label="Start time"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value, durationMin: "" }))} style={iS} /></Field>
+                <Field label="End time"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value, durationMin: "" }))} style={iS} /></Field>
+              </div>
+              <Field label="…or minutes"><input type="number" inputMode="numeric" value={manual.durationMin || ""} onChange={e => setManual(m2 => ({ ...m2, durationMin: e.target.value }))} style={iS} placeholder="e.g. 20" /></Field>
+            </div>
+          )}
+        </Field>
+
+        <Field label="Note (optional)"><input value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={iS} placeholder="e.g. ED consult — head CT review" /></Field>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+          <button onClick={saveManual} disabled={!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end))} style={{
+            flex: 1, padding: "14px", borderRadius: 12, border: "none",
+            background: (!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end)))
+              ? T.border : "linear-gradient(135deg, #10b981, #059669)",
+            color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
+          }}>Log it</button>
         </div>
       </Modal>
 

@@ -1,4 +1,4 @@
-import { memo, useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { CloseIcon } from "./Icons";
 
@@ -13,15 +13,36 @@ function Modal({ open, onClose, title, children, width = 520 }) {
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
 
+  // iOS: the on-screen keyboard shrinks the VISUAL viewport but not 100vh,
+  // so a full-height modal gets half-buried with no way to scroll. Track the
+  // visual viewport and cap the card to it.
+  const [vvh, setVvh] = useState(null);
+  useEffect(() => {
+    if (!open || typeof window === "undefined" || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const update = () => setVvh(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      setVvh(null);
+    };
+  }, [open]);
+
   if (!open) return null;
+
+  const keyboardOpen = vvh != null && typeof window !== "undefined" && vvh < window.innerHeight - 120;
 
   return (
     <div
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, backgroundColor: T.overlay,
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-        padding: "20px 0",
+        display: "flex", alignItems: keyboardOpen ? "flex-start" : "center",
+        justifyContent: "center", zIndex: 1000,
+        padding: keyboardOpen ? "10px 0" : "20px 0",
       }}
     >
       <div
@@ -29,7 +50,8 @@ function Modal({ open, onClose, title, children, width = 520 }) {
         className="cmd-fade-in"
         style={{
           backgroundColor: T.modalBg, borderRadius: 16,
-          width: "calc(100% - 24px)", maxWidth: width, maxHeight: "calc(100vh - 40px)",
+          width: "calc(100% - 24px)", maxWidth: width,
+          maxHeight: vvh != null ? vvh - 24 : "calc(100vh - 40px)",
           display: "flex", flexDirection: "column",
           boxShadow: T.shadow3 || "0 12px 24px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04)",
           border: `1px solid ${T.border}`,
@@ -53,7 +75,7 @@ function Modal({ open, onClose, title, children, width = 520 }) {
             <CloseIcon />
           </button>
         </div>
-        <div style={{ padding: "16px 20px 24px", overflowY: "auto", flex: 1 }}>{children}</div>
+        <div style={{ padding: "16px 20px 24px", overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>{children}</div>
       </div>
     </div>
   );
