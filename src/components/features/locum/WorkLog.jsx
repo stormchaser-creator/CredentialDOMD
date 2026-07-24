@@ -4,7 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
-import { PlusIcon, TrashIcon, SendIcon } from "../../shared/Icons";
+import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard } from "../../../utils/helpers";
 
 /**
@@ -62,6 +62,11 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function localHHMM(iso) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 function money(n) {
   return "$" + (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -98,6 +103,11 @@ function WorkLog() {
   const [manual, setManual] = useState({});
   const [invoicePreview, setInvoicePreview] = useState(null); // { text, entryIds, total, contract }
   const [sent, setSent] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const showNotice = useCallback((msg) => {
+    setNotice(msg);
+    setTimeout(() => setNotice(n => (n === msg ? null : n)), 8000);
+  }, []);
 
   const contract = contracts.find(c => c.id === contractId)
     || contracts.find(c => c.id === lastLoggedContractId)
@@ -109,6 +119,18 @@ function WorkLog() {
     const iv = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(iv);
   }, [timer]);
+
+  // The covered window for a call day: a CallDay entry's start time plus the
+  // contract's stipend hours (or its explicit end time). Work inside the
+  // window is included in the stipend; work after it bills separately.
+  const windowForDay = useCallback((cId, dayKey) => {
+    const cd = entries.find(e => e.contractId === cId && e.type === "CallDay" && e.startTime && callDayOf(e) === dayKey);
+    if (!cd) return null;
+    const c = contracts.find(x => x.id === cId);
+    const start = new Date(cd.startTime);
+    const end = cd.endTime ? new Date(cd.endTime) : new Date(start.getTime() + (c?.stipendHours || 0) * 3600e3);
+    return { start, end };
+  }, [entries, contracts]);
 
   const rateFor = useCallback((type, c) => {
     if (!c) return 0;
@@ -140,15 +162,46 @@ function WorkLog() {
       for (const date of Object.keys(byDate).sort()) {
         const dayEntries = byDate[date];
         const calls = dayEntries.filter(e => e.type === "Call");
+        const cd = dayEntries.find(e => e.type === "CallDay" && e.startTime);
         const callMin = calls.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
         totalMin += callMin;
         total += c.callStipend;
-        lines.push({ date, label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h)`, detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged", amount: c.callStipend });
-        const overMin = Math.max(0, callMin - (c.stipendHours || 0) * 60);
-        if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
-          const amt = (overMin / 60) * c.overageHourlyRate;
-          total += amt;
-          lines.push({ date, label: `Call time beyond stipend`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+
+        if (cd) {
+          // WINDOW model: stipend buys the coverage window (start → start +
+          // stipend hours). Call time inside is included; time outside the
+          // window bills at the after-stipend rate.
+          const winStart = new Date(cd.startTime);
+          const winEnd = cd.endTime ? new Date(cd.endTime) : new Date(winStart.getTime() + (c.stipendHours || 0) * 3600e3);
+          let outsideRaw = 0;
+          for (const e of calls) {
+            if (!e.startTime) continue;
+            const es = new Date(e.startTime);
+            const ee = e.endTime ? new Date(e.endTime) : es;
+            if (ee > winEnd) outsideRaw += Math.round((ee - Math.max(es, winEnd)) / 60000);
+            if (es < winStart) outsideRaw += Math.round((Math.min(ee, winStart) - es) / 60000);
+          }
+          lines.push({
+            date,
+            label: `Call coverage — stipend`,
+            detail: `${fmtTime(winStart)}–${fmtTime(winEnd)} window · ${calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged"}`,
+            amount: c.callStipend,
+          });
+          const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
+          if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
+            const amt = (overMin / 60) * c.overageHourlyRate;
+            total += amt;
+            lines.push({ date, label: `Call time outside covered window`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+          }
+        } else {
+          // No window logged: stipend covers the first N worked hours.
+          lines.push({ date, label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h worked)`, detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged", amount: c.callStipend });
+          const overMin = Math.max(0, callMin - (c.stipendHours || 0) * 60);
+          if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
+            const amt = (overMin / 60) * c.overageHourlyRate;
+            total += amt;
+            lines.push({ date, label: `Call time beyond stipend`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+          }
         }
       }
     } else {
@@ -216,14 +269,62 @@ function WorkLog() {
       description: "",
       invoiceId: null,
     });
+    if (timer.type === "Call") {
+      const w = windowForDay(timer.contractId, callDayOf({ startTime: timer.startedAt }));
+      if (w && start >= w.start && end <= w.end) {
+        showNotice(`This call falls inside your covered window (${fmtTime(w.start)}–${fmtTime(w.end)}) — included in the stipend, no extra charge.`);
+      } else if (w && end > w.end) {
+        showNotice(`Part of this call is after your covered window (ends ${fmtTime(w.end)}) — that portion bills at the after-stipend rate.`);
+      }
+    }
     setTimer(null); saveTimer(null);
-  }, [timer, contracts, contract, addItem]);
+  }, [timer, contracts, contract, addItem, windowForDay, showNotice]);
+
+  const noticeForCall = useCallback((cId, startIso, endIso) => {
+    if (!startIso) return;
+    const w = windowForDay(cId, callDayOf({ startTime: startIso }));
+    if (!w) return;
+    const es = new Date(startIso), ee = endIso ? new Date(endIso) : es;
+    if (es >= w.start && ee <= w.end) {
+      showNotice(`Heads up: that time is inside your covered call window (${fmtTime(w.start)}–${fmtTime(w.end)}) — it's already billed by the stipend, no extra charge.`);
+    } else if (ee > w.end) {
+      showNotice(`Part of that time is after your covered window (ends ${fmtTime(w.end)}) — that portion bills at the after-stipend rate.`);
+    }
+  }, [windowForDay, showNotice]);
 
   const saveManual = useCallback(() => {
     const target = contracts.find(x => x.id === manual.contractId) || contract;
     if (!target || !manual.date) return;
-    const startIso = manual.start ? `${manual.date}T${manual.start}` : null;
-    const endIso = manual.end ? `${manual.date}T${manual.end}` : null;
+    const startIso = manual.start ? new Date(`${manual.date}T${manual.start}`).toISOString() : null;
+    const endIso = manual.end ? new Date(`${manual.date}T${manual.end}`).toISOString() : null;
+
+    // Editing an existing entry (incl. call-coverage windows)
+    if (manual.editId) {
+      const orig = entries.find(x => x.id === manual.editId);
+      if (!orig) return;
+      if (orig.type === "CallDay") {
+        if (!startIso) return;
+        const end2 = endIso || new Date(new Date(startIso).getTime() + (target.stipendHours || 0) * 3600e3).toISOString();
+        editItem("workLog", { ...orig, date: manual.date, startTime: startIso, endTime: end2, description: manual.description || orig.description });
+        showNotice(`Coverage window updated: ${fmtTime(startIso)}–${fmtTime(end2)}.`);
+      } else {
+        let rawMin = parseInt(manual.durationMin, 10) || 0;
+        if (!rawMin && startIso && endIso) rawMin = Math.max(1, Math.round((new Date(endIso) - new Date(startIso)) / 60000));
+        if (!rawMin) return;
+        const type = manual.type || orig.type;
+        const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
+        editItem("workLog", {
+          ...orig, contractId: target.id, type, date: manual.date,
+          startTime: startIso, endTime: endIso,
+          durationMin: rawMin, billedMin,
+          description: manual.description || "",
+        });
+        if (type === "Call") noticeForCall(target.id, startIso, endIso);
+      }
+      setShowManual(false); setManual({});
+      return;
+    }
+
     let rawMin = parseInt(manual.durationMin, 10) || 0;
     if (!rawMin && startIso && endIso) {
       rawMin = Math.max(1, Math.round((new Date(endIso) - new Date(startIso)) / 60000));
@@ -236,16 +337,33 @@ function WorkLog() {
       contractId: target.id,
       type,
       date: manual.date,
-      startTime: startIso ? new Date(startIso).toISOString() : null,
-      endTime: endIso ? new Date(endIso).toISOString() : null,
+      startTime: startIso,
+      endTime: endIso,
       durationMin: rawMin,
       billedMin,
       description: manual.description || "",
       invoiceId: null,
     });
+    if (type === "Call") noticeForCall(target.id, startIso, endIso);
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, addItem, rememberContract]);
+  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice]);
+
+  const openEditEntry = useCallback((e) => {
+    setManual({
+      editId: e.id,
+      contractId: e.contractId,
+      type: e.type,
+      date: e.date,
+      start: e.startTime ? localHHMM(e.startTime) : "",
+      end: e.endTime ? localHHMM(e.endTime) : "",
+      durationMin: e.startTime ? "" : String(e.durationMin || ""),
+      description: e.description || "",
+      exact: !!e.startTime,
+      pickDate: false,
+    });
+    setShowManual(true);
+  }, []);
 
   const contractEntries = useMemo(
     () => entries.filter(e => e.contractId === (contract?.id)).sort((a, b) => (b.startTime || b.date).localeCompare(a.startTime || a.date)),
@@ -272,7 +390,7 @@ function WorkLog() {
     lines.push(`Period: ${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`);
     lines.push(`Terms: ` +
       ((contract.callStipend || 0) > 0
-        ? `${money(contract.callStipend)} per call day (7am\u20137am) covering first ${contract.stipendHours || 0}h, then ${money(contract.overageHourlyRate || 0)}/hr; `
+        ? `${money(contract.callStipend)} per on-call day covering a ${contract.stipendHours || 0}-hour window, call time outside the window @ ${money(contract.overageHourlyRate || 0)}/hr; `
         : "") +
       `billed in ${contract.incrementMinutes || 15}-minute increments` +
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : ""));
@@ -397,13 +515,19 @@ function WorkLog() {
             }}>
               📞 Got a call — start timer
             </button>
-            {(contract?.callStipend || 0) > 0 && !contractEntries.some(e => e.date === new Date().toISOString().slice(0, 10) && (e.type === "Call" || e.type === "CallDay")) && (
-              <button onClick={() => addItem("workLog", {
-                id: generateId(), contractId: contract.id, type: "CallDay",
-                date: new Date().toISOString().slice(0, 10),
-                startTime: null, endTime: null, durationMin: 0, billedMin: 0,
-                description: "On-call coverage", invoiceId: null,
-              })} style={{
+            {(contract?.callStipend || 0) > 0 && !contractEntries.some(e => e.type === "CallDay" && callDayOf(e) === localDate(new Date())) && (
+              <button onClick={() => {
+                const start = new Date(`${localDate(new Date())}T${String(CALL_DAY_START_HOUR).padStart(2, "0")}:00`);
+                const end = new Date(start.getTime() + (contract.stipendHours || 0) * 3600e3);
+                addItem("workLog", {
+                  id: generateId(), contractId: contract.id, type: "CallDay",
+                  date: localDate(new Date()),
+                  startTime: start.toISOString(), endTime: end.toISOString(),
+                  durationMin: 0, billedMin: 0,
+                  description: "Call coverage", invoiceId: null,
+                });
+                showNotice(`Coverage logged ${fmtTime(start)}–${fmtTime(end)}. Tap the pencil on the entry to adjust the times.`);
+              }} style={{
                 width: "100%", padding: "12px", borderRadius: 12, marginBottom: 8,
                 border: `2px solid ${T.accent}`, backgroundColor: "transparent",
                 color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
@@ -424,7 +548,7 @@ function WorkLog() {
               border: `1px solid ${T.border}`, backgroundColor: T.input,
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-            }}><PlusIcon /> Log past time — e.g. 90 min of orientation</button>
+            }}><PlusIcon /> Log past time</button>
           </>
         )}
       </div>
@@ -444,7 +568,7 @@ function WorkLog() {
       )}
 
       {/* Manual entry modal */}
-      <Modal open={showManual} onClose={() => setShowManual(false)} title="Log past time">
+      <Modal open={showManual} onClose={() => setShowManual(false)} title={manual.editId ? (manual.type === "CallDay" ? "Edit call coverage" : "Edit entry") : "Log past time"}>
         {contracts.length > 1 && (
           <Field label="Contract">
             <select value={manual.contractId || contract?.id || ""} onChange={e => setManual(m2 => ({ ...m2, contractId: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
@@ -454,6 +578,7 @@ function WorkLog() {
         )}
 
         {/* Type — one tap */}
+        {manual.type !== "CallDay" && (
         <Field label="Type">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {WORK_TYPES.map(t2 => (
@@ -466,6 +591,7 @@ function WorkLog() {
             ))}
           </div>
         </Field>
+        )}
 
         {/* Date — Today / Yesterday, or pick */}
         <Field label="Date">
@@ -489,7 +615,18 @@ function WorkLog() {
           )}
         </Field>
 
+        {/* Call coverage: the window the stipend buys */}
+        {manual.type === "CallDay" && (
+          <Field label="Covered window" hint="Coverage start — the stipend covers the hours from here; work after the window bills separately">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Field label="Start"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value }))} style={iS} /></Field>
+              <Field label="End"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value }))} style={iS} /></Field>
+            </div>
+          </Field>
+        )}
+
         {/* Duration — one tap */}
+        {manual.type !== "CallDay" && (
         <Field label="How long">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {[15, 30, 45, 60, 90, 120, 240, 480, 720].map(mins => (
@@ -517,17 +654,24 @@ function WorkLog() {
             </div>
           )}
         </Field>
+        )}
 
         <Field label="Note (optional)"><input value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={iS} placeholder="e.g. ED consult — head CT review" /></Field>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-          <button onClick={saveManual} disabled={!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end))} style={{
-            flex: 1, padding: "14px", borderRadius: 12, border: "none",
-            background: (!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end)))
-              ? T.border : "linear-gradient(135deg, #10b981, #059669)",
-            color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
-          }}>Log it</button>
+          {(() => {
+            const invalid = manual.type === "CallDay"
+              ? (!manual.date || !manual.start)
+              : (!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end)));
+            return (
+              <button onClick={saveManual} disabled={invalid} style={{
+                flex: 1, padding: "14px", borderRadius: 12, border: "none",
+                background: invalid ? T.border : "linear-gradient(135deg, #10b981, #059669)",
+                color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
+              }}>{manual.editId ? "Save changes" : "Log it"}</button>
+            );
+          })()}
         </div>
       </Modal>
 
@@ -560,6 +704,16 @@ function WorkLog() {
         )}
       </Modal>
 
+      {notice && (
+        <div style={{
+          padding: "12px 14px", borderRadius: 12, marginBottom: 10,
+          backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`,
+          fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.45,
+        }}>
+          {notice}
+        </div>
+      )}
+
       {/* Entry list */}
       {contractEntries.length === 0 ? (
         <EmptyState icon={"📞"} title="Nothing logged yet"
@@ -567,23 +721,35 @@ function WorkLog() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {contractEntries.slice(0, 50).map(e => {
+            const isCoverage = e.type === "CallDay";
             return (
               <div key={e.id} style={{
                 display: "flex", alignItems: "center", gap: 10,
-                backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+                backgroundColor: T.card,
+                border: `1px solid ${isCoverage ? T.accent + "66" : T.border}`, borderRadius: 12,
                 padding: "10px 12px", boxShadow: T.shadow1,
                 opacity: e.invoiceId ? 0.55 : 1,
               }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
-                    {e.type}{e.description ? ` — ${e.description}` : ""}
+                    {isCoverage ? "🏥 Call coverage" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
                     {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
                   </div>
                   <div style={{ fontSize: 12, color: T.textDim }}>
-                    {formatDate(e.date)}{e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · {e.durationMin} min → billed {e.billedMin} min
+                    {isCoverage
+                      ? `${formatDate(e.date)}${e.startTime ? ` · covered window ${fmtTime(e.startTime)}–${e.endTime ? fmtTime(e.endTime) : ""}` : ""} · calls in this window are included`
+                      : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min → billed ${e.billedMin} min`}
                   </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{e.billedMin}m</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                  {isCoverage ? `stipend ${money(contract?.callStipend || 0)}` : `${e.billedMin}m`}
+                </div>
+                {!e.invoiceId && (
+                  <button onClick={() => openEditEntry(e)} style={{
+                    padding: "5px 7px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent",
+                    color: T.textMuted, cursor: "pointer", display: "flex", flexShrink: 0,
+                  }}><EditIcon /></button>
+                )}
                 {!e.invoiceId && (
                   <button onClick={() => { if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{
                     padding: "5px 7px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
