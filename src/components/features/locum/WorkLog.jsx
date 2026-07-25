@@ -376,11 +376,14 @@ function WorkLog() {
     }
   }, [windowForDay, showNotice]);
 
-  // Make start/end/duration agree: a start plus a duration produces the end
-  // (fixing end === start saves), an end at-or-before the start with no
-  // duration means the work crossed midnight, and start+end derive duration.
+  // Make start/end/duration agree: a start plus a duration produces the end,
+  // an end STRICTLY before the start with no duration means the work crossed
+  // midnight, and start+end derive duration. end === start is a sub-minute
+  // entry (a quick call), NOT a 24-hour day — that bug billed $7,200 once.
   const normalizeTimes = useCallback((s, e, m) => {
-    if (s && e && new Date(e) <= new Date(s)) {
+    if (s && e && new Date(e).getTime() === new Date(s).getTime() && m) {
+      e = new Date(new Date(s).getTime() + m * 60000).toISOString();
+    } else if (s && e && new Date(e) < new Date(s)) {
       e = m
         ? new Date(new Date(s).getTime() + m * 60000).toISOString()
         : new Date(new Date(e).getTime() + 86400e3).toISOString();
@@ -766,9 +769,9 @@ function WorkLog() {
         {/* Call coverage: the window the stipend buys */}
         {manual.type === "CallDay" && (
           <Field label="Covered window" hint="Coverage start — the stipend covers the hours from here; work after the window bills separately">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <Field label="Start"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value }))} style={iS} /></Field>
-              <Field label="End"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value }))} style={iS} /></Field>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
+              <Field label="Start"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value }))} style={{ ...iS, minWidth: 0 }} /></Field>
+              <Field label="End"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value }))} style={{ ...iS, minWidth: 0 }} /></Field>
             </div>
           </Field>
         )}
@@ -794,9 +797,9 @@ function WorkLog() {
           </div>
           {manual.exact && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <Field label="Start time"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value, durationMin: "" }))} style={iS} /></Field>
-                <Field label="End time"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value, durationMin: "" }))} style={iS} /></Field>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
+                <Field label="Start time"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value, durationMin: "" }))} style={{ ...iS, minWidth: 0 }} /></Field>
+                <Field label="End time"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value, durationMin: "" }))} style={{ ...iS, minWidth: 0 }} /></Field>
               </div>
               <Field label="…or minutes"><input type="number" inputMode="numeric" value={manual.durationMin || ""} onChange={e => setManual(m2 => ({ ...m2, durationMin: e.target.value }))} style={iS} placeholder="e.g. 20" /></Field>
             </div>

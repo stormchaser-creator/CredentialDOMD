@@ -79,7 +79,7 @@ function Modal({ open, onClose, title, children, width = 520 }) {
             <CloseIcon />
           </button>
         </div>
-        <div style={{ padding: "16px 20px 24px", overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>{children}</div>
+        <div style={{ padding: "16px 20px 24px", overflowY: "auto", overflowX: "hidden", flex: 1, WebkitOverflowScrolling: "touch" }}>{children}</div>
       </div>
     </div>
   );
