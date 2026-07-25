@@ -48,6 +48,19 @@ function callDayOf(e) {
   return e.date;
 }
 
+/**
+ * The coverage window a CallDay entry defines. Entries logged without times
+ * (older builds, quick logs) still mean "on call from the day's start hour
+ * for the contract's stipend hours" — never no-window.
+ */
+function windowFromCallDay(cd, c) {
+  const start = cd.startTime
+    ? new Date(cd.startTime)
+    : new Date(`${cd.date}T${String(CALL_DAY_START_HOUR).padStart(2, "0")}:00`);
+  const end = cd.endTime ? new Date(cd.endTime) : new Date(start.getTime() + (c?.stipendHours || 0) * 3600e3);
+  return { start, end };
+}
+
 function roundUp(rawMin, increment, minimum) {
   const inc = increment > 0 ? increment : 15;
   return Math.max(minimum || 0, Math.ceil(rawMin / inc) * inc || inc);
@@ -124,12 +137,9 @@ function WorkLog() {
   // contract's stipend hours (or its explicit end time). Work inside the
   // window is included in the stipend; work after it bills separately.
   const windowForDay = useCallback((cId, dayKey) => {
-    const cd = entries.find(e => e.contractId === cId && e.type === "CallDay" && e.startTime && callDayOf(e) === dayKey);
+    const cd = entries.find(e => e.contractId === cId && e.type === "CallDay" && callDayOf(e) === dayKey);
     if (!cd) return null;
-    const c = contracts.find(x => x.id === cId);
-    const start = new Date(cd.startTime);
-    const end = cd.endTime ? new Date(cd.endTime) : new Date(start.getTime() + (c?.stipendHours || 0) * 3600e3);
-    return { start, end };
+    return windowFromCallDay(cd, contracts.find(x => x.id === cId));
   }, [entries, contracts]);
 
   const rateFor = useCallback((type, c) => {
@@ -162,12 +172,9 @@ function WorkLog() {
     const windowsByDate = {};
     if (stipendModel) {
       for (const e of all) {
-        if (e.type === "CallDay" && e.startTime) {
+        if (e.type === "CallDay") {
           const k = callDayOf(e);
-          if (!windowsByDate[k]) {
-            const ws = new Date(e.startTime);
-            windowsByDate[k] = { start: ws, end: e.endTime ? new Date(e.endTime) : new Date(ws.getTime() + (c.stipendHours || 0) * 3600e3) };
-          }
+          if (!windowsByDate[k]) windowsByDate[k] = windowFromCallDay(e, c);
         }
       }
     }
@@ -292,7 +299,9 @@ function WorkLog() {
         }
         continue;
       }
-      const rate = rateFor(e.type, c);
+      // Stipend contracts often have no general hourly rate — the after-
+      // stipend rate is the working rate, never bill real hours at $0
+      const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
       const amt = ((e.billedMin || 0) / 60) * rate;
       totalMin += e.billedMin || 0; total += amt;
       lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt });
@@ -363,6 +372,20 @@ function WorkLog() {
     }
   }, [windowForDay, showNotice]);
 
+  // Make start/end/duration agree: a start plus a duration produces the end
+  // (fixing end === start saves), an end at-or-before the start with no
+  // duration means the work crossed midnight, and start+end derive duration.
+  const normalizeTimes = useCallback((s, e, m) => {
+    if (s && e && new Date(e) <= new Date(s)) {
+      e = m
+        ? new Date(new Date(s).getTime() + m * 60000).toISOString()
+        : new Date(new Date(e).getTime() + 86400e3).toISOString();
+    }
+    if (s && !e && m) e = new Date(new Date(s).getTime() + m * 60000).toISOString();
+    if (s && e && !m) m = Math.max(1, Math.round((new Date(e) - new Date(s)) / 60000));
+    return [s, e, m];
+  }, []);
+
   const saveManual = useCallback(() => {
     const target = contracts.find(x => x.id === manual.contractId) || contract;
     if (!target || !manual.date) return;
@@ -379,27 +402,23 @@ function WorkLog() {
         editItem("workLog", { ...orig, date: manual.date, startTime: startIso, endTime: end2, description: manual.description || orig.description });
         showNotice(`Coverage window updated: ${fmtTime(startIso)}–${fmtTime(end2)}.`);
       } else {
-        let rawMin = parseInt(manual.durationMin, 10) || 0;
-        if (!rawMin && startIso && endIso) rawMin = Math.max(1, Math.round((new Date(endIso) - new Date(startIso)) / 60000));
+        const [s2, e2, rawMin] = normalizeTimes(startIso, endIso, parseInt(manual.durationMin, 10) || 0);
         if (!rawMin) return;
         const type = manual.type || orig.type;
         const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
         editItem("workLog", {
           ...orig, contractId: target.id, type, date: manual.date,
-          startTime: startIso, endTime: endIso,
+          startTime: s2, endTime: e2,
           durationMin: rawMin, billedMin,
           description: manual.description || "",
         });
-        if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso, manual.date);
+        if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s2, e2, manual.date);
       }
       setShowManual(false); setManual({});
       return;
     }
 
-    let rawMin = parseInt(manual.durationMin, 10) || 0;
-    if (!rawMin && startIso && endIso) {
-      rawMin = Math.max(1, Math.round((new Date(endIso) - new Date(startIso)) / 60000));
-    }
+    const [s3, e3, rawMin] = normalizeTimes(startIso, endIso, parseInt(manual.durationMin, 10) || 0);
     if (!rawMin) return;
     const type = manual.type || "Call";
     const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
@@ -408,17 +427,17 @@ function WorkLog() {
       contractId: target.id,
       type,
       date: manual.date,
-      startTime: startIso,
-      endTime: endIso,
+      startTime: s3,
+      endTime: e3,
       durationMin: rawMin,
       billedMin,
       description: manual.description || "",
       invoiceId: null,
     });
-    if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, startIso, endIso, manual.date);
+    if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s3, e3, manual.date);
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice]);
+  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice, normalizeTimes]);
 
   const openEditEntry = useCallback((e) => {
     setManual({
@@ -802,7 +821,7 @@ function WorkLog() {
             const isCoverage = e.type === "CallDay";
             // Work fully inside a covered window is stipend-paid — say so
             // instead of showing a billed amount that isn't charged extra
-            const w = !isCoverage && e.type !== "Orientation" ? windowForDay(e.contractId, callDayOf(e)) : null;
+            const w = e.type !== "Orientation" ? windowForDay(e.contractId, callDayOf(e)) : null;
             const es = e.startTime ? new Date(e.startTime) : null;
             const ee = e.endTime ? new Date(e.endTime) : (es && e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
             const winMin = w ? Math.max(0, Math.round((w.end - w.start) / 60000)) : 0;
@@ -822,7 +841,7 @@ function WorkLog() {
                   </div>
                   <div style={{ fontSize: 12, color: T.textDim }}>
                     {isCoverage
-                      ? `${formatDate(e.date)}${e.startTime ? ` · covered window ${fmtTime(e.startTime)}–${e.endTime ? fmtTime(e.endTime) : ""}` : ""} · calls in this window are included`
+                      ? `${formatDate(e.date)}${w ? ` · covered window ${fmtTime(w.start)}–${fmtTime(w.end)}` : ""} · calls in this window are included`
                       : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · inside covered window — paid by stipend" : ` → billed ${e.billedMin} min`}`}
                   </div>
                 </div>
