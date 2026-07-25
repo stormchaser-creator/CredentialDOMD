@@ -210,20 +210,23 @@ function WorkLog() {
 
         if (win) {
           // WINDOW model: stipend buys the coverage window. Call time inside
-          // is included; time outside bills at the after-stipend rate.
-          let outsideRaw = 0;
+          // is included; each call outside bills SEPARATELY at the after-
+          // stipend rate with the per-call minimum — two 1-minute call backs
+          // are two minimum charges, never pooled into one.
           for (const e of calls) {
             if (!e.startTime) continue;
             const es = new Date(e.startTime);
             const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
+            let outsideRaw = 0;
             if (ee > win.end) outsideRaw += Math.round((ee - Math.max(es, win.end)) / 60000);
             if (es < win.start) outsideRaw += Math.round((Math.min(ee, win.start) - es) / 60000);
-          }
-          const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
-          if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
-            const amt = (overMin / 60) * c.overageHourlyRate;
-            total += amt;
-            lines.push({ date, label: `Call time outside covered window`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+            if (outsideRaw <= 0 && (es < win.end && ee > win.start)) continue; // fully covered
+            const overMin = roundUp(Math.max(1, outsideRaw), c.incrementMinutes || 15, c.minCallMinutes || 15);
+            if ((c.overageHourlyRate || 0) > 0) {
+              const amt = (overMin / 60) * c.overageHourlyRate;
+              total += amt;
+              lines.push({ date, label: `Call after covered window${e.description ? " — " + e.description : ""}`, detail: `${fmtTime(es)} · ${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+            }
           }
         } else {
           // No window logged: stipend covers the first N worked hours —
@@ -481,21 +484,27 @@ function WorkLog() {
     const w = stipendModel ? windowForDay(e.contractId, callDayOf(e)) : null;
     if (w) {
       const winMin = Math.max(0, Math.round((w.end - w.start) / 60000));
+      if (!e.startTime) {
+        if (e.type === "Call") return 0; // counted in the stipend
+        const outsideRaw = Math.max(0, billed - winMin);
+        const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
+        return overMin > 0 ? (overMin / 60) * (rateFor(e.type, c) || c.overageHourlyRate || 0) : 0;
+      }
+      const es = new Date(e.startTime);
+      const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
       let outsideRaw = 0;
-      if (e.startTime) {
-        const es = new Date(e.startTime);
-        const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
-        if (ee > w.end) outsideRaw += Math.round((ee - Math.max(es, w.end)) / 60000);
-        if (es < w.start) outsideRaw += Math.round((Math.min(ee, w.start) - es) / 60000);
-      } else {
-        outsideRaw = Math.max(0, billed - winMin);
+      if (ee > w.end) outsideRaw += Math.round((ee - Math.max(es, w.end)) / 60000);
+      if (es < w.start) outsideRaw += Math.round((Math.min(ee, w.start) - es) / 60000);
+      if (e.type === "Call") {
+        // Same rule as the invoice: each outside call bills its own
+        // per-call minimum, calls inside the window are stipend-covered
+        if (outsideRaw <= 0 && es < w.end && ee > w.start) return 0;
+        const overMin = roundUp(Math.max(1, outsideRaw), c.incrementMinutes || 15, c.minCallMinutes || 15);
+        return (overMin / 60) * (c.overageHourlyRate || 0);
       }
       const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
       if (overMin <= 0) return 0;
-      const rate = e.type === "Call"
-        ? (c.overageHourlyRate || 0)
-        : (rateFor(e.type, c) || c.overageHourlyRate || 0);
-      return (overMin / 60) * rate;
+      return (overMin / 60) * (rateFor(e.type, c) || c.overageHourlyRate || 0);
     }
     const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
     return (billed / 60) * rate;
