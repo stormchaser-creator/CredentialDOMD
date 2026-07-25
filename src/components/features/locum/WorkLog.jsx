@@ -336,6 +336,7 @@ function WorkLog() {
     )) return;
     addItem("workLog", {
       id: generateId(),
+      createdAt: new Date().toISOString(),
       contractId: timer.contractId,
       type: timer.type,
       date: localDate(timer.startedAt),
@@ -424,6 +425,7 @@ function WorkLog() {
     const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
     addItem("workLog", {
       id: generateId(),
+      createdAt: new Date().toISOString(),
       contractId: target.id,
       type,
       date: manual.date,
@@ -455,10 +457,49 @@ function WorkLog() {
     setShowManual(true);
   }, []);
 
+  // Most recently ENTERED first (per Eric) — createdAt when we have it,
+  // work time as the fallback for entries from before the stamp existed
   const contractEntries = useMemo(
-    () => entries.filter(e => e.contractId === (contract?.id)).sort((a, b) => (b.startTime || b.date).localeCompare(a.startTime || a.date)),
+    () => entries.filter(e => e.contractId === (contract?.id)).sort((a, b) =>
+      (b.createdAt || b.startTime || b.date).localeCompare(a.createdAt || a.startTime || a.date)),
     [entries, contract]
   );
+
+  // What one entry contributes in dollars — mirrors computeBilling's rules
+  // so the list matches the invoice (stipend is day-level, shown on the
+  // CallDay row; covered work is $0; only outside-window/hourly time bills)
+  const amountForEntry = useCallback((e, c) => {
+    if (!c) return 0;
+    const stipendModel = (c.callStipend || 0) > 0;
+    if (e.type === "CallDay") return c.callStipend || 0;
+    const billed = e.billedMin || 0;
+    if (e.type === "Orientation") {
+      if ((c.orientationHourlyRate || 0) > 0) return (billed / 60) * c.orientationHourlyRate;
+      if ((c.orientationFee || 0) > 0) return 0;
+      return (billed / 60) * (rateFor("Orientation", c) || (stipendModel ? (c.overageHourlyRate || 0) : 0));
+    }
+    const w = stipendModel ? windowForDay(e.contractId, callDayOf(e)) : null;
+    if (w) {
+      const winMin = Math.max(0, Math.round((w.end - w.start) / 60000));
+      let outsideRaw = 0;
+      if (e.startTime) {
+        const es = new Date(e.startTime);
+        const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
+        if (ee > w.end) outsideRaw += Math.round((ee - Math.max(es, w.end)) / 60000);
+        if (es < w.start) outsideRaw += Math.round((Math.min(ee, w.start) - es) / 60000);
+      } else {
+        outsideRaw = Math.max(0, billed - winMin);
+      }
+      const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
+      if (overMin <= 0) return 0;
+      const rate = e.type === "Call"
+        ? (c.overageHourlyRate || 0)
+        : (rateFor(e.type, c) || c.overageHourlyRate || 0);
+      return (overMin / 60) * rate;
+    }
+    const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
+    return (billed / 60) * rate;
+  }, [rateFor, windowForDay]);
   const unbilled = useMemo(() => contractEntries.filter(e => !e.invoiceId), [contractEntries]);
   const unbilledTotal = useMemo(
     () => computeBilling(contract, unbilled, true, contractEntries).total,
@@ -617,7 +658,8 @@ function WorkLog() {
                 const start = new Date(`${localDate(new Date())}T${String(CALL_DAY_START_HOUR).padStart(2, "0")}:00`);
                 const end = new Date(start.getTime() + (contract.stipendHours || 0) * 3600e3);
                 addItem("workLog", {
-                  id: generateId(), contractId: contract.id, type: "CallDay",
+                  id: generateId(), createdAt: new Date().toISOString(),
+                  contractId: contract.id, type: "CallDay",
                   date: localDate(new Date()),
                   startTime: start.toISOString(), endTime: end.toISOString(),
                   durationMin: 0, billedMin: 0,
@@ -845,8 +887,13 @@ function WorkLog() {
                       : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · inside covered window — paid by stipend" : ` → billed ${e.billedMin} min`}`}
                   </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  {isCoverage ? `stipend ${money(contract?.callStipend || 0)}` : covered ? "covered" : `${e.billedMin}m`}
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
+                    {money(amountForEntry(e, contract))}
+                  </div>
+                  <div style={{ fontSize: 10, color: T.textDim }}>
+                    {isCoverage ? "stipend" : covered ? `${e.billedMin}m · covered` : `${e.billedMin}m`}
+                  </div>
                 </div>
                 {!e.invoiceId && (
                   <button onClick={() => openEditEntry(e)} style={{

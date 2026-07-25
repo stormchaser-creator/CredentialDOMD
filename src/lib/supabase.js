@@ -211,9 +211,9 @@ export async function loadFromSupabase(userId) {
   for (const { key, rows } of results) {
     out[key] = rows.map((row) => {
       const camel = toCamelObj(row);
-      // Remove DB-specific fields, keep id
+      // Remove DB-specific fields, keep id — and keep createdAt, it drives
+      // "most recently entered first" ordering in the work log
       delete camel.userId;
-      delete camel.createdAt;
       delete camel.updatedAt;
       return camel;
     });
@@ -291,8 +291,8 @@ export async function insertItem(userId, collectionKey, item) {
   // Remove fields not in DB
   for (const f of SKIP_FIELDS) delete row[f];
   row.user_id = userId;
-  row.created_at = new Date().toISOString();
-  row.updated_at = row.created_at;
+  row.created_at = row.created_at || new Date().toISOString();
+  row.updated_at = new Date().toISOString();
   // Documents: push the file bytes to Storage and record where they live.
   if (collectionKey === "documents" && item.data) {
     const path = await uploadDocumentFile(item);
