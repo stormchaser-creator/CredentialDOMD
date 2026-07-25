@@ -324,7 +324,10 @@ function WorkLog() {
     const t = { contractId: contract.id, type, startedAt: new Date().toISOString() };
     setTimer(t); saveTimer(t);
     rememberContract(contract.id);
-  }, [contract, rememberContract]);
+    if (!inScheduledCoverage(contract, callDayOf({ startTime: t.startedAt }))) {
+      showNotice(`Heads up: today isn't inside a scheduled coverage block for ${contract.facility || "this contract"} — make sure you're logging against the right agreement (see the Schedule tab).`);
+    }
+  }, [contract, rememberContract, inScheduledCoverage, showNotice]);
 
   const stopTimer = useCallback(() => {
     if (!timer) return;
@@ -360,6 +363,17 @@ function WorkLog() {
     }
     setTimer(null); saveTimer(null);
   }, [timer, contracts, contract, addItem, windowForDay, showNotice]);
+
+  // Is a date inside any of the contract's scheduled coverage blocks?
+  // No blocks on file → assume yes (nothing to check against).
+  const inScheduledCoverage = useCallback((c, dateStr) => {
+    if (!c || !dateStr) return true;
+    const ps = c.coveragePeriods?.length
+      ? c.coveragePeriods
+      : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
+    if (!ps.length) return true;
+    return ps.some(p => (!p.start || dateStr >= p.start) && (!(p.end || p.start) || dateStr <= (p.end || p.start)));
+  }, []);
 
   const noticeForCall = useCallback((cId, startIso, endIso, dateKey) => {
     const w = windowForDay(cId, startIso ? callDayOf({ startTime: startIso }) : dateKey);
@@ -420,6 +434,9 @@ function WorkLog() {
           description: manual.description || "",
         });
         if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s2, e2, manual.date);
+        if (!inScheduledCoverage(target, manual.date)) {
+          showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
+        }
       }
       setShowManual(false); setManual({});
       return;
@@ -443,9 +460,12 @@ function WorkLog() {
       invoiceId: null,
     });
     if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s3, e3, manual.date);
+    if (!inScheduledCoverage(target, manual.date)) {
+      showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
+    }
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice, normalizeTimes]);
+  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice, normalizeTimes, inScheduledCoverage]);
 
   const openEditEntry = useCallback((e) => {
     setManual({

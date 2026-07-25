@@ -28,10 +28,19 @@ function Contracts() {
   const items = data.locumContracts || [];
 
   const openAdd = useCallback(() => {
-    setForm({ incrementMinutes: 15, minCallMinutes: 15 });
+    setForm({ incrementMinutes: 15, minCallMinutes: 15, coveragePeriods: [] });
     setEditItem(null); setAttachedDocs([]); setShowForm(true);
   }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => {
+    setForm({
+      ...item,
+      // Older contracts stored one start/end pair — surface it as the first period
+      coveragePeriods: item.coveragePeriods?.length
+        ? item.coveragePeriods
+        : (item.startDate ? [{ start: item.startDate, end: item.endDate || "" }] : []),
+    });
+    setEditItem(item); setAttachedDocs([]); setShowForm(true);
+  }, []);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
   const handleSave = useCallback(() => {
@@ -43,8 +52,15 @@ function Contracts() {
     }
     setFormError(null);
     const itemId = editItem ? editItem.id : generateId();
+    // startDate/endDate = the span of all coverage periods (oldest → newest)
+    const periods = (form.coveragePeriods || []).filter(p => p.start || p.end);
+    const starts = periods.map(p => p.start).filter(Boolean).sort();
+    const ends = periods.map(p => p.end || p.start).filter(Boolean).sort();
     const entry = {
       ...form,
+      coveragePeriods: periods,
+      startDate: starts[0] || form.startDate || "",
+      endDate: ends[ends.length - 1] || form.endDate || "",
       id: itemId,
       hourlyRate: parseFloat(form.hourlyRate) || 0,
       callHourlyRate: parseFloat(form.callHourlyRate) || 0,
@@ -93,11 +109,24 @@ function Contracts() {
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Agreement" : "Add Agreement"}>
         <Field label="Hospital / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Riverside Community Hospital" /></Field>
         <Field label="Agency (if any)"><input value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={iS} placeholder="e.g. CompHealth" /></Field>
+        <Field label="Location" hint="City / state of the facility"><input value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={iS} placeholder="e.g. Colorado Springs, CO" /></Field>
         <Field label="Invoice recipient email" hint="Where invoices get sent"><input type="email" value={form.billTo || ""} onChange={e => setForm(f => ({ ...f, billTo: e.target.value }))} style={iS} placeholder="billing@hospital.org" /></Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Field label="Start Date"><input type="date" value={form.startDate || ""} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} style={iS} /></Field>
-          <Field label="End Date"><input type="date" value={form.endDate || ""} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} style={iS} /></Field>
-        </div>
+        <Field label="Coverage dates" hint="Every scheduled block — contracts often have several separate date ranges">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {(form.coveragePeriods || []).map((p, i) => (
+              <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="date" value={p.start || ""} onChange={e => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                <span style={{ color: T.textDim, flexShrink: 0 }}>–</span>
+                <input type="date" value={p.end || ""} onChange={e => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                <button onClick={() => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>&times;</button>
+              </div>
+            ))}
+            <button onClick={() => setForm(f => ({ ...f, coveragePeriods: [...(f.coveragePeriods || []), { start: "", end: "" }] }))} style={{
+              padding: "10px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: "transparent",
+              color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>+ Add a date block</button>
+          </div>
+        </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="Call stipend ($/day)" hint="Flat amount per on-call day"><input type="number" inputMode="decimal" value={form.callStipend ?? ""} onChange={e => setForm(f => ({ ...f, callStipend: e.target.value }))} style={iS} placeholder="3000" /></Field>
           <Field label="Stipend covers (hours)"><input type="number" inputMode="decimal" value={form.stipendHours ?? ""} onChange={e => setForm(f => ({ ...f, stipendHours: e.target.value }))} style={iS} placeholder="4" /></Field>
@@ -143,7 +172,10 @@ function Contracts() {
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
                     {[
                       item.agency,
-                      item.startDate && `${formatDate(item.startDate)}${item.endDate ? " – " + formatDate(item.endDate) : ""}`,
+                      item.location,
+                      item.coveragePeriods?.length
+                        ? item.coveragePeriods.map(p => `${formatDate(p.start)}${p.end && p.end !== p.start ? " – " + formatDate(p.end) : ""}`).join(", ")
+                        : item.startDate && `${formatDate(item.startDate)}${item.endDate ? " – " + formatDate(item.endDate) : ""}`,
                       item.callStipend ? `$${item.callStipend}/call day (first ${item.stipendHours || 0}h)` : null,
                       item.overageHourlyRate ? `then $${item.overageHourlyRate}/hr` : null,
                       item.hourlyRate ? `$${item.hourlyRate}/hr` : null,

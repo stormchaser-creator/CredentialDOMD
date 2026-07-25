@@ -17,9 +17,11 @@ import { useApp } from "../../../context/AppContext";
 import DeductionMemo from "./DeductionMemo";
 import WorkLog from "./WorkLog";
 import Contracts from "./Contracts";
+import Schedule from "./Schedule";
 
 const SUBTABS = [
   { id: "work", label: "Work" },
+  { id: "schedule", label: "Schedule" },
   { id: "contracts", label: "Contracts" },
   { id: "deductions", label: "Deductions" },
 ];
@@ -69,6 +71,7 @@ export default function LocumDashboard() {
       </div>
 
       {sub === "work" && <WorkLog />}
+      {sub === "schedule" && <Schedule />}
       {sub === "contracts" && <Contracts />}
       {sub === "deductions" && <DeductionMemo />}
     </div>

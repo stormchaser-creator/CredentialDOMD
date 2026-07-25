@@ -38,9 +38,9 @@ const FIELD_DEFS = {
     { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" },
   ],
   agreement: [
-    { key: "facility", label: "Hospital / Facility" }, { key: "agency", label: "Agency" },
+    { key: "facility", label: "Hospital / Facility" }, { key: "location", label: "Location (city, state)" },
+    { key: "agency", label: "Agency" },
     { key: "billTo", label: "Invoice recipient email" },
-    { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" },
     { key: "callStipend", label: "Call stipend ($/day)", type: "number" },
     { key: "stipendHours", label: "Stipend covers (hours)", type: "number" },
     { key: "overageHourlyRate", label: "After-stipend rate ($/hr)", type: "number" },
@@ -207,6 +207,27 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                       {dose.facility && <span style={{ color: T.textDim }}>{dose.facility}</span>}
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+            {docType === "agreement" && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>
+                  Coverage dates — every scheduled block
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(edited.coveragePeriods || []).map((p, i) => (
+                    <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input type="date" value={p.start || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                      <span style={{ color: T.textDim, flexShrink: 0 }}>–</span>
+                      <input type="date" value={p.end || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                      <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>&times;</button>
+                    </div>
+                  ))}
+                  <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: [...(prev.coveragePeriods || []), { start: "", end: "" }] }))} style={{
+                    padding: "9px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: "transparent",
+                    color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  }}>+ Add a date block</button>
                 </div>
               </div>
             )}
