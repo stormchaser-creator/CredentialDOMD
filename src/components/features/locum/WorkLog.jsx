@@ -147,6 +147,17 @@ function WorkLog() {
     return type === "Call" ? (c.callHourlyRate || c.hourlyRate || 0) : (c.hourlyRate || 0);
   }, []);
 
+  // Is a date inside any of the contract's scheduled coverage blocks?
+  // No blocks on file → assume yes (nothing to check against).
+  const inScheduledCoverage = useCallback((c, dateStr) => {
+    if (!c || !dateStr) return true;
+    const ps = c.coveragePeriods?.length
+      ? c.coveragePeriods
+      : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
+    if (!ps.length) return true;
+    return ps.some(p => (!p.start || dateStr >= p.start) && (!(p.end || p.start) || dateStr <= (p.end || p.start)));
+  }, []);
+
   /**
    * Billing engine. Two call models:
    *  - Stipend (callStipend > 0): each date with call coverage bills the flat
@@ -363,17 +374,6 @@ function WorkLog() {
     }
     setTimer(null); saveTimer(null);
   }, [timer, contracts, contract, addItem, windowForDay, showNotice]);
-
-  // Is a date inside any of the contract's scheduled coverage blocks?
-  // No blocks on file → assume yes (nothing to check against).
-  const inScheduledCoverage = useCallback((c, dateStr) => {
-    if (!c || !dateStr) return true;
-    const ps = c.coveragePeriods?.length
-      ? c.coveragePeriods
-      : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
-    if (!ps.length) return true;
-    return ps.some(p => (!p.start || dateStr >= p.start) && (!(p.end || p.start) || dateStr <= (p.end || p.start)));
-  }, []);
 
   const noticeForCall = useCallback((cId, startIso, endIso, dateKey) => {
     const w = windowForDay(cId, startIso ? callDayOf({ startTime: startIso }) : dateKey);
