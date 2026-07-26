@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
 import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon } from "../../shared/Icons";
+import { shareInvoicePdf } from "../../../utils/invoicePdf";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
@@ -30,6 +31,22 @@ function Invoices() {
   const markUnpaid = (inv) => editItem("invoices", { ...inv, paidAt: null });
 
   const resend = async (inv) => {
+    // Rebuild the PDF from the stored line items when we have them
+    if (inv.lines?.length) {
+      const c = contracts.find(x => x.id === inv.contractId);
+      const s = data.settings || {};
+      await shareInvoicePdf({
+        number: inv.number,
+        physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
+        npi: s.npi, email: s.email,
+        facility: c?.facility, agency: c?.agency, location: c?.location, billTo: c?.billTo,
+        periodStart: inv.periodStart, periodEnd: inv.periodEnd,
+        terms: inv.terms, lines: inv.lines,
+        totalMin: inv.totalMinutes, total: inv.totalAmount,
+        issuedDate: inv.sentAt?.slice(0, 10),
+      }, `Invoice ${inv.number}`);
+      return;
+    }
     const text = inv.text || `Invoice ${inv.number} — ${facilityOf(inv.contractId)} — ${money(inv.totalAmount)}`;
     if (navigator.share) {
       try { await navigator.share({ title: `Invoice ${inv.number}`, text }); } catch { /* user cancelled */ }
