@@ -361,7 +361,7 @@ function WorkLog() {
       endTime: end.toISOString(),
       durationMin: rawMin,
       billedMin,
-      description: "",
+      description: timer.note || "",
       invoiceId: null,
     });
     {
@@ -658,6 +658,13 @@ function WorkLog() {
             <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12 }}>
               Will bill as {liveBilled} min ({(liveBilled / 60).toFixed(2)} h) · started {fmtTime(timer.startedAt)}
             </div>
+            {/* Notes DURING the call — saved with the entry on stop */}
+            <textarea
+              value={timer.note || ""}
+              onChange={e => setTimer(t => { const nt = { ...t, note: e.target.value }; saveTimer(nt); return nt; })}
+              placeholder="Notes while you talk — patient, issue, orders given…"
+              style={{ ...iS, minHeight: 64, resize: "vertical", textAlign: "left", marginBottom: 12 }}
+            />
             <button onClick={stopTimer} style={{
               width: "100%", padding: "16px", borderRadius: 14, border: "none",
               background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff",
