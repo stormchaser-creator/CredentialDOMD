@@ -592,6 +592,8 @@ function WorkLog() {
       totalAmount: invoicePreview.total,
       method,
       sentAt: new Date().toISOString(),
+      paidAt: null,
+      text: invoicePreview.text,
     });
     setSent(true);
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
