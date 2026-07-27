@@ -91,11 +91,6 @@ export function buildInvoicePdf(inv) {
 
   // ── Totals ──
   let ty = doc.lastAutoTable.finalY + 6;
-  doc.setFontSize(9);
-  doc.setTextColor(90, 90, 90);
-  if (inv.totalMin) {
-    doc.text(`Total time: ${(inv.totalMin / 60).toFixed(2)} hours (${inv.totalMin} min)`, M, ty + 6);
-  }
   doc.setFillColor(...EMERALD);
   doc.roundedRect(W - M - 70, ty - 2, 70, 12, 2, 2, "F");
   doc.setTextColor(255, 255, 255);

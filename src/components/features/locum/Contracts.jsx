@@ -7,7 +7,7 @@ import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, EditIcon, TrashIcon, FileIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
 import DocAttach from "../DocAttach";
-import { analyzeAgreement } from "../../../utils/documentScanner";
+import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentScanner";
 
 /**
  * Contracts — locum agreements with the terms that drive billing.
@@ -148,7 +148,7 @@ function Contracts() {
           <Field label="Minimum per call (min)"><input type="number" inputMode="numeric" value={form.minCallMinutes ?? 15} onChange={e => setForm(f => ({ ...f, minCallMinutes: e.target.value }))} style={iS} /></Field>
         </div>
         <Field label="Key terms / notes" hint="Cancellation clause, guaranteed hours, travel, etc."><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 60, resize: "vertical" }} /></Field>
-        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} analyzer={analyzeAgreement} />
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} analyzer={analyzeAgreement} textAnalyzer={analyzeAgreementText} />
         {formError && (
           <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{formError}</div>
         )}

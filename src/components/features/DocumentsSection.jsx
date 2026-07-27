@@ -5,7 +5,8 @@ import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
 import { generateId } from "../../utils/helpers";
-import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
+import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { isOfficeFile, extractOfficeText } from "../../utils/officeText";
 import ScanReviewCard from "./ScanReviewCard";
 
 function DocumentsSection() {
@@ -196,18 +197,21 @@ function DocumentsSection() {
         data: dataUrl, uploadedAt: new Date().toISOString(), linkedTo: "",
       });
 
-      if ((file.type.startsWith("image/") || file.type === "application/pdf") && apiKey) {
+      const scannable = file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file);
+      if (scannable && apiKey) {
         setScanning(true);
         try {
-          const result = file.type === "application/pdf"
-            ? await analyzePDF(dataUrl, deg, apiKey)
-            : await analyzeDocument(dataUrl, deg, apiKey);
+          const result = isOfficeFile(file)
+            ? await analyzeDocText(await extractOfficeText({ name: file.name, type: file.type, file }), deg, apiKey)
+            : file.type === "application/pdf"
+              ? await analyzePDF(dataUrl, deg, apiKey)
+              : await analyzeDocument(dataUrl, deg, apiKey);
           setScanQueue(q => [...q, { result, imageData: dataUrl, fileName: file.name, docId }]);
         } catch (err) {
           setScanError(err.message || "Analysis failed. Document has been saved to your files.");
         }
         setScanning(false);
-      } else if (!apiKey && (file.type.startsWith("image/") || file.type === "application/pdf")) {
+      } else if (!apiKey && scannable) {
         setScanError("Document saved but could not be analyzed. Add your API key in Settings to enable AI scanning.");
       }
     }
@@ -273,9 +277,11 @@ function DocumentsSection() {
     setScanError(null);
     try {
       const isPdf = doc.type === "application/pdf" || doc.data.startsWith("data:application/pdf");
-      const result = isPdf
-        ? await analyzePDF(doc.data, deg, apiKey)
-        : await analyzeDocument(doc.data, deg, apiKey);
+      const result = isOfficeFile(doc)
+        ? await analyzeDocText(await extractOfficeText({ name: doc.name, type: doc.type, dataUrl: doc.data }), deg, apiKey)
+        : isPdf
+          ? await analyzePDF(doc.data, deg, apiKey)
+          : await analyzeDocument(doc.data, deg, apiKey);
       setScanQueue(q => q.some(i => i.docId === doc.id) ? q : [...q, { result, imageData: doc.data, fileName: doc.name, docId: doc.id }]);
     } catch (err) {
       setScanError(err.message || "Could not read this document.");

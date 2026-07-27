@@ -7,7 +7,8 @@ import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
 import { generateId, getStatusColor, getStatusLabel, describeItem } from "../../utils/helpers";
-import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
+import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { isOfficeFile, extractOfficeText } from "../../utils/officeText";
 import CPTCodePicker from "./CPTCodePicker";
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone }) {
@@ -113,13 +114,15 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       setAttachedDocs(prev => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
 
       // Run AI scan to auto-fill form fields
-      if (apiKey && (file.type.startsWith("image/") || file.type === "application/pdf")) {
+      if (apiKey && (file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file))) {
         setScanningDoc(true);
         setScanMsg(null);
         try {
-          const result = file.type === "application/pdf"
-            ? await analyzePDF(dataUrl, deg, apiKey)
-            : await analyzeDocument(dataUrl, deg, apiKey);
+          const result = isOfficeFile(file)
+            ? await analyzeDocText(await extractOfficeText({ name: file.name, type: file.type, file }), deg, apiKey)
+            : file.type === "application/pdf"
+              ? await analyzePDF(dataUrl, deg, apiKey)
+              : await analyzeDocument(dataUrl, deg, apiKey);
 
           const extracted = result?.extracted || result?.fields;
           if (extracted && typeof extracted === "object") {
@@ -291,7 +294,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         ))}
         {/* Upload / Camera document */}
         <div style={{ marginTop: 14, padding: "14px", borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>
-          <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
+          <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx,.xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
           <input type="file" ref={modalCameraRef} accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={() => requireApiKey() && uploadRef.current?.click()} style={{

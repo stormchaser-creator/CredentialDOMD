@@ -205,42 +205,53 @@ function WorkLog() {
         // already billed this day's coverage, don't charge it again for
         // late-logged calls.
         const stipendBilled = all.some(e => e.invoiceId && (e.type === "CallDay" || e.type === "Call") && callDayOf(e) === date);
-        if (!stipendBilled) {
-          total += c.callStipend;
-          lines.push(win ? {
-            date,
-            label: `Call coverage — stipend`,
-            detail: `${fmtTime(win.start)}–${fmtTime(win.end)} window · ${calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged"}`,
-            amount: c.callStipend,
-          } : {
-            date,
-            label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h worked)`,
-            detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged",
-            amount: c.callStipend,
-          });
-        }
 
         if (win) {
-          // WINDOW model: stipend buys the coverage window. Call time inside
-          // is included; each call outside bills SEPARATELY at the after-
-          // stipend rate with the per-call minimum — two 1-minute call backs
-          // are two minimum charges, never pooled into one.
+          // WINDOW model: stipend buys the coverage window. The stipend line
+          // describes ONLY the calls inside the window — after-window calls
+          // are their own line items and never mix into the stipend. Each
+          // outside call bills separately with the per-call minimum.
+          const covered = [], outside = [];
           for (const e of calls) {
-            if (!e.startTime) continue;
+            if (!e.startTime) { covered.push(e); continue; }
             const es = new Date(e.startTime);
             const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
             let outsideRaw = 0;
             if (ee > win.end) outsideRaw += Math.round((ee - Math.max(es, win.end)) / 60000);
             if (es < win.start) outsideRaw += Math.round((Math.min(ee, win.start) - es) / 60000);
-            if (outsideRaw <= 0 && (es < win.end && ee > win.start)) continue; // fully covered
+            if (outsideRaw <= 0 && (es < win.end && ee > win.start)) covered.push(e);
+            else outside.push({ e, outsideRaw, es });
+          }
+          const coveredMin = covered.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+          if (!stipendBilled) {
+            total += c.callStipend;
+            lines.push({
+              date,
+              label: `Call coverage — stipend`,
+              detail: `${fmtTime(win.start)}–${fmtTime(win.end)} window${covered.length ? ` · ${covered.length} call${covered.length > 1 ? "s" : ""} · ${coveredMin} min included` : " · no calls inside the window"}`,
+              amount: c.callStipend,
+              _sort: `${date}~0`,
+            });
+          }
+          for (const { e, outsideRaw, es } of outside) {
             const overMin = roundUp(Math.max(1, outsideRaw), c.incrementMinutes || 15, c.minCallMinutes || 15);
             if ((c.overageHourlyRate || 0) > 0) {
               const amt = (overMin / 60) * c.overageHourlyRate;
               total += amt;
-              lines.push({ date, label: `Call after covered window${e.description ? " — " + e.description : ""}`, detail: `${fmtTime(es)} · ${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+              lines.push({ date, label: `Call after covered window${e.description ? " — " + e.description : ""}`, detail: `${fmtTime(es)} · ${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~${es.toISOString()}` });
             }
           }
         } else {
+          if (!stipendBilled) {
+            total += c.callStipend;
+            lines.push({
+              date,
+              label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h worked)`,
+              detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged",
+              amount: c.callStipend,
+              _sort: `${date}~0`,
+            });
+          }
           // No window logged: stipend covers the first N worked hours —
           // minutes billed on earlier invoices count toward the allowance.
           const priorMin = all.filter(e => e.invoiceId && e.type === "Call" && callDayOf(e) === date).reduce((s2, e) => s2 + (e.billedMin || 0), 0);
@@ -249,7 +260,7 @@ function WorkLog() {
           if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
             const amt = (overMin / 60) * c.overageHourlyRate;
             total += amt;
-            lines.push({ date, label: `Call time beyond stipend`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt });
+            lines.push({ date, label: `Call time beyond stipend`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~z` });
           }
         }
       }
@@ -258,7 +269,7 @@ function WorkLog() {
         const rate = rateFor("Call", c);
         const amt = ((e.billedMin || 0) / 60) * rate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: e.date, label: `Call${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt });
+        lines.push({ date: e.date, label: `Call${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~1~${e.startTime || "z"}` });
       }
     }
 
@@ -269,12 +280,12 @@ function WorkLog() {
       if (e.type === "Orientation" && (c.orientationHourlyRate || 0) > 0) {
         const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt });
+        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${e.date}~2~${e.startTime || "z"}` });
         continue;
       }
       if (e.type === "Orientation" && (c.orientationFee || 0) > 0) {
         totalMin += e.billedMin || 0;
-        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min — covered by orientation fee`, amount: 0 });
+        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min — covered by orientation fee`, amount: 0, _sort: `${e.date}~2~${e.startTime || "z"}` });
         continue;
       }
       // On a stipend-covered call day, the stipend already pays for ALL work
@@ -300,7 +311,7 @@ function WorkLog() {
         totalMin += billed;
         const coveredMin = Math.max(0, billed - overMin);
         if (coveredMin > 0 || overMin === 0) {
-          lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${coveredMin} min — covered by call stipend`, amount: 0 });
+          lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${coveredMin} min — covered by call stipend`, amount: 0, _sort: `${e.date}~2~${e.startTime || "z"}~a` });
         }
         if (overMin > 0) {
           // Work outside the window bills at its own hourly rate when the
@@ -309,7 +320,7 @@ function WorkLog() {
           if (rate > 0) {
             const amt = (overMin / 60) * rate;
             total += amt;
-            lines.push({ date: e.date, label: `${e.type} outside covered window${e.description ? " — " + e.description : ""}`, detail: `${overMin} min @ ${money(rate)}/hr`, amount: amt });
+            lines.push({ date: e.date, label: `${e.type} outside covered window${e.description ? " — " + e.description : ""}`, detail: `${overMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~2~${e.startTime || "z"}~b` });
           }
         }
         continue;
@@ -319,15 +330,19 @@ function WorkLog() {
       const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
       const amt = ((e.billedMin || 0) / 60) * rate;
       totalMin += e.billedMin || 0; total += amt;
-      lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt });
+      lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~2~${e.startTime || "z"}` });
     }
 
     let orientationIncluded = false;
     if (includeOrientation && (c.orientationFee || 0) > 0 && !c.orientationBilled) {
       total += c.orientationFee;
       orientationIncluded = true;
-      lines.push({ date: null, label: "Orientation (one-time)", detail: "", amount: c.orientationFee });
+      lines.push({ date: null, label: "Orientation (one-time)", detail: "", amount: c.orientationFee, _sort: "~zzz" });
     }
+
+    // Chronological invoice: day by day, stipend first, then calls by time,
+    // then other work — regardless of the order entries were logged in.
+    lines.sort((a, b) => (a._sort || "").localeCompare(b._sort || ""));
     return { lines, total, totalMin, orientationIncluded };
   }, [rateFor]);
 
@@ -570,7 +585,6 @@ function WorkLog() {
       lines.push(`   ${l.detail ? l.detail + " = " : ""}${money(l.amount)}`);
     }
     lines.push(div);
-    lines.push(`Total call/work time: ${(billing.totalMin / 60).toFixed(2)} hours`);
     lines.push(`TOTAL DUE: ${money(billing.total)}`);
     lines.push("", `Generated by CredentialDOMD · ${new Date().toLocaleDateString()}`);
     setInvoicePreview({
@@ -927,9 +941,6 @@ function WorkLog() {
                   <tr>
                     <td colSpan={2} style={{ padding: "8px 6px", fontWeight: 800, color: T.text }}>
                       TOTAL DUE
-                      <span style={{ fontWeight: 500, color: T.textMuted, fontSize: 11 }}>
-                        {" "}· {((invoicePreview.totalMin || 0) / 60).toFixed(2)} h
-                      </span>
                     </td>
                     <td style={{ padding: "8px 6px", textAlign: "right", fontWeight: 800, fontSize: 14, color: T.accent }}>
                       {money(invoicePreview.total)}

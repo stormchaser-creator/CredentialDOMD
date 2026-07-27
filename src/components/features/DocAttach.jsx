@@ -1,7 +1,8 @@
 import { useRef, useState, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { UploadIcon, CameraIcon, FileIcon, TrashIcon } from "../shared/Icons";
-import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
+import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { isOfficeFile, extractOfficeText } from "../../utils/officeText";
 
 /**
  * DocAttach — the ONE way to attach + scan documents from inside any
@@ -17,7 +18,7 @@ import { analyzeDocument, analyzePDF } from "../../utils/documentScanner";
  *  - setForm(fn): form state setter — extracted fields are merged in
  *  - attachedDocs / setAttachedDocs: pending files, saved+linked by the parent
  */
-function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer }) {
+function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnalyzer }) {
   const { data, theme: T } = useApp();
   const uploadRef = useRef(null);
   const cameraRef = useRef(null);
@@ -55,16 +56,21 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer }) {
       }
       setAttachedDocs((prev) => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
 
-      if (file.type.startsWith("image/") || file.type === "application/pdf") {
+      if (file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file)) {
         setScanning(true);
         setMsg(null);
         setIsError(false);
         try {
-          const result = analyzer
-            ? await analyzer(dataUrl, apiKey)
-            : file.type === "application/pdf"
-              ? await analyzePDF(dataUrl, deg, apiKey)
-              : await analyzeDocument(dataUrl, deg, apiKey);
+          const result = isOfficeFile(file)
+            ? await (async () => {
+                const text = await extractOfficeText({ name: file.name, type: file.type, file });
+                return textAnalyzer ? textAnalyzer(text, apiKey) : analyzeDocText(text, deg, apiKey);
+              })()
+            : analyzer
+              ? await analyzer(dataUrl, apiKey)
+              : file.type === "application/pdf"
+                ? await analyzePDF(dataUrl, deg, apiKey)
+                : await analyzeDocument(dataUrl, deg, apiKey);
           const extracted = result?.extracted || result?.fields;
           if (extracted && typeof extracted === "object") {
             setForm((prev) => {
@@ -86,11 +92,11 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer }) {
         setScanning(false);
       }
     }
-  }, [data.settings.apiKey, data.settings.degreeType, data.documents, requireApiKey, setAttachedDocs, setForm, analyzer]);
+  }, [data.settings.apiKey, data.settings.degreeType, data.documents, requireApiKey, setAttachedDocs, setForm, analyzer, textAnalyzer]);
 
   return (
     <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>
-      <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx" style={{ display: "none" }}
+      <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx,.xlsx,.xls,.csv" style={{ display: "none" }}
         onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
       <input type="file" ref={cameraRef} accept="image/*" capture="environment" style={{ display: "none" }}
         onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />

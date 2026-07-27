@@ -201,6 +201,44 @@ export async function analyzePDF(pdfData, degreeType, apiKey) {
   return result;
 }
 
+/**
+ * Analyze a document supplied as PLAIN TEXT (extracted from Word/Excel
+ * uploads). Same classification pipeline as images/PDFs.
+ */
+export async function analyzeDocText(text, degreeType, apiKey) {
+  if (!apiKey) {
+    throw new Error("No API key configured. Add your Gemini API key in Settings.");
+  }
+  if (!text?.trim()) {
+    throw new Error("No readable text in this document.");
+  }
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType) }] },
+      contents: [{
+        parts: [
+          { text: `DOCUMENT CONTENT (text extracted from an uploaded Word/Excel file):\n\n${text}` },
+          { text: "Analyze this medical credential document. Return only JSON." },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    }),
+  });
+
+  if (!response.ok) handleApiError(response.status);
+
+  const json = await response.json();
+  const parsed = parseResponse(json);
+  const result = validateResponse(parsed);
+  if (!result) {
+    throw new Error("AI could not identify a document type from this file.");
+  }
+  return result;
+}
+
 // ─── Locum agreement analyzer ────────────────────────────────────────────
 // Extracts the billing terms a locum contract runs on. Unlike credential
 // documents, agreements aren't classified — the caller already knows what
@@ -229,6 +267,39 @@ Fields to extract (omit any not present):
 
 Return JSON: { "extracted": { ...fields }, "confidence": "high"|"medium"|"low" }
 Numbers must be plain numbers without $ signs or commas.`;
+
+/** Agreement terms from PLAIN TEXT (Word/Excel contract uploads). */
+export async function analyzeAgreementText(text, apiKey) {
+  if (!apiKey) {
+    throw new Error("No API key configured. Add your Gemini API key in Settings.");
+  }
+  if (!text?.trim()) {
+    throw new Error("No readable text in this document.");
+  }
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: AGREEMENT_PROMPT }] },
+      contents: [{
+        parts: [
+          { text: `AGREEMENT CONTENT (text extracted from an uploaded file):\n\n${text}` },
+          { text: "Extract the locum agreement terms. Return only JSON." },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    }),
+  });
+
+  if (!response.ok) handleApiError(response.status);
+
+  const json = await response.json();
+  const parsed = parseResponse(json);
+  if (!parsed || typeof parsed.extracted !== "object") {
+    throw new Error("Could not read agreement terms from this document.");
+  }
+  return parsed;
+}
 
 export async function analyzeAgreement(dataUrl, apiKey) {
   if (!apiKey) {
