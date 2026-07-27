@@ -127,6 +127,9 @@ function WorkLog() {
     || contracts.find(c => c.id === lastLoggedContractId)
     || contracts[0] || null;
 
+  // Tap-anywhere detail view for a work entry
+  const [viewEntry, setViewEntry] = useState(null);
+
   // Tick while a timer runs
   useEffect(() => {
     if (!timer) return;
@@ -407,6 +410,20 @@ function WorkLog() {
     }
   }, [windowForDay, showNotice]);
 
+  // Work is logged AFTER it happens. A start time in the future almost
+  // always means the date is wrong (the old UTC-date bug filed 9 PM work
+  // under the next day) — make the user look twice before saving it.
+  const confirmIfFuture = useCallback((startIso, dateStr) => {
+    const graceMs = 10 * 60000;
+    const future =
+      (startIso && new Date(startIso).getTime() > Date.now() + graceMs) ||
+      (!startIso && dateStr && dateStr > localDate(new Date()));
+    if (!future) return true;
+    return window.confirm(
+      `${formatDate(dateStr)}${startIso ? " at " + fmtTime(startIso) : ""} hasn't happened yet — that usually means the date is wrong. Save it as future time anyway?`
+    );
+  }, []);
+
   // Make start/end/duration agree: a start plus a duration produces the end,
   // an end STRICTLY before the start with no duration means the work crossed
   // midnight, and start+end derive duration. end === start is a sub-minute
@@ -443,6 +460,11 @@ function WorkLog() {
         const [s2, e2, rawMin] = normalizeTimes(startIso, endIso, parseInt(manual.durationMin, 10) || 0);
         if (!rawMin) return;
         const type = manual.type || orig.type;
+        if (!confirmIfFuture(s2, manual.date)) return;
+        if (orig.invoiceId) {
+          const inv = (data.invoices || []).find(i => i.id === orig.invoiceId);
+          if (!window.confirm(`This entry is already billed${inv ? ` on ${inv.number}` : ""}. Editing updates your records but NOT the invoice that was sent — to change the invoice too, delete it in the Invoices tab (entries become unbilled) and generate it again. Edit anyway?`)) return;
+        }
         const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
         editItem("workLog", {
           ...orig, contractId: target.id, type, date: manual.date,
@@ -463,6 +485,7 @@ function WorkLog() {
     const [s3, e3, rawMin] = normalizeTimes(startIso, endIso, parseInt(manual.durationMin, 10) || 0);
     if (!rawMin) return;
     const type = manual.type || "Call";
+    if (!confirmIfFuture(s3, manual.date)) return;
     const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
     addItem("workLog", {
       id: generateId(),
@@ -484,7 +507,7 @@ function WorkLog() {
     }
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice, normalizeTimes, inScheduledCoverage]);
+  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, data.invoices]);
 
   const openEditEntry = useCallback((e) => {
     setManual({
@@ -977,6 +1000,40 @@ function WorkLog() {
         </div>
       )}
 
+      {/* Entry detail — tap any row to see everything about it */}
+      <Modal open={!!viewEntry} onClose={() => setViewEntry(null)} title={viewEntry ? (viewEntry.type === "CallDay" ? "Call coverage" : viewEntry.type) : "Entry"}>
+        {viewEntry && (() => {
+          const e = viewEntry;
+          const inv = e.invoiceId ? (data.invoices || []).find(i => i.id === e.invoiceId) : null;
+          const rows = [
+            ["Date", formatDate(e.date)],
+            e.startTime && ["Time", `${fmtTime(e.startTime)}${e.endTime ? " – " + fmtTime(e.endTime) : ""}`],
+            e.type !== "CallDay" && ["Logged", `${e.durationMin} min`],
+            e.type !== "CallDay" && ["Billed", `${e.billedMin} min`],
+            ["Amount", money(amountForEntry(e, contracts.find(c => c.id === e.contractId) || contract))],
+            ["Invoice", inv ? `${inv.number} · ${inv.paidAt ? "paid" : "awaiting payment"}` : e.invoiceId ? "billed" : "not yet invoiced"],
+            e.description && ["Billing note", e.description],
+            e.privateNote && ["🔒 Private note", e.privateNote],
+          ].filter(Boolean);
+          return (
+            <>
+              {rows.map(([k, v]) => (
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                  <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{k}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{v}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                <button onClick={() => { const en = viewEntry; setViewEntry(null); openEditEntry(en); }} style={{
+                  padding: "12px 18px", borderRadius: 10, border: "none",
+                  backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer",
+                }}>Edit</button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
+
       {/* Entry list */}
       {contractEntries.length === 0 ? (
         <EmptyState icon={"📞"} title="Nothing logged yet"
@@ -993,12 +1050,12 @@ function WorkLog() {
             const winMin = w ? Math.max(0, Math.round((w.end - w.start) / 60000)) : 0;
             const covered = !!w && (es ? (es >= w.start && ee <= w.end) : (e.billedMin || 0) <= winMin);
             return (
-              <div key={e.id} style={{
+              <div key={e.id} onClick={() => setViewEntry(e)} style={{
                 display: "flex", alignItems: "center", gap: 10,
                 backgroundColor: T.card,
                 border: `1px solid ${isCoverage ? T.accent + "66" : T.border}`, borderRadius: 12,
-                padding: "10px 12px", boxShadow: T.shadow1,
-                opacity: e.invoiceId ? 0.55 : 1,
+                padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer",
+                opacity: e.invoiceId ? 0.8 : 1,
               }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
@@ -1024,14 +1081,12 @@ function WorkLog() {
                     {isCoverage ? "stipend" : covered ? `${e.billedMin}m · covered` : `${e.billedMin}m`}
                   </div>
                 </div>
+                <button onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={{
+                  padding: "5px 7px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent",
+                  color: T.textMuted, cursor: "pointer", display: "flex", flexShrink: 0,
+                }}><EditIcon /></button>
                 {!e.invoiceId && (
-                  <button onClick={() => openEditEntry(e)} style={{
-                    padding: "5px 7px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent",
-                    color: T.textMuted, cursor: "pointer", display: "flex", flexShrink: 0,
-                  }}><EditIcon /></button>
-                )}
-                {!e.invoiceId && (
-                  <button onClick={() => { if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{
+                  <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{
                     padding: "5px 7px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
                     color: T.danger, cursor: "pointer", display: "flex", flexShrink: 0,
                   }}><TrashIcon /></button>
