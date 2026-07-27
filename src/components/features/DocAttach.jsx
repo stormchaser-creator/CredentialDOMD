@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { UploadIcon, CameraIcon, FileIcon, TrashIcon } from "../shared/Icons";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
-import { isOfficeFile, extractOfficeText } from "../../utils/officeText";
+import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 
 /**
  * DocAttach — the ONE way to attach + scan documents from inside any
@@ -96,7 +96,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
 
   return (
     <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>
-      <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx,.xlsx,.xls,.csv" style={{ display: "none" }}
+      <input type="file" ref={uploadRef} multiple accept={UPLOAD_ACCEPT} style={{ display: "none" }}
         onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
       <input type="file" ref={cameraRef} accept="image/*" capture="environment" style={{ display: "none" }}
         onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />

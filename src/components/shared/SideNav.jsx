@@ -124,6 +124,21 @@ export default function SideNav({ items, active, onChange, fabItem }) {
 
 /* ─── Mobile Bottom Nav ───────────────────────────────────── */
 function BottomNav({ items, active, onChange, fabItem, T }) {
+  // The iOS keyboard makes fixed bottom bars float and bounce over it —
+  // hide the bar entirely while the keyboard is open.
+  const [kbOpen, setKbOpen] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => setKbOpen(vv.height < window.innerHeight - 150);
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
+  if (kbOpen) return null;
+  return <BottomNavInner items={items} active={active} onChange={onChange} fabItem={fabItem} T={T} />;
+}
+
+function BottomNavInner({ items, active, onChange, fabItem, T }) {
   // Split items around FAB if present
   const allItems = fabItem
     ? [...items.slice(0, 2), fabItem, ...items.slice(2)]

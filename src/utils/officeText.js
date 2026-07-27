@@ -5,6 +5,20 @@
  * main bundle doesn't carry them.
  */
 
+/**
+ * Shared file-picker accept list. iOS grays out files unless the exact
+ * MIME type is listed, so extensions AND MIMEs both appear here.
+ */
+export const UPLOAD_ACCEPT = [
+  "image/*",
+  ".pdf", "application/pdf",
+  ".doc", "application/msword",
+  ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls", "application/vnd.ms-excel",
+  ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".csv", "text/csv",
+].join(",");
+
 export function officeKind(name = "", mime = "") {
   const n = (name || "").toLowerCase();
   const m = (mime || "").toLowerCase();

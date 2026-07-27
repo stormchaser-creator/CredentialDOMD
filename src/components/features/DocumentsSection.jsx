@@ -6,7 +6,7 @@ import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
 import { generateId } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
-import { isOfficeFile, extractOfficeText } from "../../utils/officeText";
+import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import ScanReviewCard from "./ScanReviewCard";
 
 function DocumentsSection() {
@@ -323,7 +323,7 @@ function DocumentsSection() {
       )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <input type="file" ref={fileRef} multiple accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
+        <input type="file" ref={fileRef} multiple accept={UPLOAD_ACCEPT} style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
         <input type="file" ref={cameraRef} accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
         <button onClick={() => requireApiKey() && fileRef.current?.click()} style={btnStyle}><UploadIcon /> Upload</button>
         <button onClick={() => requireApiKey() && openCamera()} style={btnStyle}><CameraIcon /> Camera</button>

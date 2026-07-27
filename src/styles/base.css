@@ -47,6 +47,9 @@ html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  /* Stop rubber-band overscroll dragging fixed elements (bottom nav)
+     up and down with the bounce */
+  overscroll-behavior-y: none;
 }
 
 #root {

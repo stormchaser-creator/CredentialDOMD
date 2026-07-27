@@ -8,7 +8,7 @@ import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
 import { generateId, getStatusColor, getStatusLabel, describeItem } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
-import { isOfficeFile, extractOfficeText } from "../../utils/officeText";
+import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import CPTCodePicker from "./CPTCodePicker";
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone }) {
@@ -294,7 +294,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         ))}
         {/* Upload / Camera document */}
         <div style={{ marginTop: 14, padding: "14px", borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>
-          <input type="file" ref={uploadRef} multiple accept="image/*,.pdf,.doc,.docx,.xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
+          <input type="file" ref={uploadRef} multiple accept={UPLOAD_ACCEPT} style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
           <input type="file" ref={modalCameraRef} accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={() => requireApiKey() && uploadRef.current?.click()} style={{
