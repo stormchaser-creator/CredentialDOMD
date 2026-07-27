@@ -666,7 +666,7 @@ function WorkLog() {
   const sendInvoice = useCallback(async () => {
     const subject = `Invoice ${invoicePreview.number} — ${data.settings?.name || "Locum"} — ${contract.facility}`;
     // A real PDF with a proper table — falls back to download, then text/mailto
-    const how = await shareInvoicePdf(pdfArgsFor(invoicePreview), subject);
+    const how = await shareInvoicePdf(pdfArgsFor(invoicePreview), subject, invoicePreview.text);
     if (how === null) return; // user cancelled the share sheet
     markBilledAndLog(how === "share" ? "share-pdf" : "pdf-download");
   }, [invoicePreview, contract, data.settings, markBilledAndLog, pdfArgsFor]);

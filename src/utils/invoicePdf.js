@@ -160,13 +160,28 @@ export function invoicePdfFile(inv) {
   return new File([blob], `${inv.number || "invoice"}.pdf`, { type: "application/pdf" });
 }
 
-/** Share the PDF (file share sheet where supported, download fallback). */
-export async function shareInvoicePdf(inv, subject) {
+/**
+ * Share the PDF. Fallback order matters: in the installed app, "downloading"
+ * navigates the whole app into the PDF with no way back — so when the share
+ * sheet can't take files we share the text version instead, and only plain
+ * browsers get the download.
+ */
+export async function shareInvoicePdf(inv, subject, fallbackText) {
   const file = invoicePdfFile(inv);
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ title: subject || `Invoice ${inv.number}`, files: [file] });
       return "share";
+    } catch (err) {
+      if (err?.name === "AbortError") return null;
+    }
+  }
+  const standalone = window.navigator.standalone === true
+    || window.matchMedia?.("(display-mode: standalone)")?.matches;
+  if (standalone && navigator.share && fallbackText) {
+    try {
+      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: fallbackText });
+      return "share-text";
     } catch (err) {
       if (err?.name === "AbortError") return null;
     }

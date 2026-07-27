@@ -46,7 +46,7 @@ function Invoices() {
         terms: inv.terms, lines: inv.lines,
         totalMin: inv.totalMinutes, total: inv.totalAmount,
         issuedDate: inv.sentAt?.slice(0, 10),
-      }, `Invoice ${inv.number}`);
+      }, `Invoice ${inv.number}`, inv.text);
       return;
     }
     const text = inv.text || `Invoice ${inv.number} — ${facilityOf(inv.contractId)} — ${money(inv.totalAmount)}`;
