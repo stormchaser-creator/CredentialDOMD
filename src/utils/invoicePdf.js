@@ -11,6 +11,38 @@ const NAVY = [10, 37, 64];      // #0A2540
 const EMERALD = [16, 185, 129]; // #10b981
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/**
+ * Chronological line order, even for invoices saved before lines carried
+ * _sort keys: day by day → stipend → calls by clock time (pre-7am counts
+ * as end of the call day) → other work → one-time orientation last.
+ */
+const parseDetailTime = (detail = "") => {
+  const m = detail.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10) % 12;
+  if (/pm/i.test(m[3])) h += 12;
+  let mins = h * 60 + parseInt(m[2], 10);
+  if (mins < 7 * 60) mins += 24 * 60; // before 7am = tail of the call day
+  return mins;
+};
+export function sortInvoiceLines(lines = []) {
+  const rank = (l) =>
+    !l.date ? 9
+      : l.label?.startsWith("Call coverage") ? 0
+        : l.label?.startsWith("Call") ? 1
+          : 2;
+  return [...lines].sort((a, b) => {
+    if (a._sort && b._sort) return a._sort.localeCompare(b._sort);
+    const d = (a.date || "9999").localeCompare(b.date || "9999");
+    if (d) return d;
+    const r = rank(a) - rank(b);
+    if (r) return r;
+    const ta = parseDetailTime(a.detail), tb = parseDetailTime(b.detail);
+    if (ta != null && tb != null) return ta - tb;
+    return 0;
+  });
+}
+
 export function buildInvoicePdf(inv) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
@@ -66,7 +98,7 @@ export function buildInvoicePdf(inv) {
     startY: y,
     margin: { left: M, right: M },
     head: [["Date", "Item", "Details", "Amount"]],
-    body: (inv.lines || []).map(l => [
+    body: sortInvoiceLines(inv.lines).map(l => [
       l.date ? formatDate(l.date) : "",
       l.label || "",
       l.detail || "",

@@ -4,7 +4,7 @@ import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
 import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon } from "../../shared/Icons";
-import { shareInvoicePdf } from "../../../utils/invoicePdf";
+import { shareInvoicePdf, sortInvoiceLines } from "../../../utils/invoicePdf";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
@@ -117,7 +117,7 @@ function Invoices() {
                   </tr>
                 </thead>
                 <tbody>
-                  {viewInv.lines.map((l, i) => (
+                  {sortInvoiceLines(viewInv.lines).map((l, i) => (
                     <tr key={i}>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.textDim, whiteSpace: "nowrap", verticalAlign: "top" }}>
                         {l.date ? formatDate(l.date) : ""}
