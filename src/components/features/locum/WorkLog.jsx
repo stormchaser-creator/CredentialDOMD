@@ -22,7 +22,9 @@ import { shareInvoicePdf } from "../../../utils/invoicePdf";
 
 const TIMER_KEY = "credentialdomd-live-timer";
 const LAST_CONTRACT_KEY = "credentialdomd-last-contract";
-const WORK_TYPES = ["Call", "Shift", "Procedure", "Rounding", "Orientation", "Admin", "Travel"];
+// "Shift" (flat-hourly scheduled blocks) removed per Eric — his contracts
+// are stipend/call-based. Re-add if an hourly-shift contract ever appears.
+const WORK_TYPES = ["Call", "Procedure", "Rounding", "Orientation", "Admin", "Travel"];
 
 function loadTimer() {
   try { return JSON.parse(localStorage.getItem(TIMER_KEY)) || null; } catch { return null; }
@@ -779,10 +781,10 @@ function WorkLog() {
                 🏥 I'm on call today — bill the stipend
               </button>
             )}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-              {["Shift", "Procedure", "Rounding", "Orientation"].map(t2 => (
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {["Procedure", "Rounding", "Orientation"].map(t2 => (
                 <button key={t2} onClick={() => startTimer(t2)} style={{
-                  flex: 1, minWidth: "calc(50% - 3px)", padding: "10px 0", borderRadius: 10, border: `1px solid ${T.border}`,
+                  flex: 1, padding: "10px 0", borderRadius: 10, border: `1px solid ${T.border}`,
                   backgroundColor: "transparent", color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer",
                 }}>{t2}</button>
               ))}
