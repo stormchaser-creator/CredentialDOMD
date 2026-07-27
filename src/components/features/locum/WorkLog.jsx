@@ -363,6 +363,7 @@ function WorkLog() {
       durationMin: rawMin,
       billedMin,
       description: timer.note || "",
+      privateNote: timer.privateNote || "",
       invoiceId: null,
     });
     {
@@ -433,6 +434,7 @@ function WorkLog() {
           startTime: s2, endTime: e2,
           durationMin: rawMin, billedMin,
           description: manual.description || "",
+          privateNote: manual.privateNote || "",
         });
         if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s2, e2, manual.date);
         if (!inScheduledCoverage(target, manual.date)) {
@@ -458,6 +460,7 @@ function WorkLog() {
       durationMin: rawMin,
       billedMin,
       description: manual.description || "",
+      privateNote: manual.privateNote || "",
       invoiceId: null,
     });
     if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s3, e3, manual.date);
@@ -478,6 +481,7 @@ function WorkLog() {
       end: e.endTime ? localHHMM(e.endTime) : "",
       durationMin: e.startTime ? "" : String(e.durationMin || ""),
       description: e.description || "",
+      privateNote: e.privateNote || "",
       exact: !!e.startTime,
       pickDate: false,
     });
@@ -676,12 +680,19 @@ function WorkLog() {
             <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12 }}>
               Will bill as {liveBilled} min ({(liveBilled / 60).toFixed(2)} h) · started {fmtTime(timer.startedAt)}
             </div>
-            {/* Notes DURING the call — saved with the entry on stop */}
+            {/* Notes DURING the call — billing note goes on the invoice,
+                private note is yours alone and never appears on it */}
             <textarea
               value={timer.note || ""}
               onChange={e => setTimer(t => { const nt = { ...t, note: e.target.value }; saveTimer(nt); return nt; })}
-              placeholder="Notes while you talk — patient, issue, orders given…"
-              style={{ ...iS, minHeight: 64, resize: "vertical", textAlign: "left", marginBottom: 12 }}
+              placeholder="Billing note — shows on the invoice (e.g. ED consult, head CT review)"
+              style={{ ...iS, minHeight: 56, resize: "vertical", textAlign: "left", marginBottom: 8 }}
+            />
+            <textarea
+              value={timer.privateNote || ""}
+              onChange={e => setTimer(t => { const nt = { ...t, privateNote: e.target.value }; saveTimer(nt); return nt; })}
+              placeholder="🔒 Private note — only you see this, never on the invoice"
+              style={{ ...iS, minHeight: 44, resize: "vertical", textAlign: "left", marginBottom: 12, borderStyle: "dashed" }}
             />
             <button onClick={stopTimer} style={{
               width: "100%", padding: "16px", borderRadius: 14, border: "none",
@@ -852,7 +863,8 @@ function WorkLog() {
         </Field>
         )}
 
-        <Field label="Note (optional)"><input value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={iS} placeholder="e.g. ED consult — head CT review" /></Field>
+        <Field label="Billing note (optional)" hint="Shows on the invoice"><input value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={iS} placeholder="e.g. ED consult — head CT review" /></Field>
+        <Field label="Private note (optional)" hint="Only you see this — never on invoices"><input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" /></Field>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
@@ -987,6 +999,11 @@ function WorkLog() {
                       ? `${formatDate(e.date)}${w ? ` · covered window ${fmtTime(w.start)}–${fmtTime(w.end)}` : ""} · calls in this window are included`
                       : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · inside covered window — paid by stipend" : ` → billed ${e.billedMin} min`}`}
                   </div>
+                  {e.privateNote && (
+                    <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
+                      {"🔒"} {e.privateNote}
+                    </div>
+                  )}
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
