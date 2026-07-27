@@ -1,6 +1,7 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
+import Modal from "../../shared/Modal";
 import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon } from "../../shared/Icons";
 import { shareInvoicePdf } from "../../../utils/invoicePdf";
@@ -15,6 +16,7 @@ const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
  */
 function Invoices() {
   const { data, editItem, deleteItem, theme: T } = useApp();
+  const [viewInv, setViewInv] = useState(null);
   const contracts = data.locumContracts || [];
   const facilityOf = (cid) => contracts.find(c => c.id === cid)?.facility || "Contract";
 
@@ -92,15 +94,79 @@ function Invoices() {
         </div>
       </div>
 
+      {/* Tap an invoice to view it */}
+      <Modal open={!!viewInv} onClose={() => setViewInv(null)} title={viewInv?.number || "Invoice"}>
+        {viewInv && (
+          <>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>
+              {facilityOf(viewInv.contractId)}
+              {viewInv.sentAt && ` · sent ${formatDate(viewInv.sentAt.slice(0, 10))}`}
+              {viewInv.paidAt && ` · paid ${formatDate(viewInv.paidAt.slice(0, 10))}`}
+            </div>
+            {viewInv.lines?.length ? (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {["Date", "Item", "Amount"].map((h, i) => (
+                      <th key={h} style={{
+                        textAlign: i === 2 ? "right" : "left", padding: "6px 6px",
+                        borderBottom: `2px solid ${T.accent}`, color: T.textMuted,
+                        fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5,
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewInv.lines.map((l, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.textDim, whiteSpace: "nowrap", verticalAlign: "top" }}>
+                        {l.date ? formatDate(l.date) : ""}
+                      </td>
+                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.text, verticalAlign: "top" }}>
+                        <div style={{ fontWeight: 700 }}>{l.label}</div>
+                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted }}>{l.detail}</div>}
+                      </td>
+                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : T.textDim }}>
+                        {money(l.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={2} style={{ padding: "8px 6px", fontWeight: 800, color: T.text }}>TOTAL DUE</td>
+                    <td style={{ padding: "8px 6px", textAlign: "right", fontWeight: 800, fontSize: 14, color: T.accent }}>
+                      {money(viewInv.totalAmount)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <div style={{
+                backgroundColor: T.input, border: `1px solid ${T.border}`, borderRadius: 10,
+                padding: 12, fontFamily: "monospace", fontSize: 12, color: T.text, whiteSpace: "pre-wrap",
+              }}>
+                {viewInv.text || `Invoice ${viewInv.number} — ${money(viewInv.totalAmount)}`}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+              <button onClick={() => resend(viewInv)} style={{
+                padding: "12px 18px", borderRadius: 10, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Share PDF</button>
+            </div>
+          </>
+        )}
+      </Modal>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {invoices.map(inv => {
           const isPaid = !!inv.paidAt;
           const age = inv.sentAt ? daysSince(inv.sentAt) : 0;
           const overdue = !isPaid && age > 30;
           return (
-            <div key={inv.id} style={{
+            <div key={inv.id} onClick={() => setViewInv(inv)} style={{
               backgroundColor: T.card, borderRadius: 14, padding: "13px 15px", boxShadow: T.shadow1,
               border: `1px solid ${overdue ? T.danger : isPaid ? T.border : T.warning}`,
+              cursor: "pointer",
             }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -130,22 +196,22 @@ function Invoices() {
               </div>
               <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
                 {isPaid ? (
-                  <button onClick={() => markUnpaid(inv)} style={{
+                  <button onClick={(ev) => { ev.stopPropagation(); markUnpaid(inv); }} style={{
                     padding: "8px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
                     backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   }}>Mark unpaid</button>
                 ) : (
-                  <button onClick={() => markPaid(inv)} style={{
+                  <button onClick={(ev) => { ev.stopPropagation(); markPaid(inv); }} style={{
                     flex: 1, padding: "8px 12px", borderRadius: 10, border: "none",
                     backgroundColor: T.success || "#22c55e", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
                   }}>✓ Mark paid</button>
                 )}
-                <button onClick={() => resend(inv)} style={{
+                <button onClick={(ev) => { ev.stopPropagation(); resend(inv); }} style={{
                   padding: "8px 12px", borderRadius: 10, border: "none",
                   backgroundColor: T.shareGlow, color: T.share, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   display: "inline-flex", alignItems: "center", gap: 5,
                 }}><SendIcon /> Resend</button>
-                <button onClick={() => removeInvoice(inv)} style={{
+                <button onClick={(ev) => { ev.stopPropagation(); removeInvoice(inv); }} style={{
                   padding: "8px 10px", borderRadius: 10, border: "none",
                   backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex", alignItems: "center",
                 }}><TrashIcon /></button>
