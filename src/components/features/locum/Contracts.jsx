@@ -87,10 +87,21 @@ function Contracts() {
     closeForm();
   }, [form, editItem, editCtx, addItem, closeForm, attachedDocs]);
 
-  const linkedDocCount = useCallback(
-    (id) => (data.documents || []).filter(d => d.linkedTo === `locumContracts:${id}`).length,
+  const linkedDocsFor = useCallback(
+    (id) => (data.documents || []).filter(d => d.linkedTo === `locumContracts:${id}`),
     [data.documents]
   );
+
+  // View the original agreement: images full-screen, PDFs in a viewer sheet
+  const [lightbox, setLightbox] = useState(null);
+  const openPdfDoc = useCallback((doc) => {
+    if (!doc.data) return;
+    const byteStr = atob(doc.data.split(",")[1]);
+    const arr = new Uint8Array(byteStr.length);
+    for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    window.open(url, "_blank");
+  }, []);
 
   return (
     <div>
@@ -185,9 +196,23 @@ function Contracts() {
                       `${item.incrementMinutes || 15}-min increments`,
                     ].filter(Boolean).join(" · ")}
                   </div>
-                  {linkedDocCount(item.id) > 0 && (
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: T.accent, marginTop: 5, fontWeight: 600 }}>
-                      <FileIcon /> {linkedDocCount(item.id)} document{linkedDocCount(item.id) > 1 ? "s" : ""} attached
+                  {linkedDocsFor(item.id).length > 0 && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                      {linkedDocsFor(item.id).map(doc => (
+                        <button key={doc.id}
+                          onClick={() => { if (!doc.data) return; if (doc.type?.startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
+                            borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                            color: T.text, fontSize: 12, fontWeight: 600, cursor: doc.data ? "pointer" : "default", textAlign: "left",
+                          }}>
+                          {doc.type?.startsWith("image/") && doc.data
+                            ? <img src={doc.data} alt={doc.name} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, flexShrink: 0 }} />
+                            : <span style={{ fontSize: 16 }}>{doc.data ? "📕" : "⏳"}</span>}
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{doc.name}</span>
+                          <span style={{ fontSize: 11, color: T.accent, flexShrink: 0 }}>{doc.data ? "view" : "syncing…"}</span>
+                        </button>
+                      ))}
                     </div>
                   )}
                   {item.notes && <div style={{ fontSize: 12, color: T.textMuted, marginTop: 5, whiteSpace: "pre-wrap" }}>{item.notes}</div>}
@@ -199,6 +224,16 @@ function Contracts() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Full-screen picture viewer for uploaded agreements */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{
+          position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
+        }}>
+          <img src={lightbox.data} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
         </div>
       )}
     </div>

@@ -288,6 +288,17 @@ function DocumentsSection() {
     }
     setScanning(false);
   }, [apiKey, deg, requireApiKey]);
+  // Full-screen viewing: images get a lightbox, PDFs open in a viewer sheet
+  const [lightbox, setLightbox] = useState(null);
+  const openPdfDoc = useCallback((doc) => {
+    if (!doc.data) return;
+    const byteStr = atob(doc.data.split(",")[1]);
+    const arr = new Uint8Array(byteStr.length);
+    for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    window.open(url, "_blank");
+  }, []);
+
   const deleteDoc = (id) => { if (window.confirm("Delete this document? This cannot be undone.")) deleteItemCtx("documents", id); };
   const linkDoc = (id, val) => {
     const doc = data.documents.find(d => d.id === id);
@@ -477,13 +488,30 @@ function DocumentsSection() {
                   )}
                   {doc.type?.includes("image") && doc.data && (
                     <div style={{ marginTop: 8 }}>
-                      <img src={doc.data} alt={doc.name} style={{ maxWidth: "100%", maxHeight: 140, borderRadius: 8, objectFit: "contain" }} />
+                      <img src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
+                        style={{ maxWidth: "100%", maxHeight: 140, borderRadius: 8, objectFit: "contain", cursor: "zoom-in" }} />
+                      <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>Tap image to enlarge</div>
                     </div>
+                  )}
+                  {doc.type?.includes("pdf") && doc.data && (
+                    <button onClick={() => openPdfDoc(doc)} style={{
+                      marginTop: 8, padding: "7px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
+                      backgroundColor: T.input, color: T.text, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    }}>📕 View PDF</button>
                   )}
                 </div>
               );
             })}
           </div>
+        </div>
+      )}
+      {/* Full-screen picture viewer */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{
+          position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
+        }}>
+          <img src={lightbox.data} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
         </div>
       )}
     </div>
