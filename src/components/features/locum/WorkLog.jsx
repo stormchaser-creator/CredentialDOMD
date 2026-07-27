@@ -231,7 +231,7 @@ function WorkLog() {
             lines.push({
               date,
               label: `Call coverage — stipend`,
-              detail: `${fmtTime(win.start)}–${fmtTime(win.end)} window${covered.length ? ` · ${covered.length} call${covered.length > 1 ? "s" : ""} · ${coveredMin} min included` : " · no calls inside the window"}`,
+              detail: `${fmtTime(win.start)}–${fmtTime(win.end)} window${covered.length ? ` · ${covered.length} call${covered.length > 1 ? "s" : ""} · ${coveredMin} min included` : ""}`,
               amount: c.callStipend,
               _sort: `${date}~0`,
             });
