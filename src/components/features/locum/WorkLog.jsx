@@ -214,6 +214,17 @@ function WorkLog() {
       ? "Patient care"
       : `${e.type}${e.description ? " — " + e.description : ""}`;
 
+    // Invoiced times are the billed quarter-hour block: start snaps DOWN to
+    // the increment, end = start + billed minutes (8:08–8:11 → 8:00–8:15).
+    // The true times stay on the entry for the physician's own records.
+    const invoiceSpan = (e) => {
+      if (!e.startTime) return "";
+      const inc = (c.incrementMinutes || 15) * 60000;
+      const s = new Date(Math.floor(new Date(e.startTime).getTime() / inc) * inc);
+      const en = new Date(s.getTime() + (e.billedMin || 0) * 60000);
+      return `${fmtTime(s)}–${fmtTime(en)} · `;
+    };
+
     for (const date of Object.keys(byDate).sort()) {
       const day = byDate[date].sort((a, b) => (a.startTime || "z").localeCompare(b.startTime || "z"));
       const stipDay = stipendModel && isStipendDay(c, date, all);
@@ -223,7 +234,7 @@ function WorkLog() {
           const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
           const amt = ((e.billedMin || 0) / 60) * rate;
           totalMin += e.billedMin || 0; total += amt;
-          lines.push({ date, label: lineLabel(e), detail: `${e.startTime ? fmtTime(e.startTime) + " · " : ""}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}` });
+          lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}` });
         }
         continue;
       }
@@ -258,7 +269,7 @@ function WorkLog() {
         remaining -= covered;
         const over = billed - covered;
         const lbl = lineLabel(e);
-        const tp = e.startTime ? `${fmtTime(e.startTime)} · ` : "";
+        const tp = invoiceSpan(e);
         if (covered > 0) {
           lines.push({ date, label: lbl, detail: `${tp}${covered} min — within stipend hours`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}~a` });
         }
@@ -272,7 +283,8 @@ function WorkLog() {
 
     // Orientation — its own terms, never part of the stipend allowance
     for (const e of list.filter(x => x.type === "Orientation")) {
-      const tp = e.startTime ? `${fmtTime(e.startTime)} · ` : "";
+      // Orientation times are already snapped to the quarter hour at save
+      const tp = e.startTime ? `${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""} · ` : "";
       if ((c.orientationHourlyRate || 0) > 0) {
         const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
         totalMin += e.billedMin || 0; total += amt;
