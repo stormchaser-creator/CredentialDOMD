@@ -18,7 +18,15 @@ function AssistantSection() {
   const { data, addItem, editItem, allTrackedStates, userIdRef, theme: T } = useApp();
   const iS = useInputStyle();
   const [msgs, setMsgs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(CHAT_KEY)) || []; } catch { return []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(CHAT_KEY)) || [];
+      // Trailing user messages with no reply = the app closed mid-send;
+      // mark them failed so they get a Try again instead of looking sent.
+      for (let i = saved.length - 1; i >= 0 && saved[i].role === "user"; i--) {
+        saved[i] = { ...saved[i], failed: true };
+      }
+      return saved;
+    } catch { return []; }
   });
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,12 +36,37 @@ function AssistantSection() {
   const fileRef = useRef(null);
   const recRef = useRef(null);
   const bottomRef = useRef(null);
+  const taRef = useRef(null);
+  const failedMapRef = useRef(new Map()); // msgId -> {text, attachment} for every failed send
+  const savedAttachRef = useRef(new Set()); // msgIds whose file already went to Files
 
   useEffect(() => {
-    try { localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-60))); } catch { /* quota */ }
+    try {
+      // sourceAttach can hold a multi-MB file — never persist it (quota).
+      const slim = msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
+      localStorage.setItem(CHAT_KEY, JSON.stringify(slim));
+    } catch { /* quota */ }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);
+
+  // Auto-grow the composer with its content (long pastes stay readable).
+  // Cap against the VISUAL viewport so the iOS keyboard doesn't let the
+  // composer swallow the screen; refit on rotation/keyboard changes.
+  const fitComposer = useCallback(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const vh = window.visualViewport?.height || window.innerHeight;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, Math.round(vh * 0.35)) + "px";
+  }, []);
+  useEffect(() => { fitComposer(); }, [input, fitComposer]);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    window.addEventListener("resize", fitComposer);
+    vv?.addEventListener("resize", fitComposer);
+    return () => { window.removeEventListener("resize", fitComposer); vv?.removeEventListener("resize", fitComposer); };
+  }, [fitComposer]);
 
   const logToCloud = useCallback((kind, question, replySummary) => {
     // The feedback loop: every exchange is reviewable by the developer.
@@ -46,28 +79,60 @@ function AssistantSection() {
     }).then(() => {}, () => {});
   }, [userIdRef]);
 
-  const send = useCallback(async (textOverride) => {
-    const text = (textOverride ?? input).trim();
-    if (!text && !attachment) return;
+  const send = useCallback(async (textOverride, retryOf = null) => {
+    // retryOf = a previously-failed message to re-send in place (its text and
+    // attachment were kept in failedRef, so a long paste never has to be redone).
+    const att = retryOf ? retryOf.attachment : attachment;
+    const text = (retryOf ? retryOf.text : (textOverride ?? input)).trim();
+    if (!text && !att) return;
     setErr(null);
-    const userMsg = { id: generateId(), role: "user", text: text || `(sent ${attachment?.name})`, attachName: attachment?.name };
-    const history = [...msgs, userMsg].map(m => ({ role: m.role, text: m.text }));
-    setMsgs(m => [...m, userMsg]);
-    setInput("");
+    let userMsg;
+    if (retryOf) {
+      const existing = msgs.find(x => x.id === retryOf.msgId);
+      userMsg = { ...(existing || { id: retryOf.msgId || generateId(), role: "user", text: text || `(sent ${att?.name})`, attachName: att?.name }), failed: false };
+      // Move it to the end of the thread so its reply lands right under it.
+      setMsgs(m => [...m.filter(x => x.id !== userMsg.id), userMsg]);
+    } else {
+      userMsg = { id: generateId(), role: "user", text: text || `(sent ${att?.name})`, attachName: att?.name };
+      setMsgs(m => [...m, userMsg]);
+      setInput("");
+      setAttachment(null);
+    }
     setBusy(true);
     try {
+      const history = [...msgs.filter(x => x.id !== userMsg.id && !x.failed), userMsg]
+        .map(m => ({ role: m.role, text: m.text }));
       const snapshot = buildSnapshot(data, allTrackedStates);
-      const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, attachment });
-      setMsgs(m => [...m, { id: generateId(), role: "model", text: result.reply, actions: result.actions }]);
-      logToCloud(attachment ? "document" : "chat", text, result.reply.slice(0, 300));
+      const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, attachment: att });
+      const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions };
+      // Keep the file with the proposal so Approve can save it to Files too.
+      if (att?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record")) {
+        modelMsg.sourceAttach = { dataUrl: att.dataUrl, name: att.name };
+      }
+      setMsgs(m => [...m, modelMsg]);
+      logToCloud(att ? "document" : "chat", text, result.reply.slice(0, 300));
+      failedMapRef.current.delete(userMsg.id);
     } catch (e2) {
+      failedMapRef.current.set(userMsg.id, { text, attachment: att });
+      setMsgs(m => m.map(x => x.id === userMsg.id ? { ...x, failed: true } : x));
       setErr(e2.message);
-      setMsgs(m => m.filter(x => x.id !== userMsg.id));
-      setInput(text);
     }
-    setAttachment(null);
     setBusy(false);
   }, [input, attachment, msgs, data, allTrackedStates, logToCloud]);
+
+  const retryFailed = useCallback((msg) => {
+    const kept = failedMapRef.current.get(msg.id);
+    if (kept) { send(null, { msgId: msg.id, text: kept.text, attachment: kept.attachment }); return; }
+    // App was reopened since the failure — the text survives on the message,
+    // but an attachment doesn't; ask for it again if there was one.
+    if (msg.attachName) {
+      setErr(`Re-attach ${msg.attachName} first (the file didn't survive the app closing), then send again.`);
+      setMsgs(m => m.filter(x => x.id !== msg.id));
+      setInput(msg.text.startsWith("(sent ") ? "" : msg.text);
+      return;
+    }
+    send(null, { msgId: msg.id, text: msg.text, attachment: null });
+  }, [send]);
 
   // ── Approve / dismiss action cards ──
   const markAction = useCallback((msgId, idx, patch) => {
@@ -87,15 +152,33 @@ function AssistantSection() {
     const msg = msgs.find(x => x.id === msgId);
     const action = msg?.actions?.[idx];
     if (!action || action.done) return;
+    // The document that produced this proposal gets saved to Files and linked
+    // to the first record you approve — the file itself stays with the data.
+    const saveSourceDoc = (linkedTo) => {
+      const att = msg.sourceAttach;
+      if (!att?.dataUrl || msg.sourceAttachSaved || savedAttachRef.current.has(msgId)) return;
+      savedAttachRef.current.add(msgId);
+      const b64 = att.dataUrl.split(",")[1] || "";
+      addItem("documents", {
+        id: generateId(), name: att.name || "attachment",
+        type: att.dataUrl.slice(5, att.dataUrl.indexOf(";")),
+        size: Math.round(b64.length * 0.75), data: att.dataUrl,
+        uploadedAt: new Date().toISOString(), linkedTo,
+      });
+      setMsgs(m => m.map(x => x.id === msgId ? { ...x, sourceAttachSaved: true } : x));
+    };
     try {
       if (action.kind === "create_record") {
         const { clean, extra } = splitFields(action.section, action.fields, action.customFields);
-        addItem(action.section, { ...clean, id: generateId(), ...(extra ? { customFields: extra } : {}) });
+        const newId = generateId();
+        addItem(action.section, { ...clean, id: newId, ...(extra ? { customFields: extra } : {}) });
+        saveSourceDoc(`${action.section}:${newId}`);
       } else if (action.kind === "update_record") {
         const existing = (data[action.section] || []).find(x => x.id === action.id);
         if (!existing) throw new Error("Record not found — it may have been deleted.");
         const { clean, extra } = splitFields(action.section, action.fields, action.customFields);
         editItem(action.section, { ...existing, ...clean, ...(extra ? { customFields: { ...(existing.customFields || {}), ...extra } } : {}) });
+        saveSourceDoc(`${action.section}:${action.id}`);
       } else if (action.kind === "feedback") {
         logToCloud("feedback", `[${action.category || "idea"}] ${action.text || action.summary}`, "queued for the developer");
       } else if (action.kind === "send_packet") {
@@ -204,10 +287,21 @@ function AssistantSection() {
               color: m.role === "user" ? "#fff" : T.text,
               border: m.role === "user" ? "none" : `1px solid ${T.border}`,
               overflowWrap: "anywhere",
+              opacity: m.failed ? 0.6 : 1,
             }}>
               {m.attachName && <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 4 }}>📎 {m.attachName}</div>}
               {m.text}
             </div>
+            {m.failed && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+                <span style={{ fontSize: 12, color: T.danger, fontWeight: 600 }}>Not sent</span>
+                <button onClick={() => retryFailed(m)} disabled={busy} style={{
+                  padding: "6px 14px", borderRadius: 8, border: "none",
+                  backgroundColor: T.accent, color: "#fff", fontSize: 12.5, fontWeight: 800,
+                  cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
+                }}>Try again</button>
+              </div>
+            )}
             {(m.actions || []).filter(a => !a.dismissed).map((a, i) => (
               <div key={i} style={{
                 marginTop: 6, padding: "10px 12px", borderRadius: 12,
@@ -275,11 +369,12 @@ function AssistantSection() {
             color: listening ? "#fff" : T.text, fontSize: 16, cursor: "pointer",
           }}>{listening ? "◼" : "🎤"}</button>
           <textarea
+            ref={taRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="Ask anything, or attach a document…"
             rows={1}
-            style={{ ...iS, resize: "none", minHeight: 46, maxHeight: 120, flex: 1 }}
+            style={{ ...iS, resize: "none", minHeight: 46, flex: 1, overflowY: "auto", lineHeight: 1.45, overscrollBehavior: "contain" }}
           />
           <button onClick={() => send()} disabled={busy || (!input.trim() && !attachment)} style={{
             padding: "12px 16px", borderRadius: 12, border: "none", flexShrink: 0,

@@ -140,20 +140,44 @@ export async function assistantTurn({ history, snapshot, apiKey, attachment }) {
     return { role: m.role === "model" ? "model" : "user", parts };
   });
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM(snapshot) }] },
-      contents,
-      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
-    }),
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM(snapshot) }] },
+    contents,
+    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
   });
+  const NETWORK_MSG = "Couldn't reach the AI service. That's usually a weak signal, or a guest Wi-Fi that blocks AI sites (hospital networks often do). Switch to cellular and tap Try again — your message is saved.";
+  // URL built outside the retry loop so a bad key surfaces its real error
+  // instead of being misdiagnosed as a network problem.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  // Phones drop requests mid-flight (weak signal, screen lock, guest Wi-Fi
+  // that blocks AI endpoints) — retry the network hop before giving up, and
+  // abort any attempt that silently stalls so the chat never locks up.
+  let response;
+  for (let attempt = 0; ; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: ctrl.signal,
+      });
+      break;
+    } catch {
+      if (attempt >= 2) throw new Error(NETWORK_MSG);
+      await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   if (!response.ok) {
     if (response.status === 429) throw new Error("The AI is rate-limited — give it a few seconds and try again.");
     throw new Error(`The assistant couldn't reach the AI (error ${response.status}).`);
   }
-  const json = await response.json();
+  let json;
+  try { json = await response.json(); }
+  catch { throw new Error(NETWORK_MSG); }
   let raw = json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
   raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
   try {
