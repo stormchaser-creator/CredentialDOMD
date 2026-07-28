@@ -191,6 +191,23 @@ function WorkLog() {
     const byDate = {};
     for (const e of billable) { const k = callDayOf(e); (byDate[k] = byDate[k] || []).push(e); }
 
+    // Being on call IS the service: every coverage-period day up to today
+    // bills its stipend even with zero logged work.
+    if (stipendModel) {
+      const ps = c.coveragePeriods?.length
+        ? c.coveragePeriods
+        : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
+      const today = localDate(new Date());
+      for (const p of ps) {
+        if (!p.start) continue;
+        const last = (p.end || p.start) < today ? (p.end || p.start) : today;
+        for (let d = new Date(p.start + "T12:00"); localDate(d) <= last; d.setDate(d.getDate() + 1)) {
+          const k = localDate(d);
+          if (!byDate[k]) byDate[k] = [];
+        }
+      }
+    }
+
     // Facility-facing wording: calls appear as "Patient care" (the note
     // stays in-app); other types read as themselves.
     const lineLabel = (e) => e.type === "Call"
@@ -227,7 +244,9 @@ function WorkLog() {
         lines.push({
           date,
           label: `Call day — stipend`,
-          detail: `covers the first ${c.stipendHours || 0}h of work · ${Math.floor(logged / 60)}h ${logged % 60}m logged`,
+          detail: logged > 0
+            ? `covers the first ${c.stipendHours || 0}h of work · ${Math.floor(logged / 60)}h ${logged % 60}m logged`
+            : `on-call coverage · no calls required`,
           amount: c.callStipend,
           _sort: `${date}~0`,
         });
