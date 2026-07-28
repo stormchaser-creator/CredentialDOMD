@@ -51,19 +51,6 @@ function callDayOf(e) {
   return e.date;
 }
 
-/**
- * The coverage window a CallDay entry defines. Entries logged without times
- * (older builds, quick logs) still mean "on call from the day's start hour
- * for the contract's stipend hours" — never no-window.
- */
-function windowFromCallDay(cd, c) {
-  const start = cd.startTime
-    ? new Date(cd.startTime)
-    : new Date(`${cd.date}T${String(CALL_DAY_START_HOUR).padStart(2, "0")}:00`);
-  const end = cd.endTime ? new Date(cd.endTime) : new Date(start.getTime() + (c?.stipendHours || 0) * 3600e3);
-  return { start, end };
-}
-
 function roundUp(rawMin, increment, minimum) {
   const inc = increment > 0 ? increment : 15;
   return Math.max(minimum || 0, Math.ceil(rawMin / inc) * inc || inc);
@@ -139,14 +126,31 @@ function WorkLog() {
     return () => clearInterval(iv);
   }, [timer]);
 
-  // The covered window for a call day: a CallDay entry's start time plus the
-  // contract's stipend hours (or its explicit end time). Work inside the
-  // window is included in the stipend; work after it bills separately.
-  const windowForDay = useCallback((cId, dayKey) => {
-    const cd = entries.find(e => e.contractId === cId && e.type === "CallDay" && callDayOf(e) === dayKey);
-    if (!cd) return null;
-    return windowFromCallDay(cd, contracts.find(x => x.id === cId));
-  }, [entries, contracts]);
+  // A stipend (call) day: any day inside the contract's coverage dates, or
+  // marked with a legacy CallDay entry. The stipend covers the FIRST
+  // stipendHours of logged work that day — a countdown, not a clock window.
+  const isStipendDay = useCallback((c, dayKey, allList) => {
+    if (!c || (c.callStipend || 0) <= 0 || !dayKey) return false;
+    if ((allList || entries).some(e => e.contractId === c.id && e.type === "CallDay" && callDayOf(e) === dayKey)) return true;
+    const ps = c.coveragePeriods?.length
+      ? c.coveragePeriods
+      : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
+    return ps.some(p => p.start && dayKey >= p.start && dayKey <= (p.end || p.start));
+  }, [entries]);
+
+  // Minutes of the day's stipend allowance already consumed by OTHER entries
+  // (chronologically before the given one; all of them if no entry given).
+  const allowanceUsed = useCallback((c, dayKey, beforeEntryId) => {
+    const day = entries
+      .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dayKey)
+      .sort((a, b) => (a.startTime || "z").localeCompare(b.startTime || "z"));
+    let used = 0;
+    for (const e of day) {
+      if (beforeEntryId && e.id === beforeEntryId) break;
+      used += e.billedMin || 0;
+    }
+    return used;
+  }, [entries]);
 
   const rateFor = useCallback((type, c) => {
     if (!c) return 0;
@@ -165,14 +169,16 @@ function WorkLog() {
   }, []);
 
   /**
-   * Billing engine. Two call models:
-   *  - Stipend (callStipend > 0): each date with call coverage bills the flat
-   *    stipend, which covers the first stipendHours of call work; call time
-   *    beyond that bills at overageHourlyRate. "CallDay" entries mark
-   *    coverage on days with zero phone calls.
-   *  - Flat: every Call entry bills at callHourlyRate (or hourlyRate).
-   * Non-call work always bills hourly. Orientation fee bills once, on the
-   * first invoice for the contract.
+   * Billing engine — ALLOWANCE model (per the actual contracts):
+   *  - Stipend (callStipend > 0): each call day pays the flat stipend, which
+   *    covers the FIRST stipendHours of LOGGED work that day — calls,
+   *    rounding, procedures, everything except orientation — counted down
+   *    chronologically. Work beyond the allowance bills at overageHourlyRate.
+   *    A day is a call day when it falls inside the contract's coverage
+   *    dates (or carries a legacy CallDay marker).
+   *  - Flat: every entry bills at its hourly rate.
+   * Orientation always bills under its own terms (hourly rate or one-time
+   * fee) and never draws down the stipend allowance.
    */
   const computeBilling = useCallback((c, list, includeOrientation, allList) => {
     if (!c) return { lines: [], total: 0, totalMin: 0, orientationIncluded: false };
@@ -181,161 +187,80 @@ function WorkLog() {
     let total = 0, totalMin = 0;
     const stipendModel = (c.callStipend || 0) > 0;
 
-    const callish = list.filter(e => e.type === "Call" || e.type === "CallDay");
-    const others = list.filter(e => e.type !== "Call" && e.type !== "CallDay");
+    const billable = list.filter(e => e.type !== "CallDay" && e.type !== "Orientation");
+    const byDate = {};
+    for (const e of billable) { const k = callDayOf(e); (byDate[k] = byDate[k] || []).push(e); }
 
-    // Coverage windows by call day, built from ALL entries (billed and not) —
-    // a window stays in force for work logged after its day was invoiced
-    const windowsByDate = {};
-    if (stipendModel) {
-      for (const e of all) {
-        if (e.type === "CallDay") {
-          const k = callDayOf(e);
-          if (!windowsByDate[k]) windowsByDate[k] = windowFromCallDay(e, c);
+    for (const date of Object.keys(byDate).sort()) {
+      const day = byDate[date].sort((a, b) => (a.startTime || "z").localeCompare(b.startTime || "z"));
+      const stipDay = stipendModel && isStipendDay(c, date, all);
+
+      if (!stipDay) {
+        for (const e of day) {
+          const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
+          const amt = ((e.billedMin || 0) / 60) * rate;
+          totalMin += e.billedMin || 0; total += amt;
+          lines.push({ date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${e.startTime ? fmtTime(e.startTime) + " · " : ""}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}` });
+        }
+        continue;
+      }
+
+      // Stipend day: the allowance counts down across the day's logged work.
+      // Minutes billed on earlier invoices for this day stay consumed.
+      const allowance = (c.stipendHours || 0) * 60;
+      const priorMin = all
+        .filter(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date)
+        .reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+      let remaining = Math.max(0, allowance - priorMin);
+      const stipendBilled = all.some(e => e.invoiceId && e.contractId === c.id && callDayOf(e) === date);
+      const dayMin = day.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+
+      if (!stipendBilled) {
+        total += c.callStipend;
+        const logged = priorMin + dayMin;
+        lines.push({
+          date,
+          label: `Call day — stipend`,
+          detail: `covers the first ${c.stipendHours || 0}h of work · ${Math.floor(logged / 60)}h ${logged % 60}m logged`,
+          amount: c.callStipend,
+          _sort: `${date}~0`,
+        });
+      }
+      for (const e of day) {
+        const billed = e.billedMin || 0;
+        totalMin += billed;
+        const covered = Math.min(remaining, billed);
+        remaining -= covered;
+        const over = billed - covered;
+        const lbl = `${e.type}${e.description ? " — " + e.description : ""}`;
+        const tp = e.startTime ? `${fmtTime(e.startTime)} · ` : "";
+        if (covered > 0) {
+          lines.push({ date, label: lbl, detail: `${tp}${covered} min — within stipend hours`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}~a` });
+        }
+        if (over > 0 && (c.overageHourlyRate || 0) > 0) {
+          const amt = (over / 60) * c.overageHourlyRate;
+          total += amt;
+          lines.push({ date, label: covered > 0 ? `${lbl} (beyond stipend hours)` : lbl, detail: `${tp}${over} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}~b` });
         }
       }
     }
 
-    if (stipendModel) {
-      const byDate = {};
-      for (const e of callish) { const k = callDayOf(e); (byDate[k] = byDate[k] || []).push(e); }
-      for (const date of Object.keys(byDate).sort()) {
-        const dayEntries = byDate[date];
-        const calls = dayEntries.filter(e => e.type === "Call");
-        const win = windowsByDate[date] || null;
-        const callMin = calls.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
-        totalMin += callMin;
-
-        // The stipend bills ONCE per coverage day — if a prior invoice
-        // already billed this day's coverage, don't charge it again for
-        // late-logged calls.
-        const stipendBilled = all.some(e => e.invoiceId && (e.type === "CallDay" || e.type === "Call") && callDayOf(e) === date);
-
-        if (win) {
-          // WINDOW model: stipend buys the coverage window. The stipend line
-          // describes ONLY the calls inside the window — after-window calls
-          // are their own line items and never mix into the stipend. Each
-          // outside call bills separately with the per-call minimum.
-          const covered = [], outside = [];
-          for (const e of calls) {
-            if (!e.startTime) { covered.push(e); continue; }
-            const es = new Date(e.startTime);
-            const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
-            let outsideRaw = 0;
-            if (ee > win.end) outsideRaw += Math.round((ee - Math.max(es, win.end)) / 60000);
-            if (es < win.start) outsideRaw += Math.round((Math.min(ee, win.start) - es) / 60000);
-            if (outsideRaw <= 0 && (es < win.end && ee > win.start)) covered.push(e);
-            else outside.push({ e, outsideRaw, es });
-          }
-          const coveredMin = covered.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
-          if (!stipendBilled) {
-            total += c.callStipend;
-            lines.push({
-              date,
-              label: `Call coverage — stipend`,
-              detail: `${fmtTime(win.start)}–${fmtTime(win.end)} window${covered.length ? ` · ${covered.length} call${covered.length > 1 ? "s" : ""} · ${coveredMin} min included` : ""}`,
-              amount: c.callStipend,
-              _sort: `${date}~0`,
-            });
-          }
-          for (const { e, outsideRaw, es } of outside) {
-            const overMin = roundUp(Math.max(1, outsideRaw), c.incrementMinutes || 15, c.minCallMinutes || 15);
-            if ((c.overageHourlyRate || 0) > 0) {
-              const amt = (overMin / 60) * c.overageHourlyRate;
-              total += amt;
-              lines.push({ date, label: `Call after covered window${e.description ? " — " + e.description : ""}`, detail: `${fmtTime(es)} · ${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~${es.toISOString()}` });
-            }
-          }
-        } else {
-          if (!stipendBilled) {
-            total += c.callStipend;
-            lines.push({
-              date,
-              label: `Call coverage — stipend (covers first ${c.stipendHours || 0}h worked)`,
-              detail: calls.length ? `${calls.length} call${calls.length > 1 ? "s" : ""} · ${callMin} min` : "no calls logged",
-              amount: c.callStipend,
-              _sort: `${date}~0`,
-            });
-          }
-          // No window logged: stipend covers the first N worked hours —
-          // minutes billed on earlier invoices count toward the allowance.
-          const priorMin = all.filter(e => e.invoiceId && e.type === "Call" && callDayOf(e) === date).reduce((s2, e) => s2 + (e.billedMin || 0), 0);
-          const allowance = (c.stipendHours || 0) * 60;
-          const overMin = Math.max(0, priorMin + callMin - allowance) - Math.max(0, priorMin - allowance);
-          if (overMin > 0 && (c.overageHourlyRate || 0) > 0) {
-            const amt = (overMin / 60) * c.overageHourlyRate;
-            total += amt;
-            lines.push({ date, label: `Call time beyond stipend`, detail: `${overMin} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~z` });
-          }
-        }
-      }
-    } else {
-      for (const e of callish.filter(x => x.type === "Call")) {
-        const rate = rateFor("Call", c);
-        const amt = ((e.billedMin || 0) / 60) * rate;
-        totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: e.date, label: `Call${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~1~${e.startTime || "z"}` });
-      }
-    }
-
-    for (const e of others) {
-      // Orientation: hourly orientation rate if the contract has one;
-      // else covered by a flat fee ($0 as time — the fee is its own line);
-      // else plain hourly work.
-      if (e.type === "Orientation" && (c.orientationHourlyRate || 0) > 0) {
+    // Orientation — its own terms, never part of the stipend allowance
+    for (const e of list.filter(x => x.type === "Orientation")) {
+      const tp = e.startTime ? `${fmtTime(e.startTime)} · ` : "";
+      if ((c.orientationHourlyRate || 0) > 0) {
         const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${e.date}~2~${e.startTime || "z"}` });
-        continue;
-      }
-      if (e.type === "Orientation" && (c.orientationFee || 0) > 0) {
+        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${e.date}~1~${e.startTime || "z"}` });
+      } else if ((c.orientationFee || 0) > 0) {
         totalMin += e.billedMin || 0;
-        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min — covered by orientation fee`, amount: 0, _sort: `${e.date}~2~${e.startTime || "z"}` });
-        continue;
+        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min — covered by orientation fee`, amount: 0, _sort: `${e.date}~1~${e.startTime || "z"}` });
+      } else {
+        const rate = rateFor("Orientation", c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
+        const amt = ((e.billedMin || 0) / 60) * rate;
+        totalMin += e.billedMin || 0; total += amt;
+        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~1~${e.startTime || "z"}` });
       }
-      // On a stipend-covered call day, the stipend already pays for ALL work
-      // inside the coverage window — shift, procedure, rounding, anything.
-      // Only the portion outside the window bills. Orientation is excluded:
-      // it always bills under its own terms above (or plain hourly below).
-      const win = e.type !== "Orientation" ? windowsByDate[callDayOf(e)] : null;
-      if (win) {
-        const billed = e.billedMin || 0;
-        const winMin = Math.max(0, Math.round((win.end - win.start) / 60000));
-        let outsideRaw = 0;
-        if (e.startTime) {
-          const es = new Date(e.startTime);
-          const ee = e.endTime ? new Date(e.endTime) : new Date(es.getTime() + (e.durationMin || billed) * 60000);
-          if (ee > win.end) outsideRaw += Math.round((ee - Math.max(es, win.end)) / 60000);
-          if (es < win.start) outsideRaw += Math.round((Math.min(ee, win.start) - es) / 60000);
-        } else {
-          // No start/stop logged: counts as inside the window, but never
-          // more of it than the window can actually hold
-          outsideRaw = Math.max(0, billed - winMin);
-        }
-        const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
-        totalMin += billed;
-        const coveredMin = Math.max(0, billed - overMin);
-        if (coveredMin > 0 || overMin === 0) {
-          lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${coveredMin} min — covered by call stipend`, amount: 0, _sort: `${e.date}~2~${e.startTime || "z"}~a` });
-        }
-        if (overMin > 0) {
-          // Work outside the window bills at its own hourly rate when the
-          // contract has one; the after-stipend rate is the fallback
-          const rate = rateFor(e.type, c) || c.overageHourlyRate || 0;
-          if (rate > 0) {
-            const amt = (overMin / 60) * rate;
-            total += amt;
-            lines.push({ date: e.date, label: `${e.type} outside covered window${e.description ? " — " + e.description : ""}`, detail: `${overMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~2~${e.startTime || "z"}~b` });
-          }
-        }
-        continue;
-      }
-      // Stipend contracts often have no general hourly rate — the after-
-      // stipend rate is the working rate, never bill real hours at $0
-      const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
-      const amt = ((e.billedMin || 0) / 60) * rate;
-      totalMin += e.billedMin || 0; total += amt;
-      lines.push({ date: e.date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~2~${e.startTime || "z"}` });
     }
 
     let orientationIncluded = false;
@@ -345,11 +270,11 @@ function WorkLog() {
       lines.push({ date: null, label: "Orientation (one-time)", detail: "", amount: c.orientationFee, _sort: "~zzz" });
     }
 
-    // Chronological invoice: day by day, stipend first, then calls by time,
-    // then other work — regardless of the order entries were logged in.
+    // Chronological invoice: day by day, stipend first, then the day's work
+    // in clock order — regardless of the order entries were logged in.
     lines.sort((a, b) => (a._sort || "").localeCompare(b._sort || ""));
     return { lines, total, totalMin, orientationIncluded };
-  }, [rateFor]);
+  }, [rateFor, isStipendDay]);
 
   const startTimer = useCallback((type) => {
     if (!contract) return;
@@ -361,56 +286,66 @@ function WorkLog() {
     }
   }, [contract, rememberContract, inScheduledCoverage, showNotice]);
 
+  // Orientation bills wall-clock: start and finish each round to the
+  // NEAREST 15 minutes and the span between them is what's billed. Other
+  // types round the duration UP to the contract increment as before.
+  const round15 = (iso) => new Date(Math.round(new Date(iso).getTime() / 900000) * 900000).toISOString();
+  const finalizeEntry = useCallback((type, s, e, raw, c) => {
+    if (type === "Orientation" && s && e) {
+      const rs = round15(s), re = round15(e);
+      const span = Math.max(15, Math.round((new Date(re) - new Date(rs)) / 60000));
+      return { s: rs, e: re, raw: span, billed: span };
+    }
+    return { s, e, raw, billed: roundUp(raw, c?.incrementMinutes || 15, type === "Call" ? (c?.minCallMinutes || 15) : 0) };
+  }, []);
+
+  // After a save on a stipend day, tell the user where the countdown stands.
+  const noticeAllowance = useCallback((c, dateKey, newMin, excludeId) => {
+    if (!c || (c.callStipend || 0) <= 0 || !isStipendDay(c, dateKey, entries)) return;
+    const allowance = (c.stipendHours || 0) * 60;
+    const others = entries
+      .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dateKey && e.id !== excludeId)
+      .reduce((s, e) => s + (e.billedMin || 0), 0);
+    const used = others + (newMin || 0);
+    const left = allowance - used;
+    const fmtH = (m) => `${Math.floor(Math.abs(m) / 60)}h ${String(Math.abs(m) % 60).padStart(2, "0")}m`;
+    if (left >= 0) {
+      showNotice(`Stipend day: ${fmtH(used)} of the ${c.stipendHours}h covered by the stipend logged — ${fmtH(left)} left before time bills at ${money(c.overageHourlyRate || 0)}/hr.`);
+    } else {
+      showNotice(`Stipend day: ${fmtH(used)} logged — ${fmtH(-left)} past the ${c.stipendHours}h stipend; that time bills at ${money(c.overageHourlyRate || 0)}/hr.`);
+    }
+  }, [entries, isStipendDay, showNotice]);
+
   const stopTimer = useCallback(() => {
     if (!timer) return;
     const c = contracts.find(x => x.id === timer.contractId) || contract;
     const end = new Date();
     const start = new Date(timer.startedAt);
-    const rawMin = Math.max(1, Math.round((end - start) / 60000));
-    const billedMin = roundUp(rawMin, c?.incrementMinutes || 15, timer.type === "Call" ? (c?.minCallMinutes || 15) : 0);
+    const f = finalizeEntry(timer.type, timer.startedAt, end.toISOString(),
+      Math.max(1, Math.round((end - start) / 60000)), c);
     // A stray tap shouldn't turn seconds into a billed increment
     if ((end - start) < 120000 && !window.confirm(
-      `Only ${Math.round((end - start) / 1000)} seconds on the clock — logging bills ${billedMin} min. Log it? (Cancel keeps the timer running.)`
+      `Only ${Math.round((end - start) / 1000)} seconds on the clock — logging bills ${f.billed} min. Log it? (Cancel keeps the timer running.)`
     )) return;
     addItem("workLog", {
       id: generateId(),
       createdAt: new Date().toISOString(),
       contractId: timer.contractId,
       type: timer.type,
-      date: localDate(timer.startedAt),
-      startTime: timer.startedAt,
-      endTime: end.toISOString(),
-      durationMin: rawMin,
-      billedMin,
+      date: localDate(f.s),
+      startTime: f.s,
+      endTime: f.e,
+      durationMin: f.raw,
+      billedMin: f.billed,
       description: timer.note || "",
       privateNote: timer.privateNote || "",
       invoiceId: null,
     });
-    {
-      const w = windowForDay(timer.contractId, callDayOf({ startTime: timer.startedAt }));
-      if (w && start >= w.start && end <= w.end) {
-        showNotice(`This time falls inside your covered window (${fmtTime(w.start)}–${fmtTime(w.end)}) — included in the stipend, no extra charge.`);
-      } else if (w && end > w.end) {
-        showNotice(`Part of this time is after your covered window (ends ${fmtTime(w.end)}) — that portion bills at the after-stipend rate.`);
-      }
+    if (timer.type !== "Orientation") {
+      noticeAllowance(c, callDayOf({ startTime: f.s }), f.billed, null);
     }
     setTimer(null); saveTimer(null);
-  }, [timer, contracts, contract, addItem, windowForDay, showNotice]);
-
-  const noticeForCall = useCallback((cId, startIso, endIso, dateKey) => {
-    const w = windowForDay(cId, startIso ? callDayOf({ startTime: startIso }) : dateKey);
-    if (!w) return;
-    if (!startIso) {
-      showNotice(`Heads up: that day has covered call hours (${fmtTime(w.start)}–${fmtTime(w.end)}). Time logged without start/stop times counts as inside the window — stipend-paid, no extra charge. Add exact times if part of it was outside.`);
-      return;
-    }
-    const es = new Date(startIso), ee = endIso ? new Date(endIso) : es;
-    if (es >= w.start && ee <= w.end) {
-      showNotice(`Heads up: that time is inside your covered call window (${fmtTime(w.start)}–${fmtTime(w.end)}) — it's already billed by the stipend, no extra charge.`);
-    } else if (ee > w.end) {
-      showNotice(`Part of that time is after your covered window (ends ${fmtTime(w.end)}) — that portion bills at the after-stipend rate.`);
-    }
-  }, [windowForDay, showNotice]);
+  }, [timer, contracts, contract, addItem, finalizeEntry, noticeAllowance]);
 
   // Work is logged AFTER it happens. A start time in the future almost
   // always means the date is wrong (the old UTC-date bug filed 9 PM work
@@ -467,15 +402,17 @@ function WorkLog() {
           const inv = (data.invoices || []).find(i => i.id === orig.invoiceId);
           if (!window.confirm(`This entry is already billed${inv ? ` on ${inv.number}` : ""}. Editing updates your records but NOT the invoice that was sent — to change the invoice too, delete it in the Invoices tab (entries become unbilled) and generate it again. Edit anyway?`)) return;
         }
-        const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
+        const f = finalizeEntry(type, s2, e2, rawMin, target);
         editItem("workLog", {
           ...orig, contractId: target.id, type, date: manual.date,
-          startTime: s2, endTime: e2,
-          durationMin: rawMin, billedMin,
+          startTime: f.s, endTime: f.e,
+          durationMin: f.raw, billedMin: f.billed,
           description: manual.description || "",
           privateNote: manual.privateNote || "",
         });
-        if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s2, e2, manual.date);
+        if (type !== "CallDay" && type !== "Orientation") {
+          noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, orig.id);
+        }
         if (!inScheduledCoverage(target, manual.date)) {
           showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
         }
@@ -488,28 +425,30 @@ function WorkLog() {
     if (!rawMin) return;
     const type = manual.type || "Call";
     if (!confirmIfFuture(s3, manual.date)) return;
-    const billedMin = roundUp(rawMin, target.incrementMinutes || 15, type === "Call" ? (target.minCallMinutes || 15) : 0);
+    const f = finalizeEntry(type, s3, e3, rawMin, target);
     addItem("workLog", {
       id: generateId(),
       createdAt: new Date().toISOString(),
       contractId: target.id,
       type,
       date: manual.date,
-      startTime: s3,
-      endTime: e3,
+      startTime: f.s,
+      endTime: f.e,
       durationMin: rawMin,
       billedMin,
       description: manual.description || "",
       privateNote: manual.privateNote || "",
       invoiceId: null,
     });
-    if (type !== "CallDay" && type !== "Orientation") noticeForCall(target.id, s3, e3, manual.date);
+    if (type !== "CallDay" && type !== "Orientation") {
+      noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, null);
+    }
     if (!inScheduledCoverage(target, manual.date)) {
       showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
     }
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeForCall, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, data.invoices]);
+  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
 
   const openEditEntry = useCallback((e) => {
     setManual({
@@ -536,9 +475,10 @@ function WorkLog() {
     [entries, contract]
   );
 
-  // What one entry contributes in dollars — mirrors computeBilling's rules
-  // so the list matches the invoice (stipend is day-level, shown on the
-  // CallDay row; covered work is $0; only outside-window/hourly time bills)
+  // What one entry contributes in dollars — mirrors computeBilling's
+  // allowance rules so the list matches the invoice: on a stipend day the
+  // day's work draws down the stipend hours chronologically, and only the
+  // part beyond bills at the after-stipend rate.
   const amountForEntry = useCallback((e, c) => {
     if (!c) return 0;
     const stipendModel = (c.callStipend || 0) > 0;
@@ -549,34 +489,16 @@ function WorkLog() {
       if ((c.orientationFee || 0) > 0) return 0;
       return (billed / 60) * (rateFor("Orientation", c) || (stipendModel ? (c.overageHourlyRate || 0) : 0));
     }
-    const w = stipendModel ? windowForDay(e.contractId, callDayOf(e)) : null;
-    if (w) {
-      const winMin = Math.max(0, Math.round((w.end - w.start) / 60000));
-      if (!e.startTime) {
-        if (e.type === "Call") return 0; // counted in the stipend
-        const outsideRaw = Math.max(0, billed - winMin);
-        const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
-        return overMin > 0 ? (overMin / 60) * (rateFor(e.type, c) || c.overageHourlyRate || 0) : 0;
-      }
-      const es = new Date(e.startTime);
-      const ee = e.endTime ? new Date(e.endTime) : (e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
-      let outsideRaw = 0;
-      if (ee > w.end) outsideRaw += Math.round((ee - Math.max(es, w.end)) / 60000);
-      if (es < w.start) outsideRaw += Math.round((Math.min(ee, w.start) - es) / 60000);
-      if (e.type === "Call") {
-        // Same rule as the invoice: each outside call bills its own
-        // per-call minimum, calls inside the window are stipend-covered
-        if (outsideRaw <= 0 && es < w.end && ee > w.start) return 0;
-        const overMin = roundUp(Math.max(1, outsideRaw), c.incrementMinutes || 15, c.minCallMinutes || 15);
-        return (overMin / 60) * (c.overageHourlyRate || 0);
-      }
-      const overMin = outsideRaw > 0 ? roundUp(outsideRaw, c.incrementMinutes || 15, 0) : 0;
-      if (overMin <= 0) return 0;
-      return (overMin / 60) * (rateFor(e.type, c) || c.overageHourlyRate || 0);
+    const dateKey = callDayOf(e);
+    if (stipendModel && isStipendDay(c, dateKey, entries)) {
+      const usedBefore = allowanceUsed(c, dateKey, e.id);
+      const remaining = Math.max(0, (c.stipendHours || 0) * 60 - usedBefore);
+      const over = Math.max(0, billed - remaining);
+      return (over / 60) * (c.overageHourlyRate || 0);
     }
     const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
     return (billed / 60) * rate;
-  }, [rateFor, windowForDay]);
+  }, [rateFor, isStipendDay, allowanceUsed, entries]);
   const unbilled = useMemo(() => contractEntries.filter(e => !e.invoiceId), [contractEntries]);
   const unbilledTotal = useMemo(
     () => computeBilling(contract, unbilled, true, contractEntries).total,
@@ -760,27 +682,28 @@ function WorkLog() {
             }}>
               📞 Got a call — start timer
             </button>
-            {(contract?.callStipend || 0) > 0 && !contractEntries.some(e => e.type === "CallDay" && callDayOf(e) === localDate(new Date())) && (
-              <button onClick={() => {
-                const start = new Date(`${localDate(new Date())}T${String(CALL_DAY_START_HOUR).padStart(2, "0")}:00`);
-                const end = new Date(start.getTime() + (contract.stipendHours || 0) * 3600e3);
-                addItem("workLog", {
-                  id: generateId(), createdAt: new Date().toISOString(),
-                  contractId: contract.id, type: "CallDay",
-                  date: localDate(new Date()),
-                  startTime: start.toISOString(), endTime: end.toISOString(),
-                  durationMin: 0, billedMin: 0,
-                  description: "Call coverage", invoiceId: null,
-                });
-                showNotice(`Coverage logged ${fmtTime(start)}–${fmtTime(end)}. Tap the pencil on the entry to adjust the times.`);
-              }} style={{
-                width: "100%", padding: "12px", borderRadius: 12, marginBottom: 8,
-                border: `2px solid ${T.accent}`, backgroundColor: "transparent",
-                color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
-              }}>
-                🏥 I'm on call today — bill the stipend
-              </button>
-            )}
+            {/* Stipend countdown — call days come from the contract's
+                coverage dates; the stipend covers the first N hours of work */}
+            {contract && (contract.callStipend || 0) > 0 && (() => {
+              const todayKey = callDayOf({ startTime: new Date().toISOString() });
+              if (!isStipendDay(contract, todayKey, entries)) return null;
+              const allow = (contract.stipendHours || 0) * 60;
+              const used = allowanceUsed(contract, todayKey);
+              const left = allow - used;
+              const fmtH = (m) => `${Math.floor(Math.abs(m) / 60)}h ${String(Math.abs(m) % 60).padStart(2, "0")}m`;
+              return (
+                <div style={{
+                  padding: "10px 12px", borderRadius: 12, marginBottom: 8, textAlign: "left",
+                  backgroundColor: left >= 0 ? (T.accentGlow || "rgba(16,185,129,0.12)") : T.warningDim,
+                  border: `1px solid ${left >= 0 ? T.accent : T.warning}`,
+                  fontSize: 13, fontWeight: 700, color: T.text,
+                }}>
+                  {left >= 0
+                    ? `Stipend day · ${fmtH(used)} of ${contract.stipendHours}h used · ${fmtH(left)} left`
+                    : `Stipend day · ${fmtH(-left)} past the ${contract.stipendHours}h — billing at ${money(contract.overageHourlyRate || 0)}/hr`}
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
               {["Procedure", "Rounding", "Orientation"].map(t2 => (
                 <button key={t2} onClick={() => startTimer(t2)} style={{
@@ -1044,13 +967,11 @@ function WorkLog() {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {contractEntries.slice(0, 50).map(e => {
             const isCoverage = e.type === "CallDay";
-            // Work fully inside a covered window is stipend-paid — say so
-            // instead of showing a billed amount that isn't charged extra
-            const w = e.type !== "Orientation" ? windowForDay(e.contractId, callDayOf(e)) : null;
-            const es = e.startTime ? new Date(e.startTime) : null;
-            const ee = e.endTime ? new Date(e.endTime) : (es && e.durationMin ? new Date(es.getTime() + e.durationMin * 60000) : es);
-            const winMin = w ? Math.max(0, Math.round((w.end - w.start) / 60000)) : 0;
-            const covered = !!w && (es ? (es >= w.start && ee <= w.end) : (e.billedMin || 0) <= winMin);
+            // Work inside the stipend allowance shows as included, not billed
+            const amt = amountForEntry(e, contract);
+            const stipDay = !isCoverage && e.type !== "Orientation" && contract
+              && isStipendDay(contract, callDayOf(e), entries);
+            const covered = stipDay && amt === 0;
             return (
               <div key={e.id} onClick={() => setViewEntry(e)} style={{
                 display: "flex", alignItems: "center", gap: 10,
@@ -1066,8 +987,8 @@ function WorkLog() {
                   </div>
                   <div style={{ fontSize: 12, color: T.textDim }}>
                     {isCoverage
-                      ? `${formatDate(e.date)}${w ? ` · covered window ${fmtTime(w.start)}–${fmtTime(w.end)}` : ""} · calls in this window are included`
-                      : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · inside covered window — paid by stipend" : ` → billed ${e.billedMin} min`}`}
+                      ? `${formatDate(e.date)} · call-day marker · stipend covers the first ${contract?.stipendHours || 0}h of work`
+                      : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · within stipend hours" : stipDay && amt > 0 ? ` → ${e.billedMin} min · partly beyond stipend` : ` → billed ${e.billedMin} min`}`}
                   </div>
                   {e.privateNote && (
                     <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
@@ -1077,10 +998,10 @@ function WorkLog() {
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
-                    {money(amountForEntry(e, contract))}
+                    {money(amt)}
                   </div>
                   <div style={{ fontSize: 10, color: T.textDim }}>
-                    {isCoverage ? "stipend" : covered ? `${e.billedMin}m · covered` : `${e.billedMin}m`}
+                    {isCoverage ? "stipend" : covered ? `${e.billedMin}m · in stipend` : `${e.billedMin}m`}
                   </div>
                 </div>
                 <button onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={{
