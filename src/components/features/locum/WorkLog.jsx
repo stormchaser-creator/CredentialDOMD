@@ -51,6 +51,14 @@ function callDayOf(e) {
   return e.date;
 }
 
+/** One canonical order for allowance consumption — the list rows and the
+ *  invoice must always agree on which minutes were "first". */
+function entryOrder(a, b) {
+  return (a.startTime || "z").localeCompare(b.startTime || "z")
+    || (a.createdAt || "").localeCompare(b.createdAt || "")
+    || (a.id || "").localeCompare(b.id || "");
+}
+
 function roundUp(rawMin, increment, minimum) {
   const inc = increment > 0 ? increment : 15;
   return Math.max(minimum || 0, Math.ceil(rawMin / inc) * inc || inc);
@@ -126,24 +134,25 @@ function WorkLog() {
     return () => clearInterval(iv);
   }, [timer]);
 
-  // A stipend (call) day: any day inside the contract's coverage dates, or
-  // marked with a legacy CallDay entry. The stipend covers the FIRST
+  // A stipend (call) day: any day inside the contract's EXPLICIT coverage
+  // dates, or marked with a CallDay entry. The stipend covers the FIRST
   // stipendHours of logged work that day — a countdown, not a clock window.
+  // Contract start/end dates deliberately do NOT count: a 3-month contract
+  // term is not 90 call days.
   const isStipendDay = useCallback((c, dayKey, allList) => {
     if (!c || (c.callStipend || 0) <= 0 || !dayKey) return false;
     if ((allList || entries).some(e => e.contractId === c.id && e.type === "CallDay" && callDayOf(e) === dayKey)) return true;
-    const ps = c.coveragePeriods?.length
-      ? c.coveragePeriods
-      : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
-    return ps.some(p => p.start && dayKey >= p.start && dayKey <= (p.end || p.start));
+    return (c.coveragePeriods || []).some(p => p.start && dayKey >= p.start && dayKey <= (p.end || p.start));
   }, [entries]);
 
   // Minutes of the day's stipend allowance already consumed by OTHER entries
   // (chronologically before the given one; all of them if no entry given).
   const allowanceUsed = useCallback((c, dayKey, beforeEntryId) => {
+    // Mirror computeBilling: minutes already on an invoice consume the
+    // allowance first, then the day's unbilled work in canonical order.
     const day = entries
       .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dayKey)
-      .sort((a, b) => (a.startTime || "z").localeCompare(b.startTime || "z"));
+      .sort((a, b) => ((a.invoiceId ? 0 : 1) - (b.invoiceId ? 0 : 1)) || entryOrder(a, b));
     let used = 0;
     for (const e of day) {
       if (beforeEntryId && e.id === beforeEntryId) break;
@@ -191,18 +200,22 @@ function WorkLog() {
     const byDate = {};
     for (const e of billable) { const k = callDayOf(e); (byDate[k] = byDate[k] || []).push(e); }
 
-    // Being on call IS the service: every coverage-period day up to today
-    // bills its stipend even with zero logged work.
+    // Being on call IS the service: every EXPLICIT coverage-period day up to
+    // the current call day (7am boundary) bills its stipend even with zero
+    // logged work — as do days carrying a CallDay marker.
     if (stipendModel) {
-      const ps = c.coveragePeriods?.length
-        ? c.coveragePeriods
-        : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
-      const today = localDate(new Date());
-      for (const p of ps) {
+      const today = callDayOf({ startTime: new Date().toISOString() });
+      for (const p of c.coveragePeriods || []) {
         if (!p.start) continue;
         const last = (p.end || p.start) < today ? (p.end || p.start) : today;
         for (let d = new Date(p.start + "T12:00"); localDate(d) <= last; d.setDate(d.getDate() + 1)) {
           const k = localDate(d);
+          if (!byDate[k]) byDate[k] = [];
+        }
+      }
+      for (const e of all) {
+        if (e.type === "CallDay" && e.contractId === c.id) {
+          const k = callDayOf(e);
           if (!byDate[k]) byDate[k] = [];
         }
       }
@@ -227,7 +240,7 @@ function WorkLog() {
 
     const emptyStipendDays = [];
     for (const date of Object.keys(byDate).sort()) {
-      const day = byDate[date].sort((a, b) => (a.startTime || "z").localeCompare(b.startTime || "z"));
+      const day = byDate[date].sort(entryOrder);
       const stipDay = stipendModel && isStipendDay(c, date, all);
 
       if (!stipDay) {
@@ -247,7 +260,7 @@ function WorkLog() {
         .filter(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date)
         .reduce((s2, e) => s2 + (e.billedMin || 0), 0);
       let remaining = Math.max(0, allowance - priorMin);
-      const stipendBilled = all.some(e => e.invoiceId && e.contractId === c.id && callDayOf(e) === date);
+      const stipendBilled = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date);
       const dayMin = day.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
 
       if (!stipendBilled) {
@@ -277,10 +290,15 @@ function WorkLog() {
         if (covered > 0) {
           lines.push({ date, label: lbl, detail: `${tp}${covered} min — within stipend hours`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}~a` });
         }
-        if (over > 0 && (c.overageHourlyRate || 0) > 0) {
-          const amt = (over / 60) * c.overageHourlyRate;
-          total += amt;
-          lines.push({ date, label: covered > 0 ? `${lbl} (beyond stipend hours)` : lbl, detail: `${tp}${over} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}~b` });
+        if (over > 0) {
+          if ((c.overageHourlyRate || 0) > 0) {
+            const amt = (over / 60) * c.overageHourlyRate;
+            total += amt;
+            lines.push({ date, label: covered > 0 ? `${lbl} (beyond stipend hours)` : lbl, detail: `${tp}${over} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}~b` });
+          } else {
+            // Never let real work vanish silently — flag the missing rate
+            lines.push({ date, label: `${lbl} (beyond stipend hours)`, detail: `${tp}${over} min — NO after-stipend rate set on this contract`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}~b` });
+          }
         }
       }
     }
@@ -305,7 +323,9 @@ function WorkLog() {
     }
 
     let orientationIncluded = false;
-    if (includeOrientation && (c.orientationFee || 0) > 0 && !c.orientationBilled) {
+    // The one-time fee bills only once orientation has actually been logged
+    if (includeOrientation && (c.orientationFee || 0) > 0 && !c.orientationBilled
+        && list.some(e => e.type === "Orientation")) {
       total += c.orientationFee;
       orientationIncluded = true;
       lines.push({ date: null, label: "Orientation (one-time)", detail: "", amount: c.orientationFee, _sort: "~zzz" });
@@ -475,8 +495,8 @@ function WorkLog() {
       date: manual.date,
       startTime: f.s,
       endTime: f.e,
-      durationMin: rawMin,
-      billedMin,
+      durationMin: f.raw,
+      billedMin: f.billed,
       description: manual.description || "",
       privateNote: manual.privateNote || "",
       invoiceId: null,
@@ -812,12 +832,13 @@ function WorkLog() {
               <button key={t2} onClick={() => setManual(m2 => {
                 const next = { ...m2, type: t2 };
                 // Contract conventions: a consult bills 1 hour flat; weekend
-                // rounding is the fixed 7–11 AM block (editable).
-                if (t2 === "Consult" && !m2.durationMin) next.durationMin = "60";
-                if (t2 === "Rounding" && m2.date) {
+                // rounding is the fixed 7–11 AM block. Prefills NEVER
+                // overwrite times or durations the user already entered.
+                if (t2 === "Consult" && !m2.durationMin && !m2.start && !m2.end) next.durationMin = "60";
+                if (t2 === "Rounding" && m2.date && !m2.start && !m2.end && !m2.durationMin) {
                   const dow = new Date(m2.date + "T12:00").getDay();
-                  if ((dow === 0 || dow === 6) && !m2.start && !m2.end) {
-                    next.exact = true; next.start = "07:00"; next.end = "11:00"; next.durationMin = "";
+                  if (dow === 0 || dow === 6) {
+                    next.exact = true; next.start = "07:00"; next.end = "11:00";
                   }
                 }
                 return next;
@@ -869,7 +890,7 @@ function WorkLog() {
         <Field label="How long">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {[15, 30, 45, 60, 90, 120, 240, 480, 720].map(mins => (
-              <button key={mins} onClick={() => setManual(m2 => ({ ...m2, durationMin: String(mins), exact: false }))} style={{
+              <button key={mins} onClick={() => setManual(m2 => ({ ...m2, durationMin: String(mins), exact: false, start: "", end: "" }))} style={{
                 padding: "10px 13px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
                 fontVariantNumeric: "tabular-nums",
                 border: `1px solid ${manual.durationMin === String(mins) && !manual.exact ? T.accent : T.border}`,

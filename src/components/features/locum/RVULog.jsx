@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, memo } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect, memo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import EmptyState from "../../shared/EmptyState";
@@ -34,6 +34,9 @@ function RVULog() {
   const [manualQ, setManualQ] = useState("");
   const [manualResults, setManualResults] = useState([]);
   const recRef = useRef(null);
+
+  // Never leave the microphone hot after leaving the tab
+  useEffect(() => () => { try { recRef.current?.stop(); } catch { /* already stopped */ } }, []);
 
   // ── Dictation (Web Speech API; the keyboard mic works in the box too) ──
   const toggleMic = useCallback(() => {
