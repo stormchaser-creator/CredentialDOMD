@@ -982,12 +982,12 @@ function WorkLog() {
               }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
-                    {isCoverage ? "🏥 Call coverage" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
+                    {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
                     {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
                   </div>
                   <div style={{ fontSize: 12, color: T.textDim }}>
                     {isCoverage
-                      ? `${formatDate(e.date)} · call-day marker · stipend covers the first ${contract?.stipendHours || 0}h of work`
+                      ? `${formatDate(e.date)} · marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
                       : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · within stipend hours" : stipDay && amt > 0 ? ` → ${e.billedMin} min · partly beyond stipend` : ` → billed ${e.billedMin} min`}`}
                   </div>
                   {e.privateNote && (
