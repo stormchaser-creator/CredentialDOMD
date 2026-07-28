@@ -4,28 +4,38 @@
 
 import { NEUROSURGERY_CODES } from "./neurosurgery";
 import { CMS_BASE_CODES } from "./cmsBase";
+import { ADDITIONAL_CODES } from "./additions";
 import { RVU_DATA } from "./rvuData";
+
+// Codes deleted from the CPT/PFS — never surface them
+const DELETED = new Set(["61440", "61470", "61480", "99241", "49585"]);
 
 // Build curated map — these override CMS base entries
 const curatedMap = new Map();
 NEUROSURGERY_CODES.forEach(c => curatedMap.set(c.code, c));
-// Future: import and merge additional specialty files here
+ADDITIONAL_CODES.forEach(c => { if (!curatedMap.has(c.code)) curatedMap.set(c.code, c); });
 
 // Merge: curated codes override base, then add any curated codes not in base
 const baseMap = new Map(CMS_BASE_CODES.map(c => [c.code, c]));
 
-// Attach RVU data to each code object
+// Attach RVU data (official CMS values, status, global period) to each code
 function attachRVU(codeObj) {
   const rvu = RVU_DATA[codeObj.code];
-  if (rvu) return { ...codeObj, wRVU: rvu.wRVU, totalRVU: rvu.totalRVU };
+  if (rvu) {
+    return {
+      ...codeObj,
+      wRVU: rvu.wRVU, totalRVU: rvu.totalRVU, totalFacilityRVU: rvu.totalFacilityRVU,
+      status: rvu.status, globalDays: rvu.global, cmsDesc: rvu.desc,
+    };
+  }
   return codeObj;
 }
 
 export const CPT_CODES = [
   // All base codes, overridden by curated where available
-  ...CMS_BASE_CODES.map(base => attachRVU(curatedMap.get(base.code) || base)),
+  ...CMS_BASE_CODES.filter(c => !DELETED.has(c.code)).map(base => attachRVU(curatedMap.get(base.code) || base)),
   // Any curated codes not in base
-  ...NEUROSURGERY_CODES.filter(c => !baseMap.has(c.code)).map(attachRVU),
+  ...[...curatedMap.values()].filter(c => !baseMap.has(c.code) && !DELETED.has(c.code)).map(attachRVU),
 ];
 
 // Fast lookup by code

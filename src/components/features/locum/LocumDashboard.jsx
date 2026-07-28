@@ -19,10 +19,12 @@ import WorkLog from "./WorkLog";
 import Contracts from "./Contracts";
 import Schedule from "./Schedule";
 import Invoices from "./Invoices";
+import RVULog from "./RVULog";
 
 const SUBTABS = [
   { id: "work", label: "Work" },
-  { id: "schedule", label: "Schedule" },
+  { id: "rvus", label: "RVUs" },
+  { id: "schedule", label: "Sched." },
   { id: "invoices", label: "Invoices" },
   { id: "contracts", label: "Contracts" },
   { id: "deductions", label: "Deduct." },
@@ -73,6 +75,7 @@ export default function LocumDashboard() {
       </div>
 
       {sub === "work" && <WorkLog />}
+      {sub === "rvus" && <RVULog />}
       {sub === "schedule" && <Schedule />}
       {sub === "invoices" && <Invoices />}
       {sub === "contracts" && <Contracts />}
