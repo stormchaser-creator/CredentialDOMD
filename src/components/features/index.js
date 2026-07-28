@@ -5,6 +5,7 @@ export { default as DocumentsSection } from "./DocumentsSection";
 export { default as ScanReviewCard } from "./ScanReviewCard";
 export { default as HealthRecordsSection } from "./HealthRecordsSection";
 export { default as ScreeningsSection } from "./ScreeningsSection";
+export { default as AssistantSection } from "./AssistantSection";
 export { default as CMEResourcesSection } from "./CMEResourcesSection";
 export { default as CVGenerator } from "./CVGenerator";
 export { default as DataExport } from "./DataExport";

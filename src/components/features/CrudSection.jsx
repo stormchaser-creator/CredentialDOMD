@@ -400,6 +400,19 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 </span>
               </div>
             ))}
+            {viewItem.customFields && Object.keys(viewItem.customFields).length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 2px" }}>
+                  Additional details
+                </div>
+                {Object.entries(viewItem.customFields).map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                    <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{k}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{String(v)}</span>
+                  </div>
+                ))}
+              </>
+            )}
             {linkedDocs(viewItem).length > 0 && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Documents</div>

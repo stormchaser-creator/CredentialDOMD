@@ -18,6 +18,7 @@ import { DataExport } from "./components/features";
 import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
 import { ScreeningsSection } from "./components/features";
+import { AssistantSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
 import { LocumDashboard, MultiStateMatrix } from "./components/features";
@@ -900,6 +901,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "cv") return <CVGenerator />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
+    if (subPage === "assistant") return <AssistantSection />;
     if (subPage === "faq") return <FAQSection />;
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;
@@ -1057,6 +1059,20 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
               <span style={{ color: T.accent }}>{"\u203a"}</span>
             </button>
           )}
+
+          {/* Assistant */}
+          <button onClick={() => setSubPage("assistant")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `2px solid ${T.accent}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 22 }}>{"\u2728"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Assistant</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Ask about your file, hand it any document, request a packet send</div>
+            </div>
+          </button>
 
           {/* Theme Toggle */}
           <div style={{
