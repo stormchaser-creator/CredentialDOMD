@@ -85,6 +85,7 @@ const TABLE_MAP = {
   locumContracts: "locum_contracts",
   workLog: "work_log",
   encounters: "encounters",
+  screenings: "screenings",
   invoices: "invoices",
 };
 

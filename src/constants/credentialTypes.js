@@ -97,7 +97,27 @@ export const CASE_CATEGORIES = [
   "Other",
 ];
 
-export const HEALTH_RECORD_CATEGORIES = ["Vaccination", "TB Test", "Fit Test"];
+export const HEALTH_RECORD_CATEGORIES = ["Vaccination", "Titer / Immunity", "TB Test", "Drug Screen", "Fit Test"];
+
+export const TITER_TYPES = [
+  "Hepatitis B Surface Antibody (HBsAb)",
+  "MMR Panel (Measles, Mumps, Rubella)",
+  "Measles (Rubeola) IgG",
+  "Mumps IgG",
+  "Rubella IgG",
+  "Varicella Zoster IgG",
+  "Hepatitis C Antibody",
+  "Other Titer",
+];
+
+export const TITER_RESULTS = ["Immune", "Not Immune", "Equivocal", "Negative", "Positive", "Pending"];
+
+export const DRUG_SCREEN_TYPES = [
+  "9-Panel Urine", "10-Panel Urine", "5-Panel Urine",
+  "Hair Follicle", "Breath Alcohol", "Other",
+];
+
+export const DRUG_SCREEN_RESULTS = ["Negative", "Positive", "Dilute", "Pending", "Refused"];
 
 export const VACCINATION_TYPES = [
   "Hepatitis B", "MMR (Measles, Mumps, Rubella)", "Varicella (Chickenpox)",
@@ -132,10 +152,32 @@ export const EDUCATION_TYPES = [
 
 export const getHealthRecordTypes = (category) => {
   if (category === "Vaccination") return VACCINATION_TYPES;
+  if (category === "Titer / Immunity") return TITER_TYPES;
   if (category === "TB Test") return TB_TEST_TYPES;
+  if (category === "Drug Screen") return DRUG_SCREEN_TYPES;
   if (category === "Fit Test") return FIT_TEST_TYPES;
   return [];
 };
+
+/** Result choices for a health-record category (empty = free text). */
+export const getHealthRecordResults = (category) => {
+  if (category === "Titer / Immunity") return TITER_RESULTS;
+  if (category === "Drug Screen") return DRUG_SCREEN_RESULTS;
+  return [];
+};
+
+/** Screening / background-check report types. */
+export const SCREENING_TYPES = [
+  "Background Screening Report",
+  "Drug Screen Report",
+  "Occupational Health Panel",
+  "OIG / SAM Exclusion Check",
+  "Sanctions / Licensure Monitoring",
+  "Fingerprinting / Livescan",
+  "Other Screening",
+];
+
+export const SCREENING_RESULTS = ["Clear", "Review", "Complete", "Pending", "Flagged"];
 
 export const WORK_HISTORY_TYPES = [
   "Full-Time Employed",

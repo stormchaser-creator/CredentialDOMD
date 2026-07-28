@@ -17,6 +17,7 @@ import { CVGenerator } from "./components/features";
 import { DataExport } from "./components/features";
 import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
+import { ScreeningsSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
 import { LocumDashboard, MultiStateMatrix } from "./components/features";
@@ -747,6 +748,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     ]},
     { title: "Supporting Records", items: [
       { id: "healthRecords", label: "Health Records", icon: "\ud83d\udc89", count: (data.healthRecords || []).length },
+      { id: "screenings", label: "Screenings", icon: "\ud83d\udd0e", count: (data.screenings || []).length },
       { id: "peerReferences", label: "Peer References", icon: "\ud83d\udc65", count: (data.peerReferences || []).length, pro: true },
       { id: "malpracticeHistory", label: "Malpractice History", icon: "\ud83d\udccb", count: (data.malpracticeHistory || []).length, pro: true },
     ]},
@@ -802,6 +804,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
       return <CrudSection title="Insurance" sectionKey="insurance" autoEditId={autoEditTarget?.sec === "insurance" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
+    if (subPage === "screenings") return <ScreeningsSection onShare={openShare} />;
     if (subPage === "healthRecords") return <HealthRecordsSection onShare={openShare} autoEditId={autoEditTarget?.sec === "healthRecords" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} />;
     if (subPage === "education") return <CrudSection title="Education" sectionKey="education" items={data.education || []} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "graduationDate", label: "Graduation Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "caseLogs") {

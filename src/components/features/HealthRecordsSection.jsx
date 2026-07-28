@@ -6,7 +6,7 @@ import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
-import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS } from "../../constants/credentialTypes";
+import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, getHealthRecordResults, TB_RESULTS } from "../../constants/credentialTypes";
 import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
 
@@ -126,13 +126,32 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
           <Field label="Date Administered"><input type="date" value={form.dateAdministered || ""} onChange={e => setForm(f => ({ ...f, dateAdministered: e.target.value }))} style={iS} /></Field>
           <Field label="Expiration Date"><input type="date" value={form.expirationDate || ""} onChange={e => setForm(f => ({ ...f, expirationDate: e.target.value }))} style={iS} /></Field>
         </div>
-        {form.category === "TB Test" && (
+        {(form.category === "TB Test" || form.category === "Titer / Immunity" || form.category === "Drug Screen") && (
           <Field label="Result">
             <select value={form.result || ""} onChange={e => setForm(f => ({ ...f, result: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
               <option value="">Select result...</option>
-              {TB_RESULTS.map(r => <option key={r} value={r}>{r}</option>)}
+              {(form.category === "TB Test" ? TB_RESULTS : getHealthRecordResults(form.category)).map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </Field>
+        )}
+        {/* Lab detail — quantitative titers, drug screens, TB blood tests */}
+        {(form.category === "Titer / Immunity" || form.category === "Drug Screen" || form.category === "TB Test") && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Field label="Value"><input value={form.resultValue || ""} onChange={e => setForm(f => ({ ...f, resultValue: e.target.value }))} style={iS} placeholder="e.g. 165" /></Field>
+              <Field label="Units"><input value={form.resultUnits || ""} onChange={e => setForm(f => ({ ...f, resultUnits: e.target.value }))} style={iS} placeholder="e.g. mIU/mL" /></Field>
+            </div>
+            <Field label="Reference range"><input value={form.referenceRange || ""} onChange={e => setForm(f => ({ ...f, referenceRange: e.target.value }))} style={iS} placeholder="e.g. ≥ 10 mIU/mL = immune" /></Field>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Field label="Collected"><input type="date" value={form.collectedDate || ""} onChange={e => setForm(f => ({ ...f, collectedDate: e.target.value }))} style={iS} /></Field>
+              <Field label="Reported"><input type="date" value={form.reportedDate || ""} onChange={e => setForm(f => ({ ...f, reportedDate: e.target.value }))} style={iS} /></Field>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Field label="Laboratory"><input value={form.lab || ""} onChange={e => setForm(f => ({ ...f, lab: e.target.value }))} style={iS} placeholder="e.g. Quest Diagnostics" /></Field>
+              <Field label="Specimen #"><input value={form.specimenId || ""} onChange={e => setForm(f => ({ ...f, specimenId: e.target.value }))} style={iS} /></Field>
+            </div>
+            <Field label="Ordered by / for"><input value={form.orderedBy || ""} onChange={e => setForm(f => ({ ...f, orderedBy: e.target.value }))} style={iS} placeholder="e.g. MPLT Healthcare — Intermountain Peaks" /></Field>
+          </>
         )}
         <Field label="Lot / Batch #"><input value={form.lotNumber || ""} onChange={e => setForm(f => ({ ...f, lotNumber: e.target.value }))} style={iS} /></Field>
         <Field label="Administrator / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Employee Health, Hospital Name" /></Field>
@@ -179,7 +198,8 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
                           item.facility,
                           item.dateAdministered && `Given ${formatDate(item.dateAdministered)}`,
                           item.lotNumber && `Lot: ${item.lotNumber}`,
-                          item.result && `Result: ${item.result}`,
+                          item.result && `Result: ${item.result}${item.resultValue ? ` (${item.resultValue}${item.resultUnits ? " " + item.resultUnits : ""})` : ""}`,
+                          item.lab,
                           item.expirationDate && getStatusLabel(item.expirationDate),
                         ].filter(Boolean).join(" \u00b7 ")}
                       </div>
