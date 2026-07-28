@@ -82,6 +82,10 @@ function money(n) {
   return "$" + (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function fmtHM(m) {
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+
 function WorkLog() {
   const { data, addItem, editItem, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
@@ -253,53 +257,70 @@ function WorkLog() {
         continue;
       }
 
-      // Stipend day: the allowance counts down across the day's logged work.
-      // Minutes billed on earlier invoices for this day stay consumed.
+      // Stipend day: ONE line for the whole day — the daily total (stipend
+      // plus any work beyond the allowance) with the day's work listed.
+      // Line items only make sense when each item is billed; on a stipend
+      // day the value lives at the day level, so that's what the line shows.
       const allowance = (c.stipendHours || 0) * 60;
       const priorMin = all
         .filter(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date)
         .reduce((s2, e) => s2 + (e.billedMin || 0), 0);
-      let remaining = Math.max(0, allowance - priorMin);
       const stipendBilled = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date);
       const dayMin = day.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+      totalMin += dayMin;
+
+      const logged = priorMin + dayMin;
+      const overMin = Math.max(0, logged - allowance)
+        - Math.max(0, priorMin - allowance); // beyond-allowance minutes not billed on an earlier invoice
+      const rate = c.overageHourlyRate || 0;
+      const overAmt = overMin > 0 && rate > 0 ? (overMin / 60) * rate : 0;
+      const fmtH = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+      const workList = day.map(e => `${invoiceSpan(e)}${lineLabel(e)} (${e.billedMin}m)`).join(" · ");
 
       if (!stipendBilled) {
-        total += c.callStipend;
-        const logged = priorMin + dayMin;
+        total += c.callStipend + overAmt;
         // A billed EMPTY day has no entry to stamp with the invoice id — the
         // caller must create a zero-minute marker so it never re-bills.
         if (day.length === 0) emptyStipendDays.push(date);
+        let detail;
+        if (logged === 0) {
+          detail = `on-call coverage · no calls required`;
+        } else {
+          detail = `${fmtH(logged)} logged — first ${c.stipendHours || 0}h covered by the ${money(c.callStipend)} stipend`;
+          if (overMin > 0) {
+            detail += rate > 0
+              ? `, ${fmtH(overMin)} beyond @ ${money(rate)}/hr (+${money(overAmt)})`
+              : `, ${fmtH(overMin)} beyond — NO after-stipend rate set on this contract`;
+          }
+          if (workList) detail += `\n${workList}`;
+        }
         lines.push({
           date,
-          label: `Call day — stipend`,
-          detail: logged > 0
-            ? `covers the first ${c.stipendHours || 0}h of work · ${Math.floor(logged / 60)}h ${logged % 60}m logged`
-            : `on-call coverage · no calls required`,
-          amount: c.callStipend,
+          label: `On-call coverage — daily total`,
+          detail,
+          amount: c.callStipend + overAmt,
           _sort: `${date}~0`,
         });
-      }
-      for (const e of day) {
-        const billed = e.billedMin || 0;
-        totalMin += billed;
-        const covered = Math.min(remaining, billed);
-        remaining -= covered;
-        const over = billed - covered;
-        const lbl = lineLabel(e);
-        const tp = invoiceSpan(e);
-        if (covered > 0) {
-          lines.push({ date, label: lbl, detail: `${tp}${covered} min — within stipend hours`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}~a` });
+      } else if (day.length > 0) {
+        // The day's stipend went out on an earlier invoice — late-logged
+        // work aggregates into one line: covered part included, rest billed.
+        total += overAmt;
+        let detail = `stipend billed earlier · ${fmtH(dayMin)} more logged`;
+        if (overMin > 0) {
+          detail += rate > 0
+            ? ` — ${fmtH(overMin)} beyond stipend hours @ ${money(rate)}/hr`
+            : ` — ${fmtH(overMin)} beyond stipend hours, NO after-stipend rate set on this contract`;
+        } else {
+          detail += ` — within stipend hours`;
         }
-        if (over > 0) {
-          if ((c.overageHourlyRate || 0) > 0) {
-            const amt = (over / 60) * c.overageHourlyRate;
-            total += amt;
-            lines.push({ date, label: covered > 0 ? `${lbl} (beyond stipend hours)` : lbl, detail: `${tp}${over} min @ ${money(c.overageHourlyRate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}~b` });
-          } else {
-            // Never let real work vanish silently — flag the missing rate
-            lines.push({ date, label: `${lbl} (beyond stipend hours)`, detail: `${tp}${over} min — NO after-stipend rate set on this contract`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}~b` });
-          }
-        }
+        if (workList) detail += `\n${workList}`;
+        lines.push({
+          date,
+          label: `Additional work — daily total`,
+          detail,
+          amount: overAmt,
+          _sort: `${date}~0`,
+        });
       }
     }
 
@@ -566,6 +587,54 @@ function WorkLog() {
     [unbilled, contract, computeBilling]
   );
 
+  // Entry list grouped by call day, most recent day first. On stipend
+  // contracts the money lives at the DAY level (stipend + anything beyond
+  // the allowance), so each day header carries the daily total and the
+  // rows below show the work that was done.
+  const dayGroups = useMemo(() => {
+    if (!contract) return [];
+    const by = new Map();
+    for (const e of contractEntries.slice(0, 60)) {
+      const k = callDayOf(e);
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(e);
+    }
+    // Coverage days with nothing logged still earn their stipend — show them
+    if ((contract.callStipend || 0) > 0) {
+      const today = callDayOf({ startTime: new Date().toISOString() });
+      for (const p of contract.coveragePeriods || []) {
+        if (!p.start) continue;
+        const last = (p.end || p.start) < today ? (p.end || p.start) : today;
+        for (let d = new Date(p.start + "T12:00"); localDate(d) <= last; d.setDate(d.getDate() + 1)) {
+          const k = localDate(d);
+          if (!by.has(k)) by.set(k, []);
+        }
+      }
+    }
+    return [...by.keys()].sort().reverse().map(k => {
+      const list = by.get(k).sort(entryOrder);
+      const stipDay = (contract.callStipend || 0) > 0 && isStipendDay(contract, k, entries);
+      let totalAmt = 0, loggedMin = 0, includedMin = 0;
+      if (stipDay) {
+        const allowance = (contract.stipendHours || 0) * 60;
+        // Whole-day consumption across ALL entries for the day (billed too)
+        loggedMin = entries
+          .filter(e => e.contractId === contract.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === k)
+          .reduce((s, e) => s + (e.billedMin || 0), 0);
+        includedMin = Math.min(allowance, loggedMin);
+        totalAmt = (contract.callStipend || 0)
+          + ((loggedMin - includedMin) / 60) * (contract.overageHourlyRate || 0);
+        for (const e of list.filter(x => x.type === "Orientation")) totalAmt += amountForEntry(e, contract);
+      } else {
+        for (const e of list) {
+          totalAmt += amountForEntry(e, contract);
+          if (e.type !== "CallDay") loggedMin += e.billedMin || 0;
+        }
+      }
+      return { key: k, list, stipDay, totalAmt, loggedMin, includedMin };
+    });
+  }, [contractEntries, contract, entries, isStipendDay, amountForEntry]);
+
   const buildInvoice = useCallback(() => {
     if (!contract || unbilled.length === 0) return;
     const s = data.settings || {};
@@ -581,7 +650,7 @@ function WorkLog() {
     lines.push(`Period: ${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`);
     const termsText =
       ((contract.callStipend || 0) > 0
-        ? `${money(contract.callStipend)} per on-call day covering a ${contract.stipendHours || 0}-hour window, call time outside the window @ ${money(contract.overageHourlyRate || 0)}/hr; `
+        ? `${money(contract.callStipend)} per on-call day covering the first ${contract.stipendHours || 0} hours of logged work, time beyond @ ${money(contract.overageHourlyRate || 0)}/hr; `
         : "") +
       `billed in ${contract.incrementMinutes || 15}-minute increments` +
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : "");
@@ -590,7 +659,9 @@ function WorkLog() {
     const billing = computeBilling(contract, unbilled, true, contractEntries);
     for (const l of billing.lines) {
       lines.push(`${l.date ? formatDate(l.date) + "  " : ""}${l.label}`);
-      lines.push(`   ${l.detail ? l.detail + " = " : ""}${money(l.amount)}`);
+      const [summary, ...work] = (l.detail || "").split("\n");
+      lines.push(`   ${summary ? summary + " = " : ""}${money(l.amount)}`);
+      for (const w of work) lines.push(`   ${w}`);
     }
     lines.push(div);
     lines.push(`TOTAL DUE: ${money(billing.total)}`);
@@ -1026,7 +1097,13 @@ function WorkLog() {
             e.startTime && ["Time", `${fmtTime(e.startTime)}${e.endTime ? " – " + fmtTime(e.endTime) : ""}`],
             e.type !== "CallDay" && ["Logged", `${e.durationMin} min`],
             e.type !== "CallDay" && ["Billed", `${e.billedMin} min`],
-            ["Amount", money(amountForEntry(e, contracts.find(c => c.id === e.contractId) || contract))],
+            (() => {
+              const c2 = contracts.find(c => c.id === e.contractId) || contract;
+              const a2 = amountForEntry(e, c2);
+              const cov = e.type !== "CallDay" && e.type !== "Orientation" && c2
+                && (c2.callStipend || 0) > 0 && isStipendDay(c2, callDayOf(e), entries) && a2 === 0;
+              return ["Amount", cov ? "$0.00 — included in the day's stipend" : money(a2)];
+            })(),
             ["Invoice", inv ? `${inv.number} · ${inv.paidAt ? "paid" : "awaiting payment"}` : e.invoiceId ? "billed" : "not yet invoiced"],
             e.description && ["Billing note", e.description],
             e.privateNote && ["🔒 Private note", e.privateNote],
@@ -1050,64 +1127,98 @@ function WorkLog() {
         })()}
       </Modal>
 
-      {/* Entry list */}
+      {/* Entry list — grouped by call day; the day header carries the
+          daily total (on stipend days the money lives at the day level) */}
       {contractEntries.length === 0 ? (
         <EmptyState icon={"📞"} title="Nothing logged yet"
           subtitle="Tap the timer when you get a call — it does the math for you." />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {contractEntries.slice(0, 50).map(e => {
-            const isCoverage = e.type === "CallDay";
-            // Work inside the stipend allowance shows as included, not billed
-            const amt = amountForEntry(e, contract);
-            const stipDay = !isCoverage && e.type !== "Orientation" && contract
-              && isStipendDay(contract, callDayOf(e), entries);
-            const covered = stipDay && amt === 0;
-            return (
-              <div key={e.id} onClick={() => setViewEntry(e)} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                backgroundColor: T.card,
-                border: `1px solid ${isCoverage ? T.accent + "66" : T.border}`, borderRadius: 12,
-                padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer",
-                opacity: e.invoiceId ? 0.8 : 1,
-              }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
-                    {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
-                    {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {dayGroups.map(g => (
+            <div key={g.key}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, padding: "0 4px 6px" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>
+                    {formatDate(g.key)}
+                    {g.stipDay && <span style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, marginLeft: 6, letterSpacing: 0.4 }}>STIPEND DAY</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: T.textDim }}>
-                    {isCoverage
-                      ? `${formatDate(e.date)} · marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
-                      : `${formatDate(e.date)}${e.startTime ? ` · ${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""}` : ""} · ${e.durationMin} min${covered ? " · within stipend hours" : stipDay && amt > 0 ? ` → ${e.billedMin} min · partly beyond stipend` : ` → billed ${e.billedMin} min`}`}
+                  <div style={{ fontSize: 11.5, color: T.textDim }}>
+                    {g.stipDay
+                      ? (g.loggedMin > 0
+                        ? `${fmtHM(g.loggedMin)} logged · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond @ ${money(contract?.overageHourlyRate || 0)}/hr` : ""}`
+                        : `on call · nothing logged yet`)
+                      : `${fmtHM(g.loggedMin)} logged`}
                   </div>
-                  {e.privateNote && (
-                    <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
-                      {"🔒"} {e.privateNote}
-                    </div>
-                  )}
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
-                    {money(amt)}
-                  </div>
-                  <div style={{ fontSize: 10, color: T.textDim }}>
-                    {isCoverage ? "stipend" : covered ? `${e.billedMin}m · in stipend` : `${e.billedMin}m`}
-                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{money(g.totalAmt)}</div>
+                  <div style={{ fontSize: 10, color: T.textDim }}>day total</div>
                 </div>
-                <button onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={{
-                  padding: "5px 7px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent",
-                  color: T.textMuted, cursor: "pointer", display: "flex", flexShrink: 0,
-                }}><EditIcon /></button>
-                {!e.invoiceId && (
-                  <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{
-                    padding: "5px 7px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
-                    color: T.danger, cursor: "pointer", display: "flex", flexShrink: 0,
-                  }}><TrashIcon /></button>
-                )}
               </div>
-            );
-          })}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {g.list.map(e => {
+                  const isCoverage = e.type === "CallDay";
+                  // Work inside the stipend allowance shows as included, not $0
+                  const amt = amountForEntry(e, contract);
+                  const stipDay = !isCoverage && e.type !== "Orientation" && g.stipDay;
+                  const covered = stipDay && amt === 0;
+                  return (
+                    <div key={e.id} onClick={() => setViewEntry(e)} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      backgroundColor: T.card,
+                      border: `1px solid ${isCoverage ? T.accent + "66" : T.border}`, borderRadius: 12,
+                      padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer",
+                      opacity: e.invoiceId ? 0.8 : 1,
+                    }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
+                          {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
+                          {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: T.textDim }}>
+                          {isCoverage
+                            ? `marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
+                            : `${e.startTime ? `${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""} · ` : ""}${e.durationMin} min${covered ? "" : stipDay && amt > 0 ? ` → ${e.billedMin} min · partly beyond stipend` : ` → billed ${e.billedMin} min`}`}
+                        </div>
+                        {e.privateNote && (
+                          <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
+                            {"🔒"} {e.privateNote}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        {covered ? (
+                          <>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: T.success || T.accent }}>included</div>
+                            <div style={{ fontSize: 10, color: T.textDim }}>{e.billedMin}m in stipend</div>
+                          </>
+                        ) : isCoverage ? (
+                          <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim }}>day marker</div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
+                              {money(amt)}
+                            </div>
+                            <div style={{ fontSize: 10, color: T.textDim }}>{e.billedMin}m</div>
+                          </>
+                        )}
+                      </div>
+                      <button onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={{
+                        padding: "5px 7px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent",
+                        color: T.textMuted, cursor: "pointer", display: "flex", flexShrink: 0,
+                      }}><EditIcon /></button>
+                      {!e.invoiceId && (
+                        <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{
+                          padding: "5px 7px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
+                          color: T.danger, cursor: "pointer", display: "flex", flexShrink: 0,
+                        }}><TrashIcon /></button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
