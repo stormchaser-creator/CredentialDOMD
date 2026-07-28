@@ -23,8 +23,8 @@ import { shareInvoicePdf } from "../../../utils/invoicePdf";
 const TIMER_KEY = "credentialdomd-live-timer";
 const LAST_CONTRACT_KEY = "credentialdomd-last-contract";
 // "Shift" (flat-hourly scheduled blocks) removed per Eric — his contracts
-// are stipend/call-based. Re-add if an hourly-shift contract ever appears.
-const WORK_TYPES = ["Call", "Procedure", "Rounding", "Orientation", "Admin", "Travel"];
+// are stipend/call-based. Consult = a new patient seen, bills 1 hour flat.
+const WORK_TYPES = ["Call", "Consult", "Procedure", "Rounding", "Orientation", "Admin", "Travel"];
 
 function loadTimer() {
   try { return JSON.parse(localStorage.getItem(TIMER_KEY)) || null; } catch { return null; }
@@ -191,6 +191,12 @@ function WorkLog() {
     const byDate = {};
     for (const e of billable) { const k = callDayOf(e); (byDate[k] = byDate[k] || []).push(e); }
 
+    // Facility-facing wording: calls appear as "Patient care" (the note
+    // stays in-app); other types read as themselves.
+    const lineLabel = (e) => e.type === "Call"
+      ? "Patient care"
+      : `${e.type}${e.description ? " — " + e.description : ""}`;
+
     for (const date of Object.keys(byDate).sort()) {
       const day = byDate[date].sort((a, b) => (a.startTime || "z").localeCompare(b.startTime || "z"));
       const stipDay = stipendModel && isStipendDay(c, date, all);
@@ -200,7 +206,7 @@ function WorkLog() {
           const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
           const amt = ((e.billedMin || 0) / 60) * rate;
           totalMin += e.billedMin || 0; total += amt;
-          lines.push({ date, label: `${e.type}${e.description ? " — " + e.description : ""}`, detail: `${e.startTime ? fmtTime(e.startTime) + " · " : ""}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}` });
+          lines.push({ date, label: lineLabel(e), detail: `${e.startTime ? fmtTime(e.startTime) + " · " : ""}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}` });
         }
         continue;
       }
@@ -232,7 +238,7 @@ function WorkLog() {
         const covered = Math.min(remaining, billed);
         remaining -= covered;
         const over = billed - covered;
-        const lbl = `${e.type}${e.description ? " — " + e.description : ""}`;
+        const lbl = lineLabel(e);
         const tp = e.startTime ? `${fmtTime(e.startTime)} · ` : "";
         if (covered > 0) {
           lines.push({ date, label: lbl, detail: `${tp}${covered} min — within stipend hours`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}~a` });
@@ -712,6 +718,11 @@ function WorkLog() {
                 }}>{t2}</button>
               ))}
             </div>
+            <button onClick={() => { setManual({ type: "Consult", date: localDate(new Date()), durationMin: "60" }); setShowManual(true); }} style={{
+              width: "100%", padding: "12px", borderRadius: 12, marginBottom: 8,
+              border: `1px solid ${T.accent}`, backgroundColor: "transparent",
+              color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
+            }}>🩺 Consult seen — log 1 hour</button>
             <button onClick={() => { setManual({ type: "Call", date: localDate(new Date()) }); setShowManual(true); }} style={{
               width: "100%", padding: "12px", borderRadius: 12,
               border: `1px solid ${T.border}`, backgroundColor: T.input,
@@ -751,7 +762,19 @@ function WorkLog() {
         <Field label="Type">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {WORK_TYPES.map(t2 => (
-              <button key={t2} onClick={() => setManual(m2 => ({ ...m2, type: t2 }))} style={{
+              <button key={t2} onClick={() => setManual(m2 => {
+                const next = { ...m2, type: t2 };
+                // Contract conventions: a consult bills 1 hour flat; weekend
+                // rounding is the fixed 7–11 AM block (editable).
+                if (t2 === "Consult" && !m2.durationMin) next.durationMin = "60";
+                if (t2 === "Rounding" && m2.date) {
+                  const dow = new Date(m2.date + "T12:00").getDay();
+                  if ((dow === 0 || dow === 6) && !m2.start && !m2.end) {
+                    next.exact = true; next.start = "07:00"; next.end = "11:00"; next.durationMin = "";
+                  }
+                }
+                return next;
+              })} style={{
                 padding: "9px 14px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
                 border: `1px solid ${(manual.type || "Call") === t2 ? T.accent : T.border}`,
                 backgroundColor: (manual.type || "Call") === t2 ? T.accent : "transparent",
