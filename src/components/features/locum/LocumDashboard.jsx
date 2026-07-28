@@ -61,10 +61,11 @@ export default function LocumDashboard() {
             key={t.id}
             onClick={() => setSub(t.id)}
             style={{
-              flex: 1, padding: "8px", borderRadius: 8, border: "none",
+              flex: 1, minWidth: 0, padding: "8px 2px", borderRadius: 8, border: "none",
               backgroundColor: sub === t.id ? T.card : "transparent",
               color: sub === t.id ? T.text : T.textMuted,
-              fontSize: 12, fontWeight: 700, cursor: "pointer",
+              fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               boxShadow: sub === t.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
               transition: "all 0.15s",
             }}
