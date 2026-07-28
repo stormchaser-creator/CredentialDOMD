@@ -61,7 +61,10 @@ function Invoices() {
     const n = (data.workLog || []).filter(x => x.invoiceId === inv.id).length;
     if (!window.confirm(`Delete invoice ${inv.number}? Its ${n} work entr${n === 1 ? "y" : "ies"} become unbilled again.`)) return;
     for (const e of (data.workLog || []).filter(x => x.invoiceId === inv.id)) {
-      editItem("workLog", { ...e, invoiceId: null });
+      // Zero-minute markers exist only as this invoice's billing record —
+      // remove them; real work entries just become unbilled again.
+      if (e.type === "CallDay" && !e.billedMin) deleteItem("workLog", e.id);
+      else editItem("workLog", { ...e, invoiceId: null });
     }
     deleteItem("invoices", inv.id);
   };

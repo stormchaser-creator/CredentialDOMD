@@ -225,6 +225,7 @@ function WorkLog() {
       return `${fmtTime(s)}–${fmtTime(en)} · `;
     };
 
+    const emptyStipendDays = [];
     for (const date of Object.keys(byDate).sort()) {
       const day = byDate[date].sort((a, b) => (a.startTime || "z").localeCompare(b.startTime || "z"));
       const stipDay = stipendModel && isStipendDay(c, date, all);
@@ -252,6 +253,9 @@ function WorkLog() {
       if (!stipendBilled) {
         total += c.callStipend;
         const logged = priorMin + dayMin;
+        // A billed EMPTY day has no entry to stamp with the invoice id — the
+        // caller must create a zero-minute marker so it never re-bills.
+        if (day.length === 0) emptyStipendDays.push(date);
         lines.push({
           date,
           label: `Call day — stipend`,
@@ -310,7 +314,7 @@ function WorkLog() {
     // Chronological invoice: day by day, stipend first, then the day's work
     // in clock order — regardless of the order entries were logged in.
     lines.sort((a, b) => (a._sort || "").localeCompare(b._sort || ""));
-    return { lines, total, totalMin, orientationIncluded };
+    return { lines, total, totalMin, orientationIncluded, emptyStipendDays };
   }, [rateFor, isStipendDay]);
 
   const startTimer = useCallback((type) => {
@@ -576,6 +580,7 @@ function WorkLog() {
       number: num, orientationIncluded: billing.orientationIncluded,
       lines: billing.lines, totalMin: billing.totalMin, terms: termsText,
       periodStart: dates[0] || null, periodEnd: dates[dates.length - 1] || null,
+      emptyStipendDays: billing.emptyStipendDays || [],
     });
   }, [contract, unbilled, data.settings, data.invoices, computeBilling, contractEntries]);
 
@@ -588,6 +593,17 @@ function WorkLog() {
     for (const id of invoicePreview.entryIds) {
       const e = entries.find(x => x.id === id);
       if (e) editItem("workLog", { ...e, invoiceId: invId });
+    }
+    // Empty stipend days billed on this invoice get a zero-minute marker
+    // stamped with the invoice id so they can never bill twice.
+    for (const date of invoicePreview.emptyStipendDays || []) {
+      addItem("workLog", {
+        id: generateId(), createdAt: new Date().toISOString(),
+        contractId: contract.id, type: "CallDay", date,
+        startTime: null, endTime: null, durationMin: 0, billedMin: 0,
+        description: "Stipend billed — no calls required", privateNote: "",
+        invoiceId: invId,
+      });
     }
     const dates = unbilled.map(e => e.date).sort();
     addItem("invoices", {
