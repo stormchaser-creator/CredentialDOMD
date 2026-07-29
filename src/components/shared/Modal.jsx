@@ -13,6 +13,21 @@ function Modal({ open, onClose, title, children, width = 520 }) {
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
 
+  // When the iOS keyboard opens over a field, the field can end up buried —
+  // scroll whatever gets focus to the center of what's still visible.
+  useEffect(() => {
+    if (!open) return;
+    const onFocus = (e) => {
+      const el = e.target;
+      if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      setTimeout(() => {
+        try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* older browser */ }
+      }, 300); // give the keyboard time to resize the viewport first
+    };
+    document.addEventListener("focusin", onFocus);
+    return () => document.removeEventListener("focusin", onFocus);
+  }, [open]);
+
   // iOS: the on-screen keyboard shrinks the VISUAL viewport but not 100vh,
   // so a full-height modal gets half-buried with no way to scroll. Track the
   // visual viewport and cap the card to it.

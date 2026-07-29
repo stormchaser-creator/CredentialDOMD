@@ -86,6 +86,63 @@ function fmtHM(m) {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
+// ── Fast exact-time entry — type it, no wheels ──
+// Accepts "808", "8:08", "8:08p", "808p", or 24-hour "2008". A typed a/p
+// suffix wins over the AM/PM chips; hours above 12 are taken as 24-hour.
+function parseTimeText(raw, ap) {
+  const t = String(raw || "").toLowerCase().replace(/[^0-9ap]/g, "");
+  const m = t.match(/^(\d{1,4})(a|p)?$/);
+  if (!m) return null;
+  const d = m[1];
+  const suf = m[2] || null;
+  let h, min;
+  if (d.length <= 2) { h = +d; min = 0; }
+  else { h = +d.slice(0, -2); min = +d.slice(-2); }
+  if (h > 23 || min > 59) return null;
+  if (h <= 12) {
+    const mer = suf || ap;
+    if (!mer) return null; // ambiguous without AM/PM
+    if (mer === "p" && h < 12) h += 12;
+    if (mer === "a" && h === 12) h = 0;
+  }
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+function fmt12(hhmm) {
+  const [h, m] = String(hhmm).split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+function SmartTimeField({ label, value, onCommit, iS, T }) {
+  const [raw, setRaw] = useState(() => (value ? fmt12(value).replace(" ", "") : ""));
+  const [ap, setAp] = useState(() => (value ? (parseInt(value, 10) >= 12 ? "p" : "a") : null));
+  const parsed = parseTimeText(raw, ap);
+  const commit = (nextRaw, nextAp) => onCommit(parseTimeText(nextRaw, nextAp));
+  return (
+    <Field label={label}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input
+          value={raw}
+          inputMode="numeric"
+          placeholder="8:08"
+          onChange={(e) => { setRaw(e.target.value); commit(e.target.value, ap); }}
+          style={{ ...iS, minWidth: 0, flex: 1 }}
+        />
+        {["a", "p"].map(mer => (
+          <button key={mer} onClick={() => { setAp(mer); commit(raw, mer); }} style={{
+            padding: "10px 12px", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer",
+            border: `1px solid ${ap === mer ? T.accent : T.border}`,
+            backgroundColor: ap === mer ? T.accent : "transparent",
+            color: ap === mer ? "#fff" : T.textMuted, flexShrink: 0,
+          }}>{mer === "a" ? "AM" : "PM"}</button>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: parsed ? (T.success || T.accent) : raw ? T.warning : T.textDim }}>
+        {parsed ? `= ${fmt12(parsed)}` : raw ? "Add AM or PM (or type 8:08p / 20:08)" : "Type it — 808 + AM/PM, 8:08p, or 24-hour 2008"}
+      </div>
+    </Field>
+  );
+}
+
 // The displayed time is always the BILLED quarter-hour block (8:08–8:11 →
 // 8:00 PM–8:15 PM); the exact clock stays hidden on the record for the
 // physician's own history. Orientation snaps to the NEAREST quarter hour,
@@ -1052,10 +1109,10 @@ function WorkLog() {
           </div>
           {manual.exact && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
-                <Field label="Start time"><input type="time" value={manual.start || ""} onChange={e => setManual(m2 => ({ ...m2, start: e.target.value, durationMin: "" }))} style={{ ...iS, minWidth: 0 }} /></Field>
-                <Field label="End time"><input type="time" value={manual.end || ""} onChange={e => setManual(m2 => ({ ...m2, end: e.target.value, durationMin: "" }))} style={{ ...iS, minWidth: 0 }} /></Field>
-              </div>
+              <SmartTimeField label="Start time" value={manual.start || ""} iS={iS} T={T}
+                onCommit={(v) => setManual(m2 => ({ ...m2, start: v || "", ...(v ? { durationMin: "" } : {}) }))} />
+              <SmartTimeField label="End time" value={manual.end || ""} iS={iS} T={T}
+                onCommit={(v) => setManual(m2 => ({ ...m2, end: v || "", ...(v ? { durationMin: "" } : {}) }))} />
               <Field label="…or minutes"><input type="number" inputMode="numeric" value={manual.durationMin || ""} onChange={e => setManual(m2 => ({ ...m2, durationMin: e.target.value }))} style={iS} placeholder="e.g. 20" /></Field>
             </div>
           )}
