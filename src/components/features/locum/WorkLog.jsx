@@ -86,6 +86,26 @@ function fmtHM(m) {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
+// The displayed time is always the BILLED quarter-hour block (8:08–8:11 →
+// 8:00 PM–8:15 PM); the exact clock stays hidden on the record for the
+// physician's own history. Orientation snaps to the NEAREST quarter hour,
+// everything else floors the start and spans the billed minutes.
+function snap15(iso) {
+  return new Date(Math.round(new Date(iso).getTime() / 900000) * 900000);
+}
+function billedSpan(e, c) {
+  if (!e.startTime) return "";
+  if (e.type === "Orientation") {
+    const s = snap15(e.startTime);
+    const en = e.endTime ? snap15(e.endTime) : new Date(s.getTime() + (e.billedMin || 0) * 60000);
+    return `${fmtTime(s)}–${fmtTime(en)}`;
+  }
+  const inc = ((c?.incrementMinutes) || 15) * 60000;
+  const s = new Date(Math.floor(new Date(e.startTime).getTime() / inc) * inc);
+  const en = new Date(s.getTime() + (e.billedMin || 0) * 60000);
+  return `${fmtTime(s)}–${fmtTime(en)}`;
+}
+
 function WorkLog() {
   const { data, addItem, editItem, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
@@ -326,8 +346,9 @@ function WorkLog() {
 
     // Orientation — its own terms, never part of the stipend allowance
     for (const e of list.filter(x => x.type === "Orientation")) {
-      // Orientation times are already snapped to the quarter hour at save
-      const tp = e.startTime ? `${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""} · ` : "";
+      // Display the quarter-hour block even if a stored time was never
+      // snapped at save — the invoice always shows rounded times.
+      const tp = e.startTime ? `${billedSpan(e, c)} · ` : "";
       if ((c.orientationHourlyRate || 0) > 0) {
         const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
         totalMin += e.billedMin || 0; total += amt;
@@ -1119,7 +1140,8 @@ function WorkLog() {
           const inv = e.invoiceId ? (data.invoices || []).find(i => i.id === e.invoiceId) : null;
           const rows = [
             ["Date", formatDate(e.date)],
-            e.startTime && ["Time", `${fmtTime(e.startTime)}${e.endTime ? " – " + fmtTime(e.endTime) : ""}`],
+            e.startTime && ["Time (as billed)", billedSpan(e, contracts.find(c => c.id === e.contractId) || contract)],
+            e.startTime && ["Exact time (records only)", `${fmtTime(e.startTime)}${e.endTime ? " – " + fmtTime(e.endTime) : ""}`],
             e.type !== "CallDay" && ["Logged", `${e.durationMin} min`],
             e.type !== "CallDay" && ["Billed", `${e.billedMin} min`],
             (() => {
@@ -1212,7 +1234,7 @@ function WorkLog() {
                         <div style={{ fontSize: 12, color: T.textDim }}>
                           {isCoverage
                             ? `marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
-                            : `${e.startTime ? `${fmtTime(e.startTime)}${e.endTime ? "–" + fmtTime(e.endTime) : ""} · ` : ""}${e.durationMin} min${covered ? "" : stipDay && amt > 0 ? ` → ${e.billedMin} min · partly beyond stipend` : ` → billed ${e.billedMin} min`}`}
+                            : `${e.startTime ? `${billedSpan(e, contract)} · ` : ""}${e.billedMin || e.durationMin || 0} min${stipDay && amt > 0 ? " · partly beyond stipend" : ""}`}
                         </div>
                         {e.privateNote && (
                           <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
