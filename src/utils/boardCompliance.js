@@ -33,11 +33,28 @@ export function computeBoardCompliance(data) {
   const todayISO = today.toISOString().slice(0, 10);
   const out = [];
 
-  for (const id of data.settings.specialties || []) {
+  // In the AOA/ABMS structure, disciplines like neurological surgery are
+  // certified BY a parent board (AOBS/ABNS). Picking the discipline alone
+  // must produce the parent board's full requirement card — a neurosurgeon
+  // shouldn't have to know to pick "Surgery".
+  const seen = new Set();
+  const resolved = (data.settings.specialties || []).map(id => {
     const [kind, code, ...rest] = String(id).split(":");
     const subName = rest.join(":");
+    if (kind === "AOA-SUB" && AOA_OCC[code]) return { id, kind: "AOA", code, displayName: subName };
+    if (kind === "ABMS-SUB" && ABMS_MOC[code]) return { id, kind: "ABMS", code, displayName: subName };
+    return { id, kind, code, displayName: subName };
+  });
+
+  for (const spec of resolved) {
+    const { id, kind, code, displayName } = spec;
+    const subName = displayName;
+    // One card per underlying board, even if both the board and its
+    // discipline are selected
+    if ((kind === "ABMS" || kind === "AOA") && seen.has(`${kind}:${code}`)) continue;
 
     if (kind === "ABMS" && ABMS_MOC[code]) {
+      seen.add(`ABMS:${code}`);
       const b = ABMS_MOC[code];
       const cycleYears = b.cycle || 1;
       let from, windowLabel, daysLeft;
@@ -55,8 +72,8 @@ export function computeBoardCompliance(data) {
       const earned = hoursIn(cme, from, todayISO.slice(0, 4) + "-12-31",
         c => (c.category || "").includes("AMA PRA Category 1"));
       out.push({
-        id, source: "ABMS", code, name: b.name,
-        label: `${b.name} — ABMS ${code}`,
+        id, source: "ABMS", code, name: subName || b.name,
+        label: `${subName || b.name} — ABMS ${code}`,
         required: b.hours, earned, met: earned >= b.hours,
         unit: b.unit, windowLabel, daysLeft,
         assessment: b.assessment || "", notes: b.notes || "",
@@ -67,14 +84,15 @@ export function computeBoardCompliance(data) {
       // boards), NOT the 120 that only applies outside OCC. Category 1-A
       // minimums are per board — many boards, incl. AOBS, have none.
       const b = AOA_OCC[code];
+      seen.add(`AOA:${code}`);
       const req = b.timeLimited || { hours: 120, cat1: 0 };
       const cyc = aoaCycle(today);
       const from = `${cyc.start}-01-01`, to = `${cyc.end}-12-31`;
       const earned = hoursIn(cme, from, to);
       const cat1a = hoursIn(cme, from, to, c => (c.category || "").includes("AOA Category 1-A"));
       out.push({
-        id, source: "AOA", code, name: b.name,
-        label: `${b.name} — AOA ${code}`,
+        id, source: "AOA", code, name: subName || b.name,
+        label: `${subName || b.name} — AOA ${code}`,
         required: req.hours, earned,
         met: earned >= req.hours && cat1a >= (req.cat1 || 0),
         cat1aRequired: req.cat1 || 0, cat1aEarned: cat1a,
