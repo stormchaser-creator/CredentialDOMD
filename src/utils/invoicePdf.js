@@ -166,6 +166,25 @@ export function invoicePdfFile(inv) {
 }
 
 /**
+ * A professional cover email to accompany the invoice — sharing to Mail
+ * uses this as the message body, so the recipient gets a real letter,
+ * not a bare subject line with an attachment.
+ */
+export function invoiceCoverEmail(inv) {
+  const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const period = inv.periodStart
+    ? `${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? ` through ${formatDate(inv.periodEnd)}` : ""}`
+    : null;
+  const paras = [
+    "Hello,",
+    `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. The total due is ${money(inv.total)}.`,
+    "The attached PDF itemizes each day of coverage and the work performed under the terms of our agreement. Please reply to this email with any questions.",
+    `Thank you,\n${inv.physician || ""}${inv.npi ? `\nNPI ${inv.npi}` : ""}${inv.email ? `\n${inv.email}` : ""}`,
+  ];
+  return paras.join("\n\n");
+}
+
+/**
  * Share the PDF. Fallback order matters: in the installed app, "downloading"
  * navigates the whole app into the PDF with no way back — so when the share
  * sheet can't take files we share the text version instead, and only plain
@@ -173,9 +192,10 @@ export function invoicePdfFile(inv) {
  */
 export async function shareInvoicePdf(inv, subject, fallbackText) {
   const file = invoicePdfFile(inv);
+  const cover = invoiceCoverEmail(inv);
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ title: subject || `Invoice ${inv.number}`, files: [file] });
+      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: cover, files: [file] });
       return "share";
     } catch (err) {
       if (err?.name === "AbortError") return null;
@@ -185,7 +205,7 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
     || window.matchMedia?.("(display-mode: standalone)")?.matches;
   if (standalone && navigator.share && fallbackText) {
     try {
-      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: fallbackText });
+      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: `${cover}\n\n———\n\n${fallbackText}` });
       return "share-text";
     } catch (err) {
       if (err?.name === "AbortError") return null;

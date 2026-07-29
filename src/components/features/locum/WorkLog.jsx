@@ -245,11 +245,10 @@ function WorkLog() {
       }
     }
 
-    // Facility-facing wording: calls appear as "Patient care" (the note
-    // stays in-app); other types read as themselves.
-    const lineLabel = (e) => e.type === "Call"
-      ? "Patient care"
-      : `${e.type}${e.description ? " — " + e.description : ""}`;
+    // Facility-facing wording: calls appear as "Patient care", and the
+    // billing note rides along exactly as it reads in the app. (The private
+    // note never appears anywhere.)
+    const lineLabel = (e) => `${e.type === "Call" ? "Patient care" : e.type}${e.description ? " — " + e.description : ""}`;
 
     // Invoiced times are the billed quarter-hour block: start snaps DOWN to
     // the increment, end = start + billed minutes (8:08–8:11 → 8:00–8:15).
@@ -1243,7 +1242,7 @@ function WorkLog() {
                     }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
-                          {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
+                          {isCoverage ? "🏥 Stipend day" : `${e.type === "Call" ? "Patient care" : e.type}${e.description ? ` — ${e.description}` : ""}`}
                           {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
                         </div>
                         <div style={{ fontSize: 12, color: T.textDim }}>

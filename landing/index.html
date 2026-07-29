@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CredentialDoMD — Credential tracking for physicians, by a physician</title>
-<meta name="description" content="Track every license, DEA, board cert, and hospital privilege across all 50 states. Built by a neurosurgeon. Free for 5 credentials. $19/month for unlimited.">
+<meta name="description" content="Every license, DEA, board cert, CME cycle, hospital privilege, and locum invoice in one app. Built by a practicing neurosurgeon. Join the early-access list.">
 <meta name="keywords" content="physician credential tracker, medical license renewal, DEA renewal reminder, locum tenens credentialing, CME tracker, hospital privileges, board certification">
 
 <!-- Canonical -->
@@ -40,27 +40,21 @@
   "founder": {
     "@type": "Person",
     "name": "Eric Whitney",
-    "honorificSuffix": "MD",
+    "honorificSuffix": "DO",
     "jobTitle": "Founder",
     "description": "Board-certified neurosurgeon"
   }
 }
 </script>
 
-<!-- Schema.org SoftwareApplication (pricing) -->
+<!-- Schema.org SoftwareApplication -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "CredentialDoMD",
   "applicationCategory": "BusinessApplication",
-  "operatingSystem": "Web",
-  "offers": [
-    { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
-    { "@type": "Offer", "name": "Solo", "price": "19", "priceCurrency": "USD" },
-    { "@type": "Offer", "name": "Locum", "price": "29", "priceCurrency": "USD" },
-    { "@type": "Offer", "name": "Practice", "price": "39", "priceCurrency": "USD" }
-  ]
+  "operatingSystem": "Web"
 }
 </script>
 
@@ -1848,9 +1842,10 @@ footer {
     </a>
     <div class="nav-links">
       <a href="#features">Features</a>
-      <a href="#pricing">Pricing</a>
+      <a href="#locum">For Locums</a>
       <a href="#faq">FAQ</a>
-      <a href="/app/" class="btn-primary nav-cta">Get Started Free</a>
+      <a href="/app/">Sign in</a>
+      <a href="#early-access" class="btn-primary nav-cta">Get Early Access</a>
     </div>
     <button class="mobile-menu-btn" aria-label="Open menu" onclick="document.querySelector('.nav-links').classList.toggle('mobile-open')">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1877,8 +1872,8 @@ footer {
       </p>
 
       <div class="hero-buttons">
-        <a href="/app/" class="btn-primary">
-          Check Your Credential Health &mdash; Free
+        <a href="#early-access" class="btn-primary">
+          Get Early Access
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
         </a>
         <a href="#how-it-works" class="btn-secondary">See How It Works</a>
@@ -2146,7 +2141,7 @@ footer {
         Everything You Need
       </div>
       <h2 class="section-title">Every credential. One app. Zero surprises.</h2>
-      <p class="section-subtitle">CredentialDOMD replaces your spreadsheet, your sticky notes, your calendar reminders, and that folder of scanned PDFs you can never find.</p>
+      <p class="section-subtitle">CredentialDOMD replaces your spreadsheet, your sticky notes, your calendar reminders, that folder of scanned PDFs you can never find &mdash; and for locums, your entire billing workflow.</p>
     </div>
 
     <div class="features-grid">
@@ -2155,59 +2150,108 @@ footer {
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="14" r="3"/></svg>
         </div>
         <h3 class="feature-title">AI Document Scanner</h3>
-        <p class="feature-desc">Snap a photo of any license, certification, or DEA card. Gemini AI extracts issuer, number, dates, and state &mdash; automatically.</p>
-        <div class="feature-value">Stand-alone value: <span>$199</span></div>
+        <p class="feature-desc">Snap a photo of any license, DEA card, board certificate, insurance COI, or vaccine card. The AI reads it, pulls every field, and files it in the right place for your one-tap approval.</p>
+        <div class="feature-value"><span>Example:</span> a photo of your state license files itself &mdash; number, issue date, expiration &mdash; in about ten seconds.</div>
       </div>
 
       <div class="feature-card animate-on-scroll">
         <div class="feature-icon">
-          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
         </div>
-        <h3 class="feature-title">50-State License Tracking</h3>
-        <p class="feature-desc">Every state has different requirements, renewal cycles, and CME mandates. We track all of them. Because you should not have to.</p>
-        <div class="feature-value">Stand-alone value: <span>$149</span></div>
+        <h3 class="feature-title">AI Assistant</h3>
+        <p class="feature-desc">Chat with your own file. Ask what is expiring, hand it a document that fits no standard form (nothing gets dropped), or paste an agency's request. Nothing changes without your approval.</p>
+        <div class="feature-value"><span>Example:</span> paste a credentialing checklist &mdash; it bundles the nine documents you have into one send and lists exactly what is missing.</div>
       </div>
 
       <div class="feature-card animate-on-scroll">
         <div class="feature-icon">
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
         </div>
-        <h3 class="feature-title">CME Compliance Monitor</h3>
-        <p class="feature-desc">Track credits by category, state requirement, and specialty board. Know exactly where you stand before your cycle ends.</p>
-        <div class="feature-value">Stand-alone value: <span>$99</span></div>
+        <h3 class="feature-title">CME Compliance Engine</h3>
+        <p class="feature-desc">Cycle-aware CME tracking anchored to each license's renewal date, with the real state rules built in: category minimums, topic mandates, MD vs DO requirements, and the DEA MATE Act.</p>
+        <div class="feature-value"><span>Example:</span> Colorado's 30-hour cycle with its 2-hour substance-use mandate, counted down against your actual renewal date.</div>
       </div>
 
       <div class="feature-card animate-on-scroll">
         <div class="feature-icon">
-          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         </div>
-        <h3 class="feature-title">Hospital Privilege Tracker</h3>
-        <p class="feature-desc">Track privileges at every facility. Know what is due, what is pending, and which hospitals need updated documents.</p>
-        <div class="feature-value">Stand-alone value: <span>$79</span></div>
+        <h3 class="feature-title">Multi-State License Matrix</h3>
+        <p class="feature-desc">Hold licenses in three states? One view shows every license, DEA registration, renewal date, and CME standing side by side &mdash; with each state's rules applied independently.</p>
+        <div class="feature-value"><span>Example:</span> adding a new state license automatically starts tracking that state's CME requirements on your Home screen.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        </div>
+        <h3 class="feature-title">Alerts That Escalate</h3>
+        <p class="feature-desc">Expiration alerts sharpen as deadlines approach, across licenses, certifications, TB tests, and CME cycles. One tap builds a renewal packet: transcript plus certificates, ready to share.</p>
+        <div class="feature-value"><span>Example:</span> a record saved without an expiration date gets flagged immediately &mdash; undated credentials are how lapses happen.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5"/><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h3 class="feature-title">Health Records &amp; Screenings</h3>
+        <p class="feature-desc">Titers with lab values and reference ranges, TB tests, drug screens with chain of custody, vaccine series, and background screenings with per-search status &mdash; everything agencies ask for.</p>
+        <div class="feature-value"><span>Example:</span> a measles titer that comes back non-immune is flagged the day the report lands, not the week an assignment needs it.</div>
       </div>
 
       <div class="feature-card animate-on-scroll">
         <div class="feature-icon">
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         </div>
-        <h3 class="feature-title">Insurance Panel Manager</h3>
-        <p class="feature-desc">Track your payer enrollments, re-credentialing dates, and panel status. Never discover you dropped off a panel after the fact.</p>
-        <div class="feature-value">Stand-alone value: <span>$79</span></div>
+        <h3 class="feature-title">Contract Scanner</h3>
+        <p class="feature-desc">Upload a locum agreement and the AI extracts your rates, call stipend, coverage dates, and billing terms straight off the PDF &mdash; then your work logs price themselves against those terms.</p>
+        <div class="feature-value"><span>Example:</span> "$3,000 per 24-hour call covering the first 4 hours, $300/hr after" &mdash; read from the agreement, applied to every entry.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3 class="feature-title">One-Tap Call Logging</h3>
+        <p class="feature-desc">Phone rings, tap the timer. Calls, rounding, procedures, and consults log themselves, round to your contract's billing increment, and draw down your stipend hours in real time.</p>
+        <div class="feature-value"><span>Example:</span> a 3-minute call back at 2am logs as a 15-minute billed block and lands on the right call day &mdash; automatically.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 14l6-6m-5.5.5h.01m4.99 4.99h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l5-3 5 3z"/></svg>
+        </div>
+        <h3 class="feature-title">Invoices That Match Your Contract</h3>
+        <p class="feature-desc">Professional PDF invoices with one daily total per call day and every piece of work itemized beneath it. Track each invoice from sent to paid, with aging on what is outstanding.</p>
+        <div class="feature-value"><span>Example:</span> six days of call becomes a clean one-page PDF &mdash; stipends, overage hours, and orientation, each priced by your contract's terms.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>
+        </div>
+        <h3 class="feature-title">RVU Capture by Voice</h3>
+        <p class="feature-desc">Say what you did in plain language. The AI codes it against official CMS values &mdash; procedures, consults, progress notes &mdash; and keeps daily, monthly, and all-time wRVU totals.</p>
+        <div class="feature-value"><span>Example:</span> "placed an EVD and saw two consults" comes back coded with CPT codes and work RVUs, ready to save.</div>
       </div>
 
       <div class="feature-card animate-on-scroll">
         <div class="feature-icon">
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         </div>
-        <h3 class="feature-title">CV Generator + Data Export</h3>
-        <p class="feature-desc">Generate a formatted CV from your credential data. Export everything as CSV or PDF. Your data, your way.</p>
-        <div class="feature-value">Stand-alone value: <span>$49</span></div>
+        <h3 class="feature-title">CV, Exports &amp; 1099 Deductions</h3>
+        <p class="feature-desc">Generate a formatted CV from your credential data. Export everything as CSV or PDF. A deduction ledger auto-collects your licensing and credentialing costs for tax season.</p>
+        <div class="feature-value"><span>Example:</span> license fees, DEA renewals, and CME costs flow into a Schedule&nbsp;C-ready export for your CPA.</div>
       </div>
-    </div>
 
-    <div class="value-stack-total animate-on-scroll">
-      <div class="price">$19<span class="price-period">/month</span></div>
-      <p class="price-note">Or $190/year (2 months free). Free for 5 credentials, no card.</p>
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3 class="feature-title">Offline, Private, Yours</h3>
+        <p class="feature-desc">Installs on your phone like a native app and works with zero signal &mdash; then syncs across devices when you are back online. Row-level security means your data is isolated to your account.</p>
+        <div class="feature-value"><span>Example:</span> pull up your license number in a hospital basement with no reception. It is all still there.</div>
+      </div>
     </div>
   </div>
 </section>
@@ -2221,33 +2265,33 @@ footer {
           <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
           For Locum Tenens Physicians
         </div>
-        <h2 class="section-title">You credential at 4 hospitals. That is 60+ documents.</h2>
-        <p class="section-subtitle">20+ expiration dates. Zero margin for error. Your entire income depends on being credentialed at every facility you work.</p>
+        <h2 class="section-title">Your contract says $3,000 per call day covering the first 4 hours. Your app should know that.</h2>
+        <p class="section-subtitle">CredentialDOMD is the only credential tracker with a complete locum tenens business engine inside &mdash; built by a neurosurgeon who works these exact contracts.</p>
 
         <ul class="locum-pain-list">
           <li>
             <div class="check-icon">
               <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
             </div>
-            <span>One-tap credential summary for new hospital applications &mdash; every document, every date, every number, exported in seconds</span>
+            <span><strong>Upload your agreement, get a billing engine.</strong> Stipends, hourly rates, coverage dates, and billing increments are read off the contract and applied to every entry you log.</span>
           </li>
           <li>
             <div class="check-icon">
               <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
             </div>
-            <span>Track privileges across every facility with per-hospital status dashboards and reappointment cycle alerts</span>
+            <span><strong>Stipend math handled for you.</strong> Call days count logged work down against your covered hours; anything beyond bills at your after-stipend rate. A live countdown shows where you stand all day.</span>
           </li>
           <li>
             <div class="check-icon">
               <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
             </div>
-            <span>NPI lookup and auto-population &mdash; enter once, populate everywhere</span>
+            <span><strong>Invoices a hospital biller respects.</strong> Daily totals with the work itemized beneath, quarter-hour billing blocks, orientation at its own rate &mdash; exported as a clean PDF and tracked sent to paid.</span>
           </li>
           <li>
             <div class="check-icon">
               <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
             </div>
-            <span>Works offline as a PWA. Pull up your credentials on-site, even without signal. Syncs when you are back online.</span>
+            <span><strong>Every assignment's schedule in one place.</strong> Coverage blocks across contracts, warnings when you log against the wrong facility, and a deduction ledger running for tax season.</span>
           </li>
         </ul>
       </div>
@@ -2325,7 +2369,7 @@ footer {
         </div>
 
         <div class="locum-cta">
-          <p>"I credential at 4 hospitals. CredentialDOMD replaced <strong>4 spreadsheets, 12 calendar reminders, and a filing cabinet.</strong>"</p>
+          <p>"I work these contracts myself. A week of call &mdash; stipends, call backs, orientation &mdash; becomes <strong>one accurate PDF invoice in two taps.</strong>"<br><span style="font-size: 13px; color: var(--text-muted);">&mdash; Dr. Eric Whitney, DO, neurosurgeon and founder</span></p>
         </div>
       </div>
     </div>
@@ -2337,97 +2381,31 @@ footer {
      least one named, photo-verifiable physician quote. -->
 
 
-<!-- ============ PRICING ============ -->
-<section class="pricing" id="pricing">
+<!-- ============ EARLY ACCESS ============ -->
+<section class="pricing" id="early-access">
   <div class="container">
-    <div class="animate-on-scroll">
-      <div class="section-label">
-        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
-        Simple Pricing
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Early Access
       </div>
-      <h2 class="section-title">Less than a single lost billing day.</h2>
-      <p class="section-subtitle">If you only have 2-3 credentials, you probably don't need this. But if you have more &mdash; and most physicians do &mdash; the math is obvious.</p>
+      <h2 class="section-title">Be first in line when we open the doors.</h2>
+      <p class="section-subtitle" style="margin-left: auto; margin-right: auto;">CredentialDOMD is being tested in the field right now &mdash; on real hospital assignments, real contracts, and real invoices. Leave your email and you will be the first to know when it opens, with founding-member perks for the earliest names on the list.</p>
     </div>
 
-    <div class="pricing-grid">
-      <!-- Free -->
-      <div class="pricing-card animate-on-scroll">
-        <div class="pricing-name">Free</div>
-        <div class="pricing-desc">Get started and see the value</div>
-        <div class="pricing-price">
-          <div class="pricing-amount free">$0</div>
-          <div class="pricing-period">forever</div>
-        </div>
-        <ul class="pricing-features">
-          <li><span class="check">&#10003;</span> Track up to 5 credentials</li>
-          <li><span class="check">&#10003;</span> Basic expiration alerts</li>
-          <li><span class="check">&#10003;</span> Credential Health Score</li>
-          <li><span class="check">&#10003;</span> NPI lookup</li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">AI document scanner</span></li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">CV generator</span></li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">Priority alerts</span></li>
-        </ul>
-        <a href="/app/" class="btn-secondary pricing-cta">Start Free</a>
-      </div>
-
-      <!-- Solo -->
-      <div class="pricing-card animate-on-scroll">
-        <div class="pricing-name">Solo</div>
-        <div class="pricing-desc">One physician. Unlimited credentials. Full toolkit.</div>
-        <div class="pricing-price">
-          <div class="pricing-amount">$19<span class="pricing-period">/mo</span></div>
-          <div class="pricing-annual">$190/year &mdash; 2 months free</div>
-        </div>
-        <ul class="pricing-features">
-          <li><span class="check">&#10003;</span> <strong>Unlimited</strong> credentials</li>
-          <li><span class="check">&#10003;</span> AI document scanner</li>
-          <li><span class="check">&#10003;</span> Credential Health Score</li>
-          <li><span class="check">&#10003;</span> CV generator</li>
-          <li><span class="check">&#10003;</span> All 50 states and territories</li>
-          <li><span class="check">&#10003;</span> Offline-ready PWA</li>
-        </ul>
-        <a href="/app/?tier=solo" class="btn-secondary pricing-cta">Start 14-day trial</a>
-      </div>
-
-      <!-- Locum (recommended) -->
-      <div class="pricing-card featured animate-on-scroll">
-        <div class="pricing-popular">Recommended</div>
-        <div class="pricing-name">Locum</div>
-        <div class="pricing-desc">Built for 1099 locum tenens physicians who hold multiple state licenses.</div>
-        <div class="pricing-price">
-          <div class="pricing-amount">$29<span class="pricing-period">/mo</span></div>
-          <div class="pricing-annual">$290/year &mdash; 2 months free</div>
-        </div>
-        <ul class="pricing-features">
-          <li><span class="check">&#10003;</span> Everything in Solo</li>
-          <li><span class="check">&#10003;</span> Multi-state license matrix (one view, every state)</li>
-          <li><span class="check">&#10003;</span> Hospital rotation tracker</li>
-          <li><span class="check">&#10003;</span> 1099 deduction memo export (CSV/PDF)</li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">IMLC compact tracker (in development)</span></li>
-          <li><span class="x-mark">&mdash;</span> <span style="color: var(--text-muted);">Agency share-links (in development)</span></li>
-        </ul>
-        <a href="/app/?tier=locum" class="btn-primary pricing-cta">Start 14-day trial</a>
-      </div>
-
-      <!-- Practice -->
-      <div class="pricing-card animate-on-scroll" style="opacity: 0.85;">
-        <div style="position: absolute; top: -10px; right: 16px; background: var(--text-secondary); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.3px;">In development</div>
-        <div class="pricing-name">Practice</div>
-        <div class="pricing-desc">2 to 25 providers. Annual billing.</div>
-        <div class="pricing-price">
-          <div class="pricing-amount">$39<span class="pricing-period">/provider/mo</span></div>
-          <div class="pricing-annual">billed annually &mdash; available H2 2026</div>
-        </div>
-        <ul class="pricing-features">
-          <li><span class="check">&#10003;</span> Everything in Solo, per provider</li>
-          <li><span class="check">&#10003;</span> Admin dashboard</li>
-          <li><span class="check">&#10003;</span> Role and permission controls</li>
-          <li><span class="check">&#10003;</span> Per-hospital privilege views</li>
-          <li><span class="check">&#10003;</span> Centralized expiration calendar</li>
-          <li><span class="check">&#10003;</span> Bulk CSV import and export</li>
-        </ul>
-        <a href="mailto:hello@credentialdomd.com?subject=Practice%20tier%20waitlist" class="btn-secondary pricing-cta">Join waitlist</a>
-      </div>
+    <div class="animate-on-scroll" style="max-width: 560px; margin: 36px auto 0;">
+      <form id="waitlist-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+        <input type="email" id="waitlist-email" required placeholder="you@hospital.org" autocomplete="email"
+          style="flex: 1; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
+          onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
+        <button type="submit" class="btn-primary" style="padding: 16px 28px; font-size: 16px; border: none; cursor: pointer;">
+          Join the list
+        </button>
+      </form>
+      <div id="waitlist-msg" style="margin-top: 14px; font-size: 14.5px; font-weight: 600; text-align: center; min-height: 22px;"></div>
+      <p style="margin-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center;">
+        No spam, no sharing your address &mdash; one email when early access opens, from the physician who built it.
+      </p>
     </div>
   </div>
 </section>
@@ -2441,7 +2419,7 @@ footer {
         How We Compare
       </div>
       <h2 class="section-title">More comprehensive than anything else out there.</h2>
-      <p class="section-subtitle" style="margin: 0 auto;">Mocingbird is $199/year and tracks licenses and CME. CredentialDoMD Solo is $19/month and covers everything &mdash; licenses, DEA, board cert, hospital privileges, malpractice, AI scanning, CV generation, multi-state matrix.</p>
+      <p class="section-subtitle" style="margin: 0 auto;">License-and-CME trackers exist. Nothing else covers the whole job &mdash; licenses, DEA, board certs, privileges, malpractice, health records, AI scanning, an assistant that ships document packets, and a full locum billing engine.</p>
     </div>
 
     <div class="animate-on-scroll" style="overflow-x: auto;">
@@ -2449,8 +2427,8 @@ footer {
         <thead>
           <tr>
             <th style="text-align: left; padding: 14px 20px; color: var(--text-secondary); font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--border);">Feature</th>
-            <th style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 700; font-size: 14px; border-bottom: 2px solid var(--emerald); background: var(--emerald-dim);">CredentialDoMD Solo<br><span style="font-size: 12px; font-weight: 600; color: var(--emerald-light);">$19/mo</span></th>
-            <th style="text-align: center; padding: 14px 20px; color: var(--text-muted); font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border);">Mocingbird<br><span style="font-size: 12px; font-weight: 500;">$199/year</span></th>
+            <th style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 700; font-size: 14px; border-bottom: 2px solid var(--emerald); background: var(--emerald-dim);">CredentialDoMD</th>
+            <th style="text-align: center; padding: 14px 20px; color: var(--text-muted); font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border);">Typical CME tracker</th>
           </tr>
         </thead>
         <tbody>
@@ -2499,10 +2477,20 @@ footer {
             <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
             <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
           </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">AI assistant + document packets</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-subtle);">
+            <td style="padding: 13px 20px; color: var(--text);">Health records, titers &amp; screenings</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 700; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
+          </tr>
           <tr>
-            <td style="padding: 14px 20px; color: var(--text); font-weight: 700;">Monthly price</td>
-            <td style="text-align: center; padding: 14px 20px; color: var(--emerald); font-weight: 800; font-size: 17px; background: var(--emerald-dim);">$19/mo</td>
-            <td style="text-align: center; padding: 14px 20px; color: var(--text-muted); font-weight: 700; font-size: 17px;">$199/yr</td>
+            <td style="padding: 13px 20px; color: var(--text); font-weight: 700;">Locum contracts, work log, invoices &amp; RVUs</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--emerald); font-weight: 800; background: var(--emerald-dim);">✓</td>
+            <td style="text-align: center; padding: 13px 20px; color: var(--red);">✗</td>
           </tr>
         </tbody>
       </table>
@@ -2518,9 +2506,9 @@ footer {
         <svg width="36" height="36" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
       </div>
       <div>
-        <h3 class="guarantee-title">The Zero-Lapse Guarantee</h3>
+        <h3 class="guarantee-title">The Zero-Lapse Promise</h3>
         <p class="guarantee-text">
-          If a credential lapses while you are a CredentialDOMD Pro subscriber and we failed to send you an alert, <strong>we refund 12 months of your subscription</strong>. No questions asked. We only succeed when you never miss a deadline.
+          When CredentialDOMD launches, it comes with this commitment: if a tracked credential ever lapses because we failed to alert you, <strong>you get a full year on us</strong>. No questions asked. We only succeed when you never miss a deadline.
         </p>
       </div>
     </div>
@@ -2539,6 +2527,18 @@ footer {
     </div>
 
     <div class="faq-grid">
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          When can I use it?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">
+            CredentialDOMD is in field testing right now &mdash; the founder runs his own licenses, CME, hospital assignments, and invoices through it every day. Early access opens to the waitlist first, in order. Leave your email above and you will get one message when your spot is ready. The earliest names on the list get founding-member perks at launch.
+          </div>
+        </div>
+      </div>
+
       <div class="faq-item">
         <button class="faq-question" onclick="toggleFaq(this)">
           Is my credential data secure?
@@ -2570,7 +2570,7 @@ footer {
         </button>
         <div class="faq-answer">
           <div class="faq-answer-inner">
-            Yes. The Practice tier is $39 per provider per month, billed annually, for 2 to 25 providers. The Group tier is $29 per provider per month for 26 to 100 providers and includes an onboarding call. Your practice manager gets a team-wide compliance view, can manage individual provider credentials, and receives consolidated alerts. Each provider can also access their own credential profile independently. For 100+ providers or hospital systems, contact us for an Enterprise plan.
+            That is the plan. A practice tier with a team-wide compliance view, per-provider profiles, and consolidated alerts is on the roadmap after individual early access opens. Join the early-access list and mention your group size &mdash; practices get priority onboarding when the team features ship.
           </div>
         </div>
       </div>
@@ -2618,7 +2618,7 @@ footer {
         </button>
         <div class="faq-answer">
           <div class="faq-answer-inner">
-            Honestly? If you have fewer than 5 credentials and they all renew at the same time, a calendar reminder might be enough. Our Free tier handles up to 5 credentials if you want the Credential Health Score and basic alerts. But if you have more than 5, or you credential at multiple hospitals, or you manage insurance panels &mdash; the math changes quickly. One missed renewal costs more than a decade of Pro subscriptions.
+            Honestly? If you have two credentials that renew on the same date, a calendar reminder might be enough. But most physicians are carrying twenty-plus &mdash; licenses, DEA registrations, board certs, privileges, titers, TB tests &mdash; each on its own cycle. If you credential at more than one facility or hold more than one state license, this is built for you. One missed renewal costs more than years of any tool.
           </div>
         </div>
       </div>
@@ -2635,16 +2635,16 @@ footer {
         Don't Wait
       </div>
       <h2 class="section-title">Right now, something in your credentialing file is 47 days from expiring.</h2>
-      <p class="section-subtitle">Find out what it is. Set up takes 15 minutes. Then it runs itself.</p>
+      <p class="section-subtitle">Get on the list now, and be the first to find out what it is &mdash; before it costs you a billing cycle.</p>
 
       <div class="final-cta-buttons">
-        <a href="/app/" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
-          Check Your Credential Health &mdash; Free
+        <a href="#early-access" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
+          Get Early Access
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
         </a>
       </div>
 
-      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">No credit card required. Free tier includes up to 5 credentials.</p>
+      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">One email when the doors open. Founding-member perks for the earliest names on the list.</p>
     </div>
   </div>
 </section>
@@ -2669,6 +2669,55 @@ footer {
 
 <!-- ============ SCRIPTS ============ -->
 <script>
+// Early-access waitlist → Supabase (anon key is the public client key;
+// the table is insert-only for the public role, nobody can read it back)
+(function() {
+  var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
+  var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
+  var form = document.getElementById('waitlist-form');
+  if (!form) return;
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var input = document.getElementById('waitlist-email');
+    var msg = document.getElementById('waitlist-msg');
+    var btn = form.querySelector('button[type="submit"]');
+    var email = (input.value || '').trim();
+    if (!email) return;
+    btn.disabled = true;
+    btn.textContent = 'Joining…';
+    msg.textContent = '';
+    fetch(SUPABASE_URL + '/rest/v1/early_access_leads', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ email: email, source: window.location.pathname || '/' })
+    }).then(function(res) {
+      btn.disabled = false;
+      btn.textContent = 'Join the list';
+      if (res.ok) {
+        msg.style.color = 'var(--emerald)';
+        msg.textContent = "You're on the list. One email when the doors open — that's it.";
+        form.reset();
+      } else if (res.status === 409) {
+        msg.style.color = 'var(--emerald)';
+        msg.textContent = "You're already on the list — we've got you.";
+      } else {
+        msg.style.color = 'var(--amber, #f59e0b)';
+        msg.textContent = 'That didn\'t go through — check the address and try again.';
+      }
+    }).catch(function() {
+      btn.disabled = false;
+      btn.textContent = 'Join the list';
+      msg.style.color = 'var(--amber, #f59e0b)';
+      msg.textContent = 'Connection hiccup — please try again.';
+    });
+  });
+})();
+
 // FAQ toggle
 function toggleFaq(btn) {
   const item = btn.closest('.faq-item');
