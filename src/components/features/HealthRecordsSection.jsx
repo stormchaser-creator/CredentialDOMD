@@ -18,6 +18,36 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
   const [form, setForm] = useState({});
   const [attachedDocs, setAttachedDocs] = useState([]);
   const [filter, setFilter] = useState("all");
+  // Tap-anywhere detail view — shows every field AND the source document
+  // (the lab report or card the data came from); agencies want the paper,
+  // not a statement.
+  const [viewItem, setViewItem] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
+
+  // Escape must close the lightbox, not the modal underneath it
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); setLightbox(null); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [lightbox]);
+
+  const linkedDocs = useCallback(
+    (item) => (data.documents || []).filter(d => d.linkedTo === `healthRecords:${item.id}`),
+    [data.documents]
+  );
+
+  // Data URLs don't open directly in iOS Safari — convert to a blob URL
+  const openPdfDoc = useCallback((doc) => {
+    if (!doc.data) return;
+    const byteStr = atob(doc.data.split(",")[1]);
+    const arr = new Uint8Array(byteStr.length);
+    for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    window.open(url, "_blank");
+  }, []);
 
   const items = data.healthRecords || [];
 
@@ -166,6 +196,106 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
         </div>
       </Modal>
 
+      {/* Tap-to-view detail — fields plus the source document(s) */}
+      <Modal open={!!viewItem} onClose={() => setViewItem(null)} title={viewItem ? (viewItem.name || viewItem.type || viewItem.category || "Health Record") : "Health Record"}>
+        {viewItem && (() => {
+          const rows = [
+            ["Category", viewItem.category],
+            ["Type", viewItem.type],
+            ["Date administered", viewItem.dateAdministered && formatDate(viewItem.dateAdministered)],
+            ["Expires", viewItem.expirationDate && formatDate(viewItem.expirationDate)],
+            ["Result", viewItem.result],
+            ["Value", viewItem.resultValue && `${viewItem.resultValue}${viewItem.resultUnits ? " " + viewItem.resultUnits : ""}`],
+            ["Reference range", viewItem.referenceRange],
+            ["Collected", viewItem.collectedDate && formatDate(viewItem.collectedDate)],
+            ["Reported", viewItem.reportedDate && formatDate(viewItem.reportedDate)],
+            ["Laboratory", viewItem.lab],
+            ["Specimen #", viewItem.specimenId],
+            ["Ordered by / for", viewItem.orderedBy],
+            ["Lot / Batch #", viewItem.lotNumber],
+            ["Facility", viewItem.facility],
+            ["Notes", viewItem.notes],
+          ].filter(([, v]) => v);
+          const docs = linkedDocs(viewItem);
+          return (
+            <>
+              {rows.map(([k, v]) => (
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                  <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{k}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{String(v)}</span>
+                </div>
+              ))}
+              {viewItem.customFields && Object.keys(viewItem.customFields).length > 0 && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 2px" }}>
+                    Additional details
+                  </div>
+                  {Object.entries(viewItem.customFields).map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                      <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{k}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{String(v)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              {docs.length > 0 ? (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents — tap to view</div>
+                  {docs.map(doc => (
+                    !doc.data ? (
+                      <div key={doc.id} style={{
+                        display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px",
+                        borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input,
+                        color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8,
+                      }}>
+                        <span style={{ fontSize: 16 }}>{"⏳"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} — downloading from cloud, check back shortly</span>
+                      </div>
+                    ) : doc.type?.startsWith("image/") ? (
+                      <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
+                        style={{ width: "100%", borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 8, cursor: "zoom-in", display: "block" }} />
+                    ) : (
+                      <button key={doc.id} onClick={() => openPdfDoc(doc)} style={{
+                        display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px",
+                        borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                        color: T.text, fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 8, textAlign: "left",
+                      }}>
+                        <span style={{ fontSize: 16 }}>{"📕"}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
+                      </button>
+                    )
+                  ))}
+                </div>
+              ) : (
+                <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.warning}`, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 }}>
+                  No source document attached yet. Agencies usually need the actual report or card — tap Edit and attach it so it rides along when you send this record.
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                <button onClick={() => { const it = viewItem; setViewItem(null); onShare(it, "healthRecords"); }} style={{
+                  padding: "12px 18px", borderRadius: 10, border: "none",
+                  backgroundColor: T.shareGlow, color: T.share, fontSize: 15, fontWeight: 600, cursor: "pointer",
+                }}>Send</button>
+                <button onClick={() => { const it = viewItem; setViewItem(null); openEdit(it); }} style={{
+                  padding: "12px 18px", borderRadius: 10, border: "none",
+                  backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer",
+                }}>Edit</button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* Full-screen picture viewer */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{
+          position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
+        }}>
+          <img src={lightbox.data} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+        </div>
+      )}
+
       {/* List */}
       {filtered.length === 0 ? (
         <EmptyState
@@ -181,7 +311,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
             const color = getStatusColor(item.expirationDate);
             const catColor = catColors[item.category] || T.accent;
             return (
-              <div key={item.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
+              <div key={item.id} onClick={() => setViewItem(item)} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1, cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
                     {item.expirationDate && <StatusDot color={color} />}
@@ -206,9 +336,9 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
-                    <button onClick={() => onShare(item, "healthRecords")} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-                    <button onClick={() => openEdit(item)} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                    <button onClick={() => { if (window.confirm("Delete this record? This cannot be undone.")) handleDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                    <button onClick={(ev) => { ev.stopPropagation(); onShare(item, "healthRecords"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
+                    <button onClick={(ev) => { ev.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
+                    <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this record? This cannot be undone.")) handleDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                   </div>
                 </div>
                 {/* Dose history for multi-dose vaccines */}
