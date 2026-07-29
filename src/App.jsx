@@ -32,7 +32,7 @@ import {
   STATES, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
-import { AOA_NATIONAL } from "./constants/boardRequirements";
+import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardCompliance";
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem,
 } from "./utils/helpers";
@@ -252,7 +252,15 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     setAckItem(null);
   }, [ackItem, ackNote, addItem]);
 
-  const totalCME = useMemo(() => data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0), [data.cme]);
+  // Board continuing-certification standing (cycle-windowed). Every DO sees
+  // the AOA national cycle even before picking a specific board.
+  const boardComps = useMemo(() => {
+    const list = computeBoardCompliance(data);
+    if (data.settings.degreeType === "DO" && data.cme.length > 0 && !list.some(b => b.source === "AOA")) {
+      list.unshift(aoaNationalEntry(data));
+    }
+    return list;
+  }, [data]);
 
   // An incomplete profile silently degrades everything downstream — degree
   // type drives MD-vs-DO CME rules, specialty drives board requirements,
@@ -754,40 +762,65 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         </div>
       )}
 
-      {/* AOA for DOs */}
-      {data.settings.degreeType === "DO" && data.cme.length > 0 && (
+      {/* Board certification standing \u2014 cycle-windowed, from Settings \u2192
+          Board Specialties. Replaces the old lifetime-sum AOA card. */}
+      {boardComps.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>AOA National Requirement</h3>
-          <div style={{ backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Total: {totalCME} / {AOA_NATIONAL.hours} hrs</div>
-                <div style={{ fontSize: 13, color: T.textDim }}>{AOA_NATIONAL.cycle}-year cycle</div>
-              </div>
-              <div style={{
-                width: 24, height: 24, borderRadius: 12,
-                backgroundColor: totalCME >= AOA_NATIONAL.hours ? T.successDim : T.dangerDim,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: totalCME >= AOA_NATIONAL.hours ? T.success : T.danger, fontSize: 14, fontWeight: 700,
-              }}>{totalCME >= AOA_NATIONAL.hours ? "\u2713" : "\u2717"}</div>
-            </div>
-            {(() => {
-              const aoaHrs = data.cme.filter(c => c.category === "AOA Category 1-A").reduce((s, c) => s + (parseFloat(c.hours) || 0), 0);
-              return (
-                <div style={{ padding: "10px 12px", backgroundColor: T.input, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Cat 1-A: {aoaHrs} / {AOA_NATIONAL.cat1a} hrs</div>
-                    <div style={{ fontSize: 12, color: T.textDim }}>Minimum AOA Category 1-A</div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>Board Certification</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {boardComps.filter(b => !b.followsParent).map(b => (
+              <div key={b.id} style={{
+                backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1,
+                borderLeft: `3px solid ${b.met ? T.success : T.warning}`,
+              }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{b.label}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: b.met ? T.success : T.warning, flexShrink: 0 }}>
+                    {b.earned}/{b.required} hrs
                   </div>
-                  <div style={{
-                    width: 20, height: 20, borderRadius: 10,
-                    backgroundColor: aoaHrs >= AOA_NATIONAL.cat1a ? T.successDim : T.warningDim,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: aoaHrs >= AOA_NATIONAL.cat1a ? T.success : T.warning, fontSize: 12,
-                  }}>{aoaHrs >= AOA_NATIONAL.cat1a ? "\u2713" : "!"}</div>
                 </div>
-              );
-            })()}
+                <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
+                  {b.unit} \u00b7 {b.windowLabel}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
+                </div>
+                {b.required > 0 && (
+                  <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginTop: 8 }}>
+                    <div style={{
+                      height: "100%", borderRadius: 3,
+                      width: Math.min(100, (b.earned / b.required) * 100) + "%",
+                      backgroundColor: b.met ? T.success : T.accent,
+                    }} />
+                  </div>
+                )}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, alignItems: "center" }}>
+                  {b.cat1aRequired > 0 && (
+                    <span style={{
+                      padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
+                      backgroundColor: b.cat1aEarned >= b.cat1aRequired ? T.successDim : T.warningDim,
+                      color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning,
+                    }}>AOA Cat 1-A: {b.cat1aEarned}/{b.cat1aRequired}h</span>
+                  )}
+                  {!b.met && (
+                    <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
+                      padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+                      border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
+                    }}>Find CME &rarr;</button>
+                  )}
+                </div>
+                {b.assessment && (
+                  <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>
+                    Also required: {b.assessment}
+                  </div>
+                )}
+                {b.notes && (
+                  <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>{b.notes}</div>
+                )}
+              </div>
+            ))}
+            {boardComps.filter(b => b.followsParent).map(b => (
+              <div key={b.id} style={{ fontSize: 12, color: T.textDim, padding: "0 4px" }}>
+                {b.label} \u2014 CME follows the primary board above
+              </div>
+            ))}
           </div>
         </div>
       )}

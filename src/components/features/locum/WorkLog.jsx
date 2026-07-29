@@ -988,12 +988,12 @@ function WorkLog() {
                 }}>{t2}</button>
               ))}
             </div>
-            <button onClick={() => { setManual({ type: "Consult", date: localDate(new Date()), durationMin: "60" }); setShowManual(true); }} style={{
+            <button onClick={() => { const now = new Date(); setManual({ type: "Consult", date: localDate(now), durationMin: "60", exact: true, start: localHHMM(now.toISOString()) }); setShowManual(true); }} style={{
               width: "100%", padding: "12px", borderRadius: 12, marginBottom: 8,
               border: `1px solid ${T.accent}`, backgroundColor: "transparent",
               color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
             }}>🩺 Consult seen — log 1 hour</button>
-            <button onClick={() => { setManual({ type: "Call", date: localDate(new Date()) }); setShowManual(true); }} style={{
+            <button onClick={() => { setManual({ type: "Call", date: localDate(new Date()), exact: true }); setShowManual(true); }} style={{
               width: "100%", padding: "12px", borderRadius: 12,
               border: `1px solid ${T.border}`, backgroundColor: T.input,
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
@@ -1226,6 +1226,7 @@ function WorkLog() {
           const inv = e.invoiceId ? (data.invoices || []).find(i => i.id === e.invoiceId) : null;
           const rows = [
             ["Date", formatDate(e.date)],
+            e.createdAt && ["Recorded", new Date(e.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })],
             e.startTime && ["Time (as billed)", billedSpan(e, contracts.find(c => c.id === e.contractId) || contract)],
             e.startTime && ["Exact time (records only)", `${fmtTime(e.startTime)}${e.endTime ? " – " + fmtTime(e.endTime) : ""}`],
             e.type !== "CallDay" && ["Logged", `${e.durationMin} min`],

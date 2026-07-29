@@ -98,8 +98,8 @@ export const ABMS_MOC = {
     hours: 20,
     cycle: 1,
     unit: "AMA PRA Cat 1/year",
-    assessment: "Annual: patient safety module + Self-Assessment Learning Tool + Chief of Staff questionnaire (Adaptive Learning Tool); no exam travel",
-    notes: "20 AMA PRA Cat 1 credits every year, NO carryover between years (ABNS Continuous Certification, verified 2026-07)",
+    assessment: "Annual by Sept 30: Adaptive Learning Tool (General & Emergency, 80% within 2 attempts for CME) + CC Pledge & standing questionnaire + privileges attestation + IHHC quality-improvement attestation. License verified by ABNS directly.",
+    notes: "20 Cat 1/yr per the ABMS directory (ABNS rules don't restate an hour figure). 2025 redesign REMOVED the Chief of Staff survey and the standalone patient-safety module. Verified 2026-07 vs abns.org.",
   },
   ABNM: {
     name: "Nuclear Medicine",
@@ -1618,8 +1618,14 @@ export const AOA_OCC = {
   },
   AOBS: {
     name: "Surgery",
-    timeLimited: { hours: 120, cat1: 0, specReq: "specialty-specific" },
-    nonTimeLimited: { hours: 120, cat1: 0, specReq: "specialty-specific" },
+    // Verified 2026-07 vs osteopathic.org 2025-27 by-board table: OCC
+    // participants / time-limited = 60 credits per 3-yr cycle; only
+    // non-time-limited diplomates NOT in OCC owe 120. AOBS publishes NO
+    // Category 1-A minimum and NO specialty-specific CME minimum, so AMA
+    // PRA Category 1 credit counts fully toward the total.
+    timeLimited: { hours: 60, cat1: 0, specReq: "" },
+    nonTimeLimited: { hours: 120, cat1: 0, specReq: "" },
+    occChecklist: "Annual: unrestricted-license proof + 15-question open-book Longitudinal Assessment (80% = 12/15, two attempts, $225/yr — completing it earns 5.0 Cat 1-B). Every 3 years: at least one QI/practice-performance attestation via the AOA portal.",
   },
 };
 
