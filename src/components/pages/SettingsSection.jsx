@@ -5,7 +5,7 @@ import Field from "../shared/Field";
 import { EmailIcon, TextMsgIcon } from "../shared/Icons";
 import { STATES } from "../../constants/states";
 import { lookupNPI, searchNPI, extractLicensesFromNPI } from "../../utils/npiLookup";
-import { generateId } from "../../utils/helpers";
+import { generateId, downscalePhoto } from "../../utils/helpers";
 import {
   MATE_ACT, AOA_NATIONAL, ABMS_MOC, AOA_OCC,
   ABMS_SUBSPECIALTIES, AOA_SUBSPECIALTIES, UCNS_CERTS, ABPS_CERTS,
@@ -161,6 +161,42 @@ function SettingsSection() {
       {/* Profile */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 14 }}>Physician Profile</h3>
+        {/* Profile photo — shown as your avatar everywhere */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: 32, overflow: "hidden", flexShrink: 0,
+            background: "linear-gradient(135deg, #0D9488, #1A73E8)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#fff", fontWeight: 700, fontSize: 20,
+          }}>
+            {s.profilePhoto
+              ? <img src={s.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 25%" }} />
+              : (s.name ? s.name.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "MD")}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <label style={{
+              padding: "10px 16px", borderRadius: 10, border: `1px solid ${T.accent}`,
+              color: T.accent, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+            }}>
+              {s.profilePhoto ? "Change photo" : "Add photo"}
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                const dataUrl = await new Promise((res, rej) => {
+                  const r = new FileReader(); r.onload = ev2 => res(ev2.target.result); r.onerror = rej; r.readAsDataURL(file);
+                });
+                update("profilePhoto", await downscalePhoto(dataUrl));
+              }} />
+            </label>
+            {s.profilePhoto && (
+              <button onClick={() => update("profilePhoto", "")} style={{
+                padding: "10px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+              }}>Remove</button>
+            )}
+          </div>
+        </div>
         <Field label="Full Name"><input name="name" autoComplete="name" value={s.name} onChange={e => update("name", e.target.value)} style={iS} placeholder="Your full name" /></Field>
         <Field label="NPI" hint="We'll find your NPI from the NPPES registry using your name">
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>

@@ -254,6 +254,21 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
 
   const totalCME = useMemo(() => data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0), [data.cme]);
 
+  // An incomplete profile silently degrades everything downstream — degree
+  // type drives MD-vs-DO CME rules, specialty drives board requirements,
+  // NPI/email feed credentialing paperwork. Flag gaps loudly on Home.
+  const profileGaps = useMemo(() => {
+    const s = data.settings;
+    const gaps = [];
+    if (!s.name) gaps.push("your name");
+    if (!s.degreeType) gaps.push("degree (MD or DO — it changes which CME rules apply)");
+    if (!s.primaryState) gaps.push("primary state");
+    if (!(s.specialties || []).length) gaps.push("board specialty (drives your board's CME requirements)");
+    if (!s.npi) gaps.push("NPI");
+    if (!s.email) gaps.push("email");
+    return gaps;
+  }, [data.settings]);
+
   // Expiring record types that are MISSING their expiration date — the app
   // can't protect what it can't see. Surfaced on Home until fixed.
   const missingExpiration = useMemo(() => {
@@ -399,6 +414,21 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 4 }}>Get Started</div>
           <div style={{ fontSize: 14, color: T.textMuted }}>Add your medical license to begin tracking credentials</div>
+        </div>
+      )}
+
+      {/* Incomplete profile — the app can only compute what it knows */}
+      {profileGaps.length > 0 && (
+        <div onClick={() => { setTab("more"); setSubPage("settings"); }} style={{
+          backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
+          borderRadius: 12, padding: "12px 16px", marginBottom: 14, cursor: "pointer",
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+            {"⚠️"} Finish your profile — {profileGaps.length} thing{profileGaps.length === 1 ? "" : "s"} missing
+          </div>
+          <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
+            Missing: {profileGaps.join(" · ")}. The app can only track what it knows — an empty specialty or degree hides CME requirements that apply to you. Tap to complete it in Settings.
+          </div>
         </div>
       )}
 

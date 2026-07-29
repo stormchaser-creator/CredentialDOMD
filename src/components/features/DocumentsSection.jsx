@@ -4,7 +4,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
-import { generateId } from "../../utils/helpers";
+import { generateId, downscalePhoto } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import ScanReviewCard from "./ScanReviewCard";
@@ -514,21 +514,7 @@ function DocumentsSection() {
           <img src={lightbox.data} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "85%", objectFit: "contain" }} />
           <button onClick={async (ev) => {
             ev.stopPropagation();
-            // Downscale — full-res photos are megabytes; the avatar syncs
-            // inside the profile row, so keep it small.
-            const small = await new Promise((resolve, reject) => {
-              const img = new Image();
-              img.onload = () => {
-                const scale = Math.min(1, 512 / Math.max(img.width, img.height));
-                const canvas = document.createElement("canvas");
-                canvas.width = Math.round(img.width * scale);
-                canvas.height = Math.round(img.height * scale);
-                canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL("image/jpeg", 0.85));
-              };
-              img.onerror = reject;
-              img.src = lightbox.data;
-            });
+            const small = await downscalePhoto(lightbox.data);
             updateSettings({ profilePhoto: small });
             setLightbox(null);
           }} style={{

@@ -160,3 +160,21 @@ export const STATUS_COLORS = {
   green: "#22c55e",
   gray: "#94a3b8",
 };
+
+// Downscale a photo for the profile avatar — full-res photos are megabytes;
+// the avatar syncs inside the profile row, so keep it small.
+export function downscalePhoto(dataUrl, max = 512) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
