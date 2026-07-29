@@ -14,6 +14,7 @@ export default function AdminDashboard() {
   const [tickets, setTickets] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [signups, setSignups] = useState([]);
+  const [waitlist, setWaitlist] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -29,7 +30,8 @@ export default function AdminDashboard() {
       supabase.from("admin_tickets_open").select("*").limit(50),
       supabase.from("admin_feedback_recent").select("*").limit(50),
       supabase.from("admin_signups_daily").select("*").limit(30),
-    ]).then(([t, f, s]) => {
+      supabase.from("early_access_leads").select("name,email,source,created_at").order("created_at", { ascending: false }).limit(500),
+    ]).then(([t, f, s, w]) => {
       if (cancelled) return;
       if (t.error) setError(`Tickets: ${t.error.message}`);
       else setTickets(t.data || []);
@@ -37,6 +39,8 @@ export default function AdminDashboard() {
       else setFeedback(f.data || []);
       if (s.error) setError((prev) => prev || `Signups: ${s.error.message}`);
       else setSignups(s.data || []);
+      if (w.error) setError((prev) => prev || `Waitlist: ${w.error.message}`);
+      else setWaitlist(w.data || []);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -57,6 +61,7 @@ export default function AdminDashboard() {
     { id: "tickets",   label: `Tickets (${tickets.length})` },
     { id: "feedback",  label: `Feedback (${feedback.length})` },
     { id: "signups",   label: "Signups" },
+    { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
   ];
 
   return (
@@ -101,6 +106,7 @@ export default function AdminDashboard() {
       {tab === "tickets"  && !loading && <TicketsList rows={tickets} T={T} />}
       {tab === "feedback" && !loading && <FeedbackList rows={feedback} T={T} />}
       {tab === "signups"  && !loading && <SignupsList rows={signups} T={T} />}
+      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} T={T} />}
     </div>
   );
 }
@@ -206,6 +212,46 @@ function SignupsList({ rows, T }) {
           }}>
             <span style={{ color: T.text }}>{r.day?.slice(0, 10)}</span>
             <span style={{ color: T.text, fontWeight: 700 }}>{r.signups}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WaitlistList({ rows, T }) {
+  if (!rows.length) return <Empty T={T} text="No early-access signups yet. Share the site!" />;
+  const copyAll = () => {
+    const text = rows.map((r) => `${r.name || ""} <${r.email}>`).join(", ");
+    try { navigator.clipboard.writeText(text); } catch { /* older browser */ }
+  };
+  return (
+    <div>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        backgroundColor: T.card, border: `2px solid ${T.accent}`,
+        borderRadius: 12, padding: "12px 16px", marginBottom: 12,
+      }}>
+        <div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{rows.length}</div>
+          <div style={{ fontSize: 11, color: T.textMuted }}>waiting for early access</div>
+        </div>
+        <button onClick={copyAll} style={{
+          padding: "8px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
+          backgroundColor: "transparent", color: T.text, fontSize: 12, fontWeight: 700, cursor: "pointer",
+        }}>Copy all emails</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {rows.map((r) => (
+          <div key={r.email + r.created_at} style={{
+            backgroundColor: T.card, border: `1px solid ${T.border}`,
+            borderRadius: 10, padding: "10px 12px",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.name || "(no name)"}</span>
+              <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
+            </div>
+            <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>
           </div>
         ))}
       </div>

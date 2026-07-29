@@ -175,13 +175,15 @@ export function invoiceCoverEmail(inv) {
   const period = inv.periodStart
     ? `${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? ` through ${formatDate(inv.periodEnd)}` : ""}`
     : null;
+  // CRLF line endings — the iOS share sheet collapses bare \n when text
+  // rides along with a file, which turned the letter into a run-on.
   const paras = [
     "Hello,",
     `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. The total due is ${money(inv.total)}.`,
     "The attached PDF itemizes each day of coverage and the work performed under the terms of our agreement. Please reply to this email with any questions.",
-    `Thank you,\n${inv.physician || ""}${inv.npi ? `\nNPI ${inv.npi}` : ""}${inv.email ? `\n${inv.email}` : ""}`,
+    `Thank you,\r\n${inv.physician || ""}${inv.npi ? `\r\nNPI ${inv.npi}` : ""}${inv.email ? `\r\n${inv.email}` : ""}`,
   ];
-  return paras.join("\n\n");
+  return paras.join("\r\n\r\n");
 }
 
 /**
