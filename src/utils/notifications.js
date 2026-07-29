@@ -1,6 +1,14 @@
 import { complianceFor } from "./compliance";
 import { getItemLabel, formatDate, MS_PER_DAY } from "./helpers";
 
+/** The active acknowledgment for an item, if its snooze date hasn't passed.
+ *  An acknowledged alert stays quiet until then — "seen it, nothing to do
+ *  yet" is a real state (e.g. waiting on the board to extend privileges). */
+export function activeAckFor(data, itemId) {
+  const today = new Date().toISOString().slice(0, 10);
+  return (data.alertAcks || []).find(a => a.itemId === itemId && a.until && a.until >= today) || null;
+}
+
 export function generateAlerts(data) {
   const now = new Date();
   const lead = data.settings.reminderLeadDays || 90;
@@ -15,9 +23,10 @@ export function generateAlerts(data) {
     ...(data.education || []).map(e => ({ ...e, _sec: "education", _cat: "Education" })),
   ];
 
-  const expired = allCreds.filter(i => i.expirationDate && new Date(i.expirationDate) < now);
+  const expired = allCreds.filter(i => i.expirationDate && new Date(i.expirationDate) < now && !activeAckFor(data, i.id));
   const soon = allCreds.filter(i => {
     if (!i.expirationDate) return false;
+    if (activeAckFor(data, i.id)) return false;
     const d = Math.ceil((new Date(i.expirationDate) - now) / MS_PER_DAY);
     return d >= 0 && d <= lead;
   });

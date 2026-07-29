@@ -7,6 +7,7 @@ import {
   AsclepiusIcon,
 } from "./components/shared/Icons";
 import StatusDot from "./components/shared/StatusDot";
+import Modal from "./components/shared/Modal";
 import StatusBadge from "./components/shared/StatusBadge";
 import ComplianceRing from "./components/shared/ComplianceRing";
 import { ShareModal } from "./components/features";
@@ -36,7 +37,7 @@ import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem,
 } from "./utils/helpers";
 import { complianceFor, findStateLicense } from "./utils/compliance";
-import { generateAlerts } from "./utils/notifications";
+import { generateAlerts, activeAckFor } from "./utils/notifications";
 import { lookupNPI, extractLicensesFromNPI } from "./utils/npiLookup";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
@@ -216,18 +217,40 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     ...(data.malpracticeHistory || []).map(m => ({ ...m, _sec: "malpracticeHistory", _cat: "Malpractice" })),
   ], [data.licenses, data.cme, data.privileges, data.insurance, data.caseLogs, data.healthRecords, data.education, data.workHistory, data.peerReferences, data.malpracticeHistory]);
 
-  const { expired, soon, urgent } = useMemo(() => {
+  const { expired, soon, urgent, snoozed } = useMemo(() => {
     const now = new Date();
     const lead = data.settings.reminderLeadDays || 90;
-    const exp = allCreds.filter(i => i.expirationDate && new Date(i.expirationDate) < now);
-    const sn = allCreds.filter(i => {
+    const inWindow = allCreds.filter(i => {
       if (!i.expirationDate) return false;
+      if (new Date(i.expirationDate) < now) return true;
       const d = Math.ceil((new Date(i.expirationDate) - now) / MS_PER_DAY);
       return d >= 0 && d <= lead;
     });
+    // Acknowledged alerts step aside until their snooze date passes
+    const active = inWindow.filter(i => !activeAckFor(data, i.id));
+    const snz = inWindow.filter(i => activeAckFor(data, i.id));
+    const exp = active.filter(i => new Date(i.expirationDate) < now);
+    const sn = active.filter(i => new Date(i.expirationDate) >= now);
     const urg = [...exp, ...sn].sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
-    return { expired: exp, soon: sn, urgent: urg };
-  }, [allCreds, data.settings.reminderLeadDays]);
+    return { expired: exp, soon: sn, urgent: urg, snoozed: snz };
+  }, [allCreds, data.settings.reminderLeadDays, data]);
+
+  // Acknowledge-an-alert modal: {item} being acknowledged + form state
+  const [ackItem, setAckItem] = useState(null);
+  const [ackNote, setAckNote] = useState("");
+  const [ackUntil, setAckUntil] = useState("");
+  const [showSnoozed, setShowSnoozed] = useState(false);
+  const openAck = useCallback((item) => {
+    setAckItem(item); setAckNote(""); setAckUntil("");
+  }, []);
+  const saveAck = useCallback((untilDate) => {
+    if (!ackItem || !untilDate) return;
+    addItem("alertAcks", {
+      id: generateId(), itemId: ackItem.id, until: untilDate,
+      note: ackNote.trim(), createdAt: new Date().toISOString(),
+    });
+    setAckItem(null);
+  }, [ackItem, ackNote, addItem]);
 
   const totalCME = useMemo(() => data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0), [data.cme]);
 
@@ -413,11 +436,11 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         </div>
       )}
 
-      {urgent.length > 0 && (
+      {(urgent.length > 0 || snoozed.length > 0) && (
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Action Required</h3>
-            <span style={{ fontSize: 12, fontWeight: 600, color: T.danger }}>{urgent.length} item{urgent.length !== 1 ? "s" : ""}</span>
+            {urgent.length > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: T.danger }}>{urgent.length} item{urgent.length !== 1 ? "s" : ""}</span>}
           </div>
           <div className="cmd-snap-scroll">
             {urgent.slice(0, 6).map(item => {
@@ -436,15 +459,101 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                   <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {describeItem(item, data.settings.name)}
                   </div>
-                  <div style={{ fontSize: 12, color: T.textMuted }}>
-                    {item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : ""}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 12, color: T.textMuted }}>
+                      {item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : ""}
+                    </div>
+                    <button onClick={(ev) => { ev.stopPropagation(); openAck(item); }} style={{
+                      padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                      backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                    }}>Acknowledge</button>
                   </div>
                 </div>
               );
             })}
           </div>
+          {snoozed.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <button onClick={() => setShowSnoozed(v => !v)} style={{
+                background: "none", border: "none", padding: "4px 2px", cursor: "pointer",
+                fontSize: 12.5, fontWeight: 600, color: T.textMuted,
+              }}>
+                {"🔕"} {snoozed.length} acknowledged {showSnoozed ? "▴" : "▾"}
+              </button>
+              {showSnoozed && snoozed.map(item => {
+                const ack = activeAckFor(data, item.id);
+                return (
+                  <div key={item.id} style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
+                    backgroundColor: T.card, border: `1px dashed ${T.border}`, borderRadius: 10, marginTop: 6,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {describeItem(item, data.settings.name)}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: T.textDim }}>
+                        Exp {formatDate(item.expirationDate)} · quiet until {formatDate(ack?.until)}{ack?.note ? ` · ${ack.note}` : ""}
+                      </div>
+                    </div>
+                    <button onClick={() => ack && deleteItem("alertAcks", ack.id)} style={{
+                      padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                      backgroundColor: "transparent", color: T.accent, fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                    }}>Wake</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Acknowledge an alert — "seen it, nothing to do yet" is a real state */}
+      <Modal open={!!ackItem} onClose={() => setAckItem(null)} title="Acknowledge this alert">
+        {ackItem && (() => {
+          const exp = ackItem.expirationDate;
+          const fmtISO = (d) => d.toISOString().slice(0, 10);
+          const plus = (days) => fmtISO(new Date(Date.now() + days * MS_PER_DAY));
+          const before30 = exp ? fmtISO(new Date(new Date(exp + "T12:00").getTime() - 30 * MS_PER_DAY)) : null;
+          const today = fmtISO(new Date());
+          const chips = [
+            { l: "2 weeks", v: plus(14) },
+            { l: "1 month", v: plus(30) },
+            ...(before30 && before30 > today ? [{ l: "Until 30 days before it expires", v: before30 }] : []),
+          ];
+          return (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>{describeItem(ackItem, data.settings.name)}</div>
+              <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
+                Expires {formatDate(exp)}. Nothing to do right now? Silence this alert and the app will raise it again when the date you pick arrives.
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Quiet until</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {chips.map(c => (
+                  <button key={c.l} onClick={() => setAckUntil(c.v)} style={{
+                    padding: "9px 13px", borderRadius: 16, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    border: `1px solid ${ackUntil === c.v ? T.accent : T.border}`,
+                    backgroundColor: ackUntil === c.v ? T.accent : "transparent",
+                    color: ackUntil === c.v ? "#fff" : T.textMuted,
+                  }}>{c.l}</button>
+                ))}
+                <input type="date" value={ackUntil} min={today} onChange={e => setAckUntil(e.target.value)}
+                  style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Why (optional — shows with the acknowledged alert)</div>
+              <input value={ackNote} onChange={e => setAckNote(e.target.value)} placeholder="e.g. waiting on the board to extend"
+                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                <button onClick={() => setAckItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                <button onClick={() => saveAck(ackUntil)} disabled={!ackUntil} style={{
+                  padding: "12px 18px", borderRadius: 10, border: "none",
+                  backgroundColor: ackUntil ? T.accent : T.border, color: "#fff", fontSize: 15, fontWeight: 600,
+                  cursor: ackUntil ? "pointer" : "default",
+                }}>Acknowledge</button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
 
       {/* Credentials List */}
       {allCreds.length > 0 && (

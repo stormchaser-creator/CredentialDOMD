@@ -86,6 +86,7 @@ const TABLE_MAP = {
   workLog: "work_log",
   encounters: "encounters",
   screenings: "screenings",
+  alertAcks: "alert_acks",
   invoices: "invoices",
 };
 
