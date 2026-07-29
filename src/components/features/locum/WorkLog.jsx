@@ -295,7 +295,19 @@ function WorkLog() {
       const rate = c.overageHourlyRate || 0;
       const overAmt = overMin > 0 && rate > 0 ? (overMin / 60) * rate : 0;
       const fmtH = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-      const workList = day.map(e => `${invoiceSpan(e)}${lineLabel(e)} (${e.billedMin}m)`).join(" · ");
+      // The day's work renders as its own indented line items (amount: null →
+      // blank cell); only the daily-total row carries money.
+      const pushWorkItems = () => {
+        for (const e of day) {
+          lines.push({
+            date: null,
+            label: `· ${lineLabel(e)}`,
+            detail: `${invoiceSpan(e)}${e.billedMin} min`,
+            amount: null,
+            _sort: `${date}~1~${e.startTime || "z"}`,
+          });
+        }
+      };
 
       if (!stipendBilled) {
         total += c.callStipend + overAmt;
@@ -312,7 +324,6 @@ function WorkLog() {
               ? `, ${fmtH(overMin)} beyond @ ${money(rate)}/hr (+${money(overAmt)})`
               : `, ${fmtH(overMin)} beyond — NO after-stipend rate set on this contract`;
           }
-          if (workList) detail += `\n${workList}`;
         }
         lines.push({
           date,
@@ -321,9 +332,10 @@ function WorkLog() {
           amount: c.callStipend + overAmt,
           _sort: `${date}~0`,
         });
+        pushWorkItems();
       } else if (day.length > 0) {
         // The day's stipend went out on an earlier invoice — late-logged
-        // work aggregates into one line: covered part included, rest billed.
+        // work aggregates under one money-carrying line.
         total += overAmt;
         let detail = `stipend billed earlier · ${fmtH(dayMin)} more logged`;
         if (overMin > 0) {
@@ -333,7 +345,6 @@ function WorkLog() {
         } else {
           detail += ` — within stipend hours`;
         }
-        if (workList) detail += `\n${workList}`;
         lines.push({
           date,
           label: `Additional work — daily total`,
@@ -341,6 +352,7 @@ function WorkLog() {
           amount: overAmt,
           _sort: `${date}~0`,
         });
+        pushWorkItems();
       }
     }
 
@@ -697,10 +709,13 @@ function WorkLog() {
     lines.push(div);
     const billing = computeBilling(contract, unbilled, true, contractEntries);
     for (const l of billing.lines) {
+      if (l.amount == null) {
+        // Work item under a daily total — indented, no amount of its own
+        lines.push(`     ${l.label} ${l.detail}`);
+        continue;
+      }
       lines.push(`${l.date ? formatDate(l.date) + "  " : ""}${l.label}`);
-      const [summary, ...work] = (l.detail || "").split("\n");
-      lines.push(`   ${summary ? summary + " = " : ""}${money(l.amount)}`);
-      for (const w of work) lines.push(`   ${w}`);
+      lines.push(`   ${l.detail ? l.detail + " = " : ""}${money(l.amount)}`);
     }
     lines.push(div);
     lines.push(`TOTAL DUE: ${money(billing.total)}`);
@@ -1086,11 +1101,11 @@ function WorkLog() {
                         {l.date ? formatDate(l.date) : ""}
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.text, verticalAlign: "top" }}>
-                        <div style={{ fontWeight: 700 }}>{l.label}</div>
-                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted, whiteSpace: "pre-line" }}>{l.detail}</div>}
+                        <div style={{ fontWeight: l.amount == null ? 500 : 700, paddingLeft: l.amount == null ? 10 : 0 }}>{l.label}</div>
+                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted, whiteSpace: "pre-line", paddingLeft: l.amount == null ? 10 : 0 }}>{l.detail}</div>}
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : T.textDim }}>
-                        {money(l.amount)}
+                        {l.amount == null ? "" : money(l.amount)}
                       </td>
                     </tr>
                   ))}
