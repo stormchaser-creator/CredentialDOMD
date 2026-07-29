@@ -245,10 +245,10 @@ function WorkLog() {
       }
     }
 
-    // Facility-facing wording: calls appear as "Patient care", and the
-    // billing note rides along exactly as it reads in the app. (The private
-    // note never appears anywhere.)
-    const lineLabel = (e) => `${e.type === "Call" ? "Patient care" : e.type}${e.description ? " — " + e.description : ""}`;
+    // Entries read exactly as logged: "Call — <billing note>" — the note is
+    // the facility-facing description Eric writes. (The private note never
+    // appears anywhere.)
+    const lineLabel = (e) => `${e.type}${e.description ? " — " + e.description : ""}`;
 
     // Invoiced times are the billed quarter-hour block: start snaps DOWN to
     // the increment, end = start + billed minutes (8:08–8:11 → 8:00–8:15).
@@ -294,15 +294,27 @@ function WorkLog() {
       const rate = c.overageHourlyRate || 0;
       const overAmt = overMin > 0 && rate > 0 ? (overMin / 60) * rate : 0;
       const fmtH = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-      // The day's work renders as its own indented line items (amount: null →
-      // blank cell); only the daily-total row carries money.
+      // The day's work renders as its own indented line items, each flagged
+      // exactly like the app rows: "included" while inside the allowance,
+      // the dollar value once beyond it. Only the daily-total row carries
+      // money into the sum (amount: null keeps sub-rows out of the total).
       const pushWorkItems = () => {
+        let rem = Math.max(0, allowance - priorMin);
         for (const e of day) {
+          const billed = e.billedMin || 0;
+          const cov = Math.min(rem, billed);
+          rem -= cov;
+          const over = billed - cov;
+          const overAmtItem = over > 0 && rate > 0 ? (over / 60) * rate : 0;
+          let flag = "included";
+          if (over > 0) flag = rate > 0 ? `+${money(overAmtItem)}` : "no rate set";
+          const split = cov > 0 && over > 0 ? ` — ${cov}m included, ${over}m beyond` : "";
           lines.push({
             date: null,
             label: `· ${lineLabel(e)}`,
-            detail: `${invoiceSpan(e)}${e.billedMin} min`,
+            detail: `${invoiceSpan(e)}${billed} min${split}`,
             amount: null,
+            flag,
             _sort: `${date}~1~${e.startTime || "z"}`,
           });
         }
@@ -709,8 +721,8 @@ function WorkLog() {
     const billing = computeBilling(contract, unbilled, true, contractEntries);
     for (const l of billing.lines) {
       if (l.amount == null) {
-        // Work item under a daily total — indented, no amount of its own
-        lines.push(`     ${l.label} ${l.detail}`);
+        // Work item under a daily total — indented, flagged like the app
+        lines.push(`     ${l.label} ${l.detail}${l.flag ? ` — ${l.flag}` : ""}`);
         continue;
       }
       lines.push(`${l.date ? formatDate(l.date) + "  " : ""}${l.label}`);
@@ -1103,8 +1115,8 @@ function WorkLog() {
                         <div style={{ fontWeight: l.amount == null ? 500 : 700, paddingLeft: l.amount == null ? 10 : 0 }}>{l.label}</div>
                         {l.detail && <div style={{ fontSize: 11, color: T.textMuted, whiteSpace: "pre-line", paddingLeft: l.amount == null ? 10 : 0 }}>{l.detail}</div>}
                       </td>
-                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : T.textDim }}>
-                        {l.amount == null ? "" : money(l.amount)}
+                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : l.flag === "included" ? (T.success || T.accent) : T.textDim, fontSize: l.amount == null ? 11 : undefined }}>
+                        {l.amount == null ? (l.flag || "") : money(l.amount)}
                       </td>
                     </tr>
                   ))}
@@ -1242,7 +1254,7 @@ function WorkLog() {
                     }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
-                          {isCoverage ? "🏥 Stipend day" : `${e.type === "Call" ? "Patient care" : e.type}${e.description ? ` — ${e.description}` : ""}`}
+                          {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
                           {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
                         </div>
                         <div style={{ fontSize: 12, color: T.textDim }}>

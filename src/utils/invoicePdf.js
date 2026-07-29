@@ -102,7 +102,7 @@ export function buildInvoicePdf(inv) {
       l.date ? formatDate(l.date) : "",
       l.label || "",
       l.detail || "",
-      l.amount == null ? "" : money(l.amount),
+      l.amount == null ? (l.flag || "") : money(l.amount),
     ]),
     styles: { font: "helvetica", fontSize: 9, cellPadding: 2.6, textColor: [40, 40, 40] },
     headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
@@ -118,10 +118,16 @@ export function buildInvoicePdf(inv) {
         h.cell.styles.textColor = [150, 150, 150];
         h.cell.styles.fontStyle = "normal";
       }
-      // Work items under a daily total (blank amount) render as quiet sub-rows
-      if (h.section === "body" && h.row.raw && h.row.raw[3] === "" && h.row.raw[1]) {
+      // Work items under a daily total render as quiet sub-rows; their
+      // amount cell shows "included" (green) or the beyond-stipend value
+      if (h.section === "body" && h.row.raw && typeof h.row.raw[1] === "string" && h.row.raw[1].startsWith("· ")) {
         if (h.column.index === 1) h.cell.styles.fontStyle = "normal";
         h.cell.styles.textColor = [110, 110, 110];
+        if (h.column.index === 3) {
+          h.cell.styles.fontSize = 7.5;
+          h.cell.styles.fontStyle = "normal";
+          if (h.cell.raw === "included") h.cell.styles.textColor = [16, 150, 105];
+        }
       }
     },
   });
