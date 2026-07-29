@@ -235,6 +235,10 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     return { expired: exp, soon: sn, urgent: urg, snoozed: snz };
   }, [allCreds, data.settings.reminderLeadDays, data]);
 
+  // CME math breakdown — tap a state card to see exactly which entries
+  // counted, which didn't, and why. {st, comp}
+  const [cmeDetail, setCmeDetail] = useState(null);
+
   // Acknowledge-an-alert modal: {item} being acknowledged + form state
   const [ackItem, setAckItem] = useState(null);
   const [ackNote, setAckNote] = useState("");
@@ -545,6 +549,111 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         </div>
       )}
 
+      {/* CME math — which entries counted, which didn't, and why */}
+      <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? `${cmeDetail.st} CME — the math` : "CME"}>
+        {cmeDetail && (() => {
+          const { comp } = cmeDetail;
+          const deg = data.settings.degreeType;
+          const cat1Keys = deg === "DO"
+            ? (comp.cat1OneAOnly ? ["AOA Category 1-A"] : ["AOA Category 1-A", "AOA Category 1-B", "AMA PRA Category 1"])
+            : ["AMA PRA Category 1"];
+          const mandateTopics = comp.topicResults.map(t => t.topic);
+          const inWin = [], outWin = [];
+          for (const c of data.cme || []) {
+            const d = c.date ? new Date(c.date) : null;
+            if (d && d >= comp.windowStart && d <= comp.windowEnd) inWin.push(c);
+            else outWin.push(c);
+          }
+          const fmtD = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          return (
+            <>
+              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
+                Cycle window: <strong style={{ color: T.text }}>{fmtD(comp.windowStart)} – {fmtD(comp.windowEnd)}</strong>
+                {comp.windowAnchored ? " (anchored to your license renewal)" : " (rolling — add the license's expiration date to anchor it)"}
+                {comp.daysLeft != null && ` · ${comp.daysLeft} days left`}. Only hours dated inside this window count toward this renewal.
+              </div>
+
+              {/* Requirement scoreboard */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                {!comp.noGeneralReq && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                    <span style={{ color: T.text, fontWeight: 600 }}>Total hours</span>
+                    <span style={{ fontWeight: 800, color: comp.totalMet ? T.success : T.warning }}>{comp.totalEarned} / {comp.totalRequired}</span>
+                  </div>
+                )}
+                {comp.cat1Required > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                    <span style={{ color: T.text, fontWeight: 600 }}>{comp.cat1OneAOnly ? "AOA Category 1-A" : "Category 1"} minimum
+                      <span style={{ display: "block", fontSize: 11, color: T.textDim, fontWeight: 500 }}>counts: {cat1Keys.join(", ")}</span>
+                    </span>
+                    <span style={{ fontWeight: 800, color: comp.cat1Met ? T.success : T.warning }}>{comp.cat1Earned} / {comp.cat1Required}</span>
+                  </div>
+                )}
+                {comp.topicResults.map(t => (
+                  <div key={t.topic} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                    <span style={{ color: T.text, fontWeight: 600 }}>{t.topic}{t.checklist ? " (required topic)" : ""}</span>
+                    <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.checklist ? (t.met ? "✓" : "missing") : `${t.earned} / ${t.required}`}</span>
+                  </div>
+                ))}
+                {comp.mate && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                    <span style={{ color: T.text, fontWeight: 600 }}>MATE Act (one-time, any date)</span>
+                    <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{comp.mate.earned} / {comp.mate.required}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* What counted */}
+              <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                Counted this cycle ({inWin.length})
+              </div>
+              {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — every hour you log dated inside the window lands here.</div>}
+              {inWin.map(c => (
+                <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+                    <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                    <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: T.textDim }}>{c.date}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: cat1Keys.includes(c.category) ? T.successDim : T.input, color: cat1Keys.includes(c.category) ? T.success : T.textMuted }}>
+                      {c.category || "no category"}{cat1Keys.includes(c.category) ? " · counts as Cat 1" : ""}
+                    </span>
+                    {(c.topics || []).filter(t => mandateTopics.includes(t)).map(t => (
+                      <span key={t} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: T.accentDim, color: T.accent }}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {/* What didn't count */}
+              {outWin.length > 0 && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
+                    Not counting toward this renewal ({outWin.length})
+                  </div>
+                  {outWin.map(c => (
+                    <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
+                        <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                        <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
+                        {c.date ? `${c.date} — outside the cycle window` : "no date on the entry — add one so it can count"}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {comp.notes && (
+                <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>{comp.notes}</div>
+              )}
+            </>
+          );
+        })()}
+      </Modal>
+
       {/* Acknowledge an alert — "seen it, nothing to do yet" is a real state */}
       <Modal open={!!ackItem} onClose={() => setAckItem(null)} title="Acknowledge this alert">
         {ackItem && (() => {
@@ -663,9 +772,9 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
               const dl = comp.daysLeft;
               const urgency = dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok";
               return (
-                <div key={st} style={{
+                <div key={st} onClick={() => setCmeDetail({ st, comp })} style={{
                   backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
-                  boxShadow: T.shadow1,
+                  boxShadow: T.shadow1, cursor: "pointer",
                   borderLeft: `3px solid ${comp.fullyCompliant ? T.success : T.warning}`,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
