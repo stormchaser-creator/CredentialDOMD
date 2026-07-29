@@ -98,12 +98,14 @@ export default function SideNav({ items, active, onChange, fabItem }) {
           borderRadius: 12, backgroundColor: T.input,
         }}>
           <div style={{
-            width: 32, height: 32, borderRadius: 16,
+            width: 32, height: 32, borderRadius: 16, overflow: "hidden",
             background: T.pillGradient,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0,
           }}>
-            {initials}
+            {data.settings.profilePhoto
+              ? <img src={data.settings.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 25%" }} />
+              : initials}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{

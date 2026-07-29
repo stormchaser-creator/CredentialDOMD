@@ -107,6 +107,7 @@ const SETTINGS_TO_PROFILE = {
   phone: "phone",
   email: "email",
   specialties: "specialties",
+  profilePhoto: "profile_photo",
   theme: "theme",
   fontSize: "font_size",
   apiKey: "api_key",

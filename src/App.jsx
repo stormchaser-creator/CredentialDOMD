@@ -1386,13 +1386,15 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             ) : (
               <>
                 <div onClick={() => { setTab("more"); setSubPage("settings"); }} style={{
-                  width: 36, height: 36, borderRadius: 18,
+                  width: 36, height: 36, borderRadius: 18, overflow: "hidden",
                   background: "linear-gradient(135deg, #0D9488, #1A73E8)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer",
                   boxShadow: "0 2px 6px rgba(13,148,136,0.3)",
                 }}>
-                  {data.settings.name ? data.settings.name.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "MD"}
+                  {data.settings.profilePhoto
+                    ? <img src={data.settings.profilePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 25%" }} />
+                    : (data.settings.name ? data.settings.name.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase() : "MD")}
                 </div>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
