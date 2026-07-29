@@ -41,10 +41,22 @@ export function buildSnapshot(data, allTrackedStates = []) {
       };
     } catch { /* state without rules */ }
   }
+  // A document's identity comes from the record it's attached to — filenames
+  // like IMG_0269.jpeg mean nothing. Resolve every link to a readable label.
+  const attachedLabel = (ref) => {
+    if (!ref) return null;
+    const [sec, id] = String(ref).split(":");
+    const item = (data[sec] || []).find(x => x.id === id);
+    if (!item) return sec;
+    const bits = [...new Set([item.type, item.name, item.title, item.institution, item.facility, item.provider, item.state].filter(Boolean))];
+    return `${sec}: ${bits.slice(0, 3).join(" — ")}`;
+  };
   return {
     today: new Date().toISOString().slice(0, 10),
     physician: { name: data.settings.name, degree: data.settings.degreeType, npi: data.settings.npi, states: allTrackedStates },
-    licenses: short(data.licenses, l => ({ id: l.id, type: l.type, state: l.state, number: l.licenseNumber, expires: l.expirationDate })),
+    licenses: short(data.licenses, l => ({ id: l.id, type: l.type, name: l.name, state: l.state, number: l.licenseNumber, expires: l.expirationDate })),
+    privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate })),
+    insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate })),
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
     cme: short(data.cme, x => ({ id: x.id, title: x.title, hours: x.hours, category: x.category, date: x.date, provider: x.provider })),
     healthRecords: short(data.healthRecords, h => ({ id: h.id, category: h.category, name: h.name, result: h.result, value: h.resultValue, expires: h.expirationDate })),
@@ -53,9 +65,9 @@ export function buildSnapshot(data, allTrackedStates = []) {
     workLog: { entries: (data.workLog || []).length, unbilled: (data.workLog || []).filter(e => !e.invoiceId).length },
     invoices: short(data.invoices, i => ({ number: i.number, total: i.totalAmount, sent: i.sentAt?.slice(0, 10), paid: !!i.paidAt })),
     encounters: { count: (data.encounters || []).length },
-    education: short(data.education, e => ({ name: e.name, institution: e.institution, graduated: e.graduationDate })),
+    education: short(data.education, e => ({ id: e.id, type: e.type, name: e.name, institution: e.institution, graduated: e.graduationDate })),
     documents: (data.documents || []).slice(0, 80).map(d => ({
-      id: d.id, name: d.name, linkedTo: d.linkedTo || null, onDevice: !!d.data,
+      id: d.id, name: d.name, attachedTo: attachedLabel(d.linkedTo), onDevice: !!d.data,
     })),
   };
 }
@@ -87,11 +99,18 @@ YOU CAN PROPOSE ACTIONS. Respond with JSON ONLY (no fences):
  ]
 }
 
+DOCUMENT IDENTITY: a file's name is usually a meaningless camera name (IMG_1234.jpeg).
+What a document IS comes from its "attachedTo" record — a photo attached to the DO-degree
+education record IS the medical diploma copy; one attached to a state license IS that
+license copy; one attached to a malpractice insurance record IS a certificate of insurance.
+ALWAYS match requested items against attachedTo (and the records themselves), never
+against filenames alone.
+
 CREDENTIALING PACKETS (very common): agencies send checklists ("copy of diploma, all state
 licenses, DEA certs, board certificate, titers, TB test…"). When the user shares such a
-request: (1) match EVERY requested item against the documents list and the records in the
-snapshot, (2) propose ONE send_packet action with the docIds of everything found, (3) put
-each requested item you could NOT find into "missing" — that gap list is half the value,
+request: (1) match EVERY requested item against the documents list (by attachedTo) and the
+records in the snapshot, (2) propose ONE send_packet action with the docIds of everything
+found, (3) put each requested item you could NOT find into "missing" — that gap list is half the value,
 (4) in the reply, walk through found vs missing in plain language and suggest how to close
 gaps (e.g. scan the diploma with the + button; the MMR titer shows NOT immune — a vaccine
 series + re-titer will be needed, not just a copy). Documents with onDevice=false can still
