@@ -581,10 +581,26 @@ function WorkLog() {
     const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
     return (billed / 60) * rate;
   }, [rateFor, isStipendDay, allowanceUsed, entries]);
+
+  // Minutes of one entry beyond the day's allowance — 0 when fully covered.
+  // Distinguishes "genuinely included in the stipend" from "beyond the
+  // allowance but earning $0 because no after-stipend rate is set".
+  const overMinFor = useCallback((e, c) => {
+    if (!c || (c.callStipend || 0) <= 0 || e.type === "CallDay" || e.type === "Orientation") return 0;
+    const dateKey = callDayOf(e);
+    if (!isStipendDay(c, dateKey, entries)) return 0;
+    const usedBefore = allowanceUsed(c, dateKey, e.id);
+    const remaining = Math.max(0, (c.stipendHours || 0) * 60 - usedBefore);
+    return Math.max(0, (e.billedMin || 0) - remaining);
+  }, [isStipendDay, allowanceUsed, entries]);
+  // Re-derived on every render so the 7am call-day rollover is picked up
+  // (the `now` tick keeps this fresh while a timer runs).
+  const todayKey = callDayOf({ startTime: new Date(now).toISOString() });
+
   const unbilled = useMemo(() => contractEntries.filter(e => !e.invoiceId), [contractEntries]);
   const unbilledTotal = useMemo(
     () => computeBilling(contract, unbilled, true, contractEntries).total,
-    [unbilled, contract, computeBilling]
+    [unbilled, contract, computeBilling, todayKey]
   );
 
   // Entry list grouped by call day, most recent day first. On stipend
@@ -601,7 +617,7 @@ function WorkLog() {
     }
     // Coverage days with nothing logged still earn their stipend — show them
     if ((contract.callStipend || 0) > 0) {
-      const today = callDayOf({ startTime: new Date().toISOString() });
+      const today = todayKey;
       for (const p of contract.coveragePeriods || []) {
         if (!p.start) continue;
         const last = (p.end || p.start) < today ? (p.end || p.start) : today;
@@ -614,26 +630,28 @@ function WorkLog() {
     return [...by.keys()].sort().reverse().map(k => {
       const list = by.get(k).sort(entryOrder);
       const stipDay = (contract.callStipend || 0) > 0 && isStipendDay(contract, k, entries);
+      // Day totals always come from the FULL entry set — the 60-entry render
+      // window must never understate a day's dollars.
+      const dayAll = entries.filter(e => e.contractId === contract.id && callDayOf(e) === k);
       let totalAmt = 0, loggedMin = 0, includedMin = 0;
       if (stipDay) {
         const allowance = (contract.stipendHours || 0) * 60;
-        // Whole-day consumption across ALL entries for the day (billed too)
-        loggedMin = entries
-          .filter(e => e.contractId === contract.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === k)
+        loggedMin = dayAll
+          .filter(e => e.type !== "CallDay" && e.type !== "Orientation")
           .reduce((s, e) => s + (e.billedMin || 0), 0);
         includedMin = Math.min(allowance, loggedMin);
         totalAmt = (contract.callStipend || 0)
           + ((loggedMin - includedMin) / 60) * (contract.overageHourlyRate || 0);
-        for (const e of list.filter(x => x.type === "Orientation")) totalAmt += amountForEntry(e, contract);
+        for (const e of dayAll.filter(x => x.type === "Orientation")) totalAmt += amountForEntry(e, contract);
       } else {
-        for (const e of list) {
+        for (const e of dayAll) {
           totalAmt += amountForEntry(e, contract);
           if (e.type !== "CallDay") loggedMin += e.billedMin || 0;
         }
       }
       return { key: k, list, stipDay, totalAmt, loggedMin, includedMin };
     });
-  }, [contractEntries, contract, entries, isStipendDay, amountForEntry]);
+  }, [contractEntries, contract, entries, isStipendDay, amountForEntry, todayKey]);
 
   const buildInvoice = useCallback(() => {
     if (!contract || unbilled.length === 0) return;
@@ -686,8 +704,16 @@ function WorkLog() {
       if (e) editItem("workLog", { ...e, invoiceId: invId });
     }
     // Empty stipend days billed on this invoice get a zero-minute marker
-    // stamped with the invoice id so they can never bill twice.
-    for (const date of invoicePreview.emptyStipendDays || []) {
+    // stamped with the invoice id so they can never bill twice. A day whose
+    // only entry is an existing CallDay marker already has its carrier —
+    // that marker was just stamped above; don't create a duplicate.
+    const markerDates = new Set(
+      invoicePreview.entryIds
+        .map(id => entries.find(x => x.id === id))
+        .filter(e => e && e.type === "CallDay")
+        .map(e => callDayOf(e))
+    );
+    for (const date of (invoicePreview.emptyStipendDays || []).filter(d => !markerDates.has(d))) {
       addItem("workLog", {
         id: generateId(), createdAt: new Date().toISOString(),
         contractId: contract.id, type: "CallDay", date,
@@ -829,7 +855,6 @@ function WorkLog() {
             {/* Stipend countdown — call days come from the contract's
                 coverage dates; the stipend covers the first N hours of work */}
             {contract && (contract.callStipend || 0) > 0 && (() => {
-              const todayKey = callDayOf({ startTime: new Date().toISOString() });
               if (!isStipendDay(contract, todayKey, entries)) return null;
               const allow = (contract.stipendHours || 0) * 60;
               const used = allowanceUsed(contract, todayKey);
@@ -1041,7 +1066,7 @@ function WorkLog() {
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.text, verticalAlign: "top" }}>
                         <div style={{ fontWeight: 700 }}>{l.label}</div>
-                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted }}>{l.detail}</div>}
+                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted, whiteSpace: "pre-line" }}>{l.detail}</div>}
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : T.textDim }}>
                         {money(l.amount)}
@@ -1100,9 +1125,14 @@ function WorkLog() {
             (() => {
               const c2 = contracts.find(c => c.id === e.contractId) || contract;
               const a2 = amountForEntry(e, c2);
+              const o2 = c2 ? overMinFor(e, c2) : 0;
               const cov = e.type !== "CallDay" && e.type !== "Orientation" && c2
-                && (c2.callStipend || 0) > 0 && isStipendDay(c2, callDayOf(e), entries) && a2 === 0;
-              return ["Amount", cov ? "$0.00 — included in the day's stipend" : money(a2)];
+                && (c2.callStipend || 0) > 0 && isStipendDay(c2, callDayOf(e), entries) && a2 === 0 && o2 === 0;
+              if (cov) return ["Amount", "$0.00 — included in the day's stipend"];
+              if (o2 > 0 && !((c2?.overageHourlyRate || 0) > 0)) {
+                return ["Amount", `$0.00 — ${o2}m beyond the stipend, but no after-stipend rate is set on this contract`];
+              }
+              return ["Amount", money(a2)];
             })(),
             ["Invoice", inv ? `${inv.number} · ${inv.paidAt ? "paid" : "awaiting payment"}` : e.invoiceId ? "billed" : "not yet invoiced"],
             e.description && ["Billing note", e.description],
@@ -1145,7 +1175,7 @@ function WorkLog() {
                   <div style={{ fontSize: 11.5, color: T.textDim }}>
                     {g.stipDay
                       ? (g.loggedMin > 0
-                        ? `${fmtHM(g.loggedMin)} logged · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond @ ${money(contract?.overageHourlyRate || 0)}/hr` : ""}`
+                        ? `${fmtHM(g.loggedMin)} logged · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond ${(contract?.overageHourlyRate || 0) > 0 ? `@ ${money(contract.overageHourlyRate)}/hr` : "— no after-stipend rate set"}` : ""}`
                         : `on call · nothing logged yet`)
                       : `${fmtHM(g.loggedMin)} logged`}
                   </div>
@@ -1158,10 +1188,14 @@ function WorkLog() {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {g.list.map(e => {
                   const isCoverage = e.type === "CallDay";
-                  // Work inside the stipend allowance shows as included, not $0
+                  // Work inside the stipend allowance shows as included, not $0.
+                  // Beyond-allowance minutes with no after-stipend rate are NOT
+                  // "included" — they're unbillable until the rate is set.
                   const amt = amountForEntry(e, contract);
                   const stipDay = !isCoverage && e.type !== "Orientation" && g.stipDay;
-                  const covered = stipDay && amt === 0;
+                  const overMin = stipDay ? overMinFor(e, contract) : 0;
+                  const covered = stipDay && overMin === 0;
+                  const noRate = stipDay && overMin > 0 && !((contract?.overageHourlyRate || 0) > 0);
                   return (
                     <div key={e.id} onClick={() => setViewEntry(e)} style={{
                       display: "flex", alignItems: "center", gap: 10,
@@ -1191,6 +1225,11 @@ function WorkLog() {
                           <>
                             <div style={{ fontSize: 12, fontWeight: 800, color: T.success || T.accent }}>included</div>
                             <div style={{ fontSize: 10, color: T.textDim }}>{e.billedMin}m in stipend</div>
+                          </>
+                        ) : noRate ? (
+                          <>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: T.warning }}>no rate set</div>
+                            <div style={{ fontSize: 10, color: T.textDim }}>{overMin}m beyond stipend</div>
                           </>
                         ) : isCoverage ? (
                           <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim }}>day marker</div>

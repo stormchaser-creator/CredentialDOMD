@@ -9,6 +9,15 @@ import { shareInvoicePdf, sortInvoiceLines } from "../../../utils/invoicePdf";
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
 
+// Same 7am call-day boundary as the Work tab
+const callDayOf = (e) => {
+  if (e.startTime) {
+    const x = new Date(new Date(e.startTime).getTime() - 7 * 3600 * 1000);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  }
+  return e.date;
+};
+
 /**
  * Invoices — every invoice sent from the Work tab, tracked sent → paid.
  * Mark paid when the money lands; unpaid invoices age visibly so nothing
@@ -58,8 +67,18 @@ function Invoices() {
   };
 
   const removeInvoice = (inv) => {
-    const n = (data.workLog || []).filter(x => x.invoiceId === inv.id).length;
-    if (!window.confirm(`Delete invoice ${inv.number}? Its ${n} work entr${n === 1 ? "y" : "ies"} become unbilled again.`)) return;
+    const mine = (data.workLog || []).filter(x => x.invoiceId === inv.id);
+    const n = mine.length;
+    // Two invoices can share a call day (stipend billed on one, late-logged
+    // work on the other). Deleting only one of them makes the stipend math
+    // unrecoverable — the fix is always to delete both and regenerate.
+    const myDays = new Set(mine.map(callDayOf));
+    const shared = (data.workLog || []).some(x =>
+      x.invoiceId && x.invoiceId !== inv.id && x.contractId === inv.contractId && myDays.has(callDayOf(x)));
+    const warn = shared
+      ? `Careful: another invoice also bills work on the same call day(s). Deleting just this one breaks the stipend math for those days — delete BOTH invoices and regenerate one invoice instead. Delete anyway?`
+      : `Delete invoice ${inv.number}? Its ${n} work entr${n === 1 ? "y" : "ies"} become unbilled again.`;
+    if (!window.confirm(warn)) return;
     for (const e of (data.workLog || []).filter(x => x.invoiceId === inv.id)) {
       // Zero-minute markers exist only as this invoice's billing record —
       // remove them; real work entries just become unbilled again.
@@ -127,7 +146,7 @@ function Invoices() {
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.text, verticalAlign: "top" }}>
                         <div style={{ fontWeight: 700 }}>{l.label}</div>
-                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted }}>{l.detail}</div>}
+                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted, whiteSpace: "pre-line" }}>{l.detail}</div>}
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : T.textDim }}>
                         {money(l.amount)}
