@@ -201,10 +201,15 @@ export function invoiceCoverEmail(inv) {
 export async function shareInvoicePdf(inv, subject, fallbackText) {
   const file = invoicePdfFile(inv);
   const cover = invoiceCoverEmail(inv);
+  // iOS Mail HTML-renders shared text, collapsing every line break (an
+  // OS behavior — no format survives it). The clipboard copy DOES keep
+  // formatting when pasted, so the cover letter always rides along there.
+  let coverCopied = false;
+  try { await navigator.clipboard.writeText(cover); coverCopied = true; } catch { /* clipboard unavailable */ }
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ title: subject || `Invoice ${inv.number}`, text: cover, files: [file] });
-      return "share";
+      return coverCopied ? "share+cover" : "share";
     } catch (err) {
       if (err?.name === "AbortError") return null;
     }
@@ -214,7 +219,7 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
   if (standalone && navigator.share && fallbackText) {
     try {
       await navigator.share({ title: subject || `Invoice ${inv.number}`, text: `${cover}\n\n———\n\n${fallbackText}` });
-      return "share-text";
+      return coverCopied ? "share-text+cover" : "share-text";
     } catch (err) {
       if (err?.name === "AbortError") return null;
     }

@@ -26,6 +26,7 @@ const callDayOf = (e) => {
 function Invoices() {
   const { data, editItem, deleteItem, theme: T } = useApp();
   const [viewInv, setViewInv] = useState(null);
+  const [notice, setNotice] = useState(null);
   const contracts = data.locumContracts || [];
   const facilityOf = (cid) => contracts.find(c => c.id === cid)?.facility || "Contract";
 
@@ -46,7 +47,7 @@ function Invoices() {
     if (inv.lines?.length) {
       const c = contracts.find(x => x.id === inv.contractId);
       const s = data.settings || {};
-      await shareInvoicePdf({
+      const how = await shareInvoicePdf({
         number: inv.number,
         physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
         npi: s.npi, email: s.email,
@@ -56,6 +57,10 @@ function Invoices() {
         totalMin: inv.totalMinutes, total: inv.totalAmount,
         issuedDate: inv.sentAt?.slice(0, 10),
       }, `Invoice ${inv.number}`, inv.text);
+      if (how && how.includes("+cover")) {
+        setNotice("The cover email is on your clipboard — if Mail squashed the message body into one line, select it and paste to get the proper letter.");
+        setTimeout(() => setNotice(null), 9000);
+      }
       return;
     }
     const text = inv.text || `Invoice ${inv.number} — ${facilityOf(inv.contractId)} — ${money(inv.totalAmount)}`;
@@ -97,6 +102,13 @@ function Invoices() {
 
   return (
     <div>
+      {notice && (
+        <div style={{
+          padding: "12px 14px", borderRadius: 12, marginBottom: 10,
+          backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`,
+          fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.45,
+        }}>{notice}</div>
+      )}
       <div style={{ marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.text }}>Invoices</h3>
         <div style={{ fontSize: 12, color: T.textMuted }}>Mark each one paid when the money lands.</div>

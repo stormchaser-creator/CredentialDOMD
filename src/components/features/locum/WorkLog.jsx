@@ -809,8 +809,11 @@ function WorkLog() {
     // A real PDF with a proper table — falls back to download, then text/mailto
     const how = await shareInvoicePdf(pdfArgsFor(invoicePreview), subject, invoicePreview.text);
     if (how === null) return; // user cancelled the share sheet
-    markBilledAndLog(how === "share" ? "share-pdf" : "pdf-download");
-  }, [invoicePreview, contract, data.settings, markBilledAndLog, pdfArgsFor]);
+    if (how.includes("+cover")) {
+      showNotice("The cover email is on your clipboard — if Mail squashed the message body into one line, select it and paste to get the proper letter.");
+    }
+    markBilledAndLog(how.startsWith("share") ? "share-pdf" : "pdf-download");
+  }, [invoicePreview, contract, data.settings, markBilledAndLog, pdfArgsFor, showNotice]);
 
   if (contracts.length === 0) {
     return (
