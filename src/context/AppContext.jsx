@@ -372,7 +372,7 @@ export function useNotifications() {
     const msg = buildNotificationMessage(data, alerts);
     if (!msg) return;
 
-    if (browserPermission === "granted") {
+    if (browserPermission === "granted" && data.settings.notifyBrowser !== false) {
       fireBrowserNotification("CredentialDOMD Alert", msg.shortText, "credentialdomd-" + now.toDateString());
     }
 
@@ -421,7 +421,7 @@ export function useNotifications() {
             cmeVerificationAlerted: summary.failing > 0,
           },
         }));
-        if (summary.failing > 0 && browserPermission === "granted") {
+        if (summary.failing > 0 && browserPermission === "granted" && data.settings.notifyBrowser !== false) {
           fireBrowserNotification(
             "CredentialDOMD: CME Link Check",
             `${summary.failing} CME provider link(s) may be down. Open Find CME to review.`,

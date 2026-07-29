@@ -113,6 +113,7 @@ const SETTINGS_TO_PROFILE = {
   apiKey: "api_key",
   reminderLeadDays: "reminder_lead_days",
   notifyEmail: "notify_email",
+  notifyBrowser: "notify_browser",
   notifyText: "notify_text",
   notifyFreqDays: "notify_freq_days",
   lastNotified: "last_notified",

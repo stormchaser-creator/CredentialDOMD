@@ -339,27 +339,35 @@ function SettingsSection() {
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>Notifications</h3>
         <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14 }}>Get alerted when credentials expire or CME compliance gaps are detected.</div>
 
-        {/* Browser */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Browser Notifications</div>
-            <div style={{ fontSize: 12, color: T.textDim }}>
-              {typeof Notification === "undefined" ? "Not supported" :
-               Notification.permission === "granted" ? "Enabled" :
-               Notification.permission === "denied" ? "Blocked" : "Click to enable"}
+        {/* Browser — once permission is granted the app keeps its own
+            on/off switch (a page can't un-grant browser permission) */}
+        {typeof Notification !== "undefined" && Notification.permission === "granted" ? (
+          <ToggleRow label="Browser Notifications"
+            sub={s.notifyBrowser === false ? "Off — this app won't pop alerts on this device" : "On — alerts pop on this device"}
+            active={s.notifyBrowser !== false}
+            onToggle={() => update("notifyBrowser", s.notifyBrowser === false)}
+            color={T.accent} T={T} />
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Browser Notifications</div>
+              <div style={{ fontSize: 12, color: T.textDim }}>
+                {typeof Notification === "undefined" ? "Not supported on this device" :
+                 Notification.permission === "denied" ? "Blocked — allow notifications for this site in your browser or phone settings first" : "Click to enable"}
+              </div>
             </div>
+            {typeof Notification !== "undefined" && Notification.permission === "default" && (
+              <button onClick={async () => {
+                const r = await Notification.requestPermission();
+                if (r === "granted") update("notifyBrowser", true);
+              }} style={{
+                padding: "7px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted,
+                fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>Enable</button>
+            )}
           </div>
-          <button onClick={async () => {
-            if (typeof Notification !== "undefined" && Notification.permission === "default") await Notification.requestPermission();
-          }} style={{
-            padding: "7px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
-            backgroundColor: typeof Notification !== "undefined" && Notification.permission === "granted" ? T.successDim : "transparent",
-            color: typeof Notification !== "undefined" && Notification.permission === "granted" ? T.success : T.textMuted,
-            fontSize: 12, fontWeight: 600, cursor: "pointer",
-          }}>
-            {typeof Notification !== "undefined" && Notification.permission === "granted" ? "On" : "Enable"}
-          </button>
-        </div>
+        )}
 
         {/* Email toggle */}
         <ToggleRow label="Email Notifications" sub={s.email || "Add email in profile"} active={s.notifyEmail} onToggle={() => update("notifyEmail", !s.notifyEmail)} color={T.accent} T={T} />
