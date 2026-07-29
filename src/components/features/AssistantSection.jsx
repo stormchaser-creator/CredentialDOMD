@@ -39,6 +39,10 @@ function AssistantSection() {
   const taRef = useRef(null);
   const failedMapRef = useRef(new Map()); // msgId -> {text, attachment} for every failed send
   const savedAttachRef = useRef(new Set()); // msgIds whose file already went to Files
+  // The most recent document stays available to follow-up turns — the AI can
+  // only read what's attached to the CURRENT message, and answering questions
+  // about a document from memory is how it invents things.
+  const lastAttachRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -82,18 +86,22 @@ function AssistantSection() {
   const send = useCallback(async (textOverride, retryOf = null) => {
     // retryOf = a previously-failed message to re-send in place (its text and
     // attachment were kept in failedRef, so a long paste never has to be redone).
-    const att = retryOf ? retryOf.attachment : attachment;
+    // With no new attachment, the last document rides along invisibly so the
+    // AI can re-read it when the user asks follow-up questions about it.
+    const explicitAtt = retryOf ? retryOf.attachment : attachment;
+    const att = explicitAtt || (lastAttachRef.current ? { ...lastAttachRef.current, implicit: true } : null);
     const text = (retryOf ? retryOf.text : (textOverride ?? input)).trim();
-    if (!text && !att) return;
+    if (!text && !explicitAtt) return;
+    if (explicitAtt && !retryOf) lastAttachRef.current = explicitAtt;
     setErr(null);
     let userMsg;
     if (retryOf) {
       const existing = msgs.find(x => x.id === retryOf.msgId);
-      userMsg = { ...(existing || { id: retryOf.msgId || generateId(), role: "user", text: text || `(sent ${att?.name})`, attachName: att?.name }), failed: false };
+      userMsg = { ...(existing || { id: retryOf.msgId || generateId(), role: "user", text: text || `(sent ${explicitAtt?.name})`, attachName: explicitAtt?.name }), failed: false };
       // Move it to the end of the thread so its reply lands right under it.
       setMsgs(m => [...m.filter(x => x.id !== userMsg.id), userMsg]);
     } else {
-      userMsg = { id: generateId(), role: "user", text: text || `(sent ${att?.name})`, attachName: att?.name };
+      userMsg = { id: generateId(), role: "user", text: text || `(sent ${explicitAtt?.name})`, attachName: explicitAtt?.name };
       setMsgs(m => [...m, userMsg]);
       setInput("");
       setAttachment(null);
@@ -105,12 +113,13 @@ function AssistantSection() {
       const snapshot = buildSnapshot(data, allTrackedStates);
       const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, attachment: att });
       const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions };
-      // Keep the file with the proposal so Approve can save it to Files too.
-      if (att?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record")) {
-        modelMsg.sourceAttach = { dataUrl: att.dataUrl, name: att.name };
+      // Keep the file with the proposal so Approve can save it to Files too —
+      // only for documents the user just attached, never the implicit re-send.
+      if (explicitAtt?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record")) {
+        modelMsg.sourceAttach = { dataUrl: explicitAtt.dataUrl, name: explicitAtt.name };
       }
       setMsgs(m => [...m, modelMsg]);
-      logToCloud(att ? "document" : "chat", text, result.reply.slice(0, 300));
+      logToCloud(explicitAtt ? "document" : "chat", text, result.reply.slice(0, 300));
       failedMapRef.current.delete(userMsg.id);
     } catch (e2) {
       failedMapRef.current.set(userMsg.id, { text, attachment: att });

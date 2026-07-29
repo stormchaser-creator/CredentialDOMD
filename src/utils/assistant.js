@@ -46,6 +46,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
     physician: { name: data.settings.name, degree: data.settings.degreeType, npi: data.settings.npi, states: allTrackedStates },
     licenses: short(data.licenses, l => ({ id: l.id, type: l.type, state: l.state, number: l.licenseNumber, expires: l.expirationDate })),
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
+    cme: short(data.cme, x => ({ id: x.id, title: x.title, hours: x.hours, category: x.category, date: x.date, provider: x.provider })),
     healthRecords: short(data.healthRecords, h => ({ id: h.id, category: h.category, name: h.name, result: h.result, value: h.resultValue, expires: h.expirationDate })),
     screenings: short(data.screenings, s => ({ id: s.id, name: s.name, result: s.result, reported: s.reportDate, expires: s.expirationDate })),
     contracts: short(data.locumContracts, c => ({ id: c.id, facility: c.facility, stipend: c.callStipend, stipendHours: c.stipendHours, overageRate: c.overageHourlyRate, periods: c.coveragePeriods })),
@@ -105,6 +106,17 @@ RULES:
   Pick the best-fitting section; when several records are present (e.g. a lab panel),
   propose several create_record actions.
 - Dates are YYYY-MM-DD. Never fabricate values not present in the document/conversation.
+- TOTALS ANCHOR EVERYTHING: when a document states a total (credits earned, amount due,
+  panel count), the records you propose MUST add up to that total. Per-unit boilerplate
+  ("awarded 0.5 credits" per completion) is NOT the total — a transcript line reading
+  "Count 7, Credits 3.5" is ONE record of 3.5 hours unless separate activities are listed.
+  State the total back to the user in your reply so they can confirm it matches the paper.
+- You can only read a document in the turn it is attached. If it is not attached in THIS
+  turn, do not describe its contents from memory — ask for it again instead. Never invent
+  line items that are not in front of you.
+- CORRECTIONS: when the user says a record just created is wrong, propose update_record on
+  the EXISTING record (its id is in the snapshot) — never a second create_record for the
+  same thing.
 - When the user suggests an improvement, reports something broken, or is clearly frustrated
   with the app itself, ALWAYS add a feedback action (their words, lightly cleaned). The
   developer reads every one — this is how the app gets better.
@@ -132,9 +144,12 @@ export async function assistantTurn({ history, snapshot, apiKey, attachment }) {
     const isLast = i === history.slice(-14).length - 1;
     if (isLast && attachment?.dataUrl) {
       parts.push({ inlineData: { mimeType: mediaType(attachment.dataUrl), data: extractBase64(attachment.dataUrl) } });
+      if (attachment.implicit) {
+        parts.push({ text: `(The document "${attachment.name || "attachment"}" above is re-supplied from earlier in this conversation so you can re-read it — the user did not attach anything new.)` });
+      }
     }
     if (isLast && attachment?.text) {
-      parts.push({ text: `ATTACHED DOCUMENT "${attachment.name}" (extracted text):\n${attachment.text}` });
+      parts.push({ text: `ATTACHED DOCUMENT "${attachment.name}" (extracted text${attachment.implicit ? ", re-supplied from earlier in this conversation" : ""}):\n${attachment.text}` });
     }
     parts.push({ text: m.text });
     return { role: m.role === "model" ? "model" : "user", parts };
