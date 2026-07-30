@@ -41,7 +41,9 @@ export function computeBoardCompliance(data) {
   const resolved = (data.settings.specialties || []).map(id => {
     const [kind, code, ...rest] = String(id).split(":");
     const subName = rest.join(":");
-    if (kind === "AOA-SUB" && AOA_OCC[code]) return { id, kind: "AOA", code, displayName: subName };
+    // ABMS subspecialties explicitly follow their primary board. AOA
+    // disciplines do NOT get merged into the parent board — a neurosurgery
+    // certificate is its own certificate (per Eric), tracked separately.
     if (kind === "ABMS-SUB" && ABMS_MOC[code]) return { id, kind: "ABMS", code, displayName: subName };
     return { id, kind, code, displayName: subName };
   });
@@ -101,6 +103,29 @@ export function computeBoardCompliance(data) {
         daysLeft: Math.ceil((new Date(`${cyc.end}-12-31T23:59`) - today) / 86400000),
         assessment: b.occChecklist || "OCC: active licensure + lifelong learning/CME + cognitive assessment + practice performance",
         notes: req.specReq ? `Specialty requirement: ${req.specReq}` : "",
+      });
+    } else if (kind === "AOA-SUB" && AOA_OCC[code]) {
+      // An AOA discipline certificate (e.g. Neurological Surgery) — its own
+      // card, never combined with a "Surgery" pick. OCC is administered by
+      // the parent board but the certificate and its annual discipline-
+      // specific assessment stand alone.
+      const b = AOA_OCC[code];
+      const req = b.timeLimited || { hours: 120, cat1: 0 };
+      const cyc = aoaCycle(today);
+      const from = `${cyc.start}-01-01`, to = `${cyc.end}-12-31`;
+      const earned = hoursIn(cme, from, to);
+      const cat1a = hoursIn(cme, from, to, c => (c.category || "").includes("AOA Category 1-A"));
+      out.push({
+        id, source: "AOA", code: `${code}-${subName}`, name: subName,
+        label: `${subName} — AOA`,
+        required: req.hours, earned,
+        met: earned >= req.hours && cat1a >= (req.cat1 || 0),
+        cat1aRequired: req.cat1 || 0, cat1aEarned: cat1a,
+        unit: "total hrs, all categories (OCC participant)",
+        windowLabel: `${cyc.start}–${cyc.end} AOA cycle`,
+        daysLeft: Math.ceil((new Date(`${cyc.end}-12-31T23:59`) - today) / 86400000),
+        assessment: `Annual: unrestricted-license proof + discipline-specific 15-question open-book Longitudinal Assessment for ${subName} (80% = 12/15, $225/yr — completing it earns 5.0 Cat 1-B). Every 3 years: at least one QI/practice-performance attestation.`,
+        notes: "Tracked as its own certificate — not combined with the parent surgery board.",
       });
     } else if (kind === "ABMS-SUB" || kind === "AOA-SUB" || kind === "UCNS" || kind === "ABPS") {
       out.push({
