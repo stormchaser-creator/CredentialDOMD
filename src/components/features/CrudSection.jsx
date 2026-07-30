@@ -11,7 +11,7 @@ import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documen
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import CPTCodePicker from "./CPTCodePicker";
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, filterTabs }) {
   const { data, setData, addItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -175,6 +175,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   // Tap-anywhere detail view + full-screen picture viewer
   const [viewItem, setViewItem] = useState(null);
   const [lightbox, setLightbox] = useState(null);
+  // Optional category tabs (e.g. Licenses: Medical / DEA / Board / Life
+  // Support) — mixed record types in one flat list are unreadable.
+  const [catFilter, setCatFilter] = useState("all");
+  const categorize = (item) => {
+    if (!filterTabs) return "all";
+    const hit = filterTabs.find(t => t.match(item));
+    return hit ? hit.key : "other";
+  };
+  const shownItems = !filterTabs || catFilter === "all"
+    ? items
+    : items.filter(i => categorize(i) === catFilter);
 
   // Escape must close the lightbox, not the modal underneath it — capture
   // phase so this runs before Modal's own document-level Escape handler
@@ -466,11 +477,29 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         </div>
       )}
 
-      {items.length === 0 ? (
+      {filterTabs && items.length > 0 && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+          {[{ key: "all", label: "All" }, ...filterTabs, { key: "other", label: "Other" }].map(t => {
+            const count = t.key === "all" ? items.length : items.filter(i => categorize(i) === t.key).length;
+            if (t.key === "other" && count === 0) return null;
+            return (
+              <button key={t.key} onClick={() => setCatFilter(t.key)} style={{
+                padding: "6px 14px", fontSize: 13, borderRadius: 22,
+                border: `1px solid ${catFilter === t.key ? T.accent : T.border}`,
+                backgroundColor: catFilter === t.key ? T.accent : "transparent",
+                color: catFilter === t.key ? "#fff" : T.textMuted,
+                cursor: "pointer", fontWeight: 600,
+              }}>{t.label}{count > 0 ? ` (${count})` : ""}</button>
+            );
+          })}
+        </div>
+      )}
+
+      {shownItems.length === 0 ? (
         <EmptyState icon={emptyIcon} title={emptyTitle} subtitle={emptySub} onAction={openAdd} actionLabel="Add" />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {items.map(item => {
+          {shownItems.map(item => {
             const color = getStatusColor(item.expirationDate);
             const needsReview = item.npiImported && !item.expirationDate;
             return (
