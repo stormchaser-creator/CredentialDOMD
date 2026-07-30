@@ -1,4 +1,5 @@
 import { complianceFor, findStateLicense } from "./compliance";
+import { CME_PROVIDERS } from "../constants/cmeProviders";
 
 /**
  * The in-app AI assistant. Modeled on the CallSync helper (every question
@@ -12,6 +13,13 @@ import { complianceFor, findStateLicense } from "./compliance";
  */
 
 const GEMINI_MODEL = "gemini-2.5-flash";
+
+// The app's vetted CME directory (links re-checked by the app) — the ONLY
+// sources the assistant may recommend. An AI's remembered links go stale;
+// these don't.
+const PROVIDER_DIGEST = CME_PROVIDERS.map(p =>
+  `${p.name} | ${p.url} | ${p.pricing} | ${(p.accreditation || []).join(" + ")}${p.aoaNote ? ` | NOTE: ${p.aoaNote}` : ""} | ${(p.description || "").slice(0, 90)}`
+).join("\n");
 
 // ── Known sections and their real fields (keeps the model honest) ──
 export const SECTION_FIELDS = {
@@ -162,6 +170,18 @@ RULES:
   Agencies would far rather see documented progress than an unexplained gap. The
   "missing" list then names only the outstanding piece (e.g. "MMR dose 2 — scheduled").
 - Deleting records is not something you can do — tell them where the trash button lives.
+
+FINDING CME (when asked "find me CME for X"): recommend ONLY from the VETTED PROVIDER
+DIRECTORY below — the app verifies these links; never suggest a source or URL that is
+not in it. Match the recommendation to the SPECIFIC gap:
+- AOA Category 1-A can ONLY come from AOA-accredited sponsors (AMA PRA Category 1 credit
+  maps to AOA Category 2, never 1-A). For gaps that accept any category (like an AOBS
+  total-hours gap), free ACCME platforms work fine and say so.
+- For state topic mandates, match the provider's topics to the mandate.
+- Point them to Credentials → Find CME for the full filterable directory.
+
+VETTED PROVIDER DIRECTORY (name | url | pricing | accreditation | note):
+${PROVIDER_DIGEST}
 
 KNOWN SECTION FIELDS:
 ${JSON.stringify(SECTION_FIELDS)}
