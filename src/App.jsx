@@ -238,6 +238,8 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   // CME math breakdown — tap a state card to see exactly which entries
   // counted, which didn't, and why. {st, comp}
   const [cmeDetail, setCmeDetail] = useState(null);
+  // Same for board certification cards. {b}
+  const [boardDetail, setBoardDetail] = useState(null);
 
   // Acknowledge-an-alert modal: {item} being acknowledged + form state
   const [ackItem, setAckItem] = useState(null);
@@ -654,6 +656,77 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         })()}
       </Modal>
 
+      {/* Board math — same transparency as the state cards */}
+      <Modal open={!!boardDetail} onClose={() => setBoardDetail(null)} title={boardDetail ? `${boardDetail.name} — the math` : "Board"}>
+        {boardDetail && (() => {
+          const b = boardDetail;
+          const counts = (c) => !b.countRule || (c.category || "").includes(b.countRule);
+          const inWin = [], excluded = [];
+          for (const c of data.cme || []) {
+            if (c.date && b.from && c.date >= b.from && c.date <= b.to) {
+              if (counts(c)) inWin.push(c);
+              else excluded.push({ c, why: `category doesn't count for this board — needs ${b.countRule}` });
+            } else {
+              excluded.push({ c, why: c.date ? "outside this cycle window" : "no date on the entry — add one so it can count" });
+            }
+          }
+          const fmtD = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          return (
+            <>
+              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
+                {b.label}. Cycle window: <strong style={{ color: T.text }}>{b.from ? fmtD(b.from) : "—"} – {b.to ? fmtD(b.to) : "—"}</strong>
+                {b.daysLeft != null && ` · ${b.daysLeft} days left`}. {b.countRule ? `Only ${b.countRule} credit counts for this board.` : "All CME categories count toward the total."}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                  <span style={{ color: T.text, fontWeight: 600 }}>Total hours ({b.unit})</span>
+                  <span style={{ fontWeight: 800, color: b.met ? T.success : T.warning }}>{b.earned} / {b.required}</span>
+                </div>
+                {b.cat1aRequired > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                    <span style={{ color: T.text, fontWeight: 600 }}>AOA Category 1-A minimum</span>
+                    <span style={{ fontWeight: 800, color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning }}>{b.cat1aEarned} / {b.cat1aRequired}</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                Counted this cycle ({inWin.length})
+              </div>
+              {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — hours dated inside the window land here.</div>}
+              {inWin.map(c => (
+                <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+                    <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                    <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date} · {c.category || "no category"}</div>
+                </div>
+              ))}
+              {excluded.length > 0 && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
+                    Not counting ({excluded.length})
+                  </div>
+                  {excluded.map(({ c, why }) => (
+                    <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
+                        <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                        <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date ? `${c.date} — ${why}` : why}</div>
+                    </div>
+                  ))}
+                </>
+              )}
+              {b.assessment && (
+                <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>Also required: {b.assessment}</div>
+              )}
+              {b.notes && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{b.notes}</div>}
+            </>
+          );
+        })()}
+      </Modal>
+
       {/* Acknowledge an alert — "seen it, nothing to do yet" is a real state */}
       <Modal open={!!ackItem} onClose={() => setAckItem(null)} title="Acknowledge this alert">
         {ackItem && (() => {
@@ -878,8 +951,8 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>Board Certification</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {boardComps.filter(b => !b.followsParent).map(b => (
-              <div key={b.id} style={{
-                backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1,
+              <div key={b.id} onClick={() => setBoardDetail(b)} style={{
+                backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1, cursor: "pointer",
                 borderLeft: `3px solid ${b.met ? T.success : T.warning}`,
               }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
@@ -909,7 +982,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                     }}>AOA Cat 1-A: {b.cat1aEarned}/{b.cat1aRequired}h</span>
                   )}
                   {!b.met && (
-                    <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
+                    <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
                       padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
                       border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
                     }}>Find CME &rarr;</button>

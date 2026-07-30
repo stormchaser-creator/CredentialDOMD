@@ -78,6 +78,7 @@ export function computeBoardCompliance(data) {
         label: `${subName || b.name} — ABMS ${code}`,
         required: b.hours, earned, met: earned >= b.hours,
         unit: b.unit, windowLabel, daysLeft,
+        from, to: `${today.getFullYear()}-12-31`, countRule: "AMA PRA Category 1",
         assessment: b.assessment || "", notes: b.notes || "",
       });
     } else if (kind === "AOA" && AOA_OCC[code]) {
@@ -95,6 +96,7 @@ export function computeBoardCompliance(data) {
       out.push({
         id, source: "AOA", code, name: subName || b.name,
         label: `${subName || b.name} — AOA ${code}`,
+        from, to, countRule: null,
         required: req.hours, earned,
         met: earned >= req.hours && cat1a >= (req.cat1 || 0),
         cat1aRequired: req.cat1 || 0, cat1aEarned: cat1a,
@@ -118,6 +120,7 @@ export function computeBoardCompliance(data) {
       out.push({
         id, source: "AOA", code: `${code}-${subName}`, name: subName,
         label: `${subName} — AOA`,
+        from, to, countRule: null,
         required: req.hours, earned,
         met: earned >= req.hours && cat1a >= (req.cat1 || 0),
         cat1aRequired: req.cat1 || 0, cat1aEarned: cat1a,
@@ -150,6 +153,7 @@ export function aoaNationalEntry(data) {
   return {
     id: "AOA:NATIONAL", source: "AOA", code: "AOA", name: "AOA National CME",
     label: "AOA National CME",
+    from, to, countRule: null,
     required: AOA_NATIONAL.hours, earned,
     met: earned >= AOA_NATIONAL.hours && cat1a >= AOA_NATIONAL.cat1a,
     cat1aRequired: AOA_NATIONAL.cat1a, cat1aEarned: cat1a,
