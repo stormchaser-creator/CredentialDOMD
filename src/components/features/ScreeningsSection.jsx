@@ -26,6 +26,15 @@ function ScreeningsSection({ onShare }) {
   const [form, setForm] = useState({});
   const [attachedDocs, setAttachedDocs] = useState([]);
   const [viewItem, setViewItem] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
+  // Data URLs don't open directly in iOS Safari — convert to a blob URL
+  const openPdfDoc = (doc) => {
+    if (!doc.data) return;
+    const byteStr = atob(doc.data.split(",")[1]);
+    const arr = new Uint8Array(byteStr.length);
+    for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+    window.open(URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" })), "_blank");
+  };
 
   const openAdd = useCallback(() => { setForm({ components: [] }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item, components: item.components || [] }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
@@ -103,6 +112,35 @@ function ScreeningsSection({ onShare }) {
               </div>
             )}
             {viewItem.notes && <div style={{ fontSize: 13, color: T.textMuted, marginTop: 12, whiteSpace: "pre-wrap" }}>{viewItem.notes}</div>}
+            {docsFor(viewItem.id).length > 0 ? (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 8 }}>Source documents — tap to view</div>
+                {docsFor(viewItem.id).map(doc => (
+                  !doc.data ? (
+                    <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                      <span style={{ fontSize: 16 }}>{"⏳"}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name} — downloading from cloud, check back shortly</span>
+                    </div>
+                  ) : doc.type?.startsWith("image/") ? (
+                    <img key={doc.id} src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
+                      style={{ width: "100%", borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 8, cursor: "zoom-in", display: "block" }} />
+                  ) : (
+                    <button key={doc.id} onClick={() => openPdfDoc(doc)} style={{
+                      display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px",
+                      borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                      color: T.text, fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 8, textAlign: "left",
+                    }}>
+                      <span style={{ fontSize: 16 }}>{"📕"}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.name}</span>
+                    </button>
+                  )
+                ))}
+              </div>
+            ) : (
+              <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.warning}`, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 }}>
+                No source report attached yet — tap Edit and attach the screening report so it rides along when you send this.
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
               <button onClick={() => { const it = viewItem; setViewItem(null); onShare?.(it, "screenings"); }} style={{
                 padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.shareGlow, color: T.share, fontSize: 15, fontWeight: 600, cursor: "pointer",
@@ -114,6 +152,16 @@ function ScreeningsSection({ onShare }) {
           </>
         )}
       </Modal>
+
+      {/* Full-screen picture viewer */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{
+          position: "fixed", inset: 0, zIndex: 100000, backgroundColor: "rgba(0,0,0,0.93)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
+        }}>
+          <img src={lightbox.data} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+        </div>
+      )}
 
       {/* Add / Edit */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Screening" : "Add Screening"}>
