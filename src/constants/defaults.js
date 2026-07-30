@@ -44,7 +44,8 @@ export const DEFAULT_DATA = {
   locumContracts: [], // [{ id, facility, agency, billTo, startDate, endDate, hourlyRate, callHourlyRate, incrementMinutes, minCallMinutes, notes }]
   workLog: [],        // [{ id, contractId, type, date, startTime, endTime, durationMin, billedMin, description, invoiceId }]
   screenings: [],
-  alertAcks: [],     // [{ id, itemId, until, note }] — acknowledged/snoozed expiration alerts    // [{ id, type, name, agency, requestedBy, assignment, fileNumber, orderDate, reportDate, result, expirationDate, components: [{name, scope, status, date, note}], notes }]
+  alertAcks: [],     // [{ id, itemId, until, note }] — acknowledged/snoozed expiration alerts
+  professionalPhotos: [], // [{ id, name, dateTaken, notes }] — headshots for credentialing packets    // [{ id, type, name, agency, requestedBy, assignment, fileNumber, orderDate, reportDate, result, expirationDate, components: [{name, scope, status, date, note}], notes }]
   encounters: [],     // [{ id, contractId, date, codes: [{code, units, desc, wRVU}], note, spokenText }]
   invoices: [],       // [{ id, number, contractId, periodStart, periodEnd, entryIds, totalMinutes, totalAmount, sentAt }]
   settings: { ...DEFAULT_SETTINGS },

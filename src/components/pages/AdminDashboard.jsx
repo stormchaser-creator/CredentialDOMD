@@ -15,6 +15,7 @@ export default function AdminDashboard() {
   const [feedback, setFeedback] = useState([]);
   const [signups, setSignups] = useState([]);
   const [waitlist, setWaitlist] = useState([]);
+  const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -31,7 +32,8 @@ export default function AdminDashboard() {
       supabase.from("admin_feedback_recent").select("*").limit(50),
       supabase.from("admin_signups_daily").select("*").limit(30),
       supabase.from("early_access_leads").select("name,email,source,created_at").order("created_at", { ascending: false }).limit(500),
-    ]).then(([t, f, s, w]) => {
+      supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
+    ]).then(([t, f, s, w, fp]) => {
       if (cancelled) return;
       if (t.error) setError(`Tickets: ${t.error.message}`);
       else setTickets(t.data || []);
@@ -41,6 +43,8 @@ export default function AdminDashboard() {
       else setSignups(s.data || []);
       if (w.error) setError((prev) => prev || `Waitlist: ${w.error.message}`);
       else setWaitlist(w.data || []);
+      if (fp.error) setError((prev) => prev || `Fields: ${fp.error.message}`);
+      else setFields(fp.data || []);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -62,6 +66,7 @@ export default function AdminDashboard() {
     { id: "feedback",  label: `Feedback (${feedback.length})` },
     { id: "signups",   label: "Signups" },
     { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
+    { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
   ];
 
   return (
@@ -107,6 +112,7 @@ export default function AdminDashboard() {
       {tab === "feedback" && !loading && <FeedbackList rows={feedback} T={T} />}
       {tab === "signups"  && !loading && <SignupsList rows={signups} T={T} />}
       {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} T={T} />}
+      {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}
     </div>
   );
 }
@@ -255,6 +261,52 @@ function WaitlistList({ rows, T }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function FieldProposals({ rows, setRows, T }) {
+  // New fields/categories the assistant created on the fly — the schema
+  // evolves under founder review. Approve = keep an eye on it as a candidate
+  // for a first-class field; dismiss = noise.
+  const setStatus = async (row, status) => {
+    setRows(rs => rs.map(r => r.id === row.id ? { ...r, status } : r));
+    await supabase.from("field_proposals").update({ status }).eq("id", row.id);
+  };
+  if (!rows.length) return <Empty T={T} text="No new fields proposed yet. When the assistant invents a field to avoid dropping data, it lands here for your review." />;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {rows.map(r => (
+        <div key={r.id} style={{
+          backgroundColor: T.card, border: `1px solid ${T.border}`,
+          borderRadius: 10, padding: "10px 12px",
+          opacity: r.status === "dismissed" ? 0.55 : 1,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.label}</span>
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, alignSelf: "center",
+              backgroundColor: r.status === "approved" ? "rgba(16,185,129,0.15)" : r.status === "dismissed" ? T.input : "rgba(245,158,11,0.15)",
+              color: r.status === "approved" ? "#10b981" : r.status === "dismissed" ? T.textMuted : "#f59e0b",
+            }}>{r.status.toUpperCase()}</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>
+            in {r.section} · e.g. "{r.sample}" · {new Date(r.created_at).toLocaleDateString()}
+          </div>
+          {r.status === "pending" && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button onClick={() => setStatus(r, "approved")} style={{
+                flex: 1, padding: "7px", borderRadius: 8, border: "none",
+                backgroundColor: "#10b981", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
+              }}>Approve</button>
+              <button onClick={() => setStatus(r, "dismissed")} style={{
+                padding: "7px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>Dismiss</button>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -176,18 +176,39 @@ function AssistantSection() {
       });
       setMsgs(m => m.map(x => x.id === msgId ? { ...x, sourceAttachSaved: true } : x));
     };
+    // New on-the-fly fields go to the founder's approval queue — the schema
+    // evolves under admin review, not silently.
+    const proposeFields = (section, extra) => {
+      const uid = userIdRef?.current;
+      if (!supabase || !uid || !extra) return;
+      for (const [label, sample] of Object.entries(extra)) {
+        supabase.from("field_proposals").insert({
+          section, label, sample: String(sample).slice(0, 200), user_id: uid,
+        }).then(() => {}, () => {}); // duplicate labels are expected — ignore
+      }
+    };
     try {
       if (action.kind === "create_record") {
         const { clean, extra } = splitFields(action.section, action.fields, action.customFields);
         const newId = generateId();
         addItem(action.section, { ...clean, id: newId, ...(extra ? { customFields: extra } : {}) });
+        proposeFields(action.section, extra);
         saveSourceDoc(`${action.section}:${newId}`);
       } else if (action.kind === "update_record") {
         const existing = (data[action.section] || []).find(x => x.id === action.id);
         if (!existing) throw new Error("Record not found — it may have been deleted.");
         const { clean, extra } = splitFields(action.section, action.fields, action.customFields);
         editItem(action.section, { ...existing, ...clean, ...(extra ? { customFields: { ...(existing.customFields || {}), ...extra } } : {}) });
+        proposeFields(action.section, extra);
         saveSourceDoc(`${action.section}:${action.id}`);
+      } else if (action.kind === "update_document") {
+        const doc = (data.documents || []).find(d => d.id === action.id);
+        if (!doc) throw new Error("Document not found — it may have been deleted.");
+        editItem("documents", {
+          ...doc,
+          ...(action.name ? { name: action.name } : {}),
+          ...(action.linkedTo !== undefined ? { linkedTo: action.linkedTo || "" } : {}),
+        });
       } else if (action.kind === "feedback") {
         logToCloud("feedback", `[${action.category || "idea"}] ${action.text || action.summary}`, "queued for the developer");
       } else if (action.kind === "send_packet") {
@@ -320,7 +341,8 @@ function AssistantSection() {
                 <div style={{ fontSize: 12, fontWeight: 800, color: a.done ? (T.success || "#22c55e") : T.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>
                   {a.kind === "feedback" ? "Feedback for the developer"
                     : a.kind === "send_packet" ? `Send packet · ${(a.docIds || []).length} documents`
-                      : a.kind === "update_record" ? `Update in ${a.section}` : `New record → ${a.section}`}
+                      : a.kind === "update_document" ? "File / rename a document"
+                        : a.kind === "update_record" ? `Update in ${a.section}` : `New record → ${a.section}`}
                   {a.done && " ✓ done"}
                 </div>
                 <div style={{ fontSize: 13.5, color: T.text, marginTop: 3 }}>{a.summary}</div>

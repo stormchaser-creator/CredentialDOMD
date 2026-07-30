@@ -23,6 +23,7 @@ export const SECTION_FIELDS = {
   cme: ["title", "category", "hours", "date", "provider", "certificateNumber", "topics", "notes"],
   workHistory: ["type", "position", "employer", "city", "state", "startDate", "endDate", "current", "description", "notes"],
   screenings: ["type", "name", "agency", "requestedBy", "assignment", "fileNumber", "orderDate", "reportDate", "result", "expirationDate", "components", "notes"],
+  professionalPhotos: ["name", "dateTaken", "notes"],
   locumContracts: ["facility", "location", "agency", "billTo", "coveragePeriods", "callStipend", "stipendHours", "overageHourlyRate", "orientationHourlyRate", "orientationFee", "hourlyRate", "incrementMinutes", "minCallMinutes", "notes"],
 };
 
@@ -85,12 +86,14 @@ YOU CAN PROPOSE ACTIONS. Respond with JSON ONLY (no fences):
 {
  "reply": "your conversational answer (markdown ok, keep it tight)",
  "actions": [ // optional; each renders as a card the user must APPROVE before it executes
-   {"kind":"create_record","section":"licenses|privileges|insurance|healthRecords|education|cme|workHistory|screenings|locumContracts",
+   {"kind":"create_record","section":"licenses|privileges|insurance|healthRecords|education|cme|workHistory|screenings|professionalPhotos|locumContracts",
     "summary":"one line describing what will be created",
     "fields":{...known fields for that section...},
     "customFields":{"Label":"value", ...}},   // EVERYTHING that doesn't fit a known field
    {"kind":"update_record","section":"...","id":"<id from the data snapshot>",
     "summary":"one line","fields":{...},"customFields":{...}},
+   {"kind":"update_document","id":"<doc id from the documents list>","summary":"one line",
+    "name":"new descriptive filename (optional)","linkedTo":"section:recordId to attach it to (optional)"},
    {"kind":"feedback","summary":"one line","category":"bug|idea|question","text":"the feedback, verbatim-ish"},
    {"kind":"send_packet","summary":"one line, e.g. 'Send 9 documents to Jane at MedStaff'",
     "docIds":["<ids from the documents list in the snapshot>"],
@@ -139,6 +142,18 @@ RULES:
 - When the user suggests an improvement, reports something broken, or is clearly frustrated
   with the app itself, ALWAYS add a feedback action (their words, lightly cleaned). The
   developer reads every one — this is how the app gets better.
+- NEVER say you saved, renamed, filed, or changed ANYTHING unless it happened through an
+  action the user APPROVED in this conversation. If you want a change to happen, PROPOSE
+  the action and let them approve it. A claimed change that didn't happen destroys trust.
+- When the user tells you what an uploaded file IS (e.g. "this is my color photo"),
+  propose the right filing: a create_record in the matching section (professionalPhotos
+  for headshots — the file attaches automatically on approval) and/or an update_document
+  giving the file a descriptive name so future packet requests can find it. A document
+  named IMG_1234.jpeg with no link is invisible to future searches.
+- PARTIAL MATCHES: when a request wants a span (e.g. "COIs for the past 5 years") and the
+  file has only part of it, SEND what exists and word the missing item precisely
+  ("current COI included — prior-year COIs 2021-2024 missing"), never mark the whole
+  item missing.
 - Deleting records is not something you can do — tell them where the trash button lives.
 
 KNOWN SECTION FIELDS:
