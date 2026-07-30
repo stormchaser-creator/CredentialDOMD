@@ -1119,7 +1119,7 @@ function WorkLog() {
         </Field>
         )}
 
-        <Field label="Billing note (optional)" hint="Shows on the invoice"><input value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={iS} placeholder="e.g. ED consult — head CT review" /></Field>
+        <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult — head CT review" /></Field>
         <Field label="Private note (optional)" hint="Only you see this — never on invoices"><input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" /></Field>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
@@ -1172,7 +1172,7 @@ function WorkLog() {
                         {l.date ? formatDate(l.date) : ""}
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.text, verticalAlign: "top" }}>
-                        <div style={{ fontWeight: l.amount == null ? 500 : 700, paddingLeft: l.amount == null ? 10 : 0 }}>{l.label}</div>
+                        <div style={{ fontWeight: l.amount == null ? 500 : 700, paddingLeft: l.amount == null ? 10 : 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{l.label}</div>
                         {l.detail && <div style={{ fontSize: 11, color: T.textMuted, whiteSpace: "pre-line", paddingLeft: l.amount == null ? 10 : 0 }}>{l.detail}</div>}
                       </td>
                       <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : l.flag === "included" ? (T.success || T.accent) : T.textDim, fontSize: l.amount == null ? 11 : undefined }}>
@@ -1314,7 +1314,7 @@ function WorkLog() {
                       opacity: e.invoiceId ? 0.8 : 1,
                     }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                           {isCoverage ? "🏥 Stipend day" : `${e.type}${e.description ? ` — ${e.description}` : ""}`}
                           {e.invoiceId && <span style={{ fontSize: 11, fontWeight: 700, color: T.success, marginLeft: 6 }}>BILLED</span>}
                         </div>
