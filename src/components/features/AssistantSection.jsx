@@ -218,10 +218,31 @@ function AssistantSection() {
         if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet — open Files to let them sync, then approve again.");
         const files = docs.map(dataUrlToFile);
         const note = `${action.coverNote || "Credential documents enclosed."}\n\n— sent from CredentialDOMD`;
+        let shared = false;
         if (navigator.canShare && navigator.canShare({ files })) {
-          await navigator.share({ title: "Credential packet", text: note, files });
-        } else {
-          throw new Error("This browser can't share file bundles — use the app on your phone, or Files → Select to send.");
+          try {
+            await navigator.share({ title: "Credential packet", text: note, files });
+            shared = true;
+          } catch (shareErr) {
+            if (shareErr?.name === "AbortError") return; // user closed the sheet
+            // Desktop browsers often refuse file shares ("Permission denied")
+            // — fall through to the download path below.
+          }
+        }
+        if (!shared) {
+          const standalone = window.navigator.standalone === true
+            || window.matchMedia?.("(display-mode: standalone)")?.matches;
+          if (standalone) throw new Error("The share sheet didn't open — try Approve again.");
+          // Desktop fallback: download every file and put the cover note on
+          // the clipboard, ready to paste into an email.
+          try { await navigator.clipboard.writeText(note); } catch { /* clipboard unavailable */ }
+          for (const f of files) {
+            const url = URL.createObjectURL(f);
+            const a = document.createElement("a");
+            a.href = url; a.download = f.name; a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 15000);
+          }
+          setErr(`This browser can't attach files to a share sheet, so the ${files.length} documents are downloading instead (allow multiple downloads if asked) — and the cover note is on your clipboard, ready to paste into your email.`);
         }
         addItem("shareLog", {
           id: generateId(), itemName: `Assistant packet (${docs.length} files)`,
