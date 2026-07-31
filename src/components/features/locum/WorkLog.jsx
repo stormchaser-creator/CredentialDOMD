@@ -95,11 +95,25 @@ function findContainer(e, siblings) {
     if (!(oe > os)) continue;
     const contained = os <= s && en <= oe;
     if (!contained) continue;
-    const bigger = (oe - os) > (en - s)
-      || ((oe - os) === (en - s) && (o.createdAt || "") < (e.createdAt || ""));
+    const dur = en - s, odur = oe - os;
+    const bigger = odur > dur
+      || (odur === dur && ((o.createdAt || "") < (e.createdAt || "")
+        || ((o.createdAt || "") === (e.createdAt || "") && String(o.id || "") < String(e.id || ""))));
     if (bigger) return o;
   }
   return null;
+}
+
+// Containers can cross the 7am call-day boundary (a 6:30–8:30am procedure
+// must still suppress a 7:15am call) — search siblings in adjacent call
+// days too.
+function overlapSiblings(list, contractId, dayKey) {
+  const d = new Date(dayKey + "T12:00").getTime();
+  return list.filter(x => {
+    if (x.contractId !== contractId || x.type === "CallDay") return false;
+    const xd = new Date(callDayOf(x) + "T12:00").getTime();
+    return Math.abs(xd - d) <= 86400000;
+  });
 }
 
 function money(n) {
@@ -255,7 +269,7 @@ function WorkLog() {
   const allowanceUsed = useCallback((c, dayKey, beforeEntryId) => {
     // Mirror computeBilling: minutes already on an invoice consume the
     // allowance first, then the day's unbilled work in canonical order.
-    const sibs = entries.filter(x => x.contractId === c.id && x.type !== "CallDay" && callDayOf(x) === dayKey);
+    const sibs = overlapSiblings(entries, c.id, dayKey);
     const day = entries
       .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dayKey)
       .sort((a, b) => ((a.invoiceId ? 0 : 1) - (b.invoiceId ? 0 : 1)) || entryOrder(a, b));
@@ -271,9 +285,7 @@ function WorkLog() {
   // Mirror of the engine's overlap rule for rows, countdown, and headers
   const containerFor = useCallback((e, c) => {
     if (!c) return null;
-    const dateKey = callDayOf(e);
-    const sibs = entries.filter(x => x.contractId === c.id && x.type !== "CallDay" && callDayOf(x) === dateKey);
-    return findContainer(e, sibs);
+    return findContainer(e, overlapSiblings(entries, c.id, callDayOf(e)));
   }, [entries]);
 
   const rateFor = useCallback((type, c) => {
@@ -359,7 +371,7 @@ function WorkLog() {
       // Overlap rule: an entry fully inside another entry's actual time span
       // (incl. Orientation as a container) is already paid for — it charges
       // nothing. A call answered mid-procedure never bills twice.
-      const sibs = all.filter(x => x.contractId === c.id && x.type !== "CallDay" && callDayOf(x) === date);
+      const sibs = overlapSiblings(all, c.id, date);
       const containerOf = (e) => findContainer(e, sibs);
       const effMin = (e) => (containerOf(e) ? 0 : (e.billedMin || 0));
 
@@ -385,7 +397,7 @@ function WorkLog() {
       const allowance = (c.stipendHours || 0) * 60;
       const priorMin = all
         .filter(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date)
-        .reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+        .reduce((s2, e) => s2 + effMin(e), 0);
       const stipendBilled = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date);
       const dayMin = day.reduce((s2, e) => s2 + effMin(e), 0);
       totalMin += dayMin;
@@ -544,7 +556,7 @@ function WorkLog() {
   const noticeOverlap = useCallback((c, saved) => {
     if (!c || !saved.startTime || !saved.endTime) return false;
     const dateKey = callDayOf(saved);
-    const sibs = entries.filter(x => x.contractId === c.id && x.type !== "CallDay" && x.id !== saved.id && callDayOf(x) === dateKey);
+    const sibs = overlapSiblings(entries, c.id, dateKey).filter(x => x.id !== saved.id);
     const container = findContainer(saved, [...sibs, saved]);
     if (container) {
       showNotice(`This ${saved.type} falls entirely inside your ${container.type} (${fmtTime(container.startTime)}–${fmtTime(container.endTime)}) — that time is already billed, so it won't charge separately.`);
@@ -562,9 +574,10 @@ function WorkLog() {
   const noticeAllowance = useCallback((c, dateKey, newMin, excludeId) => {
     if (!c || (c.callStipend || 0) <= 0 || !isStipendDay(c, dateKey, entries)) return;
     const allowance = (c.stipendHours || 0) * 60;
+    const sibsN = overlapSiblings(entries, c.id, dateKey);
     const others = entries
       .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dateKey && e.id !== excludeId)
-      .reduce((s, e) => s + (e.billedMin || 0), 0);
+      .reduce((s, e) => s + (findContainer(e, sibsN) ? 0 : (e.billedMin || 0)), 0);
     const used = others + (newMin || 0);
     const left = allowance - used;
     const fmtH = (m) => `${Math.floor(Math.abs(m) / 60)}h ${String(Math.abs(m) % 60).padStart(2, "0")}m`;
@@ -601,10 +614,11 @@ function WorkLog() {
       invoiceId: null,
     });
     if (timer.type !== "Orientation") {
-      noticeAllowance(c, callDayOf({ startTime: f.s }), f.billed, null);
+      const overlapped = noticeOverlap(c, { id: "timer", type: timer.type, startTime: f.s, endTime: f.e, createdAt: new Date().toISOString() });
+      if (!overlapped) noticeAllowance(c, callDayOf({ startTime: f.s }), f.billed, null);
     }
     setTimer(null); saveTimer(null);
-  }, [timer, contracts, contract, addItem, finalizeEntry, noticeAllowance]);
+  }, [timer, contracts, contract, addItem, finalizeEntry, noticeAllowance, noticeOverlap]);
 
   // Work is logged AFTER it happens. A start time in the future almost
   // always means the date is wrong (the old UTC-date bug filed 9 PM work
@@ -815,7 +829,7 @@ function WorkLog() {
       // window must never understate a day's dollars.
       const dayAll = entries.filter(e => e.contractId === contract.id && callDayOf(e) === k);
       let totalAmt = 0, loggedMin = 0, includedMin = 0;
-      const sibs = dayAll.filter(x => x.type !== "CallDay");
+      const sibs = overlapSiblings(entries, contract.id, k);
       if (stipDay) {
         const allowance = (contract.stipendHours || 0) * 60;
         loggedMin = dayAll
@@ -915,7 +929,7 @@ function WorkLog() {
       periodStart: dates[0] || null,
       periodEnd: dates[dates.length - 1] || null,
       entryIds: invoicePreview.entryIds,
-      totalMinutes: unbilled.reduce((s2, e) => s2 + e.billedMin, 0),
+      totalMinutes: invoicePreview.totalMin,
       totalAmount: invoicePreview.total,
       method,
       sentAt: new Date().toISOString(),
@@ -1316,6 +1330,8 @@ function WorkLog() {
               const c2 = contracts.find(c => c.id === e.contractId) || contract;
               const a2 = amountForEntry(e, c2);
               const o2 = c2 ? overMinFor(e, c2) : 0;
+              const cont2 = e.type !== "CallDay" && e.type !== "Orientation" && c2 ? containerFor(e, c2) : null;
+              if (cont2) return ["Amount", `$0.00 — no separate charge (during ${cont2.type} ${fmtTime(cont2.startTime)}–${fmtTime(cont2.endTime)})`];
               const cov = e.type !== "CallDay" && e.type !== "Orientation" && c2
                 && (c2.callStipend || 0) > 0 && isStipendDay(c2, callDayOf(e), entries) && a2 === 0 && o2 === 0;
               if (cov) return ["Amount", "$0.00 — included in the day's stipend"];
