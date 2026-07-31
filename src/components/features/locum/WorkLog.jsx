@@ -78,6 +78,30 @@ function localHHMM(iso) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/**
+ * A timed entry whose actual span sits fully INSIDE another entry's span is
+ * already paid for by that time — a call answered mid-procedure never bills
+ * separately. Ties on identical spans keep the earlier-created entry
+ * billing. Orientation can CONTAIN other work but is never itself contained
+ * (it bills wall-clock under its own terms).
+ */
+function findContainer(e, siblings) {
+  if (!e.startTime || !e.endTime || e.type === "Orientation" || e.type === "CallDay") return null;
+  const s = new Date(e.startTime).getTime(), en = new Date(e.endTime).getTime();
+  if (!(en > s)) return null;
+  for (const o of siblings) {
+    if (o.id === e.id || !o.startTime || !o.endTime || o.type === "CallDay") continue;
+    const os = new Date(o.startTime).getTime(), oe = new Date(o.endTime).getTime();
+    if (!(oe > os)) continue;
+    const contained = os <= s && en <= oe;
+    if (!contained) continue;
+    const bigger = (oe - os) > (en - s)
+      || ((oe - os) === (en - s) && (o.createdAt || "") < (e.createdAt || ""));
+    if (bigger) return o;
+  }
+  return null;
+}
+
 function money(n) {
   return "$" + (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -231,15 +255,25 @@ function WorkLog() {
   const allowanceUsed = useCallback((c, dayKey, beforeEntryId) => {
     // Mirror computeBilling: minutes already on an invoice consume the
     // allowance first, then the day's unbilled work in canonical order.
+    const sibs = entries.filter(x => x.contractId === c.id && x.type !== "CallDay" && callDayOf(x) === dayKey);
     const day = entries
       .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dayKey)
       .sort((a, b) => ((a.invoiceId ? 0 : 1) - (b.invoiceId ? 0 : 1)) || entryOrder(a, b));
     let used = 0;
     for (const e of day) {
       if (beforeEntryId && e.id === beforeEntryId) break;
+      if (findContainer(e, sibs)) continue; // inside another entry's time — no draw
       used += e.billedMin || 0;
     }
     return used;
+  }, [entries]);
+
+  // Mirror of the engine's overlap rule for rows, countdown, and headers
+  const containerFor = useCallback((e, c) => {
+    if (!c) return null;
+    const dateKey = callDayOf(e);
+    const sibs = entries.filter(x => x.contractId === c.id && x.type !== "CallDay" && callDayOf(x) === dateKey);
+    return findContainer(e, sibs);
   }, [entries]);
 
   const rateFor = useCallback((type, c) => {
@@ -322,9 +356,20 @@ function WorkLog() {
     for (const date of Object.keys(byDate).sort()) {
       const day = byDate[date].sort(entryOrder);
       const stipDay = stipendModel && isStipendDay(c, date, all);
+      // Overlap rule: an entry fully inside another entry's actual time span
+      // (incl. Orientation as a container) is already paid for — it charges
+      // nothing. A call answered mid-procedure never bills twice.
+      const sibs = all.filter(x => x.contractId === c.id && x.type !== "CallDay" && callDayOf(x) === date);
+      const containerOf = (e) => findContainer(e, sibs);
+      const effMin = (e) => (containerOf(e) ? 0 : (e.billedMin || 0));
 
       if (!stipDay) {
         for (const e of day) {
+          const container = containerOf(e);
+          if (container) {
+            lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)} — no separate charge`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}` });
+            continue;
+          }
           const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
           const amt = ((e.billedMin || 0) / 60) * rate;
           totalMin += e.billedMin || 0; total += amt;
@@ -342,7 +387,7 @@ function WorkLog() {
         .filter(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date)
         .reduce((s2, e) => s2 + (e.billedMin || 0), 0);
       const stipendBilled = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date);
-      const dayMin = day.reduce((s2, e) => s2 + (e.billedMin || 0), 0);
+      const dayMin = day.reduce((s2, e) => s2 + effMin(e), 0);
       totalMin += dayMin;
 
       const logged = priorMin + dayMin;
@@ -358,6 +403,18 @@ function WorkLog() {
       const pushWorkItems = () => {
         let rem = Math.max(0, allowance - priorMin);
         for (const e of day) {
+          const container = containerOf(e);
+          if (container) {
+            lines.push({
+              date: null,
+              label: `· ${lineLabel(e)}`,
+              detail: `${invoiceSpan(e)}${e.billedMin || 0} min — during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)}, already covered`,
+              amount: null,
+              flag: "no charge",
+              _sort: `${date}~1~${e.startTime || "z"}`,
+            });
+            continue;
+          }
           const billed = e.billedMin || 0;
           const cov = Math.min(rem, billed);
           rem -= cov;
@@ -482,6 +539,25 @@ function WorkLog() {
     return { s, e, raw, billed: roundUp(raw, c?.incrementMinutes || 15, type === "Call" ? (c?.minCallMinutes || 15) : 0) };
   }, []);
 
+  // Overlap check at save time — surprises about "why didn't this bill"
+  // should never wait for the invoice.
+  const noticeOverlap = useCallback((c, saved) => {
+    if (!c || !saved.startTime || !saved.endTime) return false;
+    const dateKey = callDayOf(saved);
+    const sibs = entries.filter(x => x.contractId === c.id && x.type !== "CallDay" && x.id !== saved.id && callDayOf(x) === dateKey);
+    const container = findContainer(saved, [...sibs, saved]);
+    if (container) {
+      showNotice(`This ${saved.type} falls entirely inside your ${container.type} (${fmtTime(container.startTime)}–${fmtTime(container.endTime)}) — that time is already billed, so it won't charge separately.`);
+      return true;
+    }
+    const swallowed = sibs.filter(x => findContainer(x, [saved, ...sibs]) === saved || (findContainer(x, [saved, ...sibs])?.id === saved.id));
+    if (swallowed.length > 0) {
+      showNotice(`${swallowed.length} logged ${swallowed.length === 1 ? "entry falls" : "entries fall"} inside this time span — ${swallowed.length === 1 ? "it" : "they"} won't bill separately anymore (the time is covered by this ${saved.type}).`);
+      return true;
+    }
+    return false;
+  }, [entries, showNotice]);
+
   // After a save on a stipend day, tell the user where the countdown stands.
   const noticeAllowance = useCallback((c, dateKey, newMin, excludeId) => {
     if (!c || (c.callStipend || 0) <= 0 || !isStipendDay(c, dateKey, entries)) return;
@@ -594,7 +670,8 @@ function WorkLog() {
           privateNote: manual.privateNote || "",
         });
         if (type !== "CallDay" && type !== "Orientation") {
-          noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, orig.id);
+          const overlapped = noticeOverlap(target, { id: orig.id, type, startTime: f.s, endTime: f.e, createdAt: orig.createdAt });
+          if (!overlapped) noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, orig.id);
         }
         if (!inScheduledCoverage(target, manual.date)) {
           showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
@@ -624,14 +701,15 @@ function WorkLog() {
       invoiceId: null,
     });
     if (type !== "CallDay" && type !== "Orientation") {
-      noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, null);
+      const overlapped = noticeOverlap(target, { id: "new", type, startTime: f.s, endTime: f.e, createdAt: new Date().toISOString() });
+      if (!overlapped) noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, null);
     }
     if (!inScheduledCoverage(target, manual.date)) {
       showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
     }
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
+  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, noticeOverlap, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
 
   const openEditEntry = useCallback((e) => {
     setManual({
@@ -666,6 +744,7 @@ function WorkLog() {
     if (!c) return 0;
     const stipendModel = (c.callStipend || 0) > 0;
     if (e.type === "CallDay") return c.callStipend || 0;
+    if (e.type !== "Orientation" && containerFor(e, c)) return 0; // inside another entry's time
     const billed = e.billedMin || 0;
     if (e.type === "Orientation") {
       if ((c.orientationHourlyRate || 0) > 0) return (billed / 60) * c.orientationHourlyRate;
@@ -681,19 +760,20 @@ function WorkLog() {
     }
     const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
     return (billed / 60) * rate;
-  }, [rateFor, isStipendDay, allowanceUsed, entries]);
+  }, [rateFor, isStipendDay, allowanceUsed, entries, containerFor]);
 
   // Minutes of one entry beyond the day's allowance — 0 when fully covered.
   // Distinguishes "genuinely included in the stipend" from "beyond the
   // allowance but earning $0 because no after-stipend rate is set".
   const overMinFor = useCallback((e, c) => {
     if (!c || (c.callStipend || 0) <= 0 || e.type === "CallDay" || e.type === "Orientation") return 0;
+    if (containerFor(e, c)) return 0;
     const dateKey = callDayOf(e);
     if (!isStipendDay(c, dateKey, entries)) return 0;
     const usedBefore = allowanceUsed(c, dateKey, e.id);
     const remaining = Math.max(0, (c.stipendHours || 0) * 60 - usedBefore);
     return Math.max(0, (e.billedMin || 0) - remaining);
-  }, [isStipendDay, allowanceUsed, entries]);
+  }, [isStipendDay, allowanceUsed, entries, containerFor]);
   // Re-derived on every render so the 7am call-day rollover is picked up
   // (the `now` tick keeps this fresh while a timer runs).
   const todayKey = callDayOf({ startTime: new Date(now).toISOString() });
@@ -735,11 +815,12 @@ function WorkLog() {
       // window must never understate a day's dollars.
       const dayAll = entries.filter(e => e.contractId === contract.id && callDayOf(e) === k);
       let totalAmt = 0, loggedMin = 0, includedMin = 0;
+      const sibs = dayAll.filter(x => x.type !== "CallDay");
       if (stipDay) {
         const allowance = (contract.stipendHours || 0) * 60;
         loggedMin = dayAll
           .filter(e => e.type !== "CallDay" && e.type !== "Orientation")
-          .reduce((s, e) => s + (e.billedMin || 0), 0);
+          .reduce((s, e) => s + (findContainer(e, sibs) ? 0 : (e.billedMin || 0)), 0);
         includedMin = Math.min(allowance, loggedMin);
         totalAmt = (contract.callStipend || 0)
           + ((loggedMin - includedMin) / 60) * (contract.overageHourlyRate || 0);
@@ -747,7 +828,7 @@ function WorkLog() {
       } else {
         for (const e of dayAll) {
           totalAmt += amountForEntry(e, contract);
-          if (e.type !== "CallDay") loggedMin += e.billedMin || 0;
+          if (e.type !== "CallDay" && !findContainer(e, sibs)) loggedMin += e.billedMin || 0;
         }
       }
       return { key: k, list, stipDay, totalAmt, loggedMin, includedMin };
@@ -1301,7 +1382,8 @@ function WorkLog() {
                   // Beyond-allowance minutes with no after-stipend rate are NOT
                   // "included" — they're unbillable until the rate is set.
                   const amt = amountForEntry(e, contract);
-                  const stipDay = !isCoverage && e.type !== "Orientation" && g.stipDay;
+                  const container = !isCoverage && e.type !== "Orientation" ? containerFor(e, contract) : null;
+                  const stipDay = !isCoverage && e.type !== "Orientation" && g.stipDay && !container;
                   const overMin = stipDay ? overMinFor(e, contract) : 0;
                   const covered = stipDay && overMin === 0;
                   const noRate = stipDay && overMin > 0 && !((contract?.overageHourlyRate || 0) > 0);
@@ -1321,7 +1403,7 @@ function WorkLog() {
                         <div style={{ fontSize: 12, color: T.textDim }}>
                           {isCoverage
                             ? `marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
-                            : `${e.startTime ? `${billedSpan(e, contract)} · ` : ""}${e.billedMin || e.durationMin || 0} min${stipDay && amt > 0 ? " · partly beyond stipend" : ""}`}
+                            : `${e.startTime ? `${billedSpan(e, contract)} · ` : ""}${e.billedMin || e.durationMin || 0} min`}
                         </div>
                         {e.privateNote && (
                           <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
@@ -1330,7 +1412,12 @@ function WorkLog() {
                         )}
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        {covered ? (
+                        {container ? (
+                          <>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: T.textDim }}>no charge</div>
+                            <div style={{ fontSize: 10, color: T.textDim }}>during {container.type}</div>
+                          </>
+                        ) : covered ? (
                           <>
                             <div style={{ fontSize: 12, fontWeight: 800, color: T.success || T.accent }}>included</div>
                             <div style={{ fontSize: 10, color: T.textDim }}>{e.billedMin}m in stipend</div>
