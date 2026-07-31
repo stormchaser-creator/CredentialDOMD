@@ -24,7 +24,10 @@ const TIMER_KEY = "credentialdomd-live-timer";
 const LAST_CONTRACT_KEY = "credentialdomd-last-contract";
 // "Shift" (flat-hourly scheduled blocks) removed per Eric — his contracts
 // are stipend/call-based. Consult = a new patient seen, bills 1 hour flat.
-const WORK_TYPES = ["Call", "Consult", "Procedure", "Rounding", "Orientation", "Admin", "Travel"];
+// "Travel" removed per Eric — not paid, so not logged. Free-text types are
+// allowed via the "Other…" chip; the engine prices any unknown type like
+// general work (draws the stipend allowance / bills the hourly rate).
+const WORK_TYPES = ["Call", "Consult", "Procedure", "Rounding", "Orientation", "Admin"];
 
 function loadTimer() {
   try { return JSON.parse(localStorage.getItem(TIMER_KEY)) || null; } catch { return null; }
@@ -669,7 +672,7 @@ function WorkLog() {
       } else {
         const [s2, e2, rawMin] = normalizeTimes(startIso, endIso, parseInt(manual.durationMin, 10) || 0);
         if (!rawMin) return;
-        const type = manual.type || orig.type;
+        const type = (manual.type || "").trim() || (manual.otherType ? "Other" : orig.type);
         if (!confirmIfFuture(s2, manual.date)) return;
         if (orig.invoiceId) {
           const inv = (data.invoices || []).find(i => i.id === orig.invoiceId);
@@ -697,7 +700,7 @@ function WorkLog() {
 
     const [s3, e3, rawMin] = normalizeTimes(startIso, endIso, parseInt(manual.durationMin, 10) || 0);
     if (!rawMin) return;
-    const type = manual.type || "Call";
+    const type = (manual.type || "").trim() || (manual.otherType ? "Other" : "Call");
     if (!confirmIfFuture(s3, manual.date)) return;
     const f = finalizeEntry(type, s3, e3, rawMin, target);
     addItem("workLog", {
@@ -730,6 +733,7 @@ function WorkLog() {
       editId: e.id,
       contractId: e.contractId,
       type: e.type,
+      otherType: e.type !== "CallDay" && !WORK_TYPES.includes(e.type),
       date: e.date,
       start: e.startTime ? localHHMM(e.startTime) : "",
       end: e.endTime ? localHHMM(e.endTime) : "",
@@ -1128,7 +1132,7 @@ function WorkLog() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {WORK_TYPES.map(t2 => (
               <button key={t2} onClick={() => setManual(m2 => {
-                const next = { ...m2, type: t2 };
+                const next = { ...m2, type: t2, otherType: false };
                 // Contract conventions: a consult bills 1 hour flat; weekend
                 // rounding is the fixed 7–11 AM block. Prefills NEVER
                 // overwrite times or durations the user already entered.
@@ -1142,12 +1146,23 @@ function WorkLog() {
                 return next;
               })} style={{
                 padding: "9px 14px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${(manual.type || "Call") === t2 ? T.accent : T.border}`,
-                backgroundColor: (manual.type || "Call") === t2 ? T.accent : "transparent",
-                color: (manual.type || "Call") === t2 ? "#fff" : T.textMuted,
+                border: `1px solid ${!manual.otherType && (manual.type || "Call") === t2 ? T.accent : T.border}`,
+                backgroundColor: !manual.otherType && (manual.type || "Call") === t2 ? T.accent : "transparent",
+                color: !manual.otherType && (manual.type || "Call") === t2 ? "#fff" : T.textMuted,
               }}>{t2}</button>
             ))}
+            <button onClick={() => setManual(m2 => ({ ...m2, otherType: true, type: "" }))} style={{
+              padding: "9px 14px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${manual.otherType ? T.accent : T.border}`,
+              backgroundColor: manual.otherType ? T.accent : "transparent",
+              color: manual.otherType ? "#fff" : T.textMuted,
+            }}>Other…</button>
           </div>
+          {manual.otherType && (
+            <input value={manual.type || ""} onChange={e => setManual(m2 => ({ ...m2, type: e.target.value }))}
+              placeholder="What was the work? e.g. Family meeting, Peer review" autoFocus
+              style={{ ...iS, marginTop: 8 }} />
+          )}
         </Field>
         )}
 
