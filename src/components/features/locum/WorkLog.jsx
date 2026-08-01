@@ -24,10 +24,13 @@ const TIMER_KEY = "credentialdomd-live-timer";
 const LAST_CONTRACT_KEY = "credentialdomd-last-contract";
 // "Shift" (flat-hourly scheduled blocks) removed per Eric — his contracts
 // are stipend/call-based. Consult = a new patient seen, bills 1 hour flat.
-// "Travel" removed per Eric — not paid, so not logged. Free-text types are
-// allowed via the "Other…" chip; the engine prices any unknown type like
-// general work (draws the stipend allowance / bills the hourly rate).
-const WORK_TYPES = ["Call", "Consult", "Procedure", "Rounding", "Orientation", "Admin"];
+// Eric's billing vocabulary (2026-07): phone work bills per-call minimums;
+// everything else is timed work. Free-text via the "Other…" chip; unknown
+// types price like general work.
+const WORK_TYPES = ["Call", "Transfer call", "Consult", "Rounding", "Procedure", "FU visit", "Preop", "Postop", "Family talk", "Sign-out", "Orientation"];
+// Types that bill like phone calls: per-call minimum minutes and the
+// call rate; invoiced as patient care.
+const CALL_TYPES = new Set(["Call", "Transfer call"]);
 
 function loadTimer() {
   try { return JSON.parse(localStorage.getItem(TIMER_KEY)) || null; } catch { return null; }
@@ -293,7 +296,7 @@ function WorkLog() {
 
   const rateFor = useCallback((type, c) => {
     if (!c) return 0;
-    return type === "Call" ? (c.callHourlyRate || c.hourlyRate || 0) : (c.hourlyRate || 0);
+    return CALL_TYPES.has(type) ? (c.callHourlyRate || c.hourlyRate || 0) : (c.hourlyRate || 0);
   }, []);
 
   // Is a date inside any of the contract's scheduled coverage blocks?
@@ -551,7 +554,7 @@ function WorkLog() {
       const span = Math.max(15, Math.round((new Date(re) - new Date(rs)) / 60000));
       return { s: rs, e: re, raw: span, billed: span };
     }
-    return { s, e, raw, billed: roundUp(raw, c?.incrementMinutes || 15, type === "Call" ? (c?.minCallMinutes || 15) : 0) };
+    return { s, e, raw, billed: roundUp(raw, c?.incrementMinutes || 15, CALL_TYPES.has(type) ? (c?.minCallMinutes || 15) : 0) };
   }, []);
 
   // Overlap check at save time — surprises about "why didn't this bill"
