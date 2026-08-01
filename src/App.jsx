@@ -12,6 +12,8 @@ import StatusBadge from "./components/shared/StatusBadge";
 import ComplianceRing from "./components/shared/ComplianceRing";
 import { ShareModal } from "./components/features";
 import { CrudSection } from "./components/features";
+import { CaseLogSummary } from "./components/features";
+import { academicYearOf, caseWRVU } from "./utils/caseLogReport";
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
 import { CVGenerator } from "./components/features";
@@ -113,6 +115,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 }
 
 function AppInner({ tab, setTab, subPage, setSubPage }) {
+  const [caseLogYear, setCaseLogYear] = useState("all");
   const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
@@ -1176,7 +1179,20 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "education") return <CrudSection title="Education" sectionKey="education" items={data.education || []} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "caseLogs") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
-      return <CrudSection title="Case Logs" sectionKey="caseLogs" items={data.caseLogs || []} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set((data.workHistory || []).map(w => w.employer).filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => item.role ? <div style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600, marginTop: 2 }}>{item.role}</div> : null} />;
+      {
+        const allCases = data.caseLogs || [];
+        const shownCases = caseLogYear === "all" ? allCases : allCases.filter(c => academicYearOf(c.date) === caseLogYear);
+        return <>
+          <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
+          <CrudSection title="Case Logs" sectionKey="caseLogs" items={shownCases} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
+              {item.role && <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{item.role}</span>}
+              {caseWRVU(item) > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{caseWRVU(item).toFixed(2)} wRVU</span>}
+              {item.complication && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#f59e0b" }}>complication</span>}
+            </div>
+          )} />
+        </>;
+      }
     }
     if (subPage === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "select", options: ["No", "Yes"] }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "peerReferences") {
@@ -1267,7 +1283,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "cv") return <CVGenerator />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
-    if (subPage === "assistant") return <AssistantSection />;
+    if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} />;
     if (subPage === "faq") return <FAQSection />;
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;
@@ -1375,22 +1391,6 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
-          {/* Help & feedback — one door for bugs, questions, and ideas */}
-          {user && (
-            <button onClick={() => setShowSupport(true)} className="cmd-card-hover" style={{
-              display: "flex", alignItems: "center", gap: 12,
-              backgroundColor: T.card, border: `1px solid ${T.border}`,
-              borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-              boxShadow: T.shadow1,
-            }}>
-              <span style={{ fontSize: 20 }}>{"\ud83c\udd98"}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Help & feedback</div>
-                <div style={{ fontSize: 13, color: T.textDim }}>Bug, question, idea — the founder reads every one</div>
-              </div>
-              <span style={{ color: T.textDim }}>{"\u203a"}</span>
-            </button>
-          )}
 
           {/* Admin (founders only) */}
           {isAdminUser(user) && (
@@ -1419,7 +1419,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             <span style={{ fontSize: 22 }}>{"\u2728"}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Vera</div>
-              <div style={{ fontSize: 12, color: T.textMuted }}>Your credentialing coordinator — documents, packets, answers</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Everything starts here — questions, documents, packets, help, feedback</div>
             </div>
           </button>
 

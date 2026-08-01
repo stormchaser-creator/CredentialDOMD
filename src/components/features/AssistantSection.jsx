@@ -14,7 +14,7 @@ const CHAT_KEY = "credentialdomd-assistant-chat";
  * lands, unmapped details included), and every suggestion you make goes
  * straight to the developer. Actions only run after you approve them.
  */
-function AssistantSection() {
+function AssistantSection({ onFileTicket }) {
   const { data, addItem, editItem, allTrackedStates, userIdRef, theme: T } = useApp();
   const iS = useInputStyle();
   const [msgs, setMsgs] = useState(() => {
@@ -327,9 +327,17 @@ function AssistantSection() {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 220px)" }}>
       <div style={{ marginBottom: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>Vera</h2>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>Vera</h2>
+          {onFileTicket && (
+            <button onClick={onFileTicket} style={{
+              padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}>File a ticket</button>
+          )}
+        </div>
         <div style={{ fontSize: 12, color: T.textMuted }}>
-          Your credentialing coordinator — ask about your file, hand her any document, or tell her what the app should do better.
+          Ask about your file, hand her any document, report a bug, or just say what should work better — she files it where it belongs.
         </div>
       </div>
 
