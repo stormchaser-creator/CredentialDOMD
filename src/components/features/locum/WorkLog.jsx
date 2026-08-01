@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, memo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
@@ -7,7 +7,7 @@ import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard } from "../../../utils/helpers";
 import { shareInvoicePdf } from "../../../utils/invoicePdf";
-import DictateButton from "../../shared/DictateButton";
+import { parseWorkDictation } from "../../../utils/workDictation";
 
 /**
  * WorkLog — one-tap time capture for locum work, billed in the contract's
@@ -245,6 +245,15 @@ function WorkLog() {
     setNotice(msg);
     setTimeout(() => setNotice(n => (n === msg ? null : n)), 8000);
   }, []);
+
+  // ── One-mic dictation: speak the whole event, AI structures it, the
+  //    Log form opens PREFILLED for review. Voice never saves directly. ──
+  const [dictating, setDictating] = useState(false);
+  const [dictTranscript, setDictTranscript] = useState("");
+  const [dictBusy, setDictBusy] = useState(false);
+  const dictRecRef = useRef(null);
+  const dictTextRef = useRef("");
+  useEffect(() => () => { try { dictRecRef.current?.stop(); } catch { /* stopped */ } }, []);
 
   const contract = contracts.find(c => c.id === contractId)
     || contracts.find(c => c.id === lastLoggedContractId)
@@ -534,6 +543,60 @@ function WorkLog() {
     lines.sort((a, b) => (a._sort || "").localeCompare(b._sort || ""));
     return { lines, total, totalMin, orientationIncluded, emptyStipendDays };
   }, [rateFor, isStipendDay]);
+
+  const beginDictation = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showNotice("Dictation isn't available in this browser — use Log past time and the mic key on your keyboard."); return; }
+    dictTextRef.current = "";
+    setDictTranscript("");
+    const rec = new SR();
+    rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
+    rec.onresult = (ev) => {
+      let finals = "", interim = "";
+      for (let i = 0; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) finals += ev.results[i][0].transcript;
+        else interim += ev.results[i][0].transcript;
+      }
+      dictTextRef.current = finals;
+      setDictTranscript((finals + " " + interim).trim());
+    };
+    rec.onend = () => setDictating(false);
+    rec.onerror = () => setDictating(false);
+    dictRecRef.current = rec;
+    rec.start();
+    setDictating(true);
+  }, [showNotice]);
+
+  const finishDictation = useCallback(async () => {
+    try { dictRecRef.current?.stop(); } catch { /* stopped */ }
+    setDictating(false);
+    const words = (dictTextRef.current || dictTranscript || "").trim();
+    if (!words) return;
+    setDictBusy(true);
+    try {
+      const parsed = await parseWorkDictation(words, data.settings.apiKey, WORK_TYPES);
+      setManual({
+        type: parsed.type,
+        otherType: parsed.type !== "CallDay" && !WORK_TYPES.includes(parsed.type),
+        date: parsed.date,
+        exact: !!parsed.start,
+        start: parsed.start,
+        end: parsed.end,
+        durationMin: parsed.start ? "" : parsed.durationMin,
+        description: parsed.billingNote,
+        privateNote: parsed.privateNote,
+        pickDate: false,
+      });
+      setShowManual(true);
+    } catch (err2) {
+      // Never lose the words — fall back to a prefilled note
+      setManual({ type: "Call", date: localDate(new Date()), exact: true, description: words });
+      setShowManual(true);
+      showNotice(err2.message || "Couldn't structure that — your words are in the billing note, fill in the rest.");
+    }
+    setDictBusy(false);
+    setDictTranscript("");
+  }, [dictTranscript, data.settings.apiKey, showNotice]);
 
   const startTimer = useCallback((type) => {
     if (!contract) return;
@@ -1023,24 +1086,18 @@ function WorkLog() {
             </div>
             {/* Notes DURING the call — billing note goes on the invoice,
                 private note is yours alone and never appears on it */}
-            <div style={{ display: "flex", gap: 6, alignItems: "stretch", marginBottom: 8 }}>
-              <textarea
-                value={timer.note || ""}
-                onChange={e => setTimer(t => { const nt = { ...t, note: e.target.value }; saveTimer(nt); return nt; })}
-                placeholder="Billing note — shows on the invoice. Tap the mic and say it."
-                style={{ ...iS, minHeight: 56, resize: "vertical", textAlign: "left", flex: 1 }}
-              />
-              <DictateButton T={T} onText={t2 => t2 && setTimer(t => { const nt = { ...t, note: (t.note ? t.note + " " : "") + t2 }; saveTimer(nt); return nt; })} />
-            </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "stretch", marginBottom: 12 }}>
-              <textarea
-                value={timer.privateNote || ""}
-                onChange={e => setTimer(t => { const nt = { ...t, privateNote: e.target.value }; saveTimer(nt); return nt; })}
-                placeholder="🔒 Private note — only you see this, never on the invoice"
-                style={{ ...iS, minHeight: 44, resize: "vertical", textAlign: "left", flex: 1, borderStyle: "dashed" }}
-              />
-              <DictateButton T={T} onText={t2 => t2 && setTimer(t => { const nt = { ...t, privateNote: (t.privateNote ? t.privateNote + " " : "") + t2 }; saveTimer(nt); return nt; })} />
-            </div>
+            <textarea
+              value={timer.note || ""}
+              onChange={e => setTimer(t => { const nt = { ...t, note: e.target.value }; saveTimer(nt); return nt; })}
+              placeholder="Billing note — shows on the invoice (e.g. ED consult, head CT review)"
+              style={{ ...iS, minHeight: 56, resize: "vertical", textAlign: "left", marginBottom: 8 }}
+            />
+            <textarea
+              value={timer.privateNote || ""}
+              onChange={e => setTimer(t => { const nt = { ...t, privateNote: e.target.value }; saveTimer(nt); return nt; })}
+              placeholder="🔒 Private note — only you see this, never on the invoice"
+              style={{ ...iS, minHeight: 44, resize: "vertical", textAlign: "left", marginBottom: 12, borderStyle: "dashed" }}
+            />
             <button onClick={stopTimer} style={{
               width: "100%", padding: "16px", borderRadius: 14, border: "none",
               background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff",
@@ -1108,6 +1165,27 @@ function WorkLog() {
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
             }}><PlusIcon /> Log past time</button>
+            {dictating ? (
+              <div style={{ marginTop: 8, textAlign: "left" }}>
+                <div style={{
+                  padding: "10px 12px", borderRadius: 12, backgroundColor: T.input,
+                  border: `1px solid #ef4444`, fontSize: 13.5, color: T.text, minHeight: 44, lineHeight: 1.45,
+                }}>
+                  {dictTranscript || "Listening — say what you did, with times…"}
+                </div>
+                <button onClick={finishDictation} style={{
+                  width: "100%", marginTop: 6, padding: "13px", borderRadius: 12, border: "none",
+                  background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff",
+                  fontSize: 15, fontWeight: 800, cursor: "pointer",
+                }}>{"◼"} Done — build the entry</button>
+              </div>
+            ) : (
+              <button onClick={beginDictation} disabled={dictBusy} style={{
+                width: "100%", marginTop: 8, padding: "12px", borderRadius: 12,
+                border: `1px solid ${T.accent}`, backgroundColor: "transparent",
+                color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
+              }}>{dictBusy ? "Building the entry…" : "🎤 Dictate an entry — say what you did"}</button>
+            )}
           </>
         )}
       </div>
@@ -1239,18 +1317,8 @@ function WorkLog() {
         </Field>
         )}
 
-        <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept. Tap the mic and just say it.">
-          <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
-            <textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45, flex: 1 }} placeholder="e.g. ED consult — head CT review" />
-            <DictateButton T={T} onText={t2 => t2 && setManual(m2 => ({ ...m2, description: (m2.description ? m2.description + " " : "") + t2 }))} />
-          </div>
-        </Field>
-        <Field label="Private note (optional)" hint="Only you see this — never on invoices">
-          <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
-            <input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed", flex: 1 }} placeholder="🔒 e.g. patient name / MRN reminder" />
-            <DictateButton T={T} onText={t2 => t2 && setManual(m2 => ({ ...m2, privateNote: (m2.privateNote ? m2.privateNote + " " : "") + t2 }))} />
-          </div>
-        </Field>
+        <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult — head CT review" /></Field>
+        <Field label="Private note (optional)" hint="Only you see this — never on invoices"><input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" /></Field>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
