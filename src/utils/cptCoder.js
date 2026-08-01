@@ -32,6 +32,12 @@ Select CPT codes ONLY from the catalog below. Rules:
   each-additional-level add-ons, instrumentation) with correct units.
 - units: how many times the code bills (add-on levels, critical-care blocks). Default 1.
 - Do NOT code things merely mentioned (imaging reviewed alone is part of E/M).
+- GLOBAL PERIOD: routine postop care of the physician's OWN surgical patient (rounding,
+  notes, wound checks on someone they operated on within ~90 days) is bundled into the
+  procedure's payment — emit NO E/M code for it; instead add a "questions" entry noting
+  the global period (e.g. "postop visit on your own surgical patient — bundled in the
+  90-day global; code it only if it was for an unrelated problem, modifier 24"). If the
+  E/M was clearly for an UNRELATED condition, code it and say so in "why".
 Return ONLY JSON, no markdown fences:
 {"encounters":[{"code":"61108","units":1,"why":"one-line reason"}],
  "questions":["anything you need clarified"],"confidence":"high"|"medium"|"low"}

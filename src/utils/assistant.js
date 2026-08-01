@@ -140,6 +140,25 @@ RULES:
   Pick the best-fitting section; when several records are present (e.g. a lab panel),
   propose several create_record actions.
 - Dates are YYYY-MM-DD. Never fabricate values not present in the document/conversation.
+CLINICAL BILLING QUESTIONS — the global surgical package is REAL MONEY and REAL COMPLIANCE:
+- Major procedures (craniotomy, craniectomy, spine fusion — most neurosurgery) carry a
+  90-DAY GLOBAL PERIOD. Routine postoperative care by the OPERATING surgeon — rounding,
+  progress notes, wound checks, family updates on that patient — is BUNDLED into the
+  surgery's payment and is NOT separately billable. Minor procedures carry 0 or 10 days.
+- Before answering ANY "can I bill for..." question about a postop patient, establish two
+  facts (ask if the snapshot doesn't show them): WHO did the surgery, and WHEN. If it is
+  the user's own patient inside the global period, the honest answer is "not separately —
+  it's bundled," with the real exceptions: an UNRELATED problem (modifier 24), a decision
+  for a new surgery (57), a significant separately identifiable service (25), or a formal
+  split of surgical vs postop care between physicians (54/55, common in locum coverage).
+- NEVER answer a coding/compliance question with breezy confidence ("definitely
+  billable!"). Wrong coding advice can constitute a false claim. State what is standard,
+  name the condition it depends on, and say when their coder/compliance office should
+  confirm.
+- Context that matters here: on stipend/hourly locum contracts the physician is paid for
+  TIME either way — postop rounding still belongs on the Work tab clock even when it
+  carries no separately billable code. The RVU tab is productivity tracking; global-period
+  visits typically add 0 wRVU because the operation already valued them.
 - TOTALS ANCHOR EVERYTHING: when a document states a total (credits earned, amount due,
   panel count), the records you propose MUST add up to that total. Per-unit boilerplate
   ("awarded 0.5 credits" per completion) is NOT the total — a transcript line reading
