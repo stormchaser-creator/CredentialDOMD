@@ -12,7 +12,14 @@ import { CME_PROVIDERS } from "../constants/cmeProviders";
  *     {label: value} on the record, so no information is ever dropped.
  */
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Vera thinks on Pro — same free AI Studio key, better judgment. The free
+// tier caps Pro at far fewer requests/day than Flash, so when Pro's limit
+// runs dry (429) the turn silently falls back to Flash instead of erroring.
+// Pro requires a thinking budget (0 is rejected); Flash runs without one.
+const CHAT_MODELS = [
+  { model: "gemini-2.5-pro", generationConfig: { maxOutputTokens: 8192 } },
+  { model: "gemini-2.5-flash", generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } } },
+];
 
 // The app's vetted CME directory (links re-checked by the app) — the ONLY
 // sources the assistant may recommend. An AI's remembered links go stale;
@@ -241,36 +248,44 @@ export async function assistantTurn({ history, snapshot, apiKey, attachment }) {
     return { role: m.role === "model" ? "model" : "user", parts };
   });
 
-  const body = JSON.stringify({
+  const bodyFor = (tier) => JSON.stringify({
     systemInstruction: { parts: [{ text: SYSTEM(snapshot) }] },
     contents,
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: tier.generationConfig,
   });
   const NETWORK_MSG = "Couldn't reach the AI service. That's usually a weak signal, or a guest Wi-Fi that blocks AI sites (hospital networks often do). Switch to cellular and tap Try again — your message is saved.";
-  // URL built outside the retry loop so a bad key surfaces its real error
-  // instead of being misdiagnosed as a network problem.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
   // Phones drop requests mid-flight (weak signal, screen lock, guest Wi-Fi
   // that blocks AI endpoints) — retry the network hop before giving up, and
   // abort any attempt that silently stalls so the chat never locks up.
+  // A Pro rate-limit or server error demotes to Flash rather than failing.
   let response;
+  let tierIdx = 0;
   for (let attempt = 0; ; attempt++) {
+    const tier = CHAT_MODELS[tierIdx];
+    // URL built per tier, outside the try, so a bad key surfaces its real
+    // error instead of being misdiagnosed as a network problem.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${tier.model}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 45000);
     try {
       response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body,
+        body: bodyFor(tier),
         signal: ctrl.signal,
       });
-      break;
     } catch {
       if (attempt >= 2) throw new Error(NETWORK_MSG);
       await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+      continue;
     } finally {
       clearTimeout(timer);
     }
+    if (!response.ok && tierIdx < CHAT_MODELS.length - 1 && (response.status === 429 || response.status >= 500 || response.status === 404)) {
+      tierIdx += 1; // Pro exhausted or unavailable on this key — Flash takes the turn
+      continue;
+    }
+    break;
   }
   if (!response.ok) {
     if (response.status === 429) throw new Error("The AI is rate-limited — give it a few seconds and try again.");
