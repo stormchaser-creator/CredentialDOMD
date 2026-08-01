@@ -51,10 +51,16 @@ function localDate(d) {
 // 24-hour call runs 7:00am–7:00am, so work before 7am belongs to the
 // PREVIOUS day's call coverage (and its stipend).
 const CALL_DAY_START_HOUR = 7;
+function deriveCallDay(startTime) {
+  return localDate(new Date(new Date(startTime).getTime() - CALL_DAY_START_HOUR * 3600 * 1000));
+}
 function callDayOf(e) {
-  if (e.startTime) {
-    return localDate(new Date(new Date(e.startTime).getTime() - CALL_DAY_START_HOUR * 3600 * 1000));
-  }
+  // The stamp wins: it froze the call day in the timezone where the work
+  // actually happened. Deriving is only for legacy rows saved before the
+  // stamp existed — a device in a different timezone would re-partition
+  // days and could re-bill an already-invoiced stipend.
+  if (e.callDay) return e.callDay;
+  if (e.startTime) return deriveCallDay(e.startTime);
   return e.date;
 }
 
@@ -95,12 +101,15 @@ function localHHMM(iso) {
 function findContainer(e, siblings) {
   if (!e.startTime || !e.endTime || e.type === "Orientation" || e.type === "CallDay") return null;
   const s = new Date(e.startTime).getTime(), en = new Date(e.endTime).getTime();
-  if (!(en > s)) return null;
+  // A zero-length entry (end === start, a sub-minute call) is an INSTANT —
+  // it is contained whenever that instant falls inside a sibling's span.
+  // Skipping these let a call logged mid-procedure bill a full 15 minutes.
+  const zeroLen = !(en > s);
   for (const o of siblings) {
     if (o.id === e.id || !o.startTime || !o.endTime || o.type === "CallDay") continue;
     const os = new Date(o.startTime).getTime(), oe = new Date(o.endTime).getTime();
     if (!(oe > os)) continue;
-    const contained = os <= s && en <= oe;
+    const contained = zeroLen ? (os <= s && s < oe) : (os <= s && en <= oe);
     if (!contained) continue;
     const dur = en - s, odur = oe - os;
     const bigger = odur > dur
@@ -332,7 +341,7 @@ function WorkLog() {
    * Orientation always bills under its own terms (hourly rate or one-time
    * fee) and never draws down the stipend allowance.
    */
-  const computeBilling = useCallback((c, list, includeOrientation, allList) => {
+  const computeBilling = useCallback((c, list, includeOrientation, allList, invoicesList) => {
     if (!c) return { lines: [], total: 0, totalMin: 0, orientationIncluded: false };
     const all = allList || list;
     const lines = [];
@@ -381,6 +390,7 @@ function WorkLog() {
     };
 
     const emptyStipendDays = [];
+    const dayOverMin = {};
     for (const date of Object.keys(byDate).sort()) {
       const day = byDate[date].sort(entryOrder);
       const stipDay = stipendModel && isStipendDay(c, date, all);
@@ -419,8 +429,16 @@ function WorkLog() {
       totalMin += dayMin;
 
       const logged = priorMin + dayMin;
-      const overMin = Math.max(0, logged - allowance)
-        - Math.max(0, priorMin - allowance); // beyond-allowance minutes not billed on an earlier invoice
+      // Overage already billed for this day: read it off the invoices that
+      // billed it (persisted at send time). Invoices from before that stamp
+      // existed fall back to re-deriving from the invoiced entries.
+      const stamped = (invoicesList || []).filter(inv => inv.contractId === c.id && inv.dayOverMin && inv.dayOverMin[date] != null);
+      const legacyInvoiced = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date
+        && !stamped.some(inv => (inv.entryIds || []).includes(e.id)));
+      const billedOver = stamped.reduce((s2, inv) => s2 + (inv.dayOverMin[date] || 0), 0)
+        + (legacyInvoiced ? Math.max(0, priorMin - allowance) : 0);
+      const overMin = Math.max(0, Math.max(0, logged - allowance) - billedOver);
+      dayOverMin[date] = overMin; // persisted on the invoice when it sends
       const rate = c.overageHourlyRate || 0;
       const overAmt = overMin > 0 && rate > 0 ? (overMin / 60) * rate : 0;
       const fmtH = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
@@ -541,7 +559,7 @@ function WorkLog() {
     // Chronological invoice: day by day, stipend first, then the day's work
     // in clock order — regardless of the order entries were logged in.
     lines.sort((a, b) => (a._sort || "").localeCompare(b._sort || ""));
-    return { lines, total, totalMin, orientationIncluded, emptyStipendDays };
+    return { lines, total, totalMin, orientationIncluded, emptyStipendDays, dayOverMin };
   }, [rateFor, isStipendDay]);
 
   const beginDictation = useCallback(() => {
@@ -675,6 +693,7 @@ function WorkLog() {
       contractId: timer.contractId,
       type: timer.type,
       date: localDate(f.s),
+      callDay: deriveCallDay(f.s),
       startTime: f.s,
       endTime: f.e,
       durationMin: f.raw,
@@ -709,8 +728,10 @@ function WorkLog() {
   // midnight, and start+end derive duration. end === start is a sub-minute
   // entry (a quick call), NOT a 24-hour day — that bug billed $7,200 once.
   const normalizeTimes = useCallback((s, e, m) => {
-    if (s && e && new Date(e).getTime() === new Date(s).getTime() && m) {
-      e = new Date(new Date(s).getTime() + m * 60000).toISOString();
+    if (s && e && new Date(e).getTime() === new Date(s).getTime()) {
+      const mm = m || 1; // blank duration = the sub-minute call
+      e = new Date(new Date(s).getTime() + mm * 60000).toISOString();
+      m = mm;
     } else if (s && e && new Date(e) < new Date(s)) {
       e = m
         ? new Date(new Date(s).getTime() + m * 60000).toISOString()
@@ -748,6 +769,7 @@ function WorkLog() {
         const f = finalizeEntry(type, s2, e2, rawMin, target);
         editItem("workLog", {
           ...orig, contractId: target.id, type, date: manual.date,
+          callDay: f.s ? deriveCallDay(f.s) : manual.date,
           startTime: f.s, endTime: f.e,
           durationMin: f.raw, billedMin: f.billed,
           description: manual.description || "",
@@ -776,6 +798,7 @@ function WorkLog() {
       contractId: target.id,
       type,
       date: manual.date,
+      callDay: f.s ? deriveCallDay(f.s) : manual.date,
       startTime: f.s,
       endTime: f.e,
       durationMin: f.raw,
@@ -865,8 +888,8 @@ function WorkLog() {
 
   const unbilled = useMemo(() => contractEntries.filter(e => !e.invoiceId), [contractEntries]);
   const unbilledTotal = useMemo(
-    () => computeBilling(contract, unbilled, true, contractEntries).total,
-    [unbilled, contract, computeBilling, todayKey]
+    () => computeBilling(contract, unbilled, true, contractEntries, data.invoices).total,
+    [unbilled, contract, computeBilling, todayKey, data.invoices]
   );
 
   // Entry list grouped by call day, most recent day first. On stipend
@@ -941,7 +964,7 @@ function WorkLog() {
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : "");
     lines.push(`Terms: ` + termsText);
     lines.push(div);
-    const billing = computeBilling(contract, unbilled, true, contractEntries);
+    const billing = computeBilling(contract, unbilled, true, contractEntries, data.invoices);
     for (const l of billing.lines) {
       if (l.amount == null) {
         // Work item under a daily total — indented, flagged like the app
@@ -960,6 +983,7 @@ function WorkLog() {
       lines: billing.lines, totalMin: billing.totalMin, terms: termsText,
       periodStart: dates[0] || null, periodEnd: dates[dates.length - 1] || null,
       emptyStipendDays: billing.emptyStipendDays || [],
+      dayOverMin: billing.dayOverMin || {},
     });
   }, [contract, unbilled, data.settings, data.invoices, computeBilling, contractEntries]);
 
@@ -986,7 +1010,7 @@ function WorkLog() {
     for (const date of (invoicePreview.emptyStipendDays || []).filter(d => !markerDates.has(d))) {
       addItem("workLog", {
         id: generateId(), createdAt: new Date().toISOString(),
-        contractId: contract.id, type: "CallDay", date,
+        contractId: contract.id, type: "CallDay", date, callDay: date,
         startTime: null, endTime: null, durationMin: 0, billedMin: 0,
         description: "Stipend billed — no calls required", privateNote: "",
         invoiceId: invId,
@@ -1002,6 +1026,7 @@ function WorkLog() {
       entryIds: invoicePreview.entryIds,
       totalMinutes: invoicePreview.totalMin,
       totalAmount: invoicePreview.total,
+      dayOverMin: invoicePreview.dayOverMin || {},
       method,
       sentAt: new Date().toISOString(),
       paidAt: null,

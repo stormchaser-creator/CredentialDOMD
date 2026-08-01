@@ -34,13 +34,47 @@ function Invoices() {
     () => [...(data.invoices || [])].sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || "")),
     [data.invoices]
   );
-  const outstanding = invoices.filter(i => !i.paidAt);
-  const paidList = invoices.filter(i => i.paidAt);
-  const sumOut = outstanding.reduce((s, i) => s + (parseFloat(i.totalAmount) || 0), 0);
-  const sumPaid = paidList.reduce((s, i) => s + (parseFloat(i.totalAmount) || 0), 0);
+  // Payments are a ledger, not a flag — agencies sometimes pay an invoice in
+  // pieces. Legacy invoices marked paid before the ledger existed count as
+  // paid in full.
+  const paidOf = (inv) => {
+    const fromLedger = (inv.payments || []).reduce((s2, p) => s2 + (parseFloat(p.amount) || 0), 0);
+    if (fromLedger > 0) return fromLedger;
+    return inv.paidAt ? (parseFloat(inv.totalAmount) || 0) : 0;
+  };
+  const balanceOf = (inv) => Math.max(0, (parseFloat(inv.totalAmount) || 0) - paidOf(inv));
 
-  const markPaid = (inv) => editItem("invoices", { ...inv, paidAt: new Date().toISOString() });
-  const markUnpaid = (inv) => editItem("invoices", { ...inv, paidAt: null });
+  const outstanding = invoices.filter(i => balanceOf(i) > 0.005);
+  const paidList = invoices.filter(i => balanceOf(i) <= 0.005);
+  const sumOut = outstanding.reduce((s, i) => s + balanceOf(i), 0);
+  const sumPaid = invoices.reduce((s, i) => s + paidOf(i), 0);
+
+  const [payFor, setPayFor] = useState(null);
+  const [payAmt, setPayAmt] = useState("");
+  const [payDate, setPayDate] = useState("");
+  const [payNote, setPayNote] = useState("");
+  const openPayment = (inv) => {
+    setPayFor(inv);
+    setPayAmt(String(balanceOf(inv).toFixed(2)));
+    const now = new Date();
+    setPayDate(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10));
+    setPayNote("");
+  };
+  const savePayment = () => {
+    const amt = parseFloat(payAmt);
+    if (!payFor || !amt || amt <= 0) return;
+    const payments = [...(payFor.payments || []), { amount: amt, date: payDate, note: payNote.trim() }];
+    const total = parseFloat(payFor.totalAmount) || 0;
+    const paid = payments.reduce((s2, p2) => s2 + (parseFloat(p2.amount) || 0), 0);
+    editItem("invoices", {
+      ...payFor,
+      payments,
+      // paidAt = settled in full; a partial payment leaves it open
+      paidAt: paid >= total - 0.005 ? (payFor.paidAt || new Date().toISOString()) : null,
+    });
+    setPayFor(null);
+  };
+  const markUnpaid = (inv) => editItem("invoices", { ...inv, paidAt: null, payments: [] });
 
   const resend = async (inv) => {
     // Rebuild the PDF from the stored line items when we have them
@@ -111,7 +145,7 @@ function Invoices() {
       )}
       <div style={{ marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.text }}>Invoices</h3>
-        <div style={{ fontSize: 12, color: T.textMuted }}>Mark each one paid when the money lands.</div>
+        <div style={{ fontSize: 12, color: T.textMuted }}>Record each payment as it lands — partials count too.</div>
       </div>
 
       {/* Outstanding vs paid */}
@@ -137,6 +171,22 @@ function Invoices() {
               {viewInv.sentAt && ` · sent ${formatDate(viewInv.sentAt.slice(0, 10))}`}
               {viewInv.paidAt && ` · paid ${formatDate(viewInv.paidAt.slice(0, 10))}`}
             </div>
+            {(viewInv.payments || []).length > 0 && (
+              <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Payments received</div>
+                {(viewInv.payments || []).map((p2, i2) => (
+                  <div key={i2} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: T.text, marginBottom: 2 }}>
+                    <span>{p2.date ? formatDate(p2.date) : "—"}{p2.note ? ` · ${p2.note}` : ""}</span>
+                    <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(p2.amount)}</span>
+                  </div>
+                ))}
+                {balanceOf(viewInv) > 0.005 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 800, color: T.warning, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${T.border}` }}>
+                    <span>Still owed</span><span>{money(balanceOf(viewInv))}</span>
+                  </div>
+                )}
+              </div>
+            )}
             {viewInv.lines?.length ? (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
@@ -191,9 +241,46 @@ function Invoices() {
         )}
       </Modal>
 
+      {/* Record a payment — full or partial */}
+      <Modal open={!!payFor} onClose={() => setPayFor(null)} title={payFor ? `Payment on ${payFor.number}` : "Payment"}>
+        {payFor && (
+          <>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>
+              Invoice total {money(payFor.totalAmount)}
+              {paidOf(payFor) > 0 && ` · ${money(paidOf(payFor))} already received`}
+              {` · ${money(balanceOf(payFor))} open`}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Amount received</div>
+            <input type="number" inputMode="decimal" value={payAmt} onChange={e => setPayAmt(e.target.value)}
+              style={{ width: "100%", padding: "12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16, boxSizing: "border-box", marginBottom: 10 }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Date received</div>
+            <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+              style={{ width: "100%", padding: "12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16, boxSizing: "border-box", marginBottom: 10 }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 4 }}>Note (check #, remittance, what it covered)</div>
+            <input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="optional"
+              style={{ width: "100%", padding: "12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16, boxSizing: "border-box", marginBottom: 12 }} />
+            {parseFloat(payAmt) > balanceOf(payFor) + 0.005 && (
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, marginBottom: 10 }}>
+                That's more than the open balance — double-check the amount.
+              </div>
+            )}
+            <button onClick={savePayment} disabled={!(parseFloat(payAmt) > 0)} style={{
+              width: "100%", padding: "13px", borderRadius: 12, border: "none",
+              backgroundColor: parseFloat(payAmt) > 0 ? (T.success || "#22c55e") : T.border,
+              color: "#fff", fontSize: 15, fontWeight: 800, cursor: parseFloat(payAmt) > 0 ? "pointer" : "default",
+            }}>
+              {payFor && parseFloat(payAmt) >= balanceOf(payFor) - 0.005 ? "Record — settles the invoice" : "Record partial payment"}
+            </button>
+          </>
+        )}
+      </Modal>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {invoices.map(inv => {
-          const isPaid = !!inv.paidAt;
+          const paid = paidOf(inv);
+          const balance = balanceOf(inv);
+          const isPaid = balance <= 0.005;
+          const isPartial = !isPaid && paid > 0;
           const age = inv.sentAt ? daysSince(inv.sentAt) : 0;
           const overdue = !isPaid && age > 30;
           return (
@@ -212,7 +299,7 @@ function Invoices() {
                       backgroundColor: isPaid ? (T.successDim || "rgba(34,197,94,0.15)") : overdue ? T.dangerDim : T.warningDim,
                       color: isPaid ? (T.success || "#22c55e") : overdue ? T.danger : T.warning,
                     }}>
-                      {isPaid ? "paid" : `owed · ${age}d`}
+                      {isPaid ? "paid" : isPartial ? `partial · ${money(balance)} owed` : `owed · ${age}d`}
                     </span>
                   </div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
@@ -221,8 +308,13 @@ function Invoices() {
                   <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
                     Sent {inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "—"}
                     {inv.periodStart && ` · work ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? "–" + formatDate(inv.periodEnd) : ""}`}
-                    {isPaid && ` · paid ${formatDate(inv.paidAt.slice(0, 10))}`}
+                    {isPaid && inv.paidAt && ` · paid ${formatDate(inv.paidAt.slice(0, 10))}`}
                   </div>
+                  {isPartial && (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, marginTop: 2 }}>
+                      {money(paid)} received · {money(balance)} still owed
+                    </div>
+                  )}
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: T.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                   {money(inv.totalAmount)}
@@ -233,12 +325,12 @@ function Invoices() {
                   <button onClick={(ev) => { ev.stopPropagation(); markUnpaid(inv); }} style={{
                     padding: "8px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
                     backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                  }}>Mark unpaid</button>
+                  }}>Reopen</button>
                 ) : (
-                  <button onClick={(ev) => { ev.stopPropagation(); markPaid(inv); }} style={{
+                  <button onClick={(ev) => { ev.stopPropagation(); openPayment(inv); }} style={{
                     flex: 1, padding: "8px 12px", borderRadius: 10, border: "none",
                     backgroundColor: T.success || "#22c55e", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
-                  }}>✓ Mark paid</button>
+                  }}>{isPartial ? "＄ Record another payment" : "＄ Record payment"}</button>
                 )}
                 <button onClick={(ev) => { ev.stopPropagation(); resend(inv); }} style={{
                   padding: "8px 12px", borderRadius: 10, border: "none",

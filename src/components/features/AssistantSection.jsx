@@ -210,7 +210,24 @@ function AssistantSection() {
           ...(action.linkedTo !== undefined ? { linkedTo: action.linkedTo || "" } : {}),
         });
       } else if (action.kind === "feedback") {
-        logToCloud("feedback", `[${action.category || "idea"}] ${action.text || action.summary}`, "queued for the developer");
+        const body = action.text || action.summary || "";
+        logToCloud("feedback", `[${action.category || "idea"}] ${body}`, "queued for the developer");
+        // Also file it as a real ticket so it shows up in Admin → Tickets
+        // alongside anything sent through Get help. assistant_log alone is
+        // write-only: no screen reads it.
+        if (supabase) {
+          const category = action.category === "bug" ? "bug"
+            : action.category === "idea" ? "feature_request" : "other";
+          supabase.functions.invoke("create-ticket", {
+            body: {
+              subject: (action.summary || body).slice(0, 180) || "Reported from the assistant",
+              body: `${body}\n\n— reported through the in-app assistant`,
+              category,
+              priority: action.category === "bug" ? "high" : "normal",
+              context_page: "assistant",
+            },
+          }).then(() => {}, () => {});
+        }
       } else if (action.kind === "send_packet") {
         const docs = (action.docIds || [])
           .map(id2 => (data.documents || []).find(d => d.id === id2))

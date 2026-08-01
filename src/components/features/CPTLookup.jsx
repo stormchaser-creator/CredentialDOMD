@@ -2,12 +2,20 @@ import { useState, useRef, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { SearchIcon } from "../shared/Icons";
+import { generateId } from "../../utils/helpers";
 import { searchCPT } from "../../utils/cptSearch";
 import { aiCPTLookup } from "../../utils/cptAILookup";
 
+// Local calendar date — a UTC slice would file late-evening work on tomorrow
+const localDay = (d) => {
+  const p = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return p.toISOString().slice(0, 10);
+};
+
 function CPTLookup() {
-  const { data, theme: T } = useApp();
+  const { data, addItem, theme: T } = useApp();
   const iS = useInputStyle();
+  const [logged, setLogged] = useState(null);
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -60,6 +68,44 @@ function CPTLookup() {
     navigator.clipboard?.writeText(code);
     setExpanded(prev => prev === code ? null : code);
   }, []);
+
+  // Looking a code up and billing it are the same errand — log it straight
+  // into the RVU ledger instead of making him retype it on the Locum tab.
+  const logToBilling = useCallback((c) => {
+    const contracts = data.locumContracts || [];
+    addItem("encounters", {
+      id: generateId(),
+      createdAt: new Date().toISOString(),
+      contractId: contracts.length === 1 ? contracts[0].id : null,
+      date: localDay(new Date()),
+      codes: [{
+        code: c.code,
+        desc: c.shortDesc || c.fullDesc || c.cmsDesc || "",
+        units: 1,
+        wRVU: c.wRVU || 0,
+      }],
+      note: "",
+      spokenText: "",
+    });
+    setLogged(c.code);
+    setTimeout(() => setLogged(l => (l === c.code ? null : l)), 2600);
+  }, [addItem, data.locumContracts]);
+
+  const LogButton = ({ c }) => (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={(e) => { e.stopPropagation(); logToBilling(c); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); logToBilling(c); } }}
+      style={{
+        flexShrink: 0, alignSelf: "center", padding: "8px 12px", borderRadius: 10,
+        border: `1px solid ${logged === c.code ? "transparent" : T.accent}`,
+        backgroundColor: logged === c.code ? (T.successDim || "rgba(34,197,94,0.12)") : "transparent",
+        color: logged === c.code ? (T.success || "#22c55e") : T.accent,
+        fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+      }}
+    >{logged === c.code ? "\u2713 Logged" : "+ Bill it"}</span>
+  );
 
   const hasResults = results.length > 0 || (aiResults && aiResults.length > 0);
 
@@ -177,6 +223,7 @@ function CPTLookup() {
               </div>
             )}
           </div>
+          <LogButton c={r} />
         </button>
       ))}
 
@@ -224,6 +271,7 @@ function CPTLookup() {
                   </div>
                 )}
               </div>
+              <LogButton c={{ ...r, shortDesc: r.description }} />
             </button>
           ))}
         </>

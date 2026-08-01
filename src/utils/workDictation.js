@@ -11,7 +11,15 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const PROMPT = (transcript, todayISO, workTypes) => `You convert a physician's spoken description of
 locum work into ONE JSON object for a time-log entry. Respond with JSON only, no fences.
 
-TYPES (pick the closest; if none fits, use a short label of your own): ${workTypes.join(", ")}
+TYPES: ${workTypes.join(", ")}
+Use a listed type ONLY when the work plainly IS that type. When it is not a clean match, return a
+short label in the physician's own words instead — a wrong type on an invoice is worse than a
+custom one. In particular:
+- "charting", "documentation", "notes", "note writing", "chart review", "Epic work" → return
+  "Charting" (or their exact word). These are NOT "Sign-out": sign-out means handing patients
+  off to another physician.
+- "preop"/"postop" mean the visit, not the operation; the operation is a Procedure.
+- A phone call about a patient is "Call"; a call accepting a transfer is "Transfer call".
 
 TODAY is ${todayISO} (local). Interpret casual speech:
 - "last night" / "yesterday evening" = yesterday's date; "this morning" = today.
