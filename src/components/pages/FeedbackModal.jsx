@@ -119,7 +119,7 @@ export default function FeedbackModal({ open, onClose, contextPage }) {
                 width: "100%", minHeight: 100,
                 padding: "10px 12px", borderRadius: 10,
                 backgroundColor: T.input, border: `1px solid ${T.inputBorder || T.border}`,
-                color: T.text, fontSize: 14, fontFamily: "inherit",
+                color: T.text, fontSize: 16, fontFamily: "inherit",
                 outline: "none", resize: "vertical", boxSizing: "border-box",
               }}
             />

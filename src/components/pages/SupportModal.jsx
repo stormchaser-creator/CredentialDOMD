@@ -66,7 +66,7 @@ export default function SupportModal({ open, onClose, contextPage }) {
   const inputStyle = {
     width: "100%", padding: "10px 12px", borderRadius: 10,
     backgroundColor: T.input, border: `1px solid ${T.inputBorder || T.border}`,
-    color: T.text, fontSize: 14, outline: "none", boxSizing: "border-box",
+    color: T.text, fontSize: 16, outline: "none", boxSizing: "border-box",
   };
 
   return (

@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { AsclepiusIcon, ExternalLinkIcon } from "../shared/Icons";
 import { formatDate, copyToClipboard } from "../../utils/helpers";
 import { complianceFor } from "../../utils/compliance";
+import { shareCvPdf } from "../../utils/cvPdf";
 
 const CV_TEMPLATES = [
   { id: "clinical", name: "Clinical CV", description: "Standard format for hospital credentialing" },
@@ -14,6 +15,7 @@ function CVGenerator() {
   const { data, theme: T, allTrackedStates } = useApp();
   const [template, setTemplate] = useState("clinical");
   const [preview, setPreview] = useState(true);
+  const [note, setNote] = useState("");
 
   const s = data.settings;
 
@@ -28,6 +30,7 @@ function CVGenerator() {
       type: "header",
       name: s.name || "Physician Name",
       degree: deg,
+      fullDegree,
       npi: s.npi,
       email: s.email,
       phone: s.phone,
@@ -211,6 +214,7 @@ function CVGenerator() {
       if (section.type === "header") {
         lines.push(divider);
         lines.push(`  ${section.name}, ${section.degree}`);
+        lines.push(`  ${section.fullDegree}`);
         if (section.npi) lines.push(`  NPI: ${section.npi}`);
         if (section.email || section.phone) {
           lines.push(`  ${[section.email, section.phone].filter(Boolean).join(" | ")}`);
@@ -239,26 +243,21 @@ function CVGenerator() {
     return lines.join("\n");
   };
 
+  const flash = (msg) => { setNote(msg); setTimeout(() => setNote(""), 2500); };
+
   const handleCopyCV = async () => {
     await copyToClipboard(generatePlainText());
+    flash("Copied — paste it anywhere.");
   };
 
-  const handlePrintCV = () => {
-    const text = generatePlainText();
-    const w = window.open("", "_blank");
-    if (!w) return;
-    const doc = w.document;
-    doc.open();
-    const style = doc.createElement("style");
-    style.textContent = "body{font-family:'SF Pro Display','DM Sans',sans-serif;max-width:700px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.6;font-size:13px}pre{white-space:pre-wrap;font-family:inherit}";
-    doc.head.appendChild(style);
-    doc.title = `CV - ${s.name || "Physician"}`;
-    const pre = doc.createElement("pre");
-    pre.textContent = text;
-    doc.body.appendChild(pre);
-    doc.close();
-    w.onafterprint = () => w.close();
-    w.print();
+  const handlePdfCV = async () => {
+    try {
+      const result = await shareCvPdf(cvContent, { name: s.name || "Physician", degree: s.degreeType || "" });
+      if (result === "download") flash("PDF downloaded.");
+      else if (result === "share") flash("PDF ready in the share sheet.");
+    } catch (err) {
+      flash(`Couldn't build the PDF: ${err.message}`);
+    }
   };
 
   const hasData = data.licenses.length > 0 || data.education?.length > 0 || data.cme.length > 0;
@@ -293,11 +292,15 @@ function CVGenerator() {
           flex: 1, padding: "12px 16px", borderRadius: 12, border: "none",
           backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
         }}>Copy to Clipboard</button>
-        <button onClick={handlePrintCV} style={{
+        <button onClick={handlePdfCV} style={{
           flex: 1, padding: "12px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
           backgroundColor: T.card, color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
-        }}>Print / Save PDF</button>
+        }}>Save PDF</button>
       </div>
+
+      {note && (
+        <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 10, backgroundColor: T.accentDim, color: T.accent, fontSize: 13, fontWeight: 700 }}>{note}</div>
+      )}
 
       {!hasData && (
         <div style={{ textAlign: "center", padding: "26px 18px", backgroundColor: T.card, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: T.shadow1 }}>
@@ -326,6 +329,7 @@ function CVGenerator() {
                   return (
                     <div key={idx} style={{ marginBottom: 16, paddingBottom: 12, borderBottom: `2px solid ${T.accent}` }}>
                       <div style={{ fontSize: 20, fontWeight: 800, color: T.text }}>{section.name}, {section.degree}</div>
+                      <div style={{ fontSize: 13, color: T.textMuted }}>{section.fullDegree}</div>
                       {section.npi && <div style={{ fontSize: 14, color: T.textMuted }}>NPI: {section.npi}</div>}
                       <div style={{ fontSize: 14, color: T.textMuted }}>{[section.email, section.phone].filter(Boolean).join(" | ")}</div>
                       {section.specialties.length > 0 && (

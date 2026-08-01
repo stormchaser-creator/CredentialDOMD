@@ -181,6 +181,19 @@ function RVULog() {
         </div>
         {err && <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: T.danger }}>{err}</div>}
 
+        {/* Type a code directly — works with or without the AI coder */}
+        <input value={manualQ} onChange={e => manualSearch(e.target.value)} inputMode="search"
+          placeholder="Type a CPT code (e.g. 61312) or name to add it" style={{ ...iS, marginTop: 10 }} />
+        {manualResults.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+            {manualResults.map(c => (
+              <button key={c.code} onClick={() => addManual(c)} style={{ textAlign: "left", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 13, cursor: "pointer" }}>
+                <b>{c.code}</b> {c.shortDesc || c.cmsDesc} {c.wRVU ? `· ${c.wRVU} wRVU` : ""}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Review chips */}
         {review && (
           <div style={{ marginTop: 12 }}>
@@ -205,18 +218,6 @@ function RVULog() {
                 </div>
               ))}
             </div>
-
-            {/* Manual add */}
-            <input value={manualQ} onChange={e => manualSearch(e.target.value)} placeholder="+ add a code manually (search)" style={{ ...iS, marginTop: 8 }} />
-            {manualResults.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
-                {manualResults.map(c => (
-                  <button key={c.code} onClick={() => addManual(c)} style={{ textAlign: "left", padding: "7px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 12, cursor: "pointer" }}>
-                    <b>{c.code}</b> {c.shortDesc || c.cmsDesc} {c.wRVU ? `· ${c.wRVU} wRVU` : ""}
-                  </button>
-                ))}
-              </div>
-            )}
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />

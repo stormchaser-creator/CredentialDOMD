@@ -7,8 +7,8 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyOperator } from "../_shared/telegram.ts";
+import { clerkProfile } from "../_shared/clerkAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,13 +25,7 @@ serve(async (req) => {
   }
 
   try {
-    const supa = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
-    );
-
-    const { data: { user } } = await supa.auth.getUser();
+    const user = await clerkProfile(req);
     if (!user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -51,10 +45,10 @@ serve(async (req) => {
       });
     }
 
-    const { data, error } = await supa
+    const { data, error } = await user.db
       .from("feedback")
       .insert({
-        user_id: user.id,
+        user_id: user.profileId,
         rating: rating || null,
         message: body.message.trim().slice(0, 5000),
         context_page: body.context_page?.slice(0, 200) || null,

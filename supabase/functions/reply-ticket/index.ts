@@ -7,8 +7,8 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyOperator } from "../_shared/telegram.ts";
+import { clerkProfile } from "../_shared/clerkAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,11 +17,6 @@ const corsHeaders = {
 };
 
 const VALID_STATUSES = ["open", "in_progress", "waiting_user", "resolved", "closed"];
-const ADMIN_EMAILS = new Set([
-  "admin@credentialdomd.com",
-  "drericwhitney@gmail.com",
-  "stormchaser@elryx.com",
-]);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -32,13 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const supa = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
-    );
-
-    const { data: { user } } = await supa.auth.getUser();
+    const user = await clerkProfile(req);
     if (!user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -61,30 +50,32 @@ serve(async (req) => {
       });
     }
 
-    const isAdmin = ADMIN_EMAILS.has((user.email || "").toLowerCase());
+    const isAdmin = user.isAdmin;
 
-    // RLS will enforce that the user is owner or admin. We just need to know
-    // is_admin_reply for the message row + telegram routing.
-    const { data: msg, error: msgErr } = await supa
+    // Service-role client bypasses RLS, so the owner-or-admin check lives here.
+    const { data: ticketRow } = await user.db
+      .from("support_tickets")
+      .select("id, subject, user_id")
+      .eq("id", ticketId)
+      .maybeSingle();
+    if (!ticketRow || (ticketRow.user_id !== user.profileId && !isAdmin)) {
+      return new Response(JSON.stringify({ error: "You don't have access to this ticket." }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: msg, error: msgErr } = await user.db
       .from("support_messages")
       .insert({
         ticket_id: ticketId,
-        author_id: user.id,
+        author_id: user.profileId,
         body: replyBody.slice(0, 10000),
         is_admin_reply: isAdmin,
       })
       .select()
       .single();
 
-    if (msgErr) {
-      // RLS denial → 403 instead of 500
-      if (msgErr.code === "42501" || /policy/i.test(msgErr.message)) {
-        return new Response(JSON.stringify({ error: "You don't have access to this ticket." }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw msgErr;
-    }
+    if (msgErr) throw msgErr;
 
     // Optional status update (admin-only)
     if (newStatus && isAdmin && VALID_STATUSES.includes(newStatus)) {
@@ -92,19 +83,13 @@ serve(async (req) => {
       if (newStatus === "resolved" || newStatus === "closed") {
         updates.resolved_at = new Date().toISOString();
       }
-      await supa.from("support_tickets").update(updates).eq("id", ticketId);
+      await user.db.from("support_tickets").update(updates).eq("id", ticketId);
     }
 
     // Notify operator only on customer replies (not admin's own replies)
     if (!isAdmin) {
-      const { data: ticket } = await supa
-        .from("support_tickets")
-        .select("subject")
-        .eq("id", ticketId)
-        .single();
-
       notifyOperator(
-        `💬 *Customer reply* on "${ticket?.subject || "(unknown)"}"\n` +
+        `💬 *Customer reply* on "${ticketRow.subject || "(unknown)"}"\n` +
         `From: ${user.email}\n\n` +
         replyBody.slice(0, 500)
       );
