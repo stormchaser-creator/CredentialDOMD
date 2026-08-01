@@ -7,6 +7,7 @@ import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard } from "../../../utils/helpers";
 import { shareInvoicePdf } from "../../../utils/invoicePdf";
+import DictateButton from "../../shared/DictateButton";
 
 /**
  * WorkLog — one-tap time capture for locum work, billed in the contract's
@@ -1022,18 +1023,24 @@ function WorkLog() {
             </div>
             {/* Notes DURING the call — billing note goes on the invoice,
                 private note is yours alone and never appears on it */}
-            <textarea
-              value={timer.note || ""}
-              onChange={e => setTimer(t => { const nt = { ...t, note: e.target.value }; saveTimer(nt); return nt; })}
-              placeholder="Billing note — shows on the invoice (e.g. ED consult, head CT review)"
-              style={{ ...iS, minHeight: 56, resize: "vertical", textAlign: "left", marginBottom: 8 }}
-            />
-            <textarea
-              value={timer.privateNote || ""}
-              onChange={e => setTimer(t => { const nt = { ...t, privateNote: e.target.value }; saveTimer(nt); return nt; })}
-              placeholder="🔒 Private note — only you see this, never on the invoice"
-              style={{ ...iS, minHeight: 44, resize: "vertical", textAlign: "left", marginBottom: 12, borderStyle: "dashed" }}
-            />
+            <div style={{ display: "flex", gap: 6, alignItems: "stretch", marginBottom: 8 }}>
+              <textarea
+                value={timer.note || ""}
+                onChange={e => setTimer(t => { const nt = { ...t, note: e.target.value }; saveTimer(nt); return nt; })}
+                placeholder="Billing note — shows on the invoice. Tap the mic and say it."
+                style={{ ...iS, minHeight: 56, resize: "vertical", textAlign: "left", flex: 1 }}
+              />
+              <DictateButton T={T} onText={t2 => t2 && setTimer(t => { const nt = { ...t, note: (t.note ? t.note + " " : "") + t2 }; saveTimer(nt); return nt; })} />
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "stretch", marginBottom: 12 }}>
+              <textarea
+                value={timer.privateNote || ""}
+                onChange={e => setTimer(t => { const nt = { ...t, privateNote: e.target.value }; saveTimer(nt); return nt; })}
+                placeholder="🔒 Private note — only you see this, never on the invoice"
+                style={{ ...iS, minHeight: 44, resize: "vertical", textAlign: "left", flex: 1, borderStyle: "dashed" }}
+              />
+              <DictateButton T={T} onText={t2 => t2 && setTimer(t => { const nt = { ...t, privateNote: (t.privateNote ? t.privateNote + " " : "") + t2 }; saveTimer(nt); return nt; })} />
+            </div>
             <button onClick={stopTimer} style={{
               width: "100%", padding: "16px", borderRadius: 14, border: "none",
               background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff",
@@ -1232,8 +1239,18 @@ function WorkLog() {
         </Field>
         )}
 
-        <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult — head CT review" /></Field>
-        <Field label="Private note (optional)" hint="Only you see this — never on invoices"><input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" /></Field>
+        <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept. Tap the mic and just say it.">
+          <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+            <textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45, flex: 1 }} placeholder="e.g. ED consult — head CT review" />
+            <DictateButton T={T} onText={t2 => t2 && setManual(m2 => ({ ...m2, description: (m2.description ? m2.description + " " : "") + t2 }))} />
+          </div>
+        </Field>
+        <Field label="Private note (optional)" hint="Only you see this — never on invoices">
+          <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+            <input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed", flex: 1 }} placeholder="🔒 e.g. patient name / MRN reminder" />
+            <DictateButton T={T} onText={t2 => t2 && setManual(m2 => ({ ...m2, privateNote: (m2.privateNote ? m2.privateNote + " " : "") + t2 }))} />
+          </div>
+        </Field>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
