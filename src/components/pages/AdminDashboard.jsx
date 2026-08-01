@@ -63,7 +63,6 @@ export default function AdminDashboard() {
 
   const TABS = [
     { id: "tickets",   label: `Tickets (${tickets.length})` },
-    { id: "feedback",  label: `Feedback (${feedback.length})` },
     { id: "signups",   label: "Signups" },
     { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
@@ -108,8 +107,19 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {tab === "tickets"  && !loading && <TicketsList rows={tickets} T={T} />}
-      {tab === "feedback" && !loading && <FeedbackList rows={feedback} T={T} />}
+      {tab === "tickets"  && !loading && (
+        <>
+          <TicketsList rows={tickets} T={T} />
+          {feedback.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>
+                Legacy feedback (pre-merge)
+              </div>
+              <FeedbackList rows={feedback} T={T} />
+            </>
+          )}
+        </>
+      )}
       {tab === "signups"  && !loading && <SignupsList rows={signups} T={T} />}
       {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} T={T} />}
       {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}

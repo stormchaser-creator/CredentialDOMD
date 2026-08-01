@@ -5,9 +5,10 @@ import { supabase } from "../../lib/supabase";
 const CATEGORIES = [
   { id: "bug",             label: "Bug / something broken" },
   { id: "billing",         label: "Billing or subscription" },
-  { id: "feature_request", label: "Feature request" },
+  { id: "feature_request", label: "Feature request / idea" },
   { id: "data_issue",      label: "Data issue (lost, wrong, missing)" },
   { id: "compliance",      label: "Privacy / HIPAA / compliance" },
+  { id: "feedback",        label: "General feedback" },
   { id: "other",           label: "Other" },
 ];
 
@@ -24,6 +25,7 @@ export default function SupportModal({ open, onClose, contextPage }) {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("other");
   const [priority, setPriority] = useState("normal");
+  const [rating, setRating] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -31,7 +33,9 @@ export default function SupportModal({ open, onClose, contextPage }) {
   if (!open) return null;
 
   const submit = async () => {
-    if (subject.trim().length < 3) { setError("Subject must be at least 3 characters."); return; }
+    // Feedback shouldn't demand a subject line — derive one from the message
+    const subj = subject.trim() || body.trim().slice(0, 80);
+    if (subj.length < 3) { setError("Tell us a bit more first."); return; }
     if (body.trim().length < 10)   { setError("Tell us a bit more — at least 10 characters."); return; }
     if (!supabase) { setError("App not connected to backend."); return; }
 
@@ -39,9 +43,9 @@ export default function SupportModal({ open, onClose, contextPage }) {
     try {
       const res = await supabase.functions.invoke("create-ticket", {
         body: {
-          subject: subject.trim(),
-          body: body.trim(),
-          category,
+          subject: subj,
+          body: (rating ? `Rating: ${rating}/5\n\n` : "") + body.trim(),
+          category: category === "feedback" ? "other" : category,
           priority,
           context_page: contextPage || window.location.pathname,
         },
@@ -58,7 +62,7 @@ export default function SupportModal({ open, onClose, contextPage }) {
 
   const reset = () => {
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
-    setDone(false); setError("");
+    setRating(0); setDone(false); setError("");
   };
 
   const close = () => { onClose(); reset(); };
@@ -98,11 +102,27 @@ export default function SupportModal({ open, onClose, contextPage }) {
         ) : (
           <>
             <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800, color: T.text }}>
-              Get help
+              Help & feedback
             </h2>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: T.textMuted }}>
-              Goes straight to the founder. He responds personally.
+              Bug, question, or just a thought — goes straight to the founder. He responds personally.
             </p>
+
+            {/* Optional rating */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>How's the app? (optional)</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} onClick={() => setRating(rating === n ? 0 : n)} style={{
+                    flex: 1, padding: "8px", borderRadius: 8,
+                    border: `1px solid ${rating >= n ? T.accent : T.border}`,
+                    backgroundColor: rating >= n ? (T.accentDim || "rgba(59,130,246,0.12)") : "transparent",
+                    color: rating >= n ? T.accent : T.textMuted,
+                    fontSize: 17, fontWeight: 700, cursor: "pointer",
+                  }}>{"\u2605"}</button>
+                ))}
+              </div>
+            </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {/* Category */}
@@ -122,7 +142,7 @@ export default function SupportModal({ open, onClose, contextPage }) {
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="Short summary"
+                placeholder="Short summary (optional)"
                 maxLength={200}
                 style={inputStyle}
               />
@@ -148,12 +168,12 @@ export default function SupportModal({ open, onClose, contextPage }) {
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button
                 onClick={submit}
-                disabled={submitting || !subject.trim() || body.trim().length < 10}
+                disabled={submitting || body.trim().length < 10}
                 style={{
                   flex: 1, padding: "12px", borderRadius: 10, border: "none",
-                  backgroundColor: submitting || !subject.trim() || body.trim().length < 10 ? T.textDim : T.accent,
+                  backgroundColor: submitting || body.trim().length < 10 ? T.textDim : T.accent,
                   color: "#fff", fontSize: 14, fontWeight: 700,
-                  cursor: submitting || !subject.trim() || body.trim().length < 10 ? "not-allowed" : "pointer",
+                  cursor: submitting || body.trim().length < 10 ? "not-allowed" : "pointer",
                 }}
               >
                 {submitting ? "Sending..." : "Send ticket"}
