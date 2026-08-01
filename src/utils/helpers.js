@@ -61,7 +61,7 @@ export function buildCredentialText(item, section, settings) {
     lines.push("Specialty: " + names.join(", "));
   }
   lines.push("Degree: " + (deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine"));
-  lines.push(div, item.name || item.type || item.title || item.category || "Credential", "");
+  lines.push(div, describeItem(item, settings.name), "");
 
   const a = (k, v) => { if (v) lines.push(k + ": " + v); };
 
@@ -88,8 +88,16 @@ export function buildCredentialText(item, section, settings) {
     a("Result", item.result); a("Lot #", item.lotNumber); a("Facility", item.facility);
   } else if (section === "education") {
     a("Type", item.type); a("Institution", item.institution);
+    a("Started", item.startDate ? formatDate(item.startDate) : "");
     a("Graduated", formatDate(item.graduationDate)); a("Field of Study", item.fieldOfStudy);
     a("Honors", item.honors);
+  } else if (section === "publications") {
+    a("Citation", item.citation); a("Year", item.year);
+    a("DOI", item.doi); a("PMID", item.pmid); a("Link", item.url);
+  } else if (section === "memberships") {
+    a("Organization", item.organization); a("Membership", item.role);
+    a("Member Since", item.startDate ? formatDate(item.startDate) : "");
+    a("Ended", item.endDate ? formatDate(item.endDate) : "");
   }
 
   if (item.notes) lines.push("", "Notes: " + item.notes);
@@ -135,6 +143,8 @@ function isPersonName(name, physicianName) {
 
 export function describeItem(item, physicianName) {
   if (item.name && !isPersonName(item.name, physicianName)) return item.name;
+  if (item.organization) return [item.role, item.organization].filter(Boolean).join(" — ");
+  if (item.citation) return String(item.citation).split(".").slice(0, 2).join(".").slice(0, 90);
   const base = item.type || item.title || item.category || "Credential";
   const where = item.state || item.facility || item.institution || item.provider || "";
   return where ? `${base} — ${where}` : base;

@@ -21,17 +21,27 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
   for (const section of sections) {
     if (section.type === "header") {
       doc.setFont("helvetica", "bold").setFontSize(19).setTextColor(20, 24, 33);
-      doc.text(`${section.name}${section.degree ? `, ${section.degree}` : ""}`, M, y + 14);
-      y += 24;
+      // Name only — the degree rides on the specialty line, exactly as the
+      // preview and clipboard export render it.
+      for (const line of doc.splitTextToSize(section.name, W)) {
+        doc.text(line, M, y + 14);
+        y += 22;
+      }
+      y += 2;
       doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(90, 98, 110);
-      if (section.address) { doc.text(section.address, M, y + 10); y += 14; }
+      const headerLine = (text, step) => {
+        for (const line of doc.splitTextToSize(text, W)) {
+          doc.text(line, M, y + 10);
+          y += step;
+        }
+      };
+      if (section.address) headerLine(section.address, 13);
       const contact = [section.email, section.website, section.phone, section.npi ? `NPI ${section.npi}` : ""]
         .filter(Boolean).join("   ·   ");
-      if (contact) { doc.text(contact, M, y + 10); y += 14; }
+      if (contact) headerLine(contact, 13);
       if (section.specialties?.length) {
         doc.setFont("helvetica", "bold").setFontSize(10.5).setTextColor(13, 110, 253);
-        doc.text(`${section.fullDegree ? section.fullDegree + " — " : ""}${section.specialties.map(id => id.split(":").pop()).join(", ")}`, M, y + 10);
-        y += 14;
+        headerLine(`${section.fullDegree ? section.fullDegree + " — " : ""}${section.specialties.map(id => id.split(":").pop()).join(", ")}`, 13.5);
       }
       y += 6;
       doc.setDrawColor(20, 24, 33).setLineWidth(1.4);
@@ -40,7 +50,9 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
       continue;
     }
 
-    ensure(40);
+    // A heading must never sit alone at the foot of a page — reserve the
+    // heading block plus the first line of its first item.
+    ensure(25 + 26);
     doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(13, 110, 253);
     doc.text(section.title.toUpperCase(), M, y + 10);
     y += 15;
@@ -53,16 +65,18 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
       // in `secondary` with no bold lead line — render as flowing text
       const paraSize = item.primary ? 9.5 : 10;
       const secondary = item.secondary ? doc.setFont("helvetica", "normal").setFontSize(paraSize).splitTextToSize(item.secondary, W - 10) : [];
-      const detail = item.detail ? doc.setFontSize(9).splitTextToSize(item.detail, W - 10) : [];
-      const need = (item.primary ? 13 : 2) + secondary.length * (paraSize + 2.5) + detail.length * 10 + 5;
-      ensure(Math.min(need, 700));
+      const detail = item.detail ? doc.setFont("helvetica", "normal").setFontSize(9).splitTextToSize(item.detail, W - 10) : [];
 
       if (item.primary) {
-        doc.setFont("helvetica", "bold").setFontSize(item.subhead ? 11 : 10.5).setTextColor(20, 24, 33);
-        const dateW = item.date ? doc.setFont("helvetica", "normal").setFontSize(9).getTextWidth(item.date) : 0;
+        doc.setFont("helvetica", "normal").setFontSize(9);
+        const dateW = item.date ? doc.getTextWidth(item.date) : 0;
         doc.setFont("helvetica", "bold").setFontSize(item.subhead ? 11 : 10.5);
         const primary = doc.splitTextToSize(item.primary, W - dateW - 16);
+        // Reserve the whole lead block plus one following line, so a wrapped
+        // title never splits from its own body across a page break.
+        ensure(13 + (primary.length - 1) * 12 + (secondary.length || detail.length ? 12 : 0));
         if (item.subhead) y += 3;
+        doc.setTextColor(20, 24, 33);
         doc.text(primary, M + (item.subhead ? 0 : 4), y + 10);
         if (item.date) {
           doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(130, 136, 145);
@@ -71,16 +85,19 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
         y += 13 + (primary.length - 1) * 12;
       }
 
-      if (secondary.length) {
-        doc.setFont("helvetica", "normal").setFontSize(paraSize).setTextColor(item.primary ? 90 : 40, item.primary ? 98 : 46, item.primary ? 110 : 56);
-        doc.text(secondary, M + 4, y + 9);
-        y += secondary.length * (paraSize + 2.5) + 1;
-      }
-      if (detail.length) {
-        doc.setFontSize(9).setTextColor(130, 136, 145);
-        doc.text(detail, M + 4, y + 9);
-        y += detail.length * 10 + 1;
-      }
+      // Long bodies (a full publication citation, the summary paragraph) can
+      // exceed a whole page — draw line by line so nothing is ever clipped.
+      const flow = (linesArr, size, color) => {
+        for (const line of linesArr) {
+          ensure(size + 2.5);
+          doc.setFont("helvetica", "normal").setFontSize(size).setTextColor(...color);
+          doc.text(line, M + 4, y + 9);
+          y += size + 2.5;
+        }
+        if (linesArr.length) y += 1;
+      };
+      flow(secondary, paraSize, item.primary ? [90, 98, 110] : [40, 46, 56]);
+      flow(detail, 9, [130, 136, 145]);
       y += item.primary ? 5 : 7;
     }
     y += 8;

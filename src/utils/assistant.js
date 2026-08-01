@@ -32,7 +32,7 @@ export const SECTION_FIELDS = {
   workHistory: ["type", "position", "employer", "city", "state", "startDate", "endDate", "current", "description", "notes"],
   screenings: ["type", "name", "agency", "requestedBy", "assignment", "fileNumber", "orderDate", "reportDate", "result", "expirationDate", "components", "notes"],
   professionalPhotos: ["name", "dateTaken", "notes"],
-  publications: ["name", "citation", "year", "doi", "pmid", "url", "notes"],
+  publications: ["name", "citation", "year", "sortOrder", "doi", "pmid", "url", "notes"],
   memberships: ["organization", "role", "startDate", "endDate", "notes"],
   locumContracts: ["facility", "location", "agency", "billTo", "coveragePeriods", "callStipend", "stipendHours", "overageHourlyRate", "orientationHourlyRate", "orientationFee", "hourlyRate", "incrementMinutes", "minCallMinutes", "notes"],
 };

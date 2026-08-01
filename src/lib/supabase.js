@@ -399,14 +399,14 @@ export async function deleteAllData(userId) {
   await supabase
     .from("profiles")
     .update({
-      name: null, npi: null, email: null, phone: null,
-      primary_state: null, specialties: "[]",
-      additional_states: "[]", theme: "light", font_size: "M",
-      api_key: null, reminder_lead_days: 90,
+      // Derived from the sync map, so a column added to SETTINGS_TO_PROFILE
+      // is always cleared here too — a hand-kept list silently drifted before.
+      ...Object.fromEntries(Object.values(SETTINGS_TO_PROFILE).map(col => [col, null])),
+      specialties: "[]", additional_states: "[]",
+      theme: "light", font_size: "M", reminder_lead_days: 90,
       notify_email: true, notify_text: true, notify_freq_days: 7,
-      last_notified: null, snoozed_until: null, alerts_fingerprint: null,
       cme_verification_results: "{}", cme_verification_alerted: false,
-      last_cme_verification: null, updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("id", userId);
 }

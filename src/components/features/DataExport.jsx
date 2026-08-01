@@ -21,6 +21,10 @@ function DataExport() {
     workHistory: (data.workHistory || []).length,
     peerReferences: (data.peerReferences || []).length,
     malpracticeHistory: (data.malpracticeHistory || []).length,
+    publications: (data.publications || []).length,
+    memberships: (data.memberships || []).length,
+    screenings: (data.screenings || []).length,
+    professionalPhotos: (data.professionalPhotos || []).length,
   };
   const totalItems = Object.values(counts).reduce((s, v) => s + v, 0);
 
@@ -69,7 +73,8 @@ function DataExport() {
       "licenses", "cme", "privileges", "caseLogs", "insurance",
       "healthRecords", "education", "documents", "shareLog",
       "notificationLog", "workHistory", "peerReferences",
-      "malpracticeHistory", "settings",
+      "malpracticeHistory", "publications", "memberships",
+      "screenings", "professionalPhotos", "settings",
     ];
 
     // Max string length for any field value
@@ -127,7 +132,8 @@ function DataExport() {
             "primaryState", "additionalStates", "reminderLeadDays",
             "name", "npi", "degreeType", "specialties",
             "email", "phone", "theme", "fontSize",
-            "notifyEmail", "notifyText", "notifyFreqDays",
+            "address", "website", "languages", "professionalSummary", "cvHighlights",
+            "notifyEmail", "notifyText", "notifyFreqDays", "notifyBrowser",
             "lastCmeVerification", "cmeVerificationResults", "cmeVerificationAlerted",
           ];
           const safeSets = {};
@@ -151,6 +157,7 @@ function DataExport() {
             "licenses", "cme", "privileges", "insurance", "healthRecords",
             "education", "caseLogs", "workHistory", "peerReferences",
             "malpracticeHistory", "documents", "shareLog", "notificationLog",
+            "publications", "memberships", "screenings", "professionalPhotos",
           ];
           for (const key of COLLECTIONS) {
             if (merged[key]?.length > 0) bulkSync(uid, key, merged[key]).catch(() => {});

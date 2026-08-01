@@ -34,10 +34,16 @@ export function buildCvContent(data, template = "clinical") {
     const deg = s.degreeType || "MD";
     const fullDegree = deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine";
     const yr = (d) => (d ? String(d).slice(0, 4) : "");
+    // A CV states only the precision it has. A stored Jan-1 date means
+    // "that year" — printing "January 1, 2006" would assert a day nobody knew.
     const longDate = (d) => {
       if (!d) return "";
-      const dt = new Date(d + (String(d).length === 10 ? "T12:00:00" : ""));
-      return isNaN(dt) ? String(d) : dt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      const str = String(d);
+      const [y, m, day] = str.split("-");
+      if (!m) return y;
+      if (m === "01" && (!day || day.slice(0, 2) === "01")) return y;
+      const dt = new Date(str + (str.length === 10 ? "T12:00:00" : ""));
+      return isNaN(dt) ? str : dt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     };
     const isTrue = (v) => v === true || v === "true" || v === 1;
     // Scanned credentials often get saved under the physician's OWN name, which
@@ -167,7 +173,8 @@ export function buildCvContent(data, template = "clinical") {
           date: "",
         });
       }
-      const meds = lic.filter(isMedical);
+      const meds = lic.filter(isMedical).sort((a, b) =>
+        (STATE_NAMES[a.state] || a.state || "").localeCompare(STATE_NAMES[b.state] || b.state || ""));
       if (meds.length > 0) {
         items.push({ primary: "Medical Licenses", secondary: "", date: "", subhead: true });
         for (const m of meds) {
@@ -176,7 +183,7 @@ export function buildCvContent(data, template = "clinical") {
           items.push({ primary: [stateLabel, m.licenseNumber].filter(Boolean).join(": ") + provisional, secondary: "", date: "" });
         }
       }
-      const deas = lic.filter(isDEA);
+      const deas = lic.filter(isDEA).sort((a, b) => (a.state || "").localeCompare(b.state || ""));
       if (deas.length > 0) {
         items.push({ primary: "DEA", secondary: "", date: "", subhead: true });
         for (const d of deas) {
@@ -191,7 +198,12 @@ export function buildCvContent(data, template = "clinical") {
       sections.push({
         type: "section",
         title: "Hospital Privileges",
-        items: data.privileges.map(p => {
+        items: [...data.privileges].sort((a, b) => {
+          const da = a.appointmentDate ? new Date(a.appointmentDate) : new Date(0);
+          const db = b.appointmentDate ? new Date(b.appointmentDate) : new Date(0);
+          if (db - da !== 0) return db - da;
+          return String(a.facility || a.name || "").localeCompare(String(b.facility || b.name || ""));
+        }).map(p => {
           const from = longDate(p.appointmentDate);
           const active = !p.expirationDate || new Date(p.expirationDate) >= new Date();
           const span = from ? `(${from} to ${active ? "current" : formatDate(p.expirationDate)})` : "";
@@ -208,12 +220,13 @@ export function buildCvContent(data, template = "clinical") {
 
     // PUBLICATIONS — full citations in the order set (sortOrder, then year desc)
     if (data.publications?.length > 0) {
+      // Author-set order wins; anything unordered follows, newest first.
+      // Years may arrive as numbers, so coerce before comparing.
+      const rank = (v) => (v === null || v === undefined || v === "" ? Number.MAX_SAFE_INTEGER : Number(v));
       const pubs = [...data.publications].sort((a, b) => {
-        const ao = a.sortOrder ?? null, bo = b.sortOrder ?? null;
-        if (ao != null && bo != null) return ao - bo;
-        if (ao != null) return -1;
-        if (bo != null) return 1;
-        return (b.year || "").localeCompare(a.year || "");
+        const ao = rank(a.sortOrder), bo = rank(b.sortOrder);
+        if (ao !== bo) return ao - bo;
+        return String(b.year ?? "").localeCompare(String(a.year ?? ""));
       });
       sections.push({
         type: "section",
