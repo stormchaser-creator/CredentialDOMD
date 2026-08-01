@@ -24,10 +24,10 @@ const PROVIDER_DIGEST = CME_PROVIDERS.map(p =>
 // ── Known sections and their real fields (keeps the model honest) ──
 export const SECTION_FIELDS = {
   licenses: ["type", "name", "licenseNumber", "state", "issuedDate", "expirationDate", "notes"],
-  privileges: ["type", "name", "facility", "state", "appointmentDate", "expirationDate", "notes"],
+  privileges: ["type", "name", "facility", "city", "state", "appointmentDate", "expirationDate", "notes"],
   insurance: ["type", "name", "provider", "policyNumber", "coveragePerClaim", "coverageAggregate", "effectiveDate", "expirationDate", "notes"],
   healthRecords: ["category", "type", "name", "dateAdministered", "expirationDate", "result", "resultValue", "resultUnits", "referenceRange", "collectedDate", "reportedDate", "lab", "specimenId", "orderedBy", "lotNumber", "facility", "notes"],
-  education: ["type", "name", "institution", "graduationDate", "fieldOfStudy", "honors", "notes"],
+  education: ["type", "name", "institution", "startDate", "graduationDate", "fieldOfStudy", "honors", "notes"],
   cme: ["title", "category", "hours", "date", "provider", "certificateNumber", "topics", "notes"],
   workHistory: ["type", "position", "employer", "city", "state", "startDate", "endDate", "current", "description", "notes"],
   screenings: ["type", "name", "agency", "requestedBy", "assignment", "fileNumber", "orderDate", "reportDate", "result", "expirationDate", "components", "notes"],
