@@ -9,6 +9,7 @@ export { default as AssistantSection } from "./AssistantSection";
 export { default as CMEResourcesSection } from "./CMEResourcesSection";
 export { default as CVGenerator } from "./CVGenerator";
 export { default as CaseLogSummary } from "./CaseLogSummary";
+export { default as CaseDictate } from "./CaseDictate";
 export { default as DataExport } from "./DataExport";
 export { default as CPTCodePicker } from "./CPTCodePicker";
 export { default as CPTLookup } from "./CPTLookup";

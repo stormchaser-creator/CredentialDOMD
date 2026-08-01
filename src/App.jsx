@@ -13,6 +13,7 @@ import ComplianceRing from "./components/shared/ComplianceRing";
 import { ShareModal } from "./components/features";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
+import { CaseDictate } from "./components/features";
 import { academicYearOf, caseWRVU, currentAcademicYear } from "./utils/caseLogReport";
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
@@ -116,6 +117,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 
 function AppInner({ tab, setTab, subPage, setSubPage }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
+  const [caseDraft, setCaseDraft] = useState(null);
   const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
@@ -1184,7 +1186,8 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         const shownCases = caseLogYear === "all" ? allCases : allCases.filter(c => academicYearOf(c.date) === caseLogYear);
         return <>
           <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
-          <CrudSection title="Case Logs" sectionKey="caseLogs" items={shownCases} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
+          <CaseDictate categories={CASE_CATEGORIES} onDraft={setCaseDraft} />
+          <CrudSection title="Case Logs" sectionKey="caseLogs" items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
               {item.role && <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{item.role}</span>}
               {caseWRVU(item) > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{caseWRVU(item).toFixed(2)} wRVU</span>}

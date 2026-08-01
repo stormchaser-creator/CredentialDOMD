@@ -11,7 +11,7 @@ import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documen
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import CPTCodePicker from "./CPTCodePicker";
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, filterTabs }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, filterTabs, prefillItem, onPrefillDone }) {
   const { data, setData, addItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -44,11 +44,18 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   }, [autoEditId, items, openEdit, onAutoEditDone]);
 
   useEffect(() => {
+    if (prefillItem) {
+      // A dictated/AI-built draft: open the add form already filled — the
+      // physician reviews and saves; nothing writes without their tap.
+      openAdd();
+      setForm(prefillItem);
+      onPrefillDone?.();
+    }
     if (autoOpen) {
       openAdd();
       onAutoOpenDone?.();
     }
-  }, [autoOpen, openAdd, onAutoOpenDone]);
+  }, [autoOpen, openAdd, onAutoOpenDone, prefillItem, onPrefillDone]);
   const closeForm = useCallback(() => {
     setRequiredError(null);
     if (modalStreamRef.current) { modalStreamRef.current.getTracks().forEach(t => t.stop()); modalStreamRef.current = null; }
