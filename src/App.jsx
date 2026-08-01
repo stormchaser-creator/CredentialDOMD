@@ -1436,8 +1436,8 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           }}>
             <span style={{ fontSize: 22 }}>{"\u2728"}</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Assistant</div>
-              <div style={{ fontSize: 12, color: T.textMuted }}>Ask about your file, hand it any document, request a packet send</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Vera</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Your credentialing coordinator — documents, packets, answers</div>
             </div>
           </button>
 

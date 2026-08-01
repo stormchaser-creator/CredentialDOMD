@@ -262,7 +262,7 @@ function AssistantSection() {
           setErr(`This browser can't attach files to a share sheet, so the ${files.length} documents are downloading instead (allow multiple downloads if asked) — and the cover note is on your clipboard, ready to paste into your email.`);
         }
         addItem("shareLog", {
-          id: generateId(), itemName: `Assistant packet (${docs.length} files)`,
+          id: generateId(), itemName: `Vera packet (${docs.length} files)`,
           method: "share", sharedAt: new Date().toISOString(),
           recipient: action.summary || "",
         });
@@ -327,9 +327,9 @@ function AssistantSection() {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 220px)" }}>
       <div style={{ marginBottom: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>Assistant</h2>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>Vera</h2>
         <div style={{ fontSize: 12, color: T.textMuted }}>
-          Ask about your file, hand it any document, or tell it what the app should do better.
+          Your credentialing coordinator — ask about your file, hand her any document, or tell her what the app should do better.
         </div>
       </div>
 
@@ -441,7 +441,7 @@ function AssistantSection() {
             ref={taRef}
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Ask anything, or attach a document…"
+            placeholder="Ask Vera anything, or attach a document…"
             rows={1}
             style={{ ...iS, resize: "none", minHeight: 46, flex: 1, overflowY: "auto", lineHeight: 1.45, overscrollBehavior: "contain" }}
           />
