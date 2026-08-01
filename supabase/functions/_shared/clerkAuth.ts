@@ -1,15 +1,22 @@
 /**
  * Clerk-era identity for edge functions.
  *
- * This app authenticates with Clerk-minted JWTs (the "supabase" template,
- * signed with the project JWT secret). The API gateway (verify_jwt=true)
- * has already validated the signature by the time a function runs — but
- * these users do NOT exist in Supabase Auth, so `supa.auth.getUser()`
- * always returns null for them. Identity is the token's `sub` claim,
- * resolved to a row in `profiles` (auth_user_id = sub).
+ * This app authenticates with Clerk-minted RS256 JWTs. PostgREST accepts
+ * them via Supabase third-party auth, but the functions gateway does NOT
+ * (verify_jwt only knows the legacy HS256 secret → UNAUTHORIZED_ASYMMETRIC_JWT),
+ * so these functions deploy with --no-verify-jwt and the signature is
+ * verified HERE against Clerk's JWKS, pinned to our Clerk issuer. These
+ * users don't exist in Supabase Auth, so `supa.auth.getUser()` can never
+ * work; identity is the verified `sub` claim resolved to `profiles`.
+ *
+ * CLERK_ISSUER must move with any Clerk instance change (dev → production).
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5";
+
+const ISSUER = Deno.env.get("CLERK_ISSUER") || "https://dynamic-goshawk-87.clerk.accounts.dev";
+const JWKS = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`));
 
 const ADMIN_EMAILS = new Set([
   "admin@credentialdomd.com",
@@ -26,15 +33,14 @@ export interface ClerkProfile {
 
 export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  const payload = token.split(".")[1];
-  if (!payload) return null;
+  if (!token) return null;
 
   let sub = "";
   let claimEmail = "";
   try {
-    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    sub = claims.sub || "";
-    claimEmail = claims.email || "";
+    const { payload } = await jwtVerify(token, JWKS, { issuer: ISSUER });
+    sub = (payload.sub as string) || "";
+    claimEmail = (payload.email as string) || "";
   } catch {
     return null;
   }

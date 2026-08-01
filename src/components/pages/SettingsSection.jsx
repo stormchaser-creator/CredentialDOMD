@@ -284,6 +284,11 @@ function SettingsSection() {
         </Field>
         <Field label="Email" hint="For share emails"><input type="email" name="email" autoComplete="email" value={s.email || ""} onChange={e => update("email", e.target.value)} style={iS} placeholder="your@email.com" /></Field>
         <Field label="Phone" hint="For share texts"><input type="tel" name="tel" autoComplete="tel" value={s.phone || ""} onChange={e => update("phone", e.target.value)} style={iS} placeholder="(555) 123-4567" /></Field>
+        <Field label="Address" hint="Appears on your CV header"><input name="address" autoComplete="street-address" value={s.address || ""} onChange={e => update("address", e.target.value)} style={iS} placeholder="Street, City, ST ZIP" /></Field>
+        <Field label="Website" hint="Personal or practice site — CV header"><input name="website" value={s.website || ""} onChange={e => update("website", e.target.value)} style={iS} placeholder="e.g. DrYourName.com" /></Field>
+        <Field label="Languages" hint="e.g. Fluent in Spanish"><input value={s.languages || ""} onChange={e => update("languages", e.target.value)} style={iS} placeholder="Languages beyond English" /></Field>
+        <Field label="Professional Summary" hint="Opening paragraph of your CV"><textarea value={s.professionalSummary || ""} onChange={e => update("professionalSummary", e.target.value)} style={{ ...iS, minHeight: 96, resize: "vertical", fontFamily: "inherit" }} placeholder="Board-certified neurosurgeon with…" /></Field>
+        <Field label="CV Highlight Line" hint="One bold line under the summary — books, projects, distinctions"><input value={s.cvHighlights || ""} onChange={e => update("cvHighlights", e.target.value)} style={iS} placeholder="e.g. Author of two books" /></Field>
         <Field label="API Key (Gemini)" hint={s.apiKey ? "Saved \u2713 \u2014 saves automatically as you type. AI scanning is enabled." : "Required for AI document scanning. Get one free at aistudio.google.com/apikey \u2014 saves automatically, no save button needed."}>
           <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza..." />
         </Field>

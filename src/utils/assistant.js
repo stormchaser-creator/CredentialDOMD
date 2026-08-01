@@ -32,6 +32,8 @@ export const SECTION_FIELDS = {
   workHistory: ["type", "position", "employer", "city", "state", "startDate", "endDate", "current", "description", "notes"],
   screenings: ["type", "name", "agency", "requestedBy", "assignment", "fileNumber", "orderDate", "reportDate", "result", "expirationDate", "components", "notes"],
   professionalPhotos: ["name", "dateTaken", "notes"],
+  publications: ["name", "citation", "year", "doi", "pmid", "url", "notes"],
+  memberships: ["organization", "role", "startDate", "endDate", "notes"],
   locumContracts: ["facility", "location", "agency", "billTo", "coveragePeriods", "callStipend", "stipendHours", "overageHourlyRate", "orientationHourlyRate", "orientationFee", "hourlyRate", "incrementMinutes", "minCallMinutes", "notes"],
 };
 
@@ -75,6 +77,8 @@ export function buildSnapshot(data, allTrackedStates = []) {
     invoices: short(data.invoices, i => ({ number: i.number, total: i.totalAmount, sent: i.sentAt?.slice(0, 10), paid: !!i.paidAt })),
     encounters: { count: (data.encounters || []).length },
     education: short(data.education, e => ({ id: e.id, type: e.type, name: e.name, institution: e.institution, graduated: e.graduationDate })),
+    publications: short(data.publications, p => ({ id: p.id, name: p.name, year: p.year })),
+    memberships: short(data.memberships, m => ({ id: m.id, organization: m.organization, role: m.role })),
     documents: (data.documents || []).slice(0, 80).map(d => ({
       id: d.id, name: d.name, attachedTo: attachedLabel(d.linkedTo), onDevice: !!d.data,
     })),

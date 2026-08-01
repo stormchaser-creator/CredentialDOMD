@@ -88,6 +88,8 @@ const TABLE_MAP = {
   screenings: "screenings",
   alertAcks: "alert_acks",
   professionalPhotos: "professional_photos",
+  publications: "publications",
+  memberships: "professional_memberships",
   invoices: "invoices",
 };
 
@@ -108,6 +110,11 @@ const SETTINGS_TO_PROFILE = {
   phone: "phone",
   email: "email",
   specialties: "specialties",
+  address: "address",
+  website: "website",
+  languages: "languages",
+  professionalSummary: "professional_summary",
+  cvHighlights: "cv_highlights",
   profilePhoto: "profile_photo",
   theme: "theme",
   fontSize: "font_size",

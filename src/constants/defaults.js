@@ -10,6 +10,11 @@ export const DEFAULT_SETTINGS = {
   specialties: [],
   email: "",
   phone: "",
+  address: "",
+  website: "",
+  languages: "",
+  professionalSummary: "",
+  cvHighlights: "",
   theme: "dark",
   fontSize: "M",
   apiKey: import.meta.env.VITE_GEMINI_API_KEY || "",
@@ -37,6 +42,8 @@ export const DEFAULT_DATA = {
   notificationLog: [],
   workHistory: [],
   peerReferences: [],
+  publications: [],   // [{ id, name, citation, year, doi, pmid, url, sortOrder, notes }]
+  memberships: [],    // [{ id, organization, role, startDate, endDate, notes }]
   malpracticeHistory: [],
   // Locum tier features
   rotations: [],     // [{ id, hospital, city, state, startDate, endDate, role, agency, notes }]
