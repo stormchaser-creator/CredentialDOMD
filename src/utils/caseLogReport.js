@@ -7,6 +7,22 @@ import autoTable from "jspdf-autotable";
  * by that year — "2018-19" is Jul 1 2018 through Jun 30 2019.
  */
 
+// Training-year label: PGY 1 began Jul 1 2018, so the year starting Jul 1
+// of (2017 + N) is PGY N. The medicine year always runs Jul 1 – Jun 30.
+const PGY_ANCHOR = 2018; // start year of PGY 1
+export function pgyLabelOf(academicYear) {
+  const start = parseInt(String(academicYear).slice(0, 4), 10);
+  if (!start) return academicYear;
+  const n = start - PGY_ANCHOR + 1;
+  return n >= 1 ? `PGY ${n}` : academicYear;
+}
+
+export function currentAcademicYear(now = new Date()) {
+  const y = now.getFullYear();
+  const start = now.getMonth() + 1 >= 7 ? y : y - 1;
+  return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+}
+
 export function academicYearOf(dateStr) {
   if (!dateStr) return "Undated";
   const [y, m] = String(dateStr).split("-").map(Number);
@@ -73,7 +89,7 @@ export function buildCaseLogPdf(cases, { physician = "Physician", year = null } 
   autoTable(doc, {
     startY: 74,
     head: [["Academic Year", "Cases", "wRVU"]],
-    body: totals.map(t => [t.year, String(t.cases), t.wRVU.toFixed(2)]),
+    body: totals.map(t => [`${pgyLabelOf(t.year)} (${t.year})`, String(t.cases), t.wRVU.toFixed(2)]),
     foot: [["Total", String(grand.cases), grand.wRVU.toFixed(2)]],
     styles: { fontSize: 9, cellPadding: 3 },
     headStyles: { fillColor: [13, 110, 253], fontSize: 9 },

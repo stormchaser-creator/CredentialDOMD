@@ -201,15 +201,28 @@ export async function loadFromSupabase(userId) {
   const profileId = profile.id;
   const settings = profileRowToSettings(profile);
 
-  // Fetch all collections in parallel
-  const collections = Object.keys(TABLE_MAP);
-  const results = await Promise.all(
-    collections.map((key) =>
-      supabase
+  // Fetch all collections in parallel. PostgREST caps any single response at
+  // 1,000 rows — a career case log blows straight past that, so every
+  // collection pages until a short page says it has everything.
+  const fetchAll = async (key) => {
+    const PAGE = 1000;
+    let rows = [];
+    for (let start = 0; ; start += PAGE) {
+      const { data, error } = await supabase
         .from(tableName(key))
         .select("*")
         .eq("user_id", profileId)
         .order("created_at", { ascending: false })
+        .range(start, start + PAGE - 1);
+      if (error) return { data: rows.length ? rows : null, error };
+      rows = rows.concat(data || []);
+      if (!data || data.length < PAGE) return { data: rows, error: null };
+    }
+  };
+  const collections = Object.keys(TABLE_MAP);
+  const results = await Promise.all(
+    collections.map((key) =>
+      fetchAll(key)
         .then(({ data, error }) => {
           if (error) {
             console.warn(`Failed to load ${key}:`, error.message);

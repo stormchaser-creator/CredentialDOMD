@@ -13,7 +13,7 @@ import ComplianceRing from "./components/shared/ComplianceRing";
 import { ShareModal } from "./components/features";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
-import { academicYearOf, caseWRVU } from "./utils/caseLogReport";
+import { academicYearOf, caseWRVU, currentAcademicYear } from "./utils/caseLogReport";
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
 import { CVGenerator } from "./components/features";
@@ -115,7 +115,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 }
 
 function AppInner({ tab, setTab, subPage, setSubPage }) {
-  const [caseLogYear, setCaseLogYear] = useState("all");
+  const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
