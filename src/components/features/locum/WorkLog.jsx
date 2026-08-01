@@ -1288,33 +1288,15 @@ function WorkLog() {
 
         {/* Duration — one tap */}
         {manual.type !== "CallDay" && (
-        <Field label="How long">
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {[15, 30, 45, 60, 90, 120, 240, 480, 720].map(mins => (
-              <button key={mins} onClick={() => setManual(m2 => ({ ...m2, durationMin: String(mins), exact: false, start: "", end: "" }))} style={{
-                padding: "10px 13px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
-                fontVariantNumeric: "tabular-nums",
-                border: `1px solid ${manual.durationMin === String(mins) && !manual.exact ? T.accent : T.border}`,
-                backgroundColor: manual.durationMin === String(mins) && !manual.exact ? T.accent : "transparent",
-                color: manual.durationMin === String(mins) && !manual.exact ? "#fff" : T.textMuted,
-              }}>{mins < 60 ? `${mins}m` : `${mins / 60}h`}</button>
-            ))}
-            <button onClick={() => setManual(m2 => ({ ...m2, exact: !m2.exact }))} style={{
-              padding: "10px 13px", borderRadius: 18, fontSize: 14, fontWeight: 700, cursor: "pointer",
-              border: `1px solid ${manual.exact ? T.accent : T.border}`,
-              backgroundColor: "transparent", color: manual.exact ? T.accent : T.textMuted,
-            }}>Exact…</button>
-          </div>
-          {manual.exact && (
-            <div style={{ marginTop: 8 }}>
-              <SmartTimeField label="Start time" value={manual.start || ""} iS={iS} T={T}
-                onCommit={(v) => setManual(m2 => ({ ...m2, start: v || "", ...(v ? { durationMin: "" } : {}) }))} />
-              <SmartTimeField label="End time" value={manual.end || ""} iS={iS} T={T}
-                onCommit={(v) => setManual(m2 => ({ ...m2, end: v || "", ...(v ? { durationMin: "" } : {}) }))} />
-              <Field label="…or minutes"><input type="number" inputMode="numeric" value={manual.durationMin || ""} onChange={e => setManual(m2 => ({ ...m2, durationMin: e.target.value }))} style={iS} placeholder="e.g. 20" /></Field>
-            </div>
-          )}
-        </Field>
+        <>
+          {/* Times only — the duration-chip picker is gone (Eric enters
+              clock times directly; the time card IS the record) */}
+          <SmartTimeField label="Start time" value={manual.start || ""} iS={iS} T={T}
+            onCommit={(v) => setManual(m2 => ({ ...m2, start: v || "", ...(v ? { durationMin: "" } : {}) }))} />
+          <SmartTimeField label="End time" value={manual.end || ""} iS={iS} T={T}
+            onCommit={(v) => setManual(m2 => ({ ...m2, end: v || "", ...(v ? { durationMin: "" } : {}) }))} />
+          <Field label="…or minutes (when you only know the length)"><input type="number" inputMode="numeric" value={manual.durationMin || ""} onChange={e => setManual(m2 => ({ ...m2, durationMin: e.target.value }))} style={iS} placeholder="e.g. 60" /></Field>
+        </>
         )}
 
         <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult — head CT review" /></Field>
