@@ -1,4 +1,6 @@
 import { complianceFor, findStateLicense } from "./compliance";
+import { academicYearOf, caseWRVU } from "./caseLogReport";
+import { CPT_DESCS } from "../constants/cptDescs";
 import { CME_PROVIDERS } from "../constants/cmeProviders";
 
 /**
@@ -69,9 +71,44 @@ export function buildSnapshot(data, allTrackedStates = []) {
     const bits = [...new Set([item.type, item.name, item.title, item.institution, item.facility, item.provider, item.state].filter(Boolean))];
     return `${sec}: ${bits.slice(0, 3).join(" — ")}`;
   };
+  // The surgeon's complete case log, compacted into aggregates the model can
+  // count over: per-year totals, a procedure-title histogram, and a CPT-code
+  // histogram with descriptions. 1,500 raw rows would drown the context;
+  // histograms answer "how many EVDs" exactly.
+  const caseLog = (() => {
+    const cases = data.caseLogs || [];
+    if (!cases.length) return null;
+    const byYear = {}, byTitle = {}, byCode = {};
+    for (const c of cases) {
+      const ay = academicYearOf(c.date);
+      byYear[ay] = byYear[ay] || { cases: 0, wRVU: 0 };
+      byYear[ay].cases += 1;
+      byYear[ay].wRVU = Math.round((byYear[ay].wRVU + caseWRVU(c)) * 100) / 100;
+      const t = String(c.title || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 60);
+      if (t) byTitle[t] = (byTitle[t] || 0) + 1;
+      for (const tok of String(c.cptCodes || "").split(",")) {
+        const code = tok.trim().split(/[-\s]/)[0];
+        if (code) byCode[code] = (byCode[code] || 0) + 1;
+      }
+    }
+    const codeCounts = Object.fromEntries(Object.entries(byCode).sort((a, b) => b[1] - a[1])
+      .map(([code, n]) => [code, { n, what: CPT_DESCS[code]?.d || "" }]));
+    return { totalCases: cases.length, byYear, procedureCounts: byTitle, codeCounts };
+  })();
+
+  const workLogRecent = (data.workLog || [])
+    .filter(e => e.type !== "CallDay")
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .slice(0, 50)
+    .map(e => ({ date: e.date, type: e.type, billedMin: e.billedMin, desc: (e.description || "").slice(0, 60), invoiced: !!e.invoiceId }));
+
   return {
     today: new Date().toISOString().slice(0, 10),
-    physician: { name: data.settings.name, degree: data.settings.degreeType, npi: data.settings.npi, states: allTrackedStates },
+    physician: {
+      name: data.settings.name, degree: data.settings.degreeType, npi: data.settings.npi,
+      states: allTrackedStates, specialties: data.settings.specialties,
+      address: data.settings.address, website: data.settings.website, languages: data.settings.languages,
+    },
     licenses: short(data.licenses, l => ({ id: l.id, type: l.type, name: l.name, state: l.state, number: l.licenseNumber, expires: l.expirationDate })),
     privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate })),
     insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate })),
@@ -80,9 +117,19 @@ export function buildSnapshot(data, allTrackedStates = []) {
     healthRecords: short(data.healthRecords, h => ({ id: h.id, category: h.category, name: h.name, result: h.result, value: h.resultValue, expires: h.expirationDate })),
     screenings: short(data.screenings, s => ({ id: s.id, name: s.name, result: s.result, reported: s.reportDate, expires: s.expirationDate })),
     contracts: short(data.locumContracts, c => ({ id: c.id, facility: c.facility, stipend: c.callStipend, stipendHours: c.stipendHours, overageRate: c.overageHourlyRate, periods: c.coveragePeriods })),
-    workLog: { entries: (data.workLog || []).length, unbilled: (data.workLog || []).filter(e => !e.invoiceId).length },
+    workLog: { entries: (data.workLog || []).length, unbilled: (data.workLog || []).filter(e => !e.invoiceId).length, recent: workLogRecent },
     invoices: short(data.invoices, i => ({ number: i.number, total: i.totalAmount, sent: i.sentAt?.slice(0, 10), paid: !!i.paidAt })),
-    encounters: { count: (data.encounters || []).length },
+    encounters: {
+      count: (data.encounters || []).length,
+      totalWRVU: Math.round((data.encounters || []).reduce((t, e) => t + (e.codes || []).reduce((u, c) => u + (c.wRVU || 0) * (c.units || 1), 0), 0) * 100) / 100,
+    },
+    caseLog,
+    workHistory: short(data.workHistory, w => ({ id: w.id, position: w.position, employer: w.employer, from: w.startDate, to: w.current === true || w.current === "true" ? "current" : w.endDate })),
+    peerReferences: short(data.peerReferences, r => ({ id: r.id, name: r.name, specialty: r.specialty, institution: r.institution })),
+    malpracticeHistory: short(data.malpracticeHistory, m => ({ id: m.id, type: m.type, status: m.status, date: m.date })),
+    rotations: short(data.rotations, r => ({ id: r.id, hospital: r.hospital, from: r.startDate, to: r.endDate, agency: r.agency })),
+    deductibles: { count: (data.deductibles || []).length, total: Math.round((data.deductibles || []).reduce((t, d) => t + (parseFloat(d.amount) || 0), 0) * 100) / 100 },
+    professionalPhotos: short(data.professionalPhotos, ph => ({ id: ph.id, name: ph.name, taken: ph.dateTaken })),
     education: short(data.education, e => ({ id: e.id, type: e.type, name: e.name, institution: e.institution, graduated: e.graduationDate })),
     publications: short(data.publications, p => ({ id: p.id, name: p.name, year: p.year })),
     memberships: short(data.memberships, m => ({ id: m.id, organization: m.organization, role: m.role })),
@@ -101,7 +148,21 @@ announce it.
 WHAT THE APP DOES: tracks licenses/DEA/board certs (with expirations), CME compliance per
 state, hospital privileges, malpractice insurance, health records (vaccinations, titers, TB,
 drug screens), background screenings, documents (scanned via AI), locum contracts + work
-logging + invoices (stipend-allowance billing), and RVU capture by voice.
+logging + invoices (stipend-allowance billing), RVU capture by voice, and the surgeon's
+COMPLETE career case log.
+
+YOU SEE THEIR WHOLE FILE. The snapshot below is their entire database, so never say you
+cannot see their data. CASE-LOG ANALYTICS: snapshot.caseLog holds totals, per-academic-year
+counts and wRVU (years run Jul 1 - Jun 30), procedureCounts (lowercased title histogram),
+and codeCounts (CPT histogram with descriptions). To answer "how many X": sum EVERY
+matching variant across procedureCounts (spelling varies: "evd", "evd replacement",
+"crani supra tent bleed / evd") AND check codeCounts for the code; show your work
+("40x 'evd' + 1x 'evd replacement' ... + code 61107 on N cases"). Surgeon shorthand:
+EVD = external ventricular drain (61107); SDD = subdural drain (61154/61108); PIF =
+posterior instrumented fusion; PCDF = posterior cervical decompression & fusion;
+DLL = decompressive lumbar laminectomy; HLD = hemilaminectomy discectomy; TNTS =
+transnasal transsphenoidal (61548/62165); DSA = diagnostic cerebral angiogram
+(36221-36228); LVO thrombectomy = 61645; crani = craniotomy/craniectomy.
 
 YOU CAN PROPOSE ACTIONS. Respond with JSON ONLY (no fences):
 {
