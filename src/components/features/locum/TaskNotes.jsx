@@ -1,14 +1,16 @@
 import { useState, useMemo, memo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
+import { Modal, Field } from "../../shared";
+import SmartTimeField from "../../shared/SmartTimeField";
 import { generateId } from "../../../utils/helpers";
 
 /**
  * The interrupted-work list. A call comes in mid-case: capture it in one
- * line and move on. The moment of capture is kept, because that is often
- * the billable clock start — the call at 6:47pm is the work, even if the
- * note gets finished at 9. Completing a task hands its text and its times
- * straight to the Work tab as a prefilled entry.
+ * line and move on. When he comes back and finishes it, THAT is when the
+ * entry gets made — he types the begin and end times himself, adjusts the
+ * note, and it becomes a work entry. The capture time is only a reminder
+ * of when it came in; it never decides what gets billed.
  */
 
 const fmtClock = (iso) => {
@@ -28,6 +30,8 @@ function TaskNotes({ onBill }) {
   const iS = useInputStyle();
   const [text, setText] = useState("");
   const [showDone, setShowDone] = useState(false);
+  const [finishing, setFinishing] = useState(null); // the task being completed
+  const [form, setForm] = useState({});
 
   const tasks = data.taskNotes || [];
   const { open, done } = useMemo(() => ({
@@ -53,19 +57,42 @@ function TaskNotes({ onBill }) {
 
   const startWork = (task) => editItem("taskNotes", { ...task, startedAt: new Date().toISOString() });
 
-  // Finish it and hand the Work tab a prefilled entry. Which clock is right
-  // depends on the job: a phone call bills from when it came in, a task he
-  // sat down to later bills from when he started it.
-  const complete = (task, from) => {
-    const end = new Date().toISOString();
-    const start = from === "captured" ? task.capturedAt : (task.startedAt || task.capturedAt);
-    editItem("taskNotes", { ...task, completedAt: end });
-    onBill?.({
-      description: task.text,
+  // Finishing is where the real entry happens: he opens it, types the
+  // begin and end times, adjusts the note, and it becomes a work entry.
+  // The capture time is only a reminder of when it came in.
+  const openFinish = (task) => {
+    const now = new Date();
+    const dayKey = (d) => {
+      const p = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+      return p.toISOString().slice(0, 10);
+    };
+    setFinishing(task);
+    setForm({
+      date: dayKey(now),
+      type: "Call",
+      start: "",
+      end: "",
+      description: task.text || "",
+      privateNote: "",
       contractId: task.contractId || defaultContract,
-      startIso: start,
-      endIso: end,
     });
+  };
+
+  const submitFinish = () => {
+    if (!finishing) return;
+    if (!form.start || !form.end) return; // the button is disabled until both exist
+    editItem("taskNotes", { ...finishing, completedAt: new Date().toISOString() });
+    onBill?.({
+      date: form.date,
+      type: form.type,
+      start: form.start,
+      end: form.end,
+      description: form.description,
+      privateNote: form.privateNote,
+      contractId: form.contractId,
+    });
+    setFinishing(null);
+    setForm({});
   };
 
   const dismiss = (task) => editItem("taskNotes", { ...task, completedAt: new Date().toISOString(), notes: "closed without billing" });
@@ -89,18 +116,12 @@ function TaskNotes({ onBill }) {
               <button onClick={() => startWork(t)} style={{
                 padding: "8px 12px", borderRadius: 9, border: `1px solid ${T.accent}`,
                 backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 800, cursor: "pointer",
-              }}>Start now</button>
+              }}>Start timing</button>
             )}
-            <button onClick={() => complete(t, "captured")} style={{
+            <button onClick={() => openFinish(t)} style={{
               padding: "8px 12px", borderRadius: 9, border: "none",
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer",
-            }}>Bill from {fmtClock(t.capturedAt)}</button>
-            {t.startedAt && (
-              <button onClick={() => complete(t, "started")} style={{
-                padding: "8px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
-                backgroundColor: "transparent", color: T.text, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-              }}>Bill from {fmtClock(t.startedAt)}</button>
-            )}
+            }}>Finish &amp; log time</button>
             <button onClick={() => dismiss(t)} style={{
               padding: "8px 11px", borderRadius: 9, border: `1px solid ${T.border}`,
               backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
@@ -122,7 +143,7 @@ function TaskNotes({ onBill }) {
       <div style={{ marginBottom: 10 }}>
         <h3 style={{ margin: "0 0 3px", fontSize: 17, fontWeight: 800, color: T.text }}>To do</h3>
         <div style={{ fontSize: 12, color: T.textMuted }}>
-          Catch it now, finish it later. The time it came in is kept, so it can still be billed from then.
+          Catch it now, finish it later — you enter the times when you close it out.
         </div>
       </div>
 
@@ -149,6 +170,63 @@ function TaskNotes({ onBill }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {open.map(t => <Row key={t.id} t={t} isDone={false} />)}
       </div>
+
+      <Modal open={!!finishing} onClose={() => { setFinishing(null); setForm({}); }} title="Finish and log the time">
+        {finishing && (
+          <>
+            <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10 }}>
+              Noted {fmtDay(finishing.capturedAt)} at {fmtClock(finishing.capturedAt)}
+              {finishing.startedAt && ` · timing started ${fmtClock(finishing.startedAt)}`}
+            </div>
+
+            <Field label="What you did"><input value={form.description || ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={iS} /></Field>
+
+            <Field label="Type">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {["Call", "Transfer call", "Consult", "Rounding", "Procedure", "Charting", "Family talk"].map(t2 => (
+                  <button key={t2} onClick={() => setForm(f => ({ ...f, type: t2 }))} style={{
+                    padding: "8px 12px", borderRadius: 16, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                    border: `1px solid ${form.type === t2 ? T.accent : T.border}`,
+                    backgroundColor: form.type === t2 ? T.accent : "transparent",
+                    color: form.type === t2 ? "#fff" : T.textMuted,
+                  }}>{t2}</button>
+                ))}
+              </div>
+            </Field>
+
+            <Field label="Date"><input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={iS} /></Field>
+
+            <SmartTimeField label="Begin" value={form.start || ""} iS={iS} T={T}
+              onCommit={(v) => setForm(f => ({ ...f, start: v || "" }))} />
+            <SmartTimeField label="End" value={form.end || ""} iS={iS} T={T}
+              onCommit={(v) => setForm(f => ({ ...f, end: v || "" }))} />
+
+            {contracts.length > 1 && (
+              <Field label="Contract">
+                <select value={form.contractId || ""} onChange={e => setForm(f => ({ ...f, contractId: e.target.value || null }))} style={{ ...iS, appearance: "auto" }}>
+                  <option value="">— none —</option>
+                  {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+                </select>
+              </Field>
+            )}
+
+            <Field label="Notes (for the invoice)"><textarea value={form.privateNote || ""} onChange={e => setForm(f => ({ ...f, privateNote: e.target.value }))} style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} placeholder="Anything worth recording about this one" /></Field>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={submitFinish} disabled={!form.start || !form.end} style={{
+                flex: 1, padding: "13px", borderRadius: 12, border: "none",
+                background: form.start && form.end ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
+                color: "#fff", fontSize: 15, fontWeight: 800,
+                cursor: form.start && form.end ? "pointer" : "default",
+              }}>Log it to the Work tab</button>
+              <button onClick={() => { setFinishing(null); setForm({}); }} style={{
+                padding: "13px 18px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Cancel</button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       {done.length > 0 && (
         <>
