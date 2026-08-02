@@ -217,7 +217,7 @@ function billedSpan(e, c) {
   return `${fmtTime(s)}–${fmtTime(en)}`;
 }
 
-function WorkLog() {
+function WorkLog({ billDraft, onBillDraftDone }) {
   const { data, addItem, editItem, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
 
@@ -817,6 +817,32 @@ function WorkLog() {
     rememberContract(target.id);
     setShowManual(false); setManual({});
   }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, noticeOverlap, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
+
+  // A to-do handed over for billing: open the manual form already filled
+  // with its text and the clock times the note itself recorded.
+  useEffect(() => {
+    if (!billDraft) return;
+    const s2 = new Date(billDraft.startIso), e2 = new Date(billDraft.endIso);
+    const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const dayKey = (d) => {
+      const p = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+      return p.toISOString().slice(0, 10);
+    };
+    setManual({
+      contractId: billDraft.contractId,
+      type: "Call",
+      date: dayKey(s2),
+      start: hhmm(s2),
+      end: hhmm(e2),
+      durationMin: "",
+      description: billDraft.description || "",
+      privateNote: "",
+      exact: true,
+      pickDate: false,
+    });
+    setShowManual(true);
+    onBillDraftDone?.();
+  }, [billDraft, onBillDraftDone]);
 
   const openEditEntry = useCallback((e) => {
     setManual({

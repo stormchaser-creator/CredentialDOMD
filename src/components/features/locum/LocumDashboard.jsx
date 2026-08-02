@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { useApp } from "../../../context/AppContext";
-import DeductionMemo from "./DeductionMemo";
+import TaskNotes from "./TaskNotes";
 import WorkLog from "./WorkLog";
 import Contracts from "./Contracts";
 import Schedule from "./Schedule";
@@ -27,12 +27,13 @@ const SUBTABS = [
   { id: "schedule", label: "Sched." },
   { id: "invoices", label: "Invoices" },
   { id: "contracts", label: "Contracts" },
-  { id: "deductions", label: "Deduct." },
+  { id: "todo", label: "To do" },
 ];
 
 export default function LocumDashboard() {
   const { theme: T, plan, isDevMode } = useApp();
   const [sub, setSub] = useState("work");
+  const [billDraft, setBillDraft] = useState(null);
 
   const isLocum = plan === "locum" || isDevMode;
 
@@ -75,12 +76,12 @@ export default function LocumDashboard() {
         ))}
       </div>
 
-      {sub === "work" && <WorkLog />}
+      {sub === "work" && <WorkLog billDraft={billDraft} onBillDraftDone={() => setBillDraft(null)} />}
       {sub === "rvus" && <RVULog />}
       {sub === "schedule" && <Schedule />}
       {sub === "invoices" && <Invoices />}
       {sub === "contracts" && <Contracts />}
-      {sub === "deductions" && <DeductionMemo />}
+      {sub === "todo" && <TaskNotes onBill={(d) => { setBillDraft(d); setSub("work"); }} />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { ShareModal } from "./components/features";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
 import { CaseDictate } from "./components/features";
+import { DeductionMemo } from "./components/features/locum";
 import { academicYearOf, caseWRVU, currentAcademicYear } from "./utils/caseLogReport";
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
@@ -1284,6 +1285,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   const renderMore = () => {
     if (subPage === "settings") return <SettingsSection />;
     if (subPage === "cv") return <CVGenerator />;
+    if (subPage === "finance") return <DeductionMemo />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
     if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} />;
@@ -1350,6 +1352,21 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
               <div style={{ fontSize: 13, color: T.textMuted }}>Auto-generate your curriculum vitae</div>
             </div>
             <span style={{ color: T.accent }}>{"\u203a"}</span>
+          </button>
+
+          {/* Finance — 1099 deductions and expense ledger */}
+          <button onClick={() => setSubPage("finance")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${T.border}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\ud83d\udcb0"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Finance</div>
+              <div style={{ fontSize: 13, color: T.textMuted }}>1099 deductions and expense ledger</div>
+            </div>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
           {/* CPT Lookup */}

@@ -89,6 +89,7 @@ const TABLE_MAP = {
   alertAcks: "alert_acks",
   professionalPhotos: "professional_photos",
   publications: "publications",
+  taskNotes: "task_notes",
   memberships: "professional_memberships",
   invoices: "invoices",
 };
