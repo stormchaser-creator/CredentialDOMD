@@ -5,6 +5,8 @@
  * PREFILLED for review — dictation never saves a case directly.
  */
 
+import { CONSTRUCT_RULES } from "../constants/cptConstructs";
+
 const GEMINI_MODEL = "gemini-2.5-flash";
 
 const PROMPT = (transcript, todayISO, categories) => `You convert a NEUROSURGEON's spoken
@@ -15,6 +17,9 @@ TODAY is ${todayISO} (local). "yesterday", "last night", "Tuesday" resolve again
 If no date is spoken, use today.
 
 CATEGORIES (pick the closest): ${categories.join(", ")}
+
+
+${CONSTRUCT_RULES}
 
 CPT: suggest the standard code(s) for the procedure described — primary code first,
 clearly implied add-ons only (navigation +61781 only if stealth/navigation is said,

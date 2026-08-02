@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, memo, useCallback } from "react";
 import { useApp } from "../../context/AppContext";
+import { CPT_DESCS } from "../../constants/cptDescs";
+import { CPT_BY_CODE } from "../../constants/cpt";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
@@ -10,6 +12,34 @@ import { generateId, getStatusColor, getStatusLabel, describeItem } from "../../
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import CPTCodePicker from "./CPTCodePicker";
+
+// Every billed code, spelled out — number, what it entails, units, value.
+// Structured detail from the import wins; a hand-typed code string still
+// resolves through the description catalogs.
+function billedCodes(item) {
+  const detail = item.customFields?.cptDetail;
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map(c => ({
+      code: c.code, units: c.units || 1, mod: c.mod || null,
+      desc: c.desc || CPT_DESCS[c.code]?.d || CPT_BY_CODE[c.code]?.shortDesc || "",
+      wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? CPT_BY_CODE[c.code]?.wRVU ?? 0,
+      inferred: !!c.inferred,
+    }));
+  }
+  if (!item.cptCodes) return [];
+  return String(item.cptCodes).split(",").map(t => t.trim()).filter(Boolean).map(tok => {
+    const m = tok.match(/^(\w+?)(?:-(\d\d))?(?:\s*x(\d+))?$/i) || [];
+    const code = m[1] || tok;
+    return {
+      code, units: m[3] ? parseInt(m[3], 10) : 1, mod: m[2] || null,
+      desc: CPT_DESCS[code]?.d || CPT_BY_CODE[code]?.shortDesc || "",
+      wRVU: CPT_DESCS[code]?.w ?? CPT_BY_CODE[code]?.wRVU ?? 0,
+      inferred: false,
+    };
+  });
+}
+
+const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, filterTabs, prefillItem, onPrefillDone }) {
   const { data, setData, addItem, theme: T } = useApp();
@@ -418,12 +448,52 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 </span>
               </div>
             ))}
-            {viewItem.customFields && Object.keys(viewItem.customFields).length > 0 && (
+            {billedCodes(viewItem).length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 2px" }}>
+                  What was billed
+                </div>
+                {billedCodes(viewItem).map((c, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 800, fontFamily: "monospace", color: T.accent, flexShrink: 0, minWidth: 52 }}>
+                      {c.code}{c.mod ? `-${c.mod}` : ""}{c.units > 1 ? ` ×${c.units}` : ""}
+                    </span>
+                    <span style={{ fontSize: 13, color: T.text, flex: 1, minWidth: 0 }}>
+                      {c.desc || "—"}
+                      {c.inferred && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: 0.5 }}>implied</span>}
+                    </span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#22c55e", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                      {c.wRVU ? (c.wRVU * c.units).toFixed(2) : "—"}
+                    </span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", fontSize: 13.5, fontWeight: 800 }}>
+                  <span style={{ color: T.textMuted }}>Case total</span>
+                  <span style={{ color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>
+                    {billedCodes(viewItem).reduce((t, c) => t + (c.wRVU || 0) * c.units, 0).toFixed(2)} wRVU
+                  </span>
+                </div>
+                {viewItem.customFields?.componentAudit?.rationale && (
+                  <div style={{ fontSize: 11.5, color: T.textDim, padding: "6px 0" }}>
+                    Construct check: {viewItem.customFields.componentAudit.rationale}
+                  </div>
+                )}
+              </>
+            )}
+            {viewItem.customFields && Object.keys(viewItem.customFields).filter(k => !HIDDEN_CUSTOM_KEYS.has(k)).length > 0 && (
               <>
                 <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 2px" }}>
                   Additional details
                 </div>
-                {Object.entries(viewItem.customFields).map(([k, v]) => (
+                {viewItem.customFields.patient && (
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                    <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>Patient (private)</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right" }}>
+                      {[viewItem.customFields.patient.name, viewItem.customFields.patient.mrn && `MRN ${viewItem.customFields.patient.mrn}`].filter(Boolean).join(" · ")}
+                    </span>
+                  </div>
+                )}
+                {Object.entries(viewItem.customFields).filter(([k]) => !HIDDEN_CUSTOM_KEYS.has(k)).map(([k, v]) => (
                   <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
                     <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{k}</span>
                     <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{String(v)}</span>

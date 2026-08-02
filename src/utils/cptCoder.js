@@ -1,4 +1,5 @@
 import { CPT_CODES, CPT_BY_CODE } from "../constants/cpt";
+import { CONSTRUCT_RULES } from "../constants/cptConstructs";
 
 /**
  * Plain-language → CPT codes. The physician dictates or types what they
@@ -28,6 +29,8 @@ Select CPT codes ONLY from the catalog below. Rules:
   99291 (+99292 per extra 30 min), ED 99281-99285. If the level isn't stated, infer from
   described complexity; a routine progress note is 99232, a new consult defaults to
   moderate (99254) — and note the assumption in "why".
+
+${CONSTRUCT_RULES}
 - Procedures: include implied add-on codes (microscope +69990, navigation +61781/61782/61783,
   each-additional-level add-ons, instrumentation) with correct units.
 - units: how many times the code bills (add-on levels, critical-care blocks). Default 1.
