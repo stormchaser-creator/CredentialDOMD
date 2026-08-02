@@ -486,9 +486,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 </div>
                 {viewItem.customFields.patient && (
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
-                    <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>Patient (private)</span>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right" }}>
-                      {[viewItem.customFields.patient.name, viewItem.customFields.patient.mrn && `MRN ${viewItem.customFields.patient.mrn}`].filter(Boolean).join(" · ")}
+                    <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>Case reference</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", fontFamily: "monospace" }}>
+                      {[viewItem.customFields.patient.caseRef, viewItem.customFields.patient.dob && `DOB ${viewItem.customFields.patient.dob}`].filter(Boolean).join(" · ")}
                     </span>
                   </div>
                 )}
