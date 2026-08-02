@@ -20,12 +20,12 @@ Absolutely. Each state license has its own CME hour requirements, cycle lengths,
 ---
 
 **Q: Is my data secure?**
-Your credential data is stored in Supabase with encryption at rest and TLS encryption in transit, and row-level security ensures no one can access your records but you. Access controls and audit logging are built into the platform so you have a complete record of who accessed what and when.
+Your credential data is stored in Supabase with encryption at rest and TLS encryption in transit, and row-level security isolates your records to your account. Note two limits we state plainly: we do not yet keep an access audit trail, and support tickets and feedback you send are read by the founder.
 
 ---
 
 **Q: Is CredentialDOMD HIPAA compliant?**
-The platform implements HIPAA-aligned security controls including encryption, access controls, and audit logging to protect your personal health and credentialing information. We treat your data with the same rigor you apply to your patients' records.
+**CredentialDOMD is not HIPAA compliant and does not sign business associate agreements.** It is built to hold your own credential, billing, and case records — not patient health information. Keep patient identifiers out of it. The AI features send what you give them to Google's Gemini API under your own key; Google's free tier permits human review of submitted content.
 
 ---
 

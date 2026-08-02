@@ -117,7 +117,8 @@ function PrivacyPolicy({ T }) {
       </Section>
 
       <Section title="5. HIPAA Considerations" T={T}>
-        <p>CredentialDOMD stores physician credentialing data, which may include information adjacent to Protected Health Information (PHI). While this app is designed for personal use by the physician themselves (not for covered entities), users handling data in a clinical or institutional context should consult their compliance officer about applicable HIPAA requirements.</p>
+        <p><strong>CredentialDOMD is not HIPAA compliant and does not offer business associate agreements.</strong> Do not store Protected Health Information in it. Case logs are intended for procedure, code, and RVU tracking &mdash; not patient names, medical record numbers, or dates of birth.</p>
+        <p>Two disclosures you should weigh before entering anything clinical: (1) the AI features (document scanning, dictation, CPT coding, and the assistant) transmit what you supply to Google&rsquo;s Gemini API using your own API key, and Google&rsquo;s free-tier terms permit human review and model training of submitted content; (2) support tickets, feedback, and assistant transcripts are stored and read by the developer. If you work under a covered entity, consult your compliance officer before using AI features on anything clinical.</p>
         <p style={{ marginTop: 6 }}>Additional safeguards may be required for deployments involving institutional use, multi-user environments, or integration with covered entity systems.</p>
       </Section>
 

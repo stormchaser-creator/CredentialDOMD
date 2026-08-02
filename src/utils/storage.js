@@ -74,3 +74,13 @@ export async function saveData(data) {
   } catch { /* unavailable */ }
   return saved;
 }
+
+/**
+ * Sign-out purge. The cached copy of the whole file — which now includes
+ * patient identifiers on case logs — must not survive on a shared or
+ * hospital device for the next person who signs in.
+ */
+export async function clearLocalData() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* unavailable */ }
+  try { await window.storage?.remove?.(STORAGE_KEY); } catch { /* unavailable */ }
+}

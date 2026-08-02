@@ -3,7 +3,7 @@ import { useUser, useClerk } from "@clerk/clerk-react";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
-import { loadData, saveData } from "../utils/storage";
+import { loadData, saveData, clearLocalData } from "../utils/storage";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
 import { MS_PER_DAY } from "../utils/helpers";
@@ -221,6 +221,10 @@ export function AppProvider({ children, onNavigate }) {
     userIdRef.current = null;
     setData(DEFAULT_DATA);
     setLoaded(false);
+    // Purge the on-device cache: it holds the whole file, patient
+    // identifiers included, and the next account on this device must
+    // never inherit it.
+    await clearLocalData();
   }, [clerkSignOut]);
 
   // Persist to localStorage on change (debounced backup)

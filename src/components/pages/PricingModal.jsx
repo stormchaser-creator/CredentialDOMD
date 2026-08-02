@@ -366,7 +366,7 @@ export default function PricingModal({ open, onClose }) {
             }}
           >
             <div style={{ fontWeight: 700, color: T.text, marginBottom: 4, fontSize: 13 }}>
-              HIPAA-aligned. Your data stays yours.
+              Encrypted and isolated to your account. Your data stays yours.
             </div>
             AES-256 at rest, TLS 1.3 in transit, US-region only. We sign BAAs on Practice and above.
           </div>
