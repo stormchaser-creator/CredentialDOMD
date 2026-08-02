@@ -159,10 +159,23 @@ function DocumentsSection() {
     setScanError(null);
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
     const MAX_BATCH = 10;
+    // Everything the picker offers must actually be accepted — this list
+    // had drifted behind UPLOAD_ACCEPT and silently rejected Word and Excel.
+    // Extension is the fallback: iOS and Windows often hand over an empty or
+    // generic MIME type for Office files.
     const ALLOWED_TYPES = new Set([
-      "image/jpeg", "image/png", "image/gif", "image/webp",
+      "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp",
+      "image/heic", "image/heif", "image/tiff", "image/bmp",
       "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/csv", "application/csv", "text/plain",
+      "application/rtf", "text/rtf",
+      "application/octet-stream", // some browsers send this for .docx/.xlsx
     ]);
+    const ALLOWED_EXT = /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp|pdf|docx?|xlsx?|csv|txt|rtf)$/i;
     const fileList = Array.from(files).slice(0, MAX_BATCH);
     if (files.length > MAX_BATCH) {
       setScanError(`Only the first ${MAX_BATCH} files will be processed.`);
@@ -172,8 +185,8 @@ function DocumentsSection() {
         setScanError(`"${file.name}" exceeds the 10 MB size limit.`);
         continue;
       }
-      if (file.type && !ALLOWED_TYPES.has(file.type)) {
-        setScanError(`"${file.name}" has an unsupported file type (${file.type}).`);
+      if (!ALLOWED_TYPES.has(file.type) && !ALLOWED_EXT.test(file.name || "")) {
+        setScanError(`"${file.name}" isn't a file type this app reads (${file.type || "unknown type"}). Photos, PDFs, Word, Excel, CSV and text work.`);
         continue;
       }
       const dataUrl = await new Promise((resolve, reject) => {

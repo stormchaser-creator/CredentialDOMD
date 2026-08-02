@@ -17,6 +17,9 @@ export const UPLOAD_ACCEPT = [
   ".xls", "application/vnd.ms-excel",
   ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".csv", "text/csv",
+  ".txt", "text/plain",
+  ".rtf", "application/rtf",
+  ".heic", ".heif",
 ].join(",");
 
 export function officeKind(name = "", mime = "") {
@@ -25,7 +28,8 @@ export function officeKind(name = "", mime = "") {
   if (n.endsWith(".docx") || m.includes("wordprocessingml")) return "docx";
   if (n.endsWith(".doc") || m === "application/msword") return "doc";
   if (n.endsWith(".xlsx") || n.endsWith(".xls") || m.includes("spreadsheetml") || m === "application/vnd.ms-excel") return "excel";
-  if (n.endsWith(".csv") || m === "text/csv") return "csv";
+  if (n.endsWith(".csv") || m === "text/csv" || m === "application/csv") return "csv";
+  if (n.endsWith(".txt") || n.endsWith(".rtf") || m === "text/plain" || m.includes("rtf")) return "text";
   return null;
 }
 
@@ -65,6 +69,15 @@ export async function extractOfficeText(src) {
       .map(n => `--- Sheet: ${n} ---\n${XLSX.utils.sheet_to_csv(wb.Sheets[n])}`)
       .join("\n\n");
     if (!text.trim()) throw new Error("No readable cells found in this spreadsheet.");
+    return text.slice(0, MAX_CHARS);
+  }
+  if (kind === "text") {
+    const buf2 = await toArrayBuffer(src);
+    const text = new TextDecoder("utf-8").decode(buf2)
+      // RTF: strip control words so the model sees prose, not markup
+      .replace(/\\[a-z]+-?\d* ?/gi, src.name?.toLowerCase().endsWith(".rtf") ? " " : "$&")
+      .replace(/[{}]/g, src.name?.toLowerCase().endsWith(".rtf") ? "" : "$&");
+    if (!text.trim()) throw new Error("That file has no readable text in it.");
     return text.slice(0, MAX_CHARS);
   }
   throw new Error("Unsupported file type for text extraction.");
