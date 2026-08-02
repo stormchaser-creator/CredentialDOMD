@@ -90,6 +90,7 @@ const TABLE_MAP = {
   professionalPhotos: "professional_photos",
   publications: "publications",
   taskNotes: "task_notes",
+  dutyDays: "duty_days",
   memberships: "professional_memberships",
   invoices: "invoices",
 };

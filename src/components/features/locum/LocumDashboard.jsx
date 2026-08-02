@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import TaskNotes from "./TaskNotes";
+import DutyLog from "./DutyLog";
 import WorkLog from "./WorkLog";
 import Contracts from "./Contracts";
 import Schedule from "./Schedule";
@@ -31,9 +32,12 @@ const SUBTABS = [
 ];
 
 export default function LocumDashboard() {
-  const { theme: T, plan, isDevMode } = useApp();
+  const { data, theme: T, plan, isDevMode } = useApp();
   const [sub, setSub] = useState("work");
   const [billDraft, setBillDraft] = useState(null);
+  // A day-rate contract has no clock to run — it logs days and call periods.
+  const contracts = data.locumContracts || [];
+  const dailyContract = contracts.length === 1 && contracts[0].payModel === "daily" ? contracts[0] : null;
 
   const isLocum = plan === "locum" || isDevMode;
 
@@ -76,7 +80,9 @@ export default function LocumDashboard() {
         ))}
       </div>
 
-      {sub === "work" && <WorkLog billDraft={billDraft} onBillDraftDone={() => setBillDraft(null)} />}
+      {sub === "work" && (dailyContract
+        ? <DutyLog contract={dailyContract} />
+        : <WorkLog billDraft={billDraft} onBillDraftDone={() => setBillDraft(null)} />)}
       {sub === "rvus" && <RVULog />}
       {sub === "schedule" && <Schedule />}
       {sub === "invoices" && <Invoices />}

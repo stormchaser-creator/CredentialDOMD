@@ -1,0 +1,245 @@
+import { useState, useMemo, memo } from "react";
+import { useApp } from "../../../context/AppContext";
+import { useInputStyle } from "../../shared/useInputStyle";
+import { Modal, Field } from "../../shared";
+import { generateId } from "../../../utils/helpers";
+import {
+  dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor,
+  monthKey, monthLabel,
+} from "../../../utils/dutyPay";
+
+/**
+ * Day-rate logging, for a contract that pays per day worked and per accepted
+ * 24-hour call period rather than by the hour. One row per date: was it a
+ * clinical day, was call taken and where, was teaching logged. The invoice
+ * unit is the month, so that is what the header totals.
+ */
+function DutyLog({ contract }) {
+  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
+  const iS = useInputStyle();
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({});
+
+  const todayKey = (() => {
+    const d = new Date();
+    const p = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return p.toISOString().slice(0, 10);
+  })();
+
+  const duties = useMemo(
+    () => (data.dutyDays || [])
+      .filter(d => d.contractId === contract?.id)
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+    [data.dutyDays, contract?.id]
+  );
+
+  const months = useMemo(() => {
+    const by = new Map();
+    for (const d of duties) {
+      const k = monthKey(d.date);
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(d);
+    }
+    return [...by.entries()];
+  }, [duties]);
+
+  const hospitals = hospitalsFor(contract);
+
+  const openNew = () => {
+    setEditing("new");
+    setForm({
+      date: todayKey,
+      workedDay: true,
+      scholarly: false,
+      callHospital: "",
+      callRole: "primary",
+      notes: "",
+    });
+  };
+  const openEdit = (d) => { setEditing(d.id); setForm({ ...d }); };
+
+  const save = () => {
+    if (!form.date) return;
+    const clean = {
+      contractId: contract.id,
+      date: form.date,
+      workedDay: !!form.workedDay,
+      scholarly: !!form.scholarly,
+      callHospital: form.callHospital || null,
+      callRole: form.callHospital ? (form.callRole || "primary") : null,
+      notes: form.notes || "",
+    };
+    clean.amount = dutyDayPay(contract, clean).total;
+    if (editing === "new") addItem("dutyDays", { id: generateId(), createdAt: new Date().toISOString(), ...clean });
+    else editItem("dutyDays", { ...form, ...clean });
+    setEditing(null);
+    setForm({});
+  };
+
+  const preview = dutyDayPay(contract, form);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 10 }}>
+        <h3 style={{ margin: "0 0 3px", fontSize: 17, fontWeight: 800, color: T.text }}>Days &amp; call</h3>
+        <div style={{ fontSize: 12, color: T.textMuted }}>
+          This contract pays per day worked and per accepted 24-hour call period. Log the day; the rate comes from the agreement.
+        </div>
+      </div>
+
+      <button onClick={openNew} style={{
+        width: "100%", padding: "13px", borderRadius: 12, border: "none", marginBottom: 14,
+        background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+        fontSize: 15, fontWeight: 800, cursor: "pointer",
+      }}>+ Log a day</button>
+
+      {months.length === 0 && (
+        <div style={{ textAlign: "center", padding: "26px 18px", backgroundColor: T.card, borderRadius: 14, border: `1px solid ${T.border}` }}>
+          <div style={{ fontSize: 26, marginBottom: 8 }}>{"📅"}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>No days logged</div>
+          <div style={{ fontSize: 13.5, color: T.textMuted }}>Log each weekday you work and each call period you accept.</div>
+        </div>
+      )}
+
+      {months.map(([mk, list]) => {
+        const sum = summarizeDuties(contract, list);
+        return (
+          <div key={mk} style={{ marginBottom: 16 }}>
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "baseline",
+              padding: "10px 12px", borderRadius: 12, marginBottom: 6,
+              backgroundColor: T.card, border: `2px solid ${T.accent}`,
+            }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>{monthLabel(mk)}</div>
+                <div style={{ fontSize: 11.5, color: T.textDim }}>
+                  {sum.workedDays} day{sum.workedDays === 1 ? "" : "s"} worked · {sum.callDays} call period{sum.callDays === 1 ? "" : "s"}
+                </div>
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
+                ${sum.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {list.map(d => {
+                const pay = dutyDayPay(contract, d);
+                return (
+                  <div key={d.id} role="button" tabIndex={0}
+                    onClick={() => openEdit(d)}
+                    onKeyDown={(e) => { if (e.key === "Enter") openEdit(d); }}
+                    style={{
+                      backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+                      padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer",
+                      display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center",
+                    }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
+                        {new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                      </div>
+                      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
+                        {dutyLabel(d)}{d.callHospital ? ` · ${d.callHospital.replace(/\s*\(.*\)$/, "")}` : ""}
+                        {d.scholarly ? " · teaching logged" : ""}
+                      </div>
+                      {d.notes && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 2 }}>{d.notes}</div>}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                      ${pay.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <Modal open={!!editing} onClose={() => { setEditing(null); setForm({}); }} title={editing === "new" ? "Log a day" : "Edit day"}>
+        {editing && (
+          <>
+            <Field label="Date"><input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={iS} /></Field>
+
+            <Field label="Clinical day worked" hint="Surgery, clinic, rounding, or other daytime services">
+              <button onClick={() => setForm(f => ({ ...f, workedDay: !f.workedDay }))} style={{
+                width: "100%", padding: "12px", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer",
+                border: `1px solid ${form.workedDay ? T.accent : T.border}`,
+                backgroundColor: form.workedDay ? T.accent : "transparent",
+                color: form.workedDay ? "#fff" : T.textMuted,
+              }}>{form.workedDay ? "Yes — day worked" : "No clinical day"}</button>
+            </Field>
+
+            <Field label="On call" hint="One 24-hour period per date; leave blank if no call taken">
+              <select value={form.callHospital || ""} onChange={e => setForm(f => ({ ...f, callHospital: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
+                <option value="">— no call —</option>
+                {hospitals.map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </Field>
+
+            {form.callHospital && (
+              <Field label="Call role">
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[["primary", "Primary"], ["backup", "Backup"]].map(([id, label]) => (
+                    <button key={id} onClick={() => setForm(f => ({ ...f, callRole: id }))} style={{
+                      flex: 1, padding: "11px", borderRadius: 10, fontSize: 13.5, fontWeight: 800, cursor: "pointer",
+                      border: `1px solid ${form.callRole === id ? T.accent : T.border}`,
+                      backgroundColor: form.callRole === id ? T.accent : "transparent",
+                      color: form.callRole === id ? "#fff" : T.textMuted,
+                    }}>{label}</button>
+                  ))}
+                </div>
+              </Field>
+            )}
+
+            <Field label="Teaching logged" hint="The faculty & scholarly fee is contingent on the monthly teaching log">
+              <button onClick={() => setForm(f => ({ ...f, scholarly: !f.scholarly }))} style={{
+                width: "100%", padding: "12px", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer",
+                border: `1px solid ${form.scholarly ? T.accent : T.border}`,
+                backgroundColor: form.scholarly ? T.accent : "transparent",
+                color: form.scholarly ? "#fff" : T.textMuted,
+              }}>{form.scholarly ? "Yes — teaching documented" : "No teaching this day"}</button>
+            </Field>
+
+            <Field label="Notes"><input value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={iS} placeholder="optional" /></Field>
+
+            {/* The arithmetic, itemised, so the invoice is never a mystery */}
+            <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 12, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
+              {preview.lines.length === 0 && <div style={{ fontSize: 13, color: T.textMuted }}>Nothing logged for this day — it invoices $0.</div>}
+              {preview.lines.map((l, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: T.textMuted, padding: "3px 0" }}>
+                  <span>{l.label}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>${l.amount.toFixed(2)}</span>
+                </div>
+              ))}
+              {preview.lines.length > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, color: T.text, borderTop: `1px solid ${T.border}`, marginTop: 6, paddingTop: 6 }}>
+                  <span>This day invoices</span>
+                  <span style={{ color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>${preview.total.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={save} style={{
+                flex: 1, padding: "13px", borderRadius: 12, border: "none",
+                background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+                fontSize: 15, fontWeight: 800, cursor: "pointer",
+              }}>Save</button>
+              {editing !== "new" && (
+                <button onClick={() => { if (window.confirm("Delete this day?")) { deleteItem("dutyDays", editing); setEditing(null); } }} style={{
+                  padding: "13px 16px", borderRadius: 12, border: "none",
+                  backgroundColor: T.dangerDim, color: T.danger, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>Delete</button>
+              )}
+              <button onClick={() => { setEditing(null); setForm({}); }} style={{
+                padding: "13px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Cancel</button>
+            </div>
+          </>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+export default memo(DutyLog);

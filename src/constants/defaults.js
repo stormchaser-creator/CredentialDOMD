@@ -42,6 +42,7 @@ export const DEFAULT_DATA = {
   notificationLog: [],
   workHistory: [],
   peerReferences: [],
+  dutyDays: [],       // [{ id, contractId, date, workedDay, scholarly, callHospital, callRole, amount }]
   taskNotes: [],      // [{ id, text, contractId, capturedAt, startedAt, completedAt }]
   publications: [],   // [{ id, name, citation, year, doi, pmid, url, sortOrder, notes }]
   memberships: [],    // [{ id, organization, role, startDate, endDate, notes }]
