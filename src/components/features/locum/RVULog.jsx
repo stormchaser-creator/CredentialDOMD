@@ -6,6 +6,8 @@ import { TrashIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
 import { codeFromText } from "../../../utils/cptCoder";
 import { searchCPT } from "../../../utils/cptSearch";
+import { Modal, Field } from "../../shared";
+import { CPT_DESCS } from "../../../constants/cptDescs";
 
 const localDate = (d) => {
   const x = new Date(d);
@@ -19,7 +21,7 @@ const rvuOf = (enc) => (enc.codes || []).reduce((s, c) => s + (c.wRVU || 0) * (c
  * physician reviews the chips, saves, and running wRVU totals accumulate.
  */
 function RVULog() {
-  const { data, addItem, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
   const contracts = data.locumContracts || [];
   const encounters = data.encounters || [];
@@ -31,6 +33,10 @@ function RVULog() {
   const [review, setReview] = useState(null); // { items, questions, confidence }
   const [date, setDate] = useState(localDate(new Date()));
   const [contractId, setContractId] = useState(contracts[0]?.id || "");
+  const [viewEnc, setViewEnc] = useState(null);   // encounter opened for detail/edit
+  const [encDraft, setEncDraft] = useState(null); // its editable copy
+  const [encQ, setEncQ] = useState("");           // code search inside the modal
+  const [encResults, setEncResults] = useState([]);
   const [manualQ, setManualQ] = useState("");
   const [manualResults, setManualResults] = useState([]);
   const recRef = useRef(null);
@@ -249,7 +255,10 @@ function RVULog() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {list.map(e => (
-                  <div key={e.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", boxShadow: T.shadow1 }}>
+                  <div key={e.id} role="button" tabIndex={0}
+                    onClick={() => { setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); setEncQ(""); setEncResults([]); }}
+                    onKeyDown={ev => { if (ev.key === "Enter") { setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); } }}
+                    style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer", textAlign: "left" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         {(e.codes || []).map((c, i) => (
@@ -262,7 +271,7 @@ function RVULog() {
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 800, color: T.accent }}>{rvuOf(e).toFixed(2)}</span>
-                        <button onClick={() => { if (window.confirm("Delete this encounter?")) deleteItem("encounters", e.id); }} style={{ padding: "4px 6px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                        <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this encounter?")) deleteItem("encounters", e.id); }} style={{ padding: "4px 6px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                       </div>
                     </div>
                   </div>
@@ -272,6 +281,85 @@ function RVULog() {
           ))}
         </div>
       )}
+
+      {/* Tap an encounter → see everything in it and edit it in place */}
+      <Modal open={!!viewEnc} onClose={() => { setViewEnc(null); setEncDraft(null); }} title="Encounter">
+        {encDraft && (
+          <>
+            <Field label="Date"><input type="date" value={encDraft.date || ""} onChange={ev => setEncDraft(d => ({ ...d, date: ev.target.value }))} style={iS} /></Field>
+            {contracts.length > 0 && (
+              <Field label="Facility / contract">
+                <select value={encDraft.contractId || ""} onChange={ev => setEncDraft(d => ({ ...d, contractId: ev.target.value || null }))} style={{ ...iS, appearance: "auto" }}>
+                  <option value="">— none —</option>
+                  {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+                </select>
+              </Field>
+            )}
+
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 6px" }}>
+              What was billed
+            </div>
+            {(encDraft.codes || []).map((c, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+                <span style={{ fontSize: 13.5, fontWeight: 800, fontFamily: "monospace", color: T.accent, minWidth: 52, flexShrink: 0 }}>{c.code}</span>
+                <span style={{ fontSize: 12.5, color: T.text, flex: 1, minWidth: 0 }}>{c.desc || CPT_DESCS[c.code]?.d || "—"}</span>
+                <button onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, units: Math.max(1, (x.units || 1) - 1) } : x) }))}
+                  style={{ padding: "3px 8px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>−</button>
+                <span style={{ fontSize: 13, fontWeight: 800, color: T.text, minWidth: 14, textAlign: "center" }}>{c.units || 1}</span>
+                <button onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, units: (x.units || 1) + 1 } : x) }))}
+                  style={{ padding: "3px 8px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>+</button>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#22c55e", fontVariantNumeric: "tabular-nums", minWidth: 44, textAlign: "right" }}>
+                  {(((c.wRVU || CPT_DESCS[c.code]?.w) || 0) * (c.units || 1)).toFixed(2)}
+                </span>
+                <button onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.filter((_, j) => j !== i) }))}
+                  style={{ padding: "3px 7px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 800 }}>×</button>
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", fontSize: 13.5, fontWeight: 800 }}>
+              <span style={{ color: T.textMuted }}>Encounter total</span>
+              <span style={{ color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>
+                {(encDraft.codes || []).reduce((t, c) => t + ((c.wRVU || CPT_DESCS[c.code]?.w || 0) * (c.units || 1)), 0).toFixed(2)} wRVU
+              </span>
+            </div>
+
+            <input value={encQ} inputMode="search" placeholder="Add a code — type a number or a name"
+              onChange={async ev => {
+                setEncQ(ev.target.value);
+                if (!ev.target.value.trim()) { setEncResults([]); return; }
+                const r = await searchCPT(ev.target.value, { limit: 6 });
+                setEncResults(r.results || r || []);
+              }} style={{ ...iS, marginTop: 6 }} />
+            {encResults.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+                {encResults.map(c => (
+                  <button key={c.code} onClick={() => {
+                    setEncDraft(d => ({ ...d, codes: [...(d.codes || []), { code: c.code, desc: c.shortDesc || c.cmsDesc || "", units: 1, wRVU: c.wRVU || 0 }] }));
+                    setEncQ(""); setEncResults([]);
+                  }} style={{ textAlign: "left", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 12.5, cursor: "pointer" }}>
+                    <b>{c.code}</b> {c.shortDesc || c.cmsDesc} {c.wRVU ? `· ${c.wRVU} wRVU` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <Field label="Note"><textarea value={encDraft.note || ""} onChange={ev => setEncDraft(d => ({ ...d, note: ev.target.value }))} style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} /></Field>
+            {encDraft.spokenText && (
+              <div style={{ marginTop: 6, padding: "9px 11px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>What you dictated</div>
+                <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{encDraft.spokenText}</div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={() => {
+                editItem("encounters", { ...encDraft, codes: (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? 0 })) });
+                setViewEnc(null); setEncDraft(null);
+              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" }}>Save changes</button>
+              <button onClick={() => { setViewEnc(null); setEncDraft(null); }} style={{ padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       <div style={{ marginTop: 14, fontSize: 11, color: T.textMuted, lineHeight: 1.5 }}>
         wRVU values from the CMS Physician Fee Schedule (CY2026 July release). AI-suggested codes

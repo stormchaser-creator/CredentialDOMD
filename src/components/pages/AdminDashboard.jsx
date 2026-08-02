@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { isAdminUser } from "../../lib/admin";
+import { Modal } from "../shared";
 
 /**
  * AdminDashboard — gated to admin emails only.
@@ -18,8 +19,47 @@ export default function AdminDashboard() {
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [openTicket, setOpenTicket] = useState(null);
+  const [thread, setThread] = useState([]);
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [ticketMsg, setTicketMsg] = useState("");
 
   const isAdmin = isAdminUser(user);
+
+  const refreshTickets = async () => {
+    const { data } = await supabase.from("admin_tickets_open").select("*").limit(200);
+    setTickets(data || []);
+  };
+
+  // Tap a ticket → read it, see the whole thread, answer it, change its state.
+  const openTicketDetail = async (t) => {
+    setOpenTicket(t); setReply(""); setTicketMsg("");
+    const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
+    setThread(data || []);
+  };
+
+  const sendReply = async (newStatus) => {
+    if (!openTicket) return;
+    const body = reply.trim();
+    if (!body && !newStatus) { setTicketMsg("Write a reply first."); return; }
+    setBusy(true); setTicketMsg("");
+    try {
+      const res = await supabase.functions.invoke("reply-ticket", {
+        body: { ticket_id: openTicket.id, body: body || `Status set to ${newStatus}.`, ...(newStatus ? { status: newStatus } : {}) },
+      });
+      if (res.error) throw new Error(res.error.message);
+      const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
+      setThread(data || []);
+      setReply("");
+      setTicketMsg(newStatus ? `Marked ${newStatus.replace("_", " ")}.` : "Reply sent.");
+      await refreshTickets();
+      if (newStatus === "resolved" || newStatus === "closed") setTimeout(() => setOpenTicket(null), 900);
+    } catch (e2) {
+      setTicketMsg(e2.message);
+    }
+    setBusy(false);
+  };
 
   useEffect(() => {
     if (!isAdmin || !supabase) {
@@ -109,7 +149,7 @@ export default function AdminDashboard() {
 
       {tab === "tickets"  && !loading && (
         <>
-          <TicketsList rows={tickets} T={T} />
+          <TicketsList rows={tickets} T={T} onOpen={openTicketDetail} />
           {feedback.length > 0 && (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>
@@ -123,6 +163,73 @@ export default function AdminDashboard() {
       {tab === "signups"  && !loading && <SignupsList rows={signups} T={T} />}
       {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} T={T} />}
       {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}
+
+      {/* Tap a ticket → read it, answer it, close it */}
+      <Modal open={!!openTicket} onClose={() => setOpenTicket(null)} title={openTicket?.subject || "Ticket"}>
+        {openTicket && (
+          <>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: priorityColor(openTicket.priority) }}>{openTicket.priority?.toUpperCase()}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: statusColor(openTicket.status) }}>{openTicket.status}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: T.textMuted }}>{openTicket.category}</span>
+              {openTicket.context_page === "assistant" && (
+                <span style={{ fontSize: 10, fontWeight: 800, color: "#a78bfa" }}>VIA VERA</span>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10 }}>
+              {openTicket.user_email} · {new Date(openTicket.created_at).toLocaleString()}
+              {openTicket.context_page ? ` · from ${openTicket.context_page}` : ""}
+            </div>
+            <div style={{ fontSize: 14, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.55, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
+              {openTicket.body}
+            </div>
+
+            {thread.length > 0 && (
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                {thread.map(m => (
+                  <div key={m.id} style={{
+                    padding: "9px 11px", borderRadius: 10,
+                    backgroundColor: m.is_admin_reply ? (T.accentDim || "rgba(59,130,246,0.12)") : T.card,
+                    border: `1px solid ${T.border}`,
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: m.is_admin_reply ? T.accent : T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
+                      {m.is_admin_reply ? "You" : m.author_email || "User"} · {new Date(m.created_at).toLocaleString()}
+                    </div>
+                    <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <textarea value={reply} onChange={(e) => setReply(e.target.value)}
+              placeholder="Reply to the physician — they see this in their ticket."
+              style={{
+                width: "100%", minHeight: 90, marginTop: 12, padding: "10px 12px", borderRadius: 10,
+                backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
+                fontSize: 16, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box",
+              }} />
+
+            {ticketMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{ticketMsg}</div>}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button onClick={() => sendReply(null)} disabled={busy} style={{
+                flex: 1, minWidth: 120, padding: "12px", borderRadius: 10, border: "none",
+                backgroundColor: busy ? T.textDim : T.accent, color: "#fff", fontSize: 14, fontWeight: 800,
+                cursor: busy ? "wait" : "pointer",
+              }}>{busy ? "Sending…" : "Send reply"}</button>
+              <button onClick={() => sendReply("in_progress")} disabled={busy} style={{
+                padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>Working on it</button>
+              <button onClick={() => sendReply("resolved")} disabled={busy} style={{
+                padding: "12px 14px", borderRadius: 10, border: "none",
+                backgroundColor: "#10b981", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
+              }}>Resolve</button>
+            </div>
+          </>
+        )}
+      </Modal>
+
     </div>
   );
 }
@@ -142,14 +249,17 @@ function statusColor(s) {
   return "#94a3b8";
 }
 
-function TicketsList({ rows, T }) {
+function TicketsList({ rows, T, onOpen }) {
   if (!rows.length) return <Empty T={T} text="No open tickets. Quiet day." />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {rows.map((r) => (
-        <div key={r.id} style={{
+        <div key={r.id} role="button" tabIndex={0}
+          onClick={() => onOpen?.(r)}
+          onKeyDown={(ev) => { if (ev.key === "Enter") onOpen?.(r); }}
+          style={{
           backgroundColor: T.card, border: `1px solid ${T.border}`,
-          borderRadius: 10, padding: "10px 12px",
+          borderRadius: 10, padding: "10px 12px", cursor: "pointer", textAlign: "left",
         }}>
           <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
             <span style={{
