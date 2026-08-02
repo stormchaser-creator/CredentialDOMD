@@ -190,7 +190,8 @@ function DutyLog({ contract }) {
               </Field>
             )}
 
-            <Field label="Teaching logged" hint="The faculty & scholarly fee is contingent on the monthly teaching log">
+            {form.workedDay && (
+            <Field label="Teaching logged" hint="Paid on worked weekdays only, and contingent on the monthly teaching log">
               <button onClick={() => setForm(f => ({ ...f, scholarly: !f.scholarly }))} style={{
                 width: "100%", padding: "12px", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer",
                 border: `1px solid ${form.scholarly ? T.accent : T.border}`,
@@ -198,6 +199,12 @@ function DutyLog({ contract }) {
                 color: form.scholarly ? "#fff" : T.textMuted,
               }}>{form.scholarly ? "Yes — teaching documented" : "No teaching this day"}</button>
             </Field>
+            )}
+            {!form.workedDay && form.callHospital && (
+              <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 6 }}>
+                A call period without a worked weekday pays the grid rate alone — the scholarly fee is a worked-weekday component under V4.
+              </div>
+            )}
 
             <Field label="Notes"><input value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={iS} placeholder="optional" /></Field>
 

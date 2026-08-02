@@ -7,12 +7,14 @@
  *
  *   Weekday worked                  clinical + scholarly
  *   Weekday worked + weeknight call clinical + scholarly + grid
- *   Weekend 24-hr call              scholarly + grid
- *   Federal holiday, on call        scholarly + grid
+ *   Weekend 24-hr call              grid only
+ *   Federal holiday, on call        grid only
  *   Federal holiday, off            nothing (carried by the leave component)
  *
- * The scholarly fee is per DUTY day and is contingent on the teaching log,
- * so it is a checkbox rather than an assumption.
+ * The scholarly fee is paid on WORKED WEEKDAYS ONLY — V4 of the agreement
+ * moved it off call days, re-dividing the $60,000 educational envelope over
+ * 233 worked weekdays instead of 281 duty days. It remains contingent on the
+ * monthly teaching log, so it stays a checkbox rather than an assumption.
  */
 
 export const CALL_ROLES = [
@@ -49,9 +51,8 @@ export function dutyDayPay(contract, duty) {
   if (duty.workedDay && clinical > 0) {
     lines.push({ label: "Clinical day (incl. leave differential)", amount: clinical });
   }
-  // Scholarly rides on any duty day — worked or on call — when logged
-  const isDutyDay = !!duty.workedDay || !!duty.callHospital;
-  if (isDutyDay && duty.scholarly && scholarly > 0) {
+  // Worked weekdays only: a call day earns the grid rate and nothing else
+  if (duty.workedDay && duty.scholarly && scholarly > 0) {
     lines.push({ label: "Faculty & scholarly activity", amount: scholarly });
   }
   if (duty.callHospital) {
