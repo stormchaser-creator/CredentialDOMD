@@ -36,7 +36,6 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
   const handleFiles = useCallback(async (files) => {
     const apiKey = data.settings.apiKey;
     const deg = data.settings.degreeType;
-    if (!apiKey) { requireApiKey(); return; }
 
     for (const file of Array.from(files)) {
       const dataUrl = await new Promise((resolve, reject) => {
@@ -56,6 +55,13 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
       }
       setAttachedDocs((prev) => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
 
+      // No AI key? The file is attached and linked all the same; only the
+      // auto-fill is skipped.
+      if (!apiKey) {
+        setIsError(false);
+        setMsg(`"${file.name}" attached. Add an AI key in Settings to have it read automatically.`);
+        continue;
+      }
       if (file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file)) {
         setScanning(true);
         setMsg(null);
@@ -101,12 +107,12 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
       <input type="file" ref={cameraRef} accept="image/*" capture="environment" style={{ display: "none" }}
         onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; }} />
       <div style={{ display: "flex", gap: 6 }}>
-        <button onClick={() => requireApiKey() && uploadRef.current?.click()} style={{
+        <button onClick={() => uploadRef.current?.click()} style={{
           display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px",
           borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600,
           cursor: "pointer", backgroundColor: T.accent, color: "#fff",
         }}><UploadIcon /> Upload</button>
-        <button onClick={() => requireApiKey() && cameraRef.current?.click()} style={{
+        <button onClick={() => cameraRef.current?.click()} style={{
           display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px",
           borderRadius: 10, border: "none", fontSize: 14, fontWeight: 600,
           cursor: "pointer", backgroundColor: T.accent, color: "#fff",
