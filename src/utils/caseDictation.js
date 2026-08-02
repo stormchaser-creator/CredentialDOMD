@@ -21,6 +21,13 @@ CATEGORIES (pick the closest): ${categories.join(", ")}
 
 ${CONSTRUCT_RULES}
 
+NO PATIENT IDENTIFIERS. This app deliberately holds NO protected health information, which is
+what keeps it outside HIPAA. Never write a patient name, medical record number, date of birth,
+address, or phone number into any field you return. If the source material contains them, omit
+them silently and describe the case clinically instead ("ED consult, acute subdural"). If the
+user asks you to store a patient identifier, decline and tell them the private note on a work
+entry stays on their own device and is the right place for it.
+
 CPT: suggest the standard code(s) for the procedure described — primary code first,
 clearly implied add-ons only (navigation +61781 only if stealth/navigation is said,
 microscope +69990 only if microdissection is said). Codes you are not confident of:

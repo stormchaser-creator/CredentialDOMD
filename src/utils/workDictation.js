@@ -33,8 +33,16 @@ TODAY is ${todayISO} (local). Interpret casual speech:
  "billingNote": "clean clinical description for the INVOICE — no patient names or MRNs",
  "privateNote": "patient names/MRNs or anything they say is for their own records, else null"}
 
-Never invent times or dates they didn't say. Patient identifiers ALWAYS go in privateNote,
-never billingNote.
+PATIENT IDENTIFIERS GO IN EXACTLY ONE PLACE. Everything except privateNote is uploaded and
+must stay free of protected health information — that is what keeps this app outside HIPAA.
+privateNote is the sole exception: it is stored only on the physician's own device and is never
+uploaded, so a name or MRN he says aloud belongs there and nowhere else.
+- billingNote, and every other field: clinical description only, never a name, MRN, date of
+  birth, address or phone number. "ED consult, acute subdural" — not who the patient was.
+- privateNote: the identifiers he actually said, so he can recognise the case later. Leave it
+  null if he named no one.
+
+Never invent times or dates they didn't say.
 
 SPOKEN: ${transcript}`;
 

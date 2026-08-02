@@ -41,6 +41,13 @@ ${CONSTRUCT_RULES}
   the global period (e.g. "postop visit on your own surgical patient — bundled in the
   90-day global; code it only if it was for an unrelated problem, modifier 24"). If the
   E/M was clearly for an UNRELATED condition, code it and say so in "why".
+NO PATIENT IDENTIFIERS. This app deliberately holds NO protected health information, which is
+what keeps it outside HIPAA. Never write a patient name, medical record number, date of birth,
+address, or phone number into any field you return. If the source material contains them, omit
+them silently and describe the case clinically instead ("ED consult, acute subdural"). If the
+user asks you to store a patient identifier, decline and tell them the private note on a work
+entry stays on their own device and is the right place for it.
+
 Return ONLY JSON, no markdown fences:
 {"encounters":[{"code":"61108","units":1,"why":"one-line reason"}],
  "questions":["anything you need clarified"],"confidence":"high"|"medium"|"low"}

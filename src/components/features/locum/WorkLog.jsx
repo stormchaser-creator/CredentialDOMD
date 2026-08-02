@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { parseTimeText, fmt12 } from "../../../utils/timeText";
+import { getPrivate, setPrivate, removePrivate, looksLikePHI } from "../../../utils/privateVault";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
@@ -644,7 +645,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       durationMin: f.raw,
       billedMin: f.billed,
       description: timer.note || "",
-      privateNote: timer.privateNote || "",
+      privateNote: "",
       invoiceId: null,
     });
     if (timer.type !== "Orientation") {
@@ -697,6 +698,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (manual.editId) {
       const orig = entries.find(x => x.id === manual.editId);
       if (!orig) return;
+      if (manual.privateNote?.trim()) setPrivate("workLog", manual.editId, manual.privateNote);
+      else removePrivate("workLog", manual.editId);
       if (orig.type === "CallDay") {
         if (!startIso) return;
         const end2 = endIso || new Date(new Date(startIso).getTime() + (target.stipendHours || 0) * 3600e3).toISOString();
@@ -718,7 +721,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           startTime: f.s, endTime: f.e,
           durationMin: f.raw, billedMin: f.billed,
           description: manual.description || "",
-          privateNote: manual.privateNote || "",
+          privateNote: "", // identifiers live in the on-device vault, never the row
         });
         if (type !== "CallDay" && type !== "Orientation") {
           const overlapped = noticeOverlap(target, { id: orig.id, type, startTime: f.s, endTime: f.e, createdAt: orig.createdAt });
@@ -737,8 +740,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const type = (manual.type || "").trim() || (manual.otherType ? "Other" : "Call");
     if (!confirmIfFuture(s3, manual.date)) return;
     const f = finalizeEntry(type, s3, e3, rawMin, target);
+    const newId = generateId();
+    // The identifier note goes to this device, keyed to the entry — the
+    // synced row carries an empty string.
+    if (manual.privateNote?.trim()) setPrivate("workLog", newId, manual.privateNote);
     addItem("workLog", {
-      id: generateId(),
+      id: newId,
       createdAt: new Date().toISOString(),
       contractId: target.id,
       type,
@@ -749,7 +756,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       durationMin: f.raw,
       billedMin: f.billed,
       description: manual.description || "",
-      privateNote: manual.privateNote || "",
+      privateNote: "",
       invoiceId: null,
     });
     if (type !== "CallDay" && type !== "Orientation") {
@@ -776,7 +783,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       end: billDraft.end || "",
       durationMin: "",
       description: billDraft.description || "",
-      privateNote: billDraft.privateNote || "",
+      privateNote: billDraft.privateNote || "", // held in state only; vaulted on save
       exact: true,
       pickDate: false,
     });
@@ -795,7 +802,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       end: e.endTime ? localHHMM(e.endTime) : "",
       durationMin: e.startTime ? "" : String(e.durationMin || ""),
       description: e.description || "",
-      privateNote: e.privateNote || "",
+      privateNote: getPrivate("workLog", e.id) || e.privateNote || "",
       exact: !!e.startTime,
       pickDate: false,
     });
@@ -1291,7 +1298,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         )}
 
         <Field label="Billing note (optional)" hint="Shows on the invoice — line breaks are kept"><textarea value={manual.description || ""} onChange={e => setManual(m2 => ({ ...m2, description: e.target.value }))} style={{ ...iS, minHeight: 64, resize: "vertical", lineHeight: 1.45 }} placeholder="e.g. ED consult — head CT review" /></Field>
-        <Field label="Private note (optional)" hint="Only you see this — never on invoices"><input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" /></Field>
+        <Field label="Private note (optional)" hint="Stays on THIS device — never uploaded, never on invoices">
+          <input value={manual.privateNote || ""} onChange={e => setManual(m2 => ({ ...m2, privateNote: e.target.value }))} style={{ ...iS, borderStyle: "dashed" }} placeholder="🔒 e.g. patient name / MRN reminder" />
+          {looksLikePHI(manual.privateNote) && (
+            <div style={{ fontSize: 11, marginTop: 4, fontWeight: 600, color: T.textDim }}>
+              🔒 Contains {looksLikePHI(manual.privateNote).join(" and ")} — kept on this device only, never uploaded.
+            </div>
+          )}
+        </Field>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
@@ -1418,7 +1432,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             })(),
             ["Invoice", inv ? `${inv.number} · ${inv.paidAt ? "paid" : "awaiting payment"}` : e.invoiceId ? "billed" : "not yet invoiced"],
             e.description && ["Billing note", e.description],
-            e.privateNote && ["🔒 Private note", e.privateNote],
+            getPrivate("workLog", e.id) && ["🔒 Private note (this device only)", getPrivate("workLog", e.id)],
           ].filter(Boolean);
           return (
             <>
@@ -1497,9 +1511,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                             ? `marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
                             : `${e.startTime ? `${billedSpan(e, contract)} · ` : ""}${e.billedMin || e.durationMin || 0} min`}
                         </div>
-                        {e.privateNote && (
+                        {getPrivate("workLog", e.id) && (
                           <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
-                            {"🔒"} {e.privateNote}
+                            {"🔒"} {getPrivate("workLog", e.id)}
                           </div>
                         )}
                       </div>
