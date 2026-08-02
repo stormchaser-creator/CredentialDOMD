@@ -46,7 +46,7 @@ function Contracts() {
   const handleSave = useCallback(() => {
     // Don't let an empty agreement slip through silently — that's how a
     // blocked upload turned into a blank contract.
-    if (!form.facility && !parseFloat(form.callStipend) && !parseFloat(form.hourlyRate)) {
+    if (!form.facility && !parseFloat(form.callStipend) && !parseFloat(form.hourlyRate) && !parseFloat(form.dayRate)) {
       setFormError("Nothing is filled in yet — upload the agreement (AI fills the form) or enter the facility and rates.");
       return;
     }
@@ -63,6 +63,9 @@ function Contracts() {
       endDate: ends[ends.length - 1] || form.endDate || "",
       id: itemId,
       hourlyRate: parseFloat(form.hourlyRate) || 0,
+      dayRate: parseFloat(form.dayRate) || 0,
+      payModel: form.payModel || (parseFloat(form.dayRate) ? "daily" : parseFloat(form.callStipend) ? "stipend" : "hourly"),
+      callRateGrid: form.callRateGrid || null,
       callHourlyRate: parseFloat(form.callHourlyRate) || 0,
       callStipend: parseFloat(form.callStipend) || 0,
       stipendHours: parseFloat(form.stipendHours) || 0,
@@ -139,8 +142,9 @@ function Contracts() {
           </div>
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <Field label="Day rate ($/day worked)" hint="Flat amount per day worked — leave blank if paid hourly"><input type="number" inputMode="decimal" value={form.dayRate ?? ""} onChange={e => setForm(f => ({ ...f, dayRate: e.target.value }))} style={iS} placeholder="2016.10" /></Field>
           <Field label="Call stipend ($/day)" hint="Flat amount per on-call day"><input type="number" inputMode="decimal" value={form.callStipend ?? ""} onChange={e => setForm(f => ({ ...f, callStipend: e.target.value }))} style={iS} placeholder="3000" /></Field>
-          <Field label="Stipend covers (hours)"><input type="number" inputMode="decimal" value={form.stipendHours ?? ""} onChange={e => setForm(f => ({ ...f, stipendHours: e.target.value }))} style={iS} placeholder="4" /></Field>
+          <Field label="Stipend covers (hours)" hint="Worked hours included before overage — 0 if the call rate includes none"><input type="number" inputMode="decimal" value={form.stipendHours ?? ""} onChange={e => setForm(f => ({ ...f, stipendHours: e.target.value }))} style={iS} placeholder="4" /></Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="After-stipend rate ($/hr)" hint="Hours beyond the stipend"><input type="number" inputMode="decimal" value={form.overageHourlyRate ?? ""} onChange={e => setForm(f => ({ ...f, overageHourlyRate: e.target.value }))} style={iS} placeholder="300" /></Field>
@@ -187,7 +191,8 @@ function Contracts() {
                       item.coveragePeriods?.length
                         ? item.coveragePeriods.map(p => `${formatDate(p.start)}${p.end && p.end !== p.start ? " – " + formatDate(p.end) : ""}`).join(", ")
                         : item.startDate && `${formatDate(item.startDate)}${item.endDate ? " – " + formatDate(item.endDate) : ""}`,
-                      item.callStipend ? `$${item.callStipend}/call day (first ${item.stipendHours || 0}h)` : null,
+                      item.dayRate ? `$${item.dayRate}/day worked` : null,
+                      item.callStipend ? (item.stipendHours ? `$${item.callStipend}/call day (first ${item.stipendHours}h)` : `$${item.callStipend}/call period`) : null,
                       item.overageHourlyRate ? `then $${item.overageHourlyRate}/hr` : null,
                       item.hourlyRate ? `$${item.hourlyRate}/hr` : null,
                       !item.callStipend && item.callHourlyRate ? `call $${item.callHourlyRate}/hr` : null,

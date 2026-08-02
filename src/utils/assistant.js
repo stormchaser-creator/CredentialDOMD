@@ -43,7 +43,7 @@ export const SECTION_FIELDS = {
   professionalPhotos: ["name", "dateTaken", "notes"],
   publications: ["name", "citation", "year", "sortOrder", "doi", "pmid", "url", "notes"],
   memberships: ["organization", "role", "startDate", "endDate", "notes"],
-  locumContracts: ["facility", "location", "agency", "billTo", "coveragePeriods", "callStipend", "stipendHours", "overageHourlyRate", "orientationHourlyRate", "orientationFee", "hourlyRate", "incrementMinutes", "minCallMinutes", "notes"],
+  locumContracts: ["facility", "location", "agency", "billTo", "coveragePeriods", "payModel", "dayRate", "callRateGrid", "callStipend", "stipendHours", "overageHourlyRate", "orientationHourlyRate", "orientationFee", "hourlyRate", "incrementMinutes", "minCallMinutes", "notes"],
 };
 
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
@@ -116,7 +116,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
     cme: short(data.cme, x => ({ id: x.id, title: x.title, hours: x.hours, category: x.category, date: x.date, provider: x.provider })),
     healthRecords: short(data.healthRecords, h => ({ id: h.id, category: h.category, name: h.name, result: h.result, value: h.resultValue, expires: h.expirationDate })),
     screenings: short(data.screenings, s => ({ id: s.id, name: s.name, result: s.result, reported: s.reportDate, expires: s.expirationDate })),
-    contracts: short(data.locumContracts, c => ({ id: c.id, facility: c.facility, stipend: c.callStipend, stipendHours: c.stipendHours, overageRate: c.overageHourlyRate, periods: c.coveragePeriods })),
+    contracts: short(data.locumContracts, c => ({ id: c.id, facility: c.facility, payModel: c.payModel, dayRate: c.dayRate, stipend: c.callStipend, stipendHours: c.stipendHours, overageRate: c.overageHourlyRate, callRateGrid: c.callRateGrid, periods: c.coveragePeriods })),
     workLog: { entries: (data.workLog || []).length, unbilled: (data.workLog || []).filter(e => !e.invoiceId).length, recent: workLogRecent },
     invoices: short(data.invoices, i => ({ number: i.number, total: i.totalAmount, sent: i.sentAt?.slice(0, 10), paid: !!i.paidAt })),
     encounters: {

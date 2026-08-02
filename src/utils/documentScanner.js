@@ -244,26 +244,66 @@ export async function analyzeDocText(text, degreeType, apiKey) {
 // documents, agreements aren't classified — the caller already knows what
 // this is; we only pull the fields the Contracts form uses.
 
-const AGREEMENT_PROMPT = `You are analyzing a locum tenens / physician services agreement.
-Extract the business and billing terms. Return ONLY valid JSON (no markdown, no backticks).
+const AGREEMENT_PROMPT = `You are analyzing a physician services agreement — a locum tenens
+confirmation letter, a staffing-agency assignment, or a 1099 independent-contractor agreement
+with a medical group. Extract the business and billing terms. Return ONLY valid JSON (no
+markdown, no backticks).
+
+FIRST decide the PAY MODEL, because it determines which rate fields are meaningful. Getting
+this wrong corrupts the physician's invoices, so read the rate schedule carefully — it is
+often an appendix or exhibit at the END of the document:
+- "stipend"  — a flat amount per on-call DAY that INCLUDES a stated number of worked hours,
+               with an hourly rate beyond that. Language: "$3,000 per 24-hour call including
+               the first 4 hours worked; $300/hr callback thereafter."
+- "hourly"   — paid per hour worked, with no daily flat amount.
+- "daily"    — a flat amount per DAY WORKED (per diem / per clinical day / per weekday
+               worked), often assembled from components that sum to an all-in day rate, and
+               separately a flat amount per accepted on-call period. Language: "per-clinical-day
+               fee", "$X / weekday worked", "all-in invoiced day rate".
+
+CRITICAL DISTINCTIONS — these are the mistakes that ruin the data:
+1. A DAY RATE IS NOT AN HOURLY RATE. "$2,016.10 / weekday worked" is dayRate, never hourlyRate.
+   If a figure is per day, per diem, per shift, or per weekday, it is NOT hourly.
+2. stipendHours means HOW MANY WORKED HOURS THE STIPEND COVERS BEFORE OVERAGE STARTS. It is
+   NEVER the length of the call period. "$1,000 per 24-hour on-call period" means callStipend
+   1000 and stipendHours 0 (or omitted) — NOT stipendHours 24. Only fill stipendHours when the
+   contract literally says the payment includes the first N hours of work.
+3. If a contract pays per accepted call period with NO included hours and NO callback rate,
+   leave stipendHours and overageHourlyRate out entirely rather than writing 0 guesses.
+4. An ANNUAL target, envelope, or projection (e.g. "$600,000 total annual") is NOT a rate.
+   Never put it in a rate field; mention it in notes.
+5. Do not invent a rate by dividing an annual figure yourself. Use only rates the document states.
 
 Fields to extract (omit any not present):
-- facility: hospital or practice name the physician works AT
+- payModel: "stipend" | "hourly" | "daily" — your determination from above
+- facility: hospital or practice the physician works AT. If several hospitals are covered,
+  list them comma-separated
 - location: facility city and state (e.g. "Lafayette, CO")
-- agency: staffing agency, if the agreement is through one
+- agency: the staffing agency OR the contracting medical group. If the agreement's counterparty
+  is the physician's OWN professional corporation, that is the CONTRACTOR, not the agency —
+  put the group/hospital side here instead
 - billTo: billing/AP contact email if listed
 - startDate, endDate: assignment period (YYYY-MM-DD; earliest start / latest end)
-- coveragePeriods: array of {start, end} (YYYY-MM-DD) — one entry for EVERY separate scheduled coverage block/date range in the agreement; a single continuous assignment is one entry
-- hourlyRate: flat hourly rate in dollars for regular (non-call) work, number only
-- callStipend: flat amount paid per on-call day/shift (e.g. "$3000 for the first 4 hours" -> 3000), number only
-- stipendHours: how many worked hours the call stipend covers (e.g. 4), number
-- overageHourlyRate: hourly rate in dollars for time BEYOND the stipend hours (e.g. 300), number
-- callHourlyRate: simple per-hour call rate in dollars IF the contract uses flat hourly call pay instead of a stipend
-- orientationFee: one-time orientation/onboarding payment in dollars, number. CHECK CAREFULLY — often in a rate schedule/fee table/exhibit near the END; phrases: "orientation", "onboarding", "EMR training", "credentialing day". If orientation pays HOURLY instead of flat, put the rate in orientationHourlyRate instead
-- orientationHourlyRate: hourly rate in dollars for orientation/onboarding time, number
+- coveragePeriods: array of {start, end} (YYYY-MM-DD) — one entry for EVERY separate scheduled
+  coverage block. A multi-year term with no specific scheduled blocks is ONE entry spanning it
+- dayRate: flat dollars per DAY worked (daily model). If the document breaks the day into
+  components and states an all-in total, use the ALL-IN total and itemize the parts in notes
+- hourlyRate: flat hourly dollars for regular non-call work (hourly model only)
+- callStipend: flat dollars paid per on-call day/period. If rates differ by hospital, put the
+  PRIMARY rate for the main/reference hospital here and put the full grid in callRateGrid
+- callRateGrid: array of {hospital, primary, backup} when on-call pay varies by site or by
+  primary vs backup role — numbers only
+- stipendHours: worked hours INCLUDED in the stipend before overage (see rule 2)
+- overageHourlyRate: hourly dollars for time BEYOND stipendHours
+- callHourlyRate: per-hour call rate if call is paid hourly rather than as a flat period rate
+- orientationFee: one-time orientation/onboarding payment. Often in a rate schedule near the END.
+  If orientation pays hourly, use orientationHourlyRate instead
+- orientationHourlyRate: hourly dollars for orientation/onboarding time
 - incrementMinutes: billing increment in minutes if stated (e.g. 15)
 - minCallMinutes: minimum billable time per call if stated, in minutes
-- notes: 1-3 sentence summary of other key terms (cancellation clause, travel, guaranteed hours, malpractice coverage)
+- notes: 2-4 sentences on the terms that matter — how the day rate is composed, any conditions
+  on a component (e.g. teaching documentation), annual targets or volume commitments,
+  malpractice allocation, expense reimbursement, unavailability/PTO weeks, cancellation notice
 
 Return JSON: { "extracted": { ...fields }, "confidence": "high"|"medium"|"low" }
 Numbers must be plain numbers without $ signs or commas.`;
