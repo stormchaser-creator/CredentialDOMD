@@ -34,6 +34,7 @@ function DataExport() {
   // this is the only way a note follows him to another device, and it is
   // deliberately a manual act.
   const [vaultMsg, setVaultMsg] = useState("");
+  const [vaultPaste, setVaultPaste] = useState(null);
   const vaultN = vaultCount();
   const doVaultExport = () => {
     const blob = new Blob([JSON.stringify(exportVault(), null, 1)], { type: "application/json" });
@@ -302,6 +303,10 @@ function DataExport() {
               padding: "9px 13px", borderRadius: 9, border: `1px solid ${T.border}`,
               backgroundColor: "transparent", color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer",
             }}>Restore from a file</button>
+            <button onClick={() => setVaultPaste(v => (v === null ? "" : null))} style={{
+              padding: "9px 13px", borderRadius: 9, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>Paste it in</button>
             {vaultN > 0 && (
               <button onClick={() => { if (window.confirm(`Erase all ${vaultN} private notes from this device? The work entries stay.`)) { clearVault(); setVaultMsg("Private notes erased from this device."); } }} style={{
                 padding: "9px 13px", borderRadius: 9, border: "none",
@@ -311,6 +316,30 @@ function DataExport() {
           </div>
           <input type="file" ref={vaultFileRef} accept=".json,application/json" style={{ display: "none" }}
             onChange={(e) => { if (e.target.files?.[0]) doVaultImport(e.target.files[0]); e.target.value = ""; }} />
+          {vaultPaste !== null && (
+            <div style={{ marginTop: 10 }}>
+              <textarea value={vaultPaste} onChange={(e) => setVaultPaste(e.target.value)}
+                placeholder="Paste the vault text here, then tap Restore"
+                style={{
+                  width: "100%", minHeight: 110, padding: "10px 12px", borderRadius: 10,
+                  backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
+                  fontSize: 16, fontFamily: "monospace", outline: "none", resize: "vertical", boxSizing: "border-box",
+                }} />
+              <button onClick={() => {
+                try {
+                  const ok = importVault(JSON.parse(vaultPaste));
+                  setVaultMsg(ok ? `Restored — ${vaultCount()} private notes on this device.` : "Couldn't write to this browser's storage.");
+                  setVaultPaste(null);
+                } catch {
+                  setVaultMsg("That text isn't a vault export — paste the whole file including the braces.");
+                }
+              }} disabled={!vaultPaste.trim()} style={{
+                marginTop: 8, padding: "10px 14px", borderRadius: 9, border: "none",
+                backgroundColor: vaultPaste.trim() ? T.accent : T.border, color: "#fff",
+                fontSize: 13.5, fontWeight: 800, cursor: vaultPaste.trim() ? "pointer" : "default",
+              }}>Restore these notes</button>
+            </div>
+          )}
           {vaultMsg && <div style={{ fontSize: 12.5, fontWeight: 700, color: T.accent, marginTop: 8 }}>{vaultMsg}</div>}
         </div>
 

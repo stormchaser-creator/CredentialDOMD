@@ -24,13 +24,33 @@ function readVault() {
   }
 }
 
+/**
+ * Ask the browser to exempt this origin from storage eviction. iOS clears
+ * script-writable storage for sites left idle, and the vault is the one
+ * thing here that exists nowhere else — losing it loses the note for good.
+ * Fire-and-forget: a refusal is not an error, it just means the physician
+ * should keep an exported copy.
+ */
+let persistAsked = false;
+function askPersist() {
+  if (persistAsked || typeof navigator === "undefined") return;
+  persistAsked = true;
+  try { navigator.storage?.persist?.().catch(() => {}); } catch { /* unsupported */ }
+}
+
 function writeVault(v) {
   try {
     localStorage.setItem(VAULT_KEY, JSON.stringify(v));
+    askPersist();
     return true;
   } catch {
     return false; // storage full or blocked; the caller shows the failure
   }
+}
+
+/** True when the browser has promised not to evict this origin's storage. */
+export async function isPersisted() {
+  try { return await navigator.storage?.persisted?.() ?? null; } catch { return null; }
 }
 
 /** Read the private note for a record, e.g. getPrivate("workLog", entryId). */
