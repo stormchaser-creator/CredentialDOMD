@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { UploadIcon, CameraIcon, FileIcon, TrashIcon } from "../shared/Icons";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
+import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 
 /**
  * DocAttach — the ONE way to attach + scan documents from inside any
@@ -52,6 +53,19 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
         setIsError(true);
         setMsg(`"${file.name}" is already uploaded${dup.linkedTo ? " and linked to a credential" : ""}. Skipped duplicate.`);
         continue;
+      }
+      // A patient chart attached to a credential is still a patient chart —
+      // screen anything readable before it is staged for upload.
+      if (isOfficeFile(file)) {
+        try {
+          const preview = await extractOfficeText({ name: file.name, type: file.type, file });
+          const screen = screenDocument(`${file.name}\n${preview}`);
+          if (screen?.level === "clinical") {
+            setIsError(true);
+            setMsg(`"${file.name}" was not attached. ${phiWarningText(screen)}`);
+            continue;
+          }
+        } catch { /* unreadable — normal path reports it */ }
       }
       setAttachedDocs((prev) => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
 

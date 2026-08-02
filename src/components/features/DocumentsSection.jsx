@@ -7,6 +7,7 @@ import { SECTION_META } from "../../constants/credentialTypes";
 import { generateId, downscalePhoto } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
+import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import ScanReviewCard from "./ScanReviewCard";
 
 function DocumentsSection() {
@@ -189,6 +190,20 @@ function DocumentsSection() {
         setScanError(`"${file.name}" isn't a file type this app reads (${file.type || "unknown type"}). Photos, PDFs, Word, Excel, CSV and text work.`);
         continue;
       }
+      // Anything we can read before storing gets screened first — a patient
+      // chart must never reach the server, so refusing beats deleting.
+      if (isOfficeFile(file)) {
+        try {
+          const preview = await extractOfficeText({ name: file.name, type: file.type, file });
+          const screen = screenDocument(`${file.name}\n${preview}`);
+          if (screen?.level === "clinical") {
+            setScanError(`"${file.name}" was not uploaded. ${phiWarningText(screen)}`);
+            continue;
+          }
+          if (screen) setScanError(phiWarningText(screen));
+        } catch { /* unreadable — the normal path will report it */ }
+      }
+
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result);
@@ -219,6 +234,17 @@ function DocumentsSection() {
             : file.type === "application/pdf"
               ? await analyzePDF(dataUrl, deg, apiKey)
               : await analyzeDocument(dataUrl, deg, apiKey);
+          // An image or PDF can only be judged once it has been read. If it
+          // turns out to be a patient record, remove it again immediately
+          // rather than leaving it on the server.
+          const screen = screenDocument(`${file.name}\n${JSON.stringify(result)}`);
+          if (screen?.level === "clinical") {
+            deleteItemCtx("documents", docId);
+            setScanError(`"${file.name}" was removed. ${phiWarningText(screen)}`);
+            setScanning(false);
+            continue;
+          }
+          if (screen) setScanError(phiWarningText(screen));
           setScanQueue(q => [...q, { result, imageData: dataUrl, fileName: file.name, docId }]);
         } catch (err) {
           setScanError(err.message || "Analysis failed. Document has been saved to your files.");
@@ -228,7 +254,7 @@ function DocumentsSection() {
         setScanError("Document saved but could not be analyzed. Add your API key in Settings to enable AI scanning.");
       }
     }
-  }, [apiKey, deg, addItem, data.documents]);
+  }, [apiKey, deg, addItem, deleteItemCtx, data.documents]);
 
   const capturePhoto = useCallback(() => {
     const video = videoRef.current;
