@@ -8,9 +8,10 @@ import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
-import { generateId, formatDate, copyToClipboard } from "../../../utils/helpers";
+import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
 import { shareInvoicePdf } from "../../../utils/invoicePdf";
 import { parseWorkDictation } from "../../../utils/workDictation";
+import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import DutyLog from "./DutyLog";
 
 /**
@@ -1065,7 +1066,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const s = data.settings || {};
     const physician = s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician";
     const div = "─".repeat(40);
-    const num = `INV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${String((data.invoices || []).length + 1).padStart(2, "0")}`;
+    const num = nextInvoiceNumber(data.invoices);
     const billing = computeBilling(contract, selEntries, true, contractEntries, data.invoices, daySet);
     if (!billing.lines.length) {
       showNotice("Nothing billable in the days picked — entries that ride inside another entry wait for that entry's day, so pick both days together.");
@@ -1244,7 +1245,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       <div>
         {picker}
         {noticeEl}
-        <DutyLog contract={contract} />
+        {/* Keyed by contract so a mid-flow contract switch can never carry
+            one agreement's picker/preview state onto another's rows */}
+        <DutyLog key={contract.id} contract={contract} />
         {strandedRows.length > 0 && (
           <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, backgroundColor: T.card, border: `1px solid ${T.warning || "#f59e0b"}` }}>
             <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text, marginBottom: 4 }}>
@@ -1584,117 +1587,29 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           weeks with one-tap week toggles — one agency invoices weekly,
           another biweekly, so the window is picked fresh each time. */}
       <Modal open={!!invoicePick} onClose={() => setInvoicePick(null)} title="Which days go on this invoice?">
-        {invoicePick && (() => {
-          const sel = invoicePick.selected;
-          const toggleDay = (k) => setInvoicePick(p => {
-            const s2 = new Set(p.selected);
-            if (s2.has(k)) s2.delete(k); else s2.add(k);
-            return { ...p, selected: s2 };
-          });
-          const sundayOf = (k) => {
-            const d = new Date(k + "T12:00");
-            d.setDate(d.getDate() - d.getDay());
-            return localDate(d);
-          };
-          const weeks = new Map();
-          for (const d of invoicePick.days) {
-            const wk = sundayOf(d.key);
-            if (!weeks.has(wk)) weeks.set(wk, []);
-            weeks.get(wk).push(d);
-          }
-          const weekLabel = (wk) => {
-            const start = new Date(wk + "T12:00");
-            const end = new Date(start); end.setDate(end.getDate() + 6);
-            const f = (dt) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-            return `Sun ${f(start)} – Sat ${f(end)}`;
-          };
-          const toggleWeek = (wk) => setInvoicePick(p => {
-            const dayKeys = weeks.get(wk).map(d => d.key);
-            const s2 = new Set(p.selected);
-            const allOn = dayKeys.every(k => s2.has(k));
-            for (const k of dayKeys) { if (allOn) s2.delete(k); else s2.add(k); }
-            return { ...p, selected: s2 };
-          });
-          const dayLabel = (k) => new Date(k + "T12:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-          const check = (on) => ({
-            width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-            border: `2px solid ${on ? T.accent : T.border}`,
-            backgroundColor: on ? T.accent : "transparent",
-            color: "#fff", fontSize: 14, fontWeight: 800,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          });
-          return (
-            <>
-              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginBottom: 10 }}>
-                Pick the days this invoice covers — tap a week to take the whole Sun–Sat block,
-                or tap single days. Anything unpicked stays for the next invoice.
-              </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                <button onClick={() => setInvoicePick(p => ({ ...p, selected: new Set(p.days.map(d => d.key)) }))} style={{
-                  padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
-                  backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                }}>All days</button>
-                <button onClick={() => setInvoicePick(p => ({ ...p, selected: new Set() }))} style={{
-                  padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
-                  backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                }}>None</button>
-              </div>
-              {[...weeks.entries()].map(([wk, dayList]) => {
-                const allOn = dayList.every(d => sel.has(d.key));
-                const someOn = dayList.some(d => sel.has(d.key));
-                return (
-                  <div key={wk} style={{ marginBottom: 10, borderRadius: 12, border: `1px solid ${someOn ? T.accent : T.border}`, overflow: "hidden" }}>
-                    <div role="button" tabIndex={0} onClick={() => toggleWeek(wk)}
-                      onKeyDown={(ev) => { if (ev.key === "Enter") toggleWeek(wk); }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-                        backgroundColor: T.input, cursor: "pointer",
-                      }}>
-                      <div style={check(allOn)}>{allOn ? "✓" : someOn ? "–" : ""}</div>
-                      <div style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: T.text }}>{weekLabel(wk)}</div>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
-                        {money(dayList.reduce((s2, d) => s2 + d.amount, 0))}
-                      </div>
-                    </div>
-                    {dayList.map(d => {
-                      const on = sel.has(d.key);
-                      return (
-                        <div key={d.key} role="button" tabIndex={0} onClick={() => toggleDay(d.key)}
-                          onKeyDown={(ev) => { if (ev.key === "Enter") toggleDay(d.key); }}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 10, padding: "9px 12px 9px 22px",
-                            borderTop: `1px solid ${T.border}`, cursor: "pointer",
-                            opacity: on ? 1 : 0.55,
-                          }}>
-                          <div style={check(on)}>{on ? "✓" : ""}</div>
-                          <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text }}>
-                            {dayLabel(d.key)}
-                            <span style={{ color: T.textDim, fontWeight: 500 }}>
-                              {" · "}{d.items ? `${d.items} item${d.items === 1 ? "" : "s"}` : "on-call only"}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, fontVariantNumeric: "tabular-nums" }}>
-                            {money(d.amount)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-              <button
-                onClick={() => { const s2 = new Set(sel); setInvoicePick(null); buildInvoice(s2); }}
-                disabled={sel.size === 0}
-                style={{
-                  width: "100%", padding: "14px", borderRadius: 12, border: "none", marginTop: 4,
-                  background: sel.size ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
-                  color: "#fff", fontSize: 15, fontWeight: 800, cursor: sel.size ? "pointer" : "default",
-                }}>
-                Invoice {sel.size} day{sel.size === 1 ? "" : "s"} — {money(pickTotal)}
-              </button>
-            </>
-          );
-        })()}
+        {invoicePick && (
+          <>
+            <InvoiceDayPicker
+              T={T}
+              days={invoicePick.days.map(d => ({
+                key: d.key, amount: d.amount,
+                note: d.items ? `${d.items} item${d.items === 1 ? "" : "s"}` : "on-call only",
+              }))}
+              selected={invoicePick.selected}
+              onChange={(s2) => setInvoicePick(p => ({ ...p, selected: s2 }))}
+            />
+            <button
+              onClick={() => { const s2 = new Set(invoicePick.selected); setInvoicePick(null); buildInvoice(s2); }}
+              disabled={invoicePick.selected.size === 0}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 12, border: "none", marginTop: 4,
+                background: invoicePick.selected.size ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
+                color: "#fff", fontSize: 15, fontWeight: 800, cursor: invoicePick.selected.size ? "pointer" : "default",
+              }}>
+              Invoice {invoicePick.selected.size} day{invoicePick.selected.size === 1 ? "" : "s"} — {money(pickTotal)}
+            </button>
+          </>
+        )}
       </Modal>
 
       <Modal open={!!invoicePreview} onClose={() => setInvoicePreview(null)} title="Invoice preview">

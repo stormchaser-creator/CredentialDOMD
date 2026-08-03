@@ -188,3 +188,17 @@ export function downscalePhoto(dataUrl, max = 512) {
     img.src = dataUrl;
   });
 }
+
+// Invoice numbers must never repeat — an AP department treats the number as
+// identity. Count-based numbering (invoices.length + 1) reissued a number
+// whenever an earlier invoice was deleted; this scans what actually exists.
+export function nextInvoiceNumber(invoices) {
+  const prefix = `INV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`;
+  let seq = (invoices || []).filter(i => String(i.number || "").startsWith(prefix)).length + 1;
+  let num;
+  do {
+    num = `${prefix}-${String(seq).padStart(2, "0")}`;
+    seq += 1;
+  } while ((invoices || []).some(i => i.number === num));
+  return num;
+}

@@ -21,11 +21,22 @@ export const CALL_ROLES = [
   { id: "backup", label: "Backup" },
 ];
 
-/** The per-hospital grid rate for a role, from the contract's own table. */
+/**
+ * The per-hospital grid rate for a role, from the contract's own table.
+ * Matching is deliberately forgiving — exact, then case-insensitive, then
+ * by the parenthesized abbreviation — because a logged day stores the
+ * hospital STRING, and retitling a grid row must not silently zero the
+ * call pay already logged under the old title.
+ */
 export function gridRate(contract, hospital, role) {
   const grid = contract?.callRateGrid;
   if (!Array.isArray(grid) || !hospital) return 0;
-  const row = grid.find(r => r.hospital === hospital);
+  const norm = (s) => String(s || "").trim().toLowerCase();
+  const abbrev = (s) => (String(s || "").match(/\(([^)]+)\)\s*$/) || [])[1]?.toLowerCase() || null;
+  const row = grid.find(r => r.hospital === hospital)
+    || grid.find(r => norm(r.hospital) === norm(hospital))
+    || (abbrev(hospital) && grid.find(r => abbrev(r.hospital) === abbrev(hospital)))
+    || null;
   if (!row) return 0;
   const v = role === "backup" ? row.backup : row.primary;
   return Number(v) || 0;

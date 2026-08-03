@@ -107,7 +107,9 @@ function Invoices() {
 
   const removeInvoice = (inv) => {
     const mine = (data.workLog || []).filter(x => x.invoiceId === inv.id);
-    const n = mine.length;
+    // A day-rate invoice bills duty days, not time entries — release those too
+    const mineDuty = (data.dutyDays || []).filter(x => x.invoiceId === inv.id);
+    const n = mine.length + mineDuty.length;
     // Two invoices can share a call day (stipend billed on one, late-logged
     // work on the other). Deleting only one of them makes the stipend math
     // unrecoverable — the fix is always to delete both and regenerate.
@@ -116,7 +118,7 @@ function Invoices() {
       x.invoiceId && x.invoiceId !== inv.id && x.contractId === inv.contractId && myDays.has(callDayOf(x)));
     const warn = shared
       ? `Careful: another invoice also bills work on the same call day(s). Deleting just this one breaks the stipend math for those days — delete BOTH invoices and regenerate one invoice instead. Delete anyway?`
-      : `Delete invoice ${inv.number}? Its ${n} work entr${n === 1 ? "y" : "ies"} become unbilled again.`;
+      : `Delete invoice ${inv.number}? Its ${n} ${mineDuty.length ? `day${n === 1 ? "" : "s"}` : `work entr${n === 1 ? "y" : "ies"}`} become unbilled again.`;
     if (!window.confirm(warn)) return;
     for (const e of (data.workLog || []).filter(x => x.invoiceId === inv.id)) {
       // Zero-minute markers exist only as this invoice's billing record —
@@ -124,6 +126,7 @@ function Invoices() {
       if (e.type === "CallDay" && !e.billedMin) deleteItem("workLog", e.id);
       else editItem("workLog", { ...e, invoiceId: null });
     }
+    for (const d of mineDuty) editItem("dutyDays", { ...d, invoiceId: null });
     deleteItem("invoices", inv.id);
   };
 

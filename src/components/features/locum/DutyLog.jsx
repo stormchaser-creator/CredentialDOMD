@@ -2,12 +2,17 @@ import { useState, useMemo, memo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
-import { generateId } from "../../../utils/helpers";
+import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
+import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
 import { checkPlacement } from "../../../utils/scheduleGuard";
+import { shareInvoicePdf } from "../../../utils/invoicePdf";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
   monthKey, monthLabel,
 } from "../../../utils/dutyPay";
+
+const money = (n) =>
+  "$" + (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
  * Day-rate logging, for a contract that pays per day worked and per accepted
@@ -21,6 +26,9 @@ function DutyLog({ contract }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
   const [placement, setPlacement] = useState(null); // schedule warning awaiting confirmation
+  const [invoicePick, setInvoicePick] = useState(null); // { days, selected: Set }
+  const [invoicePreview, setInvoicePreview] = useState(null);
+  const [sent, setSent] = useState(false);
 
   const todayKey = (() => {
     const d = new Date();
@@ -47,6 +55,139 @@ function DutyLog({ contract }) {
 
   const hospitals = hospitalsFor(contract);
 
+  // ── Invoicing: pick the days, build the itemised invoice, stamp them ──
+  // Same picker and PDF as the time engine; the lines are duty lines
+  // (day rate + call periods at grid rates) instead of clock time.
+  // Every unbilled row with actual duty on it — INCLUDING one that suddenly
+  // prices $0 (a retitled grid row, say). A day that vanished from this list
+  // could never be invoiced or questioned; a visible $0.00 day can.
+  const unbilledDuties = useMemo(
+    () => duties.filter(d => !d.invoiceId && (d.workedDay || callPeriodsOf(d).length > 0)),
+    [duties]
+  );
+  const outstandingTotal = useMemo(
+    () => Math.round(unbilledDuties.reduce((s, d) => s + dutyDayPay(contract, d).total, 0) * 100) / 100,
+    [unbilledDuties, contract]
+  );
+
+  const openInvoicePicker = () => {
+    // Two rows can share a date — aggregate so a day is picked once
+    const byDay = new Map();
+    for (const d of unbilledDuties) {
+      const cur = byDay.get(d.date) || { amount: 0, labels: [] };
+      cur.amount += dutyDayPay(contract, d).total;
+      cur.labels.push(dutyLabel(d));
+      byDay.set(d.date, cur);
+    }
+    const days = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, v]) => ({ key, amount: Math.round(v.amount * 100) / 100, note: v.labels.join(" · ") }));
+    if (!days.length) return;
+    // Future-dated days list but start unchecked — invoicing a day that
+    // hasn't happened should be deliberate.
+    setInvoicePick({ days, selected: new Set(days.filter(d => d.key <= todayKey).map(d => d.key)) });
+  };
+
+  const pickTotal = invoicePick
+    ? Math.round(unbilledDuties
+        .filter(d => invoicePick.selected.has(d.date))
+        .reduce((s, d) => s + dutyDayPay(contract, d).total, 0) * 100) / 100
+    : 0;
+
+  const buildDutyInvoice = (sel) => {
+    const chosen = unbilledDuties
+      .filter(d => sel.has(d.date))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!chosen.length) return;
+    // A call period pricing $0 means its hospital no longer matches the
+    // contract's rate grid — an invoice must never go out short silently.
+    const zeroCalls = chosen.reduce((n, d) =>
+      n + dutyDayPay(contract, d).lines.filter(l => l.label.startsWith("On call") && !l.amount).length, 0);
+    if (zeroCalls > 0 && !window.confirm(
+      `${zeroCalls} call period${zeroCalls === 1 ? "" : "s"} price at $0 — the hospital on the logged day doesn't match the contract's rate grid anymore. Fix the day or the contract first, or build the invoice anyway?`
+    )) return;
+    const s = data.settings || {};
+    const physician = s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician";
+    const num = nextInvoiceNumber(data.invoices);
+    const lines = [];
+    let total = 0;
+    for (const d of chosen) {
+      const pay = dutyDayPay(contract, d);
+      pay.lines.forEach((l, i) => {
+        lines.push({ date: d.date, label: l.label, detail: i === 0 && d.notes ? d.notes : "", amount: l.amount });
+      });
+      total += pay.total;
+    }
+    total = Math.round(total * 100) / 100;
+    const dayRate = Number(contract.dayRate)
+      || (Number(contract.clinicalDayRate) || 0) + (Number(contract.scholarlyRate) || 0);
+    const terms = `${money(dayRate)} all-in day rate per day worked; 24-hour call periods per the agreement's coverage-rate grid (per hospital and role)`;
+    const dates = chosen.map(d => d.date);
+    const div = "─".repeat(40);
+    const textLines = [
+      "INVOICE " + num, div,
+      `From: ${physician}${s.npi ? " · NPI " + s.npi : ""}`,
+      ...(s.email ? [`Email: ${s.email}`] : []),
+      `To: ${contract.facility}${contract.agency ? " (via " + contract.agency + ")" : ""}`,
+      `Period: ${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`,
+      `Terms: ${terms}`, div,
+      ...lines.flatMap(l => [`${formatDate(l.date)}  ${l.label}`, `   ${l.detail ? l.detail + " = " : ""}${money(l.amount)}`]),
+      div, `TOTAL DUE: ${money(total)}`, "",
+      `Generated by CredentialDOMD · ${new Date().toLocaleDateString()}`,
+    ];
+    setSent(false); // a fresh preview must never inherit a stale ✓
+    setInvoicePreview({
+      number: num, lines, total, terms,
+      dutyIds: chosen.map(d => d.id),
+      periodStart: dates[0], periodEnd: dates[dates.length - 1],
+      text: textLines.join("\n"),
+    });
+  };
+
+  const markDutyBilled = (method) => {
+    if (!invoicePreview) return;
+    const invId = generateId();
+    for (const id of invoicePreview.dutyIds) {
+      const d = (data.dutyDays || []).find(x => x.id === id);
+      if (d) editItem("dutyDays", { ...d, invoiceId: invId });
+    }
+    addItem("invoices", {
+      id: invId,
+      number: invoicePreview.number,
+      contractId: contract.id,
+      periodStart: invoicePreview.periodStart,
+      periodEnd: invoicePreview.periodEnd,
+      entryIds: invoicePreview.dutyIds,
+      totalMinutes: 0,
+      totalAmount: invoicePreview.total,
+      dayOverMin: {},
+      method,
+      sentAt: new Date().toISOString(),
+      paidAt: null,
+      text: invoicePreview.text,
+      lines: invoicePreview.lines,
+      terms: invoicePreview.terms,
+    });
+    setSent(true);
+    setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
+  };
+
+  const sendDutyInvoice = async () => {
+    const s = data.settings || {};
+    const subject = `Invoice ${invoicePreview.number} — ${s.name || "Locum"} — ${contract.facility}`;
+    const how = await shareInvoicePdf({
+      number: invoicePreview.number,
+      physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
+      npi: s.npi, email: s.email,
+      facility: contract.facility, agency: contract.agency,
+      location: contract.location, billTo: contract.billTo,
+      periodStart: invoicePreview.periodStart, periodEnd: invoicePreview.periodEnd,
+      terms: invoicePreview.terms, lines: invoicePreview.lines,
+      totalMin: 0, total: invoicePreview.total,
+    }, subject, invoicePreview.text);
+    if (how === null) return; // share sheet cancelled
+    markDutyBilled(how.startsWith("share") ? "share-pdf" : "pdf-download");
+  };
+
   const openNew = () => {
     setEditing("new");
     setForm({
@@ -63,6 +204,12 @@ function DutyLog({ contract }) {
   // confirmed, and the confirmation is recorded on the day.
   const save = (confirmed = false) => {
     if (!form.date) return;
+    // A billed day backs a sent invoice — editing changes the records but
+    // never the document that went out; make that explicit before saving.
+    // (Skipped on the placement re-entry so it can't ask twice per save.)
+    if (!confirmed && editing !== "new" && form.invoiceId && !window.confirm(
+      "This day is already on a sent invoice. Editing updates your records but NOT the invoice that went out — to change the invoice too, delete it on the Invoices tab (days become unbilled) and generate it again. Edit anyway?"
+    )) return;
     if (!confirmed && !form.placementOk) {
       const warn = checkPlacement(data.locumContracts || [], contract, form.date);
       if (warn) { setPlacement(warn); return; }
@@ -97,10 +244,28 @@ function DutyLog({ contract }) {
       </div>
 
       <button onClick={openNew} style={{
-        width: "100%", padding: "13px", borderRadius: 12, border: "none", marginBottom: 14,
+        width: "100%", padding: "13px", borderRadius: 12, border: "none", marginBottom: 8,
         background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
         fontSize: 15, fontWeight: 800, cursor: "pointer",
       }}>+ Log a day</button>
+
+      {/* Invoice CTA — same pick-the-days flow as the time engine. Counts
+          DAYS (two rows on one date are still one day) to match the picker. */}
+      {unbilledDuties.length > 0 && (() => {
+        const nDays = new Set(unbilledDuties.map(d => d.date)).size;
+        return (
+          <button onClick={openInvoicePicker} style={{
+            width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "14px 16px", borderRadius: 14, border: `2px solid ${T.accent}`,
+            backgroundColor: T.card, cursor: "pointer", marginBottom: 14, boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
+              {"🧾"} Invoice {nDays} unbilled day{nDays === 1 ? "" : "s"}
+            </span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: T.accent }}>{money(outstandingTotal)}</span>
+          </button>
+        );
+      })()}
 
       {months.length === 0 && (
         <div style={{ textAlign: "center", padding: "26px 18px", backgroundColor: T.card, borderRadius: 14, border: `1px solid ${T.border}` }}>
@@ -165,6 +330,7 @@ function DutyLog({ contract }) {
                       </div>
                       <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
                         {dutyLabel(d)}{callPeriodsOf(d).length ? ` · ${callPeriodsOf(d).map(p => p.hospital.replace(/\s*\(.*\)$/, "")).join(", ")}` : ""}
+                        {d.invoiceId && <span style={{ fontWeight: 800, color: T.textDim }}> · billed</span>}
                       </div>
                       {d.notes && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 2 }}>{d.notes}</div>}
                     </div>
@@ -178,6 +344,80 @@ function DutyLog({ contract }) {
           </div>
         );
       })}
+
+      <Modal open={!!invoicePick} onClose={() => setInvoicePick(null)} title="Which days go on this invoice?">
+        {invoicePick && (
+          <>
+            <InvoiceDayPicker
+              T={T}
+              days={invoicePick.days}
+              selected={invoicePick.selected}
+              onChange={(s2) => setInvoicePick(p => ({ ...p, selected: s2 }))}
+            />
+            <button
+              onClick={() => { const s2 = new Set(invoicePick.selected); setInvoicePick(null); buildDutyInvoice(s2); }}
+              disabled={invoicePick.selected.size === 0}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 12, border: "none", marginTop: 4,
+                background: invoicePick.selected.size ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
+                color: "#fff", fontSize: 15, fontWeight: 800, cursor: invoicePick.selected.size ? "pointer" : "default",
+              }}>
+              Invoice {invoicePick.selected.size} day{invoicePick.selected.size === 1 ? "" : "s"} — {money(pickTotal)}
+            </button>
+          </>
+        )}
+      </Modal>
+
+      <Modal open={!!invoicePreview} onClose={() => { setInvoicePreview(null); setSent(false); }} title="Invoice preview">
+        {invoicePreview && (
+          <>
+            <div style={{
+              backgroundColor: T.input, border: `1px solid ${T.border}`, borderRadius: 12,
+              padding: 12, marginBottom: 14, maxHeight: 300, overflow: "auto",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: T.text }}>{invoicePreview.number}</span>
+                <span style={{ fontSize: 12, color: T.textMuted }}>
+                  {formatDate(invoicePreview.periodStart)}{invoicePreview.periodEnd !== invoicePreview.periodStart ? ` – ${formatDate(invoicePreview.periodEnd)}` : ""}
+                </span>
+              </div>
+              {invoicePreview.lines.map((l, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, color: T.textMuted, padding: "3px 0" }}>
+                  <span style={{ minWidth: 0 }}>{formatDate(l.date)} · {l.label}{l.detail ? ` — ${l.detail}` : ""}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, flexShrink: 0 }}>{money(l.amount)}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, color: T.text, borderTop: `1px solid ${T.border}`, marginTop: 6, paddingTop: 6 }}>
+                <span>TOTAL DUE</span>
+                <span style={{ color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{money(invoicePreview.total)}</span>
+              </div>
+            </div>
+            {sent ? (
+              <div style={{ textAlign: "center", padding: "12px", fontSize: 15, fontWeight: 800, color: "#22c55e" }}>
+                ✓ Marked sent — it's on the Invoices tab
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button onClick={sendDutyInvoice} style={{
+                  width: "100%", padding: "14px", borderRadius: 12, border: "none",
+                  background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+                  fontSize: 15, fontWeight: 800, cursor: "pointer",
+                }}>Send as PDF</button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => { copyToClipboard(invoicePreview.text); markDutyBilled("copy"); }} style={{
+                    flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${T.border}`,
+                    backgroundColor: "transparent", color: T.text, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+                  }}>Copy text &amp; mark sent</button>
+                  <button onClick={() => setInvoicePreview(null)} style={{
+                    padding: "12px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
+                    backgroundColor: "transparent", color: T.textMuted, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+                  }}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </Modal>
 
       <Modal open={!!placement} onClose={() => setPlacement(null)} title={placement?.title || "Check the date"}>
         {placement && (
@@ -267,7 +507,7 @@ function DutyLog({ contract }) {
                 background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
                 fontSize: 15, fontWeight: 800, cursor: "pointer",
               }}>Save</button>
-              {editing !== "new" && (
+              {editing !== "new" && !form.invoiceId && (
                 <button onClick={() => { if (window.confirm("Delete this day?")) { deleteItem("dutyDays", editing); setEditing(null); } }} style={{
                   padding: "13px 16px", borderRadius: 12, border: "none",
                   backgroundColor: T.dangerDim, color: T.danger, fontSize: 14, fontWeight: 700, cursor: "pointer",
