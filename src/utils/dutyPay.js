@@ -38,6 +38,21 @@ export function hospitalsFor(contract) {
 }
 
 /**
+ * The call periods on a day. Several hospitals can be covered at once —
+ * primary at one and backup at another — and each pays its own grid rate,
+ * so this always returns a list. Days written before multi-call existed
+ * carry a single hospital/role pair, which reads as a one-item list.
+ */
+export function callPeriodsOf(duty) {
+  if (!duty) return [];
+  if (Array.isArray(duty.callPeriods) && duty.callPeriods.length) {
+    return duty.callPeriods.filter(p => p && p.hospital);
+  }
+  if (duty.callHospital) return [{ hospital: duty.callHospital, role: duty.callRole || "primary" }];
+  return [];
+}
+
+/**
  * What a single duty day invoices, itemised so the physician can see why.
  * @returns {{lines: {label:string, amount:number}[], total:number}}
  */
@@ -55,10 +70,12 @@ export function dutyDayPay(contract, duty) {
   if (duty.workedDay && duty.scholarly && scholarly > 0) {
     lines.push({ label: "Faculty & scholarly activity", amount: scholarly });
   }
-  if (duty.callHospital) {
-    const rate = gridRate(contract, duty.callHospital, duty.callRole || "primary");
-    const role = duty.callRole === "backup" ? "backup" : "primary";
-    lines.push({ label: `On call — ${duty.callHospital} (${role})`, amount: rate });
+  for (const p of callPeriodsOf(duty)) {
+    const role = p.role === "backup" ? "backup" : "primary";
+    lines.push({
+      label: `On call — ${p.hospital} (${role})`,
+      amount: gridRate(contract, p.hospital, role),
+    });
   }
 
   const total = Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
@@ -69,20 +86,43 @@ export function dutyDayPay(contract, duty) {
 export function dutyLabel(duty) {
   const bits = [];
   if (duty.workedDay) bits.push("Day worked");
-  if (duty.callHospital) bits.push(`${duty.callRole === "backup" ? "Backup" : "Primary"} call`);
+  for (const p of callPeriodsOf(duty)) {
+    bits.push(`${p.role === "backup" ? "Backup" : "Primary"} call`);
+  }
   if (!bits.length) bits.push("No duty logged");
   return bits.join(" + ");
 }
 
 /** Totals for a month, the unit this contract invoices in. */
 export function summarizeDuties(contract, duties) {
-  let total = 0, workedDays = 0, callDays = 0;
+  let total = 0, workedDays = 0, callPeriods = 0, dayWork = 0, callPay = 0;
+  // Call pay varies fourfold across the grid, so the split by hospital and
+  // role is the number worth seeing — an EMC primary night is two ARMC ones.
+  const byHospital = new Map();
   for (const d of duties || []) {
-    total += dutyDayPay(contract, d).total;
+    const pay = dutyDayPay(contract, d);
+    total += pay.total;
     if (d.workedDay) workedDays += 1;
-    if (d.callHospital) callDays += 1;
+    for (const l of pay.lines) {
+      if (l.label.startsWith("On call")) callPay += l.amount; else dayWork += l.amount;
+    }
+    for (const p of callPeriodsOf(d)) {
+      callPeriods += 1;
+      const role = p.role === "backup" ? "backup" : "primary";
+      const key = `${p.hospital}|${role}`;
+      const cur = byHospital.get(key) || { hospital: p.hospital, role, periods: 0, amount: 0 };
+      cur.periods += 1;
+      cur.amount += gridRate(contract, p.hospital, role);
+      byHospital.set(key, cur);
+    }
   }
-  return { total: Math.round(total * 100) / 100, workedDays, callDays, days: (duties || []).length };
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return {
+    total: r2(total), workedDays, callPeriods, callDays: callPeriods,
+    dayWork: r2(dayWork), callPay: r2(callPay),
+    byHospital: [...byHospital.values()].sort((a, b) => b.amount - a.amount).map(h => ({ ...h, amount: r2(h.amount) })),
+    days: (duties || []).length,
+  };
 }
 
 export function monthKey(dateStr) {

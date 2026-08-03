@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import SmartTimeField from "../../shared/SmartTimeField";
-import { parseTimeText, fmt12 } from "../../../utils/timeText";
 import { getPrivate, setPrivate, removePrivate, looksLikePHI } from "../../../utils/privateVault";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
@@ -1152,13 +1151,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                 }}>{t2}</button>
               ))}
             </div>
-            <button onClick={() => { const now = new Date(); setManual({ type: "Consult", date: localDate(now), durationMin: "60", exact: true, start: localHHMM(now.toISOString()) }); setShowManual(true); }} style={{
-              width: "100%", padding: "12px", borderRadius: 12, marginBottom: 8,
-              border: `1px solid ${T.accent}`, backgroundColor: "transparent",
-              color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer",
-            }}>🩺 Consult seen — log 1 hour</button>
             <button onClick={() => { setManual({ type: "Call", date: localDate(new Date()), exact: true }); setShowManual(true); }} style={{
-              width: "100%", padding: "12px", borderRadius: 12,
+              width: "100%", padding: "12px", borderRadius: 12, marginTop: 8,
               border: `1px solid ${T.border}`, backgroundColor: T.input,
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,

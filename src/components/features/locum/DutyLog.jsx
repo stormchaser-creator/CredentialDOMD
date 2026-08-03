@@ -4,7 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import { generateId } from "../../../utils/helpers";
 import {
-  dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor,
+  dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
   monthKey, monthLabel,
 } from "../../../utils/dutyPay";
 
@@ -51,12 +51,11 @@ function DutyLog({ contract }) {
       date: todayKey,
       workedDay: true,
       scholarly: false,
-      callHospital: "",
-      callRole: "primary",
+      callPeriods: [],
       notes: "",
     });
   };
-  const openEdit = (d) => { setEditing(d.id); setForm({ ...d }); };
+  const openEdit = (d) => { setEditing(d.id); setForm({ ...d, callPeriods: callPeriodsOf(d) }); };
 
   const save = () => {
     if (!form.date) return;
@@ -65,8 +64,10 @@ function DutyLog({ contract }) {
       date: form.date,
       workedDay: !!form.workedDay,
       scholarly: !!form.scholarly,
-      callHospital: form.callHospital || null,
-      callRole: form.callHospital ? (form.callRole || "primary") : null,
+      callPeriods: (form.callPeriods || []).filter(p => p && p.hospital),
+      // Legacy columns kept in step so an older client still reads the day
+      callHospital: (form.callPeriods || [])[0]?.hospital || null,
+      callRole: (form.callPeriods || [])[0]?.role || null,
       notes: form.notes || "",
     };
     clean.amount = dutyDayPay(contract, clean).total;
@@ -113,13 +114,30 @@ function DutyLog({ contract }) {
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>{monthLabel(mk)}</div>
                 <div style={{ fontSize: 11.5, color: T.textDim }}>
-                  {sum.workedDays} day{sum.workedDays === 1 ? "" : "s"} worked · {sum.callDays} call period{sum.callDays === 1 ? "" : "s"}
+                  {sum.workedDays} day{sum.workedDays === 1 ? "" : "s"} worked · {sum.callPeriods} call period{sum.callPeriods === 1 ? "" : "s"}
                 </div>
               </div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
-                ${sum.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 17, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>
+                  ${sum.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div style={{ fontSize: 10.5, color: T.textDim, fontVariantNumeric: "tabular-nums" }}>
+                  day work ${sum.dayWork.toLocaleString("en-US", { maximumFractionDigits: 0 })} · call ${sum.callPay.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                </div>
               </div>
             </div>
+
+            {/* Call pay varies fourfold across the grid — show where it came from */}
+            {sum.byHospital.length > 0 && (
+              <div style={{ padding: "8px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}`, marginBottom: 6 }}>
+                {sum.byHospital.map((h, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: T.textMuted, padding: "2px 0" }}>
+                    <span>{h.hospital.replace(/\s*\(.*\)$/, "")} — {h.role} × {h.periods}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>${h.amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {list.map(d => {
@@ -138,7 +156,7 @@ function DutyLog({ contract }) {
                         {new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                       </div>
                       <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
-                        {dutyLabel(d)}{d.callHospital ? ` · ${d.callHospital.replace(/\s*\(.*\)$/, "")}` : ""}
+                        {dutyLabel(d)}{callPeriodsOf(d).length ? ` · ${callPeriodsOf(d).map(p => p.hospital.replace(/\s*\(.*\)$/, "")).join(", ")}` : ""}
                         {d.scholarly ? " · teaching logged" : ""}
                       </div>
                       {d.notes && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 2 }}>{d.notes}</div>}
@@ -168,27 +186,36 @@ function DutyLog({ contract }) {
               }}>{form.workedDay ? "Yes — day worked" : "No clinical day"}</button>
             </Field>
 
-            <Field label="On call" hint="One 24-hour period per date; leave blank if no call taken">
-              <select value={form.callHospital || ""} onChange={e => setForm(f => ({ ...f, callHospital: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
-                <option value="">— no call —</option>
-                {hospitals.map(h => <option key={h} value={h}>{h}</option>)}
-              </select>
-            </Field>
-
-            {form.callHospital && (
-              <Field label="Call role">
-                <div style={{ display: "flex", gap: 6 }}>
-                  {[["primary", "Primary"], ["backup", "Backup"]].map(([id, label]) => (
-                    <button key={id} onClick={() => setForm(f => ({ ...f, callRole: id }))} style={{
-                      flex: 1, padding: "11px", borderRadius: 10, fontSize: 13.5, fontWeight: 800, cursor: "pointer",
-                      border: `1px solid ${form.callRole === id ? T.accent : T.border}`,
-                      backgroundColor: form.callRole === id ? T.accent : "transparent",
-                      color: form.callRole === id ? "#fff" : T.textMuted,
-                    }}>{label}</button>
-                  ))}
+            <Field label="On call" hint="Each hospital covered pays its own grid rate — add one row per hospital">
+              {(form.callPeriods || []).map((p, i) => (
+                <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                  <select value={p.hospital} onChange={e => setForm(f => ({
+                    ...f, callPeriods: f.callPeriods.map((x, j) => j === i ? { ...x, hospital: e.target.value } : x),
+                  }))} style={{ ...iS, appearance: "auto", flex: 1, minWidth: 0 }}>
+                    {hospitals.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                  <button onClick={() => setForm(f => ({
+                    ...f, callPeriods: f.callPeriods.map((x, j) => j === i ? { ...x, role: x.role === "backup" ? "primary" : "backup" } : x),
+                  }))} style={{
+                    padding: "11px 13px", borderRadius: 10, fontSize: 12.5, fontWeight: 800, cursor: "pointer", flexShrink: 0,
+                    border: `1px solid ${p.role === "backup" ? T.border : T.accent}`,
+                    backgroundColor: p.role === "backup" ? "transparent" : T.accent,
+                    color: p.role === "backup" ? T.textMuted : "#fff",
+                  }}>{p.role === "backup" ? "Backup" : "Primary"}</button>
+                  <button onClick={() => setForm(f => ({ ...f, callPeriods: f.callPeriods.filter((_, j) => j !== i) }))} style={{
+                    padding: "11px 12px", borderRadius: 10, border: "none", flexShrink: 0,
+                    backgroundColor: T.dangerDim, color: T.danger, fontSize: 13, fontWeight: 800, cursor: "pointer",
+                  }}>×</button>
                 </div>
-              </Field>
-            )}
+              ))}
+              <button onClick={() => setForm(f => ({
+                ...f, callPeriods: [...(f.callPeriods || []), { hospital: hospitals[0] || "", role: "primary" }],
+              }))} style={{
+                width: "100%", padding: "11px", borderRadius: 10, cursor: "pointer",
+                border: `1px dashed ${T.accent}`, backgroundColor: "transparent",
+                color: T.accent, fontSize: 13, fontWeight: 800,
+              }}>+ Add a call period</button>
+            </Field>
 
             {form.workedDay && (
             <Field label="Teaching logged" hint="Paid on worked weekdays only, and contingent on the monthly teaching log">
@@ -200,7 +227,7 @@ function DutyLog({ contract }) {
               }}>{form.scholarly ? "Yes — teaching documented" : "No teaching this day"}</button>
             </Field>
             )}
-            {!form.workedDay && form.callHospital && (
+            {!form.workedDay && (form.callPeriods || []).length > 0 && (
               <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 6 }}>
                 A call period without a worked weekday pays the grid rate alone — the scholarly fee is a worked-weekday component under V4.
               </div>
