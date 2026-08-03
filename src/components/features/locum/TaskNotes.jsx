@@ -39,7 +39,9 @@ function TaskNotes({ onBill }) {
     done: tasks.filter(t => t.completedAt).sort((a, b) => String(b.completedAt || "").localeCompare(String(a.completedAt || ""))),
   }), [tasks]);
 
-  const contracts = data.locumContracts || [];
+  // A finished to-do bills TIME, so only time-priced contracts can take it —
+  // the day-rate agreement logs days and call periods, not begin/end times.
+  const contracts = (data.locumContracts || []).filter(c => c.payModel !== "daily");
   const defaultContract = contracts.length === 1 ? contracts[0].id : null;
 
   const capture = () => {
@@ -74,7 +76,8 @@ function TaskNotes({ onBill }) {
       end: "",
       description: task.text || "",
       privateNote: "",
-      contractId: task.contractId || defaultContract,
+      // A stale task may point at a non-billable contract — drop to default
+      contractId: contracts.some(c => c.id === task.contractId) ? task.contractId : defaultContract,
     });
   };
 
@@ -112,16 +115,20 @@ function TaskNotes({ onBill }) {
         </div>
         {!isDone && (
           <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
-            {!t.startedAt && (
+            {!t.startedAt && contracts.length > 0 && (
               <button onClick={() => startWork(t)} style={{
                 padding: "8px 12px", borderRadius: 9, border: `1px solid ${T.accent}`,
                 backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 800, cursor: "pointer",
               }}>Start timing</button>
             )}
-            <button onClick={() => openFinish(t)} style={{
-              padding: "8px 12px", borderRadius: 9, border: "none",
-              background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer",
-            }}>Finish &amp; log time</button>
+            {/* Billing time needs a time-priced contract to land in — with
+                none on file the only honest close is "done, no charge" */}
+            {contracts.length > 0 && (
+              <button onClick={() => openFinish(t)} style={{
+                padding: "8px 12px", borderRadius: 9, border: "none",
+                background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer",
+              }}>Finish &amp; log time</button>
+            )}
             <button onClick={() => dismiss(t)} style={{
               padding: "8px 11px", borderRadius: 9, border: `1px solid ${T.border}`,
               backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",

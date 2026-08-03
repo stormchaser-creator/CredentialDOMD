@@ -11,6 +11,7 @@ import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard } from "../../../utils/helpers";
 import { shareInvoicePdf } from "../../../utils/invoicePdf";
 import { parseWorkDictation } from "../../../utils/workDictation";
+import DutyLog from "./DutyLog";
 
 /**
  * WorkLog — one-tap time capture for locum work, billed in the contract's
@@ -169,6 +170,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
   const contracts = data.locumContracts || [];
   const entries = data.workLog || [];
+  // Contracts a TIME entry can bill against. A day-rate agreement has no
+  // hourly price — its work is logged as days and call periods, not clock
+  // time — so it never appears in a time-entry dropdown.
+  const timeContracts = useMemo(() => contracts.filter(c => c.payModel !== "daily"), [contracts]);
 
   // Default to: running timer's contract → explicitly remembered pick →
   // the contract of the most recent log entry → first contract.
@@ -649,12 +654,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       privateNote: "",
       invoiceId: null,
     });
-    if (timer.type !== "Orientation") {
+    if (c?.payModel === "daily") {
+      // A timer that predates this contract going day-rate: the row is kept
+      // for the record but prices at $0 — the money lives in Days & call.
+      showNotice(`${c.facility || "This contract"} pays per day and call period, not clock time — the timed entry was saved for your records but bills $0. Log the day or call period on Days & call.`);
+    } else if (timer.type !== "Orientation") {
       const overlapped = noticeOverlap(c, { id: "timer", type: timer.type, startTime: f.s, endTime: f.e, createdAt: new Date().toISOString() });
       if (!overlapped) noticeAllowance(c, callDayOf({ startTime: f.s }), f.billed, null);
     }
     setTimer(null); saveTimer(null);
-  }, [timer, contracts, contract, addItem, finalizeEntry, noticeAllowance, noticeOverlap]);
+  }, [timer, contracts, contract, addItem, finalizeEntry, noticeAllowance, noticeOverlap, showNotice]);
 
   // Work is logged AFTER it happens. A start time in the future almost
   // always means the date is wrong (the old UTC-date bug filed 9 PM work
@@ -690,8 +699,26 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   }, []);
 
   const saveManual = useCallback((confirmed = false) => {
-    const target = contracts.find(x => x.id === manual.contractId) || contract;
-    if (!target || !manual.date) return;
+    // Time entries only bill time-priced contracts — never the day-rate one.
+    // An EDIT never moves an entry to a different contract by fallback: if
+    // the dropdown pick isn't billable, the entry keeps its own binding
+    // (silently re-homing a saved entry would invoice the wrong facility).
+    const editOrig = manual.editId ? entries.find(x => x.id === manual.editId) : null;
+    const target = timeContracts.find(x => x.id === manual.contractId)
+      || (editOrig
+        // Edits resolve to the entry's OWN contract — and if that contract
+        // is gone, they stop rather than fall through to a different one.
+        ? contracts.find(x => x.id === editOrig.contractId)
+        : (contract?.payModel !== "daily" ? contract : timeContracts[0]));
+    if (!target) {
+      // alert, not the notice banner: the banner renders under the open
+      // modal and auto-clears — the user would never see it.
+      window.alert(editOrig && timeContracts.length
+        ? "This entry's original contract is no longer on file — pick a contract in the dropdown before saving."
+        : "This needs a time-priced contract to bill against — add one on the Contracts tab.");
+      return;
+    }
+    if (!manual.date) return;
     // Before anything is written: does the schedule say he was here?
     if (!confirmed && !manual.placementOk) {
       const warn = checkPlacement(contracts, target, manual.date);
@@ -769,14 +796,24 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, noticeOverlap, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
+  }, [contract, contracts, timeContracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, noticeOverlap, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
 
   // A finished to-do arrives with the times HE typed on the finish form —
   // use them as given rather than re-deriving anything from timestamps.
   useEffect(() => {
     if (!billDraft) return;
+    // A draft can only bill a time-priced contract. A draft with no pick (or
+    // a stale one pointing at the day-rate agreement) goes to the contract
+    // he is CURRENTLY working — the pre-existing behavior — and only then to
+    // the first billable one. If the picker sits on the day-rate agreement,
+    // it flips to the draft's target so the view behind the modal is the
+    // time engine that entry will actually land in.
+    const draftTarget = timeContracts.some(c => c.id === billDraft.contractId)
+      ? billDraft.contractId
+      : ((contract?.payModel !== "daily" ? contract?.id : null) || timeContracts[0]?.id || "");
+    if (contract?.payModel === "daily" && draftTarget) rememberContract(draftTarget);
     setManual({
-      contractId: billDraft.contractId,
+      contractId: draftTarget,
       type: billDraft.type || "Call",
       otherType: billDraft.type ? !WORK_TYPES.includes(billDraft.type) : false,
       date: billDraft.date,
@@ -790,7 +827,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     });
     setShowManual(true);
     onBillDraftDone?.();
-  }, [billDraft, onBillDraftDone]);
+  }, [billDraft, onBillDraftDone, timeContracts, contract, rememberContract]);
 
   const openEditEntry = useCallback((e) => {
     setManual({
@@ -918,7 +955,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   }, [contractEntries, contract, entries, isStipendDay, amountForEntry, todayKey]);
 
   const buildInvoice = useCallback(() => {
-    if (!contract || unbilled.length === 0) return;
+    // A day-rate contract's money lives in duty days — the time engine would
+    // price its rows at $0 and stamp them billed for nothing.
+    if (!contract || contract.payModel === "daily" || unbilled.length === 0) return;
     const s = data.settings || {};
     const physician = s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician";
     const div = "─".repeat(40);
@@ -1050,19 +1089,86 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     ? roundUp(Math.max(1, Math.ceil(elapsed / 60)), timerContract.incrementMinutes || 15, timer.type === "Call" ? (timerContract.minCallMinutes || 15) : 0)
     : 0;
 
+  // One picker, always — what changes underneath it is the ENGINE. A
+  // day-rate agreement has no clock: picking it swaps the timer and time
+  // log for days-and-call logging. (While a timer runs for another
+  // contract, or a to-do is being billed, the time view stays up so
+  // neither gets stranded behind the swap.)
+  const picker = contracts.length > 0 && (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 4 }}>
+        Logging against
+      </div>
+      <select value={contract?.id || ""} onChange={e => rememberContract(e.target.value)} style={{ ...iS, appearance: "auto" }}>
+        {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
+      </select>
+    </div>
+  );
+
+  // Notices (stipend countdown, overlap warnings, post-save summaries) must
+  // survive the engine swap — a warning fired on Stop & Log still has to be
+  // seen even when the view lands on the day-rate engine a frame later.
+  const noticeEl = notice && (
+    <div style={{
+      padding: "12px 14px", borderRadius: 12, marginBottom: 10,
+      backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`,
+      fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.45,
+    }}>
+      {notice}
+    </div>
+  );
+
+  if (contract?.payModel === "daily" && !timer && !showManual) {
+    // Time entries that landed on this contract anyway (a timer that was
+    // already running when it became day-rate, or rows from before the fix)
+    // never reach an invoice — surface them instead of stranding them.
+    const strandedRows = entries
+      .filter(e => e.contractId === contract.id)
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    return (
+      <div>
+        {picker}
+        {noticeEl}
+        <DutyLog contract={contract} />
+        {strandedRows.length > 0 && (
+          <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, backgroundColor: T.card, border: `1px solid ${T.warning || "#f59e0b"}` }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text, marginBottom: 4 }}>
+              {"⚠️"} {strandedRows.length} time entr{strandedRows.length === 1 ? "y" : "ies"} logged against this contract
+            </div>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.45, marginBottom: 8 }}>
+              This agreement pays per day and call period, not clock time. Unbilled rows here never
+              reach an invoice — log each as a day or call period above, then delete it. A row already
+              on a sent invoice stays for the record; delete that invoice first to release it.
+            </div>
+            {strandedRows.map(e => (
+              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: `1px solid ${T.border}` }}>
+                <div style={{ minWidth: 0, flex: 1, fontSize: 12.5, color: T.text }}>
+                  <span style={{ fontWeight: 700 }}>{formatDate(e.date)}</span>
+                  {" · "}{e.type}{e.description ? ` — ${e.description}` : ""}
+                  {e.billedMin ? ` · ${e.billedMin}m` : ""}
+                </div>
+                {e.invoiceId ? (
+                  // Already on a sent invoice — deleting it would orphan that
+                  // invoice's record; the Invoices tab releases it properly.
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.textDim, flexShrink: 0 }}>billed</span>
+                ) : (
+                  <button onClick={() => { if (window.confirm("Delete this time entry? Log the day or call period above first if it hasn't been.")) { removePrivate("workLog", e.id); deleteItem("workLog", e.id); } }} style={{
+                    padding: "6px 10px", borderRadius: 8, border: "none", flexShrink: 0,
+                    backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)", color: T.danger || "#ef4444",
+                    fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                  }}>Delete</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
-      {/* Contract picker — always visible so it's clear what work bills against */}
-      {contracts.length > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 4 }}>
-            Logging against
-          </div>
-          <select value={contract?.id || ""} onChange={e => rememberContract(e.target.value)} style={{ ...iS, appearance: "auto" }}>
-            {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
-          </select>
-        </div>
-      )}
+      {picker}
 
       {/* Timer */}
       <div style={{
@@ -1186,8 +1292,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         )}
       </div>
 
-      {/* Unbilled summary + invoice CTA */}
-      {unbilled.length > 0 && (
+      {/* Unbilled summary + invoice CTA — never for a day-rate contract,
+          whose invoicing lives in duty days, not the time engine */}
+      {contract?.payModel !== "daily" && unbilled.length > 0 && (
         <button onClick={buildInvoice} style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "14px 16px", borderRadius: 14, border: `2px solid ${T.accent}`,
@@ -1220,10 +1327,23 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       </Modal>
 
       <Modal open={showManual} onClose={() => setShowManual(false)} title={manual.editId ? (manual.type === "CallDay" ? "Edit call coverage" : "Edit entry") : "Log past time"}>
-        {contracts.length > 1 && (
+        {(timeContracts.length > 1 || (manual.editId && manual.contractId && !timeContracts.some(c => c.id === manual.contractId))) && (
           <Field label="Contract">
-            <select value={manual.contractId || contract?.id || ""} onChange={e => setManual(m2 => ({ ...m2, contractId: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
-              {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+            {/* Only time-priced contracts — the day-rate agreement logs days
+                and call periods on its own tab, never begin/end times. An
+                entry already bound to a non-billable contract shows its true
+                home (disabled) rather than a lying blank — even when there
+                is only one billable contract to move it to. */}
+            <select
+              value={manual.contractId || (contract?.payModel !== "daily" ? contract?.id : timeContracts[0]?.id) || ""}
+              onChange={e => setManual(m2 => ({ ...m2, contractId: e.target.value }))}
+              style={{ ...iS, appearance: "auto" }}>
+              {manual.editId && manual.contractId && !timeContracts.some(c => c.id === manual.contractId) && (
+                <option value={manual.contractId} disabled>
+                  {(contracts.find(c => c.id === manual.contractId)?.facility || "Original contract")} (day-rate — time doesn't bill here)
+                </option>
+              )}
+              {timeContracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
             </select>
           </Field>
         )}
@@ -1410,15 +1530,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         )}
       </Modal>
 
-      {notice && (
-        <div style={{
-          padding: "12px 14px", borderRadius: 12, marginBottom: 10,
-          backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`,
-          fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.45,
-        }}>
-          {notice}
-        </div>
-      )}
+      {noticeEl}
 
       {/* Entry detail — tap any row to see everything about it */}
       <Modal open={!!viewEntry} onClose={() => setViewEntry(null)} title={viewEntry ? (viewEntry.type === "CallDay" ? "Call coverage" : viewEntry.type) : "Entry"}>
