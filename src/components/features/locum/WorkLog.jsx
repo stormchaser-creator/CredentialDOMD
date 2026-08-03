@@ -199,6 +199,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const [showManual, setShowManual] = useState(false);
   const [manual, setManual] = useState({});
   const [invoicePreview, setInvoicePreview] = useState(null); // { text, entryIds, total, contract }
+  const [invoicePick, setInvoicePick] = useState(null); // { days: [{key, amount, items}], selected: Set } — day selection before an invoice builds
   const [sent, setSent] = useState(false);
   const [notice, setNotice] = useState(null);
   const showNotice = useCallback((msg) => {
@@ -293,7 +294,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
    * Orientation always bills under its own terms (hourly rate or one-time
    * fee) and never draws down the stipend allowance.
    */
-  const computeBilling = useCallback((c, list, includeOrientation, allList, invoicesList) => {
+  // dayFilter (optional Set of YYYY-MM-DD call-day keys) limits the invoice
+  // to chosen days — each agency wants its own window (one weekly Sun–Sat,
+  // another biweekly), so the physician picks the days at invoice time.
+  const computeBilling = useCallback((c, list, includeOrientation, allList, invoicesList, dayFilter = null) => {
     if (!c) return { lines: [], total: 0, totalMin: 0, orientationIncluded: false };
     const all = allList || list;
     const lines = [];
@@ -323,6 +327,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           if (!byDate[k]) byDate[k] = [];
         }
       }
+    }
+
+    // Days outside the chosen window stay off this invoice entirely — the
+    // stipend sweep above must not resurrect them.
+    if (dayFilter) {
+      for (const k of Object.keys(byDate)) if (!dayFilter.has(k)) delete byDate[k];
     }
 
     // Entries read exactly as logged: "Call — <billing note>" — the note is
@@ -479,33 +489,45 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       }
     }
 
-    // Orientation — its own terms, never part of the stipend allowance
-    for (const e of list.filter(x => x.type === "Orientation")) {
+    // Orientation — its own terms, never part of the stipend allowance.
+    // Lines are keyed by callDayOf, the SAME key every selection filter
+    // uses — keying them by e.date made a pre-7am orientation show its
+    // dollars under a day whose selection then silently dropped it.
+    const orientationList = list.filter(x => x.type === "Orientation" && (!dayFilter || dayFilter.has(callDayOf(x))));
+    for (const e of orientationList) {
+      const oDay = callDayOf(e);
       // Display the quarter-hour block even if a stored time was never
-      // snapped at save — the invoice always shows rounded times.
-      const tp = e.startTime ? `${billedSpan(e, c)} · ` : "";
+      // snapped at save — the invoice always shows rounded times. A pre-7am
+      // start files under the previous call day; the detail then names the
+      // actual calendar date so the printed document stays truthful.
+      const dateNote = e.date && e.date !== oDay ? `performed ${formatDate(e.date)} · ` : "";
+      const tp = `${dateNote}${e.startTime ? `${billedSpan(e, c)} · ` : ""}`;
       if ((c.orientationHourlyRate || 0) > 0) {
         const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${e.date}~1~${e.startTime || "z"}` });
+        lines.push({ date: oDay, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
       } else if ((c.orientationFee || 0) > 0) {
         totalMin += e.billedMin || 0;
-        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min — covered by orientation fee`, amount: 0, _sort: `${e.date}~1~${e.startTime || "z"}` });
+        lines.push({ date: oDay, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min — covered by orientation fee`, amount: 0, _sort: `${oDay}~1~${e.startTime || "z"}` });
       } else {
         const rate = rateFor("Orientation", c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
         const amt = ((e.billedMin || 0) / 60) * rate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: e.date, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${e.date}~1~${e.startTime || "z"}` });
+        lines.push({ date: oDay, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
       }
     }
 
     let orientationIncluded = false;
-    // The one-time fee bills only once orientation has actually been logged
+    // The one-time fee bills only once orientation has actually been logged.
+    // It is dated to the orientation's own day so the day picker can show
+    // where the money comes from instead of an invisible rider.
     if (includeOrientation && (c.orientationFee || 0) > 0 && !c.orientationBilled
-        && list.some(e => e.type === "Orientation")) {
+        && orientationList.length > 0) {
       total += c.orientationFee;
       orientationIncluded = true;
-      lines.push({ date: null, label: "Orientation (one-time)", detail: "", amount: c.orientationFee, _sort: "~zzz" });
+      // Earliest orientation day — deterministic, not creation order
+      const feeDay = orientationList.map(x => callDayOf(x)).sort()[0];
+      lines.push({ date: feeDay, label: "Orientation (one-time)", detail: "", amount: c.orientationFee, _sort: `${feeDay}~2` });
     }
 
     // Chronological invoice: day by day, stipend first, then the day's work
@@ -902,6 +924,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     () => computeBilling(contract, unbilled, true, contractEntries, data.invoices).total,
     [unbilled, contract, computeBilling, todayKey, data.invoices]
   );
+  // Whether anything is still owed — NOT the same as having unbilled
+  // entries: an on-call coverage day with zero calls still owes its stipend,
+  // and gating the invoice button on entries alone stranded those days
+  // forever once the last entry was billed.
+  const hasOutstanding = useMemo(() => {
+    if (!contract || contract.payModel === "daily") return false;
+    return unbilled.length > 0 || unbilledTotal > 0;
+  }, [contract, unbilled, unbilledTotal]);
 
   // Entry list grouped by call day, most recent day first. On stipend
   // contracts the money lives at the DAY level (stipend + anything beyond
@@ -954,15 +984,100 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     });
   }, [contractEntries, contract, entries, isStipendDay, amountForEntry, todayKey]);
 
-  const buildInvoice = useCallback(() => {
+  // The day-selection step. The full sweep prices every outstanding day
+  // once, and the picker shows them grouped into Sun–Sat weeks — one agency
+  // invoices weekly, another biweekly, so the window is chosen per invoice,
+  // never configured per contract.
+  const openInvoicePicker = useCallback(() => {
+    if (!contract || contract.payModel === "daily") return;
+    const billing = computeBilling(contract, unbilled, true, contractEntries, data.invoices);
+    const byDay = new Map();
+    for (const l of billing.lines) {
+      if (!l.date) continue; // day-less lines (one-time fee) follow the days picked
+      const cur = byDay.get(l.date) || { amount: 0 };
+      if (l.amount != null) cur.amount += l.amount;
+      byDay.set(l.date, cur);
+    }
+    // "Items" = pieces of logged work that day, not invoice lines — a
+    // stipend day rolls four calls into one line but is still four items.
+    const entryCount = new Map();
+    for (const e of unbilled) {
+      if (e.type === "CallDay") continue;
+      const k = callDayOf(e);
+      entryCount.set(k, (entryCount.get(k) || 0) + 1);
+    }
+    const days = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, v]) => ({ key, amount: v.amount, items: entryCount.get(key) || 0 }));
+    if (!days.length) {
+      showNotice("Nothing here prices into an invoice line — usually a leftover coverage marker on a contract whose stipend terms changed. Check the entry list.");
+      return;
+    }
+    // Future-dated days (a coverage marker logged ahead) list but start
+    // UNCHECKED — invoicing a day that hasn't happened should be deliberate.
+    setInvoicePick({ days, selected: new Set(days.filter(d => d.key <= todayKey).map(d => d.key)) });
+  }, [contract, unbilled, computeBilling, contractEntries, data.invoices, showNotice, todayKey]);
+
+  // An entry inside another entry's span ("no separate charge") ships on the
+  // SAME invoice as its container. If the container's day isn't picked and
+  // the container isn't billed yet, the contained entry waits — otherwise a
+  // $0 stamp goes out referencing a container that might later be edited or
+  // deleted before it ever reaches an invoice, orphaning the record.
+  const waitsForContainer = useCallback((e, daySet) => {
+    if (!daySet || !contract) return false;
+    // Walk the WHOLE chain: with nested spans (call inside procedure inside
+    // OR case) the inner entry waits whenever anything above it does.
+    const waits = (x, depth) => {
+      if (depth > 4) return false;
+      const container = containerFor(x, contract);
+      if (!container || container.invoiceId) return false;
+      if (!daySet.has(callDayOf(container))) return true;
+      return waits(container, depth + 1);
+    };
+    return waits(e, 0);
+  }, [contract, containerFor]);
+
+  // Honest running total while days are toggled — same engine, same rules,
+  // same entry set the built invoice will use
+  const pickTotal = useMemo(() => {
+    if (!invoicePick || !contract) return 0;
+    const sel = invoicePick.selected;
+    if (!sel.size) return 0;
+    const list = unbilled.filter(e => sel.has(callDayOf(e)) && !waitsForContainer(e, sel));
+    return computeBilling(contract, list, true, contractEntries, data.invoices, sel).total;
+  }, [invoicePick, contract, unbilled, computeBilling, contractEntries, data.invoices, waitsForContainer]);
+
+  const buildInvoice = useCallback((daySet = null) => {
     // A day-rate contract's money lives in duty days — the time engine would
     // price its rows at $0 and stamp them billed for nothing.
-    if (!contract || contract.payModel === "daily" || unbilled.length === 0) return;
+    if (!contract || contract.payModel === "daily") return;
+    const selEntries = daySet
+      ? unbilled.filter(e => daySet.has(callDayOf(e)) && !waitsForContainer(e, daySet))
+      : unbilled;
+    // Anything withheld by the pairing rule must be said out loud — the
+    // day's stipend line would otherwise read "no calls required" on a day
+    // that HAD a call (it rides, already covered, with its covering entry).
+    if (daySet) {
+      const withheld = unbilled.filter(e => daySet.has(callDayOf(e)) && waitsForContainer(e, daySet)).length;
+      if (withheld > 0 && !window.confirm(
+        `${withheld} ${withheld === 1 ? "entry" : "entries"} on the picked days happened inside a covering entry whose day isn't picked — ${withheld === 1 ? "it" : "they"} will ride on that day's invoice instead (already covered, $0). Build this invoice without ${withheld === 1 ? "it" : "them"}?`
+      )) return;
+    }
     const s = data.settings || {};
     const physician = s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician";
     const div = "─".repeat(40);
     const num = `INV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${String((data.invoices || []).length + 1).padStart(2, "0")}`;
-    const dates = unbilled.map(e => e.date).sort();
+    const billing = computeBilling(contract, selEntries, true, contractEntries, data.invoices, daySet);
+    if (!billing.lines.length) {
+      showNotice("Nothing billable in the days picked — entries that ride inside another entry wait for that entry's day, so pick both days together.");
+      return;
+    }
+    // The invoiced period is the chosen days — including empty stipend days
+    // that carry no entry — not whatever happened to be outstanding.
+    const dayKeys = (daySet ? [...daySet] : [...new Set([
+      ...selEntries.map(e => callDayOf(e)),
+      ...(billing.emptyStipendDays || []),
+    ])]).sort();
+    const dates = dayKeys;
     const lines = [];
     lines.push("INVOICE " + num, div);
     lines.push(`From: ${physician}${s.npi ? " · NPI " + s.npi : ""}`);
@@ -977,7 +1092,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       (contract.minCallMinutes ? `, ${contract.minCallMinutes}-min minimum per call` : "");
     lines.push(`Terms: ` + termsText);
     lines.push(div);
-    const billing = computeBilling(contract, unbilled, true, contractEntries, data.invoices);
     for (const l of billing.lines) {
       if (l.amount == null) {
         // Work item under a daily total — indented, flagged like the app
@@ -991,14 +1105,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     lines.push(`TOTAL DUE: ${money(billing.total)}`);
     lines.push("", `Generated by CredentialDOMD · ${new Date().toLocaleDateString()}`);
     setInvoicePreview({
-      text: lines.join("\n"), entryIds: unbilled.map(e => e.id), total: billing.total,
+      text: lines.join("\n"), entryIds: selEntries.map(e => e.id), total: billing.total,
       number: num, orientationIncluded: billing.orientationIncluded,
       lines: billing.lines, totalMin: billing.totalMin, terms: termsText,
       periodStart: dates[0] || null, periodEnd: dates[dates.length - 1] || null,
       emptyStipendDays: billing.emptyStipendDays || [],
       dayOverMin: billing.dayOverMin || {},
     });
-  }, [contract, unbilled, data.settings, data.invoices, computeBilling, contractEntries]);
+  }, [contract, unbilled, data.settings, data.invoices, computeBilling, contractEntries, waitsForContainer, showNotice]);
 
   const markBilledAndLog = useCallback((method) => {
     if (!invoicePreview) return;
@@ -1029,13 +1143,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         invoiceId: invId,
       });
     }
-    const dates = unbilled.map(e => e.date).sort();
     addItem("invoices", {
       id: invId,
       number: invoicePreview.number,
       contractId: contract.id,
-      periodStart: dates[0] || null,
-      periodEnd: dates[dates.length - 1] || null,
+      // The period is the days that were PICKED for this invoice — the
+      // preview computed it; the wider unbilled pool is irrelevant here.
+      periodStart: invoicePreview.periodStart || null,
+      periodEnd: invoicePreview.periodEnd || null,
       entryIds: invoicePreview.entryIds,
       totalMinutes: invoicePreview.totalMin,
       totalAmount: invoicePreview.total,
@@ -1049,7 +1164,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     });
     setSent(true);
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
-  }, [invoicePreview, entries, editItem, addItem, contract, unbilled]);
+  }, [invoicePreview, entries, editItem, addItem, contract]);
 
   const pdfArgsFor = useCallback((preview) => {
     const s = data.settings || {};
@@ -1293,15 +1408,19 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       </div>
 
       {/* Unbilled summary + invoice CTA — never for a day-rate contract,
-          whose invoicing lives in duty days, not the time engine */}
-      {contract?.payModel !== "daily" && unbilled.length > 0 && (
-        <button onClick={buildInvoice} style={{
+          whose invoicing lives in duty days, not the time engine. Gated on
+          outstanding MONEY, not entries: an on-call day with zero calls
+          still owes its stipend and must stay invoiceable. */}
+      {hasOutstanding && (
+        <button onClick={openInvoicePicker} style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "14px 16px", borderRadius: 14, border: `2px solid ${T.accent}`,
           backgroundColor: T.card, cursor: "pointer", marginBottom: 14, boxShadow: T.shadow1,
         }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
-            <SendIcon /> Invoice {unbilled.length} unbilled {unbilled.length === 1 ? "entry" : "entries"}
+            <SendIcon /> {unbilled.length > 0
+              ? `Invoice ${unbilled.length} unbilled ${unbilled.length === 1 ? "entry" : "entries"}`
+              : "Invoice outstanding on-call days"}
           </span>
           <span style={{ fontSize: 15, fontWeight: 800, color: T.accent }}>{money(unbilledTotal)}</span>
         </button>
@@ -1461,6 +1580,123 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       </Modal>
 
       {/* Invoice preview modal */}
+      {/* Day selection before the invoice builds. Days group into Sun–Sat
+          weeks with one-tap week toggles — one agency invoices weekly,
+          another biweekly, so the window is picked fresh each time. */}
+      <Modal open={!!invoicePick} onClose={() => setInvoicePick(null)} title="Which days go on this invoice?">
+        {invoicePick && (() => {
+          const sel = invoicePick.selected;
+          const toggleDay = (k) => setInvoicePick(p => {
+            const s2 = new Set(p.selected);
+            if (s2.has(k)) s2.delete(k); else s2.add(k);
+            return { ...p, selected: s2 };
+          });
+          const sundayOf = (k) => {
+            const d = new Date(k + "T12:00");
+            d.setDate(d.getDate() - d.getDay());
+            return localDate(d);
+          };
+          const weeks = new Map();
+          for (const d of invoicePick.days) {
+            const wk = sundayOf(d.key);
+            if (!weeks.has(wk)) weeks.set(wk, []);
+            weeks.get(wk).push(d);
+          }
+          const weekLabel = (wk) => {
+            const start = new Date(wk + "T12:00");
+            const end = new Date(start); end.setDate(end.getDate() + 6);
+            const f = (dt) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            return `Sun ${f(start)} – Sat ${f(end)}`;
+          };
+          const toggleWeek = (wk) => setInvoicePick(p => {
+            const dayKeys = weeks.get(wk).map(d => d.key);
+            const s2 = new Set(p.selected);
+            const allOn = dayKeys.every(k => s2.has(k));
+            for (const k of dayKeys) { if (allOn) s2.delete(k); else s2.add(k); }
+            return { ...p, selected: s2 };
+          });
+          const dayLabel = (k) => new Date(k + "T12:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+          const check = (on) => ({
+            width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+            border: `2px solid ${on ? T.accent : T.border}`,
+            backgroundColor: on ? T.accent : "transparent",
+            color: "#fff", fontSize: 14, fontWeight: 800,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          });
+          return (
+            <>
+              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginBottom: 10 }}>
+                Pick the days this invoice covers — tap a week to take the whole Sun–Sat block,
+                or tap single days. Anything unpicked stays for the next invoice.
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <button onClick={() => setInvoicePick(p => ({ ...p, selected: new Set(p.days.map(d => d.key)) }))} style={{
+                  padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
+                  backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                }}>All days</button>
+                <button onClick={() => setInvoicePick(p => ({ ...p, selected: new Set() }))} style={{
+                  padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`,
+                  backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                }}>None</button>
+              </div>
+              {[...weeks.entries()].map(([wk, dayList]) => {
+                const allOn = dayList.every(d => sel.has(d.key));
+                const someOn = dayList.some(d => sel.has(d.key));
+                return (
+                  <div key={wk} style={{ marginBottom: 10, borderRadius: 12, border: `1px solid ${someOn ? T.accent : T.border}`, overflow: "hidden" }}>
+                    <div role="button" tabIndex={0} onClick={() => toggleWeek(wk)}
+                      onKeyDown={(ev) => { if (ev.key === "Enter") toggleWeek(wk); }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+                        backgroundColor: T.input, cursor: "pointer",
+                      }}>
+                      <div style={check(allOn)}>{allOn ? "✓" : someOn ? "–" : ""}</div>
+                      <div style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: T.text }}>{weekLabel(wk)}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                        {money(dayList.reduce((s2, d) => s2 + d.amount, 0))}
+                      </div>
+                    </div>
+                    {dayList.map(d => {
+                      const on = sel.has(d.key);
+                      return (
+                        <div key={d.key} role="button" tabIndex={0} onClick={() => toggleDay(d.key)}
+                          onKeyDown={(ev) => { if (ev.key === "Enter") toggleDay(d.key); }}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 10, padding: "9px 12px 9px 22px",
+                            borderTop: `1px solid ${T.border}`, cursor: "pointer",
+                            opacity: on ? 1 : 0.55,
+                          }}>
+                          <div style={check(on)}>{on ? "✓" : ""}</div>
+                          <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text }}>
+                            {dayLabel(d.key)}
+                            <span style={{ color: T.textDim, fontWeight: 500 }}>
+                              {" · "}{d.items ? `${d.items} item${d.items === 1 ? "" : "s"}` : "on-call only"}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text, fontVariantNumeric: "tabular-nums" }}>
+                            {money(d.amount)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              <button
+                onClick={() => { const s2 = new Set(sel); setInvoicePick(null); buildInvoice(s2); }}
+                disabled={sel.size === 0}
+                style={{
+                  width: "100%", padding: "14px", borderRadius: 12, border: "none", marginTop: 4,
+                  background: sel.size ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
+                  color: "#fff", fontSize: 15, fontWeight: 800, cursor: sel.size ? "pointer" : "default",
+                }}>
+                Invoice {sel.size} day{sel.size === 1 ? "" : "s"} — {money(pickTotal)}
+              </button>
+            </>
+          );
+        })()}
+      </Modal>
+
       <Modal open={!!invoicePreview} onClose={() => setInvoicePreview(null)} title="Invoice preview">
         {invoicePreview && (
           <>
