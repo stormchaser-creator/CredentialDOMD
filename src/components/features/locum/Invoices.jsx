@@ -50,21 +50,48 @@ function Invoices() {
   const sumPaid = invoices.reduce((s, i) => s + paidOf(i), 0);
   const sumBilled = invoices.reduce((s, i) => s + (parseFloat(i.totalAmount) || 0), 0);
 
-  // Billed by SERVICE month (the invoice period), not the month it was sent
-  // — a July invoice sent August 3rd is July earnings.
+  // Billed by the month EACH DAY'S WORK was done — strictly by line date,
+  // never by the invoice's start month. An invoice spanning Jul 28 – Aug 24
+  // splits: its July lines count in July, its August lines in August.
+  // Payments are invoice-level, so a month's paid figure is the invoice's
+  // payments prorated by that month's share of the invoice.
   const [showMonths, setShowMonths] = useState(false);
   const byMonth = useMemo(() => {
     const m = new Map();
     for (const inv of invoices) {
-      const k = String(inv.periodStart || inv.sentAt || "").slice(0, 7);
-      if (!k) continue;
-      const cur = m.get(k) || { billed: 0, paid: 0, count: 0 };
-      cur.billed += parseFloat(inv.totalAmount) || 0;
-      cur.paid += paidOf(inv);
-      cur.count += 1;
-      m.set(k, cur);
+      const total = parseFloat(inv.totalAmount) || 0;
+      const paid = paidOf(inv);
+      const fallbackK = String(inv.periodStart || inv.sentAt || "").slice(0, 7);
+      const perMonth = new Map();
+      const moneyLines = (inv.lines || []).filter(l => l.amount != null);
+      if (moneyLines.length) {
+        for (const l of moneyLines) {
+          const k = String(l.date || "").slice(0, 7) || fallbackK;
+          if (!k) continue;
+          perMonth.set(k, (perMonth.get(k) || 0) + (parseFloat(l.amount) || 0));
+        }
+        // Lines should sum to the invoice total; any rounding drift lands on
+        // the largest month so the months always reconcile to the invoice.
+        const lineSum = [...perMonth.values()].reduce((a, b) => a + b, 0);
+        const drift = total - lineSum;
+        if (Math.abs(drift) > 0.005 && perMonth.size) {
+          const kMax = [...perMonth.entries()].sort((a, b) => b[1] - a[1])[0][0];
+          perMonth.set(kMax, perMonth.get(kMax) + drift);
+        }
+      } else if (fallbackK) {
+        perMonth.set(fallbackK, total); // legacy invoice with no stored lines
+      }
+      for (const [k, amt] of perMonth.entries()) {
+        const share = total > 0 ? amt / total : 0;
+        const cur = m.get(k) || { billed: 0, paid: 0, invIds: new Set() };
+        cur.billed += amt;
+        cur.paid += paid * share;
+        cur.invIds.add(inv.id);
+        m.set(k, cur);
+      }
     }
-    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([k, v]) => [k, { billed: v.billed, paid: v.paid, count: v.invIds.size }]);
   }, [invoices]);
   const monthName = (k) => {
     const [y, mo] = k.split("-").map(Number);
@@ -195,7 +222,7 @@ function Invoices() {
 
       <Modal open={showMonths} onClose={() => setShowMonths(false)} title="Billed by month">
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>
-          Grouped by the month the work was done (the invoice period), not the day it was sent.
+          Strictly by the day the work was done — an invoice spanning two months splits between them.
         </div>
         {byMonth.map(([k, v]) => (
           <div key={k} style={{
