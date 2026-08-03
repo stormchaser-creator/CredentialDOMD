@@ -1114,18 +1114,13 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           </>
         ) : (
           <>
-            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 8 }}>
               {contract?.facility} · {contract?.incrementMinutes || 15}-min increments
             </div>
-            <button onClick={() => startTimer("Call")} style={{
-              width: "100%", padding: "18px", borderRadius: 14, border: "none",
-              background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
-              fontSize: 18, fontWeight: 800, cursor: "pointer", marginBottom: 8,
-            }}>
-              📞 Got a call — start timer
-            </button>
-            {/* Stipend countdown — call days come from the contract's
-                coverage dates; the stipend covers the first N hours of work */}
+            {/* Stipend countdown, directly under the contract name — what is
+                left of the allowance is the thing to read BEFORE starting a
+                timer, so it sits above the button, not after it. Call days
+                come from the contract's coverage dates. */}
             {contract && (contract.callStipend || 0) > 0 && (() => {
               if (!isStipendDay(contract, todayKey, entries)) return null;
               const allow = (contract.stipendHours || 0) * 60;
@@ -1145,6 +1140,13 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                 </div>
               );
             })()}
+            <button onClick={() => startTimer("Call")} style={{
+              width: "100%", padding: "18px", borderRadius: 14, border: "none",
+              background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+              fontSize: 18, fontWeight: 800, cursor: "pointer", marginBottom: 8,
+            }}>
+              📞 Got a call — start timer
+            </button>
             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
               {["Procedure", "Rounding", "Orientation"].map(t2 => (
                 <button key={t2} onClick={() => startTimer(t2)} style={{
