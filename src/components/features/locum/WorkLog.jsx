@@ -1430,24 +1430,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       )}
 
       {/* Manual entry modal */}
-      <Modal open={!!placement} onClose={() => setPlacement(null)} title={placement?.title || "Check the date"}>
-        {placement && (
-          <>
-            <div style={{ fontSize: 14, color: T.text, lineHeight: 1.55 }}>{placement.message}</div>
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button onClick={() => { setPlacement(null); saveManual(true); }} style={{
-                flex: 1, padding: "13px", borderRadius: 12, border: "none",
-                backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer",
-              }}>Yes, log it here</button>
-              <button onClick={() => setPlacement(null)} style={{
-                padding: "13px 18px", borderRadius: 12, border: `1px solid ${T.border}`,
-                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
-              }}>Go back</button>
-            </div>
-          </>
-        )}
-      </Modal>
-
       <Modal open={showManual} onClose={() => setShowManual(false)} title={manual.editId ? (manual.type === "CallDay" ? "Edit call coverage" : "Edit entry") : "Log past time"}>
         {(timeContracts.length > 1 || (manual.editId && manual.contractId && !timeContracts.some(c => c.id === manual.contractId))) && (
           <Field label="Contract">
@@ -1841,6 +1823,27 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           ))}
         </div>
       )}
+
+      {/* Schedule warning — rendered LAST so it stacks ON TOP of whatever
+          form triggered it. Behind the form it looked like a dead Log
+          button: the user had to cancel the form to even see the question. */}
+      <Modal open={!!placement} onClose={() => setPlacement(null)} title={placement?.title || "Check the date"}>
+        {placement && (
+          <>
+            <div style={{ fontSize: 14, color: T.text, lineHeight: 1.55 }}>{placement.message}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={() => { setPlacement(null); saveManual(true); }} style={{
+                flex: 1, padding: "13px", borderRadius: 12, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer",
+              }}>Yes, log it here</button>
+              <button onClick={() => setPlacement(null)} style={{
+                padding: "13px 18px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Go back</button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

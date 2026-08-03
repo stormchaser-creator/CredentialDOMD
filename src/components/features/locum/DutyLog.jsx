@@ -419,24 +419,6 @@ function DutyLog({ contract }) {
         )}
       </Modal>
 
-      <Modal open={!!placement} onClose={() => setPlacement(null)} title={placement?.title || "Check the date"}>
-        {placement && (
-          <>
-            <div style={{ fontSize: 14, color: T.text, lineHeight: 1.55 }}>{placement.message}</div>
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button onClick={() => { setPlacement(null); save(true); }} style={{
-                flex: 1, padding: "13px", borderRadius: 12, border: "none",
-                backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer",
-              }}>Yes, log it here</button>
-              <button onClick={() => setPlacement(null)} style={{
-                padding: "13px 18px", borderRadius: 12, border: `1px solid ${T.border}`,
-                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
-              }}>Go back</button>
-            </div>
-          </>
-        )}
-      </Modal>
-
       <Modal open={!!editing} onClose={() => { setEditing(null); setForm({}); }} title={editing === "new" ? "Log a day" : "Edit day"}>
         {editing && (
           <>
@@ -517,6 +499,26 @@ function DutyLog({ contract }) {
                 padding: "13px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
               }}>Cancel</button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      {/* Schedule warning — rendered LAST so it stacks ON TOP of the form
+          that triggered it, never hidden behind it. */}
+      <Modal open={!!placement} onClose={() => setPlacement(null)} title={placement?.title || "Check the date"}>
+        {placement && (
+          <>
+            <div style={{ fontSize: 14, color: T.text, lineHeight: 1.55 }}>{placement.message}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={() => { setPlacement(null); save(true); }} style={{
+                flex: 1, padding: "13px", borderRadius: 12, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer",
+              }}>Yes, log it here</button>
+              <button onClick={() => setPlacement(null)} style={{
+                padding: "13px 18px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Go back</button>
             </div>
           </>
         )}

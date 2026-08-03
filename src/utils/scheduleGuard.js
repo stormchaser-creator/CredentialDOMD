@@ -24,6 +24,13 @@ function blocksOf(contract) {
 
 export function coversDate(contract, dateStr) {
   if (!contract || !dateStr) return false;
+  // A day-rate agreement is an UMBRELLA, not a schedule: its multi-year term
+  // says the relationship exists, not that the physician is standing there
+  // on any given date. It never claims a date — so it can never put another
+  // contract's day "in conflict". (Days logged AGAINST it are still checked
+  // the other way round: its own branch warns when a different contract has
+  // that date scheduled.)
+  if (contract.payModel === "daily" && !contract.coveragePeriods?.length) return false;
   return blocksOf(contract).some(p => dateStr >= p.start && dateStr <= (p.end || p.start));
 }
 
