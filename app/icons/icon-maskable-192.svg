@@ -6,6 +6,20 @@
     </linearGradient>
   </defs>
   <rect width="192" height="192" rx="0" fill="url(#g)"/>
-  <rect x="72.96000000000001" y="36.480000000000004" width="46.08" height="119.03999999999999" rx="12.9024" fill="#ffffff"/>
-  <rect x="36.480000000000004" y="72.96000000000001" width="119.03999999999999" height="46.08" rx="12.9024" fill="#ffffff"/>
+  <g transform="translate(96 96) scale(0.8) translate(-96 -96)">
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <!-- staff -->
+    <rect x="91.8" y="56" width="8.4" height="102" rx="4.2" fill="#ffffff" stroke="none"/>
+    <circle cx="96" cy="47" r="8" fill="#ffffff" stroke="none"/>
+    <!-- wings -->
+    <path d="M89 66 C76 52 54 50 42 58 C52 63 60 66 66 71 C57 71 48 73 41 78 C55 84 76 82 89 73 Z" fill="#ffffff" stroke="none"/>
+    <path d="M103 66 C116 52 138 50 150 58 C140 63 132 66 126 71 C135 71 144 73 151 78 C137 84 116 82 103 73 Z" fill="#ffffff" stroke="none"/>
+    <!-- snakes: two S-curves crossing the staff -->
+    <path d="M67 84 C67 99 125 101 125 117 C125 133 67 135 67 151" stroke-width="8.5"/>
+    <path d="M125 84 C125 99 67 101 67 117 C67 133 125 135 125 151" stroke-width="8.5"/>
+    <!-- heads -->
+    <circle cx="67" cy="82" r="6.2" fill="#ffffff" stroke="none"/>
+    <circle cx="125" cy="82" r="6.2" fill="#ffffff" stroke="none"/>
+  </g>
+  </g>
 </svg>
