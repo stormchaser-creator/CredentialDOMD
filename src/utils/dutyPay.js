@@ -1,20 +1,19 @@
 /**
  * Day-rate pay, straight from Appendix A of the group agreement.
  *
- * This contract does not pay by the hour and does not have a stipend that
- * "includes the first N hours." It pays per DAY WORKED and per ACCEPTED
- * 24-HOUR CALL PERIOD, and the two stack. A-3 spells out every combination:
+ * Two prices, and they stack:
  *
- *   Weekday worked                  clinical + scholarly
- *   Weekday worked + weeknight call clinical + scholarly + grid
- *   Weekend 24-hr call              grid only
- *   Federal holiday, on call        grid only
- *   Federal holiday, off            nothing (carried by the leave component)
+ *   A day worked      the all-in invoiced day rate ($2,060.09)
+ *   A call period     the A-2 grid rate for that hospital and role
  *
- * The scholarly fee is paid on WORKED WEEKDAYS ONLY — V4 of the agreement
- * moved it off call days, re-dividing the $60,000 educational envelope over
- * 233 worked weekdays instead of 281 duty days. It remains contingent on the
- * monthly teaching log, so it stays a checkbox rather than an assumption.
+ * The day rate is a BUNDLED price. Appendix A calls it "the all-in invoiced
+ * day rate" and derives it as $1,615.38 clinical + $187.19 leave component +
+ * $257.51 scholarly — but that decomposition is how the number was built,
+ * not how it is billed, so it is not something to tick off day by day. A
+ * weekday worked invoices one figure.
+ *
+ * Call is separate and independent: several hospitals can be covered at
+ * once, each at its own grid rate, on a worked day or on its own.
  */
 
 export const CALL_ROLES = [
@@ -60,15 +59,11 @@ export function dutyDayPay(contract, duty) {
   const lines = [];
   if (!contract || !duty) return { lines, total: 0 };
 
-  const clinical = Number(contract.clinicalDayRate) || 0;
-  const scholarly = Number(contract.scholarlyRate) || 0;
-
-  if (duty.workedDay && clinical > 0) {
-    lines.push({ label: "Clinical day (incl. leave differential)", amount: clinical });
-  }
-  // Worked weekdays only: a call day earns the grid rate and nothing else
-  if (duty.workedDay && duty.scholarly && scholarly > 0) {
-    lines.push({ label: "Faculty & scholarly activity", amount: scholarly });
+  // One bundled price for a day worked — not a sum of components
+  const dayRate = Number(contract.dayRate)
+    || (Number(contract.clinicalDayRate) || 0) + (Number(contract.scholarlyRate) || 0);
+  if (duty.workedDay && dayRate > 0) {
+    lines.push({ label: "Day worked", amount: dayRate });
   }
   for (const p of callPeriodsOf(duty)) {
     const role = p.role === "backup" ? "backup" : "primary";

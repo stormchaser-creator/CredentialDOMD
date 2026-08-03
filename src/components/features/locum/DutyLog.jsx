@@ -52,7 +52,6 @@ function DutyLog({ contract }) {
     setForm({
       date: todayKey,
       workedDay: true,
-      scholarly: false,
       callPeriods: [],
       notes: "",
     });
@@ -72,7 +71,6 @@ function DutyLog({ contract }) {
       contractId: contract.id,
       date: form.date,
       workedDay: !!form.workedDay,
-      scholarly: !!form.scholarly,
       callPeriods: (form.callPeriods || []).filter(p => p && p.hospital),
       // Legacy columns kept in step so an older client still reads the day
       callHospital: (form.callPeriods || [])[0]?.hospital || null,
@@ -167,7 +165,6 @@ function DutyLog({ contract }) {
                       </div>
                       <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
                         {dutyLabel(d)}{callPeriodsOf(d).length ? ` · ${callPeriodsOf(d).map(p => p.hospital.replace(/\s*\(.*\)$/, "")).join(", ")}` : ""}
-                        {d.scholarly ? " · teaching logged" : ""}
                       </div>
                       {d.notes && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 2 }}>{d.notes}</div>}
                     </div>
@@ -205,7 +202,7 @@ function DutyLog({ contract }) {
           <>
             <Field label="Date"><input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={iS} /></Field>
 
-            <Field label="Clinical day worked" hint="Surgery, clinic, rounding, or other daytime services">
+            <Field label="Day worked" hint="Surgery, clinic, rounding, or other daytime services — pays the all-in day rate">
               <button onClick={() => setForm(f => ({ ...f, workedDay: !f.workedDay }))} style={{
                 width: "100%", padding: "12px", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer",
                 border: `1px solid ${form.workedDay ? T.accent : T.border}`,
@@ -244,22 +241,6 @@ function DutyLog({ contract }) {
                 color: T.accent, fontSize: 13, fontWeight: 800,
               }}>+ Add a call period</button>
             </Field>
-
-            {form.workedDay && (
-            <Field label="Teaching logged" hint="Paid on worked weekdays only, and contingent on the monthly teaching log">
-              <button onClick={() => setForm(f => ({ ...f, scholarly: !f.scholarly }))} style={{
-                width: "100%", padding: "12px", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer",
-                border: `1px solid ${form.scholarly ? T.accent : T.border}`,
-                backgroundColor: form.scholarly ? T.accent : "transparent",
-                color: form.scholarly ? "#fff" : T.textMuted,
-              }}>{form.scholarly ? "Yes — teaching documented" : "No teaching this day"}</button>
-            </Field>
-            )}
-            {!form.workedDay && (form.callPeriods || []).length > 0 && (
-              <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 6 }}>
-                A call period without a worked weekday pays the grid rate alone — the scholarly fee is a worked-weekday component under V4.
-              </div>
-            )}
 
             <Field label="Notes"><input value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={iS} placeholder="optional" /></Field>
 
