@@ -48,6 +48,29 @@ function Invoices() {
   const paidList = invoices.filter(i => balanceOf(i) <= 0.005);
   const sumOut = outstanding.reduce((s, i) => s + balanceOf(i), 0);
   const sumPaid = invoices.reduce((s, i) => s + paidOf(i), 0);
+  const sumBilled = invoices.reduce((s, i) => s + (parseFloat(i.totalAmount) || 0), 0);
+
+  // Billed by SERVICE month (the invoice period), not the month it was sent
+  // — a July invoice sent August 3rd is July earnings.
+  const [showMonths, setShowMonths] = useState(false);
+  const byMonth = useMemo(() => {
+    const m = new Map();
+    for (const inv of invoices) {
+      const k = String(inv.periodStart || inv.sentAt || "").slice(0, 7);
+      if (!k) continue;
+      const cur = m.get(k) || { billed: 0, paid: 0, count: 0 };
+      cur.billed += parseFloat(inv.totalAmount) || 0;
+      cur.paid += paidOf(inv);
+      cur.count += 1;
+      m.set(k, cur);
+    }
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [invoices]);
+  const monthName = (k) => {
+    const [y, mo] = k.split("-").map(Number);
+    const d = new Date(y, (mo || 1) - 1, 1);
+    return isNaN(d) ? k : d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
 
   const [payFor, setPayFor] = useState(null);
   const [payAmt, setPayAmt] = useState("");
@@ -146,6 +169,59 @@ function Invoices() {
           fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.45,
         }}>{notice}</div>
       )}
+      {/* Total earnings bubble — tap for the month-by-month. Sits above the
+          heading per Eric; every information bubble in this app pops up. */}
+      <div role="button" tabIndex={0}
+        onClick={() => setShowMonths(true)}
+        onKeyDown={(e) => { if (e.key === "Enter") setShowMonths(true); }}
+        style={{
+          backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14,
+          padding: "14px 16px", marginBottom: 12, cursor: "pointer", boxShadow: T.shadow1,
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+        }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Total billed
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums" }}>
+            {money(sumBilled)}
+          </div>
+          <div style={{ fontSize: 11.5, color: T.textDim }}>
+            paid {money(sumPaid)} · awaiting {money(sumOut)}
+          </div>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, flexShrink: 0 }}>by month ›</div>
+      </div>
+
+      <Modal open={showMonths} onClose={() => setShowMonths(false)} title="Billed by month">
+        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>
+          Grouped by the month the work was done (the invoice period), not the day it was sent.
+        </div>
+        {byMonth.map(([k, v]) => (
+          <div key={k} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10,
+            padding: "10px 2px", borderBottom: `1px solid ${T.border}`,
+          }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: T.text }}>{monthName(k)}</div>
+              <div style={{ fontSize: 11.5, color: T.textDim }}>
+                {v.count} invoice{v.count === 1 ? "" : "s"}
+                {v.paid > 0.005 && v.paid < v.billed - 0.005 && ` · paid ${money(v.paid)}`}
+                {v.paid >= v.billed - 0.005 && " · paid in full"}
+                {v.paid <= 0.005 && " · unpaid"}
+              </div>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+              {money(v.billed)}
+            </div>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 2px 2px", fontSize: 15, fontWeight: 800, color: T.text }}>
+          <span>Total</span>
+          <span style={{ color: T.accent, fontVariantNumeric: "tabular-nums" }}>{money(sumBilled)}</span>
+        </div>
+      </Modal>
+
       <div style={{ marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.text }}>Invoices</h3>
         <div style={{ fontSize: 12, color: T.textMuted }}>Record each payment as it lands — partials count too.</div>
