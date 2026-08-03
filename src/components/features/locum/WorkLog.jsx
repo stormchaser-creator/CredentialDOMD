@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { getPrivate, setPrivate, removePrivate, looksLikePHI } from "../../../utils/privateVault";
+import { checkPlacement } from "../../../utils/scheduleGuard";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
@@ -215,6 +216,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
   // Tap-anywhere detail view for a work entry
   const [viewEntry, setViewEntry] = useState(null);
+  const [placement, setPlacement] = useState(null); // schedule warning awaiting confirmation
 
   // Tick while a timer runs
   useEffect(() => {
@@ -687,9 +689,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     return [s, e, m];
   }, []);
 
-  const saveManual = useCallback(() => {
+  const saveManual = useCallback((confirmed = false) => {
     const target = contracts.find(x => x.id === manual.contractId) || contract;
     if (!target || !manual.date) return;
+    // Before anything is written: does the schedule say he was here?
+    if (!confirmed && !manual.placementOk) {
+      const warn = checkPlacement(contracts, target, manual.date);
+      if (warn) { setPlacement(warn); return; }
+    }
     const startIso = manual.start ? new Date(`${manual.date}T${manual.start}`).toISOString() : null;
     const endIso = manual.end ? new Date(`${manual.date}T${manual.end}`).toISOString() : null;
 
@@ -726,9 +733,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           const overlapped = noticeOverlap(target, { id: orig.id, type, startTime: f.s, endTime: f.e, createdAt: orig.createdAt });
           if (!overlapped) noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, orig.id);
         }
-        if (!inScheduledCoverage(target, manual.date)) {
-          showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
-        }
       }
       setShowManual(false); setManual({});
       return;
@@ -762,9 +766,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       const overlapped = noticeOverlap(target, { id: "new", type, startTime: f.s, endTime: f.e, createdAt: new Date().toISOString() });
       if (!overlapped) noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, null);
     }
-    if (!inScheduledCoverage(target, manual.date)) {
-      showNotice(`Heads up: ${manual.date} isn't inside a scheduled coverage block for ${target.facility || "this contract"} — check the Schedule tab or add the dates to the agreement.`);
-    }
+
     rememberContract(target.id);
     setShowManual(false); setManual({});
   }, [contract, contracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, noticeOverlap, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
@@ -1197,6 +1199,24 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       )}
 
       {/* Manual entry modal */}
+      <Modal open={!!placement} onClose={() => setPlacement(null)} title={placement?.title || "Check the date"}>
+        {placement && (
+          <>
+            <div style={{ fontSize: 14, color: T.text, lineHeight: 1.55 }}>{placement.message}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={() => { setPlacement(null); saveManual(true); }} style={{
+                flex: 1, padding: "13px", borderRadius: 12, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer",
+              }}>Yes, log it here</button>
+              <button onClick={() => setPlacement(null)} style={{
+                padding: "13px 18px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Go back</button>
+            </div>
+          </>
+        )}
+      </Modal>
+
       <Modal open={showManual} onClose={() => setShowManual(false)} title={manual.editId ? (manual.type === "CallDay" ? "Edit call coverage" : "Edit entry") : "Log past time"}>
         {contracts.length > 1 && (
           <Field label="Contract">
@@ -1308,7 +1328,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               ? (!manual.date || !manual.start)
               : (!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end)));
             return (
-              <button onClick={saveManual} disabled={invalid} style={{
+              <button onClick={() => saveManual(false)} disabled={invalid} style={{
                 flex: 1, padding: "14px", borderRadius: 12, border: "none",
                 background: invalid ? T.border : "linear-gradient(135deg, #10b981, #059669)",
                 color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",

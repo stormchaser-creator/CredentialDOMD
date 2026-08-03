@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import { generateId } from "../../../utils/helpers";
+import { checkPlacement } from "../../../utils/scheduleGuard";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
   monthKey, monthLabel,
@@ -19,6 +20,7 @@ function DutyLog({ contract }) {
   const iS = useInputStyle();
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
+  const [placement, setPlacement] = useState(null); // schedule warning awaiting confirmation
 
   const todayKey = (() => {
     const d = new Date();
@@ -57,8 +59,15 @@ function DutyLog({ contract }) {
   };
   const openEdit = (d) => { setEditing(d.id); setForm({ ...d, callPeriods: callPeriodsOf(d) }); };
 
-  const save = () => {
+  // The schedule is checked before the day is written, not after. A warning
+  // is never a block — the physician knows where he was — but it has to be
+  // confirmed, and the confirmation is recorded on the day.
+  const save = (confirmed = false) => {
     if (!form.date) return;
+    if (!confirmed && !form.placementOk) {
+      const warn = checkPlacement(data.locumContracts || [], contract, form.date);
+      if (warn) { setPlacement(warn); return; }
+    }
     const clean = {
       contractId: contract.id,
       date: form.date,
@@ -69,6 +78,7 @@ function DutyLog({ contract }) {
       callHospital: (form.callPeriods || [])[0]?.hospital || null,
       callRole: (form.callPeriods || [])[0]?.role || null,
       notes: form.notes || "",
+      placementOk: confirmed || !!form.placementOk,
     };
     clean.amount = dutyDayPay(contract, clean).total;
     if (editing === "new") addItem("dutyDays", { id: generateId(), createdAt: new Date().toISOString(), ...clean });
@@ -172,6 +182,24 @@ function DutyLog({ contract }) {
         );
       })}
 
+      <Modal open={!!placement} onClose={() => setPlacement(null)} title={placement?.title || "Check the date"}>
+        {placement && (
+          <>
+            <div style={{ fontSize: 14, color: T.text, lineHeight: 1.55 }}>{placement.message}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={() => { setPlacement(null); save(true); }} style={{
+                flex: 1, padding: "13px", borderRadius: 12, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer",
+              }}>Yes, log it here</button>
+              <button onClick={() => setPlacement(null)} style={{
+                padding: "13px 18px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Go back</button>
+            </div>
+          </>
+        )}
+      </Modal>
+
       <Modal open={!!editing} onClose={() => { setEditing(null); setForm({}); }} title={editing === "new" ? "Log a day" : "Edit day"}>
         {editing && (
           <>
@@ -253,7 +281,7 @@ function DutyLog({ contract }) {
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button onClick={save} style={{
+              <button onClick={() => save(false)} style={{
                 flex: 1, padding: "13px", borderRadius: 12, border: "none",
                 background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
                 fontSize: 15, fontWeight: 800, cursor: "pointer",
