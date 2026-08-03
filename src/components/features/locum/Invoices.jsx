@@ -55,6 +55,7 @@ function Invoices() {
   // spanning two months splits between them, and nothing else — no invoice
   // counts, no payment math. Just the month and its number.
   const [showMonths, setShowMonths] = useState(false);
+  const [showList, setShowList] = useState(null); // "outstanding" | "paid"
   const byMonth = useMemo(() => {
     const m = new Map();
     for (const inv of invoices) {
@@ -236,19 +237,77 @@ function Invoices() {
         <div style={{ fontSize: 12, color: T.textMuted }}>Record each payment as it lands — partials count too.</div>
       </div>
 
-      {/* Outstanding vs paid */}
+      {/* Outstanding vs paid — tappable, like every bubble in this app */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-        <div style={{ backgroundColor: T.card, border: `2px solid ${outstanding.length ? T.warning : T.border}`, borderRadius: 12, padding: "12px 14px" }}>
+        <div role="button" tabIndex={0}
+          onClick={() => setShowList("outstanding")}
+          onKeyDown={(e) => { if (e.key === "Enter") setShowList("outstanding"); }}
+          style={{ backgroundColor: T.card, border: `2px solid ${outstanding.length ? T.warning : T.border}`, borderRadius: 12, padding: "12px 14px", cursor: "pointer" }}>
           <div style={{ fontSize: 11, color: T.textMuted }}>Awaiting payment</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: outstanding.length ? T.warning : T.text }}>{money(sumOut)}</div>
-          <div style={{ fontSize: 11, color: T.textDim }}>{outstanding.length} invoice{outstanding.length === 1 ? "" : "s"}</div>
+          <div style={{ fontSize: 11, color: T.textDim }}>{outstanding.length} invoice{outstanding.length === 1 ? "" : "s"} ›</div>
         </div>
-        <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px" }}>
+        <div role="button" tabIndex={0}
+          onClick={() => setShowList("paid")}
+          onKeyDown={(e) => { if (e.key === "Enter") setShowList("paid"); }}
+          style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", cursor: "pointer" }}>
           <div style={{ fontSize: 11, color: T.textMuted }}>Paid</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: T.success || "#22c55e" }}>{money(sumPaid)}</div>
-          <div style={{ fontSize: 11, color: T.textDim }}>{paidList.length} invoice{paidList.length === 1 ? "" : "s"}</div>
+          <div style={{ fontSize: 11, color: T.textDim }}>{paidList.length} invoice{paidList.length === 1 ? "" : "s"} ›</div>
         </div>
       </div>
+
+      <Modal open={!!showList} onClose={() => setShowList(null)}
+        title={showList === "outstanding" ? "Awaiting payment" : "Paid"}>
+        {showList && (() => {
+          const list = showList === "outstanding" ? outstanding : paidList;
+          if (!list.length) {
+            return <div style={{ fontSize: 13.5, color: T.textMuted, padding: "8px 0" }}>
+              {showList === "outstanding" ? "Nothing outstanding — every invoice is settled." : "No invoices fully paid yet."}
+            </div>;
+          }
+          return (
+            <>
+              <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>Tap an invoice for its full detail.</div>
+              {list.map(inv => {
+                const age = inv.sentAt ? daysSince(inv.sentAt) : null;
+                return (
+                  <div key={inv.id} role="button" tabIndex={0}
+                    onClick={() => { setShowList(null); setViewInv(inv); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { setShowList(null); setViewInv(inv); } }}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                      padding: "11px 2px", borderBottom: `1px solid ${T.border}`, cursor: "pointer",
+                    }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{inv.number}</div>
+                      <div style={{ fontSize: 11.5, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {facilityOf(inv.contractId)}
+                        {showList === "outstanding"
+                          ? (inv.sentAt ? ` · sent ${formatDate(inv.sentAt.slice(0, 10))}${age >= 1 ? ` · ${age}d ago` : ""}` : "")
+                          : (inv.paidAt ? ` · paid ${formatDate(inv.paidAt.slice(0, 10))}` : "")}
+                        {showList === "outstanding" && paidOf(inv) > 0.005 && ` · ${money(paidOf(inv))} received`}
+                      </div>
+                    </div>
+                    <div style={{
+                      fontSize: 15, fontWeight: 800, flexShrink: 0, fontVariantNumeric: "tabular-nums",
+                      color: showList === "outstanding" ? T.warning : (T.success || "#22c55e"),
+                    }}>
+                      {money(showList === "outstanding" ? balanceOf(inv) : paidOf(inv))}
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 2px 2px", fontSize: 15, fontWeight: 800, color: T.text }}>
+                <span>Total</span>
+                <span style={{ fontVariantNumeric: "tabular-nums", color: showList === "outstanding" ? T.warning : (T.success || "#22c55e") }}>
+                  {money(showList === "outstanding" ? sumOut : sumPaid)}
+                </span>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
 
       {/* Tap an invoice to view it */}
       <Modal open={!!viewInv} onClose={() => setViewInv(null)} title={viewInv?.number || "Invoice"}>
