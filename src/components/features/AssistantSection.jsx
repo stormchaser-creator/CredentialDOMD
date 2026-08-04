@@ -5,8 +5,15 @@ import { generateId } from "../../utils/helpers";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { supabase } from "../../lib/supabase";
+import Modal from "../shared/Modal";
 
 const CHAT_KEY = "credentialdomd-assistant-chat";
+const ARCHIVE_KEY = "credentialdomd-assistant-archives";
+
+// What an archived conversation keeps: the words. Action cards, attachments,
+// and retry state are live-thread machinery — they don't belong in a record.
+const slimForArchive = (msgs) =>
+  msgs.map(m => ({ id: m.id, role: m.role, text: m.text || "", attachName: m.attachName || undefined }));
 
 /**
  * The Assistant — chat with your credential file. Ask anything about your
@@ -31,6 +38,11 @@ function AssistantSection({ onFileTicket }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [archives, setArchives] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY)) || []; } catch { return []; }
+  });
+  const [showArchives, setShowArchives] = useState(false);
+  const [viewArchive, setViewArchive] = useState(null);
   const [attachment, setAttachment] = useState(null); // {dataUrl?|text?, name, kind}
   const [listening, setListening] = useState(false);
   const fileRef = useRef(null);
@@ -53,6 +65,37 @@ function AssistantSection({ onFileTicket }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);
+  useEffect(() => {
+    try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archives)); } catch { /* quota */ }
+  }, [archives]);
+
+  // ── Archive: the current chat moves out of the way but stays readable ──
+  const archiveTitle = (list) => {
+    const first = list.find(m => m.role === "user" && (m.text || "").trim());
+    return (first?.text || "Conversation").replace(/\s+/g, " ").slice(0, 60);
+  };
+  const archiveCurrent = useCallback(() => {
+    if (!msgs.length) return false;
+    setArchives(a => [{
+      id: generateId(),
+      title: archiveTitle(msgs),
+      archivedAt: new Date().toISOString(),
+      msgs: slimForArchive(msgs),
+    }, ...a]);
+    setMsgs([]);
+    setErr(null);
+    lastAttachRef.current = null;
+    failedMapRef.current.clear();
+    return true;
+  }, [msgs]);
+  const restoreArchive = useCallback((arc) => {
+    // The chat on screen is never lost — it archives itself first.
+    if (msgs.length) archiveCurrent();
+    setMsgs(arc.msgs);
+    setArchives(a => a.filter(x => x.id !== arc.id));
+    setViewArchive(null);
+    setShowArchives(false);
+  }, [msgs, archiveCurrent]);
 
   // Auto-grow the composer with its content (long pastes stay readable).
   // Cap against the VISUAL viewport so the iOS keyboard doesn't let the
@@ -327,14 +370,29 @@ function AssistantSection({ onFileTicket }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 220px)" }}>
       <div style={{ marginBottom: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>Vera</h2>
-          {onFileTicket && (
-            <button onClick={onFileTicket} style={{
-              padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
-              backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
-            }}>File a ticket</button>
-          )}
+          <div style={{ display: "flex", gap: 6 }}>
+            {msgs.length > 0 && (
+              <button onClick={() => { archiveCurrent(); }} disabled={busy} style={{
+                padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700,
+                cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
+              }}>New chat</button>
+            )}
+            {archives.length > 0 && (
+              <button onClick={() => setShowArchives(true)} style={{
+                padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>{"🗂"} {archives.length}</button>
+            )}
+            {onFileTicket && (
+              <button onClick={onFileTicket} style={{
+                padding: "7px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>File a ticket</button>
+            )}
+          </div>
         </div>
         <div style={{ fontSize: 12, color: T.textMuted }}>
           Ask about your file, hand her any document, report a bug, or just say what should work better — she files it where it belongs.
@@ -463,6 +521,70 @@ function AssistantSection({ onFileTicket }) {
           Records only change when you tap Approve. Suggestions you make here reach the developer.
         </div>
       </div>
+
+      {/* Archived conversations — out of the way, still readable */}
+      <Modal open={showArchives && !viewArchive} onClose={() => setShowArchives(false)} title="Archived chats">
+        {archives.length === 0 && (
+          <div style={{ fontSize: 13.5, color: T.textMuted }}>Nothing archived. "New chat" tucks the current conversation away here.</div>
+        )}
+        {archives.map(arc => (
+          <div key={arc.id} style={{ padding: "11px 2px", borderBottom: `1px solid ${T.border}` }}>
+            <div role="button" tabIndex={0} onClick={() => setViewArchive(arc)}
+              onKeyDown={(e) => { if (e.key === "Enter") setViewArchive(arc); }}
+              style={{ cursor: "pointer" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{arc.title}</div>
+              <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 1 }}>
+                {new Date(arc.archivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {" · "}{arc.msgs.length} message{arc.msgs.length === 1 ? "" : "s"} · tap to read
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button onClick={() => restoreArchive(arc)} style={{
+                padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.accent}`,
+                backgroundColor: "transparent", color: T.accent, fontSize: 12, fontWeight: 800, cursor: "pointer",
+              }}>Continue this chat</button>
+              <button onClick={() => { if (window.confirm("Delete this archived chat for good?")) setArchives(a => a.filter(x => x.id !== arc.id)); }} style={{
+                padding: "7px 12px", borderRadius: 9, border: "none",
+                backgroundColor: T.dangerDim, color: T.danger, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>Delete</button>
+            </div>
+          </div>
+        ))}
+      </Modal>
+
+      <Modal open={!!viewArchive} onClose={() => setViewArchive(null)} title={viewArchive?.title || "Archived chat"}>
+        {viewArchive && (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: "55vh", overflow: "auto", marginBottom: 12 }}>
+              {viewArchive.msgs.map(m => (
+                <div key={m.id} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+                  <div style={{
+                    padding: "9px 12px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap",
+                    backgroundColor: m.role === "user" ? T.accent : T.input,
+                    color: m.role === "user" ? "#fff" : T.text,
+                    border: m.role === "user" ? "none" : `1px solid ${T.border}`,
+                    overflowWrap: "anywhere",
+                  }}>
+                    {m.attachName && <div style={{ fontSize: 11.5, opacity: 0.85, marginBottom: 3 }}>{"📎"} {m.attachName}</div>}
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => restoreArchive(viewArchive)} style={{
+                flex: 1, padding: "12px", borderRadius: 12, border: "none",
+                background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+                fontSize: 14, fontWeight: 800, cursor: "pointer",
+              }}>Continue this chat</button>
+              <button onClick={() => setViewArchive(null)} style={{
+                padding: "12px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+              }}>Back</button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
