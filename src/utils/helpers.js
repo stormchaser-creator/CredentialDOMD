@@ -136,12 +136,22 @@ function isPersonName(name, physicianName) {
   // Every word of the shorter name must appear in the longer one, allowing
   // middle initials to match full middle names ("e" ~ "edwin")
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
-  return short.every(t =>
-    long.includes(t) || (t.length === 1 && long.some(u => u.startsWith(t)))
-  );
+  // Initials match full names in BOTH directions: a license reading
+  // "Eric Edwin Whitney" is the person whose profile says "Eric E. Whitney"
+  const matches = (t, u) => t === u
+    || (t.length === 1 && u.startsWith(t))
+    || (u.length === 1 && t.startsWith(u));
+  return short.every(t => long.some(u => matches(t, u)));
 }
 
 export function describeItem(item, physicianName) {
+  // A license-shaped item ALWAYS titles canonically — "type — state" — so
+  // two DEA registrations read identically regardless of what free text a
+  // scanned document happened to put in the name field. The stored name
+  // still shows in the detail view.
+  if ("licenseNumber" in item && item.type) {
+    return item.state ? `${item.type} — ${item.state}` : item.type;
+  }
   if (item.name && !isPersonName(item.name, physicianName)) return item.name;
   if (item.organization) return [item.role, item.organization].filter(Boolean).join(" — ");
   if (item.citation) return String(item.citation).split(".").slice(0, 2).join(".").slice(0, 90);
