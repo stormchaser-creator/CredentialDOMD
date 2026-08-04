@@ -224,10 +224,20 @@ function CMESection({ onShare }) {
             <div key={item.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{item.title || item.category || "CME Activity"}</div>
-                  <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
-                    {[item.category, item.hours && (item.hours + " hrs"), item.provider, item.date && formatDate(item.date)].filter(Boolean).join(" \u00b7 ")}
-                  </div>
+                  {/* Sub-line only carries what the title doesn't already say */}
+                  {(() => {
+                    const cardTitle = item.title || item.category || "CME Activity";
+                    const inTitle = (v) => v != null && cardTitle.toLowerCase().includes(String(v).toLowerCase());
+                    return (
+                      <>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{cardTitle}</div>
+                        <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
+                          {[item.category, item.hours && (item.hours + " hrs"), item.provider, item.date && formatDate(item.date)]
+                            .filter(Boolean).filter(v => !inTitle(v)).join(" \u00b7 ")}
+                        </div>
+                      </>
+                    );
+                  })()}
                   {item.topics?.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
                       {item.topics.map(t => (

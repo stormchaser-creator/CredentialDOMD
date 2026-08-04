@@ -176,7 +176,11 @@ export function describeItem(item, physicianName, sectionKey) {
     case "workHistory":
       return join(t(item.position) || t(item.type) || "Position", t(item.employer));
     case "education":
-      return join(t(item.type) || "Education", t(item.institution));
+      // The curated display name IS the information ("Skull Base
+      // Fellowship") — type-first collapsed every card into "Residency,
+      // Residency, Certification, Certification". Person names (a diploma
+      // reads the graduate's name) still fall through to type — school.
+      return notMe(item.name) || join(t(item.type) || "Education", t(item.institution));
     case "healthRecords":
       return join(t(item.type) || "Health record", notMe(item.name) || t(item.provider));
     case "malpracticeHistory":

@@ -7,7 +7,7 @@ import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
 import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, getHealthRecordResults, TB_RESULTS } from "../../constants/credentialTypes";
-import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
 
 function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
@@ -316,23 +316,37 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
                     {item.expirationDate && <StatusDot color={color} />}
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 1 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, backgroundColor: catColor + "20", color: catColor, textTransform: "uppercase", letterSpacing: 0.5 }}>{item.category}</span>
-                        {item.type && <span style={{ fontSize: 12, fontWeight: 600, color: T.accent }}>{item.type}</span>}
-                      </div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {item.name || item.type || item.category || "Health Record"}
-                      </div>
-                      <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
-                        {[
-                          item.facility,
-                          item.dateAdministered && `Given ${formatDate(item.dateAdministered)}`,
-                          item.lotNumber && `Lot: ${item.lotNumber}`,
-                          item.result && `Result: ${item.result}${item.resultValue ? ` (${item.resultValue}${item.resultUnits ? " " + item.resultUnits : ""})` : ""}`,
-                          item.lab,
-                          item.expirationDate && getStatusLabel(item.expirationDate),
-                        ].filter(Boolean).join(" \u00b7 ")}
-                      </div>
+                      {/* Say everything once \u2014 the pill and type only render
+                          when the title doesn't already carry them */}
+                      {(() => {
+                        const cardTitle = describeItem(item, data.settings?.name, "healthRecords");
+                        const inTitle = (v) => v != null && cardTitle.toLowerCase().includes(String(v).toLowerCase());
+                        return (
+                          <>
+                            {(!inTitle(item.category) || (item.type && !inTitle(item.type))) && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 1 }}>
+                                {item.category && !inTitle(item.category) && (
+                                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, backgroundColor: catColor + "20", color: catColor, textTransform: "uppercase", letterSpacing: 0.5 }}>{item.category}</span>
+                                )}
+                                {item.type && !inTitle(item.type) && <span style={{ fontSize: 12, fontWeight: 600, color: T.accent }}>{item.type}</span>}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {cardTitle}
+                            </div>
+                            <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
+                              {[
+                                item.facility,
+                                item.dateAdministered && `Given ${formatDate(item.dateAdministered)}`,
+                                item.lotNumber && `Lot: ${item.lotNumber}`,
+                                item.result && `Result: ${item.result}${item.resultValue ? ` (${item.resultValue}${item.resultUnits ? " " + item.resultUnits : ""})` : ""}`,
+                                item.lab,
+                                item.expirationDate && getStatusLabel(item.expirationDate),
+                              ].filter(Boolean).filter(v => !inTitle(v)).join(" \u00b7 ")}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
