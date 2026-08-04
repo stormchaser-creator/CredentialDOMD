@@ -316,24 +316,30 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
                     {item.expirationDate && <StatusDot color={color} />}
                     <div style={{ minWidth: 0 }}>
-                      {/* Say everything once \u2014 the pill and type only render
-                          when the title doesn't already carry them */}
+                      {/* Category pill + green type stay as the header; the
+                          white line carries only the specifics (never a
+                          repeat of the type), the dim line the rest. */}
                       {(() => {
                         const cardTitle = describeItem(item, data.settings?.name, "healthRecords");
-                        const inTitle = (v) => v != null && cardTitle.toLowerCase().includes(String(v).toLowerCase());
+                        let mainLine = cardTitle;
+                        if (item.type && cardTitle.toLowerCase().startsWith(String(item.type).toLowerCase())) {
+                          mainLine = cardTitle.slice(String(item.type).length).replace(/^\s*\u2014\s*/, "");
+                        }
+                        const said = (v) => v != null && (
+                          cardTitle.toLowerCase().includes(String(v).toLowerCase())
+                          || String(item.type || "").toLowerCase() === String(v).toLowerCase()
+                        );
                         return (
                           <>
-                            {(!inTitle(item.category) || (item.type && !inTitle(item.type))) && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 1 }}>
-                                {item.category && !inTitle(item.category) && (
-                                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, backgroundColor: catColor + "20", color: catColor, textTransform: "uppercase", letterSpacing: 0.5 }}>{item.category}</span>
-                                )}
-                                {item.type && !inTitle(item.type) && <span style={{ fontSize: 12, fontWeight: 600, color: T.accent }}>{item.type}</span>}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 1 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, backgroundColor: catColor + "20", color: catColor, textTransform: "uppercase", letterSpacing: 0.5 }}>{item.category}</span>
+                              {item.type && String(item.type) !== String(item.category) && <span style={{ fontSize: 12, fontWeight: 600, color: T.accent }}>{item.type}</span>}
+                            </div>
+                            {mainLine && (
+                              <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {mainLine}
                               </div>
                             )}
-                            <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {cardTitle}
-                            </div>
                             <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
                               {[
                                 item.facility,
@@ -342,7 +348,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
                                 item.result && `Result: ${item.result}${item.resultValue ? ` (${item.resultValue}${item.resultUnits ? " " + item.resultUnits : ""})` : ""}`,
                                 item.lab,
                                 item.expirationDate && getStatusLabel(item.expirationDate),
-                              ].filter(Boolean).filter(v => !inTitle(v)).join(" \u00b7 ")}
+                              ].filter(Boolean).filter(v => !said(v)).join(" \u00b7 ")}
                             </div>
                           </>
                         );

@@ -596,29 +596,38 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
                   {needsReview ? <StatusDot color="red" /> : item.expirationDate ? <StatusDot color={color} /> : null}
                   <div style={{ minWidth: 0 }}>
-                    {/* Say everything ONCE: the chip and sub-line only carry
-                        what the title doesn't already say \u2014 "DEA Registration
-                        \u2014 CO" never sits under a DEA REGISTRATION chip above a
-                        "CO \u00b7 \u2026" sub-line. */}
+                    {/* The green TYPE always leads \u2014 it is the card's header.
+                        The white line beneath carries only the specifics (the
+                        canonical title minus its type prefix), and the dim
+                        sub-line only what neither line already said. */}
                     {(() => {
                       const cardTitle = describeItem(item, data.settings.name, sectionKey) || "Untitled";
-                      const inTitle = (v) => v != null && cardTitle.toLowerCase().includes(String(v).toLowerCase());
+                      let mainLine = cardTitle;
+                      if (item.type && cardTitle.toLowerCase().startsWith(String(item.type).toLowerCase())) {
+                        mainLine = cardTitle.slice(String(item.type).length).replace(/^\s*\u2014\s*/, "");
+                      }
+                      const said = (v) => v != null && (
+                        cardTitle.toLowerCase().includes(String(v).toLowerCase())
+                        || String(item.type || "").toLowerCase() === String(v).toLowerCase()
+                      );
                       return (
                         <>
-                          {item.type && !inTitle(item.type) && (
+                          {item.type && (
                             <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 1 }}>
                               {item.type}
                             </div>
                           )}
-                          <div style={{
-                            fontSize: 15, fontWeight: 600, color: T.text,
-                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                          }}>
-                            {cardTitle}
-                          </div>
+                          {mainLine && (
+                            <div style={{
+                              fontSize: 15, fontWeight: 600, color: T.text,
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                            }}>
+                              {mainLine}
+                            </div>
+                          )}
                           <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
                             {[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber]
-                              .filter(Boolean).filter(v => !inTitle(v)).join(" \u00b7 ")}
+                              .filter(Boolean).filter(v => !said(v)).join(" \u00b7 ")}
                             {item.graduationDate && !item.expirationDate && (" \u00b7 Graduated " + new Date(item.graduationDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }))}
                             {item.expirationDate && (" \u00b7 " + getStatusLabel(item.expirationDate))}
                           </div>
