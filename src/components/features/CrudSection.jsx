@@ -301,6 +301,14 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 style={{ ...iS, appearance: "auto" }}
               >
                 <option value="">Select...</option>
+                {/* A scanned document can store a value the list doesn't
+                    have (e.g. "Provisional Temporary Medical License").
+                    It must still SHOW here — a select displaying blank
+                    made the record look uneditable and drove help tickets.
+                    Listing it lets the user see the truth and switch. */}
+                {form[f.key] && !(f.options || []).includes(form[f.key]) && (
+                  <option value={form[f.key]}>{form[f.key]} (from document)</option>
+                )}
                 {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             ) : f.type === "datalist" ? (
@@ -431,7 +439,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       </Modal>
 
       {/* Read-only detail view — opened by tapping anywhere on a card */}
-      <Modal open={!!viewItem} onClose={() => setViewItem(null)} title={viewItem ? describeItem(viewItem, data.settings.name) : "Details"}>
+      <Modal open={!!viewItem} onClose={() => setViewItem(null)} title={viewItem ? describeItem(viewItem, data.settings.name, sectionKey) : "Details"}>
         {viewItem && (
           <>
             {fields.filter(f => viewItem[f.key]).map(f => (
@@ -597,7 +605,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                       fontSize: 15, fontWeight: 600, color: T.text,
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                     }}>
-                      {describeItem(item, data.settings.name) || "Untitled"}
+                      {describeItem(item, data.settings.name, sectionKey) || "Untitled"}
                     </div>
                     <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
                       {[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber].filter(Boolean).join(" \u00b7 ")}

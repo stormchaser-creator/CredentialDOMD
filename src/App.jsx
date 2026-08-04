@@ -294,12 +294,12 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   // can't protect what it can't see. Surfaced on Home until fixed.
   const missingExpiration = useMemo(() => {
     const out = [];
-    for (const l of data.licenses || []) if (!l.expirationDate) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name) });
-    for (const pv of data.privileges || []) if (!pv.expirationDate) out.push({ item: pv, sec: "privileges", label: describeItem(pv, data.settings.name) });
-    for (const ins of data.insurance || []) if (!ins.expirationDate) out.push({ item: ins, sec: "insurance", label: describeItem(ins, data.settings.name) });
+    for (const l of data.licenses || []) if (!l.expirationDate) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
+    for (const pv of data.privileges || []) if (!pv.expirationDate) out.push({ item: pv, sec: "privileges", label: describeItem(pv, data.settings.name, "privileges") });
+    for (const ins of data.insurance || []) if (!ins.expirationDate) out.push({ item: ins, sec: "insurance", label: describeItem(ins, data.settings.name, "insurance") });
     for (const h of data.healthRecords || []) {
       if ((h.category === "TB Test" || h.category === "Fit Test") && !h.expirationDate) {
-        out.push({ item: h, sec: "healthRecords", label: describeItem(h, data.settings.name) });
+        out.push({ item: h, sec: "healthRecords", label: describeItem(h, data.settings.name, "healthRecords") });
       }
     }
     return out;

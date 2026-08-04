@@ -144,16 +144,59 @@ function isPersonName(name, physicianName) {
   return short.every(t => long.some(u => matches(t, u)));
 }
 
-export function describeItem(item, physicianName) {
-  // A license-shaped item ALWAYS titles canonically — "type — state" — so
-  // two DEA registrations read identically regardless of what free text a
-  // scanned document happened to put in the name field. The stored name
-  // still shows in the detail view.
-  if ("licenseNumber" in item && item.type) {
-    return item.state ? `${item.type} — ${item.state}` : item.type;
+// Every category titles CANONICALLY — the same fields in the same order for
+// every card in a section — so two DEA registrations, two policies, or two
+// degrees always read alike. The physician's own name is never information:
+// it appears on half the documents a scanner reads, and it never becomes a
+// headline (peer references excepted — there the person IS the record).
+// Free text the scanner stored stays visible in the detail view.
+export function describeItem(item, physicianName, sectionKey) {
+  const t = (v) => (v && String(v).trim()) || null;
+  const notMe = (v) => (t(v) && !isPersonName(v, physicianName) ? String(v).trim() : null);
+  const join = (...parts) => parts.filter(Boolean).join(" — ");
+
+  // Callers that know their section say so; the rest is inferred from the
+  // fields only that section has, so alerts and share sheets match the cards.
+  const sec = sectionKey
+    || ("licenseNumber" in item ? "licenses" : null)
+    || ("policyNumber" in item ? "insurance" : null)
+    || ("appointmentDate" in item ? "privileges" : null)
+    || ("employer" in item ? "workHistory" : null)
+    || ("graduationDate" in item && "institution" in item ? "education" : null)
+    || ("citation" in item ? "publications" : null)
+    || ("organization" in item ? "memberships" : null);
+
+  switch (sec) {
+    case "licenses":
+      return join(t(item.type) || "License", t(item.state));
+    case "insurance":
+      return join(t(item.type) || "Policy", t(item.provider));
+    case "privileges":
+      return join(t(item.type) || "Privileges", t(item.facility));
+    case "workHistory":
+      return join(t(item.position) || t(item.type) || "Position", t(item.employer));
+    case "education":
+      return join(t(item.type) || "Education", t(item.institution));
+    case "healthRecords":
+      return join(t(item.type) || "Health record", notMe(item.name) || t(item.provider));
+    case "malpracticeHistory":
+      return join(t(item.outcome) || "Claim", t(item.facility) || t(item.state));
+    case "memberships":
+      return join(t(item.role), t(item.organization)) || "Membership";
+    case "peerReferences":
+      return join(t(item.name) || "Reference", t(item.degree));
+    case "publications":
+      return notMe(item.name)
+        || (item.citation ? String(item.citation).split(".").slice(0, 2).join(".").slice(0, 90) : "Publication");
+    case "caseLogs":
+      return notMe(item.title) || t(item.category) || "Case";
+    default:
+      break;
   }
-  if (item.name && !isPersonName(item.name, physicianName)) return item.name;
-  if (item.organization) return [item.role, item.organization].filter(Boolean).join(" — ");
+
+  // Sections without a canonical shape (documents, CME courses, photos…):
+  // the record's own title is the information — unless it's a person's name.
+  if (notMe(item.name)) return String(item.name).trim();
   if (item.citation) return String(item.citation).split(".").slice(0, 2).join(".").slice(0, 90);
   const base = item.type || item.title || item.category || "Credential";
   const where = item.state || item.facility || item.institution || item.provider || "";
