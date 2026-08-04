@@ -34,14 +34,20 @@ export const FileIcon = memo(() => svg(<><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0
 export const ExternalLinkIcon = memo(() => svg(<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>, 14));
 export const GraduationIcon = memo(() => svg(<><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></>, 18));
 
-// Brand mark — medical cross (matches the PWA icons in public/icons/)
+// Brand mark — caduceus (matches the PWA icons in public/icons/):
+// winged staff with twin serpents, scaled from the same glyph.
 export const AsclepiusIcon = memo(({ size = 28, color }) => {
   const c = color || "currentColor";
-  // Cross: arm thickness 24%, length 62% of the 32-unit viewBox, rounded ends.
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="12.16" y="6.08" width="7.68" height="19.84" rx="2.15" fill={c} />
-      <rect x="6.08" y="12.16" width="19.84" height="7.68" rx="2.15" fill={c} />
+      <rect x="15.2" y="9.3" width="1.6" height="17" rx="0.8" fill={c} />
+      <circle cx="16" cy="7.6" r="1.5" fill={c} />
+      <path d="M14.8 11 C12.7 8.7 9 8.3 7 9.7 C8.7 10.5 10 11 11 11.8 C9.5 11.8 8 12.2 6.8 13 C9.2 14 12.7 13.7 14.8 12.2 Z" fill={c} />
+      <path d="M17.2 11 C19.3 8.7 23 8.3 25 9.7 C23.3 10.5 22 11 21 11.8 C22.5 11.8 24 12.2 25.2 13 C22.8 14 19.3 13.7 17.2 12.2 Z" fill={c} />
+      <path d="M11.2 14 C11.2 16.5 20.8 16.8 20.8 19.5 C20.8 22.2 11.2 22.5 11.2 25.2" stroke={c} strokeWidth="1.7" strokeLinecap="round" fill="none" />
+      <path d="M20.8 14 C20.8 16.5 11.2 16.8 11.2 19.5 C11.2 22.2 20.8 22.5 20.8 25.2" stroke={c} strokeWidth="1.7" strokeLinecap="round" fill="none" />
+      <circle cx="11.2" cy="13.7" r="1.15" fill={c} />
+      <circle cx="20.8" cy="13.7" r="1.15" fill={c} />
     </svg>
   );
 });
