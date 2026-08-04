@@ -43,6 +43,16 @@ export function caseWRVU(item) {
   return Number.isFinite(v) ? v : 0;
 }
 
+// Rolling window ending today, independent of the Jul-Jun academic year —
+// what the ticket meant by "the last twelve months."
+export function filterLastMonths(cases, months, now = new Date()) {
+  const end = now.toISOString().slice(0, 10);
+  const start = new Date(now);
+  start.setMonth(start.getMonth() - months);
+  const startStr = start.toISOString().slice(0, 10);
+  return (cases || []).filter(c => c.date && c.date >= startStr && c.date <= end);
+}
+
 export function summarizeByYear(cases) {
   const by = new Map();
   for (const c of cases || []) {

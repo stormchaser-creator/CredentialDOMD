@@ -15,7 +15,7 @@ import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
 import { CaseDictate } from "./components/features";
 import { DeductionMemo } from "./components/features/locum";
-import { academicYearOf, caseWRVU, currentAcademicYear } from "./utils/caseLogReport";
+import { academicYearOf, caseWRVU, currentAcademicYear, filterLastMonths } from "./utils/caseLogReport";
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
 import { CVGenerator } from "./components/features";
@@ -1184,7 +1184,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
       {
         const allCases = data.caseLogs || [];
-        const shownCases = caseLogYear === "all" ? allCases : allCases.filter(c => academicYearOf(c.date) === caseLogYear);
+        const shownCases = caseLogYear === "all" ? allCases : caseLogYear === "last12" ? filterLastMonths(allCases, 12) : allCases.filter(c => academicYearOf(c.date) === caseLogYear);
         return <>
           <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
           <CaseDictate categories={CASE_CATEGORIES} onDraft={setCaseDraft} />

@@ -1,6 +1,6 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
-import { summarizeByYear, buildCaseLogCsv, buildCaseLogPdf, shareCaseLogFile, academicYearOf, pgyLabelOf } from "../../utils/caseLogReport";
+import { summarizeByYear, buildCaseLogCsv, buildCaseLogPdf, shareCaseLogFile, academicYearOf, pgyLabelOf, filterLastMonths, caseWRVU } from "../../utils/caseLogReport";
 
 /**
  * The career ledger above the case list. The medicine year runs
@@ -16,23 +16,29 @@ function CaseLogSummary({ cases, year, onYear }) {
   const flash = (m) => { setNote(m); setTimeout(() => setNote(""), 2500); };
 
   const isAll = year === "all";
-  const selected = isAll ? cases : cases.filter(c => academicYearOf(c.date) === year);
+  const isLast12 = year === "last12";
+  const last12Cases = isLast12 ? filterLastMonths(cases, 12) : null;
+  const selected = isAll ? cases : isLast12 ? last12Cases : cases.filter(c => academicYearOf(c.date) === year);
   const selSummary = isAll
     ? { label: "Career", detail: "Jul 2018 - present", ...grand }
-    : { label: pgyLabelOf(year), detail: `Jul 1 ${String(year).slice(0, 4)} - Jun 30 ${parseInt(String(year).slice(0, 4), 10) + 1}`,
-        ...(years.find(y => y.year === year) || { cases: 0, wRVU: 0 }) };
+    : isLast12
+      ? { label: "Last 12 Months", detail: "Rolling window, ending today",
+          ...last12Cases.reduce((s, c) => ({ cases: s.cases + 1, wRVU: s.wRVU + caseWRVU(c) }), { cases: 0, wRVU: 0 }) }
+      : { label: pgyLabelOf(year), detail: `Jul 1 ${String(year).slice(0, 4)} - Jun 30 ${parseInt(String(year).slice(0, 4), 10) + 1}`,
+          ...(years.find(y => y.year === year) || { cases: 0, wRVU: 0 }) };
   const physician = data.settings.name ? `${data.settings.name}, ${data.settings.degreeType || "MD"}` : "Physician";
 
   const report = async (kind) => {
     if (selected.length === 0) { flash("No cases in that range."); return; }
     try {
+      const rangeLabel = isAll ? null : isLast12 ? "Last 12 Months" : `${pgyLabelOf(year)} (${year})`;
       if (kind === "pdf") {
-        const file = buildCaseLogPdf(selected, { physician, year: isAll ? null : `${pgyLabelOf(year)} (${year})` });
+        const file = buildCaseLogPdf(selected, { physician, year: rangeLabel });
         const r = await shareCaseLogFile(file);
         if (r) flash(r === "download" ? "PDF downloaded." : "PDF in the share sheet.");
       } else {
         const csv = buildCaseLogCsv(selected);
-        const file = new File([csv], `Case Log - ${physician}${isAll ? "" : " " + pgyLabelOf(year)}.csv`, { type: "text/csv" });
+        const file = new File([csv], `Case Log - ${physician}${rangeLabel ? " " + rangeLabel : ""}.csv`, { type: "text/csv" });
         const r = await shareCaseLogFile(file);
         if (r) flash(r === "download" ? "CSV downloaded." : "CSV in the share sheet.");
       }
@@ -80,6 +86,12 @@ function CaseLogSummary({ cases, year, onYear }) {
             color: year === y.year ? "#fff" : T.textMuted,
           }}>{pgyLabelOf(y.year)}</button>
         ))}
+        <button onClick={() => onYear("last12")} style={{
+          padding: "8px 12px", borderRadius: 16, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+          border: `1px solid ${year === "last12" ? T.accent : T.border}`,
+          backgroundColor: year === "last12" ? T.accent : "transparent",
+          color: year === "last12" ? "#fff" : T.textMuted,
+        }}>Last 12 mo</button>
         <button onClick={() => onYear("all")} style={{
           padding: "8px 12px", borderRadius: 16, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
           border: `1px solid ${year === "all" ? T.accent : T.border}`,
