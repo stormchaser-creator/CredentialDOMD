@@ -34,9 +34,16 @@ fi
 
 echo "$(date '+%F %T') RUN — $N actionable ticket(s)" >> "$LOG"
 
-export ANTHROPIC_API_KEY=$(security find-generic-password -s "Anthropic API" -w 2>/dev/null)
-if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-  echo "$(date '+%F %T') ERROR — no Anthropic API key in keychain" >> "$LOG"
+# Subscription billing via the long-lived OAuth token (claude setup-token,
+# authorized by Eric 2026-08-04). Falls back to the API key only if the
+# token item ever disappears.
+export CLAUDE_CODE_OAUTH_TOKEN=$(security find-generic-password -s "Claude Code OAuth" -w 2>/dev/null)
+if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  export ANTHROPIC_API_KEY=$(security find-generic-password -s "Anthropic API" -w 2>/dev/null)
+  echo "$(date '+%F %T') WARN — no OAuth token; using API key" >> "$LOG"
+fi
+if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "$(date '+%F %T') ERROR — no credentials in keychain" >> "$LOG"
   exit 1
 fi
 
