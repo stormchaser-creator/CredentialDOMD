@@ -11,7 +11,7 @@ import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from 
 import { generateId, getStatusColor, getStatusLabel, describeItem } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
-import { isContactPickerSupported, pickContact } from "../../utils/contactImport";
+import { isContactPickerSupported, pickContact, parseVCard } from "../../utils/contactImport";
 import CPTCodePicker from "./CPTCodePicker";
 
 // Every billed code, spelled out — number, what it entails, units, value.
@@ -211,6 +211,33 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     }
   }, []);
 
+  // iPhone path — no picker API there, but Contacts shares any card as a
+  // .vcf file. Read it, prefill the same fields.
+  const vcfRef = useRef(null);
+  const handleVcfFile = useCallback(async (file) => {
+    setContactMsg(null);
+    setContactMsgError(false);
+    try {
+      const contact = parseVCard(await file.text());
+      if (!contact) {
+        setContactMsg("That file doesn't look like a contact card (.vcf).");
+        setContactMsgError(true);
+        return;
+      }
+      setForm(prev => ({
+        ...prev,
+        name: contact.name || prev.name,
+        email: contact.email || prev.email,
+        phone: contact.phone || prev.phone,
+        institution: prev.institution || contact.institution || "",
+      }));
+      setContactMsg("Imported from the contact card — review before saving.");
+    } catch (err) {
+      setContactMsg("Could not read the contact card: " + (err.message || "unreadable file"));
+      setContactMsgError(true);
+    }
+  }, []);
+
   const captureModalPhoto = useCallback(() => {
     const video = modalVideoRef.current;
     const canvas = modalCanvasRef.current;
@@ -314,15 +341,33 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       </div>
 
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit" : "Add"}>
-        {contactImport && isContactPickerSupported() && (
+        {contactImport && (
           <div style={{ marginBottom: 14 }}>
-            <button onClick={handleImportContact} style={{
-              display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
-              borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600,
-              cursor: "pointer", backgroundColor: T.accentDim, color: T.accent,
-            }}>
-              {"📇"} Import from Contacts
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {isContactPickerSupported() && (
+                <button onClick={handleImportContact} style={{
+                  display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
+                  borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", backgroundColor: T.accentDim, color: T.accent,
+                }}>
+                  {"📇"} Import from Contacts
+                </button>
+              )}
+              <button onClick={() => vcfRef.current?.click()} style={{
+                display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
+                borderRadius: 10, border: `1px solid ${T.accent}`, fontSize: 13, fontWeight: 600,
+                cursor: "pointer", backgroundColor: "transparent", color: T.accent,
+              }}>
+                {"📇"} Import a contact card (.vcf)
+              </button>
+              <input ref={vcfRef} type="file" accept=".vcf,text/vcard,text/x-vcard" style={{ display: "none" }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleVcfFile(f); e.target.value = ""; }} />
+            </div>
+            {!isContactPickerSupported() && (
+              <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 5, lineHeight: 1.4 }}>
+                On iPhone: open Contacts → the person → Share Contact → Save to Files, then pick that file here.
+              </div>
+            )}
             {contactMsg && (
               <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: contactMsgError ? T.danger : T.success }}>
                 {contactMsg}
