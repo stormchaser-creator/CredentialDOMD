@@ -1110,6 +1110,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     ]},
     { title: "Supporting Records", items: [
       { id: "healthRecords", label: "Health Records", icon: "\ud83d\udc89", count: (data.healthRecords || []).length },
+      { id: "travelDocs", label: "Travel", icon: "\u2708\ufe0f", count: (data.travelDocs || []).length },
       { id: "screenings", label: "Screenings", icon: "\ud83d\udd0e", count: (data.screenings || []).length },
       { id: "professionalPhotos", label: "Professional Photo", icon: "\ud83d\udcf8", count: (data.professionalPhotos || []).length },
       { id: "publications", label: "Publications", icon: "\ud83d\udcda", count: (data.publications || []).length },
@@ -1179,6 +1180,14 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "memberships") return <CrudSection title="Professional Organizations" sectionKey="memberships" items={data.memberships || []} {...crud("memberships")} onShare={openShare} emptyIcon={"\ud83c\udfdb\ufe0f"} emptyTitle="No memberships" emptySub="AMA, ACS, CNS — society memberships appear on your CV under Professional Organizations." fields={[{ key: "organization", label: "Organization", placeholder: "e.g. Congress of Neurological Surgeons" }, { key: "role", label: "Membership Type", placeholder: "e.g. Member, Fellow, Resident member" }, { key: "startDate", label: "Member Since", type: "date" }, { key: "endDate", label: "Ended (blank if current)", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "professionalPhotos") return <CrudSection title="Professional Photo" sectionKey="professionalPhotos" items={data.professionalPhotos || []} {...crud("professionalPhotos")} onShare={openShare} emptyIcon={"\ud83d\udcf8"} emptyTitle="No professional photo" emptySub="Agencies ask for a recent color photo — keep a dated headshot here and it rides along in packets." fields={[{ key: "name", label: "Label", placeholder: "e.g. Professional headshot" }, { key: "dateTaken", label: "Date Taken", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "healthRecords") return <HealthRecordsSection onShare={openShare} autoEditId={autoEditTarget?.sec === "healthRecords" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} />;
+    if (subPage === "travelDocs") return <CrudSection title="Travel" sectionKey="travelDocs" items={data.travelDocs || []} {...crud("travelDocs")} onShare={openShare} emptyIcon={"✈️"} emptyTitle="No travel records" emptySub="Known Traveler Number, loyalty programs, rental memberships, airline credits — the numbers every locum assignment asks for." fields={[
+      { key: "type", label: "Type", type: "select", options: ["Known Traveler (TSA PreCheck)", "Global Entry", "Passport", "Airline loyalty", "Airline credit", "Hotel loyalty", "Rental car membership", "Visa", "Other"] },
+      { key: "provider", label: "Airline / Hotel / Company", placeholder: "e.g. Delta, Marriott, Enterprise" },
+      { key: "number", label: "Number", placeholder: "membership or document number" },
+      { key: "name", label: "Label (optional)", placeholder: "e.g. personal passport" },
+      { key: "expirationDate", label: "Expires (if it does)", type: "date" },
+      { key: "notes", label: "Notes", type: "textarea" },
+    ]} />;
     if (subPage === "education") return <CrudSection title="Education" sectionKey="education" items={data.education || []} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (subPage === "caseLogs") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;

@@ -626,7 +626,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                             </div>
                           )}
                           <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
-                            {[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber]
+                            {[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber, item.number]
                               .filter(Boolean).filter(v => !said(v)).join(" \u00b7 ")}
                             {item.graduationDate && !item.expirationDate && (" \u00b7 Graduated " + new Date(item.graduationDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }))}
                             {item.expirationDate && (" \u00b7 " + getStatusLabel(item.expirationDate))}

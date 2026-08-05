@@ -45,6 +45,7 @@ export const DEFAULT_DATA = {
   dutyDays: [],       // [{ id, contractId, date, workedDay, scholarly, callHospital, callRole, amount }]
   taskNotes: [],      // [{ id, text, contractId, capturedAt, startedAt, completedAt }]
   publications: [],   // [{ id, name, citation, year, doi, pmid, url, sortOrder, notes }]
+  travelDocs: [],     // [{ id, type, name, provider, number, expirationDate, notes }]
   memberships: [],    // [{ id, organization, role, startDate, endDate, notes }]
   malpracticeHistory: [],
   // Locum tier features
