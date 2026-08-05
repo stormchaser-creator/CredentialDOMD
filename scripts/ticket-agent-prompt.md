@@ -46,7 +46,10 @@ newer than that stamp as the user talking to you.
    the changed function with real-shaped data and check the arithmetic before shipping.
 5. Commit with a message in the repo's style, push to main.
 6. Wait for the CDN: poll `https://credentialdomd.com/app/version.json?cb=<n>` until it
-   reports the new short SHA (up to 10 minutes). If it never lands, say so in the reply.
+   reports the new short SHA (up to 10 minutes). Poll in the FOREGROUND — never hand this
+   to a background task and exit: your session ends when you stop, and an unfinished
+   verification means no reply and no stamp. Everything in "Reply and close" must be DONE
+   before your final message. If the CDN never lands, say so in the reply.
 7. If the build fails and you cannot fix it cleanly: `git reset --hard origin/main` and reply
    with what you found instead of shipping.
 
