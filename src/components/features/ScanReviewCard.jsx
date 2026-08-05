@@ -37,6 +37,11 @@ const FIELD_DEFS = {
     { key: "institution", label: "Institution" }, { key: "graduationDate", label: "Graduation Date", type: "date" },
     { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" },
   ],
+  travel: [
+    { key: "type", label: "Type" }, { key: "name", label: "Label" },
+    { key: "provider", label: "Issuer / Company" }, { key: "number", label: "Number" },
+    { key: "expirationDate", label: "Expires", type: "date" }, { key: "notes", label: "Notes" },
+  ],
   agreement: [
     { key: "facility", label: "Hospital / Facility" }, { key: "location", label: "Location (city, state)" },
     { key: "agency", label: "Agency" },
@@ -118,7 +123,9 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       <div style={{ padding: "14px 18px" }}>
         {docType === "unknown" ? (
           <div style={{ textAlign: "center", padding: "18px 0", color: T.textMuted, fontSize: 15 }}>
-            Could not identify this document. Tap a category above to classify it manually.
+            Couldn&rsquo;t identify this document — but the file itself is already saved in
+            Documents either way. Tap a category above to also file it as a credential,
+            or keep it as a plain document.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -264,8 +271,8 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
         <div style={{ padding: "0 18px 16px" }}>
           <button onClick={onDiscard} style={{
             width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent",
-            color: T.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer",
-          }}>Discard</button>
+            color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+          }}>Keep as plain document</button>
         </div>
       )}
     </div>

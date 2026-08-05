@@ -32,6 +32,8 @@ function TaskNotes({ onBill }) {
   const [showDone, setShowDone] = useState(false);
   const [finishing, setFinishing] = useState(null); // the task being completed
   const [form, setForm] = useState({});
+  const [editTask, setEditTask] = useState(null); // open item being reworded
+  const [editText, setEditText] = useState("");
 
   const tasks = data.taskNotes || [];
   const { open, done } = useMemo(() => ({
@@ -104,7 +106,13 @@ function TaskNotes({ onBill }) {
     const elapsed = t.startedAt ? minutesBetween(t.startedAt, new Date().toISOString()) : null;
     return (
       <div style={{ backgroundColor: T.card, border: `1px solid ${t.startedAt && !isDone ? T.accent : T.border}`, borderRadius: 12, padding: "11px 13px", boxShadow: T.shadow1 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none", opacity: isDone ? 0.6 : 1 }}>
+        {/* Tap the words to fix the words — every note stays editable */}
+        <div
+          role={isDone ? undefined : "button"}
+          tabIndex={isDone ? undefined : 0}
+          onClick={isDone ? undefined : () => { setEditTask(t); setEditText(t.text || ""); }}
+          onKeyDown={isDone ? undefined : (e) => { if (e.key === "Enter") { setEditTask(t); setEditText(t.text || ""); } }}
+          style={{ fontSize: 14.5, fontWeight: 600, color: T.text, lineHeight: 1.4, textDecoration: isDone ? "line-through" : "none", opacity: isDone ? 0.6 : 1, cursor: isDone ? "default" : "pointer" }}>
           {t.text}
         </div>
         <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 3 }}>
@@ -177,6 +185,33 @@ function TaskNotes({ onBill }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {open.map(t => <Row key={t.id} t={t} isDone={false} />)}
       </div>
+
+      <Modal open={!!editTask} onClose={() => setEditTask(null)} title="Edit note">
+        {editTask && (
+          <>
+            <textarea value={editText} onChange={e => setEditText(e.target.value)} autoFocus
+              style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button
+                onClick={() => { const v = editText.trim(); if (v) editItem("taskNotes", { ...editTask, text: v }); setEditTask(null); }}
+                disabled={!editText.trim()}
+                style={{
+                  flex: 1, padding: "13px", borderRadius: 12, border: "none",
+                  background: editText.trim() ? "linear-gradient(135deg, #10b981, #059669)" : T.border,
+                  color: "#fff", fontSize: 15, fontWeight: 800, cursor: editText.trim() ? "pointer" : "default",
+                }}>Save</button>
+              <button onClick={() => { if (window.confirm("Delete this note?")) { deleteItem("taskNotes", editTask.id); setEditTask(null); } }} style={{
+                padding: "13px 16px", borderRadius: 12, border: "none",
+                backgroundColor: T.dangerDim, color: T.danger, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Delete</button>
+              <button onClick={() => setEditTask(null)} style={{
+                padding: "13px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Cancel</button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       <Modal open={!!finishing} onClose={() => { setFinishing(null); setForm({}); }} title="Finish and log the time">
         {finishing && (
