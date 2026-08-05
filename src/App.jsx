@@ -38,7 +38,7 @@ import {
 } from "./constants";
 import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardCompliance";
 import {
-  generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem,
+  generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
 import { complianceFor, findStateLicense } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
@@ -843,6 +843,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
             {data.licenses.slice(0, 5).map((item, idx) => {
               const sc = getStatusColor(item.expirationDate);
+              const d = item.expirationDate ? daysUntil(item.expirationDate) : null;
               return (
                 <div key={item.id} onClick={() => { setTab("credentials"); setSubPage("licenses"); }} style={{
                   display: "flex", alignItems: "center", gap: 12,
@@ -857,6 +858,12 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                     </div>
                     <div style={{ fontSize: 13, color: T.textMuted, marginTop: 1 }}>
                       {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : null].filter(Boolean).join(" \u00b7 ")}
+                      {d !== null && Number.isFinite(d) && (
+                        <span style={{ fontWeight: 700, color: d <= 90 ? sc : T.textMuted }}>
+                          {" \u00b7 "}
+                          {d < 0 ? `expired ${Math.abs(d).toLocaleString()}d ago` : d === 0 ? "expires today" : `${d.toLocaleString()}d`}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <StatusBadge status={statusFromColor(sc)} />
