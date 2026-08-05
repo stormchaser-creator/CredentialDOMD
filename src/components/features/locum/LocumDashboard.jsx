@@ -30,9 +30,9 @@ const SUBTABS = [
   { id: "todo", label: "To do" },
 ];
 
-export default function LocumDashboard() {
+export default function LocumDashboard({ initialSub }) {
   const { theme: T, plan, isDevMode } = useApp();
-  const [sub, setSub] = useState("work");
+  const [sub, setSub] = useState(initialSub || "work");
   const [billDraft, setBillDraft] = useState(null);
 
   const isLocum = plan === "locum" || isDevMode;

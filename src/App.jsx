@@ -349,6 +349,12 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     return { active: activeCount, expiring: soon.length, expired: expired.length, total: allCreds.length };
   }, [allCreds, soon, expired, data.settings.reminderLeadDays]);
 
+  // Open locum To-do notes, newest capture first — feeds the Home widget.
+  const openTasks = useMemo(() =>
+    (data.taskNotes || []).filter(t => !t.completedAt)
+      .sort((a, b) => String(b.capturedAt || "").localeCompare(String(a.capturedAt || ""))),
+  [data.taskNotes]);
+
   // Still checking auth (Clerk SDK still bootstrapping)
   if (!authChecked) return (
     <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.textMuted }}>
@@ -553,6 +559,48 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* To do — the locum interrupted-work list, surfaced here so it's
+          visible without switching to the Locum tab */}
+      {plan === "locum" && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>To do</h3>
+            <button onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
+              background: "none", border: "none", fontSize: 13, fontWeight: 600,
+              color: T.accent, cursor: "pointer", padding: 0,
+            }}>View All</button>
+          </div>
+          {openTasks.length === 0 ? (
+            <div onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
+              backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
+              boxShadow: T.shadow1, fontSize: 13, color: T.textMuted, cursor: "pointer",
+            }}>
+              Nothing waiting — add a note when a call comes in and you can&rsquo;t deal with it yet.
+            </div>
+          ) : (
+            <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
+              {openTasks.slice(0, 5).map((t, idx) => (
+                <div key={t.id} onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "12px 16px", cursor: "pointer",
+                  borderBottom: idx < Math.min(openTasks.length, 5) - 1 ? `1px solid ${T.border}` : "none",
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {t.text}
+                    </div>
+                    {t.startedAt && (
+                      <div style={{ fontSize: 12, color: T.accent, fontWeight: 700, marginTop: 1 }}>working</div>
+                    )}
+                  </div>
+                  <span style={{ color: T.textDim, fontSize: 16 }}>{"›"}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -1596,7 +1644,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
     if (tab === "credentials") return renderCredentials();
-    if (tab === "locum") return <LocumDashboard />;
+    if (tab === "locum") return <LocumDashboard initialSub={subPage === "todo" ? "todo" : undefined} />;
     if (tab === "team") return <TeamSection />;
     if (tab === "more") return renderMore();
   };
