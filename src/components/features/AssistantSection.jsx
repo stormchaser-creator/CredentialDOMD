@@ -155,6 +155,19 @@ function AssistantSection({ onFileTicket }) {
         .map(m => ({ role: m.role, text: m.text }));
       const snapshot = buildSnapshot(data, allTrackedStates);
       const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, attachment: att });
+      // Deterministic honesty net: if the reply CLAIMS the developer will
+      // hear about something but carries no feedback action, attach one
+      // built from the user's own words — the model once said "I'll pass
+      // that along" with nothing behind it, and the ticket never existed.
+      const CLAIMS_FORWARDED = /pass (it|that|this) along|flag (it|that|this)|let the (developer|team) know|(create|created|filed|file) a ticket|sent? (it|that|this) (to|over to) the (developer|team)|queued for the developer|developer will (see|hear|read)/i;
+      if (CLAIMS_FORWARDED.test(result.reply || "") && !(result.actions || []).some(a => a.kind === "feedback")) {
+        result.actions = [...(result.actions || []), {
+          kind: "feedback",
+          summary: text.slice(0, 120) || "Suggestion from chat",
+          category: "idea",
+          text: text.slice(0, 800),
+        }];
+      }
       const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions };
       // Keep the file with the proposal so Approve can save it to Files too —
       // only for documents the user just attached, never the implicit re-send.
