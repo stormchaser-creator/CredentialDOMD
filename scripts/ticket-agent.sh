@@ -48,10 +48,22 @@ if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ]; the
 fi
 
 cd "$REPO" || exit 1
+
+# Pre-fetch the actual tickets and hand them to the model in the prompt —
+# a lazy single-turn run once claimed "no open tickets" without ever
+# running the query. With the queue in hand there is nothing to skip.
+printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.created_at FROM support_tickets t WHERE t.status = %sopen%s ORDER BY t.created_at"}' "'" "'" > /tmp/ticket-agent-list.json
+TICKETS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d @/tmp/ticket-agent-list.json)
+
 # perl alarm = 55-minute hard cap (macOS has no coreutils timeout), so a
 # wedged run can never pile into the next hour.
 /usr/bin/perl -e 'alarm 3300; exec @ARGV' -- \
-  "$CLAUDE" -p "$(cat "$REPO/scripts/ticket-agent-prompt.md")" \
+  "$CLAUDE" -p "$(cat "$REPO/scripts/ticket-agent-prompt.md")
+
+## Open tickets RIGHT NOW (pre-fetched by the runner — this is the queue; do not re-derive it, do not claim it is empty)
+$TICKETS" \
   --model claude-sonnet-5 \
   --dangerously-skip-permissions \
   >> "$LOG" 2>&1

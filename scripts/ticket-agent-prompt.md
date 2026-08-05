@@ -5,6 +5,10 @@ Tickets are filed in-app through Vera, the assistant — the owner (Eric Whitney
 APPROVED each one before it was created, so an open ticket is authorization to build. Your
 job: pick up open tickets, implement them, verify, deploy, and reply on the ticket thread.
 
+Work happens through TOOLS — queries, edits, builds, pushes. A run that answers
+without tool calls is a failed run: if the runner handed you tickets below, you
+implement or reply to them; you never declare the queue empty.
+
 ## Read the tickets
 
 Supabase project `hkpnnsjcwprrwobmpqyy`. Query via the management API:
