@@ -21,8 +21,10 @@ curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/datab
 ```
 
 Also read each ticket's thread (`support_messages` where ticket_id = …, ordered by created_at)
-— the newest user message may refine the ask. If the last message on a ticket is yours
-(`is_admin_reply = true`), skip that ticket: you are waiting on the user.
+— the newest message may refine or approve the ask. NOTE: the owner is also the app admin, so
+`is_admin_reply` does NOT distinguish you from him — the runner already filtered the queue to
+tickets with activity newer than YOUR last reply (`agent_last_reply_at`). Treat every message
+newer than that stamp as the user talking to you.
 
 ## Decide
 
@@ -54,8 +56,10 @@ Insert an admin reply and update the ticket (dollar-quote text with `$q$...$q$`)
 
 ```sql
 INSERT INTO support_messages (id, ticket_id, author_id, body, is_admin_reply, created_at)
-VALUES (gen_random_uuid(), '<ticket_id>', NULL, $q$<what you shipped / your question>$q$, true, now());
+SELECT gen_random_uuid(), t.id, t.user_id, $q$<what you shipped / your question>$q$, true, now()
+FROM support_tickets t WHERE t.id = '<ticket_id>';
 UPDATE support_tickets SET status = '<resolved|open>', updated_at = now(),
+  agent_last_reply_at = now(),
   resolved_at = CASE WHEN '<resolved|open>' = 'resolved' THEN now() ELSE resolved_at END
 WHERE id = '<ticket_id>';
 ```
