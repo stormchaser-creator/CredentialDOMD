@@ -211,7 +211,7 @@ export async function generateCredentialZip(data) {
   root.file("credentials_summary.xlsx", xlsxData);
 
   // Add JSON backup
-  const { apiKey, ...safeSettings } = data.settings;
+  const { apiKey, anthropicApiKey, ...safeSettings } = data.settings;
   const jsonBackup = JSON.stringify({
     ...data,
     settings: safeSettings,

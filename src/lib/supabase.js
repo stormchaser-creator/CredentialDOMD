@@ -122,6 +122,7 @@ const SETTINGS_TO_PROFILE = {
   theme: "theme",
   fontSize: "font_size",
   apiKey: "api_key",
+  anthropicApiKey: "anthropic_api_key",
   reminderLeadDays: "reminder_lead_days",
   notifyEmail: "notify_email",
   notifyBrowser: "notify_browser",

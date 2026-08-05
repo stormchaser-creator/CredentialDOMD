@@ -46,6 +46,7 @@ CREATE TABLE profiles (
   theme TEXT DEFAULT 'light',
   font_size TEXT DEFAULT 'M',
   api_key TEXT,
+  anthropic_api_key TEXT,
   reminder_lead_days INTEGER DEFAULT 90,
   notify_email BOOLEAN DEFAULT true,
   notify_text BOOLEAN DEFAULT true,

@@ -139,7 +139,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
   };
 }
 
-const SYSTEM = (snapshot) => `You are Vera — the CredentialDOMD assistant, named for verus:
+const SYSTEM_STATIC = `You are Vera — the CredentialDOMD assistant, named for verus:
 truth. You are the physician's credentialing coordinator in the app: their data is below.
 You are warm, direct, and PLAIN-SPOKEN: the user is a surgeon, not a technologist. Never
 use developer jargon. Refer to yourself as Vera when it comes up naturally; no need to
@@ -177,6 +177,9 @@ YOU CAN PROPOSE ACTIONS. Respond with JSON ONLY (no fences):
    {"kind":"update_document","id":"<doc id from the documents list>","summary":"one line",
     "name":"new descriptive filename (optional)","linkedTo":"section:recordId to attach it to (optional)"},
    {"kind":"feedback","summary":"one line","category":"bug|idea|question","text":"the feedback, verbatim-ish"},
+   {"kind":"export_data","summary":"one line, e.g. 'Excel of the last 12 months of case logs'",
+    "section":"caseLogs|cme|workLog|licenses|invoices","format":"xlsx|csv",
+    "dateFrom":"YYYY-MM-DD (optional)","dateTo":"YYYY-MM-DD (optional)"},
    {"kind":"send_packet","summary":"one line, e.g. 'Send 9 documents to Jane at MedStaff'",
     "docIds":["<ids from the documents list in the snapshot>"],
     "coverNote":"short professional cover note naming the physician and listing what's enclosed",
@@ -219,8 +222,9 @@ contains patient identifiers, use only the professional content and say you left
 details out on purpose.
 
 COMPLIANCE QUESTIONS — NEVER claim the app is HIPAA compliant. It is not: there is no BAA
-with Google (the AI features transmit to the Gemini API under the user's own key, and free-tier
-terms permit human review and model training), no BAA with Supabase, and no access audit trail.
+with any AI provider (chat transmits to Google's Gemini API or Anthropic's Claude API under
+the user's own key, document scanning to Gemini; Gemini free-tier terms additionally permit
+human review and model training), no BAA with Supabase, and no access audit trail.
 If asked, say exactly that, and advise keeping patient identifiers (names, MRNs, dates of birth)
 out of the app entirely — case logs are for procedures, codes, and RVUs. Never reassure a user
 that clinical data is safe to enter. If they have already entered identifiers, tell them plainly
@@ -284,6 +288,12 @@ CLINICAL BILLING QUESTIONS — the global surgical package is REAL MONEY and REA
   Agencies would far rather see documented progress than an unexplained gap. The
   "missing" list then names only the outstanding piece (e.g. "MMR dose 2 — scheduled").
 - Deleting records is not something you can do — tell them where the trash button lives.
+- EXPORTS: when the user wants a spreadsheet/Excel/CSV of their data (case logs, CME, work
+  log, licenses, invoices), propose an export_data action — on approval the app builds the
+  real file on their device and opens the share sheet (Save to Files, AirDrop, email).
+  Compute dateFrom/dateTo from their words using snapshot.today ("last 12 months" = today
+  minus one year through today). NEVER say the app can't export or point them at manual
+  copy-paste — this action is exactly that feature.
 
 FINDING CME (when asked "find me CME for X"): recommend ONLY from the VETTED PROVIDER
 DIRECTORY below — the app verifies these links; never suggest a source or URL that is
@@ -298,21 +308,142 @@ VETTED PROVIDER DIRECTORY (name | url | pricing | accreditation | note):
 ${PROVIDER_DIGEST}
 
 KNOWN SECTION FIELDS:
-${JSON.stringify(SECTION_FIELDS)}
+${JSON.stringify(SECTION_FIELDS)}`;
 
-USER DATA SNAPSHOT:
+const snapshotBlock = (snapshot) => `USER DATA SNAPSHOT:
 ${JSON.stringify(snapshot)}`;
+
+const SYSTEM = (snapshot) => `${SYSTEM_STATIC}
+
+${snapshotBlock(snapshot)}`;
 
 function extractBase64(dataUrl) { return dataUrl.split(",")[1]; }
 function mediaType(dataUrl) { return dataUrl.slice(5, dataUrl.indexOf(";")); }
+
+/** The reply is prose-JSON per the SYSTEM contract; parse it tolerantly. */
+function parseAssistantJson(raw) {
+  raw = (raw || "").replace(/```json/gi, "").replace(/```/g, "").trim();
+  try {
+    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    return {
+      reply: parsed.reply || "…",
+      actions: Array.isArray(parsed.actions) ? parsed.actions.filter(a => a && a.kind) : [],
+    };
+  } catch {
+    // Model answered in plain text — still useful
+    return { reply: raw || "I didn't catch that — try again?", actions: [] };
+  }
+}
 
 /**
  * One assistant turn. history = [{role:"user"|"model", text}], newest last
  * (the last item is the pending user message). attachment (optional) =
  * { dataUrl } for images/PDFs or { text, name } for extracted office text.
+ * With an Anthropic key, Vera thinks on Claude Opus; the Gemini key remains
+ * the fallback brain (and still powers document scanning either way).
  */
-export async function assistantTurn({ history, snapshot, apiKey, attachment }) {
-  if (!apiKey) throw new Error("Add your AI key in Settings first — the assistant runs on it.");
+export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, attachment }) {
+  if (!apiKey && !anthropicKey) throw new Error("Add your AI key in Settings first — the assistant runs on it.");
+
+  if (anthropicKey && claudeCanRead(attachment)) {
+    try {
+      return await anthropicTurn({ history, snapshot, anthropicKey, attachment });
+    } catch (e) {
+      const A = AnthropicSDK; // set by loadAnthropic() before any request ran
+      // A bad key must surface — silently answering on Gemini would hide it.
+      if (A && (e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError)) {
+        throw new Error("Your Anthropic API key was rejected — check it in Settings, or clear it to use the Gemini key.");
+      }
+      const transient = A && (e instanceof A.RateLimitError || e instanceof A.InternalServerError || e instanceof A.APIConnectionError);
+      if (transient && apiKey) {
+        // Claude briefly unreachable and a Gemini key is on file — Gemini
+        // takes the turn so the chat never dead-ends.
+      } else if (A && e instanceof A.APIConnectionError) {
+        throw new Error(NETWORK_MSG);
+      } else if (A && e instanceof A.RateLimitError) {
+        throw new Error("The AI is rate-limited — give it a few seconds and try again.");
+      } else {
+        // Non-transient (bad request, unknown model, SDK bug): surface it —
+        // a silent downgrade would hide a real problem behind the Opus badge.
+        throw new Error(e?.message || "Claude couldn't answer that turn.");
+      }
+    }
+  } else if (anthropicKey && !apiKey && attachment?.dataUrl) {
+    throw new Error("Claude can't read that file format — attach a JPEG/PNG photo or a PDF, or add a Gemini key in Settings for wider format support.");
+  }
+  return geminiTurn({ history, snapshot, apiKey, attachment });
+}
+
+// Claude accepts these attachment types; anything else (HEIC from the iPhone
+// Files app is the common one) routes the turn to Gemini instead.
+const CLAUDE_MEDIA = new Set(["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp"]);
+const claudeCanRead = (att) => !att?.dataUrl || CLAUDE_MEDIA.has(mediaType(att.dataUrl));
+
+// Loaded on demand so Gemini-only users never download the Claude SDK chunk.
+let AnthropicSDK = null;
+async function loadAnthropic() {
+  if (!AnthropicSDK) AnthropicSDK = (await import("@anthropic-ai/sdk")).default;
+  return AnthropicSDK;
+}
+
+/** Claude path — claude-opus-5 via the user's own Anthropic key. */
+async function anthropicTurn({ history, snapshot, anthropicKey, attachment }) {
+  const Anthropic = await loadAnthropic();
+  const client = new Anthropic({
+    apiKey: anthropicKey,
+    dangerouslyAllowBrowser: true, // the key is the user's own, entered by them
+    timeout: 120000,
+    maxRetries: 1,
+  });
+  const recent = history.slice(-14);
+  const messages = recent.map((m, i) => {
+    const blocks = [];
+    const isLast = i === recent.length - 1;
+    if (isLast && attachment?.dataUrl) {
+      const mt = mediaType(attachment.dataUrl);
+      const data = extractBase64(attachment.dataUrl);
+      blocks.push(mt === "application/pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
+        : { type: "image", source: { type: "base64", media_type: mt, data } });
+      if (attachment.implicit) {
+        blocks.push({ type: "text", text: `(The document "${attachment.name || "attachment"}" above is re-supplied from earlier in this conversation so you can re-read it — the user did not attach anything new.)` });
+      }
+    }
+    if (isLast && attachment?.text) {
+      blocks.push({ type: "text", text: `ATTACHED DOCUMENT "${attachment.name}" (extracted text${attachment.implicit ? ", re-supplied from earlier in this conversation" : ""}):\n${attachment.text}` });
+    }
+    blocks.push({ type: "text", text: m.text || "…" });
+    return { role: m.role === "model" ? "assistant" : "user", content: blocks };
+  });
+  // The API requires the first message to be a user turn; a sliced-off window
+  // can start mid-conversation on an assistant reply.
+  while (messages.length && messages[0].role !== "user") messages.shift();
+
+  const response = await client.messages.create({
+    model: "claude-opus-5",
+    // Opus thinks before answering and the cap covers thinking + reply
+    // together — 16k leaves the reply room even on a hard extraction turn.
+    max_tokens: 16000,
+    // The big static rulebook caches across turns; only the snapshot re-bills.
+    system: [
+      { type: "text", text: SYSTEM_STATIC, cache_control: { type: "ephemeral" } },
+      { type: "text", text: snapshotBlock(snapshot) },
+    ],
+    messages,
+  });
+  if (response.stop_reason === "refusal") {
+    return { reply: "I can't help with that particular request — try rephrasing, or ask me something else about your file.", actions: [] };
+  }
+  if (response.stop_reason === "max_tokens") {
+    return { reply: "That answer ran past my length limit and got cut off. Ask again a bit narrower — one section or a shorter date range — and I'll fit it.", actions: [] };
+  }
+  return parseAssistantJson(response.content.filter(b => b.type === "text").map(b => b.text).join(""));
+}
+
+const NETWORK_MSG = "Couldn't reach the AI service. That's usually a weak signal, or a guest Wi-Fi that blocks AI sites (hospital networks often do). Switch to cellular and tap Try again — your message is saved.";
+
+/** Gemini path — the original brain, still the default with no Anthropic key. */
+async function geminiTurn({ history, snapshot, apiKey, attachment }) {
 
   const contents = history.slice(-14).map((m, i) => {
     const parts = [];
@@ -335,7 +466,6 @@ export async function assistantTurn({ history, snapshot, apiKey, attachment }) {
     contents,
     generationConfig: tier.generationConfig,
   });
-  const NETWORK_MSG = "Couldn't reach the AI service. That's usually a weak signal, or a guest Wi-Fi that blocks AI sites (hospital networks often do). Switch to cellular and tap Try again — your message is saved.";
   // Phones drop requests mid-flight (weak signal, screen lock, guest Wi-Fi
   // that blocks AI endpoints) — retry the network hop before giving up, and
   // abort any attempt that silently stalls so the chat never locks up.
@@ -376,18 +506,7 @@ export async function assistantTurn({ history, snapshot, apiKey, attachment }) {
   let json;
   try { json = await response.json(); }
   catch { throw new Error(NETWORK_MSG); }
-  let raw = json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
-  raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-  try {
-    const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
-    return {
-      reply: parsed.reply || "…",
-      actions: Array.isArray(parsed.actions) ? parsed.actions.filter(a => a && a.kind) : [],
-    };
-  } catch {
-    // Model answered in plain text — still useful
-    return { reply: raw || "I didn't catch that — try again?", actions: [] };
-  }
+  return parseAssistantJson(json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "");
 }
 
 /**

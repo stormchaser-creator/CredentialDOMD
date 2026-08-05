@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { generateId } from "../../utils/helpers";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
+import { buildExport, makeSpreadsheetFile } from "../../utils/exportData";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { supabase } from "../../lib/supabase";
 import Modal from "../shared/Modal";
@@ -154,18 +155,24 @@ function AssistantSection({ onFileTicket }) {
       const history = [...msgs.filter(x => x.id !== userMsg.id && !x.failed), userMsg]
         .map(m => ({ role: m.role, text: m.text }));
       const snapshot = buildSnapshot(data, allTrackedStates);
-      const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, attachment: att });
+      const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, anthropicKey: data.settings.anthropicApiKey, attachment: att });
       // Deterministic honesty net: if the reply CLAIMS the developer will
       // hear about something but carries no feedback action, attach one
       // built from the user's own words — the model once said "I'll pass
       // that along" with nothing behind it, and the ticket never existed.
       const CLAIMS_FORWARDED = /pass (it|that|this) along|flag (it|that|this)|let the (developer|team) know|(create|created|filed|file) a ticket|sent? (it|that|this) (to|over to) the (developer|team)|queued for the developer|developer will (see|hear|read)/i;
       if (CLAIMS_FORWARDED.test(result.reply || "") && !(result.actions || []).some(a => a.kind === "feedback")) {
+        // The current message is often just "create a ticket" / "not here" —
+        // the actual ask lives a message or two up. A substantive current
+        // message wins; only a stub falls back to the meatiest recent turn.
+        const recentUser = history.filter(h => h.role === "user").slice(-3).map(h => h.text || "");
+        const meatiest = text.length >= 25 ? text
+          : recentUser.reduce((a, b) => (b.length > a.length ? b : a), text);
         result.actions = [...(result.actions || []), {
           kind: "feedback",
-          summary: text.slice(0, 120) || "Suggestion from chat",
+          summary: meatiest.slice(0, 120) || "Suggestion from chat",
           category: "idea",
-          text: text.slice(0, 800),
+          text: meatiest.slice(0, 800),
         }];
       }
       const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions };
@@ -325,6 +332,30 @@ function AssistantSection({ onFileTicket }) {
         if (docs.length < (action.docIds || []).length) {
           setErr(`Sent ${docs.length} of ${(action.docIds || []).length} — the rest haven't downloaded to this device yet.`);
         }
+      } else if (action.kind === "export_data") {
+        const { rows, label } = buildExport(data, action);
+        if (!rows.length) throw new Error("No records in that range — nothing to export.");
+        const ext = action.format === "csv" ? "csv" : "xlsx";
+        const range = [action.dateFrom, action.dateTo].filter(Boolean).join("_to_");
+        const fname = `${label.replace(/\s+/g, "-")}${range ? `-${range}` : ""}.${ext}`;
+        const file = makeSpreadsheetFile({ rows, label, format: ext, filename: fname });
+        // Share sheet first (Save to Files / AirDrop / email on iPhone),
+        // plain download as the desktop fallback — same split as packets.
+        let shared = false;
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ title: fname, files: [file] });
+            shared = true;
+          } catch (shareErr) {
+            if (shareErr?.name === "AbortError") return; // user closed the sheet
+          }
+        }
+        if (!shared) {
+          const url = URL.createObjectURL(file);
+          const a = document.createElement("a");
+          a.href = url; a.download = file.name; a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 15000);
+        }
       }
       markAction(msgId, idx, { done: true });
     } catch (e3) {
@@ -376,6 +407,7 @@ function AssistantSection({ onFileTicket }) {
   const SUGGESTIONS = [
     "What's expiring in the next 90 days?",
     "Where do I stand on CME for each state?",
+    "Export my last 12 months of case logs to Excel",
     "Summarize my unbilled work",
     "What's still open on my background screening?",
   ];
@@ -384,7 +416,12 @@ function AssistantSection({ onFileTicket }) {
     <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 220px)" }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>Vera</h2>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>
+            Vera
+            {data.settings.anthropicApiKey && (
+              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: T.accent, verticalAlign: "middle", padding: "2px 8px", borderRadius: 8, backgroundColor: T.accentDim }}>Opus</span>
+            )}
+          </h2>
           <div style={{ display: "flex", gap: 6 }}>
             {msgs.length > 0 && (
               <button onClick={() => { archiveCurrent(); }} disabled={busy} style={{

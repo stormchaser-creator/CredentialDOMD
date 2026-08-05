@@ -292,6 +292,9 @@ function SettingsSection() {
         <Field label="API Key (Gemini)" hint={s.apiKey ? "Saved \u2713 \u2014 saves automatically as you type. AI scanning is enabled." : "Required for AI document scanning. Get one free at aistudio.google.com/apikey \u2014 saves automatically, no save button needed."}>
           <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza..." />
         </Field>
+        <Field label="API Key (Anthropic, optional)" hint={s.anthropicApiKey ? "Saved \u2713 \u2014 Vera now thinks on Claude Opus. Document scanning still uses the Gemini key." : "Give Vera a stronger mind: with an Anthropic key (console.anthropic.com) she runs on Claude Opus, billed to your key. Leave blank to keep the free Gemini brain."}>
+          <input type="password" value={s.anthropicApiKey || ""} onChange={e => update("anthropicApiKey", e.target.value)} style={iS} placeholder="sk-ant-..." />
+        </Field>
       </div>
 
       {/* Multi-State */}

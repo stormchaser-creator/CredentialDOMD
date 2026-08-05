@@ -61,7 +61,7 @@ function DataExport() {
 
   const handleExportJSON = () => {
     // Strip sensitive fields from export (API keys, etc.)
-    const { apiKey, ...safeSettings } = data.settings;
+    const { apiKey, anthropicApiKey, ...safeSettings } = data.settings;
     const exportData = {
       ...data,
       settings: safeSettings,
