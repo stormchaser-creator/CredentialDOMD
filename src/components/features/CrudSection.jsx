@@ -11,6 +11,7 @@ import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from 
 import { generateId, getStatusColor, getStatusLabel, describeItem } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
+import { isContactPickerSupported, pickContact } from "../../utils/contactImport";
 import CPTCodePicker from "./CPTCodePicker";
 
 // Every billed code, spelled out — number, what it entails, units, value.
@@ -41,7 +42,7 @@ function billedCodes(item) {
 
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, filterTabs, prefillItem, onPrefillDone }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, filterTabs, prefillItem, onPrefillDone, contactImport }) {
   const { data, setData, addItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -52,14 +53,16 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const [scanMsg, setScanMsg] = useState(null);
   const [scanIsError, setScanIsError] = useState(false);
   const [modalCameraOpen, setModalCameraOpen] = useState(false);
+  const [contactMsg, setContactMsg] = useState(null);
+  const [contactMsgError, setContactMsgError] = useState(false);
   const uploadRef = useRef(null);
   const modalCameraRef = useRef(null);
   const modalVideoRef = useRef(null);
   const modalCanvasRef = useRef(null);
   const modalStreamRef = useRef(null);
 
-  const openAdd = useCallback(() => { setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setShowForm(true); }, []);
+  const openAdd = useCallback(() => { setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
 
   // Auto-open add form when triggered from outside (e.g., home page "Add Your License" card)
   // Deep-link: open a specific record's edit form (e.g. from the Home
@@ -89,7 +92,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const closeForm = useCallback(() => {
     setRequiredError(null);
     if (modalStreamRef.current) { modalStreamRef.current.getTracks().forEach(t => t.stop()); modalStreamRef.current = null; }
-    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false);
+    setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null);
   }, []);
 
   // Cleanup camera stream on unmount
@@ -188,6 +191,25 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       }
     }
   }, [data.settings.apiKey, data.settings.degreeType]);
+
+  const handleImportContact = useCallback(async () => {
+    setContactMsg(null);
+    setContactMsgError(false);
+    try {
+      const contact = await pickContact();
+      if (!contact) return; // user backed out of the native picker
+      setForm(prev => ({
+        ...prev,
+        name: contact.name || prev.name,
+        email: contact.email || prev.email,
+        phone: contact.phone || prev.phone,
+      }));
+      setContactMsg("Imported from contacts — review before saving.");
+    } catch (err) {
+      setContactMsg("Could not read contact: " + (err.message || "permission denied"));
+      setContactMsgError(true);
+    }
+  }, []);
 
   const captureModalPhoto = useCallback(() => {
     const video = modalVideoRef.current;
@@ -292,6 +314,22 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       </div>
 
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit" : "Add"}>
+        {contactImport && isContactPickerSupported() && (
+          <div style={{ marginBottom: 14 }}>
+            <button onClick={handleImportContact} style={{
+              display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
+              borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600,
+              cursor: "pointer", backgroundColor: T.accentDim, color: T.accent,
+            }}>
+              {"📇"} Import from Contacts
+            </button>
+            {contactMsg && (
+              <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: contactMsgError ? T.danger : T.success }}>
+                {contactMsg}
+              </div>
+            )}
+          </div>
+        )}
         {fields.map(f => (
           <Field key={f.key} label={f.label + (f.required ? " *" : "")}>
             {f.type === "select" ? (
