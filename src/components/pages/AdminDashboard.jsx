@@ -277,6 +277,27 @@ function TicketsList({ rows, T, onOpen }) {
             </span>
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.subject}</div>
+          {r.last_message && (() => {
+            // The agent stamps agent_last_reply_at when it posts; if the
+            // newest thread message is at (or before) that stamp, the agent
+            // spoke last and the ball is in the admin's court.
+            const agentSpokeLast = r.agent_last_reply_at
+              && new Date(r.last_message_at) <= new Date(new Date(r.agent_last_reply_at).getTime() + 5000);
+            return (
+              <div style={{ marginTop: 4 }}>
+                {agentSpokeLast && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
+                    color: "#fff", backgroundColor: "#7C3AED", marginRight: 6,
+                  }}>AGENT REPLIED — NEEDS YOUR ANSWER</span>
+                )}
+                <div style={{
+                  fontSize: 12, color: T.textMuted, marginTop: 3, lineHeight: 1.4,
+                  display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                }}>{r.last_message}</div>
+              </div>
+            );
+          })()}
           <div style={{ fontSize: 11, color: T.textMuted, marginTop: 3 }}>
             {r.user_email} ·{" "}
             {new Date(r.updated_at).toLocaleString()} ·{" "}
