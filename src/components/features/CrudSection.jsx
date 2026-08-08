@@ -531,6 +531,15 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {(() => {
                     const v = viewItem[f.key];
+                    if (f.type === "month") {
+                      // "2018-08" → "Aug 2018 · 8 years" — the derived count
+                      // stays current forever, which is the point of the field.
+                      const d = new Date(v + "-01T00:00:00");
+                      if (isNaN(d.getTime())) return String(v);
+                      const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+                      const yrs = Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
+                      return yrs > 0 ? `${label} · ${yrs} year${yrs === 1 ? "" : "s"}` : label;
+                    }
                     if (f.type !== "date") return String(v);
                     const d = new Date(v + "T00:00:00");
                     return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
