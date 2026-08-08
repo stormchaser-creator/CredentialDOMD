@@ -18,9 +18,11 @@ import { CME_PROVIDERS } from "../constants/cmeProviders";
 // tier caps Pro at far fewer requests/day than Flash, so when Pro's limit
 // runs dry (429) the turn silently falls back to Flash instead of erroring.
 // Pro requires a thinking budget (0 is rejected); Flash runs without one.
+// responseMimeType forces syntactically-valid JSON at the API level — Gemini
+// kept drifting into prose ("here is the card, tap Approve") with no card.
 const CHAT_MODELS = [
-  { model: "gemini-2.5-pro", generationConfig: { maxOutputTokens: 8192 } },
-  { model: "gemini-2.5-flash", generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } } },
+  { model: "gemini-2.5-pro", generationConfig: { maxOutputTokens: 8192, responseMimeType: "application/json" } },
+  { model: "gemini-2.5-flash", generationConfig: { maxOutputTokens: 8192, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } } },
 ];
 
 // The app's vetted CME directory (links re-checked by the app) — the ONLY

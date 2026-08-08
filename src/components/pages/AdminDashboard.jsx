@@ -24,6 +24,14 @@ export default function AdminDashboard() {
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [ticketMsg, setTicketMsg] = useState("");
+  // Manual ticket controls — the assistant sometimes fails to raise a card,
+  // and resolved tickets pile up; both get first-class buttons here.
+  const [showArchived, setShowArchived] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [newSubject, setNewSubject] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [newCategory, setNewCategory] = useState("feature_request");
+  const [creating, setCreating] = useState(false);
 
   const isAdmin = isAdminUser(user);
 
@@ -37,6 +45,31 @@ export default function AdminDashboard() {
     setOpenTicket(t); setReply(""); setTicketMsg("");
     const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
     setThread(data || []);
+  };
+
+  const createTicket = async () => {
+    const subject = newSubject.trim();
+    const body = newBody.trim();
+    if (!subject || !body) { setTicketMsg("Subject and details are both needed."); return; }
+    setCreating(true); setTicketMsg("");
+    try {
+      const res = await supabase.functions.invoke("create-ticket", {
+        body: { subject: subject.slice(0, 180), body, category: newCategory, priority: "normal", context_page: "admin" },
+      });
+      if (res.error) throw new Error(res.error.message);
+      setNewOpen(false); setNewSubject(""); setNewBody("");
+      await refreshTickets();
+    } catch (e2) { setTicketMsg(e2.message); }
+    setCreating(false);
+  };
+
+  const setArchived = async (t, archived) => {
+    const { error: e2 } = await supabase.from("support_tickets")
+      .update({ archived_at: archived ? new Date().toISOString() : null })
+      .eq("id", t.id);
+    if (e2) { setTicketMsg(e2.message); return; }
+    setOpenTicket(null);
+    await refreshTickets();
   };
 
   const sendReply = async (newStatus) => {
@@ -101,8 +134,10 @@ export default function AdminDashboard() {
     );
   }
 
+  const activeTickets = tickets.filter(t => !t.archived_at);
+  const archivedTickets = tickets.filter(t => t.archived_at);
   const TABS = [
-    { id: "tickets",   label: `Tickets (${tickets.length})` },
+    { id: "tickets",   label: `Tickets (${activeTickets.length})` },
     { id: "signups",   label: "Signups" },
     { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
@@ -149,7 +184,18 @@ export default function AdminDashboard() {
 
       {tab === "tickets"  && !loading && (
         <>
-          <TicketsList rows={tickets} T={T} onOpen={openTicketDetail} />
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <button onClick={() => { setNewOpen(true); setTicketMsg(""); }} style={{
+              flex: 1, padding: "11px", borderRadius: 10, border: "none",
+              backgroundColor: T.accent, color: "#fff", fontSize: 13.5, fontWeight: 800, cursor: "pointer",
+            }}>+ New ticket</button>
+            <button onClick={() => setShowArchived(a => !a)} style={{
+              padding: "11px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
+              backgroundColor: showArchived ? T.card : "transparent", color: showArchived ? T.text : T.textMuted,
+              fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>{showArchived ? "Back to active" : `Archived (${archivedTickets.length})`}</button>
+          </div>
+          <TicketsList rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
           {feedback.length > 0 && (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>
@@ -225,9 +271,46 @@ export default function AdminDashboard() {
                 padding: "12px 14px", borderRadius: 10, border: "none",
                 backgroundColor: "#10b981", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
               }}>Resolve</button>
+              <button onClick={() => setArchived(openTicket, !openTicket.archived_at)} disabled={busy} style={{
+                padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>{openTicket.archived_at ? "Unarchive" : "Archive"}</button>
             </div>
           </>
         )}
+      </Modal>
+
+      {/* Manual ticket entry — the direct road when the assistant fumbles */}
+      <Modal open={newOpen} onClose={() => setNewOpen(false)} title="New ticket">
+        <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
+          placeholder="One-line summary"
+          style={{
+            width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10,
+            backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16,
+          }} />
+        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+          {[["feature_request", "Feature"], ["bug", "Bug"], ["question", "Question"], ["other", "Other"]].map(([v, l]) => (
+            <button key={v} onClick={() => setNewCategory(v)} style={{
+              flex: 1, padding: "9px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${newCategory === v ? T.accent : T.border}`,
+              backgroundColor: newCategory === v ? T.accent : "transparent",
+              color: newCategory === v ? "#fff" : T.textMuted,
+            }}>{l}</button>
+          ))}
+        </div>
+        <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)}
+          placeholder="What should change, and why. The hourly agent reads this verbatim — the more concrete, the better."
+          style={{
+            width: "100%", minHeight: 110, marginTop: 10, padding: "12px 14px", borderRadius: 10,
+            backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
+            fontSize: 16, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box",
+          }} />
+        {ticketMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{ticketMsg}</div>}
+        <button onClick={createTicket} disabled={creating} style={{
+          width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",
+          backgroundColor: creating ? T.textDim : T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800,
+          cursor: creating ? "wait" : "pointer",
+        }}>{creating ? "Creating…" : "Create ticket"}</button>
       </Modal>
 
     </div>

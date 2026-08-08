@@ -160,8 +160,14 @@ function AssistantSection({ onFileTicket }) {
       // hear about something but carries no feedback action, attach one
       // built from the user's own words — the model once said "I'll pass
       // that along" with nothing behind it, and the ticket never existed.
-      const CLAIMS_FORWARDED = /pass (it|that|this) along|flag (it|that|this)|let the (developer|team) know|(create|created|filed|file) a ticket|sent? (it|that|this) (to|over to) the (developer|team)|queued for the developer|developer will (see|hear|read)/i;
-      if (CLAIMS_FORWARDED.test(result.reply || "") && !(result.actions || []).some(a => a.kind === "feedback")) {
+      const CLAIMS_FORWARDED = /pass (it|that|this) along|flag (it|that|this)|let the (developer|team) know|(create|created|filed|file|made) (a|the|that|this) (ticket|feedback card)|sent? (it|that|this) (to|over to) the (developer|team)|queued for the developer|developer (will|needs to) (see|hear|read)/i;
+      // A second net for card-that-never-rendered talk: only fires when the
+      // reply carries NO actions at all, so a real card is never doubled.
+      const CLAIMS_CARD = /(tap|hit|press) ['"‘’]?approve|approve button|(card|button) (should |will )?(appear|show)|below this (text|message)|(made|created|generated|here is) (the|a|your) (feedback |action )?card/i;
+      const netTriggered =
+        (CLAIMS_FORWARDED.test(result.reply || "") && !(result.actions || []).some(a => a.kind === "feedback"))
+        || (CLAIMS_CARD.test(result.reply || "") && (result.actions || []).length === 0);
+      if (netTriggered) {
         // The current message is often just "create a ticket" / "not here" —
         // the actual ask lives a message or two up. A substantive current
         // message wins; only a stub falls back to the meatiest recent turn.
