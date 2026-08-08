@@ -61,7 +61,7 @@ export function buildCredentialText(item, section, settings) {
     lines.push("Specialty: " + names.join(", "));
   }
   lines.push("Degree: " + (deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine"));
-  lines.push(div, describeItem(item, settings.name), "");
+  lines.push(div, describeItem(item, settings.name, section), "");
 
   const a = (k, v) => { if (v) lines.push(k + ": " + v); };
 
@@ -98,6 +98,27 @@ export function buildCredentialText(item, section, settings) {
     a("Organization", item.organization); a("Membership", item.role);
     a("Member Since", item.startDate ? formatDate(item.startDate) : "");
     a("Ended", item.endDate ? formatDate(item.endDate) : "");
+  } else if (section === "peerReferences") {
+    a("Name", item.name); a("Degree/Credential", item.degree); a("Specialty", item.specialty);
+    a("Institution", item.institution); a("Relationship", item.relationship);
+    a("Known Since", item.knownSince ? formatDate(item.knownSince + "-01") : "");
+    a("Email", item.email); a("Phone", item.phone);
+  } else if (section === "malpracticeHistory") {
+    a("Date of Incident", formatDate(item.dateOfIncident)); a("Date Filed", formatDate(item.dateFiled));
+    a("State", item.state); a("Outcome", item.outcome); a("Settlement Amount", item.settlementAmount);
+    a("Facility", item.facility); a("Insurance Carrier", item.insuranceCarrier);
+    a("Date Resolved", formatDate(item.dateResolved)); a("Description", item.description);
+  } else if (section === "workHistory") {
+    a("Position", item.position); a("Employer", item.employer);
+    a("Location", [item.city, item.state].filter(Boolean).join(", "));
+    a("Start Date", formatDate(item.startDate));
+    a("End Date", item.current === "Yes" ? "Current" : formatDate(item.endDate));
+    a("Reason for Leaving", item.reasonForLeaving); a("Description", item.description);
+  } else if (section === "travelDocs") {
+    a("Type", item.type); a("Provider", item.provider); a("Number", item.number);
+    a("Expires", formatDate(item.expirationDate));
+  } else if (section === "professionalPhotos") {
+    a("Date Taken", formatDate(item.dateTaken));
   }
 
   if (item.notes) lines.push("", "Notes: " + item.notes);

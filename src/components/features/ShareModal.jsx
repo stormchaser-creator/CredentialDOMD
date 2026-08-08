@@ -75,7 +75,10 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   };
 
   const doEmail = () => {
-    window.open(`mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(full)}`, "_blank");
+    // RFC 6068 requires CRLF for line breaks in a mailto body — a bare "\n"
+    // gets collapsed into one run-on line by some mail clients/relays.
+    const crlfBody = full.replace(/\n/g, "\r\n");
+    window.open(`mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(crlfBody)}`, "_blank");
     setSent("email"); setTimeout(() => setSent(null), 3000); log("email", email);
   };
 
