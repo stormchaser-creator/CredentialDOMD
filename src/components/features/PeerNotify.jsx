@@ -1,6 +1,7 @@
 import { useState, memo, useCallback } from "react";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
+import { mailtoHref } from "../../utils/helpers";
 
 function PeerNotify({ peer }) {
   const { data, theme: T } = useApp();
@@ -37,7 +38,7 @@ ${userFull}`;
 
   const handleEmail = useCallback(() => {
     if (peer.email) {
-      window.open(`mailto:${peer.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`);
+      window.open(mailtoHref(peer.email, emailSubject, emailBody));
     } else {
       setShow("email");
     }

@@ -39,6 +39,15 @@ export function formatDate(s) {
   });
 }
 
+// RFC 6068: a mailto body needs CRLF line breaks — a bare "\n" reads as one
+// continuous line in several mail clients. Every mailto in the app goes
+// through here so no send path can miss the conversion again.
+export function mailtoHref(email, subject, body) {
+  return `mailto:${encodeURIComponent(email || "")}`
+    + `?subject=${encodeURIComponent(subject || "")}`
+    + `&body=${encodeURIComponent(String(body || "").replace(/\r?\n/g, "\r\n"))}`;
+}
+
 export function daysUntil(dateStr) {
   if (!dateStr) return Infinity;
   return Math.ceil((new Date(dateStr) - new Date()) / MS_PER_DAY);

@@ -2,7 +2,7 @@ import { memo, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
-import { formatDate } from "../../../utils/helpers";
+import { formatDate, mailtoHref } from "../../../utils/helpers";
 import { SendIcon, TrashIcon } from "../../shared/Icons";
 import { shareInvoicePdf, sortInvoiceLines } from "../../../utils/invoicePdf";
 
@@ -139,11 +139,10 @@ function Invoices() {
       return;
     }
     const text = inv.text || `Invoice ${inv.number} — ${facilityOf(inv.contractId)} — ${money(inv.totalAmount)}`;
-    if (navigator.share) {
-      try { await navigator.share({ title: `Invoice ${inv.number}`, text }); } catch { /* user cancelled */ }
-      return;
-    }
-    window.open(`mailto:?subject=${encodeURIComponent(`Invoice ${inv.number}`)}&body=${encodeURIComponent(text)}`, "_blank");
+    // No share sheet for text invoices: iOS Mail collapses shared text into
+    // one line. A CRLF mailto body opens the composer properly formatted.
+    try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ }
+    window.open(mailtoHref("", `Invoice ${inv.number}`, text), "_blank");
   };
 
   const removeInvoice = (inv) => {

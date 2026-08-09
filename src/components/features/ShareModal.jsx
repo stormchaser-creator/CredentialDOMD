@@ -4,7 +4,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared/Icons";
-import { buildCredentialText, buildEmailSubject, generateId, copyToClipboard } from "../../utils/helpers";
+import { buildCredentialText, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
 
 function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const { data, theme: T } = useApp();
@@ -75,10 +75,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   };
 
   const doEmail = () => {
-    // RFC 6068 requires CRLF for line breaks in a mailto body — a bare "\n"
-    // gets collapsed into one run-on line by some mail clients/relays.
-    const crlfBody = full.replace(/\n/g, "\r\n");
-    window.open(`mailto:${encodeURIComponent(email || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(crlfBody)}`, "_blank");
+    window.open(mailtoHref(email, subject, full), "_blank");
     setSent("email"); setTimeout(() => setSent(null), 3000); log("email", email);
   };
 

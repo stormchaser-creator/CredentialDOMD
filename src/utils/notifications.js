@@ -1,5 +1,5 @@
 import { complianceFor } from "./compliance";
-import { getItemLabel, formatDate, MS_PER_DAY } from "./helpers";
+import { getItemLabel, formatDate, MS_PER_DAY, mailtoHref } from "./helpers";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -161,10 +161,7 @@ export function fireBrowserNotification(title, body, tag) {
 }
 
 export function composeEmail(email, subject, body) {
-  window.open(
-    `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-    "_blank"
-  );
+  window.open(mailtoHref(email, subject, body), "_blank");
 }
 
 export function composeText(phone, body) {
