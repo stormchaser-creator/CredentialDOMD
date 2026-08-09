@@ -1775,7 +1775,14 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
 
       {/* ─── BOTTOM TAB BAR ────────────────────────────── */}
       <div style={{
-        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
+        position: "fixed", bottom: 0, left: "50%",
+        // translate3d (not translateX) promotes this to its own GPU
+        // compositing layer — without it, iOS Safari repaints the "fixed"
+        // bar in software on every scroll frame, which reads as the bar
+        // drifting/scrolling before snapping back into place.
+        transform: "translate3d(-50%, 0, 0)",
+        WebkitTransform: "translate3d(-50%, 0, 0)",
+        willChange: "transform",
         width: "100%", maxWidth: 480,
         backgroundColor: T.tabBar, borderTop: `1px solid ${T.tabBorder}`,
         display: "flex", justifyContent: "space-around", alignItems: "center",
