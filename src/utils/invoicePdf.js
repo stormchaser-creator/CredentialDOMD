@@ -187,7 +187,7 @@ export function invoiceCoverBlurb(inv) {
   const period = inv.periodStart
     ? `${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? ` through ${formatDate(inv.periodEnd)}` : ""}`
     : null;
-  return `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. Total due: ${money(inv.total)}. The attachment itemizes each day of coverage and the work performed under the terms of our agreement. Please reply with any questions. Thank you, ${inv.physician || ""}${inv.npi ? `, NPI ${inv.npi}` : ""}${inv.email ? ` (${inv.email})` : ""}.`;
+  return `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. Total due: ${money(inv.total)}. The invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions. Thank you, ${inv.physician || ""}${inv.npi ? `, NPI ${inv.npi}` : ""}${inv.email ? ` (${inv.email})` : ""}.`;
 }
 
 export function invoiceCoverEmail(inv) {
@@ -200,7 +200,7 @@ export function invoiceCoverEmail(inv) {
   const paras = [
     "Hello,",
     `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. The total due is ${money(inv.total)}.`,
-    "The attached PDF itemizes each day of coverage and the work performed under the terms of our agreement. Please reply to this email with any questions.",
+    "The attached invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions.",
     `Thank you,\r\n${inv.physician || ""}${inv.npi ? `\r\nNPI ${inv.npi}` : ""}${inv.email ? `\r\n${inv.email}` : ""}`,
   ];
   return paras.join("\r\n\r\n");
