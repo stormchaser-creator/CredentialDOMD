@@ -10,6 +10,8 @@ import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
 import { shareInvoicePdf } from "../../../utils/invoicePdf";
+import { exportInvoice } from "../../../utils/invoiceExport";
+import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { parseWorkDictation } from "../../../utils/workDictation";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import DutyLog from "./DutyLog";
@@ -1181,15 +1183,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     };
   }, [data.settings, contract]);
 
-  const sendInvoice = useCallback(async () => {
+  const [fmtOpen, setFmtOpen] = useState(false);
+  const sendInvoice = useCallback(async (format) => {
     const subject = `Invoice ${invoicePreview.number} — ${data.settings?.name || "Locum"} — ${contract.facility}`;
-    // A real PDF with a proper table — falls back to download, then text/mailto
-    const how = await shareInvoicePdf(pdfArgsFor(invoicePreview), subject, invoicePreview.text);
+    // PDF / Word / Excel, physician's choice — share sheet, download fallback
+    const how = await exportInvoice(pdfArgsFor(invoicePreview), format, subject, invoicePreview.text);
     if (how === null) return; // user cancelled the share sheet
     if (how.includes("+cover")) {
       showNotice("The cover email is on your clipboard — if Mail squashed the message body into one line, select it and paste to get the proper letter.");
     }
-    markBilledAndLog(how.startsWith("share") ? "share-pdf" : "pdf-download");
+    markBilledAndLog(`${how.startsWith("share") ? "share" : "download"}-${format}`);
   }, [invoicePreview, contract, data.settings, markBilledAndLog, pdfArgsFor, showNotice]);
 
   if (contracts.length === 0) {
@@ -1646,11 +1649,11 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               </table>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={sendInvoice} style={{
+              <button onClick={() => setFmtOpen(true)} style={{
                 flex: 2, padding: "14px", borderRadius: 12, border: "none",
                 background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
                 fontSize: 15, fontWeight: 800, cursor: "pointer",
-              }}>{sent ? "Sent ✓" : "Send PDF invoice"}</button>
+              }}>{sent ? "Sent ✓" : "Send invoice…"}</button>
               <button onClick={async () => { await copyToClipboard(invoicePreview.text); markBilledAndLog("clipboard"); }} style={{
                 flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
@@ -1659,6 +1662,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             <div style={{ fontSize: 12, color: T.textMuted, marginTop: 8, textAlign: "center" }}>
               Sending marks these entries as billed.
             </div>
+            <InvoiceFormatChooser open={fmtOpen} onClose={() => setFmtOpen(false)}
+              onPick={(f) => { setFmtOpen(false); sendInvoice(f); }} />
           </>
         )}
       </Modal>

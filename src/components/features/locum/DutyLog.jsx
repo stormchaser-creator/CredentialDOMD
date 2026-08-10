@@ -5,7 +5,8 @@ import { Modal, Field } from "../../shared";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
 import { checkPlacement } from "../../../utils/scheduleGuard";
-import { shareInvoicePdf } from "../../../utils/invoicePdf";
+import { exportInvoice } from "../../../utils/invoiceExport";
+import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
   monthKey, monthLabel,
@@ -171,10 +172,11 @@ function DutyLog({ contract }) {
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
   };
 
-  const sendDutyInvoice = async () => {
+  const [fmtOpen, setFmtOpen] = useState(false);
+  const sendDutyInvoice = async (format) => {
     const s = data.settings || {};
     const subject = `Invoice ${invoicePreview.number} — ${s.name || "Locum"} — ${contract.facility}`;
-    const how = await shareInvoicePdf({
+    const how = await exportInvoice({
       number: invoicePreview.number,
       physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
       npi: s.npi, email: s.email,
@@ -183,9 +185,9 @@ function DutyLog({ contract }) {
       periodStart: invoicePreview.periodStart, periodEnd: invoicePreview.periodEnd,
       terms: invoicePreview.terms, lines: invoicePreview.lines,
       totalMin: 0, total: invoicePreview.total,
-    }, subject, invoicePreview.text);
+    }, format, subject, invoicePreview.text);
     if (how === null) return; // share sheet cancelled
-    markDutyBilled(how.startsWith("share") ? "share-pdf" : "pdf-download");
+    markDutyBilled(`${how.startsWith("share") ? "share" : "download"}-${format}`);
   };
 
   const openNew = () => {
@@ -398,11 +400,13 @@ function DutyLog({ contract }) {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button onClick={sendDutyInvoice} style={{
+                <button onClick={() => setFmtOpen(true)} style={{
                   width: "100%", padding: "14px", borderRadius: 12, border: "none",
                   background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
                   fontSize: 15, fontWeight: 800, cursor: "pointer",
-                }}>Send as PDF</button>
+                }}>Send invoice…</button>
+                <InvoiceFormatChooser open={fmtOpen} onClose={() => setFmtOpen(false)}
+                  onPick={(f) => { setFmtOpen(false); sendDutyInvoice(f); }} />
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => { copyToClipboard(invoicePreview.text); markDutyBilled("copy"); }} style={{
                     flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${T.border}`,

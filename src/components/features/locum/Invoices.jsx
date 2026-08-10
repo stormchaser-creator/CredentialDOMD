@@ -4,7 +4,9 @@ import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
 import { formatDate, mailtoHref } from "../../../utils/helpers";
 import { SendIcon, TrashIcon } from "../../shared/Icons";
-import { shareInvoicePdf, sortInvoiceLines } from "../../../utils/invoicePdf";
+import { sortInvoiceLines } from "../../../utils/invoicePdf";
+import { exportInvoice } from "../../../utils/invoiceExport";
+import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
@@ -117,12 +119,14 @@ function Invoices() {
   };
   const markUnpaid = (inv) => editItem("invoices", { ...inv, paidAt: null, payments: [] });
 
-  const resend = async (inv) => {
-    // Rebuild the PDF from the stored line items when we have them
+  // Format chooser state: which invoice is about to be sent, in what shape
+  const [sendFor, setSendFor] = useState(null);
+  const resend = async (inv, format = "pdf") => {
+    // Rebuild the document from the stored line items when we have them
     if (inv.lines?.length) {
       const c = contracts.find(x => x.id === inv.contractId);
       const s = data.settings || {};
-      const how = await shareInvoicePdf({
+      const how = await exportInvoice({
         number: inv.number,
         physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
         npi: s.npi, email: s.email,
@@ -131,7 +135,7 @@ function Invoices() {
         terms: inv.terms, lines: inv.lines,
         totalMin: inv.totalMinutes, total: inv.totalAmount,
         issuedDate: inv.sentAt?.slice(0, 10),
-      }, `Invoice ${inv.number}`, inv.text);
+      }, format, `Invoice ${inv.number}`, inv.text);
       if (how && how.includes("+cover")) {
         setNotice("The cover email is on your clipboard — if Mail squashed the message body into one line, select it and paste to get the proper letter.");
         setTimeout(() => setNotice(null), 9000);
@@ -378,7 +382,7 @@ function Invoices() {
               </div>
             )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
-              <button onClick={() => resend(viewInv)} style={{
+              <button onClick={() => (viewInv.lines?.length ? setSendFor(viewInv) : resend(viewInv))} style={{
                 padding: "12px 18px", borderRadius: 10, border: "none",
                 backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
               }}>Share PDF</button>
@@ -478,7 +482,7 @@ function Invoices() {
                     backgroundColor: T.success || "#22c55e", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
                   }}>{isPartial ? "＄ Record another payment" : "＄ Record payment"}</button>
                 )}
-                <button onClick={(ev) => { ev.stopPropagation(); resend(inv); }} style={{
+                <button onClick={(ev) => { ev.stopPropagation(); if (inv.lines?.length) setSendFor(inv); else resend(inv); }} style={{
                   padding: "8px 12px", borderRadius: 10, border: "none",
                   backgroundColor: T.shareGlow, color: T.share, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   display: "inline-flex", alignItems: "center", gap: 5,
@@ -492,6 +496,9 @@ function Invoices() {
           );
         })}
       </div>
+
+      <InvoiceFormatChooser open={!!sendFor} onClose={() => setSendFor(null)}
+        onPick={(f) => { const inv = sendFor; setSendFor(null); resend(inv, f); }} />
     </div>
   );
 }
