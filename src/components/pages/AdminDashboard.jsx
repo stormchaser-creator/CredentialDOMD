@@ -15,6 +15,7 @@ export default function AdminDashboard() {
   const [tickets, setTickets] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [signups, setSignups] = useState([]);
+  const [visits, setVisits] = useState([]);
   const [waitlist, setWaitlist] = useState([]);
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,9 +105,10 @@ export default function AdminDashboard() {
       supabase.from("admin_tickets_open").select("*").limit(50),
       supabase.from("admin_feedback_recent").select("*").limit(50),
       supabase.from("admin_signups_daily").select("*").limit(30),
+      supabase.from("admin_visits_daily").select("*").limit(30),
       supabase.from("early_access_leads").select("name,email,source,created_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
-    ]).then(([t, f, s, w, fp]) => {
+    ]).then(([t, f, s, v, w, fp]) => {
       if (cancelled) return;
       if (t.error) setError(`Tickets: ${t.error.message}`);
       else setTickets(t.data || []);
@@ -114,6 +116,7 @@ export default function AdminDashboard() {
       else setFeedback(f.data || []);
       if (s.error) setError((prev) => prev || `Signups: ${s.error.message}`);
       else setSignups(s.data || []);
+      if (!v.error) setVisits(v.data || []);
       if (w.error) setError((prev) => prev || `Waitlist: ${w.error.message}`);
       else setWaitlist(w.data || []);
       if (fp.error) setError((prev) => prev || `Fields: ${fp.error.message}`);
@@ -206,7 +209,33 @@ export default function AdminDashboard() {
           )}
         </>
       )}
-      {tab === "signups"  && !loading && <SignupsList rows={signups} T={T} />}
+      {tab === "signups"  && !loading && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
+            Webpage visits
+          </div>
+          {visits.length === 0 ? (
+            <div style={{ padding: "12px 14px", borderRadius: 10, backgroundColor: T.card, border: `1px solid ${T.border}`, fontSize: 13, color: T.textMuted, marginBottom: 16 }}>
+              No visits recorded yet — first-party tracking went live Aug 10, 2026. Every landing-page load (home + all 50 state pages) now logs here.
+            </div>
+          ) : (
+            <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 800, color: T.textMuted, paddingBottom: 6, borderBottom: `1px solid ${T.border}` }}>
+                <span>Day</span><span>Visits</span><span>Home</span><span>States</span><span>Referred</span>
+              </div>
+              {visits.map(v => (
+                <div key={v.day} style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 12.5, color: T.text, padding: "5px 0", borderBottom: `1px solid ${T.border}` }}>
+                  <span>{v.day}</span><span style={{ fontWeight: 800 }}>{v.visits}</span><span>{v.home}</span><span>{v.state_pages}</span><span>{v.referred}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
+            Signups
+          </div>
+          <SignupsList rows={signups} T={T} />
+        </>
+      )}
       {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} T={T} />}
       {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}
 

@@ -58,16 +58,23 @@
 }
 </script>
 
-<!-- Google Analytics 4 (placeholder; replace G-XXXXXXXXXX with real Measurement ID, or remove if not yet provisioned) -->
-<!--
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+<!-- First-party visit beacon: path + referrer only, no cookies, no PII.
+     Readable only in Admin -> Signups (RLS: insert-only for the public key). -->
 <script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-XXXXXXXXXX', { anonymize_ip: true });
+(function(){try{
+  if (navigator.webdriver) return;
+  var q = new URLSearchParams(location.search);
+  fetch('https://hkpnnsjcwprrwobmpqyy.supabase.co/rest/v1/page_visits', {
+    method: 'POST', keepalive: true,
+    headers: { 'Content-Type': 'application/json', 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U', 'Prefer': 'return=minimal' },
+    body: JSON.stringify({
+      path: location.pathname.slice(0, 200),
+      referrer: (document.referrer || '').slice(0, 300),
+      source: (q.get('utm_source') || '').slice(0, 100)
+    })
+  });
+}catch(e){}})();
 </script>
--->
 
 
 <!-- Favicon -->
