@@ -176,6 +176,20 @@ export function invoicePdfFile(inv) {
  * uses this as the message body, so the recipient gets a real letter,
  * not a bare subject line with an attachment.
  */
+/**
+ * Share-sheet text: iOS Mail strips EVERY line break from text shared with a
+ * file (CRLF included — verified), so the only body that survives is one
+ * written as a single flowing paragraph. The full letter still rides the
+ * clipboard for anyone who wants the long form.
+ */
+export function invoiceCoverBlurb(inv) {
+  const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const period = inv.periodStart
+    ? `${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? ` through ${formatDate(inv.periodEnd)}` : ""}`
+    : null;
+  return `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. Total due: ${money(inv.total)}. The attachment itemizes each day of coverage and the work performed under the terms of our agreement. Please reply with any questions. Thank you, ${inv.physician || ""}${inv.npi ? `, NPI ${inv.npi}` : ""}${inv.email ? ` (${inv.email})` : ""}.`;
+}
+
 export function invoiceCoverEmail(inv) {
   const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const period = inv.periodStart
@@ -208,7 +222,7 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
   try { await navigator.clipboard.writeText(cover); coverCopied = true; } catch { /* clipboard unavailable */ }
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: cover, files: [file] });
+      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: invoiceCoverBlurb(inv), files: [file] });
       return coverCopied ? "share+cover" : "share";
     } catch (err) {
       if (err?.name === "AbortError") return null;

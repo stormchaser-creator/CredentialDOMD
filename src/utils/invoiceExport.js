@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { formatDate } from "./helpers.js";
-import { shareInvoicePdf, sortInvoiceLines, invoiceCoverEmail } from "./invoicePdf.js";
+import { shareInvoicePdf, sortInvoiceLines, invoiceCoverEmail, invoiceCoverBlurb } from "./invoicePdf.js";
 
 /**
  * Invoice export in the physician's format of choice. All three formats
@@ -121,15 +121,15 @@ export async function invoiceDocxFile(inv) {
  * (Mail may flatten it) AND on the clipboard (paste keeps the formatting) —
  * so a Word/Excel send never produces an attachment with an empty email.
  */
-async function shareOrDownload(file, title, cover) {
+async function shareOrDownload(file, title, { letter, blurb } = {}) {
   let coverCopied = false;
-  if (cover) {
-    try { await navigator.clipboard.writeText(cover); coverCopied = true; } catch { /* clipboard unavailable */ }
+  if (letter) {
+    try { await navigator.clipboard.writeText(letter); coverCopied = true; } catch { /* clipboard unavailable */ }
   }
   const tag = coverCopied ? "+cover" : "";
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ title, text: cover || undefined, files: [file] });
+      await navigator.share({ title, text: blurb || undefined, files: [file] });
       return "share" + tag;
     } catch (err) {
       if (err?.name === "AbortError") return null;
@@ -147,7 +147,8 @@ async function shareOrDownload(file, title, cover) {
  * Returns "share*" / "download" like shareInvoicePdf, or null on cancel.
  */
 export async function exportInvoice(inv, format, subject, fallbackText) {
-  if (format === "xlsx") return shareOrDownload(invoiceXlsxFile(inv), subject, invoiceCoverEmail(inv));
-  if (format === "docx") return shareOrDownload(await invoiceDocxFile(inv), subject, invoiceCoverEmail(inv));
+  const covers = { letter: invoiceCoverEmail(inv), blurb: invoiceCoverBlurb(inv) };
+  if (format === "xlsx") return shareOrDownload(invoiceXlsxFile(inv), subject, covers);
+  if (format === "docx") return shareOrDownload(await invoiceDocxFile(inv), subject, covers);
   return shareInvoicePdf(inv, subject, fallbackText);
 }

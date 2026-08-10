@@ -1190,7 +1190,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const how = await exportInvoice(pdfArgsFor(invoicePreview), format, subject, invoicePreview.text);
     if (how === null) return; // user cancelled the share sheet
     if (how.includes("+cover")) {
-      showNotice("The cover email is on your clipboard — if Mail squashed the message body into one line, select it and paste to get the proper letter.");
+      showNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard — paste it over the intro if you want the long form.");
     }
     markBilledAndLog(`${how.startsWith("share") ? "share" : "download"}-${format}`);
   }, [invoicePreview, contract, data.settings, markBilledAndLog, pdfArgsFor, showNotice]);

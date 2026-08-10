@@ -140,7 +140,7 @@ function Invoices() {
         issuedDate: inv.sentAt?.slice(0, 10),
       }, format, `Invoice ${inv.number}`, inv.text);
       if (how && how.includes("+cover")) {
-        setNotice("The cover email is on your clipboard — if Mail squashed the message body into one line, select it and paste to get the proper letter.");
+        setNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard — paste it over the intro if you want the long form.");
         setTimeout(() => setNotice(null), 9000);
       }
       return;
