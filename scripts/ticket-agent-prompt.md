@@ -15,7 +15,7 @@ Supabase project `hkpnnsjcwprrwobmpqyy`. Query via the management API:
 
 ```bash
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w)
-printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at FROM support_tickets t WHERE t.status = %sopen%s ORDER BY t.created_at"}' "'" "'" > /tmp/tickets.json
+printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s) ORDER BY t.created_at"}' "'" "'" > /tmp/tickets.json
 curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d @/tmp/tickets.json
 ```

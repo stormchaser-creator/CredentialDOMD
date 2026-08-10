@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { formatDate } from "./helpers.js";
-import { shareInvoicePdf, sortInvoiceLines } from "./invoicePdf.js";
+import { shareInvoicePdf, sortInvoiceLines, invoiceCoverEmail } from "./invoicePdf.js";
 
 /**
  * Invoice export in the physician's format of choice. All three formats
@@ -39,7 +39,16 @@ export function invoiceXlsxFile(inv) {
     ...(inv.terms ? [[], [`Terms: ${inv.terms}`]] : []),
   ];
   const ws = XLSX.utils.aoa_to_sheet(head);
-  ws["!cols"] = [{ wch: 14 }, { wch: 34 }, { wch: 52 }, { wch: 14 }];
+  ws["!cols"] = [{ wch: 14 }, { wch: 42 }, { wch: 60 }, { wch: 14 }];
+  // Amounts as real currency numbers so Excel right-aligns and can sum them
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  for (let r = 10; r <= range.e.r; r++) {
+    const addr = XLSX.utils.encode_cell({ r, c: 3 });
+    const c = ws[addr];
+    if (!c || typeof c.v !== "string") continue;
+    const m = c.v.match(/^\+?\$([\d,]+\.\d{2})$/);
+    if (m) { c.t = "n"; c.v = parseFloat(m[1].replace(/,/g, "")); c.z = '"$"#,##0.00'; }
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Invoice");
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -52,7 +61,12 @@ export function invoiceXlsxFile(inv) {
 // package shouldn't ride in anyone's bundle until the first Word export.
 export async function invoiceDocxFile(inv) {
   const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle } = await import("docx");
-  const cell = (text, { bold = false, right = false, header = false } = {}) => new TableCell({
+  // Explicit DXA widths everywhere — percentage table widths render as a
+  // collapsed sliver in Quick Look / Pages (the lib emits "100%" into a
+  // numeric field). 9360 twips = 6.5" usable width on letter paper.
+  const COLW = [1450, 2500, 3960, 1450];
+  const cell = (text, { bold = false, right = false, header = false, col = 0 } = {}) => new TableCell({
+    width: { size: COLW[col], type: WidthType.DXA },
     shading: header ? { fill: "0A2540" } : undefined,
     children: [new Paragraph({
       alignment: right ? AlignmentType.RIGHT : AlignmentType.LEFT,
@@ -60,11 +74,11 @@ export async function invoiceDocxFile(inv) {
     })],
   });
   const rows = [
-    new TableRow({ children: ["Date", "Item", "Details", "Amount"].map(h => cell(h, { header: true })) }),
+    new TableRow({ children: ["Date", "Item", "Details", "Amount"].map((h, i) => cell(h, { header: true, col: i })) }),
     ...tableRows(inv).map(r => new TableRow({
-      children: [cell(r[0]), cell(r[1], { bold: true }), cell(r[2]), cell(r[3], { right: true, bold: true })],
+      children: [cell(r[0], { col: 0 }), cell(r[1], { bold: true, col: 1 }), cell(r[2], { col: 2 }), cell(r[3], { right: true, bold: true, col: 3 })],
     })),
-    new TableRow({ children: [cell(""), cell(""), cell("TOTAL", { bold: true }), cell(money(inv.total), { right: true, bold: true })] }),
+    new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("TOTAL", { bold: true, col: 2 }), cell(money(inv.total), { right: true, bold: true, col: 3 })] }),
   ];
   const p = (text, opts = {}) => new Paragraph({ children: [new TextRun({ text, ...opts })] });
   const doc = new Document({
@@ -85,7 +99,8 @@ export async function invoiceDocxFile(inv) {
         ...([inv.location, inv.billTo].filter(Boolean).map(t => p(String(t), { size: 18, color: "666666" }))),
         p(""),
         new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
+          width: { size: 9360, type: WidthType.DXA },
+          columnWidths: COLW,
           borders: { insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD" } },
           rows,
         }),
@@ -100,12 +115,22 @@ export async function invoiceDocxFile(inv) {
   });
 }
 
-/** Share-sheet first (Save to Files / AirDrop / Mail), download fallback. */
-async function shareOrDownload(file, title) {
+/**
+ * Share-sheet first (Save to Files / AirDrop / Mail), download fallback.
+ * The cover letter rides along exactly like the PDF path: as share text
+ * (Mail may flatten it) AND on the clipboard (paste keeps the formatting) —
+ * so a Word/Excel send never produces an attachment with an empty email.
+ */
+async function shareOrDownload(file, title, cover) {
+  let coverCopied = false;
+  if (cover) {
+    try { await navigator.clipboard.writeText(cover); coverCopied = true; } catch { /* clipboard unavailable */ }
+  }
+  const tag = coverCopied ? "+cover" : "";
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ title, files: [file] });
-      return "share";
+      await navigator.share({ title, text: cover || undefined, files: [file] });
+      return "share" + tag;
     } catch (err) {
       if (err?.name === "AbortError") return null;
     }
@@ -114,7 +139,7 @@ async function shareOrDownload(file, title) {
   const a = document.createElement("a");
   a.href = url; a.download = file.name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  return "download";
+  return "download" + tag;
 }
 
 /**
@@ -122,7 +147,7 @@ async function shareOrDownload(file, title) {
  * Returns "share*" / "download" like shareInvoicePdf, or null on cancel.
  */
 export async function exportInvoice(inv, format, subject, fallbackText) {
-  if (format === "xlsx") return shareOrDownload(invoiceXlsxFile(inv), subject);
-  if (format === "docx") return shareOrDownload(await invoiceDocxFile(inv), subject);
+  if (format === "xlsx") return shareOrDownload(invoiceXlsxFile(inv), subject, invoiceCoverEmail(inv));
+  if (format === "docx") return shareOrDownload(await invoiceDocxFile(inv), subject, invoiceCoverEmail(inv));
   return shareInvoicePdf(inv, subject, fallbackText);
 }

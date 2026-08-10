@@ -32,8 +32,11 @@ function Invoices() {
   const contracts = data.locumContracts || [];
   const facilityOf = (cid) => contracts.find(c => c.id === cid)?.facility || "Contract";
 
+  // Newest SERVICE PERIOD first — sorting by sentAt put backfilled invoices
+  // (entered later) above work that happened after them.
+  const periodKey = (i) => String(i.periodEnd || i.periodStart || i.sentAt || "");
   const invoices = useMemo(
-    () => [...(data.invoices || [])].sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || "")),
+    () => [...(data.invoices || [])].sort((a, b) => periodKey(b).localeCompare(periodKey(a))),
     [data.invoices]
   );
   // Payments are a ledger, not a flag — agencies sometimes pay an invoice in
