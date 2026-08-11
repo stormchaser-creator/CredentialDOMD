@@ -2851,15 +2851,17 @@ footer {
     var email = (input.value || '').trim();
     var name = (nameInput.value || '').trim();
     if (!email || !name) return;
-    // Spam gates: bots fill the hidden field or submit within seconds of
-    // page load. Both get a quiet fake success and never reach the server.
+    // Spam gates: bots that fill the hidden field get a quiet fake success.
+    // A fast submit is NOT dropped — autofill users beat any timer — it goes
+    // through tagged for review instead. Never lose a real signup.
     var honeypot = (document.getElementById('waitlist-website').value || '').trim();
-    if (honeypot || Date.now() - loadedAt < 4000) {
+    if (honeypot) {
       msg.style.color = 'var(--emerald)';
       msg.textContent = "You're on the list. One email when the doors open — that's it.";
       form.reset();
       return;
     }
+    var fastNote = (Date.now() - loadedAt < 4000) ? 'fast-submit' : null;
     btn.disabled = true;
     btn.textContent = 'Joining…';
     msg.textContent = '';
@@ -2871,7 +2873,7 @@ footer {
         'Authorization': 'Bearer ' + SUPABASE_ANON,
         'Prefer': 'return=minimal'
       },
-      body: JSON.stringify({ email: email, name: name, source: window.location.pathname || '/' })
+      body: JSON.stringify({ email: email, name: name, source: window.location.pathname || '/', note: fastNote })
     }).then(function(res) {
       btn.disabled = false;
       btn.textContent = 'Join the list';
