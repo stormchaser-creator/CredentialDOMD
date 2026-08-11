@@ -8,6 +8,7 @@ import { incomeByState, deductionTotal, estimate } from "../../../utils/taxEngin
 import { allDeductions } from "../../../utils/deductions";
 import { FED, TAX_YEAR, VERIFIED_NOTE } from "../../../utils/taxConstants";
 import { TrashIcon } from "../../shared/Icons";
+import StatementImport from "./StatementImport";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const money2 = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -79,6 +80,7 @@ function TaxPrep() {
   );
 
   const [showAssumptions, setShowAssumptions] = useState(!tp.scorpSalary);
+  const [showImport, setShowImport] = useState(false);
 
   return (
     <div>
@@ -143,6 +145,11 @@ function TaxPrep() {
         ))}
         {line("Gross collected", money2(income.total), { big: true })}
         {line("Deductions (ledger, meals at 50%)", `− ${money2(est.deductions)}`)}
+        <button onClick={() => setShowImport(true)} style={{
+          width: "100%", margin: "6px 0", padding: "10px", borderRadius: 10,
+          border: `1px dashed ${T.accent}`, backgroundColor: "transparent",
+          color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
+        }}>Upload card statement — import deductions</button>
         {line("Net business profit", money2(est.profit), { big: true })}
         {income.unassignedInvoices.length > 0 && (
           <div style={{ fontSize: 12, color: T.warning, fontWeight: 600, marginTop: 6 }}>
@@ -233,6 +240,8 @@ function TaxPrep() {
       <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.5, padding: "0 4px 12px" }}>
         Planning estimate on {VERIFIED_NOTE.toLowerCase()} Assumes MFJ, CA residence, revenue-share apportionment, and no PTET election; your CPA's return controls. Reimbursed travel (expense invoices) is excluded from income, and card-import meals are counted at 50%.
       </div>
+
+      <StatementImport open={showImport} onClose={() => setShowImport(false)} />
 
       <Modal open={!!payFor} onClose={() => setPayFor(null)} title={`Record payment — ${JURISDICTIONS.find(j => j.id === payFor)?.label || ""}`}>
         <Field label="Amount ($)"><input type="number" inputMode="decimal" autoFocus value={payForm.amount || ""} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} style={iS} /></Field>

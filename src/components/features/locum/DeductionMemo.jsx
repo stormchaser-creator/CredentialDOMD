@@ -124,7 +124,7 @@ export default function DeductionMemo() {
   return (
     <div>
       <div style={{
-        display: "flex", justifyContent: "space-between",
+        display: "flex", justifyContent: "space-between", flexWrap: "wrap",
         alignItems: "flex-start", marginBottom: 12, gap: 8,
       }}>
         <div>
