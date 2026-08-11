@@ -134,14 +134,23 @@ export function buildInvoicePdf(inv) {
 
   // ── Totals ──
   let ty = doc.lastAutoTable.finalY + 6;
+  // A resend after a partial payment shows what's left, not the original total
+  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
+  if (hasPartialPayment) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(90, 90, 90);
+    doc.text(`Invoice total ${money(inv.total)}  ·  Paid ${money(inv.paid)}`, W - M, ty, { align: "right" });
+    ty += 6;
+  }
   doc.setFillColor(...EMERALD);
   doc.roundedRect(W - M - 70, ty - 2, 70, 12, 2, 2, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text("TOTAL DUE", W - M - 65, ty + 5.6);
+  doc.text(hasPartialPayment ? "BALANCE DUE" : "TOTAL DUE", W - M - 65, ty + 5.6);
   doc.setFontSize(12);
-  doc.text(money(inv.total), W - M - 5, ty + 5.8, { align: "right" });
+  doc.text(money(hasPartialPayment ? inv.balance : inv.total), W - M - 5, ty + 5.8, { align: "right" });
 
   // ── Terms + footer ──
   ty += 20;
@@ -187,7 +196,11 @@ export function invoiceCoverBlurb(inv) {
   const period = inv.periodStart
     ? `${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? ` through ${formatDate(inv.periodEnd)}` : ""}`
     : null;
-  return `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. Total due: ${money(inv.total)}. The invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions. Thank you, ${inv.physician || ""}${inv.npi ? `, NPI ${inv.npi}` : ""}${inv.email ? ` (${inv.email})` : ""}.`;
+  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
+  const totalLine = hasPartialPayment
+    ? `Total due: ${money(inv.total)}. ${money(inv.paid)} received to date — balance due: ${money(inv.balance)}.`
+    : `Total due: ${money(inv.total)}.`;
+  return `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. ${totalLine} The invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions. Thank you, ${inv.physician || ""}${inv.npi ? `, NPI ${inv.npi}` : ""}${inv.email ? ` (${inv.email})` : ""}.`;
 }
 
 export function invoiceCoverEmail(inv) {
@@ -197,9 +210,13 @@ export function invoiceCoverEmail(inv) {
     : null;
   // CRLF line endings — the iOS share sheet collapses bare \n when text
   // rides along with a file, which turned the letter into a run-on.
+  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
+  const totalLine = hasPartialPayment
+    ? `The total is ${money(inv.total)}. We've received ${money(inv.paid)} to date — the balance due is ${money(inv.balance)}.`
+    : `The total due is ${money(inv.total)}.`;
   const paras = [
     "Hello,",
-    `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. The total due is ${money(inv.total)}.`,
+    `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. ${totalLine}`,
     "The attached invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions.",
     `Thank you,\r\n${inv.physician || ""}${inv.npi ? `\r\nNPI ${inv.npi}` : ""}${inv.email ? `\r\n${inv.email}` : ""}`,
   ];

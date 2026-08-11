@@ -137,6 +137,8 @@ function Invoices() {
         periodStart: inv.periodStart, periodEnd: inv.periodEnd,
         terms: inv.terms, lines: inv.lines,
         totalMin: inv.totalMinutes, total: inv.totalAmount,
+        // A resend can follow a partial payment — the document should say so
+        paid: paidOf(inv), balance: balanceOf(inv),
         issuedDate: inv.sentAt?.slice(0, 10),
       }, format, `Invoice ${inv.number}`, inv.text);
       if (how && how.includes("+cover")) {

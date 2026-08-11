@@ -36,6 +36,9 @@ export function invoiceXlsxFile(inv) {
     ...tableRows(inv),
     [],
     ["", "", "TOTAL", money(inv.total)],
+    ...(inv.paid > 0.005 && inv.balance > 0.005
+      ? [["", "", "Paid", money(inv.paid)], ["", "", "BALANCE DUE", money(inv.balance)]]
+      : []),
     ...(inv.terms ? [[], [`Terms: ${inv.terms}`]] : []),
   ];
   const ws = XLSX.utils.aoa_to_sheet(head);
@@ -73,12 +76,17 @@ export async function invoiceDocxFile(inv) {
       children: [new TextRun({ text: String(text), bold: bold || header, color: header ? "FFFFFF" : undefined, size: 18 })],
     })],
   });
+  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
   const rows = [
     new TableRow({ children: ["Date", "Item", "Details", "Amount"].map((h, i) => cell(h, { header: true, col: i })) }),
     ...tableRows(inv).map(r => new TableRow({
       children: [cell(r[0], { col: 0 }), cell(r[1], { bold: true, col: 1 }), cell(r[2], { col: 2 }), cell(r[3], { right: true, bold: true, col: 3 })],
     })),
     new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("TOTAL", { bold: true, col: 2 }), cell(money(inv.total), { right: true, bold: true, col: 3 })] }),
+    ...(hasPartialPayment ? [
+      new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("Paid", { col: 2 }), cell(money(inv.paid), { right: true, col: 3 })] }),
+      new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("BALANCE DUE", { bold: true, col: 2 }), cell(money(inv.balance), { right: true, bold: true, col: 3 })] }),
+    ] : []),
   ];
   const p = (text, opts = {}) => new Paragraph({ children: [new TextRun({ text, ...opts })] });
   const doc = new Document({
