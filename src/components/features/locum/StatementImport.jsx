@@ -2,7 +2,7 @@ import { memo, useRef, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import Modal from "../../shared/Modal";
 import { generateId } from "../../../utils/helpers";
-import { analyzeStatement } from "../../../utils/documentScanner";
+import { analyzeStatement, categorizeStatementRows } from "../../../utils/documentScanner";
 
 /**
  * StatementImport — turn the business card's statement into deduction lines.
@@ -116,7 +116,7 @@ function StatementImport({ open, onClose }) {
   const dedupKey = (d, a, m) => `${d}|${(parseFloat(a) || 0).toFixed(2)}|${String(m).toLowerCase().slice(0, 20)}`;
   const existing = new Set((data.deductibles || []).map(x => dedupKey(x.date, x.amount, x.merchant || x.description)));
 
-  const toReview = (txns) => {
+  const toReview = async (txns) => {
     const seen = new Set();
     const rs = txns
       .filter(t => t.date && (parseFloat(t.amount) || 0) > 0)
@@ -132,6 +132,18 @@ function StatementImport({ open, onClose }) {
       })
       .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
     if (!rs.length) { setError("No transactions found in that file."); return; }
+    // AI pass: the keyword map is the floor; the model assigns the rest so
+    // the ledger reaches the CPA properly categorized, not a wall of Other.
+    if (data.settings.apiKey) {
+      try {
+        const ai = await categorizeStatementRows(
+          rs.map(r => ({ merchant: r.merchant, amount: r.amount })), CATEGORIES, data.settings.apiKey
+        );
+        if (ai) for (const { i, category } of ai) {
+          if (rs[i] && CATEGORIES.includes(category)) rs[i] = { ...rs[i], category };
+        }
+      } catch { /* keyword categories stand */ }
+    }
     setRows(rs);
   };
 
@@ -139,14 +151,14 @@ function StatementImport({ open, onClose }) {
     setError(null); setDone(null); setBusy(true);
     try {
       if (/csv|text/.test(file.type) || /\.csv$/i.test(file.name)) {
-        toReview(parseCsv(await file.text()));
+        await toReview(parseCsv(await file.text()));
       } else {
         const dataUrl = await new Promise((res, rej) => {
           const r = new FileReader();
           r.onload = () => res(r.result); r.onerror = rej;
           r.readAsDataURL(file);
         });
-        toReview(await analyzeStatement(dataUrl, data.settings.apiKey));
+        await toReview(await analyzeStatement(dataUrl, data.settings.apiKey));
       }
     } catch (e) {
       setError(e.message || "Could not read that file.");

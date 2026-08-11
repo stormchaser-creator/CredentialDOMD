@@ -423,3 +423,25 @@ export async function analyzeStatement(dataUrl, apiKey) {
   if (!parsed || !Array.isArray(parsed.transactions)) throw new Error("Could not read transactions from this statement.");
   return parsed.transactions;
 }
+
+// AI categorization for statement rows — the keyword map catches the obvious
+// merchants; everything else goes to the model with the allowed category
+// list so "tax prep" categories are chosen, not invented.
+export async function categorizeStatementRows(rows, categories, apiKey) {
+  if (!apiKey || !rows.length) return null;
+  const listing = rows.map((r, i) => `${i}|${r.merchant}|$${r.amount}`).join("\n");
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: `You categorize a physician's business credit-card charges for Schedule C tax prep. Allowed categories (use EXACTLY these strings):\n${categories.map(c => `- ${c}`).join("\n")}\nReturn ONLY JSON: {"rows":[{"i":<index>,"category":"<exact category>"}]} — one entry per input row. Hotels/lodging → lodging; airlines → airfare; restaurants/coffee/delivery → the meals category; medical boards and state agencies → licensing; software subscriptions → SaaS. When genuinely unknowable from the merchant name, use "Other deductible expense".` }] },
+      contents: [{ parts: [{ text: `index|merchant|amount\n${listing}` }, { text: "Categorize every row. Return only JSON." }] }],
+      generationConfig: { maxOutputTokens: 16384, thinkingConfig: { thinkingBudget: 0 } },
+    }),
+  });
+  if (!response.ok) handleApiError(response.status);
+  const json = await response.json();
+  const parsed = parseResponse(json);
+  if (!parsed || !Array.isArray(parsed.rows)) return null;
+  return parsed.rows;
+}
