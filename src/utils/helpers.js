@@ -216,7 +216,8 @@ export function describeItem(item, physicianName, sectionKey) {
     case "malpracticeHistory":
       return join(t(item.outcome) || "Claim", t(item.facility) || t(item.state));
     case "memberships":
-      return join(t(item.role), t(item.organization)) || "Membership";
+      // Organization leads — role-first made every card read "Member — …"
+      return join(t(item.organization), t(item.role)) || "Membership";
     case "peerReferences":
       return join(t(item.name) || "Reference", t(item.degree));
     case "travelDocs":

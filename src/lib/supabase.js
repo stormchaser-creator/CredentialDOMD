@@ -53,7 +53,10 @@ function toSnakeObj(obj) {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
-    out[camelToSnake(k)] = v;
+    // "" into a date/numeric column rejects the ENTIRE row — a membership
+    // with blank dues would silently never reach the cloud. Null is what
+    // an empty form field means everywhere.
+    out[camelToSnake(k)] = v === "" ? null : v;
   }
   return out;
 }

@@ -421,7 +421,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               />
             ) : (
               <input
-                type={f.type || "text"}
+                type={f.type === "currency" ? "number" : f.type || "text"}
+                inputMode={f.type === "currency" ? "decimal" : undefined}
+                step={f.type === "currency" ? "0.01" : undefined}
+                min={f.type === "currency" ? "0" : undefined}
                 value={form[f.key] || ""}
                 onChange={e => setField(f.key, e.target.value)}
                 placeholder={f.placeholder}
@@ -531,6 +534,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {(() => {
                     const v = viewItem[f.key];
+                    if (f.type === "currency") {
+                      const n = parseFloat(v);
+                      return isNaN(n) ? String(v) : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    }
                     if (f.type === "month") {
                       // "2018-08" → "Aug 2018 · 8 years" — the derived count
                       // stays current forever, which is the point of the field.
@@ -718,10 +725,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                             </div>
                           )}
                           <div style={{ fontSize: 13, color: T.textDim, marginTop: 1 }}>
-                            {[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber, item.number]
-                              .filter(Boolean).filter(v => !said(v)).join(" \u00b7 ")}
-                            {item.graduationDate && !item.expirationDate && (" \u00b7 Graduated " + new Date(item.graduationDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }))}
-                            {item.expirationDate && (" \u00b7 " + getStatusLabel(item.expirationDate))}
+                            {(() => {
+                              const fmtMoney = (n) => `$${parseFloat(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+                              return [
+                                ...[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber, item.number]
+                                  .filter(Boolean).filter(v => !said(v)),
+                                parseFloat(item.cost) > 0 && `${fmtMoney(item.cost)}/yr`,
+                                parseFloat(item.renewalCost) > 0 && `${fmtMoney(item.renewalCost)} renewal`,
+                                item.graduationDate && !item.expirationDate && ("Graduated " + new Date(item.graduationDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" })),
+                                item.expirationDate && getStatusLabel(item.expirationDate),
+                              ].filter(Boolean).join(" \u00b7 ");
+                            })()}
                           </div>
                         </>
                       );
