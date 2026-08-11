@@ -32,7 +32,19 @@ function RVULog() {
   const [err, setErr] = useState(null);
   const [review, setReview] = useState(null); // { items, questions, confidence }
   const [date, setDate] = useState(localDate(new Date()));
-  const [contractId, setContractId] = useState(contracts[0]?.id || "");
+  // The contract defaults to WHERE THE SURGEON IS — the contract whose
+  // coverage period contains the entry date. contracts[0] as a default
+  // silently mis-attributed weeks of RVUs to the wrong facility.
+  const coveringContract = useCallback((d) =>
+    contracts.find(c => (c.coveragePeriods || []).some(p => p.start && d >= p.start && d <= (p.end || p.start)))?.id || "",
+    [contracts]);
+  const [contractId, setContractId] = useState(() => coveringContract(localDate(new Date())) || contracts[0]?.id || "");
+  const [contractPinned, setContractPinned] = useState(false);
+  useEffect(() => {
+    if (contractPinned) return;
+    const cov = coveringContract(date);
+    if (cov) setContractId(cov);
+  }, [date, contractPinned, coveringContract]);
   const [viewEnc, setViewEnc] = useState(null);   // encounter opened for detail/edit
   const [encDraft, setEncDraft] = useState(null); // its editable copy
   const [encQ, setEncQ] = useState("");           // code search inside the modal
@@ -112,8 +124,9 @@ function RVULog() {
 
   const save = useCallback(() => {
     if (!review?.items?.length) return;
+    const encId = generateId();
     addItem("encounters", {
-      id: generateId(),
+      id: encId,
       createdAt: new Date().toISOString(),
       contractId: contractId || null,
       date,
@@ -121,8 +134,30 @@ function RVULog() {
       note: "",
       spokenText: text,
     });
+    // Surgery-section CPTs (1xxxx-6xxxx) are cases, not rounding — they land
+    // in the career case log automatically, missing role/category, and the
+    // home dashboard nags until the surgeon completes them.
+    const surgical = review.items.filter(({ code }) => {
+      const n = parseInt(code, 10);
+      return Number.isFinite(n) && n >= 10000 && n < 70000;
+    });
+    if (surgical.length) {
+      const wRvu = surgical.reduce((s2, c) => s2 + (c.wRVU || 0) * (c.units || 1), 0);
+      addItem("caseLogs", {
+        id: generateId(),
+        date,
+        title: surgical[0].desc || `CPT ${surgical[0].code}`,
+        category: "Other", // cloud requires one; the dashboard still nags for role
+
+        cptCodes: surgical.map(c => (c.units || 1) > 1 ? `${c.code} x${c.units}` : c.code).join(", "),
+        wRvu: Math.round(wRvu * 100) / 100,
+        facility: contracts.find(c2 => c2.id === contractId)?.facility || "",
+        source: "RVU log",
+        customFields: { "From RVU entry": encId },
+      });
+    }
     setText(""); setReview(null);
-  }, [review, contractId, date, text, addItem]);
+  }, [review, contractId, date, text, addItem, contracts]);
 
   // ── Totals ──
   const totals = useMemo(() => {
@@ -228,7 +263,7 @@ function RVULog() {
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />
               {contracts.length > 1 && (
-                <select value={contractId} onChange={e => setContractId(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
+                <select value={contractId} onChange={e => { setContractId(e.target.value); setContractPinned(true); }} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
                   {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
                 </select>
               )}

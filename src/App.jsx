@@ -830,6 +830,36 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         })()}
       </Modal>
 
+      {/* Surgical cases captured by RVU logging that still need role/category */}
+      {(() => {
+        const incomplete = (data.caseLogs || []).filter(c => !c.role || !c.category);
+        if (!incomplete.length) return null;
+        return (
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "0 0 10px" }}>
+              Cases to complete ({incomplete.length})
+            </h3>
+            <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
+              {incomplete.slice(0, 6).map((c, idx) => (
+                <div key={c.id} onClick={() => { setTab("credentials"); setSubPage("caseLogs"); setAutoEditTarget({ sec: "caseLogs", id: c.id }); }} style={{
+                  display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer",
+                  borderBottom: idx < Math.min(incomplete.length, 6) - 1 ? `1px solid ${T.border}` : "none",
+                }}>
+                  <span style={{ fontSize: 18 }}>{"🔪"}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.cptCodes}</div>
+                    <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 1 }}>
+                      {formatDate(c.date)}{c.wRvu ? ` · ${c.wRvu} wRVU` : ""} · missing {[!c.role && "role", !c.category && "category"].filter(Boolean).join(" + ")}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#f97316", textTransform: "uppercase" }}>Complete</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Credentials List */}
       {allCreds.length > 0 && (
         <div style={{ marginBottom: 20 }}>
@@ -1255,7 +1285,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
         return <>
           <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
           <CaseDictate categories={CASE_CATEGORIES} onDraft={setCaseDraft} />
-          <CrudSection title="Case Logs" sectionKey="caseLogs" items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
+          <CrudSection title="Case Logs" sectionKey="caseLogs" autoEditId={autoEditTarget?.sec === "caseLogs" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
               {item.role && <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{item.role}</span>}
               {caseWRVU(item) > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{caseWRVU(item).toFixed(2)} wRVU</span>}
