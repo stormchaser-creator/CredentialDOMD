@@ -20,7 +20,7 @@ const facilityMatches = (a, b) => {
  * what was billed and collected, the days and hours on the ground, the
  * RVUs logged, and the cases done while there.
  */
-function ContractSummary({ contract, onClose }) {
+function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
   const { data, theme: T } = useApp();
 
   const s = useMemo(() => {
@@ -95,6 +95,45 @@ function ContractSummary({ contract, onClose }) {
         <div style={{ fontSize: 13, color: T.textDim, marginTop: 8 }}>
           {s.duty.length} duty day{s.duty.length === 1 ? "" : "s"} logged · {money(s.dutyEarned)} earned
         </div>
+      )}
+
+      {heading("Terms")}
+      <div style={{ fontSize: 13, color: T.text, lineHeight: 1.7 }}>
+        {[
+          contract.dayRate ? `$${contract.dayRate}/day worked` : null,
+          contract.callStipend ? (contract.stipendHours ? `$${contract.callStipend}/call day (first ${contract.stipendHours}h)` : `$${contract.callStipend}/call period`) : null,
+          contract.overageHourlyRate ? `then $${contract.overageHourlyRate}/hr` : null,
+          contract.hourlyRate ? `$${contract.hourlyRate}/hr` : null,
+          !contract.callStipend && contract.callHourlyRate ? `call $${contract.callHourlyRate}/hr` : null,
+          contract.orientationHourlyRate ? `orientation $${contract.orientationHourlyRate}/hr` : null,
+          contract.orientationFee ? `orientation $${contract.orientationFee}` : null,
+          `${contract.incrementMinutes || 15}-min increments`,
+        ].filter(Boolean).join(" · ")}
+      </div>
+      {contract.notes && (
+        <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 6, whiteSpace: "pre-wrap" }}>{contract.notes}</div>
+      )}
+
+      {docs.length > 0 && (
+        <>
+          {heading(`Agreement documents (${docs.length})`)}
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {docs.map(doc => (
+              <button key={doc.id} onClick={() => onOpenDoc && onOpenDoc(doc)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
+                  borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
+                  color: T.text, fontSize: 12, fontWeight: 600, cursor: doc.data ? "pointer" : "default", textAlign: "left",
+                }}>
+                {doc.type?.startsWith("image/") && doc.data
+                  ? <img src={doc.data} alt={doc.name} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, flexShrink: 0 }} />
+                  : <span style={{ fontSize: 16 }}>{doc.data ? "📕" : "⏳"}</span>}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{doc.name}</span>
+                <span style={{ fontSize: 11, color: T.accent, flexShrink: 0 }}>{doc.data ? "view" : "syncing…"}</span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {s.invoices.length > 0 && (

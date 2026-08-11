@@ -191,6 +191,8 @@ function Contracts() {
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.facility || "Facility"}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: T.accent, flexShrink: 0 }}>summary ›</span>
                   </div>
+                  {/* Identity + dates here — rate terms, docs, and notes
+                      live on the summary page one tap away. */}
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
                     {[
                       item.agency,
@@ -198,36 +200,8 @@ function Contracts() {
                       item.coveragePeriods?.length
                         ? item.coveragePeriods.map(p => `${formatDate(p.start)}${p.end && p.end !== p.start ? " – " + formatDate(p.end) : ""}`).join(", ")
                         : item.startDate && `${formatDate(item.startDate)}${item.endDate ? " – " + formatDate(item.endDate) : ""}`,
-                      item.dayRate ? `$${item.dayRate}/day worked` : null,
-                      item.callStipend ? (item.stipendHours ? `$${item.callStipend}/call day (first ${item.stipendHours}h)` : `$${item.callStipend}/call period`) : null,
-                      item.overageHourlyRate ? `then $${item.overageHourlyRate}/hr` : null,
-                      item.hourlyRate ? `$${item.hourlyRate}/hr` : null,
-                      !item.callStipend && item.callHourlyRate ? `call $${item.callHourlyRate}/hr` : null,
-                      item.orientationHourlyRate ? `orientation $${item.orientationHourlyRate}/hr` : null,
-                      item.orientationFee ? `orientation $${item.orientationFee}` : null,
-                      `${item.incrementMinutes || 15}-min increments`,
                     ].filter(Boolean).join(" · ")}
                   </div>
-                  {linkedDocsFor(item.id).length > 0 && (
-                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
-                      {linkedDocsFor(item.id).map(doc => (
-                        <button key={doc.id}
-                          onClick={() => { if (!doc.data) return; if (doc.type?.startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
-                            borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input,
-                            color: T.text, fontSize: 12, fontWeight: 600, cursor: doc.data ? "pointer" : "default", textAlign: "left",
-                          }}>
-                          {doc.type?.startsWith("image/") && doc.data
-                            ? <img src={doc.data} alt={doc.name} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, flexShrink: 0 }} />
-                            : <span style={{ fontSize: 16 }}>{doc.data ? "📕" : "⏳"}</span>}
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{doc.name}</span>
-                          <span style={{ fontSize: 11, color: T.accent, flexShrink: 0 }}>{doc.data ? "view" : "syncing…"}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {item.notes && <div style={{ fontSize: 12, color: T.textMuted, marginTop: 5, whiteSpace: "pre-wrap" }}>{item.notes}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
                   <button onClick={() => openEdit(item)} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
@@ -239,7 +213,14 @@ function Contracts() {
         </div>
       )}
 
-      {summaryFor && <ContractSummary contract={summaryFor} onClose={() => setSummaryFor(null)} />}
+      {summaryFor && (
+        <ContractSummary
+          contract={summaryFor}
+          onClose={() => setSummaryFor(null)}
+          docs={linkedDocsFor(summaryFor.id)}
+          onOpenDoc={(doc) => { if (!doc.data) return; if (doc.type?.startsWith("image/")) setLightbox(doc); else openPdfDoc(doc); }}
+        />
+      )}
 
       {/* Full-screen picture viewer for uploaded agreements */}
       {lightbox && (
