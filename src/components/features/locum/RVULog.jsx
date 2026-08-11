@@ -173,11 +173,44 @@ function RVULog() {
     return { today: t, month: m, all };
   }, [encounters]);
 
+  // History filters — the log is only useful as a list if you can slice it:
+  // by assignment, by period, by code. Totals recompute for the slice.
+  const [fltContract, setFltContract] = useState("all");
+  const [fltPeriod, setFltPeriod] = useState("30d");
+  const [fltCode, setFltCode] = useState("");
+  const filtered = useMemo(() => {
+    const pad = (n) => String(n).padStart(2, "0");
+    const now = new Date();
+    const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const daysAgo = (n) => { const d = new Date(now); d.setDate(d.getDate() - n); return iso(d); };
+    const thisMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+    const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonth = `${lm.getFullYear()}-${pad(lm.getMonth() + 1)}`;
+    const inPeriod = (d) => {
+      if (!d) return fltPeriod === "all";
+      if (fltPeriod === "all") return true;
+      if (fltPeriod === "month") return d.startsWith(thisMonth);
+      if (fltPeriod === "lastMonth") return d.startsWith(lastMonth);
+      if (fltPeriod === "year") return d.startsWith(String(now.getFullYear()));
+      return d >= daysAgo(fltPeriod === "7d" ? 7 : fltPeriod === "90d" ? 90 : 30);
+    };
+    const q = fltCode.trim().toLowerCase();
+    return encounters.filter(e =>
+      (fltContract === "all" || e.contractId === fltContract)
+      && inPeriod(e.date)
+      && (!q
+        || (e.codes || []).some(c => String(c.code).toLowerCase().includes(q) || String(c.desc || "").toLowerCase().includes(q))
+        || String(e.text || "").toLowerCase().includes(q))
+    );
+  }, [encounters, fltContract, fltPeriod, fltCode]);
+  const fltTotal = useMemo(() => filtered.reduce((s, e) => s + rvuOf(e), 0), [filtered]);
+  const fltDays = useMemo(() => new Set(filtered.map(e => e.date).filter(Boolean)).size, [filtered]);
+
   const byDay = useMemo(() => {
     const map = {};
-    for (const e of encounters) (map[e.date] = map[e.date] || []).push(e);
-    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 30);
-  }, [encounters]);
+    for (const e of filtered) (map[e.date] = map[e.date] || []).push(e);
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 90);
+  }, [filtered]);
 
   const reviewTotal = (review?.items || []).reduce((s, it) => s + (it.wRVU || 0) * (it.units || 1), 0);
   const facilityOf = (cid) => contracts.find(x => x.id === cid)?.facility;
@@ -276,10 +309,50 @@ function RVULog() {
         )}
       </div>
 
+      {/* Filters — assignment chips, period, code search, sliced totals */}
+      {encounters.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+            {[{ id: "all", label: "All" }, ...contracts.filter(c => encounters.some(e => e.contractId === c.id)).map(c => ({ id: c.id, label: (c.facility || "Contract").split(" ").slice(0, 2).join(" ") }))].map(ch => (
+              <button key={ch.id} onClick={() => setFltContract(ch.id)} style={{
+                padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                border: `1px solid ${fltContract === ch.id ? T.accent : T.border}`,
+                backgroundColor: fltContract === ch.id ? T.accentDim || "rgba(16,185,129,0.14)" : "transparent",
+                color: fltContract === ch.id ? T.accent : T.textMuted,
+              }}>{ch.label}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <select value={fltPeriod} onChange={e => setFltPeriod(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: "0 0 auto", width: "auto" }}>
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+              <option value="90d">90 days</option>
+              <option value="month">This month</option>
+              <option value="lastMonth">Last month</option>
+              <option value="year">This year</option>
+              <option value="all">All time</option>
+            </select>
+            <input value={fltCode} onChange={e => setFltCode(e.target.value)} placeholder="Filter by code or description" style={{ ...iS, minWidth: 0, flex: 1 }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8, padding: "8px 12px", borderRadius: 10, backgroundColor: T.input }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textMuted }}>
+              {filtered.length} encounter{filtered.length === 1 ? "" : "s"} · {fltDays} day{fltDays === 1 ? "" : "s"}
+            </span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{fltTotal.toFixed(2)} wRVU</span>
+          </div>
+        </div>
+      )}
+
       {/* History */}
       {byDay.length === 0 ? (
+        encounters.length > 0 ? (
+          <div style={{ fontSize: 13, color: T.textMuted, textAlign: "center", padding: "24px 0" }}>
+            No encounters match these filters.
+          </div>
+        ) : (
         <EmptyState icon={"🧮"} title="No encounters logged"
           subtitle="Dictate or type what you did and the AI turns it into CPT codes with work RVUs." />
+        )
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {byDay.map(([day, list]) => (
