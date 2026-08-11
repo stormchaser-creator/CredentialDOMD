@@ -127,6 +127,12 @@ function Contracts() {
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Agreement" : "Add Agreement"}>
         <Field label="Hospital / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Riverside Community Hospital" /></Field>
         <Field label="Agency (if any)"><input value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={iS} placeholder="e.g. CompHealth" /></Field>
+        <Field label="Work state (for taxes)" hint="Where the work physically happens — the tax estimator allocates this contract's income here.">
+          <select value={form.workState || ""} onChange={e => setForm(f => ({ ...f, workState: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
+            <option value="">— pick a state —</option>
+            {["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"].map(st => <option key={st} value={st}>{st}</option>)}
+          </select>
+        </Field>
         <Field label="Location" hint="City / state of the facility"><input value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={iS} placeholder="e.g. Colorado Springs, CO" /></Field>
         <Field label="Invoice recipient email" hint="Where invoices get sent"><input type="email" value={form.billTo || ""} onChange={e => setForm(f => ({ ...f, billTo: e.target.value }))} style={iS} placeholder="billing@hospital.org" /></Field>
         <Field label="Coverage dates" hint="Every scheduled block. The END date is your LAST call day — the 24-hr call that ends the next morning. A contract reading 'through Aug 10, 7 AM' ends Aug 9; work after that final 7 AM bills hourly with no stipend.">

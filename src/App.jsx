@@ -14,7 +14,7 @@ import { ShareModal } from "./components/features";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
 import { CaseDictate } from "./components/features";
-import { DeductionMemo } from "./components/features/locum";
+import { FinanceSection } from "./components/features/locum";
 import { academicYearOf, caseWRVU, currentAcademicYear, filterLastMonths } from "./utils/caseLogReport";
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
@@ -1382,7 +1382,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   const renderMore = () => {
     if (subPage === "settings") return <SettingsSection />;
     if (subPage === "cv") return <CVGenerator />;
-    if (subPage === "finance") return <DeductionMemo />;
+    if (subPage === "finance") return <FinanceSection />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
     if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} />;

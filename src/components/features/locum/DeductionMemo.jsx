@@ -17,6 +17,8 @@
 
 import { useState, useMemo } from "react";
 import { useApp } from "../../../context/AppContext";
+import { autoDeductions } from "../../../utils/deductions";
+import StatementImport from "./StatementImport";
 
 function makeId() {
   return `ded-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -36,6 +38,17 @@ const CATEGORIES = [
   "Software / SaaS (CredentialDoMD, Doximity, etc.)",
   "Hospital privileging fees",
   "Credentialing service fees",
+  "Travel — lodging",
+  "Travel — airfare",
+  "Travel — ground / rideshare",
+  "Travel — rental car / fuel",
+  "Travel — parking / tolls",
+  "Meals (50% deductible)",
+  "Professional society dues",
+  "Phone / internet",
+  "Professional fees (CPA, legal)",
+  "Medical supplies / equipment",
+  "Office supplies",
   "Other deductible expense",
 ];
 
@@ -48,76 +61,14 @@ const BLANK_FORM = {
 };
 
 export default function DeductionMemo() {
-  const { data, setData, theme: T, plan } = useApp();
+  const { data, addItem, deleteItem, theme: T, plan } = useApp();
+  const [showImport, setShowImport] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(BLANK_FORM);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
 
-  // Auto-derived deductibles from existing app data
-  const auto = useMemo(() => {
-    const items = [];
-
-    // CredentialDoMD subscription itself
-    const subAmount = plan === "locum" ? 348 : plan === "solo" ? 228 : 0;
-    if (subAmount > 0) {
-      items.push({
-        source: "auto",
-        date: `${yearFilter}-01-01`,
-        category: "Software / SaaS (CredentialDoMD, Doximity, etc.)",
-        description: `CredentialDoMD ${plan === "locum" ? "Locum" : "Solo"} annual subscription`,
-        amount: subAmount,
-        taxYear: yearFilter,
-      });
-    }
-
-    // License renewals (if cost field present)
-    (data.licenses || []).forEach((l) => {
-      const cost = parseFloat(l.cost || l.renewalFee || 0);
-      if (cost > 0 && l.expirationDate?.startsWith(yearFilter)) {
-        const isDea = /dea/i.test(l.type || l.name || "");
-        items.push({
-          source: "auto",
-          date: l.expirationDate,
-          category: isDea ? "DEA registration" : "License renewal fee",
-          description: `${l.type || l.name || "License"}${l.state ? ` - ${l.state}` : ""}${l.licenseNumber ? ` #${l.licenseNumber}` : ""}`,
-          amount: cost,
-          taxYear: yearFilter,
-        });
-      }
-    });
-
-    // Malpractice premiums
-    (data.insurance || []).forEach((ins) => {
-      const cost = parseFloat(ins.premium || ins.cost || 0);
-      if (cost > 0 && (ins.expirationDate?.startsWith(yearFilter) || ins.policyYear === yearFilter)) {
-        items.push({
-          source: "auto",
-          date: ins.expirationDate || `${yearFilter}-12-31`,
-          category: "Malpractice premium",
-          description: `${ins.name || ins.type || "Malpractice"}${ins.provider ? ` - ${ins.provider}` : ""}`,
-          amount: cost,
-          taxYear: yearFilter,
-        });
-      }
-    });
-
-    // CME courses with cost
-    (data.cme || []).forEach((c) => {
-      const cost = parseFloat(c.cost || 0);
-      if (cost > 0 && (c.completionDate?.startsWith(yearFilter) || c.date?.startsWith(yearFilter))) {
-        items.push({
-          source: "auto",
-          date: c.completionDate || c.date,
-          category: "CME course",
-          description: c.title || c.name || "CME activity",
-          amount: cost,
-          taxYear: yearFilter,
-        });
-      }
-    });
-
-    return items;
-  }, [data, plan, yearFilter]);
+  // Auto-derived deductibles — shared with the tax estimator
+  const auto = useMemo(() => autoDeductions(data, plan, yearFilter), [data, plan, yearFilter]);
 
   // Manual deductibles for the selected year
   const manual = (data.deductibles || []).filter((d) => d.taxYear === yearFilter);
@@ -134,23 +85,15 @@ export default function DeductionMemo() {
 
   const save = () => {
     if (!form.amount || !form.description) return;
-    setData((d) => ({
-      ...d,
-      deductibles: [
-        ...(d.deductibles || []),
-        { id: makeId(), ...form, amount: parseFloat(form.amount) || 0 },
-      ],
-    }));
+    // addItem = local + cloud; setData was local-only and entries never synced
+    addItem("deductibles", { id: makeId(), ...form, amount: parseFloat(form.amount) || 0, source: "manual" });
     setForm(BLANK_FORM);
     setShowForm(false);
   };
 
   const removeManual = (id) => {
     if (!window.confirm("Remove this deduction line?")) return;
-    setData((d) => ({
-      ...d,
-      deductibles: (d.deductibles || []).filter((x) => x.id !== id),
-    }));
+    deleteItem("deductibles", id);
   };
 
   const exportCSV = () => {
@@ -192,6 +135,10 @@ export default function DeductionMemo() {
             Itemized credentialing-related deductibles for Schedule C.
           </p>
         </div>
+        <button onClick={() => setShowImport(true)} style={{
+          padding: "6px 12px", borderRadius: 8, border: "none",
+          backgroundColor: T.accent, color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+        }}>Import statement</button>
         <select
           value={yearFilter}
           onChange={(e) => setYearFilter(e.target.value)}
@@ -361,6 +308,7 @@ export default function DeductionMemo() {
         Not tax advice. Confirm with your CPA. Auto-imported items pull from records where you logged a
         <code style={{ padding: "0 4px" }}>cost</code> field. Items without an amount aren't included.
       </div>
+      <StatementImport open={showImport} onClose={() => setShowImport(false)} />
     </div>
   );
 }

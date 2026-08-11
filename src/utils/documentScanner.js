@@ -382,3 +382,44 @@ export async function analyzeAgreement(dataUrl, apiKey) {
   }
   return parsed;
 }
+
+// ─── Credit-card statement extraction ────────────────────────
+// One dedicated business card means every charge line is a candidate
+// deduction. The model extracts raw transactions only — categorization
+// and the include/exclude decision stay with the physician in the
+// review screen, so nothing lands in the ledger unreviewed.
+const STATEMENT_PROMPT = `You extract transactions from a credit card statement for business expense tracking. Return ONLY JSON:
+{"transactions":[{"date":"YYYY-MM-DD","merchant":"string","amount":number,"isCharge":true|false}]}
+Rules:
+- Every purchase/charge line: isCharge true, amount positive.
+- Payments received, credits, refunds, interest, and fees: isCharge false.
+- Use the transaction date, not the posting date, when both appear.
+- Infer the year from the statement period if line items omit it.
+- merchant = the cleaned merchant name (drop card-processor prefixes and city/state suffixes when obvious).
+- No commentary, no markdown fences — bare JSON only.`;
+
+export async function analyzeStatement(dataUrl, apiKey) {
+  if (!apiKey) throw new Error("No API key configured. Add your Gemini API key in Settings.");
+  if (!isValidDataUrl(dataUrl)) throw new Error("Invalid file data. Please try uploading again.");
+  const isPdf = dataUrl.startsWith("data:application/pdf");
+  const payload = isPdf ? dataUrl : await compressImage(dataUrl);
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: STATEMENT_PROMPT }] },
+      contents: [{
+        parts: [
+          { inlineData: { mimeType: isPdf ? "application/pdf" : getMediaType(payload), data: extractBase64(payload) } },
+          { text: "Extract all transactions. Return only JSON." },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 16384, thinkingConfig: { thinkingBudget: 0 } },
+    }),
+  });
+  if (!response.ok) handleApiError(response.status);
+  const json = await response.json();
+  const parsed = parseResponse(json);
+  if (!parsed || !Array.isArray(parsed.transactions)) throw new Error("Could not read transactions from this statement.");
+  return parsed.transactions;
+}
