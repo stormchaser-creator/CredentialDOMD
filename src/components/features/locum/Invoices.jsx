@@ -451,13 +451,19 @@ function Invoices() {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: T.text }}>
                     {inv.number}
+                    {/* Total invoiced rides next to the name — the loud number
+                        on the right is what's still owed, the thing that
+                        actually needs attention. */}
+                    <span style={{ marginLeft: 8, fontSize: 12.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                      {money(inv.totalAmount)}
+                    </span>
                     <span style={{
                       marginLeft: 8, padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800,
                       textTransform: "uppercase", letterSpacing: 0.5,
                       backgroundColor: isPaid ? (T.successDim || "rgba(34,197,94,0.15)") : overdue ? T.dangerDim : T.warningDim,
                       color: isPaid ? (T.success || "#22c55e") : overdue ? T.danger : T.warning,
                     }}>
-                      {isPaid ? "paid" : isPartial ? `partial · ${money(balance)} owed` : `owed · ${age}d`}
+                      {isPaid ? "paid" : isPartial ? "partial" : `owed · ${age}d`}
                     </span>
                   </div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
@@ -474,8 +480,16 @@ function Invoices() {
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: T.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  {money(inv.totalAmount)}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
+                  <div style={{
+                    fontSize: 17, fontWeight: 800, fontVariantNumeric: "tabular-nums",
+                    color: isPaid ? (T.success || "#22c55e") : overdue ? T.danger : T.warning,
+                  }}>
+                    {isPaid ? money(inv.totalAmount) : money(balance)}
+                  </div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                    {isPaid ? "collected" : "owed to you"}
+                  </div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
