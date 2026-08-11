@@ -17,6 +17,7 @@ import { useApp } from "../../../context/AppContext";
 import TaskNotes from "./TaskNotes";
 import WorkLog from "./WorkLog";
 import Contracts from "./Contracts";
+import Expenses from "./Expenses";
 import Schedule from "./Schedule";
 import Invoices from "./Invoices";
 import RVULog from "./RVULog";
@@ -27,6 +28,7 @@ const SUBTABS = [
   { id: "schedule", label: "Sched." },
   { id: "invoices", label: "Invoices" },
   { id: "contracts", label: "Contracts" },
+  { id: "expenses", label: "Exp." },
   { id: "todo", label: "To do" },
 ];
 
@@ -84,6 +86,7 @@ export default function LocumDashboard({ initialSub }) {
       {sub === "schedule" && <Schedule />}
       {sub === "invoices" && <Invoices />}
       {sub === "contracts" && <Contracts />}
+      {sub === "expenses" && <Expenses />}
       {sub === "todo" && <TaskNotes onBill={(d) => { setBillDraft(d); setSub("work"); }} />}
     </div>
   );

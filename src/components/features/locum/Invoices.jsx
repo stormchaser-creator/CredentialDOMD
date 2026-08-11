@@ -31,6 +31,7 @@ function Invoices() {
   const [notice, setNotice] = useState(null);
   const contracts = data.locumContracts || [];
   const facilityOf = (cid) => contracts.find(c => c.id === cid)?.facility || "Contract";
+  const billNameOf = (inv) => inv.billToLabel || facilityOf(inv.contractId);
 
   // Newest SERVICE PERIOD first — sorting by sentAt put backfilled invoices
   // (entered later) above work that happened after them.
@@ -147,7 +148,7 @@ function Invoices() {
       }
       return;
     }
-    const text = inv.text || `Invoice ${inv.number} — ${facilityOf(inv.contractId)} — ${money(inv.totalAmount)}`;
+    const text = inv.text || `Invoice ${inv.number} — ${billNameOf(inv)} — ${money(inv.totalAmount)}`;
     // No share sheet for text invoices: iOS Mail collapses shared text into
     // one line. A CRLF mailto body opens the composer properly formatted.
     try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ }
@@ -158,6 +159,7 @@ function Invoices() {
     const mine = (data.workLog || []).filter(x => x.invoiceId === inv.id);
     // A day-rate invoice bills duty days, not time entries — release those too
     const mineDuty = (data.dutyDays || []).filter(x => x.invoiceId === inv.id);
+    const mineExp = (data.travelExpenses || []).filter(x => x.invoiceId === inv.id);
     const n = mine.length + mineDuty.length;
     // Two invoices can share a call day (stipend billed on one, late-logged
     // work on the other). Deleting only one of them makes the stipend math
@@ -176,6 +178,7 @@ function Invoices() {
       else editItem("workLog", { ...e, invoiceId: null });
     }
     for (const d of mineDuty) editItem("dutyDays", { ...d, invoiceId: null });
+    for (const x of mineExp) editItem("travelExpenses", { ...x, invoiceId: null });
     deleteItem("invoices", inv.id);
   };
 
@@ -290,7 +293,7 @@ function Invoices() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{inv.number}</div>
                       <div style={{ fontSize: 11.5, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {facilityOf(inv.contractId)}
+                        {billNameOf(inv)}
                         {showList === "outstanding"
                           ? (inv.sentAt ? ` · sent ${formatDate(inv.sentAt.slice(0, 10))}${age >= 1 ? ` · ${age}d ago` : ""}` : "")
                           : (inv.paidAt ? ` · paid ${formatDate(inv.paidAt.slice(0, 10))}` : "")}
@@ -322,7 +325,7 @@ function Invoices() {
         {viewInv && (
           <>
             <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>
-              {facilityOf(viewInv.contractId)}
+              {billNameOf(viewInv)}
               {viewInv.sentAt && ` · sent ${formatDate(viewInv.sentAt.slice(0, 10))}`}
               {viewInv.paidAt && ` · paid ${formatDate(viewInv.paidAt.slice(0, 10))}`}
             </div>
@@ -458,7 +461,7 @@ function Invoices() {
                     </span>
                   </div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
-                    {facilityOf(inv.contractId)}
+                    {billNameOf(inv)}
                   </div>
                   <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
                     Sent {inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "—"}
