@@ -7,6 +7,7 @@ import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, EditIcon, TrashIcon, FileIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
 import DocAttach from "../DocAttach";
+import ContractSummary from "./ContractSummary";
 import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentScanner";
 
 /**
@@ -94,6 +95,9 @@ function Contracts() {
     (id) => (data.documents || []).filter(d => d.linkedTo === `locumContracts:${id}`),
     [data.documents]
   );
+
+  // Tap the contract name → everything it produced (invoices, cases, RVUs)
+  const [summaryFor, setSummaryFor] = useState(null);
 
   // View the original agreement: images full-screen, PDFs in a viewer sheet
   const [lightbox, setLightbox] = useState(null);
@@ -183,7 +187,10 @@ function Contracts() {
             <div key={item.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{item.facility || "Facility"}</div>
+                  <div onClick={() => setSummaryFor(item)} style={{ fontSize: 15, fontWeight: 700, color: T.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.facility || "Facility"}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.accent, flexShrink: 0 }}>summary ›</span>
+                  </div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
                     {[
                       item.agency,
@@ -231,6 +238,8 @@ function Contracts() {
           ))}
         </div>
       )}
+
+      {summaryFor && <ContractSummary contract={summaryFor} onClose={() => setSummaryFor(null)} />}
 
       {/* Full-screen picture viewer for uploaded agreements */}
       {lightbox && (
