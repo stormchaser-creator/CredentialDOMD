@@ -1,3 +1,5 @@
+export const CERTIFICATION_TYPE = "Certification (course / device training)";
+
 export const LICENSE_TYPES_MD = [
   "State Medical License",
   "DEA Registration",
@@ -10,7 +12,7 @@ export const LICENSE_TYPES_MD = [
   "ATLS Certification",
   "Fluoroscopy Permit",
   "Laser Safety Certificate",
-  "Certification (course / device training)",
+  CERTIFICATION_TYPE,
   "Other",
 ];
 
@@ -28,7 +30,7 @@ export const LICENSE_TYPES_DO = [
   "ATLS Certification",
   "Fluoroscopy Permit",
   "Laser Safety Certificate",
-  "Certification (course / device training)",
+  CERTIFICATION_TYPE,
   "Other",
 ];
 

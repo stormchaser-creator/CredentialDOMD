@@ -23,6 +23,16 @@ const CATEGORIES = [
   "Other deductible expense",
 ];
 
+// Travel rows can also be billed to a locum agency (Work > Expenses), which
+// uses its own category vocabulary — map the ones that carry across.
+const BILLABLE_CATEGORY = {
+  "Travel — lodging": "Hotel",
+  "Travel — airfare": "Airfare",
+  "Travel — ground / rideshare": "Rideshare / Taxi",
+  "Travel — rental car / fuel": "Rental car",
+  "Travel — parking / tolls": "Parking",
+};
+
 // Merchant keyword → category. First hit wins; everything else lands in
 // "Other" for the physician to reassign in review.
 const RULES = [
@@ -112,6 +122,7 @@ function StatementImport({ open, onClose }) {
   const [error, setError] = useState(null);
   const [rows, setRows] = useState(null); // review set
   const [done, setDone] = useState(null);
+  const agencies = [...new Set((data.locumContracts || []).map(c => c.agency).filter(Boolean))];
 
   const dedupKey = (d, a, m) => `${d}|${(parseFloat(a) || 0).toFixed(2)}|${String(m).toLowerCase().slice(0, 20)}`;
   const existing = new Set((data.deductibles || []).map(x => dedupKey(x.date, x.amount, x.merchant || x.description)));
@@ -128,6 +139,8 @@ function StatementImport({ open, onClose }) {
           category: categorize(t.merchant || ""),
           include: t.isCharge !== false && !dup,
           duplicate: dup,
+          alsoBill: false,
+          agency: agencies[0] || "",
         };
       })
       .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -170,6 +183,7 @@ function StatementImport({ open, onClose }) {
   const total = included.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
 
   const saveBatch = () => {
+    let billed = 0;
     for (const r of included) {
       addItem("deductibles", {
         id: generateId(),
@@ -181,8 +195,20 @@ function StatementImport({ open, onClose }) {
         taxYear: String(r.date || "").slice(0, 4),
         source: "card import",
       });
+      if (r.alsoBill && BILLABLE_CATEGORY[r.category] && (r.agency || "").trim()) {
+        addItem("travelExpenses", {
+          id: generateId(),
+          date: r.date,
+          amount: parseFloat(r.amount) || 0,
+          category: BILLABLE_CATEGORY[r.category],
+          vendor: r.merchant,
+          agency: r.agency.trim(),
+          notes: "Imported from statement",
+        });
+        billed++;
+      }
     }
-    setDone(included.length);
+    setDone({ count: included.length, billed });
     setRows(null);
   };
 
@@ -203,7 +229,8 @@ function StatementImport({ open, onClose }) {
           }}>{busy ? "Reading statement…" : "Choose statement file"}</button>
           {done != null && (
             <div style={{ fontSize: 13.5, fontWeight: 700, color: "#22c55e", marginTop: 12 }}>
-              Added {done} deduction line{done === 1 ? "" : "s"} to the ledger. They're in the Deductions list and the tax estimate now.
+              Added {done.count} deduction line{done.count === 1 ? "" : "s"} to the ledger. They're in the Deductions list and the tax estimate now.
+              {done.billed > 0 && ` Also added ${done.billed} to Work Expenses to invoice.`}
             </div>
           )}
           {error && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 12 }}>{error}</div>}
@@ -240,6 +267,26 @@ function StatementImport({ open, onClose }) {
                   }}>
                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                )}
+                {r.include && BILLABLE_CATEGORY[r.category] && (
+                  <div style={{ marginTop: 6 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textMuted, cursor: "pointer" }}>
+                      <input type="checkbox" checked={r.alsoBill} onChange={e => setRow(i, { alsoBill: e.target.checked })} style={{ width: 15, height: 15, flexShrink: 0 }} />
+                      Also bill to agency (Work Expenses)
+                    </label>
+                    {r.alsoBill && (
+                      <>
+                        <input list={`import-agencies-${i}`} value={r.agency} onChange={e => setRow(i, { agency: e.target.value })}
+                          placeholder="Agency name" style={{
+                            width: "100%", marginTop: 6, padding: "7px 10px", borderRadius: 8, fontSize: 12.5,
+                            border: `1px solid ${T.border}`, backgroundColor: T.card, color: T.text,
+                          }} />
+                        <datalist id={`import-agencies-${i}`}>
+                          {agencies.map(a => <option key={a} value={a} />)}
+                        </datalist>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

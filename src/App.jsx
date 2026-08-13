@@ -33,7 +33,7 @@ import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import {
-  STATES, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
+  STATES, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
 import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardCompliance";
@@ -1245,7 +1245,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} autoEditId={autoEditTarget?.sec === "licenses" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: "Display Name", placeholder: "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== "Certification (course / device training)" }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} />
+        ]} autoEditId={autoEditTarget?.sec === "licenses" ? autoEditTarget.id : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: "Display Name", placeholder: "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} />
       </>);
     }
     if (subPage === "cme") return <CMESection onShare={openShare} />;

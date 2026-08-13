@@ -1,7 +1,7 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
-import { SECTION_META, getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../../constants/credentialTypes";
+import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../../constants/credentialTypes";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 
 const FIELD_DEFS = {
@@ -105,6 +105,8 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
   const confColor = result.confidence === "high" ? T.success : result.confidence === "medium" ? T.warning : T.danger;
   const fields = FIELD_DEFS[docType] || [];
   const typeOpts = TYPE_OPTIONS[docType]?.(data.settings.degreeType, edited) || null;
+  const licenseExpiryRequired = docType === "license" && edited.type !== CERTIFICATION_TYPE;
+  const expiryBlocked = (["privilege", "insurance"].includes(docType) || licenseExpiryRequired) && !edited.expirationDate;
 
   return (
     <div style={{ backgroundColor: T.card, border: `2px solid ${meta.color}`, borderRadius: 16, overflow: "hidden", marginBottom: 12, boxShadow: T.shadow1 }}>
@@ -274,16 +276,16 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       {/* Actions */}
       {docType !== "unknown" ? (
         <div style={{ padding: "0 18px 16px" }}>
-          {["license", "privilege", "insurance"].includes(docType) && !edited.expirationDate && (
+          {expiryBlocked && (
             <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
               This {SECTION_META[docType].label.toLowerCase()} expires — enter the expiration date above before saving so the app can warn you in time.
             </div>
           )}
           <div style={{ display: "flex", gap: 10 }}>
           <button
-            disabled={["license", "privilege", "insurance"].includes(docType) && !edited.expirationDate}
+            disabled={expiryBlocked}
             onClick={() => onSave(docType, edited, imageData, fileName)} style={{
-            opacity: ["license", "privilege", "insurance"].includes(docType) && !edited.expirationDate ? 0.5 : 1,
+            opacity: expiryBlocked ? 0.5 : 1,
             flex: 1, padding: "12px", borderRadius: 12, border: "none", backgroundColor: meta.color, color: "#fff",
             fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}>
