@@ -17,6 +17,7 @@ export default function AdminDashboard() {
   const [signups, setSignups] = useState([]);
   const [visits, setVisits] = useState([]);
   const [waitlist, setWaitlist] = useState([]);
+  const [attempts, setAttempts] = useState([]);
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -106,9 +107,10 @@ export default function AdminDashboard() {
       supabase.from("admin_feedback_recent").select("*").limit(50),
       supabase.from("admin_signups_daily").select("*").limit(30),
       supabase.from("admin_visits_daily").select("*").limit(30),
-      supabase.from("early_access_leads").select("name,email,source,created_at").order("created_at", { ascending: false }).limit(500),
+      supabase.from("early_access_leads").select("id,name,email,source,note,created_at").order("created_at", { ascending: false }).limit(500),
+      supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
-    ]).then(([t, f, s, v, w, fp]) => {
+    ]).then(([t, f, s, v, w, wa, fp]) => {
       if (cancelled) return;
       if (t.error) setError(`Tickets: ${t.error.message}`);
       else setTickets(t.data || []);
@@ -119,6 +121,7 @@ export default function AdminDashboard() {
       if (!v.error) setVisits(v.data || []);
       if (w.error) setError((prev) => prev || `Waitlist: ${w.error.message}`);
       else setWaitlist(w.data || []);
+      if (!wa.error) setAttempts(wa.data || []);
       if (fp.error) setError((prev) => prev || `Fields: ${fp.error.message}`);
       else setFields(fp.data || []);
       setLoading(false);
@@ -236,7 +239,7 @@ export default function AdminDashboard() {
           <SignupsList rows={signups} T={T} />
         </>
       )}
-      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} T={T} />}
+      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} T={T} />}
       {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}
 
       {/* Tap a ticket → read it, answer it, close it */}
@@ -478,8 +481,33 @@ function SignupsList({ rows, T }) {
   );
 }
 
-function WaitlistList({ rows, T }) {
-  if (!rows.length) return <Empty T={T} text="No early-access signups yet. Share the site!" />;
+function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
+  // Full back-end control: see everyone, add someone by hand (a physician
+  // whose network ate the form), remove test rows, and review attempts
+  // that never became signups.
+  const [addName, setAddName] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const addLead = async () => {
+    const email = addEmail.trim(), name = addName.trim();
+    if (!email || !name) return;
+    setBusy(true);
+    const { data, error } = await supabase.from("early_access_leads")
+      .insert({ name, email, source: "admin-manual" }).select().single();
+    setBusy(false);
+    if (!error && data) { setRows(rs => [data, ...rs]); setAddName(""); setAddEmail(""); }
+  };
+  const removeLead = async (r) => {
+    if (!window.confirm(`Remove ${r.email} from the waitlist?`)) return;
+    setRows(rs => rs.filter(x => x.id !== r.id));
+    await supabase.from("early_access_leads").delete().eq("id", r.id);
+  };
+  const removeAttempt = async (a) => {
+    setAttempts(as2 => as2.filter(x => x.id !== a.id));
+    await supabase.from("waitlist_attempts").delete().eq("id", a.id);
+  };
+  const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
+  const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
   const copyAll = () => {
     const text = rows.map((r) => `${r.name || ""} <${r.email}>`).join(", ");
     try { navigator.clipboard.writeText(text); } catch { /* older browser */ }
@@ -500,20 +528,67 @@ function WaitlistList({ rows, T }) {
           backgroundColor: "transparent", color: T.text, fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>Copy all emails</button>
       </div>
+
+      {/* Manual add — for signups that arrive by text, call, or hallway */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name"
+          style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
+        <input value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="email@domain.com" type="email"
+          style={{ flex: 1.2, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
+        <button onClick={addLead} disabled={busy || !addName.trim() || !addEmail.trim()} style={{
+          padding: "9px 14px", borderRadius: 9, border: "none", backgroundColor: T.accent, color: "#fff",
+          fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1, flexShrink: 0,
+        }}>Add</button>
+      </div>
+
+      {rows.length === 0 && <Empty T={T} text="No early-access signups yet. Share the site!" />}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {rows.map((r) => (
-          <div key={r.email + r.created_at} style={{
+          <div key={r.id || r.email + r.created_at} style={{
             backgroundColor: T.card, border: `1px solid ${T.border}`,
             borderRadius: 10, padding: "10px 12px",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.name || "(no name)"}</span>
-              <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.name || "(no name)"}</span>
+                  {r.note && <span style={{ fontSize: 10, fontWeight: 800, color: T.warning, textTransform: "uppercase" }}>{r.note}</span>}
+                  {r.source === "admin-manual" && <span style={{ fontSize: 10, fontWeight: 800, color: T.accent, textTransform: "uppercase" }}>added by you</span>}
+                </div>
+                <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
+                <button onClick={() => removeLead(r)} style={{
+                  padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)",
+                  color: T.danger || "#ef4444", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                }}>Remove</button>
+              </div>
             </div>
-            <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>
           </div>
         ))}
       </div>
+
+      {orphanAttempts.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 800, color: T.warning, textTransform: "uppercase", letterSpacing: 0.5, margin: "16px 0 6px" }}>
+            Attempts that never became signups ({orphanAttempts.length})
+          </div>
+          <div style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 6 }}>
+            These people hit Join but the signup itself did not land — reach out or add them manually above.
+          </div>
+          {orphanAttempts.map(a => (
+            <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 10, padding: "8px 12px", marginBottom: 5 }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{a.name || "(no name)"}</span>
+                <span style={{ fontSize: 12, color: T.textMuted, marginLeft: 8, overflowWrap: "anywhere" }}>{a.email}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: T.warning, marginLeft: 8, textTransform: "uppercase" }}>{a.stage}</span>
+              </div>
+              <button onClick={() => removeAttempt(a)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: "transparent", color: T.textDim, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>dismiss</button>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
