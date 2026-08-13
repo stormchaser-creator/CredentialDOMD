@@ -224,7 +224,7 @@ export default function AdminDashboard() {
           ) : (
             <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 800, color: T.textMuted, paddingBottom: 6, borderBottom: `1px solid ${T.border}` }}>
-                <span>Day</span><span>Visits</span><span>Home</span><span>States</span><span>Referred</span>
+                <span>Day</span><span>Page loads</span><span>Homepage</span><span>State pages</span><span>Via links</span>
               </div>
               {visits.map(v => (
                 <div key={v.day} style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 12.5, color: T.text, padding: "5px 0", borderBottom: `1px solid ${T.border}` }}>
@@ -233,6 +233,9 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
+          <div style={{ fontSize: 11, color: T.textDim, marginTop: 6, lineHeight: 1.5 }}>
+            Page loads = every landing-page view that day. Homepage = loads of credentialdomd.com itself. State pages = loads across the 50 state SEO pages (views, not states). Via links = arrived from another site (search, forum, shared link) instead of typing the address.
+          </div>
           <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
             Signups
           </div>
