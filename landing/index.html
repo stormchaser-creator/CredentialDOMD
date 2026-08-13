@@ -2862,30 +2862,38 @@ footer {
       return;
     }
     var fastNote = (Date.now() - loadedAt < 4000) ? 'fast-submit' : null;
-    // Attempt telemetry: land the email BEFORE the real insert. If anything
-    // downstream fails (constraint, network mid-flight), the attempt row
-    // still exists and the signup notifier flags it. Two were lost silently.
+    // Same-origin /api/* (Cloudflare Worker relay) first — hospital IT
+    // filters and content blockers kill third-party supabase.co requests
+    // but cannot block the site's own origin. Direct Supabase stays as
+    // the fallback if the Worker ever misbehaves.
+    var postSignup = function(apiPath, supaTable, payload) {
+      var direct = function() {
+        return fetch(SUPABASE_URL + '/rest/v1/' + supaTable, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(payload), keepalive: true
+        });
+      };
+      return fetch(apiPath, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload), keepalive: true
+      }).then(function(res) {
+        if (res.status === 404 || res.status === 405 || res.status >= 500) return direct();
+        return res;
+      }).catch(direct);
+    };
+    // Attempt telemetry: land the email BEFORE the real insert so a failed
+    // signup still leaves a trace the notifier can flag.
     try {
-      fetch(SUPABASE_URL + '/rest/v1/waitlist_attempts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ email: email, name: name, source: window.location.pathname || '/', stage: fastNote || 'normal' }),
-        keepalive: true
-      }).catch(function() {});
+      postSignup('/api/waitlist-attempt', 'waitlist_attempts',
+        { email: email, name: name, source: window.location.pathname || '/', stage: fastNote || 'normal' }).catch(function() {});
     } catch (e) {}
     btn.disabled = true;
     btn.textContent = 'Joining…';
     msg.textContent = '';
-    fetch(SUPABASE_URL + '/rest/v1/early_access_leads', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON,
-        'Authorization': 'Bearer ' + SUPABASE_ANON,
-        'Prefer': 'return=minimal'
-      },
-      body: JSON.stringify({ email: email, name: name, source: window.location.pathname || '/', note: fastNote })
-    }).then(function(res) {
+    postSignup('/api/waitlist', 'early_access_leads',
+      { email: email, name: name, source: window.location.pathname || '/', note: fastNote }
+    ).then(function(res) {
       btn.disabled = false;
       btn.textContent = 'Join the list';
       if (res.ok) {
