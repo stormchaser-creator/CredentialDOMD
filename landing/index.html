@@ -2862,6 +2862,17 @@ footer {
       return;
     }
     var fastNote = (Date.now() - loadedAt < 4000) ? 'fast-submit' : null;
+    // Attempt telemetry: land the email BEFORE the real insert. If anything
+    // downstream fails (constraint, network mid-flight), the attempt row
+    // still exists and the signup notifier flags it. Two were lost silently.
+    try {
+      fetch(SUPABASE_URL + '/rest/v1/waitlist_attempts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ email: email, name: name, source: window.location.pathname || '/', stage: fastNote || 'normal' }),
+        keepalive: true
+      }).catch(function() {});
+    } catch (e) {}
     btn.disabled = true;
     btn.textContent = 'Joining…';
     msg.textContent = '';

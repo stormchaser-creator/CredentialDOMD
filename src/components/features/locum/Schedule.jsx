@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
+import Forecast from "./Forecast";
 import { formatDate } from "../../../utils/helpers";
 
 const localDate = (d) => {
@@ -39,8 +40,11 @@ function Schedule() {
 
   if (blocks.length === 0) {
     return (
-      <EmptyState icon={"🗓️"} title="No scheduled coverage"
-        subtitle="Add coverage dates to your agreements (Contracts tab) — every scheduled block shows up here." />
+      <div>
+        <Forecast />
+        <EmptyState icon={"🗓️"} title="No scheduled coverage"
+          subtitle="Add coverage dates to your agreements (Contracts tab) — every scheduled block shows up here." />
+      </div>
     );
   }
 
@@ -52,6 +56,7 @@ function Schedule() {
 
   return (
     <div>
+      <Forecast />
       <div style={{ marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.text }}>Schedule</h3>
         <div style={{ fontSize: 12, color: T.textMuted }}>Every contracted coverage block, soonest first.</div>

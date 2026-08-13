@@ -54,6 +54,11 @@ export const INSURANCE_TYPES = [
   "Umbrella/Excess Liability",
   "Cyber Liability",
   "Workers Compensation",
+  "Health Insurance (personal)",
+  "Dental Insurance",
+  "Vision Insurance",
+  "Disability Insurance",
+  "Life Insurance",
 ];
 
 export const CME_CATEGORIES_MD = [

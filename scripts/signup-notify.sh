@@ -11,6 +11,11 @@ NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 Q="select 'waitlist' as kind, coalesce(name,'') as name, coalesce(email,'') as email, coalesce(source,'') as extra, created_at from early_access_leads where created_at > '$SINCE'
 union all select 'founding', coalesce(name,''), coalesce(email,''), '', created_at from founding_signups where created_at > '$SINCE'
 union all select 'app profile', coalesce(name,''), coalesce(email,''), '', created_at from profiles where created_at > '$SINCE'
+union all select 'FAILED ATTEMPT', coalesce(a.name,''), coalesce(a.email,''), coalesce(a.stage,''), a.created_at
+  from waitlist_attempts a
+  where a.created_at > '$SINCE' and a.created_at < now() - interval '3 minutes'
+    and not exists (select 1 from early_access_leads l where lower(l.email)=lower(a.email)
+                    and l.created_at between a.created_at - interval '15 minutes' and a.created_at + interval '15 minutes')
 order by created_at"
 
 ROWS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \

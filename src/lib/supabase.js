@@ -95,6 +95,7 @@ const TABLE_MAP = {
   travelDocs: "travel_docs",
   travelExpenses: "travel_expenses",
   taxPayments: "tax_payments",
+  scheduleDays: "schedule_days",
   taskNotes: "task_notes",
   dutyDays: "duty_days",
   memberships: "professional_memberships",
