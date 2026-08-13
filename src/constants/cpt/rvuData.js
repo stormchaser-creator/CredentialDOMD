@@ -1,7 +1,7 @@
 /**
  * RVU data — GENERATED from the CMS Physician Fee Schedule.
  * Source: PPRRVU2026_Jul_nonQPP.csv (CY2026 July release, released 06/30/2026)
- * Generated 2026-07-28 by scripts/generate-rvu.mjs — DO NOT HAND-EDIT.
+ * Generated 2026-08-13 by scripts/generate-rvu.mjs — DO NOT HAND-EDIT.
  *
  * wRVU  = physician work RVU
  * totalRVU = fully implemented NON-FACILITY total
@@ -172,6 +172,18 @@ export const RVU_DATA = {
   "33534": { wRVU: 38.88, totalRVU: 61.71, totalFacilityRVU: 61.71, status: "A", global: "090", desc: "Cabg arterial two" },
   "34812": { wRVU: 4.03, totalRVU: 5.54, totalFacilityRVU: 5.54, status: "A", global: "ZZZ", desc: "Opn fem art expos" },
   "35301": { wRVU: 20.63, totalRVU: 30.71, totalFacilityRVU: 30.71, status: "A", global: "090", desc: "Rechanneling of artery" },
+  "36221": { wRVU: 3.82, totalRVU: 28.53, totalFacilityRVU: 5.33, status: "A", global: "000", desc: "Place cath thoracic aorta" },
+  "36222": { wRVU: 5.15, totalRVU: 37.71, totalFacilityRVU: 7.56, status: "A", global: "000", desc: "Place cath carotid/inom art" },
+  "36223": { wRVU: 5.61, totalRVU: 57.35, totalFacilityRVU: 8.9, status: "A", global: "000", desc: "Place cath carotid/inom art" },
+  "36224": { wRVU: 6.09, totalRVU: 70.37, totalFacilityRVU: 9.94, status: "A", global: "000", desc: "Place cath carotd art" },
+  "36225": { wRVU: 5.61, totalRVU: 53.66, totalFacilityRVU: 8.81, status: "A", global: "000", desc: "Place cath subclavian art" },
+  "36226": { wRVU: 6.09, totalRVU: 68.44, totalFacilityRVU: 9.86, status: "A", global: "000", desc: "Place cath vertebral art" },
+  "36227": { wRVU: 2.04, totalRVU: 8.19, totalFacilityRVU: 3.24, status: "A", global: "ZZZ", desc: "Place cath xtrnl carotid" },
+  "36228": { wRVU: 4.14, totalRVU: 46.14, totalFacilityRVU: 6.73, status: "A", global: "ZZZ", desc: "Place cath intracranial art" },
+  "36245": { wRVU: 4.53, totalRVU: 35.89, totalFacilityRVU: 6.2, status: "A", global: "XXX", desc: "Ins cath abd/l-ext art 1st" },
+  "36246": { wRVU: 4.89, totalRVU: 23.89, totalFacilityRVU: 6.63, status: "A", global: "000", desc: "Ins cath abd/l-ext art 2nd" },
+  "36247": { wRVU: 5.89, totalRVU: 40.6, totalFacilityRVU: 7.75, status: "A", global: "000", desc: "Ins cath abd/l-ext art 3rd" },
+  "36248": { wRVU: 0.98, totalRVU: 3.36, totalFacilityRVU: 1.24, status: "A", global: "ZZZ", desc: "Ins cath abd/l-ext art addl" },
   "36555": { wRVU: 1.88, totalRVU: 6.39, totalFacilityRVU: 2.37, status: "A", global: "000", desc: "Insert non-tunnel cv cath" },
   "36556": { wRVU: 1.71, totalRVU: 7.12, totalFacilityRVU: 2.32, status: "A", global: "000", desc: "Insert non-tunnel cv cath" },
   "36558": { wRVU: 4.48, totalRVU: 23.58, totalFacilityRVU: 6.96, status: "A", global: "010", desc: "Insert tunneled cv cath" },
@@ -339,6 +351,8 @@ export const RVU_DATA = {
   "63035": { wRVU: 3.76, totalRVU: 6.18, totalFacilityRVU: 6.18, status: "A", global: "ZZZ", desc: "Lamot dcmprn nrv rt ea addl" },
   "63040": { wRVU: 19.8, totalRVU: 38.56, totalFacilityRVU: 38.56, status: "A", global: "090", desc: "Laminotomy single cervical" },
   "63042": { wRVU: 18.29, totalRVU: 36.52, totalFacilityRVU: 36.52, status: "A", global: "090", desc: "Laminotomy single lumbar" },
+  "63043": { wRVU: 0, totalRVU: 0, totalFacilityRVU: 0, status: "C", global: "ZZZ", desc: "Laminotomy addl cervical" },
+  "63044": { wRVU: 0, totalRVU: 0, totalFacilityRVU: 0, status: "C", global: "ZZZ", desc: "Laminotomy addl lumbar" },
   "63045": { wRVU: 17.5, totalRVU: 37.41, totalFacilityRVU: 37.41, status: "A", global: "090", desc: "Lam facetec & foramot crv" },
   "63046": { wRVU: 16.82, totalRVU: 35.46, totalFacilityRVU: 35.46, status: "A", global: "090", desc: "Lam facetec & foramot thrc" },
   "63047": { wRVU: 14.99, totalRVU: 31.9, totalFacilityRVU: 31.9, status: "A", global: "090", desc: "Lam facetec & foramot lumbar" },
@@ -526,6 +540,9 @@ export const RVU_DATA = {
   "74150": { wRVU: 1.16, totalRVU: 4.08, totalFacilityRVU: 4.08, status: "A", global: "XXX", desc: "Ct abdomen w/o contrast" },
   "74177": { wRVU: 1.77, totalRVU: 8.99, totalFacilityRVU: 8.99, status: "A", global: "XXX", desc: "Ct abd & pelvis w/contrast" },
   "74178": { wRVU: 1.96, totalRVU: 10.12, totalFacilityRVU: 10.12, status: "A", global: "XXX", desc: "Ct abd&plv wo cntr flwd cntr" },
+  "75625": { wRVU: 1.4, totalRVU: 3.75, totalFacilityRVU: 3.75, status: "A", global: "XXX", desc: "Contrast exam abdominl aorta" },
+  "75710": { wRVU: 1.71, totalRVU: 4.47, totalFacilityRVU: 4.47, status: "A", global: "XXX", desc: "Artery x-rays arm/leg" },
+  "75716": { wRVU: 1.92, totalRVU: 4.87, totalFacilityRVU: 4.87, status: "A", global: "XXX", desc: "Artery x-rays arms/legs" },
   "76512": { wRVU: 0.55, totalRVU: 1.46, totalFacilityRVU: 1.46, status: "A", global: "XXX", desc: "Oph us dx b-scan" },
   "76536": { wRVU: 0.55, totalRVU: 3.25, totalFacilityRVU: 3.25, status: "A", global: "XXX", desc: "Us exam of head and neck" },
   "76700": { wRVU: 0.79, totalRVU: 3.42, totalFacilityRVU: 3.42, status: "A", global: "XXX", desc: "Us exam abdom complete" },
