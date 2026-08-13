@@ -135,6 +135,24 @@ export function buildCredentialText(item, section, settings) {
   return lines.join("\n");
 }
 
+/**
+ * Share-sheet text for a credential. iOS Mail ignores the share title when
+ * files are attached, promotes the FIRST LINE of text to the subject, and
+ * strips every line break — so this must be ONE flowing paragraph whose
+ * opening words read as a subject. The formatted letter goes to the
+ * clipboard alongside (see ShareModal.doShare).
+ */
+export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
+  const facts = buildCredentialText(item, section, settings)
+    .split("\n")
+    .map(l => l.trim())
+    .filter(l => l && !/^\u2500+$/.test(l) && l !== "CREDENTIAL VERIFICATION");
+  return "Credential verification: " + facts.join("; ") + ". "
+    + (note ? note.trim().replace(/\s+/g, " ") + " " : "")
+    + (hasDocs ? "Supporting documentation is attached. " : "")
+    + "A formatted copy of this verification is on the sender's clipboard for pasting if preferred.";
+}
+
 export function buildEmailSubject(item, section, settings) {
   const label = item.name || item.type || item.title || item.category || "Credential";
   const physician = settings.name || "Physician";

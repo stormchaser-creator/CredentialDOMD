@@ -4,7 +4,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared/Icons";
-import { buildCredentialText, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
+import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
 
 function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const { data, theme: T } = useApp();
@@ -62,9 +62,15 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
       } catch { return null; }
     }).filter(Boolean);
 
+    // iOS Mail drops the title and flattens newlines in shared text — the
+    // letter-shaped `full` became one giant run-on with the salutation as
+    // the subject. Share a flowing one-paragraph blurb instead, and put the
+    // formatted letter on the clipboard for pasting.
+    const blurb = buildCredentialBlurb(item, section, data.settings, files.length > 0, note);
+    await copyToClipboard(full);
     const payload = files.length && navigator.canShare?.({ files })
-      ? { files, title: subject, text: full }
-      : { title: subject, text: full };
+      ? { files, title: subject, text: blurb }
+      : { title: subject, text: blurb };
     try {
       await navigator.share(payload);
       setSent("share"); setTimeout(() => setSent(null), 3000);
