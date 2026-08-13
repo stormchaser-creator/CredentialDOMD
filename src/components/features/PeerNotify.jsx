@@ -1,4 +1,5 @@
 import { useState, memo, useCallback } from "react";
+import { composeText } from "../../utils/notifications";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
 import { mailtoHref } from "../../utils/helpers";
@@ -47,7 +48,7 @@ ${userFull}`;
   const handleText = useCallback(() => {
     if (peer.phone) {
       const cleaned = peer.phone.replace(/\D/g, "");
-      window.open(`sms:${cleaned}?body=${encodeURIComponent(textBody)}`);
+      composeText(cleaned, textBody);
     } else {
       setShow("text");
     }

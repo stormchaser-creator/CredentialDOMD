@@ -10,9 +10,9 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const welcomeText = (first: string, position: number | string) => `Hi ${first},
+const welcomeText = (first: string, position: number | null) => `Hi ${first},
 
-You're on the list. You're number ${position}, and order matters here: founding spots come with founding terms when the doors open.
+You're on the list.${position ? ` You're number ${position}, and order matters here: founding spots come with founding terms when the doors open.` : ' Order matters here: founding spots come with founding terms when the doors open.'}
 
 Quick background so you know what you joined. I'm a neurosurgeon working locums, and I built this because I was tracking licenses in a spreadsheet, chasing CME totals across four states, and finding out the hard way that an agency's remittance didn't match my own numbers. Now the app runs my actual practice every day: my licenses, my call schedules, my invoices, my case log.
 
@@ -24,7 +24,7 @@ Whit
 
 --
 Whit Whitney, DO
-CredentialDOMD — credential tracking for physicians, by a physician
+CredentialDOMD: credential tracking for physicians, by a physician
 https://credentialdomd.com`;
 
 Deno.serve(async (req) => {
@@ -41,8 +41,10 @@ Deno.serve(async (req) => {
     .from("early_access_leads")
     .select("*", { count: "exact", head: true })
     .lte("created_at", record.created_at as string);
-  const first = String(record.name || "").trim().split(/\s+/)[0] || "Doctor";
-  const position = count || "—";
+  const tokens = String(record.name || "").trim().split(/\s+/)
+    .filter((t, i) => !(i === 0 && /^(dr\.?|mr\.?|ms\.?|mrs\.?)$/i.test(t)));
+  const first = tokens[0] || "Doctor";
+  const position = count || null;
 
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -51,7 +53,7 @@ Deno.serve(async (req) => {
       from: "Whit Whitney, DO <whit@credentialdomd.com>",
       to: [email],
       reply_to: "stormchaser@elryx.com",
-      subject: `You're #${position} on the CredentialDOMD founding list`,
+      subject: position ? `You're #${position} on the CredentialDOMD founding list` : "You're on the CredentialDOMD founding list",
       text: welcomeText(first, position),
     }),
   });

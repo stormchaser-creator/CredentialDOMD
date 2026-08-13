@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { mailtoHref } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
 import {
   TIERS,
@@ -51,7 +52,7 @@ export default function PricingModal({ open, onClose }) {
     const t = TIERS[tierId];
     if (!t) return;
     if (t.id === "practice" || t.id === "group" || t.id === "enterprise") {
-      window.location.href = `mailto:hello@credentialdomd.com?subject=${encodeURIComponent(`${t.name} tier inquiry`)}`;
+      window.location.href = mailtoHref("hello@credentialdomd.com", `${t.name} tier inquiry`, "");
       return;
     }
     const result = await checkout(tierId, billing);

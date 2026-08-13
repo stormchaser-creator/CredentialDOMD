@@ -183,9 +183,15 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
       }).filter(Boolean);
 
     const title = `${st} CME transcript \u2014 ${sName}`;
+    // iOS Mail flattens shared text \u2014 send a one-paragraph blurb whose first
+    // words read as a subject, with the formatted transcript on the clipboard.
+    const blurb = `CME transcript for ${st} renewal, ${sName}: ${comp.totalEarned} hrs earned ${formatDate(comp.windowStart)} through ${formatDate(comp.windowEnd)}.`
+      + (files.length ? ` ${files.length} certificate${files.length === 1 ? "" : "s"} attached.` : "")
+      + " A formatted transcript is on the sender's clipboard for pasting.";
+    try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ }
     if (navigator.share) {
       try {
-        await navigator.share(files.length && navigator.canShare?.({ files }) ? { files, title, text } : { title, text });
+        await navigator.share(files.length && navigator.canShare?.({ files }) ? { files, title, text: blurb } : { title, text: blurb });
         addItem("shareLog", { id: generateId(), itemId: null, itemName: `${st} renewal packet`, section: "cme", method: "share", recipient: "", sentAt: new Date().toISOString() });
         return;
       } catch (err) { if (err?.name === "AbortError") return; }

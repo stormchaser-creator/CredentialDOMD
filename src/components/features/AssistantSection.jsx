@@ -304,10 +304,16 @@ function AssistantSection({ onFileTicket }) {
         if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet — open Files to let them sync, then approve again.");
         const files = docs.map(dataUrlToFile);
         const note = `${action.coverNote || "Credential documents enclosed."}\n\n— sent from CredentialDOMD`;
+        // LLM cover notes can be multi-line; iOS Mail would promote the first
+        // fragment to the subject and flatten the rest. One-paragraph blurb
+        // out, formatted note on the clipboard.
+        const blurb = ("Credential packet: " + (action.coverNote || "Credential documents enclosed.")).replace(/\s+/g, " ").trim()
+          + " Sent from CredentialDOMD.";
+        try { await navigator.clipboard.writeText(note); } catch { /* clipboard unavailable */ }
         let shared = false;
         if (navigator.canShare && navigator.canShare({ files })) {
           try {
-            await navigator.share({ title: "Credential packet", text: note, files });
+            await navigator.share({ title: "Credential packet", text: blurb, files });
             shared = true;
           } catch (shareErr) {
             if (shareErr?.name === "AbortError") return; // user closed the sheet

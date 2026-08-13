@@ -249,7 +249,7 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
     || window.matchMedia?.("(display-mode: standalone)")?.matches;
   if (standalone && navigator.share && fallbackText) {
     try {
-      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: `${cover}\n\n———\n\n${fallbackText}` });
+      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: `${invoiceCoverBlurb(inv)}\n\n${fallbackText}` });
       return coverCopied ? "share-text+cover" : "share-text";
     } catch (err) {
       if (err?.name === "AbortError") return null;

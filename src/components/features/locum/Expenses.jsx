@@ -4,7 +4,7 @@ import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber } from "../../../utils/helpers";
-import { invoicePdfFile } from "../../../utils/invoicePdf";
+import { invoicePdfFile, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -141,9 +141,12 @@ function Expenses() {
         }
       }
       const files = [pdf, ...receiptFiles];
+      // Cover letter to clipboard, flowing blurb as share text — otherwise
+      // iOS Mail sends the attachments with an empty body.
+      try { await navigator.clipboard.writeText(invoiceCoverEmail(inv)); } catch { /* clipboard unavailable */ }
       let how = null;
       if (navigator.canShare && navigator.canShare({ files })) {
-        try { await navigator.share({ title: `Expense invoice ${number}`, files }); how = "share"; }
+        try { await navigator.share({ title: `Expense invoice ${number}`, text: invoiceCoverBlurb(inv), files }); how = "share"; }
         catch (err) { if (err?.name === "AbortError") { setBusy(false); return; } }
       }
       if (!how) {

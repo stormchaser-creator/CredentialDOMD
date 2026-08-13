@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { mailtoHref } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 
@@ -415,7 +416,7 @@ function PricingModalInline({ open, onClose }) {
 
   const handleCTA = async (p) => {
     if (p.isEnterprise) {
-      window.open("mailto:hello@credentialdomd.com?subject=Practice%20Plan%20Inquiry", "_blank");
+      window.open(mailtoHref("hello@credentialdomd.com", "Practice Plan Inquiry", ""), "_blank");
       return;
     }
     if (!p.ctaKey) return;

@@ -5,6 +5,7 @@ import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared/Icons";
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
+import { composeText } from "../../utils/notifications";
 
 function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const { data, theme: T } = useApp();
@@ -86,7 +87,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   };
 
   const doText = () => {
-    window.open(`sms:${phone || ""}?body=${encodeURIComponent(full)}`, "_blank");
+    composeText(phone || "", full);
     setSent("text"); setTimeout(() => setSent(null), 3000); log("text", phone);
   };
 

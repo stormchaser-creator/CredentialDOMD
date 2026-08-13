@@ -60,8 +60,9 @@ Deno.serve(async (req) => {
     }
 
     // Render the template
-    const subject = template.subject.replace(/\{name\}/g, email.customer_name);
-    const body = template.body_html.replace(/\{name\}/g, email.customer_name);
+    const customerName = String(email.customer_name || "").trim() || "Doctor";
+    const subject = template.subject.replace(/\{name\}/g, customerName);
+    const body = template.body_html.replace(/\{name\}/g, customerName);
 
     // For now, mark as "ready" — actual sending via Postmark/SendGrid/Resend
     // will be wired when the email provider is configured
@@ -69,7 +70,8 @@ Deno.serve(async (req) => {
       .from("onboarding_queue")
       .update({
         status: "ready",
-        sent_at: now,
+        // sent_at stamps only after a real provider send; a stub that marks
+        // rows sent would make the live provider silently skip them
       })
       .eq("id", email.id);
 
