@@ -135,9 +135,12 @@ function Forecast() {
     setTimeout(() => setLoadMsg(null), 8000);
   };
 
+  // Initials, not first words — "Intermountain" blew the grid past the
+  // screen edge on a phone, and Eric knows Arrowhead as ANMG.
   const facilityShort = (cid) => {
-    const f = contracts.find(c => c.id === cid)?.facility || "?";
-    return f.split(" ")[0];
+    const f = (contracts.find(c => c.id === cid)?.facility || "?").replace(/\(.*?\)/g, "").trim();
+    const words = f.split(/\s+/).filter(Boolean);
+    return words.length >= 2 ? words.map(w => w[0]).join("").toUpperCase().slice(0, 4) : f.slice(0, 5);
   };
 
   // Month summary numbers
@@ -176,7 +179,7 @@ function Forecast() {
             const isToday = date === today;
             return (
               <div key={date} onClick={() => openDay(date)} style={{
-                minHeight: 46, borderRadius: 8, padding: "3px 2px", cursor: "pointer", textAlign: "center",
+                minHeight: 46, minWidth: 0, overflow: "hidden", borderRadius: 8, padding: "3px 2px", cursor: "pointer", textAlign: "center",
                 border: `1px solid ${isToday ? T.accent : entries.length ? (T.accentDim || "rgba(16,185,129,0.35)") : "transparent"}`,
                 backgroundColor: entries.length ? (T.accentGlow || "rgba(16,185,129,0.08)") : T.input,
                 opacity: isPast && !entries.length && !act ? 0.55 : 1,
