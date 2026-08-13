@@ -42,7 +42,7 @@ function billedCodes(item) {
 
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, filterTabs, prefillItem, onPrefillDone, contactImport }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, filterTabs, prefillItem, onPrefillDone, contactImport }) {
   const { data, setData, addItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -73,8 +73,16 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     if (it) {
       openEdit(it);
       onAutoEditDone?.();
+      // "Add the expiration date" cards land the user INSIDE a long form —
+      // put the cursor on the exact field they came for.
+      if (autoFocusField) {
+        setTimeout(() => {
+          const el = document.querySelector(`[data-fkey="${autoFocusField}"]`);
+          try { el?.focus(); el?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* older browser */ }
+        }, 400);
+      }
     }
-  }, [autoEditId, items, openEdit, onAutoEditDone]);
+  }, [autoEditId, items, openEdit, onAutoEditDone, autoFocusField]);
 
   useEffect(() => {
     if (prefillItem) {
@@ -415,6 +423,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               />
             ) : f.type === "textarea" ? (
               <textarea
+                data-fkey={f.key}
                 value={form[f.key] || ""}
                 onChange={e => setField(f.key, e.target.value)}
                 placeholder={f.placeholder}
@@ -422,6 +431,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               />
             ) : (
               <input
+                data-fkey={f.key}
                 type={f.type === "currency" ? "number" : f.type || "text"}
                 inputMode={f.type === "currency" ? "decimal" : undefined}
                 step={f.type === "currency" ? "0.01" : undefined}
