@@ -2538,7 +2538,7 @@ footer {
           style="flex: 1; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
         <!-- Honeypot: humans never see or fill this -->
-        <input type="text" id="waitlist-website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"
+        <input type="text" id="waitlist-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" autocomplete="off" aria-hidden="true"
           style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
         <button type="submit" class="btn-primary" style="padding: 16px 28px; font-size: 16px; border: none; cursor: pointer;">
           Join the list
@@ -2851,17 +2851,14 @@ footer {
     var email = (input.value || '').trim();
     var name = (nameInput.value || '').trim();
     if (!email || !name) return;
-    // Spam gates: bots that fill the hidden field get a quiet fake success.
-    // A fast submit is NOT dropped — autofill users beat any timer — it goes
-    // through tagged for review instead. Never lose a real signup.
-    var honeypot = (document.getElementById('waitlist-website').value || '').trim();
-    if (honeypot) {
-      msg.style.color = 'var(--emerald)';
-      msg.textContent = "You're on the list. One email when the doors open — that's it.";
-      form.reset();
-      return;
-    }
-    var fastNote = (Date.now() - loadedAt < 4000) ? 'fast-submit' : null;
+    var honeypot = (document.getElementById('waitlist-hp').value || '').trim();
+    // Flags ride WITH the signup instead of dropping it — a bot row you can
+    // delete beats a physician silently ghosted (autofill was filling the
+    // old 'website' honeypot and eating real signups before any network call).
+    var flags = [];
+    if (honeypot) flags.push('honeypot');
+    if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
+    var fastNote = flags.length ? flags.join(',') : null;
     // Same-origin /api/* (Cloudflare Worker relay) first — hospital IT
     // filters and content blockers kill third-party supabase.co requests
     // but cannot block the site's own origin. Direct Supabase stays as
