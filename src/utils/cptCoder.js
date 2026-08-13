@@ -151,7 +151,10 @@ export async function codeFromText(text, apiKey) {
   const questions = parsed.questions || [];
   if (/\bassist/i.test(text)) {
     for (const it of items) {
-      if (it.wRVU > 0 && !/assistant/i.test(it.desc)) it.desc += " — assistant surgeon (mod 80/82)";
+      if (it.wRVU > 0 && !/assistant/i.test(it.desc)) {
+        it.desc += " — assistant surgeon (mod 80/82)";
+        it.modifier = it.modifier || "80"; // pre-select in the review picker; 81/82 one tap away
+      }
     }
     if (!questions.some(q2 => /assist/i.test(q2))) {
       questions.push("Assistant-surgeon case: Medicare pays 16% of the fee (modifier 80/82); how your wRVU credit counts depends on your comp agreement.");
