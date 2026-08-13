@@ -14,6 +14,14 @@ const localDate = (d) => {
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
 };
 const rvuOf = (enc) => (enc.codes || []).reduce((s, c) => s + (c.wRVU || 0) * (c.units || 1), 0);
+// Assistant-at-surgery modifiers — appended by the physician, not the AI coder
+// (billing decides which applies; the app just needs to carry it on the code).
+const ASSIST_MODIFIERS = [
+  { value: "", label: "No modifier" },
+  { value: "80", label: "80 · Assistant surgeon" },
+  { value: "81", label: "81 · Minimum assistant surgeon" },
+  { value: "82", label: "82 · Assistant (no qualified resident available)" },
+];
 
 /**
  * RVU log — describe (or dictate) the day's work in plain language, the
@@ -107,6 +115,10 @@ function RVULog() {
     items: r.items.map((it, i) => i === idx ? { ...it, units: Math.max(1, (it.units || 1) + delta) } : it),
   }));
   const removeItem = (idx) => setReview(r => ({ ...r, items: r.items.filter((_, i) => i !== idx) }));
+  const setModifier = (idx, modifier) => setReview(r => ({
+    ...r,
+    items: r.items.map((it, i) => i === idx ? { ...it, modifier } : it),
+  }));
 
   const manualSearch = useCallback(async (q) => {
     setManualQ(q);
@@ -130,7 +142,7 @@ function RVULog() {
       createdAt: new Date().toISOString(),
       contractId: contractId || null,
       date,
-      codes: review.items.map(({ code, desc, units, wRVU }) => ({ code, desc, units, wRVU })),
+      codes: review.items.map(({ code, desc, units, wRVU, modifier }) => ({ code, desc, units, wRVU, modifier: modifier || "" })),
       note: "",
       spokenText: text,
     });
@@ -149,7 +161,10 @@ function RVULog() {
         title: surgical[0].desc || `CPT ${surgical[0].code}`,
         category: "Other", // cloud requires one; the dashboard still nags for role
 
-        cptCodes: surgical.map(c => (c.units || 1) > 1 ? `${c.code} x${c.units}` : c.code).join(", "),
+        cptCodes: surgical.map(c => {
+          const base = c.modifier ? `${c.code}-${c.modifier}` : c.code;
+          return (c.units || 1) > 1 ? `${base} x${c.units}` : base;
+        }).join(", "),
         wRvu: Math.round(wRvu * 100) / 100,
         facility: contracts.find(c2 => c2.id === contractId)?.facility || "",
         source: "RVU log",
@@ -285,6 +300,11 @@ function RVULog() {
                     </div>
                     <div style={{ fontSize: 11, color: T.textDim }}>{(it.wRVU || 0).toFixed(2)} wRVU × {it.units} {it.why && `· ${it.why}`}</div>
                   </div>
+                  <select value={it.modifier || ""} onChange={e => setModifier(i, e.target.value)}
+                    style={{ ...iS, appearance: "auto", width: "auto", flexShrink: 0, padding: "4px 6px", fontSize: 11.5 }}
+                    title="Assistant surgeon modifier">
+                    {ASSIST_MODIFIERS.map(m => <option key={m.value} value={m.value}>{m.value ? `Mod ${m.value}` : "No modifier"}</option>)}
+                  </select>
                   <button onClick={() => setUnits(i, -1)} style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>−</button>
                   <span style={{ fontSize: 13, fontWeight: 800, color: T.text, minWidth: 14, textAlign: "center" }}>{it.units}</span>
                   <button onClick={() => setUnits(i, 1)} style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>+</button>
@@ -371,7 +391,7 @@ function RVULog() {
                       <div style={{ minWidth: 0, flex: 1 }}>
                         {(e.codes || []).map((c, i) => (
                           <div key={i} style={{ fontSize: 13, color: T.text }}>
-                            <b>{c.code}</b>{c.units > 1 ? ` ×${c.units}` : ""} <span style={{ color: T.textMuted }}>{c.desc}</span>
+                            <b>{c.code}{c.modifier && `-${c.modifier}`}</b>{c.units > 1 ? ` ×${c.units}` : ""} <span style={{ color: T.textMuted }}>{c.desc}</span>
                             <span style={{ color: T.textDim }}> · {((c.wRVU || 0) * (c.units || 1)).toFixed(2)}</span>
                           </div>
                         ))}
@@ -411,6 +431,11 @@ function RVULog() {
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
                 <span style={{ fontSize: 13.5, fontWeight: 800, fontFamily: "monospace", color: T.accent, minWidth: 52, flexShrink: 0 }}>{c.code}</span>
                 <span style={{ fontSize: 12.5, color: T.text, flex: 1, minWidth: 0 }}>{c.desc || CPT_DESCS[c.code]?.d || "—"}</span>
+                <select value={c.modifier || ""} onChange={ev => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, modifier: ev.target.value } : x) }))}
+                  style={{ ...iS, appearance: "auto", width: "auto", flexShrink: 0, padding: "3px 6px", fontSize: 11.5 }}
+                  title="Assistant surgeon modifier">
+                  {ASSIST_MODIFIERS.map(m => <option key={m.value} value={m.value}>{m.value ? `Mod ${m.value}` : "No modifier"}</option>)}
+                </select>
                 <button onClick={() => setEncDraft(d => ({ ...d, codes: d.codes.map((x, j) => j === i ? { ...x, units: Math.max(1, (x.units || 1) - 1) } : x) }))}
                   style={{ padding: "3px 8px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>−</button>
                 <span style={{ fontSize: 13, fontWeight: 800, color: T.text, minWidth: 14, textAlign: "center" }}>{c.units || 1}</span>
@@ -460,7 +485,7 @@ function RVULog() {
 
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button onClick={() => {
-                editItem("encounters", { ...encDraft, codes: (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? 0 })) });
+                editItem("encounters", { ...encDraft, codes: (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? 0, modifier: c.modifier || "" })) });
                 setViewEnc(null); setEncDraft(null);
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" }}>Save changes</button>
               <button onClick={() => { setViewEnc(null); setEncDraft(null); }} style={{ padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
