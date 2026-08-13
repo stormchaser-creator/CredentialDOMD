@@ -187,7 +187,10 @@ function Forecast() {
                     {facilityShort(entries[0].contractId)}<br />{short(est)}
                   </div>
                 )}
-                {isPast && act > 0 && (
+                {/* The green billed figure only earns its row when it differs
+                    from the estimate — past days seeded from actuals would
+                    otherwise print the same number twice. */}
+                {isPast && act > 0 && Math.round(act) !== Math.round(est) && (
                   <div style={{ fontSize: 8.5, fontWeight: 700, color: "#22c55e" }}>{short(act)}</div>
                 )}
               </div>
