@@ -107,7 +107,7 @@ export default function AdminDashboard() {
       supabase.from("admin_feedback_recent").select("*").limit(50),
       supabase.from("admin_signups_daily").select("*").limit(30),
       supabase.from("admin_visits_daily").select("*").limit(30),
-      supabase.from("early_access_leads").select("id,name,email,source,note,created_at").order("created_at", { ascending: false }).limit(500),
+      supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
     ]).then(([t, f, s, v, w, wa, fp]) => {
@@ -497,6 +497,14 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
     setBusy(false);
     if (!error && data) { setRows(rs => [data, ...rs]); setAddName(""); setAddEmail(""); }
   };
+  // Conversion funnel: tap the chip to advance waiting → invited → joined → paying
+  const STATUSES = [null, "invited", "joined", "paying"];
+  const cycleStatus = async (r) => {
+    const next = STATUSES[(STATUSES.indexOf(r.status || null) + 1) % STATUSES.length];
+    const patch = { status: next, invited_at: next === "invited" ? new Date().toISOString() : r.invited_at };
+    setRows(rs => rs.map(x => x.id === r.id ? { ...x, ...patch } : x));
+    await supabase.from("early_access_leads").update(patch).eq("id", r.id);
+  };
   const removeLead = async (r) => {
     if (!window.confirm(`Remove ${r.email} from the waitlist?`)) return;
     setRows(rs => rs.filter(x => x.id !== r.id));
@@ -521,7 +529,9 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
       }}>
         <div>
           <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{rows.length}</div>
-          <div style={{ fontSize: 11, color: T.textMuted }}>waiting for early access</div>
+          <div style={{ fontSize: 11, color: T.textMuted }}>
+            on the list · {rows.filter(r => r.status === "invited").length} invited · {rows.filter(r => r.status === "joined").length} joined · {rows.filter(r => r.status === "paying").length} paying
+          </div>
         </div>
         <button onClick={copyAll} style={{
           padding: "8px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
@@ -558,6 +568,12 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
                 <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <button onClick={() => cycleStatus(r)} title="Tap to advance: waiting → invited → joined → paying" style={{
+                  padding: "3px 9px", borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: "uppercase", cursor: "pointer",
+                  border: `1px solid ${r.status ? T.accent : T.border}`,
+                  backgroundColor: r.status === "paying" ? T.accent : "transparent",
+                  color: r.status === "paying" ? "#fff" : r.status ? T.accent : T.textDim,
+                }}>{r.status || "waiting"}</button>
                 <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
                 <button onClick={() => removeLead(r)} style={{
                   padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)",
