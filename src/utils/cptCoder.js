@@ -13,7 +13,7 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 
 function buildCatalog() {
   return CPT_CODES
-    .filter(c => c.code && ((c.wRVU || 0) > 0 || c.status === "A" || c.status === "B"))
+    .filter(c => c.code && ((c.wRVU || 0) > 0 || c.status === "A" || c.status === "B" || c.category === "Neurosurgery"))
     .map(c => `${c.code}|${(c.shortDesc || c.cmsDesc || "").replace(/\|/g, "/").slice(0, 64)}|${c.wRVU ?? 0}`)
     .join("\n");
 }
@@ -33,6 +33,14 @@ Select CPT codes ONLY from the catalog below. Rules:
 ${CONSTRUCT_RULES}
 - Procedures: include implied add-on codes (microscope +69990, navigation +61781/61782/61783,
   each-additional-level add-ons, instrumentation) with correct units.
+- COUNT LEVELS CAREFULLY. Laminectomy/decompression codes count VERTEBRAL SEGMENTS:
+  "C3-4 laminectomy" touches TWO segments (C3 and C4) = base code + each-additional-segment
+  add-on x1 (e.g. 63045 + 63048). Discectomy/interbody/arthrodesis codes count INTERSPACES:
+  "C3-4 ACDF" is ONE interspace (the C3-C4 disc) = base code alone. State your count in "why".
+- ASSISTANT SURGEON: if the physician says they assisted (assistant, first assist, "I was the
+  assistant"), still code every procedure, append "assistant surgeon - modifier 80/82 (AS)"
+  to each why, and add a "questions" entry noting that assistant wRVU/payment credit depends
+  on their compensation agreement (Medicare pays 16% of the fee for modifier 80).
 - units: how many times the code bills (add-on levels, critical-care blocks). Default 1.
 - Do NOT code things merely mentioned (imaging reviewed alone is part of E/M).
 - GLOBAL PERIOD: routine postop care of the physician's OWN surgical patient (rounding,
@@ -55,6 +63,23 @@ Return ONLY JSON, no markdown fences:
 CATALOG (code|description|workRVU):
 `;
 
+// Speech-to-text mangles surgical acronyms ("T-lif", "tea lift", "a c d f").
+// Normalize the common ones so the model cannot miss the construct.
+const DICTATION_FIXES = [
+  [/\bt[\s.-]?liff?\b|\btea[\s-]?liff?\b|\bt[\s-]?lift\b/gi, "TLIF (transforaminal lumbar interbody fusion)"],
+  [/\bp[\s.-]?liff?\b/gi, "PLIF (posterior lumbar interbody fusion)"],
+  [/\ba[\s.-]?liff?\b/gi, "ALIF (anterior lumbar interbody fusion)"],
+  [/\bx[\s.-]?liff?\b|\bex[\s-]?liff?\b/gi, "XLIF (lateral lumbar interbody fusion)"],
+  [/\bl[\s.-]?liff?\b/gi, "LLIF (lateral lumbar interbody fusion)"],
+  [/\ba[\s.]?c[\s.]?d[\s.]?f\b/gi, "ACDF (anterior cervical discectomy and fusion)"],
+  [/\be[\s.]?v[\s.]?d\b/gi, "EVD (external ventricular drain)"],
+];
+export function normalizeDictation(text) {
+  let out = String(text || "");
+  for (const [re, canon] of DICTATION_FIXES) out = out.replace(re, canon);
+  return out;
+}
+
 export async function codeFromText(text, apiKey) {
   if (!apiKey) throw new Error("No API key configured. Add your Gemini API key in Settings.");
   if (!text?.trim()) throw new Error("Describe (or dictate) the work first.");
@@ -64,7 +89,7 @@ export async function codeFromText(text, apiKey) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: CODER_RULES + buildCatalog() }] },
-      contents: [{ parts: [{ text: `PHYSICIAN'S DESCRIPTION:\n${text}\n\nReturn only JSON.` }] }],
+      contents: [{ parts: [{ text: `PHYSICIAN'S DESCRIPTION:\n${normalizeDictation(text)}\n\nReturn only JSON.` }] }],
       generationConfig: { maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
