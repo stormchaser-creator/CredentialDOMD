@@ -23,6 +23,9 @@ export function actualByDate(data) {
     }
   }
   for (const d of data.dutyDays || []) {
+    // Invoiced duty days already arrived via their invoice's per-day lines —
+    // counting them again doubled ANMG's July.
+    if (d.invoiceId) continue;
     if (d.date && parseFloat(d.amount) > 0) map[d.date] = (map[d.date] || 0) + parseFloat(d.amount);
   }
   return map;
@@ -41,6 +44,7 @@ export function contractDayAverage(data, contractId) {
     }
   }
   for (const d of data.dutyDays || []) {
+    if (d.invoiceId) continue; // same dedupe as actualByDate
     if (d.contractId === contractId && parseFloat(d.amount) > 0 && d.date) {
       sum += parseFloat(d.amount);
       days.add(d.date);
