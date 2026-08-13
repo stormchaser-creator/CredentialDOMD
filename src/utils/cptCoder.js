@@ -33,6 +33,11 @@ Select CPT codes ONLY from the catalog below. Rules:
 ${CONSTRUCT_RULES}
 - Procedures: include implied add-on codes (microscope +69990, navigation +61781/61782/61783,
   each-additional-level add-ons, instrumentation) with correct units.
+- INSTRUMENTATION COUNTS SEGMENTS WITH SCREWS: pedicle screws in 2 adjacent vertebrae
+  (one interspace: L5-S1, L4-L5, C5-C6) = 22840 posterior NON-segmental; 3-6 vertebral
+  segments = 22842; 7-12 = 22843; 13+ = 22844. Interbody cage = +22853 once per fused
+  interspace. So "L5-S1 TLIF with screws at L5 and S1" = 22633 + 22840 + 22853 —
+  NEVER 22842 for a two-vertebra construct, NEVER 22634 for a single interspace.
 - COUNT LEVELS CAREFULLY. Laminectomy/decompression codes count VERTEBRAL SEGMENTS:
   "C3-4 laminectomy" touches TWO segments (C3 and C4) = base code + each-additional-segment
   add-on x1 (e.g. 63045 + 63048). Discectomy/interbody/arthrodesis codes count INTERSPACES:
@@ -122,5 +127,14 @@ export async function codeFromText(text, apiKey) {
   if (items.length === 0) {
     throw new Error("No billable codes recognized — add detail (what you did, where, complexity) and try again.");
   }
-  return { items, questions: parsed.questions || [], confidence: parsed.confidence || "medium" };
+  const questions = parsed.questions || [];
+  if (/\bassist/i.test(text)) {
+    for (const it of items) {
+      if (it.wRVU > 0 && !/assistant/i.test(it.desc)) it.desc += " — assistant surgeon (mod 80/82)";
+    }
+    if (!questions.some(q2 => /assist/i.test(q2))) {
+      questions.push("Assistant-surgeon case: Medicare pays 16% of the fee (modifier 80/82); how your wRVU credit counts depends on your comp agreement.");
+    }
+  }
+  return { items, questions, confidence: parsed.confidence || "medium" };
 }
