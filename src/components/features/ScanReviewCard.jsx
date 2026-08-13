@@ -68,6 +68,34 @@ const TYPE_OPTIONS = {
   education: () => EDUCATION_TYPES,
 };
 
+// Concept aliases so reclassifying a scan carries over the fields that mean the same thing
+// under a different key name (e.g. cme "title" <-> license "name"). "type"/"category" are
+// deliberately excluded — those are per-category enums and don't translate across sections.
+const FIELD_ALIASES = {
+  license: { name: "name", primaryDate: "issuedDate", provider: null },
+  cme: { name: "title", primaryDate: "date", provider: "provider" },
+  privilege: { name: "name", primaryDate: "appointmentDate", provider: "facility" },
+  insurance: { name: "name", primaryDate: "effectiveDate", provider: "provider" },
+  healthRecord: { name: "name", primaryDate: "dateAdministered", provider: "facility" },
+  education: { name: "name", primaryDate: "graduationDate", provider: "institution" },
+  travel: { name: "name", primaryDate: null, provider: "provider" },
+};
+const DIRECT_CARRY_KEYS = ["state", "expirationDate", "notes"];
+
+function remapEdited(prevDocType, nextDocType, prev) {
+  const nextKeys = new Set((FIELD_DEFS[nextDocType] || []).map(f => f.key));
+  const next = {};
+  DIRECT_CARRY_KEYS.forEach(k => {
+    if (nextKeys.has(k) && prev[k]) next[k] = prev[k];
+  });
+  const from = FIELD_ALIASES[prevDocType] || {};
+  const to = FIELD_ALIASES[nextDocType] || {};
+  if (to.name && from.name && prev[from.name]) next[to.name] = prev[from.name];
+  if (to.primaryDate && from.primaryDate && prev[from.primaryDate]) next[to.primaryDate] = prev[from.primaryDate];
+  if (to.provider && from.provider && prev[from.provider]) next[to.provider] = prev[from.provider];
+  return next;
+}
+
 function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
   const { theme: T, data } = useApp();
   const iS = useInputStyle();
@@ -109,7 +137,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       <div style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: 4, rowGap: 6, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
         <span style={{ fontSize: 12, color: T.textDim, marginRight: 6 }}>Not right?</span>
         {Object.keys(SECTION_META).filter(k => k !== "unknown").map(dt => (
-          <button key={dt} onClick={() => setDocType(dt)} style={{
+          <button key={dt} onClick={() => { setEdited(prev => remapEdited(docType, dt, prev)); setDocType(dt); }} style={{
             padding: "4px 10px", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
             backgroundColor: dt === docType ? meta.color : T.input,
             color: dt === docType ? "#fff" : T.textMuted,
