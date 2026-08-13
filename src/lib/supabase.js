@@ -386,7 +386,15 @@ export async function bulkSync(userId, collectionKey, items) {
     return row;
   });
   const { error } = await supabase.from(table).upsert(rows, { onConflict: "id" });
-  if (error) console.warn(`Failed to bulk sync ${collectionKey}:`, error.message);
+  if (error) {
+    // One bad row must not strand the rest — retry each row alone so the
+    // failure is contained to the row that actually has the problem.
+    console.warn(`Bulk sync ${collectionKey} failed (${error.message}) — retrying row-by-row`);
+    for (const row of rows) {
+      const { error: e2 } = await supabase.from(table).upsert(row, { onConflict: "id" });
+      if (e2) console.warn(`Row ${row.id} of ${collectionKey} still failing:`, e2.message);
+    }
+  }
 }
 
 // ─── Deletion ledger ─────────────────────────────────────────
