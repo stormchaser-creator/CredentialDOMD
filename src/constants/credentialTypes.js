@@ -10,6 +10,7 @@ export const LICENSE_TYPES_MD = [
   "ATLS Certification",
   "Fluoroscopy Permit",
   "Laser Safety Certificate",
+  "Certification (course / device training)",
   "Other",
 ];
 
@@ -27,6 +28,7 @@ export const LICENSE_TYPES_DO = [
   "ATLS Certification",
   "Fluoroscopy Permit",
   "Laser Safety Certificate",
+  "Certification (course / device training)",
   "Other",
 ];
 

@@ -301,7 +301,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const handleSave = useCallback(() => {
     // The whole point is knowing when things expire — expiring record
     // types can't be saved without their dates.
-    const missing = fields.filter(f => f.required && !form[f.key]);
+    const isRequired = (f) => typeof f.required === "function" ? f.required(form) : f.required;
+    const missing = fields.filter(f => isRequired(f) && !form[f.key]);
     if (missing.length > 0) {
       setRequiredError(`Required: ${missing.map(f => f.label).join(", ")}. Expiration dates are how the app warns you before anything lapses.`);
       return;
@@ -376,7 +377,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           </div>
         )}
         {fields.map(f => (
-          <Field key={f.key} label={f.label + (f.required ? " *" : "")}>
+          <Field key={f.key} label={f.label + ((typeof f.required === "function" ? f.required(form) : f.required) ? " *" : "")}>
             {f.type === "select" ? (
               <select
                 value={form[f.key] || ""}
