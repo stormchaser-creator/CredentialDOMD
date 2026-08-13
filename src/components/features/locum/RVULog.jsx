@@ -4,7 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import EmptyState from "../../shared/EmptyState";
 import { TrashIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
-import { codeFromText } from "../../../utils/cptCoder";
+import { codeFromText, parseDictatedDate } from "../../../utils/cptCoder";
 import { searchCPT } from "../../../utils/cptSearch";
 import { Modal, Field } from "../../shared";
 import { CPT_DESCS } from "../../../constants/cptDescs";
@@ -103,6 +103,9 @@ function RVULog() {
     setCoding(true);
     try {
       const result = await codeFromText(text, data.settings.apiKey);
+      // "for yesterday…" in the dictation sets the entry date
+      const spoken = parseDictatedDate(text);
+      if (spoken) setDate(spoken);
       setReview(result);
     } catch (e2) {
       setErr(e2.message);

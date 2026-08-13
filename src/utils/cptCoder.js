@@ -85,6 +85,27 @@ export function normalizeDictation(text) {
   return out;
 }
 
+/**
+ * "For yesterday, log a TLIF…" — the spoken date is part of the order.
+ * Deterministic parse for the common relative forms; returns ISO or null.
+ */
+export function parseDictatedDate(text, now = new Date()) {
+  const t = String(text || "").toLowerCase();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const back = (n) => { const d = new Date(now); d.setDate(d.getDate() - n); return iso(d); };
+  if (/day before yesterday/.test(t)) return back(2);
+  if (/\byesterday\b|\blast night\b/.test(t)) return back(1);
+  const ago = t.match(/\b(two|three|four|five|2|3|4|5) days? ago\b/);
+  if (ago) return back({ two: 2, three: 3, four: 4, five: 5 }[ago[1]] || parseInt(ago[1], 10));
+  const wd = t.match(/\b(?:on |last )(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+  if (wd) {
+    const target = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].indexOf(wd[1]);
+    const diff = ((now.getDay() - target) + 7) % 7 || 7;
+    return back(diff);
+  }
+  return null;
+}
+
 export async function codeFromText(text, apiKey) {
   if (!apiKey) throw new Error("No API key configured. Add your Gemini API key in Settings.");
   if (!text?.trim()) throw new Error("Describe (or dictate) the work first.");
