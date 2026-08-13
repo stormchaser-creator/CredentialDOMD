@@ -139,6 +139,8 @@ function Forecast() {
   // screen edge on a phone, and Eric knows Arrowhead as ANMG.
   const facilityShort = (cid) => {
     const f = (contracts.find(c => c.id === cid)?.facility || "?").replace(/\(.*?\)/g, "").trim();
+    if (/intermountain.*samaritan/i.test(f)) return "IM: GS";
+    if (/arrowhead/i.test(f)) return "ANMG";
     const words = f.split(/\s+/).filter(Boolean);
     return words.length >= 2 ? words.map(w => w[0]).join("").toUpperCase().slice(0, 4) : f.slice(0, 5);
   };
