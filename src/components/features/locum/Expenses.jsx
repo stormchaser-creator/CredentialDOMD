@@ -217,8 +217,20 @@ function Expenses() {
                   <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2 }}>
                     {formatDate(exp.date)}{exp.agency ? ` · ${exp.agency}` : ""}
                     {rc ? ` · 📎 ${rc}` : " · no receipt"}
-                    {exp.invoiceId ? " · billed" : ""}
                   </div>
+                  {exp.invoiceId && (() => {
+                    const inv = (data.invoices || []).find(i => i.id === exp.invoiceId);
+                    if (!inv) return <div style={{ fontSize: 11.5, fontWeight: 800, marginTop: 3, color: T.textDim }}>billed</div>;
+                    const total = parseFloat(inv.totalAmount) || 0;
+                    const led = (inv.payments || []).reduce((t, p) => t + (parseFloat(p.amount) || 0), 0);
+                    const paid = led > 0 ? led : (inv.paidAt ? total : 0);
+                    const isPaid = paid >= total - 0.005;
+                    return (
+                      <div style={{ fontSize: 11.5, fontWeight: 800, marginTop: 3, color: isPaid ? (T.success || "#22c55e") : T.warning }}>
+                        {inv.number} · {isPaid ? "PAID" : "owed"}{inv.sentAt ? ` · sent ${formatDate(String(inv.sentAt).slice(0, 10))}` : ""}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: exp.invoiceId ? T.textMuted : T.text }}>{money(exp.amount)}</div>
                 {!exp.invoiceId && (
@@ -232,56 +244,6 @@ function Expenses() {
           })}
         </div>
       )}
-
-      {/* Invoiced — every expense invoice, tracked sent → paid */}
-      {(() => {
-        const expInvoices = (data.invoices || []).filter(i => i.kind === "expenses")
-          .sort((a, b) => String(b.sentAt || "").localeCompare(String(a.sentAt || "")));
-        if (!expInvoices.length) return null;
-        const paidOf = (inv) => {
-          const led = (inv.payments || []).reduce((t, p) => t + (parseFloat(p.amount) || 0), 0);
-          return led > 0 ? led : (inv.paidAt ? (parseFloat(inv.totalAmount) || 0) : 0);
-        };
-        return (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-              Invoiced ({expInvoices.length})
-            </div>
-            {expInvoices.map(inv => {
-              const total = parseFloat(inv.totalAmount) || 0;
-              const paid = paidOf(inv);
-              const isPaid = paid >= total - 0.005;
-              const mine = expenses.filter(e => e.invoiceId === inv.id);
-              return (
-                <div key={inv.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "11px 13px", boxShadow: T.shadow1, marginBottom: 7 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>
-                        {inv.number}
-                        <span style={{
-                          marginLeft: 8, padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, textTransform: "uppercase",
-                          backgroundColor: isPaid ? (T.successDim || "rgba(34,197,94,0.15)") : T.warningDim,
-                          color: isPaid ? (T.success || "#22c55e") : T.warning,
-                        }}>{isPaid ? "paid" : "owed"}</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
-                        {inv.billToLabel || "Agency"} · sent {inv.sentAt ? formatDate(String(inv.sentAt).slice(0, 10)) : "—"}
-                        {mine.length > 0 && ` · ${mine.map(e => e.category).join(", ")}`}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: isPaid ? (T.success || "#22c55e") : T.warning, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                      {money(inv.totalAmount)}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 2 }}>
-              Record payments on the Invoices tab — status updates here automatically.
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Add / edit */}
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing === "new" ? "New expense" : "Expense"}>
