@@ -33,6 +33,20 @@ function Forecast() {
     for (const c of contracts) m[c.id] = contractDayAverage(data, c.id);
     return m;
   }, [data, contracts]);
+  // Rate-structured contracts (EMC/ANMG daily model) price by the day type:
+  // day = the day rate, day+call adds the call stipend. Stipend contracts
+  // (Good Sam et al) use the historical per-day average instead.
+  const suggestFor = (cid, kind) => {
+    const c = contracts.find(x => x.id === cid);
+    const day = parseFloat(c?.dayRate) || 0;
+    const call = parseFloat(c?.callStipend) || 0;
+    if (day) {
+      if (kind === "day") return Math.round(day);
+      if (kind === "call") return Math.round(call || day);
+      return Math.round(day + call);
+    }
+    return avgOf[cid] || 0;
+  };
   const year = parseInt(month.slice(0, 4), 10);
   const outlook = useMemo(() => yearOutlook(sched, actuals, year, today), [sched, actuals, year, today]);
 
@@ -62,9 +76,10 @@ function Forecast() {
   const openDay = (date) => {
     const existing = (schedByDate[date] || [])[0];
     const cid = existing?.contractId || contracts[0]?.id || "";
+    const defKind = (contracts.find(c => c.id === cid)?.payModel === "daily") ? "day" : "call";
     setForm(existing
       ? { ...existing }
-      : { date, contractId: cid, kind: "call", expected: avgOf[cid] || "" });
+      : { date, contractId: cid, kind: defKind, expected: suggestFor(cid, defKind) || "" });
     setEditDay(date);
   };
   const saveDay = () => {
@@ -225,7 +240,7 @@ function Forecast() {
         <Field label="Contract">
           <select value={form.contractId || ""} onChange={e => {
             const cid = e.target.value;
-            setForm(f => ({ ...f, contractId: cid, expected: f.id ? f.expected : (avgOf[cid] || "") }));
+            setForm(f => ({ ...f, contractId: cid, expected: suggestFor(cid, f.kind) || "" }));
           }} style={{ ...iS, appearance: "auto" }}>
             {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
           </select>
@@ -233,7 +248,7 @@ function Forecast() {
         <Field label="Type of day">
           <div style={{ display: "flex", gap: 6 }}>
             {[["call", "Call"], ["day", "Day"], ["day+call", "Day + call"]].map(([k, label]) => (
-              <button key={k} onClick={() => setForm(f => ({ ...f, kind: k }))} style={{
+              <button key={k} onClick={() => setForm(f => ({ ...f, kind: k, expected: suggestFor(f.contractId, k) || f.expected }))} style={{
                 flex: 1, padding: "9px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer",
                 border: `1px solid ${form.kind === k ? T.accent : T.border}`,
                 backgroundColor: form.kind === k ? (T.accentDim || "rgba(16,185,129,0.14)") : "transparent",
@@ -242,7 +257,13 @@ function Forecast() {
             ))}
           </div>
         </Field>
-        <Field label="Expected earnings ($)" hint={form.contractId && avgOf[form.contractId] ? `This contract has averaged ${money(avgOf[form.contractId])} per worked day.` : "No history yet — contract rate used as the starting point."}>
+        <Field label="Expected earnings ($)" hint={(() => {
+          const c = contracts.find(x => x.id === form.contractId);
+          const day = parseFloat(c?.dayRate) || 0;
+          const call = parseFloat(c?.callStipend) || 0;
+          if (day) return `Contract rates: day ${money(day)} · day + call ${money(day + call)} — the type above sets the price.`;
+          return avgOf[form.contractId] ? `This contract has averaged ${money(avgOf[form.contractId])} per worked day.` : "No history yet — contract rate used as the starting point.";
+        })()}>
           <input type="number" inputMode="decimal" value={form.expected ?? ""} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={iS} />
         </Field>
         {editDay && actuals[editDay] > 0 && (
