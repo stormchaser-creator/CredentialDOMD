@@ -93,13 +93,13 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg: #0d0d1a;
-  --bg-elevated: #1a1a2e;
-  --bg-card: #16162b;
-  --bg-card-hover: #1e1e3a;
-  --surface: #222244;
-  --border: #2a2a4a;
-  --border-subtle: #1f1f3a;
+  --bg: #0a1014;
+  --bg-elevated: #0e161c;
+  --bg-card: #101b22;
+  --bg-card-hover: #142229;
+  --surface: #182831;
+  --border: #21363f;
+  --border-subtle: #17262e;
 
   --emerald: #10b981;
   --emerald-light: #34d399;
@@ -113,9 +113,9 @@
   --amber-dim: rgba(245, 158, 11, 0.1);
   --blue: #3b82f6;
 
-  --text: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text: #eef4f2;
+  --text-secondary: #a2b6b3;
+  --text-muted: #6d8582;
 
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
@@ -1878,12 +1878,20 @@ footer {
         CredentialDOMD monitors every license, certification, and privilege across all 50 states &mdash; so you never have to.
       </p>
 
-      <div class="hero-buttons">
-        <a href="#early-access" class="btn-primary">
-          Get Early Access
-          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
-        </a>
-        <a href="#how-it-works" class="btn-secondary">See How It Works</a>
+      <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+        <input type="email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
+          style="flex: 1; min-width: 220px; padding: 15px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
+          onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
+        <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
+          style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
+        <button type="submit" class="btn-primary" style="padding: 15px 24px; font-size: 16px; border: none; cursor: pointer; white-space: nowrap;">
+          Join the waitlist
+        </button>
+      </form>
+      <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
+      <div style="display: flex; gap: 16px; align-items: center; font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">
+        <span>30 seconds &middot; no card &middot; founding-member perks by signup order</span>
+        <a href="#how-it-works" style="white-space: nowrap;">See how it works &rarr;</a>
       </div>
 
       <div class="hero-trust">
@@ -2174,6 +2182,15 @@ footer {
         <div class="feature-icon">
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
         </div>
+        <h3 class="feature-title">AI RVU Coder</h3>
+        <p class="feature-desc">Dictate what you did &mdash; "C3-4 posterior laminectomy as the assistant" &mdash; and get CPT codes with work RVUs, add-on levels, and modifiers from a CMS-grounded catalog. Your case log builds itself.</p>
+        <div class="feature-value"><span>Example:</span> a one-level TLIF dictation returns the fusion, cage, and instrumentation codes with the assistant modifier pre-selected.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        </div>
         <h3 class="feature-title">CME Compliance Engine</h3>
         <p class="feature-desc">Cycle-aware CME tracking anchored to each license's renewal date, with the real state rules built in: category minimums, topic mandates, MD vs DO requirements, and the DEA MATE Act.</p>
         <div class="feature-value"><span>Example:</span> Colorado's 30-hour cycle with its 2-hour substance-use mandate, counted down against your actual renewal date.</div>
@@ -2298,7 +2315,19 @@ footer {
             <div class="check-icon">
               <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
             </div>
-            <span><strong>Every assignment's schedule in one place.</strong> Coverage blocks across contracts, warnings when you log against the wrong facility, and a deduction ledger running for tax season.</span>
+            <span><strong>The app checks the agency's math.</strong> Reconcile their timesheet remittances against your own minute-by-minute log &mdash; it caught a $600 underpayment on the founder's own invoice.</span>
+          </li>
+          <li>
+            <div class="check-icon">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <span><strong>Travel invoiced with receipts attached.</strong> Photo the hotel bill and the rental receipt; one tap sends the agency an expense invoice with documentation, tracked to reimbursement.</span>
+          </li>
+          <li>
+            <div class="check-icon">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <span><strong>See the year before it happens.</strong> A billing forecast calendar projects income from your real per-day averages, and multistate tax prep estimates what you owe each state, tracks quarterly payments, and turns card statements into a deduction ledger.</span>
           </li>
         </ul>
       </div>
@@ -2530,21 +2559,21 @@ footer {
     </div>
 
     <div class="animate-on-scroll" style="max-width: 560px; margin: 36px auto 0;">
-      <form id="waitlist-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-        <input type="text" id="waitlist-name" required placeholder="Dr. Jane Smith" autocomplete="name" maxlength="120"
+      <form id="waitlist-form" class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+        <input type="text" id="waitlist-name" class="wl-name" placeholder="Dr. Jane Smith (optional)" autocomplete="name" maxlength="120"
           style="flex: 1 1 100%; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
-        <input type="email" id="waitlist-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
+        <input type="email" id="waitlist-email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
         <!-- Honeypot: humans never see or fill this -->
-        <input type="text" id="waitlist-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" autocomplete="off" aria-hidden="true"
+        <input type="text" id="waitlist-hp" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
           style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
         <button type="submit" class="btn-primary" style="padding: 16px 28px; font-size: 16px; border: none; cursor: pointer;">
           Join the list
         </button>
       </form>
-      <div id="waitlist-msg" style="margin-top: 14px; font-size: 14.5px; font-weight: 600; text-align: center; min-height: 22px;"></div>
+      <div id="waitlist-msg" class="wl-msg" style="margin-top: 14px; font-size: 14.5px; font-weight: 600; text-align: center; min-height: 22px;"></div>
       <p style="margin-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center;">
         No spam, no sharing your address &mdash; one email when early access opens, from the physician who built it.
       </p>
@@ -2834,81 +2863,81 @@ footer {
 
 <!-- ============ SCRIPTS ============ -->
 <script>
-// Early-access waitlist → Supabase (anon key is the public client key;
-// the table is insert-only for the public role, nobody can read it back)
+// Early-access waitlist → same-origin /api relay (Cloudflare Worker) with
+// direct-Supabase fallback. One binder covers every .wl-form on the page
+// (hero quick-join + full form). Honeypot is flag-and-send, never drop.
 (function() {
   var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
   var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
-  var form = document.getElementById('waitlist-form');
-  if (!form) return;
   var loadedAt = Date.now();
-  form.addEventListener('submit', function(e) {
-    e.preventDefault();
-    var input = document.getElementById('waitlist-email');
-    var nameInput = document.getElementById('waitlist-name');
-    var msg = document.getElementById('waitlist-msg');
-    var btn = form.querySelector('button[type="submit"]');
-    var email = (input.value || '').trim();
-    var name = (nameInput.value || '').trim();
-    if (!email || !name) return;
-    var honeypot = (document.getElementById('waitlist-hp').value || '').trim();
-    // Flags ride WITH the signup instead of dropping it — a bot row you can
-    // delete beats a physician silently ghosted (autofill was filling the
-    // old 'website' honeypot and eating real signups before any network call).
-    var flags = [];
-    if (honeypot) flags.push('honeypot');
-    if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
-    var fastNote = flags.length ? flags.join(',') : null;
-    // Same-origin /api/* (Cloudflare Worker relay) first — hospital IT
-    // filters and content blockers kill third-party supabase.co requests
-    // but cannot block the site's own origin. Direct Supabase stays as
-    // the fallback if the Worker ever misbehaves.
-    var postSignup = function(apiPath, supaTable, payload) {
-      var direct = function() {
-        return fetch(SUPABASE_URL + '/rest/v1/' + supaTable, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Prefer': 'return=minimal' },
-          body: JSON.stringify(payload), keepalive: true
-        });
-      };
-      return fetch(apiPath, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+
+  var postSignup = function(apiPath, supaTable, payload) {
+    var direct = function() {
+      return fetch(SUPABASE_URL + '/rest/v1/' + supaTable, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Prefer': 'return=minimal' },
         body: JSON.stringify(payload), keepalive: true
-      }).then(function(res) {
-        if (res.status === 404 || res.status === 405 || res.status >= 500) return direct();
-        return res;
-      }).catch(direct);
+      });
     };
-    // Attempt telemetry: land the email BEFORE the real insert so a failed
-    // signup still leaves a trace the notifier can flag.
-    try {
-      postSignup('/api/waitlist-attempt', 'waitlist_attempts',
-        { email: email, name: name, source: window.location.pathname || '/', stage: fastNote || 'normal' }).catch(function() {});
-    } catch (e) {}
-    btn.disabled = true;
-    btn.textContent = 'Joining…';
-    msg.textContent = '';
-    postSignup('/api/waitlist', 'early_access_leads',
-      { email: email, name: name, source: window.location.pathname || '/', note: fastNote }
-    ).then(function(res) {
-      btn.disabled = false;
-      btn.textContent = 'Join the list';
-      if (res.ok) {
-        msg.style.color = 'var(--emerald)';
-        msg.textContent = "You're on the list. One email when the doors open — that's it.";
-        form.reset();
-      } else if (res.status === 409) {
-        msg.style.color = 'var(--emerald)';
-        msg.textContent = "You're already on the list — we've got you.";
-      } else {
-        msg.style.color = 'var(--amber, #f59e0b)';
-        msg.textContent = 'That didn\'t go through — check the address and try again.';
-      }
-    }).catch(function() {
-      btn.disabled = false;
-      btn.textContent = 'Join the list';
-      msg.style.color = 'var(--amber, #f59e0b)';
-      msg.textContent = 'Connection hiccup — please try again.';
+    return fetch(apiPath, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), keepalive: true
+    }).then(function(res) {
+      if (res.status === 404 || res.status === 405 || res.status >= 500) return direct();
+      return res;
+    }).catch(direct);
+  };
+
+  var forms = document.querySelectorAll('.wl-form');
+  Array.prototype.forEach.call(forms, function(form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var emailEl = form.querySelector('.wl-email');
+      var nameEl = form.querySelector('.wl-name');
+      var hpEl = form.querySelector('.wl-hp');
+      var msg = form.parentElement.querySelector('.wl-msg') || form.querySelector('.wl-msg');
+      var btn = form.querySelector('button[type="submit"]');
+      var email = (emailEl && emailEl.value || '').trim();
+      var name = (nameEl && nameEl.value || '').trim();
+      if (!email) return;
+
+      var flags = [];
+      if (hpEl && (hpEl.value || '').trim()) flags.push('honeypot');
+      if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
+      var noteFlags = flags.length ? flags.join(',') : null;
+      var payload = { email: email, name: name || null, source: window.location.pathname || '/', note: noteFlags };
+
+      // Attempt trace lands BEFORE the real insert — a failed signup still
+      // leaves the email behind for follow-up.
+      try {
+        postSignup('/api/waitlist-attempt', 'waitlist_attempts',
+          { email: email, name: name || null, source: payload.source, stage: noteFlags || 'normal' }).catch(function() {});
+      } catch (err) {}
+
+      if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Joining\u2026'; }
+      if (msg) msg.textContent = '';
+
+      postSignup('/api/waitlist', 'early_access_leads', payload).then(function(res) {
+        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
+        if (!msg) return;
+        if (res.ok) {
+          msg.style.color = 'var(--emerald)';
+          msg.textContent = "You're on the list. Check your email for your founding number.";
+          form.reset();
+        } else if (res.status === 409) {
+          msg.style.color = 'var(--emerald)';
+          msg.textContent = "You're already on the list. We've got you.";
+        } else {
+          msg.style.color = 'var(--amber, #f59e0b)';
+          msg.textContent = "That didn't go through. Check the address and try again.";
+        }
+      }).catch(function() {
+        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
+        if (msg) {
+          msg.style.color = 'var(--amber, #f59e0b)';
+          msg.textContent = 'Connection hiccup. Please try again.';
+        }
+      });
     });
   });
 })();
