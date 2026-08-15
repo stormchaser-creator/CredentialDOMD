@@ -4,7 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import { generateId, formatDate } from "../../../utils/helpers";
-import { iso, actualByDate, contractDayAverage, yearOutlook } from "../../../utils/forecast";
+import { iso, actualByDate, contractDayAverage, contractDayKindAverages, yearOutlook } from "../../../utils/forecast";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const short = (n) => {
@@ -33,6 +33,11 @@ function Forecast() {
     for (const c of contracts) m[c.id] = contractDayAverage(data, c.id);
     return m;
   }, [data, contracts]);
+  const kindAvgs = useMemo(() => {
+    const m = {};
+    for (const c of contracts) m[c.id] = contractDayKindAverages(data, c.id);
+    return m;
+  }, [data, contracts]);
   // Rate-structured contracts (EMC/ANMG daily model) price by the day type:
   // day = the day rate, day+call adds the call stipend. Stipend contracts
   // (Good Sam et al) use the historical per-day average instead.
@@ -40,12 +45,18 @@ function Forecast() {
     const c = contracts.find(x => x.id === cid);
     const day = parseFloat(c?.dayRate) || 0;
     const call = parseFloat(c?.callStipend) || 0;
-    if (day) {
+    if (day) { // daily-rate model (ANMG): the kind picks the contract rate
       if (kind === "day") return Math.round(day);
       if (kind === "call") return Math.round(call || day);
       return Math.round(day + call);
     }
-    return avgOf[cid] || 0;
+    // Stipend model (Penrose / Good Sam / Sanford): call days price from the
+    // historical CALL-day average (stipend + overage), never the blended
+    // number that orientation and sign-out days drag down.
+    const k = kindAvgs[cid] || { callAvg: 0, dayAvg: 0 };
+    if (kind === "call") return k.callAvg || Math.round(call) || avgOf[cid] || 0;
+    if (kind === "day") return k.dayAvg || avgOf[cid] || 0;
+    return (k.callAvg || Math.round(call) || 0) + (k.dayAvg || 0);
   };
   const year = parseInt(month.slice(0, 4), 10);
   const outlook = useMemo(() => yearOutlook(sched, actuals, year, today), [sched, actuals, year, today]);
@@ -270,6 +281,9 @@ function Forecast() {
           const day = parseFloat(c?.dayRate) || 0;
           const call = parseFloat(c?.callStipend) || 0;
           if (day) return `Contract rates: day ${money(day)} · day + call ${money(day + call)} — the type above sets the price.`;
+          const k = kindAvgs[form.contractId] || {};
+          if (k.callAvg) return `Call days here have averaged ${money(k.callAvg)} (stipend ${money(call)} + overage)${k.dayAvg ? `; non-call days ${money(k.dayAvg)}` : ""}. The type above sets the price.`;
+          if (call) return `Call stipend ${money(call)} per call day — no history yet, so the stipend is the starting point.`;
           return avgOf[form.contractId] ? `This contract has averaged ${money(avgOf[form.contractId])} per worked day.` : "No history yet — contract rate used as the starting point.";
         })()}>
           <input type="number" inputMode="decimal" value={form.expected ?? ""} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={iS} />

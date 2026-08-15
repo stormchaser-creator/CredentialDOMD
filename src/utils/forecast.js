@@ -89,3 +89,26 @@ export function yearOutlook(scheduleDays, actuals, year, todayIso) {
   }
   return { months, projectedYear };
 }
+
+/**
+ * Per-contract averages split by day type: call days (the "On-call" daily
+ * totals) vs non-call days (orientation, sign-out, hourly work). A Penrose
+ * call day is stipend + overage money; blending it with a $300 sign-out
+ * produced estimates that matched nothing real.
+ */
+export function contractDayKindAverages(data, contractId) {
+  const call = {}, other = {};
+  for (const inv of data.invoices || []) {
+    if (inv.contractId !== contractId || inv.kind === "expenses") continue;
+    for (const l of inv.lines || []) {
+      if (l.amount == null || !l.date) continue;
+      const bucket = /on-call/i.test(l.label || "") ? call : other;
+      bucket[l.date] = (bucket[l.date] || 0) + (parseFloat(l.amount) || 0);
+    }
+  }
+  const avg = (m) => {
+    const v = Object.values(m);
+    return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0;
+  };
+  return { callAvg: avg(call), dayAvg: avg(other) };
+}
