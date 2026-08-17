@@ -7,7 +7,7 @@
  *   - DEA renewal fee (from licenses[] where type matches DEA)
  *   - Malpractice premiums (from insurance[])
  *   - CME course costs (from cme[].cost)
- *   - CredentialDoMD subscription itself ($228/yr Solo, $348/yr Locum)
+ *   - Professional society dues (from memberships[].cost)
  *
  * Plus user-entered manual line items (data.deductibles[]) for things the
  * app doesn't know about (license application fees, board exam fees, etc.)
@@ -61,14 +61,14 @@ const BLANK_FORM = {
 };
 
 export default function DeductionMemo() {
-  const { data, addItem, deleteItem, theme: T, plan } = useApp();
+  const { data, addItem, deleteItem, theme: T } = useApp();
   const [showImport, setShowImport] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(BLANK_FORM);
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
 
   // Auto-derived deductibles — shared with the tax estimator
-  const auto = useMemo(() => autoDeductions(data, plan, yearFilter), [data, plan, yearFilter]);
+  const auto = useMemo(() => autoDeductions(data, yearFilter), [data, yearFilter]);
 
   // Manual deductibles for the selected year
   const manual = (data.deductibles || []).filter((d) => d.taxYear === yearFilter);
