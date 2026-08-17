@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { getPrivate, setPrivate, removePrivate, looksLikePHI } from "../../../utils/privateVault";
+import { BASE_KEYS, lsGet, lsSet, lsGetJSON, lsSetJSON, lsRemove } from "../../../utils/storageScope";
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
@@ -28,8 +29,8 @@ import DutyLog from "./DutyLog";
  *    text invoice, opens the share sheet / mail, marks entries billed.
  */
 
-const TIMER_KEY = "credentialdomd-live-timer";
-const LAST_CONTRACT_KEY = "credentialdomd-last-contract";
+// The running timer and the remembered contract live on-device under the
+// signed-in user's own key (storageScope).
 // "Shift" (flat-hourly scheduled blocks) removed per Eric — his contracts
 // are stipend/call-based. Consult = a new patient seen, bills 1 hour flat.
 // Eric's billing vocabulary (2026-07): phone work bills per-call minimums;
@@ -41,10 +42,10 @@ const WORK_TYPES = ["Call", "Transfer call", "Consult", "Rounding", "Procedure",
 const CALL_TYPES = new Set(["Call", "Transfer call"]);
 
 function loadTimer() {
-  try { return JSON.parse(localStorage.getItem(TIMER_KEY)) || null; } catch { return null; }
+  try { return lsGetJSON(BASE_KEYS.timer) || null; } catch { return null; }
 }
 function saveTimer(t) {
-  try { t ? localStorage.setItem(TIMER_KEY, JSON.stringify(t)) : localStorage.removeItem(TIMER_KEY); } catch { /* noop */ }
+  try { t ? lsSetJSON(BASE_KEYS.timer, t) : lsRemove(BASE_KEYS.timer); } catch { /* noop */ }
 }
 
 // Local calendar date (YYYY-MM-DD) — entries were previously dated with the
@@ -182,12 +183,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   // the contract of the most recent log entry → first contract.
   const [contractId, setContractId] = useState(() => {
     try {
-      return loadTimer()?.contractId || localStorage.getItem(LAST_CONTRACT_KEY) || "";
+      return loadTimer()?.contractId || lsGet(BASE_KEYS.lastContract) || "";
     } catch { return ""; }
   });
   const rememberContract = useCallback((id) => {
     setContractId(id);
-    try { localStorage.setItem(LAST_CONTRACT_KEY, id); } catch { /* noop */ }
+    try { lsSet(BASE_KEYS.lastContract, id); } catch { /* noop */ }
   }, []);
   const lastLoggedContractId = useMemo(() => {
     let best = null, bestKey = "";
