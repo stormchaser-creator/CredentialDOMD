@@ -254,7 +254,7 @@ export default function AdminDashboard() {
           <SignupsList rows={signups} T={T} />
         </>
       )}
-      {tab === "errors" && !loading && <ErrorsList rows={errors} users={users} T={T} />}
+      {tab === "errors" && !loading && <ErrorsList rows={errors} users={users} T={T} onCleared={() => setErrors([])} />}
       {tab === "users" && !loading && <UsersPanel users={users} setUsers={setUsers} invites={invites} setInvites={setInvites} T={T} />}
       {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} T={T} onInvite={async (r) => {
         const res = await sendInvite({ email: r.email, name: r.name, lead_id: r.id });
@@ -507,8 +507,16 @@ function SignupsList({ rows, T }) {
 }
 
 /** Client-side crashes reported by report-error. Last 50, newest first. */
-function ErrorsList({ rows, users, T }) {
+function ErrorsList({ rows, users, T, onCleared }) {
   const [openId, setOpenId] = useState(null);
+  const [clearing, setClearing] = useState(false);
+  const clearAll = async () => {
+    if (!rows.length || !window.confirm(`Delete all ${rows.length} error reports? Do this once the cause is fixed.`)) return;
+    setClearing(true);
+    const { error } = await supabase.from("client_errors").delete().in("id", rows.map(r => r.id));
+    setClearing(false);
+    if (!error) onCleared?.();
+  };
   const who = (e) => {
     const u = users.find(x => x.auth_user_id && x.auth_user_id === e.auth_user_id) || users.find(x => x.id === e.profile_id);
     return u ? (u.name || u.email || "account") : (e.auth_user_id ? "signed-in user" : "signed-out visitor");
@@ -516,6 +524,10 @@ function ErrorsList({ rows, users, T }) {
   if (!rows.length) return <div style={{ fontSize: 13, color: T.textMuted, padding: "20px 0", textAlign: "center" }}>No client errors reported.</div>;
   return (
     <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: T.textMuted }}>{rows.length} report{rows.length === 1 ? "" : "s"}, newest first. Same message repeated = one bug hit several times.</div>
+        <button onClick={clearAll} disabled={clearing} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textDim, cursor: "pointer" }}>{clearing ? "..." : "Clear all"}</button>
+      </div>
       {rows.map(e => (
         <div key={e.id} onClick={() => setOpenId(openId === e.id ? null : e.id)} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
