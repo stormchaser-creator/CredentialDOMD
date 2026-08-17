@@ -10,7 +10,7 @@ import { Modal } from "../shared";
  * views (created in supabase-tracking-migration.sql).
  */
 export default function AdminDashboard() {
-  const { theme: T, user } = useApp();
+  const { theme: T, user, data } = useApp();
   const [tab, setTab] = useState("tickets");
   const [tickets, setTickets] = useState([]);
   const [feedback, setFeedback] = useState([]);
@@ -159,6 +159,7 @@ export default function AdminDashboard() {
     { id: "signups",   label: "Signups" },
     { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
+    { id: "ai",        label: "AI" },
   ];
 
   return (
@@ -266,6 +267,7 @@ export default function AdminDashboard() {
         return res;
       }} />}
       {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}
+      {tab === "ai" && !loading && <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} />}
 
       {/* Tap a ticket → read it, answer it, close it */}
       <Modal open={!!openTicket} onClose={() => setOpenTicket(null)} title={openTicket?.subject || "Ticket"}>
@@ -896,6 +898,191 @@ function FieldProposals({ rows, setRows, T }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Calls an edge function with the admin's Clerk JWT and unwraps the JSON
+ * whatever the status. supabase-js throws on non-2xx; the body is on
+ * error.context. Returns { ok, status, data }.
+ */
+async function callFn(name, { method = "POST", body } = {}) {
+  try {
+    const { data, error } = await supabase.functions.invoke(name, { method, ...(body !== undefined ? { body } : {}) });
+    if (error) {
+      let j = null;
+      try { j = await error.context?.json?.(); } catch { /* not JSON */ }
+      return { ok: false, status: error.context?.status || 0, data: j || { error: error.message } };
+    }
+    return { ok: true, status: 200, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: e.message } };
+  }
+}
+
+/**
+ * AI: the shared Gemini key and who is using it. New accounts get AI with
+ * zero setup because every call goes through ai-proxy with this key; a
+ * user's own key (Settings > AI, device-local) still bypasses it.
+ */
+function AiPanel({ users, ownKey, T }) {
+  const [status, setStatus] = useState(null);      // { configured, last4, updated_at }
+  const [quota, setQuota] = useState(null);        // { shared, used_today, limit } from ai-proxy GET
+  const [usage, setUsage] = useState([]);          // today's ai_usage rows (UTC day)
+  const [keyInput, setKeyInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [loadErr, setLoadErr] = useState("");
+
+  const dayStartIso = () => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d.toISOString(); };
+
+  const refresh = async () => {
+    const [k, q, u] = await Promise.all([
+      callFn("admin-shared-key", { method: "GET" }),
+      callFn("ai-proxy", { method: "GET" }),
+      supabase.from("ai_usage").select("user_id, ok, status, prompt_chars, created_at").gte("created_at", dayStartIso()).order("created_at", { ascending: false }).limit(5000),
+    ]);
+    const errs = [];
+    if (k.ok) setStatus(k.data); else errs.push(`Key status: ${k.data?.error || `HTTP ${k.status}`} (is admin-shared-key deployed?)`);
+    if (q.ok) setQuota(q.data); else errs.push(`Proxy: ${q.data?.error || `HTTP ${q.status}`} (is ai-proxy deployed?)`);
+    if (u.error) errs.push(`Usage: ${u.error.message} (run 20260817_ai_proxy.sql)`);
+    else setUsage(u.data || []);
+    setLoadErr(errs.join(" | "));
+  };
+
+  // Load once on mount. Deferred to a microtask so nothing sets state
+  // synchronously inside the effect body.
+  useEffect(() => { Promise.resolve().then(refresh); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveKey = async (value, label) => {
+    const v = (value || "").trim();
+    if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(v)) { setMsg("Could not save: that does not look like a Google AI Studio key (starts with AIza)."); return; }
+    setBusy(true); setMsg("");
+    const r = await callFn("admin-shared-key", { method: "POST", body: { value: v } });
+    setBusy(false);
+    if (r.ok) { setMsg(`Shared key saved${label ? ` (${label})` : ""}. Every active account now has AI on.`); setKeyInput(""); refresh(); }
+    else setMsg(`Could not save: ${r.data?.error || `HTTP ${r.status}`}`);
+  };
+
+  const removeKey = async () => {
+    if (!window.confirm("Remove the shared key? AI features stop for everyone who has not added their own key.")) return;
+    setBusy(true); setMsg("");
+    const r = await callFn("admin-shared-key", { method: "DELETE" });
+    setBusy(false);
+    if (r.ok) { setMsg("Shared key removed."); refresh(); }
+    else setMsg(`Could not remove: ${r.data?.error || `HTTP ${r.status}`}`);
+  };
+
+  // Today's usage rolled up per account, joined to the profiles directory already loaded.
+  const byUser = {};
+  for (const r of usage) {
+    const k = r.user_id || "unknown";
+    const b = byUser[k] || (byUser[k] = { user_id: r.user_id, calls: 0, ok: 0, failed: 0, chars: 0, last: null });
+    b.calls += 1;
+    if (r.ok) b.ok += 1; else b.failed += 1;
+    b.chars += r.prompt_chars || 0;
+    if (!b.last || r.created_at > b.last) b.last = r.created_at;
+  }
+  const rows = Object.values(byUser).sort((a, b) => b.calls - a.calls);
+  const who = (id) => { const u = users.find(x => x.id === id); return u ? (u.name || u.email || "account") : (id ? "deleted account" : "unknown"); };
+  const totalCalls = usage.length;
+  const totalFailed = usage.filter(r => !r.ok).length;
+  const limit = quota?.limit ?? 200;
+
+  const card = { backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 10 };
+  const btn = (label, onClick, { primary, danger, disabled } = {}) => (
+    <button onClick={onClick} disabled={busy || disabled} style={{
+      padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: busy || disabled ? "default" : "pointer",
+      border: primary || danger ? "none" : `1px solid ${T.border}`,
+      backgroundColor: primary ? T.accent : danger ? (T.dangerDim || "rgba(239,68,68,0.12)") : "transparent",
+      color: primary ? "#fff" : danger ? (T.danger || "#ef4444") : T.text,
+      opacity: busy || disabled ? 0.6 : 1,
+    }}>{label}</button>
+  );
+
+  return (
+    <div>
+      {loadErr && (
+        <div style={{ padding: "10px 12px", borderRadius: 8, backgroundColor: "rgba(239,68,68,0.1)", color: "#ef4444", fontSize: 12, marginBottom: 10 }}>{loadErr}</div>
+      )}
+
+      <div style={{ ...card, border: `2px solid ${status?.configured ? "#10b981" : T.accent}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Shared Gemini key</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: status?.configured ? "#10b981" : T.text }}>
+              {status == null ? "Checking..." : status.configured ? `On (ends in ${status.last4})` : "Not set"}
+            </div>
+            <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
+              {status?.configured
+                ? `Saved ${timeAgo(status.updated_at)}. Every active account has AI on with no setup. Users who add their own key in Settings > AI bypass this one.`
+                : "Until a key is here, AI features only work for users who added their own key in Settings > AI."}
+            </div>
+          </div>
+          {status?.configured && btn("Remove shared key", removeKey, { danger: true })}
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>{status?.configured ? "Replace the shared key" : "Set the shared key"}</div>
+        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
+          Paste a Google AI Studio key. It is stored on the server only (app_secrets, service role) and is never sent to a browser. Google is asked to confirm the key before it is saved.
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="AIza..." type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
+            style={{ flex: "1 1 220px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13, fontFamily: "ui-monospace, monospace" }} />
+          {btn(busy ? "..." : "Save shared key", () => saveKey(keyInput), { primary: true, disabled: !keyInput.trim() })}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+          {btn("Use my own key from this device", () => {
+            if (!ownKey) { setMsg("No key on this device. Add one in Settings > AI first, then come back."); return; }
+            if (!window.confirm(`Share the key on this device (ends in ${ownKey.slice(-4)}) with every active account?`)) return;
+            saveKey(ownKey, `ends in ${ownKey.slice(-4)}`);
+          })}
+          <span style={{ fontSize: 11, color: T.textDim }}>{ownKey ? `This device has a key ending in ${ownKey.slice(-4)}.` : "This device has no key in Settings > AI."}</span>
+        </div>
+        {msg && <div style={{ fontSize: 12, color: msg.startsWith("Could not") || msg.startsWith("No key") ? "#ef4444" : "#10b981", marginTop: 8 }}>{msg}</div>}
+      </div>
+
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Per-user daily limit</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.accent }}>{limit} <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted }}>calls / day</span></div>
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+          Counted per account per UTC day; admins are unlimited. Past the cap the app tells the user to try tomorrow or add their own key. To change it: set the <code>AI_DAILY_LIMIT</code> secret on the ai-proxy function (Supabase dashboard, Edge Functions, Secrets) or edit <code>DEFAULT_DAILY_LIMIT</code> in <code>supabase/functions/ai-proxy/index.ts</code> and redeploy.
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "14px 0 6px" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>Today's usage (since midnight UTC)</div>
+        <button onClick={refresh} style={{ fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer", fontWeight: 700 }}>refresh</button>
+      </div>
+      <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
+        {totalCalls} call{totalCalls === 1 ? "" : "s"} through the shared key{totalFailed ? `, ${totalFailed} failed at Google` : ""}. Calls made with a user's own key do not appear here.
+      </div>
+      {rows.length === 0 ? (
+        <Empty T={T} text="No shared-key calls yet today." />
+      ) : (
+        <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 800, color: T.textMuted, paddingBottom: 6, borderBottom: `1px solid ${T.border}` }}>
+            <span>Account</span><span>Calls</span><span>Failed</span><span>Text sent</span><span>Last call</span>
+          </div>
+          {rows.map(r => {
+            const over = r.calls >= limit;
+            return (
+              <div key={r.user_id || "unknown"} style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 12.5, color: T.text, padding: "6px 0", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{who(r.user_id)}</span>
+                <span style={{ fontWeight: 800, color: over ? "#ef4444" : T.text }}>{r.calls}{over ? " (cap)" : ""}</span>
+                <span style={{ color: r.failed ? "#f59e0b" : T.textDim }}>{r.failed}</span>
+                <span>{r.chars >= 1000 ? `${Math.round(r.chars / 1000)}k` : r.chars} chars</span>
+                <span style={{ color: T.textMuted }}>{timeAgo(r.last)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
