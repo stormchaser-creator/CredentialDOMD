@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
+import EmailPacketModal from "./EmailPacketModal";
 import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared/Icons";
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
 import { composeText } from "../../utils/notifications";
@@ -15,6 +16,10 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const [note, setNote] = useState("");
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(null);
+  // "Email with attachments": the server sends the linked files as real
+  // attachments from docs@credentialdomd.com (reply_to = the physician).
+  // share_log for that path is written by the server, not here.
+  const [emailPacketOpen, setEmailPacketOpen] = useState(false);
 
   if (!open || !item) return null;
 
@@ -147,12 +152,23 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
         </button>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: canNativeShare ? 10 : 18 }}>
-        <button onClick={doEmail} title="Opens your mail app with the text only — email links cannot carry attachments" style={{
+      {hasDocs && (
+        <button onClick={() => setEmailPacketOpen(true)} title="Sends the linked documents as real email attachments from CredentialDOMD; replies come to your account email" style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          width: "100%", marginTop: canNativeShare ? 10 : 18, padding: "13px 10px",
+          backgroundColor: T.accentDim, color: T.accent, border: `1px solid ${T.accent}`,
+          borderRadius: 14, cursor: "pointer", fontSize: 14.5, fontWeight: 700,
+        }}>
+          <EmailIcon />Email with attachments ({linkedDocs.length})
+        </button>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+        <button onClick={doEmail} title="Opens your mail app with the text only: email links cannot carry attachments" style={{
           display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 10px",
           backgroundColor: T.accentDim, color: T.accent, border: "none", borderRadius: 14, cursor: "pointer", fontSize: 14, fontWeight: 600,
         }}>
-          <EmailIcon />{sent === "email" ? "Opening..." : "Email"}
+          <EmailIcon />{sent === "email" ? "Opening..." : "Email (opens Mail)"}
         </button>
         <button onClick={doText} style={{
           display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 10px",
@@ -189,6 +205,18 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
             </div>
           ))}
         </div>
+      )}
+
+      {hasDocs && (
+        <EmailPacketModal
+          open={emailPacketOpen}
+          onClose={() => setEmailPacketOpen(false)}
+          request={null}
+          initialTo={email}
+          initialSubject={subject}
+          initialNote={full}
+          initialDocIds={linkedDocs.map(d => d.id)}
+        />
       )}
     </Modal>
   );
