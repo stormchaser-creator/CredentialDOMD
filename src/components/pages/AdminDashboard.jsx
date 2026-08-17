@@ -21,6 +21,7 @@ export default function AdminDashboard() {
   const [fields, setFields] = useState([]);
   const [users, setUsers] = useState([]);       // profiles directory (admin read)
   const [invites, setInvites] = useState([]);   // beta_access allowlist
+  const [errors, setErrors] = useState([]);     // client_errors (report-error sink)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openTicket, setOpenTicket] = useState(null);
@@ -114,7 +115,8 @@ export default function AdminDashboard() {
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
-    ]).then(([t, f, s, v, w, wa, fp, pr, ba]) => {
+      supabase.from("client_errors").select("id, created_at, kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra").order("created_at", { ascending: false }).limit(50),
+    ]).then(([t, f, s, v, w, wa, fp, pr, ba, ce]) => {
       if (cancelled) return;
       if (t.error) setError(`Tickets: ${t.error.message}`);
       else setTickets(t.data || []);
@@ -131,6 +133,7 @@ export default function AdminDashboard() {
       if (pr.error) setError((prev) => prev || `Users: ${pr.error.message}`);
       else setUsers(pr.data || []);
       if (!ba.error) setInvites(ba.data || []);
+      if (!ce.error) setErrors(ce.data || []);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -152,6 +155,7 @@ export default function AdminDashboard() {
   const TABS = [
     { id: "tickets",   label: `Tickets (${activeTickets.length})` },
     { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
+    { id: "errors",    label: `Errors (${errors.filter(e => Date.now() - new Date(e.created_at).getTime() < 7 * 86400000).length})` },
     { id: "signups",   label: "Signups" },
     { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
@@ -250,6 +254,7 @@ export default function AdminDashboard() {
           <SignupsList rows={signups} T={T} />
         </>
       )}
+      {tab === "errors" && !loading && <ErrorsList rows={errors} users={users} T={T} />}
       {tab === "users" && !loading && <UsersPanel users={users} setUsers={setUsers} invites={invites} setInvites={setInvites} T={T} />}
       {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} T={T} onInvite={async (r) => {
         const res = await sendInvite({ email: r.email, name: r.name, lead_id: r.id });
@@ -497,6 +502,36 @@ function SignupsList({ rows, T }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Client-side crashes reported by report-error. Last 50, newest first. */
+function ErrorsList({ rows, users, T }) {
+  const [openId, setOpenId] = useState(null);
+  const who = (e) => {
+    const u = users.find(x => x.auth_user_id && x.auth_user_id === e.auth_user_id) || users.find(x => x.id === e.profile_id);
+    return u ? (u.name || u.email || "account") : (e.auth_user_id ? "signed-in user" : "signed-out visitor");
+  };
+  if (!rows.length) return <div style={{ fontSize: 13, color: T.textMuted, padding: "20px 0", textAlign: "center" }}>No client errors reported.</div>;
+  return (
+    <div>
+      {rows.map(e => (
+        <div key={e.id} onClick={() => setOpenId(openId === e.id ? null : e.id)} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color: e.kind === "react" ? "#ef4444" : "#f59e0b" }}>{e.kind}</span>
+            <span style={{ fontSize: 11, color: T.textDim }}>{timeAgo(e.created_at)} · {who(e)}{e.build ? ` · ${String(e.build).slice(-7)}` : ""}</span>
+          </div>
+          <div style={{ fontSize: 13, color: T.text, marginTop: 4, wordBreak: "break-word" }}>{e.message}</div>
+          {openId === e.id && (
+            <div style={{ marginTop: 8, fontSize: 11, color: T.textMuted, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "ui-monospace, monospace" }}>
+              {e.url && <div>{e.url}</div>}
+              {e.user_agent && <div style={{ marginTop: 4 }}>{e.user_agent}</div>}
+              {e.stack && <div style={{ marginTop: 6 }}>{e.stack}</div>}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

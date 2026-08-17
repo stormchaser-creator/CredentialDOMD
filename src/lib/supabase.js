@@ -265,6 +265,10 @@ export async function ensureProfile(userId) {
     .single();
 
   if (error) {
+    // Lost the race with the Clerk webhook (unique on auth_user_id): the row
+    // exists now, use it.
+    const { data: again } = await supabase.from("profiles").select("*").eq("auth_user_id", userId).maybeSingle();
+    if (again) return again;
     console.warn("Failed to create profile:", error.message);
     return null;
   }

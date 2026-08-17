@@ -7,7 +7,7 @@
  *   node scripts/generate-legal-pages.mjs
  *
  * The GitHub Pages deploy workflow copies these files to the site root, where
- * they are served as https://credentialdomd.com/privacy and /terms
+ * they are served as https://credentialdomd.com/app/privacy and /terms
  * (GitHub Pages resolves extensionless URLs to the .html file).
  */
 
@@ -155,8 +155,8 @@ ${doc.sections.map(section).join("\n\n")}
       <div class="footer-copy">&copy; 2026 CredentialDOMD. All rights reserved.</div>
     </div>
     <div class="footer-links">
-      <a href="/privacy">Privacy Policy</a>
-      <a href="/terms">Terms of Service</a>
+      <a href="/app/privacy">Privacy Policy</a>
+      <a href="/app/terms">Terms of Service</a>
       <a href="mailto:${LEGAL_CONTACT}">Contact</a>
       <a href="mailto:${LEGAL_CONTACT}">Support</a>
     </div>
@@ -167,6 +167,12 @@ ${doc.sections.map(section).join("\n\n")}
 </html>
 `;
 
-writeFileSync(resolve(out, "privacy.html"), page(PRIVACY, TERMS));
-writeFileSync(resolve(out, "terms.html"), page(TERMS, PRIVACY));
-console.log("wrote landing/privacy.html and landing/terms.html");
+// The gh-pages workflow cannot be edited from this machine (token lacks the
+// workflow scope), so the pages ship inside the app bundle via public/ and
+// are served at /app/privacy and /app/terms; landing/ keeps a copy for the repo.
+const pubDir = resolve(out, "..", "public");
+for (const [name, html] of [["privacy.html", page(PRIVACY, TERMS)], ["terms.html", page(TERMS, PRIVACY)]]) {
+  writeFileSync(resolve(out, name), html);
+  writeFileSync(resolve(pubDir, name), html);
+}
+console.log("wrote landing/{privacy,terms}.html and public/{privacy,terms}.html");

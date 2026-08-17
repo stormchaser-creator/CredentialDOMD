@@ -99,8 +99,19 @@ function removeLegacy(base) {
 /** Move a legacy value under the user's key, never overwriting a namespaced one. */
 function moveLegacy(base, userId) {
   const raw = readLegacy(base);
-  if (raw != null && lsGet(base, userId) == null) lsSet(base, raw, userId);
+  // An empty placeholder ("[]", "{}", "null") written by a component that
+  // mounted before adoption ran does not count as a namespaced value; the
+  // legacy content wins over it.
+  const cur = lsGet(base, userId);
+  const curEmpty = cur == null || /^\s*(\[\s*\]|\{\s*\}|null|"")\s*$/.test(cur);
+  if (raw != null && curEmpty) lsSet(base, raw, userId);
   removeLegacy(base);
+}
+
+/** True while any pre-namespace key is still on the device. */
+export function hasLegacyStorage() {
+  return [BASE_KEYS.data, BASE_KEYS.vault, BASE_KEYS.chat, BASE_KEYS.archives, BASE_KEYS.timer, BASE_KEYS.lastContract]
+    .some(base => readLegacy(base) != null);
 }
 
 /**

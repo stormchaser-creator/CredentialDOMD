@@ -4,7 +4,7 @@ import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
-import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage } from "../utils/storageScope";
+import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage } from "../utils/storageScope";
 import { vaultCount } from "../utils/privateVault";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
@@ -147,13 +147,18 @@ export function AppProvider({ children, onNavigate }) {
           // that overlaps the local file; see adoptLegacyStorage). A new
           // account therefore never pushes someone else's cache up.
           let local = readCachedData(authUserId);
-          if (!local) {
+          // Run adoption whenever legacy keys still exist, not only when the
+          // namespaced slot is empty: an offline first load may have written
+          // empty defaults under the new key, and the legacy vault must not
+          // become unreachable because of that.
+          if (!local || hasLegacyStorage()) {
             const cloudIds = new Set();
             for (const key of COLLECTION_KEYS) for (const x of merged[key] || []) if (x?.id) cloudIds.add(x.id);
             const cloudHasData = cloudIds.size > 0 || !!merged.settings?.name;
             try {
-              local = adoptLegacyStorage(authUserId, { cloudIds, cloudHasData });
-            } catch { local = null; }
+              const adopted = adoptLegacyStorage(authUserId, { cloudIds, cloudHasData });
+              local = adopted || local;
+            } catch { /* keep local */ }
           }
 
           // Deletion ledger: anything deleted anywhere stays deleted.

@@ -18,7 +18,7 @@ const APP_URL = "https://credentialdomd.com/app/";
 
 const replyText = (reply: string) => `${reply}
 
-Reply here: ${APP_URL} (Support > Your tickets)
+Reply here: ${APP_URL}#support (More > Support > Your tickets)
 
 Whit
 

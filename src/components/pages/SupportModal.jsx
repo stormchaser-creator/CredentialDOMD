@@ -89,7 +89,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       if (!profile) { setTickets([]); return; }
       const { data: rows, error: e1 } = await supabase
         .from("support_tickets")
-        .select("id, subject, status, created_at, updated_at")
+        .select("id, subject, body, status, created_at, updated_at")
         .eq("user_id", profile.id)
         .order("updated_at", { ascending: false })
         .limit(100);
@@ -355,6 +355,14 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
 
       {threadLoading && <div style={{ fontSize: 13, color: T.textMuted }}>Loading...</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {openTicket.body && (
+          <div style={{ padding: "9px 11px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
+              You {"·"} {new Date(openTicket.created_at).toLocaleString()}
+            </div>
+            <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{openTicket.body}</div>
+          </div>
+        )}
         {thread.map((m) => (
           <div key={m.id} style={{
             padding: "9px 11px", borderRadius: 10,
@@ -369,7 +377,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         ))}
         {!threadLoading && thread.length === 0 && (
           <div style={{ fontSize: 12.5, color: T.textMuted, padding: "6px 0" }}>
-            Ticket sent. No replies yet.
+            No replies yet.
           </div>
         )}
       </div>

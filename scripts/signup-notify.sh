@@ -24,6 +24,11 @@ union all select 'TICKET', coalesce(p.name,''), coalesce(p.email,''), left(coale
 union all select 'TICKET REPLY', coalesce(p.name,''), coalesce(p.email,''), left(coalesce(t.subject,''),40) || ': ' || left(regexp_replace(m.body, '\s+', ' ', 'g'),80), m.created_at
   from support_messages m join support_tickets t on t.id = m.ticket_id left join profiles p on p.id = m.author_id
   where m.created_at > '$SINCE' and not public.is_admin(m.author_id)
+union all select 'CLIENT ERROR', coalesce(p.name, e.auth_user_id, 'signed-out'), coalesce(p.email,''), e.kind || ': ' || left(regexp_replace(e.message, '\s+', ' ', 'g'),90), e.created_at
+  from client_errors e left join profiles p on p.auth_user_id = e.auth_user_id
+  where e.created_at > '$SINCE'
+union all select 'BETA JOINED', coalesce(name,''), coalesce(email,''), '', activated_at
+  from beta_access where activated_at > '$SINCE'
 order by created_at"
 
 ROWS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
@@ -38,13 +43,13 @@ except Exception:
     sys.exit(0)
 if not isinstance(rows, list) or not rows:
     sys.exit(0)
-tickets = any((r.get("kind") or "").startswith("TICKET") for r in rows)
+tickets = any((r.get("kind") or "").startswith(("TICKET","CLIENT","BETA")) for r in rows)
 lines = ["CredentialDOMD activity" if tickets else "CredentialDOMD signup" + ("s" if len(rows) > 1 else "")]
 for r in rows:
     who = r.get("name") or "(no name)"
     email = r.get("email") or "(no email)"
     kind = r.get("kind") or ""
-    sep = ": " if kind.startswith("TICKET") else " via "
+    sep = ": " if kind.startswith(("TICKET","CLIENT")) else " via "
     extra = f"{sep}{r['extra']}" if r.get("extra") else ""
     lines.append(f"• [{r.get('kind')}] {who} — {email}{extra}")
 print("\n".join(lines))

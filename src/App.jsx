@@ -120,9 +120,18 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
+  const [supportTab, setSupportTab] = useState("new");
+  // Reply emails link to /app/#support: open the sheet on "Your tickets".
+  useEffect(() => {
+    if (window.location.hash === "#support") {
+      setSupportTab("tickets");
+      setShowSupport(true);
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");
@@ -162,7 +171,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   // linked certificate files, sent as one share.
   const sendRenewalPacket = useCallback(async (st) => {
     const comp = complianceFor(data, st);
-    const sName = data.settings?.name ? `${data.settings.name}, ${data.settings.degreeType || "MD"}` : "Physician";
+    const sName = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
     const inWin = (data.cme || []).filter(c => {
       if (!c.date) return false;
       const d = new Date(c.date);
@@ -896,6 +905,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           { key: "lic", label: "Confirm your licenses", detail: "Tap Import from NPI, then add DEA and board certs", done: (data.licenses || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
           { key: "doc", label: "Upload one document", detail: "A license PDF or a photo — packets build themselves from these", done: (data.documents || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
           { key: "alert", label: "Turn on expiration alerts", detail: "The whole point: never let anything lapse silently", done: !!(data.settings.notifyEmail || data.settings.notifyBrowser || data.settings.notifyText), go: () => { setTab("more"); setSubPage("settings"); } },
+          { key: "ai", label: "Turn on AI (2 minutes)", detail: "Paste a free Google AI Studio key in Settings. It stays on this device. Unlocks scanning, dictation, and the RVU coder", done: !!(data.settings.apiKey || data.settings.anthropicApiKey), go: () => { setTab("more"); setSubPage("settings"); } },
         ];
         const remaining = steps.filter(st => !st.done);
         if (!remaining.length) return null;
@@ -1515,10 +1525,13 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Current Plan</div>
                 <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
-                  {isPractice ? "Practice" : isPro ? "Pro" : "Free"}
+                  {isFreeBeta && !hasSubscription ? "Free beta" : isPractice ? "Practice" : isPro ? "Pro" : "Free"}
                 </div>
+                {isFreeBeta && !hasSubscription && (
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>All features on. No card, nothing to cancel.</div>
+                )}
               </div>
-              {!isPro && (
+              {!isPro && !isFreeBeta && (
                 <button onClick={() => setShowPricing(true)} style={{
                   padding: "10px 18px", borderRadius: 12, border: "none",
                   backgroundColor: "#10b981", color: "#fff",
@@ -1529,7 +1542,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
                 </button>
               )}
             </div>
-            {isPro && (
+            {isPro && hasSubscription && (
               <button onClick={() => manage()} style={{
                 padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.25)",
                 backgroundColor: "rgba(255,255,255,0.1)", color: "#fff",
@@ -1713,6 +1726,19 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
+          {/* Support: file a ticket, read replies */}
+          <button onClick={() => { setSupportTab("tickets"); setShowSupport(true); }} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${T.border}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\ud83d\udcac"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Support</span>
+            <span style={{ fontSize: 12, color: T.textMuted }}>tickets & replies</span>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
+
           {/* Legal */}
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setSubPage("privacy")} className="cmd-card-hover" style={{
@@ -1755,7 +1781,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
           </div>
 
           {/* Cancel Subscription (only when authenticated + subscribed) */}
-          {user && isPro && (
+          {user && isPro && hasSubscription && (
             <button onClick={() => setSubPage("cancellation")} className="cmd-card-hover" style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               backgroundColor: T.card, border: `1px solid ${T.border}`,
@@ -1821,7 +1847,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     }}>
       <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
       <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
-      <SupportModal open={showSupport} onClose={() => setShowSupport(false)} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
+      <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); }} initialTab={supportTab} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
       <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
 
       {/* ─── TOP BAR (56px) ────────────────────────────── */}

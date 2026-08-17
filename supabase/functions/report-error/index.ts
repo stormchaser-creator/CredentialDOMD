@@ -16,7 +16,8 @@
  * table has no insert policy for any JWT role.
  *
  * DB only, no operator push here. The launchd iMessage notifier
- * (scripts/signup-notify.sh) polls the table; see the migration for the query.
+ * (scripts/signup-notify.sh) polls the table for new rows, and Admin > Errors
+ * lists them.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -57,7 +58,9 @@ function str(v: unknown, max: number): string | null {
 }
 
 async function ipHash(req: Request): Promise<string | null> {
-  const fwd = req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "";
+  // Trust the edge-set headers first; x-forwarded-for is client-spoofable and
+  // is only the last resort.
+  const fwd = req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || req.headers.get("x-forwarded-for") || "";
   const ip = fwd.split(",")[0].trim();
   if (!ip) return null;
   const pepper = Deno.env.get("ERROR_IP_PEPPER") || "credentialdomd-client-errors";
@@ -130,6 +133,16 @@ Deno.serve(async (req) => {
       .eq("ip_hash", ip_hash)
       .gte("created_at", since);
     if ((count ?? 0) >= RATE_MAX_ROWS) return json({ error: "Rate limited" }, 429);
+  }
+  // Global ceiling regardless of IP visibility: a scripted flood cannot fill
+  // the table even if it hides its address.
+  {
+    const since = new Date(Date.now() - RATE_WINDOW_MIN * 60 * 1000).toISOString();
+    const { count } = await db
+      .from("client_errors")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", since);
+    if ((count ?? 0) >= 300) return json({ error: "Rate limited" }, 429);
   }
 
   // Best-effort profile resolution. auth_user_id is self-reported (no JWT

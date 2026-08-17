@@ -214,7 +214,7 @@ export default function PricingModal({ open, onClose }) {
             // the Locum feature set for free, so no card is marked current.
             const isCurrent = !betaMode && plan === tier.id;
             const priced = priceFor(tier.id, billing);
-            const display = betaMode ? "Coming later" : priced.display;
+            const display = betaMode && priced.display !== "Free" ? "Coming later" : priced.display;
             const perInterval = betaMode ? null : priced.perInterval;
             const secondaryLine = betaMode ? null : priced.secondaryLine;
             const isRecommended = tier.recommended;

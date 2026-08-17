@@ -1,6 +1,6 @@
 -- Client-side error sink. Rows are written ONLY by the report-error edge
 -- function (service role, bypasses RLS); the browser never inserts directly.
--- Admins read them from the dashboard; nobody else can select.
+-- Intended for Admin > Errors in the app; nobody but admins can select.
 create table if not exists public.client_errors (
   id            uuid primary key default gen_random_uuid(),
   created_at    timestamptz not null default now(),
