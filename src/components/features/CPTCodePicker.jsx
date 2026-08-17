@@ -4,6 +4,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import { SearchIcon } from "../shared/Icons";
 import { searchCPT } from "../../utils/cptSearch";
 import { aiCPTLookup } from "../../utils/cptAILookup";
+import { aiAvailable, describeAiStatus } from "../../utils/aiClient";
 
 function CPTCodePicker({ value, onChange }) {
   const { data, theme: T } = useApp();
@@ -64,9 +65,10 @@ function CPTCodePicker({ value, onChange }) {
 
   // AI fallback
   const handleAILookup = useCallback(async () => {
+    // Own key when present; otherwise the shared key via ai-proxy.
     const apiKey = data.settings?.apiKey;
-    if (!apiKey) {
-      setAiError("Add your API key in Settings to use AI-assisted lookup.");
+    if (!aiAvailable(data.settings)) {
+      setAiError(describeAiStatus(data.settings));
       return;
     }
     setAiLoading(true);
@@ -78,7 +80,7 @@ function CPTCodePicker({ value, onChange }) {
       setAiError(err.message);
     }
     setAiLoading(false);
-  }, [query, results, data.settings?.apiKey]);
+  }, [query, results, data.settings]);
 
   // Close dropdown on outside click
   useEffect(() => {

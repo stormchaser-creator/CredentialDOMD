@@ -12,7 +12,7 @@
  * **double asterisks** mark bold. Plain text only, no HTML.
  */
 
-export const LEGAL_UPDATED = "August 16, 2026";
+export const LEGAL_UPDATED = "August 17, 2026";
 export const LEGAL_OPERATOR = "CredentialDOMD, operated by Eric Whitney, DO";
 export const LEGAL_CONTACT = "support@credentialdomd.com";
 
@@ -40,7 +40,7 @@ export const PRIVACY = {
           "**Locum and case data:** case logs, work and billing entries, invoices, and contract terms.",
           "**Documents you upload**, plus the fields the app extracts from them.",
           "**Support and feedback:** tickets and replies, field proposals, and a log of assistant questions with a one-line summary of each answer.",
-          "**Settings**, including any AI keys you enter so the app can call the provider on your behalf (section 4).",
+          "**Settings.** Any AI keys you enter yourself stay on your device and are not stored in the database (section 4). The server keeps a count of your AI calls per day for the shared key's daily limit.",
         ],
       ],
     },
@@ -55,11 +55,12 @@ export const PRIVACY = {
       ],
     },
     {
-      title: "4. AI features run on your own key",
+      title: "4. AI features",
       blocks: [
-        "Document scanning, dictation, CPT coding, statement and row parsing, and the assistant (Vera) are bring-your-own-key. Nothing goes to an AI company until you paste a Google Gemini key, an Anthropic key, or both into Settings and use one of those features.",
-        "When you do, what you submit (document images and PDFs, dictation transcripts, statement rows, and assistant chat including attached documents) is sent from your browser to Google or Anthropic under your key and is handled under their terms, not ours. Google's free Gemini tier permits human review and model training on submitted content; check the terms attached to your key. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.",
-        "You are responsible for the key and any charges on it. AI output is a draft: review it before you rely on it.",
+        "Document scanning, dictation, CPT coding, statement and row parsing, CME import, and the assistant (Vera) run on Google's Gemini API. By default they use a shared key that we hold on the server: your request goes from your browser to our server, which forwards it to Google under that key and returns the answer. The server records the date, which feature ran, and whether it succeeded, so it can apply a per-user daily limit; it does not keep the content of the request. Nothing goes to an AI company until you use one of these features.",
+        "You may add your own Google Gemini key, an Anthropic key, or both in Settings. Those keys stay on your device and are never stored in the database. With your own key the request goes straight from your browser to that provider under your key, the shared daily limit does not apply, and you are responsible for the key and any charges on it.",
+        "Either way, what you submit (document images and PDFs, dictation transcripts, statement rows, and assistant chat including attached documents) is handled under Google's or Anthropic's terms, not ours. Google's free Gemini tier permits human review and model training on submitted content; check the terms attached to the key in use. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.",
+        "AI output is a draft: review it before you rely on it.",
       ],
     },
     {
@@ -80,7 +81,7 @@ export const PRIVACY = {
           "**Cloudflare**: proxy and CDN in front of credentialdomd.com, and Turnstile, the bot check Clerk shows at sign-in.",
           "**GitHub Pages**: static hosting for the site and the app files.",
           "**Resend**: transactional email, such as the early-access welcome note and account emails.",
-          "**Google** (Gemini API) and **Anthropic** (Claude API): only under your own key and only when you use an AI feature (section 4).",
+          "**Google** (Gemini API): when you use an AI feature, under the shared key or your own (section 4). **Anthropic** (Claude API): only under your own key.",
           "**CMS NPPES registry** and **NLM Clinical Tables**: NPI lookup. Public government APIs that receive only the search terms (name, state, or NPI).",
           "**Telegram**: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram.",
         ],
@@ -177,9 +178,9 @@ export const TERMS = {
       ],
     },
     {
-      title: "5. AI features and your keys",
+      title: "5. AI features and keys",
       blocks: [
-        "AI features run on API keys you supply (Google Gemini, Anthropic, or both). You are responsible for those keys, for the charges on them, and for complying with the provider's terms. Content you submit to an AI feature goes to that provider under your key. AI output is a draft for your review; do not rely on it without checking.",
+        "AI features run on a shared Google Gemini key held on our server, subject to a per-user daily limit that we may change, or on API keys you supply (Google Gemini, Anthropic, or both). If you supply a key you are responsible for it, for the charges on it, and for complying with the provider's terms. Content you submit to an AI feature goes to that provider under whichever key is in use. We may suspend shared-key access for abuse. AI output is a draft for your review; do not rely on it without checking.",
       ],
     },
     {

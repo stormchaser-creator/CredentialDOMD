@@ -57,7 +57,7 @@ const FAQ_DATA = [
       },
       {
         q: "Does CredentialDOMD work offline?",
-        a: "Mostly. The app reads from a local cache, so you can open it and view your credentials without a connection; changes sync to the cloud when you are back online. Sign-in, NPI Lookup (the NPPES registry via NLM Clinical Tables), AI features (your own Gemini or Anthropic key), and support tickets need a connection.",
+        a: "Mostly. The app reads from a local cache, so you can open it and view your credentials without a connection; changes sync to the cloud when you are back online. Sign-in, NPI Lookup (the NPPES registry via NLM Clinical Tables), AI features, and support tickets need a connection.",
       },
       {
         q: "How do I set up my profile?",
@@ -82,7 +82,7 @@ const FAQ_DATA = [
       },
       {
         q: "Can I scan documents to add credentials?",
-        a: "Yes. Go to the Scan tab, upload or photograph a credential document, and the AI will extract the relevant information (type, license number, dates, state, etc.) and pre-fill the form for you. This requires your own Google Gemini API key, set in Settings; the image is sent to Google under that key. Upload the credential itself, never a patient record.",
+        a: "Yes. Go to the Scan tab, upload or photograph a credential document, and the AI will extract the relevant information (type, license number, dates, state, etc.) and pre-fill the form for you. AI is on for your account with no setup: the image goes to Google Gemini through our server under a shared key with a daily per-user limit. Add your own Gemini key in Settings to lift that limit; then the image goes to Google under your key instead. Upload the credential itself, never a patient record.",
       },
       {
         q: "How do I share credentials with a hospital or employer?",

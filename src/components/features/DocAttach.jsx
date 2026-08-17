@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { UploadIcon, CameraIcon, FileIcon, TrashIcon } from "../shared/Icons";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 
@@ -27,15 +28,12 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
   const [msg, setMsg] = useState(null);
   const [isError, setIsError] = useState(false);
 
-  const requireApiKey = useCallback(() => {
-    if (data.settings.apiKey) return true;
-    setIsError(true);
-    setMsg("Add your AI key first (Settings → API key) so documents can be read and auto-filled.");
-    return false;
-  }, [data.settings.apiKey]);
+  // AI is on with the user's own key or the shared key (via ai-proxy). With
+  // AI off a file still attaches; only the auto-fill is skipped.
+  const aiOn = useAiAvailable(data.settings);
 
   const handleFiles = useCallback(async (files) => {
-    const apiKey = data.settings.apiKey;
+    const apiKey = data.settings.apiKey; // own key, or undefined for the shared key
     const deg = data.settings.degreeType;
 
     for (const file of Array.from(files)) {
@@ -69,11 +67,11 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
       }
       setAttachedDocs((prev) => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
 
-      // No AI key? The file is attached and linked all the same; only the
+      // AI off? The file is attached and linked all the same; only the
       // auto-fill is skipped.
-      if (!apiKey) {
+      if (!aiOn) {
         setIsError(false);
-        setMsg(`"${file.name}" attached. Add an AI key in Settings to have it read automatically.`);
+        setMsg(`"${file.name}" attached. ${describeAiStatus(data.settings)}`);
         continue;
       }
       if (file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file)) {
@@ -112,7 +110,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
         setScanning(false);
       }
     }
-  }, [data.settings.apiKey, data.settings.degreeType, data.documents, requireApiKey, setAttachedDocs, setForm, analyzer, textAnalyzer]);
+  }, [aiOn, data.settings, data.documents, setAttachedDocs, setForm, analyzer, textAnalyzer]);
 
   return (
     <div style={{ marginTop: 14, padding: 14, borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>

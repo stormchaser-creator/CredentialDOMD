@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import Modal from "../../shared/Modal";
 import { generateId } from "../../../utils/helpers";
 import { analyzeStatement, categorizeStatementRows } from "../../../utils/documentScanner";
+import { aiAvailable } from "../../../utils/aiClient";
 import * as XLSX from "xlsx";
 
 /**
@@ -198,7 +199,8 @@ function StatementImport({ open, onClose }) {
     if (!rs.length) { setError("No transactions found in that file."); return; }
     // AI pass: the keyword map is the floor; the model assigns the rest so
     // the ledger reaches the CPA properly categorized, not a wall of Other.
-    if (data.settings.apiKey) {
+    // Runs on the user's own key or the shared key (via ai-proxy).
+    if (aiAvailable(data.settings)) {
       try {
         const ai = await categorizeStatementRows(
           rs.map(r => ({ merchant: r.merchant, amount: r.amount })), CATEGORIES, data.settings.apiKey

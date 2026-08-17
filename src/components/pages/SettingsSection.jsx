@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useEffect, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Field from "../shared/Field";
@@ -12,6 +12,7 @@ import {
 } from "../../constants/boardRequirements";
 import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, composeText } from "../../utils/notifications";
+import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus } from "../../utils/aiClient";
 
 function SettingsSection() {
   const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate, plan, setMockPlan, isDevMode } = useApp();
@@ -24,6 +25,11 @@ function SettingsSection() {
   const [npiResults, setNpiResults] = useState(null); // array of search results
   const [npiError, setNpiError] = useState(null);
   const [licenseImportMsg, setLicenseImportMsg] = useState(null);
+
+  // Shared AI (server-held Gemini key, metered per user). Re-checked when
+  // Settings opens so the "N of 200 calls used today" line is current.
+  const sharedAi = useSharedAiStatus();
+  useEffect(() => { fetchSharedAiStatus({ force: true }); }, []);
 
   // Search for the user's NPI by name
   const handleNpiSearch = async () => {
@@ -299,14 +305,31 @@ function SettingsSection() {
         <Field label="Languages" hint="e.g. Fluent in Spanish"><input value={s.languages || ""} onChange={e => update("languages", e.target.value)} style={iS} placeholder="Languages beyond English" /></Field>
         <Field label="Professional Summary" hint="Opening paragraph of your CV"><textarea value={s.professionalSummary || ""} onChange={e => update("professionalSummary", e.target.value)} style={{ ...iS, minHeight: 96, resize: "vertical", fontFamily: "inherit" }} placeholder="Board-certified neurosurgeon with…" /></Field>
         <Field label="CV Highlight Line" hint="One bold line under the summary — books, projects, distinctions"><input value={s.cvHighlights || ""} onChange={e => update("cvHighlights", e.target.value)} style={iS} placeholder="e.g. Author of two books" /></Field>
-        <Field label="API Key (Gemini)" hint={s.apiKey
-          ? "Saved \u2713 on this device only. AI scanning is on. Keys are not synced to your account; enter it again on any other device you use."
-          : "Required for AI document scanning. Get one free at aistudio.google.com/apikey. Saves as you type, stored on this device only and never synced to your account."}>
+      </div>
+
+      {/* AI */}
+      <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>AI</h3>
+        <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+          Document scanning, dictation, the RVU coder, CME import and Vera run on AI. It is on for your account with no setup, using a shared key that stays on the server and is metered per user.
+        </div>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, marginBottom: 14,
+          backgroundColor: (s.apiKey || sharedAi.shared) ? T.successDim : T.warningDim,
+          border: `1px solid ${(s.apiKey || sharedAi.shared) ? T.success : T.warning}`,
+          fontSize: 13, fontWeight: 600, color: T.text,
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, backgroundColor: (s.apiKey || sharedAi.shared) ? T.success : T.warning }} />
+          <span>{describeAiStatus(s)}</span>
+        </div>
+        <Field label="Your own Gemini key (optional)" hint={s.apiKey
+          ? "Saved \u2713 on this device only. Your calls run on this key instead of the shared one, so the shared daily limit does not apply. Keys are not synced to your account; enter it again on any other device you use."
+          : "AI is on without this. Add your own key (free at aistudio.google.com/apikey) to lift the shared daily limit; calls then bill to your key. Saves as you type, stored on this device only and never synced to your account."}>
           <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza..." />
         </Field>
-        <Field label="API Key (Anthropic, optional)" hint={s.anthropicApiKey
-          ? "Saved \u2713 on this device only. Vera now thinks on Claude Opus; document scanning still uses the Gemini key. Not synced, so enter it again on other devices."
-          : "Give Vera a stronger mind: with an Anthropic key (console.anthropic.com) she runs on Claude Opus, billed to your key. Stored on this device only, never synced to your account. Leave blank to keep the free Gemini brain."}>
+        <Field label="Your own Anthropic key (optional)" hint={s.anthropicApiKey
+          ? "Saved \u2713 on this device only. Vera now thinks on Claude Opus; document scanning still uses Gemini. Not synced, so enter it again on other devices."
+          : "Give Vera a stronger mind: with an Anthropic key (console.anthropic.com) she runs on Claude Opus, billed to your key. Stored on this device only, never synced to your account. Leave blank to keep the Gemini brain."}>
           <input type="password" value={s.anthropicApiKey || ""} onChange={e => update("anthropicApiKey", e.target.value)} style={iS} placeholder="sk-ant-..." />
         </Field>
       </div>

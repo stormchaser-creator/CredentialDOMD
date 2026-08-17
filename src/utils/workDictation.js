@@ -6,6 +6,8 @@
  * directly.
  */
 
+import { geminiCall, proxyErrorMessage } from "./aiClient";
+
 const GEMINI_MODEL = "gemini-2.5-flash";
 
 const PROMPT = (transcript, todayISO, workTypes) => `You convert a physician's spoken description of
@@ -46,18 +48,19 @@ Never invent times or dates they didn't say.
 
 SPOKEN: ${transcript}`;
 
+// apiKey = the user's own Gemini key (optional). Without one the call rides
+// the shared key through the ai-proxy edge function.
 export async function parseWorkDictation(transcript, apiKey, workTypes) {
-  if (!apiKey) throw new Error("Add your AI key in Settings first — dictation parsing runs on it.");
   const todayISO = new Date().toISOString().slice(0, 10);
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: PROMPT(transcript, todayISO, workTypes) }] }],
-      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
-    }),
-  });
-  if (!response.ok) throw new Error(`Couldn't reach the AI (error ${response.status}) — the words were kept, check your connection and try again.`);
+  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
+    contents: [{ role: "user", parts: [{ text: PROMPT(transcript, todayISO, workTypes) }] }],
+    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+  }, apiKey);
+  if (!response.ok) {
+    const why = proxyErrorMessage(response);
+    if (why) throw new Error(`${why} The words were kept.`);
+    throw new Error(`Couldn't reach the AI (error ${response.status}) — the words were kept, check your connection and try again.`);
+  }
   const json = await response.json();
   let raw = json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
   raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();

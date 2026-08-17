@@ -39,6 +39,7 @@
  */
 import { CME_TOPICS } from "../constants/cmeTopics.js";
 import { CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../constants/credentialTypes.js";
+import { geminiCall, proxyErrorMessage } from "./aiClient.js";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Field vocabulary
@@ -1402,26 +1403,24 @@ Rules: date is the completion date. hours is the credit total for that activity 
 /**
  * Ask Gemini to structure a transcript. Pass { text } (preferred, cheaper)
  * or { pdfDataUrl } when local text extraction produced nothing readable.
- * Returns review rows.
+ * apiKey is the user's own key (optional); without one the shared key is
+ * used via ai-proxy. Returns review rows.
  */
 export async function structureTranscriptWithAI({ text, pdfDataUrl }, deg, apiKey) {
-  if (!apiKey) throw new Error("No Gemini API key in Settings.");
   const parts = [];
   if (text && text.trim()) parts.push({ text: `TRANSCRIPT TEXT:\n\n${text.slice(0, 120000)}` });
   else if (pdfDataUrl) parts.push({ inlineData: { mimeType: "application/pdf", data: pdfDataUrl.split(",")[1] } });
   else throw new Error("Nothing to send.");
   parts.push({ text: "List every completed activity as JSON. Return only the JSON array." });
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: TRANSCRIPT_PROMPT(deg) }] },
-      contents: [{ parts }],
-      generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 }, responseMimeType: "application/json" },
-    }),
-  });
+  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
+    systemInstruction: { parts: [{ text: TRANSCRIPT_PROMPT(deg) }] },
+    contents: [{ parts }],
+    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 }, responseMimeType: "application/json" },
+  }, apiKey);
   if (!response.ok) {
-    if (response.status === 403) throw new Error("Invalid Gemini API key. Check Settings.");
+    const why = proxyErrorMessage(response);
+    if (why) throw new Error(why);
+    if (response.status === 403) throw new Error(apiKey ? "Invalid Gemini API key. Check Settings." : "The AI service refused the request. Try again later.");
     if (response.status === 429) throw new Error("Rate limited by the AI service. Try again in a moment.");
     throw new Error("The AI service could not read this transcript.");
   }
