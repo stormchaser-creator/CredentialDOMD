@@ -37,8 +37,9 @@ export const SHARED_DAILY_LIMIT = 200;
 
 // User-facing text for the proxy's own refusals. Physicians read these;
 // keep them plain and tell them the one thing that fixes it.
+export const quotaMessage = (limit) => `Shared AI quota reached for today (${limit || SHARED_DAILY_LIMIT} calls). Add your own Gemini key in Settings to keep going.`;
 export const AI_MESSAGES = {
-  quota: `Shared AI quota reached for today (${SHARED_DAILY_LIMIT} calls). Add your own Gemini key in Settings to keep going.`,
+  get quota() { return quotaMessage(sharedAiStatus?.limit); },
   shared_key_not_configured: "AI is not switched on yet: the shared key is not configured.",
   forbidden: "AI is available once your beta access is active.",
   unauthorized: "Sign in to use AI features.",
@@ -145,7 +146,7 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
         shared: !!body?.shared,
         used: Number(body?.used_today ?? body?.used) || 0,
         limit: Number(body?.limit) || SHARED_DAILY_LIMIT,
-        reason: body?.shared ? null : "not_configured",
+        reason: body?.shared ? null : body?.configured === false ? "not_configured" : body?.allowed === false ? "pending" : "not_configured",
         checkedAt: Date.now(),
       });
     } else if (res.status === 403) {
@@ -312,7 +313,7 @@ export async function geminiCall(path, body, apiKey, { signal } = {}) {
       used: Number(parsed.used) || sharedAiStatus.limit,
       limit: Number(parsed.limit) || sharedAiStatus.limit,
     });
-    return wrapResponse(res, { proxyError: "quota", message: AI_MESSAGES.quota, parsed });
+    return wrapResponse(res, { proxyError: "quota", message: quotaMessage(Number(parsed.limit) || sharedAiStatus.limit), parsed });
   }
   if (res.status === 503 && !fromGemini) {
     setSharedAiStatus({ shared: false, reason: "not_configured" });

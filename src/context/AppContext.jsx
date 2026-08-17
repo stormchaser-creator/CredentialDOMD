@@ -5,6 +5,7 @@ import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
 import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage } from "../utils/storageScope";
+import { resetSharedAiStatus } from "../utils/aiClient";
 import { vaultCount } from "../utils/privateVault";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
@@ -269,6 +270,8 @@ export function AppProvider({ children, onNavigate }) {
 
   // ─── Auth actions (Clerk) ─────────────────────────────────
   const handleSignOut = useCallback(async () => {
+    // Shared-AI status is per account; the next user must re-check.
+    try { resetSharedAiStatus(); } catch { /* ignore */ }
     const ownerId = user?.id || getActiveUserId();
     // The vault is erased with everything else on sign-out and those notes
     // exist nowhere else, so say so once when there is something to lose.

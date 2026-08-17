@@ -28,6 +28,7 @@ import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
 import HomeSearch, { SECTIONS } from "./components/features/HomeSearch";
 import Onboarding from "./components/features/Onboarding";
+import { useAiAvailable, resetSharedAiStatus } from "./utils/aiClient";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
@@ -131,6 +132,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [veraSeed, setVeraSeed] = useState(null); // first question for Vera, from Home search
   const [veraRequest, setVeraRequest] = useState(null); // {id, from_addr, subject}: the document request Vera is working
   const newRequestCount = useNewRequestCount();
+  const aiOn = useAiAvailable(data.settings);
   const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
   // Reply emails link to /app/#support: open the sheet on "Your tickets".
   useEffect(() => {
@@ -453,7 +455,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           { key: "lic", label: "Confirm your licenses", detail: "Tap Import from NPI, then add DEA and board certs", done: (data.licenses || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
           { key: "doc", label: "Upload one document", detail: "A license PDF or a photo — packets build themselves from these", done: (data.documents || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
           { key: "alert", label: "Turn on expiration alerts", detail: "The whole point: never let anything lapse silently", done: !!(data.settings.notifyEmail || data.settings.notifyBrowser || data.settings.notifyText), go: () => { setTab("more"); setSubPage("settings"); } },
-          { key: "ai", label: "Turn on AI (2 minutes)", detail: "Paste a free Google AI Studio key in Settings. It stays on this device. Unlocks scanning, dictation, and the RVU coder", done: !!(data.settings.apiKey || data.settings.anthropicApiKey), go: () => { setTab("more"); setSubPage("settings"); } },
+          { key: "ai", label: "AI is on", detail: "Scanning, dictation, the RVU coder and Vera work with no setup on a shared key. Add your own free Gemini key in Settings to lift the daily limit", done: aiOn || !!data.settings.anthropicApiKey, go: () => { setTab("more"); setSubPage("settings"); } },
         ];
         const remaining = steps.filter(st => !st.done);
         if (!remaining.length) return null;

@@ -106,6 +106,8 @@ serve(async (req) => {
     const used = await usedToday();
     return json(200, {
       shared: allowed && !!sharedKey,
+      allowed,
+      configured: !!sharedKey,
       used_today: used,
       limit: DAILY_LIMIT,
       unlimited: user.isAdmin,
@@ -145,7 +147,8 @@ serve(async (req) => {
     upstreamType = up.headers.get("content-type") || "application/json";
   } catch (e) {
     await db.from("ai_usage").insert({ user_id: user.profileId, path, ok: false, status: null, prompt_chars: chars });
-    return json(502, { error: "upstream_unreachable", message: (e as Error).message });
+    // Never echo the fetch error text: Deno embeds the request URL (and the key) in it.
+    return json(502, { error: "upstream_unreachable" });
   }
 
   // Log after the call so the row carries Gemini's status. Never let a
