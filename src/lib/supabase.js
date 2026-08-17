@@ -100,6 +100,11 @@ const TABLE_MAP = {
   dutyDays: "duty_days",
   memberships: "professional_memberships",
   invoices: "invoices",
+  // Was missing: rows were written (tableName() falls back to the key) but
+  // never loaded back, so the deduction ledger only lived in the device
+  // cache and vanished on a fresh load.
+  deductibles: "deductibles",
+  rotations: "rotations",
 };
 
 function tableName(key) {
