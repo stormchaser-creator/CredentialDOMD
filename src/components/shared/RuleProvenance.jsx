@@ -9,7 +9,12 @@ import { supabase } from "../../lib/supabase";
  * Provenance line for a rule set (state CME or board MOC) plus a one-tap
  * "Rules changed?" report.
  *
- *   Source: <citation> · database Feb 2026 · verified Jul 2026   [Rules changed?]
+ *   Source: <citation> · database Feb 2026 · verified Aug 2026   [Rules changed?]
+ *   Coming: <upcoming rule> · <upcoming rule>
+ *
+ * The citation is a link when the rule set carries `sourceUrl` (the best
+ * primary-source page loaded at the last recheck). `upcoming` lists rules
+ * that are enacted or pending but not yet in force.
  *
  * The report lands in the founder's review queue (public.field_proposals,
  * the same table the assistant's new-field proposals use; RLS lets any
@@ -65,7 +70,12 @@ async function submitRuleChange({ reportKey, subject, citation, meta, verified, 
   return { via: "ticket" };
 }
 
-function RuleProvenance({ reportKey, subject, citation, meta, verified, compact = false, style }) {
+/** Only http(s) links are rendered as anchors; anything else stays plain text. */
+function safeHttpUrl(u) {
+  return typeof u === "string" && /^https?:\/\//i.test(u.trim()) ? u.trim() : "";
+}
+
+function RuleProvenance({ reportKey, subject, citation, meta, verified, sourceUrl, upcoming, compact = false, style }) {
   const { theme: T, userIdRef } = useApp();
   const iS = useInputStyle();
   const [open, setOpen] = useState(false);
@@ -94,11 +104,13 @@ function RuleProvenance({ reportKey, subject, citation, meta, verified, compact 
     }
   }, [what, link, reportKey, subject, citation, meta, verified, userIdRef]);
 
-  const parts = [
-    `Source: ${citation || "not on file"}`,
+  const href = safeHttpUrl(sourceUrl);
+  const citationText = citation || "not on file";
+  const trailing = [
     meta?.databaseDate ? `database ${formatMonth(meta.databaseDate)}` : null,
     verified ? `verified ${formatMonth(verified)}` : null,
   ].filter(Boolean);
+  const coming = (Array.isArray(upcoming) ? upcoming : []).map(u => String(u || "").trim()).filter(Boolean);
 
   return (
     <div style={{
@@ -108,7 +120,19 @@ function RuleProvenance({ reportKey, subject, citation, meta, verified, compact 
       ...style,
     }}>
       <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.4, minWidth: 0, flex: 1 }}>
-        {parts.join(" · ")}
+        <div>
+          {"Source: "}
+          {href ? (
+            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, textDecoration: "underline", wordBreak: "break-word" }}>{citationText}</a>
+          ) : citationText}
+          {trailing.length > 0 ? ` · ${trailing.join(" · ")}` : ""}
+        </div>
+        {coming.length > 0 && (
+          <div style={{ marginTop: 3, color: T.textMuted }}>
+            <span style={{ fontWeight: 700 }}>Coming: </span>
+            {coming.join(" · ")}
+          </div>
+        )}
       </div>
       <button type="button" onClick={openForm} style={{
         padding: "3px 9px", fontSize: 11, fontWeight: 700, borderRadius: 8, flexShrink: 0,

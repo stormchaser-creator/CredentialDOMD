@@ -117,6 +117,11 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     // it has been). Empty when the state is unknown to the database.
     source: entry?.source || "",
     verified: entry?.verified || null,
+    // Best primary-source URL loaded during the last recheck (empty when the
+    // check could not load an official page), and rules that are enacted or
+    // pending but not yet in force, so the current numbers stay current.
+    sourceUrl: entry?.sourceUrl || "",
+    upcoming: Array.isArray(entry?.upcoming) ? entry.upcoming : [],
     noGeneralReq,
     // True when the physician has not chosen MD or DO and this state runs
     // separate boards: the numbers above use the MD rule set as a stand-in.

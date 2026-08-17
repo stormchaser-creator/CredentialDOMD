@@ -31,9 +31,13 @@ function CMESection({ onShare }) {
   const deg = data.settings.degreeType;
   const categories = getCMECategories(deg);
 
+  // Every topic a tracked state mandates, including zero-hour checklist
+  // items: those are met only when an entry carries the tag, and several
+  // (e.g. MI opioid awareness, TX Life of the Mother Act) are not in the
+  // general CME_TOPICS list, so this is the only place they can be tagged.
   const requiredTopics = useMemo(() =>
     [...new Set(allTrackedStates.flatMap(st =>
-      (getStateEntry(st, deg)?.topics || []).filter(t => t.hours > 0).map(t => t.topic)
+      (getStateEntry(st, deg)?.topics || []).map(t => t.topic)
     ))],
     [allTrackedStates, deg]
   );
@@ -265,6 +269,8 @@ function CMESection({ onShare }) {
                 citation={comp.source}
                 meta={STATE_REQS_META}
                 verified={comp.verified}
+                sourceUrl={comp.sourceUrl}
+                upcoming={comp.upcoming}
               />
             </div>
           ))}
