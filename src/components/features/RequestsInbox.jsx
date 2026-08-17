@@ -229,7 +229,7 @@ function RequestsInbox({ onAskVera, onReplyEmail }) {
                   <span style={{ color: T.textDim, fontSize: 12, flexShrink: 0 }}>{d.data ? fmtBytes(docBytes(d)) : "syncing"}</span>
                 </div>
               ))}
-              <div style={{ fontSize: 12, color: T.textDim }}>These files are also under Files, not filed yet.</div>
+              <div style={{ fontSize: 12, color: T.textDim }}>Also saved under Files, not linked to a record yet.</div>
             </div>
           )}
 

@@ -28,7 +28,7 @@ import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
 import HomeSearch, { SECTIONS } from "./components/features/HomeSearch";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
-import { LocumDashboard, MultiStateMatrix } from "./components/features";
+import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
@@ -128,6 +128,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
   const [veraSeed, setVeraSeed] = useState(null); // first question for Vera, from Home search
+  const [veraRequest, setVeraRequest] = useState(null); // {id, from_addr, subject}: the document request Vera is working
+  const newRequestCount = useNewRequestCount();
   const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
   // Reply emails link to /app/#support: open the sheet on "Your tickets".
   useEffect(() => {
@@ -417,11 +419,22 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (sec.tab === "locum") { setLocumSeed({ sub: sec.sub, id }); setTab("locum"); setSubPage(sec.sub); return; }
     if (sec.tab === "more") { setTab("more"); setSubPage(sec.sub); return; }
   };
-  const askVera = (q) => { setVeraSeed(q); setTab("more"); setSubPage("assistant"); };
+  const askVera = (q, request = null) => {
+    setVeraSeed(q);
+    setVeraRequest(request ? { id: request.id, from_addr: request.from_addr, subject: request.subject } : null);
+    setTab("more"); setSubPage("assistant");
+  };
 
   const renderHome = () => (
     <div className="cmd-fade-in">
       <HomeSearch onOpen={openFromSearch} onAskVera={askVera} />
+      {newRequestCount > 0 && (
+        <div onClick={() => { setTab("more"); setSubPage("requests"); }} style={{ display: "flex", alignItems: "center", gap: 10, backgroundColor: T.accentDim, border: `1px solid ${T.accent}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14, cursor: "pointer" }}>
+          <span style={{ fontSize: 18 }}>{"\ud83d\udce8"}</span>
+          <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.text }}>{newRequestCount} document request{newRequestCount === 1 ? "" : "s"} waiting for a reply</div>
+          <span style={{ color: T.accent, fontWeight: 800 }}>{"\u203a"}</span>
+        </div>
+      )}
       {/* Hero: Compliance Ring + Stats */}
       {allCreds.length > 0 ? (
         <div style={{
@@ -1478,7 +1491,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (subPage === "finance") return <FinanceSection />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
-    if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} />;
+    if (subPage === "requests") return <RequestsInbox onAskVera={askVera} />;
+    if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} />;
     if (subPage === "faq") return <FAQSection />;
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;
@@ -1703,6 +1717,24 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           }}>
             <span style={{ fontSize: 20 }}>{"\u2753"}</span>
             <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Help & FAQ</span>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
+
+          {/* Requests: document requests forwarded to docs@ */}
+          <button onClick={() => setSubPage("requests")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${newRequestCount ? T.accent : T.border}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\ud83d\udce8"}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Requests</div>
+              <div style={{ fontSize: 12.5, color: T.textMuted }}>Document requests forwarded to docs@credentialdomd.com; reply with the packet attached</div>
+            </div>
+            {newRequestCount > 0 && (
+              <span style={{ minWidth: 22, padding: "2px 8px", borderRadius: 11, backgroundColor: T.accent, color: "#fff", fontSize: 12, fontWeight: 800, textAlign: "center" }}>{newRequestCount}</span>
+            )}
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 

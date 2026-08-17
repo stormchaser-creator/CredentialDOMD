@@ -93,7 +93,9 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
   const encodedBytes = Math.round(chosenBytes * BASE64_FACTOR);
   const overFiles = chosen.length > MAX_FILES;
   const overSize = encodedBytes > MAX_BYTES;
-  const notInCloud = chosen.filter((d) => !d.storagePath);
+  // Not yet in cloud AND not on this device: newly uploaded docs have bytes
+  // locally and the server falls back to the standard storage path.
+  const notInCloud = chosen.filter((d) => !d.storagePath && !d.data);
 
   const toggle = (id) => setSelected((s) => {
     const n = new Set(s);

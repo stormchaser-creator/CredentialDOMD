@@ -9,7 +9,8 @@
 export const INBOX_DOC_TYPE = "cme-certificate-inbox";
 export const CME_INBOX_ADDRESS = "cme@credentialdomd.com";
 
-export const isInboxDoc = (d) => d?.type === INBOX_DOC_TYPE && !d?.linkedTo;
+export const REQUEST_INBOX_DOC_TYPE = "request-attachment-inbox";
+export const isInboxDoc = (d) => (d?.type === INBOX_DOC_TYPE || d?.type === REQUEST_INBOX_DOC_TYPE) && !d?.linkedTo;
 
 export function docMime(doc) {
   if (!doc) return "";

@@ -201,8 +201,11 @@ serve(async (req) => {
       const d = byId.get(id)!;
       const filename = safeFilename(d.name, `document-${attachments.length + 1}`);
       if (attachments.length >= MAX_FILES) { skipped.push(filename); continue; }
+      // Only files inside the caller's own storage folder are ever read: a
+      // user can edit their own row's storage_path, and the service role
+      // must not become a way around storage RLS.
       const path = d.storage_path || (prof.auth_user_id ? `${prof.auth_user_id}/${d.id}` : "");
-      if (!path) { skipped.push(filename); continue; }
+      if (!path || !prof.auth_user_id || !path.startsWith(`${prof.auth_user_id}/`)) { skipped.push(filename); continue; }
       const dl = await db.storage.from(STORAGE_BUCKET).download(path);
       if (dl.error || !dl.data) {
         console.error(`storage download failed for ${path}: ${dl.error?.message ?? "no data"}`);
