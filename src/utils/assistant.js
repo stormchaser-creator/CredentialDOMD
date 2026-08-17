@@ -2,6 +2,7 @@ import { complianceFor, findStateLicense } from "./compliance";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
 import { CPT_DESCS } from "../constants/cptDescs";
 import { CME_PROVIDERS } from "../constants/cmeProviders";
+import { geminiCall, proxyErrorMessage } from "./aiClient";
 
 /**
  * The in-app AI assistant. Modeled on the CallSync helper (every question
@@ -352,12 +353,11 @@ function parseAssistantJson(raw) {
  * One assistant turn. history = [{role:"user"|"model", text}], newest last
  * (the last item is the pending user message). attachment (optional) =
  * { dataUrl } for images/PDFs or { text, name } for extracted office text.
- * With an Anthropic key, Vera thinks on Claude Opus; the Gemini key remains
- * the fallback brain (and still powers document scanning either way).
+ * With an Anthropic key, Vera thinks on Claude Opus. Otherwise she runs on
+ * Gemini: the user's own key when they have one, else the shared key via
+ * ai-proxy (so a new account has Vera on with zero setup).
  */
 export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, attachment }) {
-  if (!apiKey && !anthropicKey) throw new Error("Add your AI key in Settings first — the assistant runs on it.");
-
   if (anthropicKey && claudeCanRead(attachment)) {
     try {
       return await anthropicTurn({ history, snapshot, anthropicKey, attachment });
@@ -365,12 +365,12 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
       const A = AnthropicSDK; // set by loadAnthropic() before any request ran
       // A bad key must surface — silently answering on Gemini would hide it.
       if (A && (e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError)) {
-        throw new Error("Your Anthropic API key was rejected — check it in Settings, or clear it to use the Gemini key.");
+        throw new Error("Your Anthropic API key was rejected. Check it in Settings, or clear it to use Gemini.");
       }
       const transient = A && (e instanceof A.RateLimitError || e instanceof A.InternalServerError || e instanceof A.APIConnectionError);
-      if (transient && apiKey) {
-        // Claude briefly unreachable and a Gemini key is on file — Gemini
-        // takes the turn so the chat never dead-ends.
+      if (transient) {
+        // Claude briefly unreachable — Gemini (own key or shared) takes the
+        // turn so the chat never dead-ends.
       } else if (A && e instanceof A.APIConnectionError) {
         throw new Error(NETWORK_MSG);
       } else if (A && e instanceof A.RateLimitError) {
@@ -381,9 +381,9 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
         throw new Error(e?.message || "Claude couldn't answer that turn.");
       }
     }
-  } else if (anthropicKey && !apiKey && attachment?.dataUrl) {
-    throw new Error("Claude can't read that file format — attach a JPEG/PNG photo or a PDF, or add a Gemini key in Settings for wider format support.");
   }
+  // Anthropic key present but Claude can't read this attachment type (HEIC
+  // and friends): Gemini takes the turn instead.
   return geminiTurn({ history, snapshot, apiKey, attachment });
 }
 
@@ -455,7 +455,11 @@ async function anthropicTurn({ history, snapshot, anthropicKey, attachment }) {
 
 const NETWORK_MSG = "Couldn't reach the AI service. That's usually a weak signal, or a guest Wi-Fi that blocks AI sites (hospital networks often do). Switch to cellular and tap Try again — your message is saved.";
 
-/** Gemini path — the original brain, still the default with no Anthropic key. */
+/**
+ * Gemini path — the default brain with no Anthropic key. apiKey is the
+ * user's own Gemini key (optional); without one geminiCall() rides the
+ * shared key through ai-proxy.
+ */
 async function geminiTurn({ history, snapshot, apiKey, attachment }) {
 
   const contents = history.slice(-14).map((m, i) => {
@@ -474,7 +478,7 @@ async function geminiTurn({ history, snapshot, apiKey, attachment }) {
     return { role: m.role === "model" ? "model" : "user", parts };
   });
 
-  const bodyFor = (tier) => JSON.stringify({
+  const bodyFor = (tier) => ({
     systemInstruction: { parts: [{ text: SYSTEM(snapshot) }] },
     contents,
     generationConfig: tier.generationConfig,
@@ -487,18 +491,10 @@ async function geminiTurn({ history, snapshot, apiKey, attachment }) {
   let tierIdx = 0;
   for (let attempt = 0; ; attempt++) {
     const tier = CHAT_MODELS[tierIdx];
-    // URL built per tier, outside the try, so a bad key surfaces its real
-    // error instead of being misdiagnosed as a network problem.
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${tier.model}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 45000);
     try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: bodyFor(tier),
-        signal: ctrl.signal,
-      });
+      response = await geminiCall(`models/${tier.model}:generateContent`, bodyFor(tier), apiKey, { signal: ctrl.signal });
     } catch {
       if (attempt >= 2) throw new Error(NETWORK_MSG);
       await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
@@ -506,6 +502,9 @@ async function geminiTurn({ history, snapshot, apiKey, attachment }) {
     } finally {
       clearTimeout(timer);
     }
+    // A proxy refusal (daily quota, beta gate, key not configured) is final:
+    // no point demoting to Flash, the answer would be the same.
+    if (response.proxyError) break;
     if (!response.ok && tierIdx < CHAT_MODELS.length - 1 && (response.status === 429 || response.status >= 500 || response.status === 404)) {
       tierIdx += 1; // Pro exhausted or unavailable on this key — Flash takes the turn
       continue;
@@ -513,6 +512,8 @@ async function geminiTurn({ history, snapshot, apiKey, attachment }) {
     break;
   }
   if (!response.ok) {
+    const why = proxyErrorMessage(response);
+    if (why) throw new Error(why);
     if (response.status === 429) throw new Error("The AI is rate-limited — give it a few seconds and try again.");
     throw new Error(`The assistant couldn't reach the AI (error ${response.status}).`);
   }

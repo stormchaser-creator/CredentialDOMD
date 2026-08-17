@@ -5,6 +5,7 @@ import { SearchIcon } from "../shared/Icons";
 import { generateId } from "../../utils/helpers";
 import { searchCPT } from "../../utils/cptSearch";
 import { aiCPTLookup } from "../../utils/cptAILookup";
+import { aiAvailable, describeAiStatus } from "../../utils/aiClient";
 
 // Local calendar date — a UTC slice would file late-evening work on tomorrow
 const localDay = (d) => {
@@ -48,9 +49,10 @@ function CPTLookup() {
   }, []);
 
   const handleAILookup = useCallback(async () => {
+    // Own key when present; otherwise the shared key via ai-proxy.
     const apiKey = data.settings?.apiKey;
-    if (!apiKey) {
-      setAiError("Add your API key in Settings to use AI-assisted lookup.");
+    if (!aiAvailable(data.settings)) {
+      setAiError(describeAiStatus(data.settings));
       return;
     }
     setAiLoading(true);
@@ -62,7 +64,7 @@ function CPTLookup() {
       setAiError(err.message);
     }
     setAiLoading(false);
-  }, [query, results, data.settings?.apiKey]);
+  }, [query, results, data.settings]);
 
   const copyCode = useCallback((code) => {
     navigator.clipboard?.writeText(code);

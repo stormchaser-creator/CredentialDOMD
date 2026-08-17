@@ -10,6 +10,7 @@ import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
 import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { isContactPickerSupported, pickContact, parseVCard } from "../../utils/contactImport";
 import CPTCodePicker from "./CPTCodePicker";
@@ -141,15 +142,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     setModalCameraOpen(false);
   }, []);
 
+  // AI is on with the user's own key or the shared key (via ai-proxy).
+  const aiOn = useAiAvailable(data.settings);
   const requireApiKey = useCallback(() => {
-    if (data.settings.apiKey) return true;
+    if (aiOn) return true;
     setScanIsError(true);
-    setScanMsg("Add your AI key first (Settings \u2192 API key) so documents can be read and auto-filled.");
+    setScanMsg(`${describeAiStatus(data.settings)} Documents are read and auto-filled by AI.`);
     return false;
-  }, [data.settings.apiKey]);
+  }, [aiOn, data.settings]);
 
   const handleUpload = useCallback(async (files) => {
-    const apiKey = data.settings.apiKey;
+    const apiKey = data.settings.apiKey; // own key, or undefined for the shared key
     const deg = data.settings.degreeType;
 
     for (const file of Array.from(files)) {
@@ -162,7 +165,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       setAttachedDocs(prev => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
 
       // Run AI scan to auto-fill form fields
-      if (apiKey && (file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file))) {
+      if (aiOn && (file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file))) {
         setScanningDoc(true);
         setScanMsg(null);
         try {
@@ -199,7 +202,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         setScanningDoc(false);
       }
     }
-  }, [data.settings.apiKey, data.settings.degreeType]);
+  }, [aiOn, data.settings.apiKey, data.settings.degreeType]);
 
   const handleImportContact = useCallback(async () => {
     setContactMsg(null);

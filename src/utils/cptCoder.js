@@ -1,5 +1,6 @@
 import { CPT_CODES, CPT_BY_CODE } from "../constants/cpt";
 import { CONSTRUCT_RULES } from "../constants/cptConstructs";
+import { geminiCall, proxyErrorMessage } from "./aiClient";
 
 /**
  * Plain-language → CPT codes. The physician dictates or types what they
@@ -106,20 +107,19 @@ export function parseDictatedDate(text, now = new Date()) {
   return null;
 }
 
+// apiKey = the user's own Gemini key (optional); otherwise the shared key
+// via ai-proxy.
 export async function codeFromText(text, apiKey) {
-  if (!apiKey) throw new Error("No API key configured. Add your Gemini API key in Settings.");
   if (!text?.trim()) throw new Error("Describe (or dictate) the work first.");
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: CODER_RULES + buildCatalog() }] },
-      contents: [{ parts: [{ text: `PHYSICIAN'S DESCRIPTION:\n${normalizeDictation(text)}\n\nReturn only JSON.` }] }],
-      generationConfig: { maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
-    }),
-  });
+  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
+    systemInstruction: { parts: [{ text: CODER_RULES + buildCatalog() }] },
+    contents: [{ parts: [{ text: `PHYSICIAN'S DESCRIPTION:\n${normalizeDictation(text)}\n\nReturn only JSON.` }] }],
+    generationConfig: { maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } },
+  }, apiKey);
   if (!response.ok) {
+    const why = proxyErrorMessage(response);
+    if (why) throw new Error(why);
     if (response.status === 429) throw new Error("AI rate limit hit — wait a moment and try again.");
     throw new Error(`AI request failed (${response.status}).`);
   }

@@ -6,6 +6,7 @@ import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
 import { generateId, downscalePhoto } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import ScanReviewCard from "./ScanReviewCard";
@@ -140,15 +141,18 @@ function DocumentsSection() {
   }, []);
 
   const deg = data.settings.degreeType;
+  // The user's own Gemini key (device-local) when they have one; otherwise
+  // the analyzers ride the shared key through ai-proxy.
   const apiKey = data.settings.apiKey;
+  // AI is on with either key. Uploads are blocked while it is off (a document
+  // that can't be read just sits unprocessed), so check up front.
+  const aiOn = useAiAvailable(data.settings);
 
-  // Uploads are blocked until an AI key exists — a document that can't be
-  // read just sits unprocessed, so require the key up front.
-  const requireApiKey = () => {
-    if (apiKey) return true;
-    setScanError("Add your AI key first (Settings \u2192 API key). Documents are read and filed automatically when uploaded, which needs the key.");
+  const requireApiKey = useCallback(() => {
+    if (aiOn) return true;
+    setScanError(`${describeAiStatus(data.settings)} Documents are read and filed automatically when uploaded, which needs AI.`);
     return false;
-  };
+  }, [aiOn, data.settings]);
 
   const linkables = [
     ...data.licenses.map(l => ({ value: `licenses:${l.id}`, label: `License: ${l.name || l.type}` })),
@@ -231,7 +235,7 @@ function DocumentsSection() {
       });
 
       const scannable = file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file);
-      if (scannable && apiKey) {
+      if (scannable && aiOn) {
         setScanning(true);
         try {
           const result = isOfficeFile(file)
@@ -255,11 +259,11 @@ function DocumentsSection() {
           setScanError(err.message || "Analysis failed. Document has been saved to your files.");
         }
         setScanning(false);
-      } else if (!apiKey && scannable) {
-        setScanError("Document saved but could not be analyzed. Add your API key in Settings to enable AI scanning.");
+      } else if (!aiOn && scannable) {
+        setScanError(`Document saved but could not be analyzed. ${describeAiStatus(data.settings)}`);
       }
     }
-  }, [apiKey, deg, addItem, deleteItemCtx, data.documents]);
+  }, [apiKey, aiOn, deg, addItem, deleteItemCtx, data.documents, data.settings, requireApiKey]);
 
   const capturePhoto = useCallback(() => {
     const video = videoRef.current;
@@ -444,11 +448,11 @@ function DocumentsSection() {
         Upload, scan, or photograph any credential document. AI will identify the document type, extract all fields, and file it to the correct section.
       </div>
 
-      {!apiKey && (
+      {!aiOn && (
         <div style={{ padding: "18px", borderRadius: 14, backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, marginBottom: 16 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>API Key Required</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>AI is not on yet</div>
           <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
-            Document scanning uses AI to read your credentials and automatically file them. Add your Gemini API key in Settings to get started.
+            Document scanning uses AI to read your credentials and automatically file them. {describeAiStatus(data.settings)} You can also add your own Gemini key in Settings.
           </div>
           <button onClick={() => navigate("more", "settings")} style={{
             padding: "10px 22px", borderRadius: 22, border: "none", fontSize: 14,

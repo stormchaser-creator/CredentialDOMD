@@ -11,6 +11,7 @@ import {
   looksLikeCeBroker, parseCeBrokerPages, looksLikeCmePassport, parseCmePassportText,
   structureTranscriptWithAI,
 } from "../../utils/cmeImport";
+import { useAiAvailable } from "../../utils/aiClient";
 
 /**
  * CMEImport: file picker (or paste) -> parse -> review every row -> add to
@@ -21,9 +22,10 @@ import {
  *    directly from their known layout.
  *  - CSV / XLSX: columns are guessed from the header row and shown for
  *    confirmation (always shown for a generic file).
- *  - Other PDFs / text: with a Gemini key in Settings the model structures
- *    the rows; without one the extracted text is shown and read either as
- *    columns (then mapped) or line by line.
+ *  - Other PDFs / text: with AI on (the shared key, or the user's own Gemini
+ *    key in Settings) the model structures the rows; with AI off the
+ *    extracted text is shown and read either as columns (then mapped) or
+ *    line by line.
  */
 
 const SRC_CEBROKER = { id: "cebroker-pdf", label: "CE Broker CE Report (PDF)", verified: true, note: "Layout read directly. The CE Report prints no certificate number and no AMA credit category, so every row is set to AMA PRA Category 1 for you to confirm. Course and provider numbers are kept in Notes." };
@@ -34,7 +36,8 @@ const SRC_LINES = { id: "lines", label: "Text, read line by line", verified: fal
 function CMEImport({ open, onClose }) {
   const { data, addItem, theme: T } = useApp();
   const deg = data.settings.degreeType;
-  const apiKey = data.settings.apiKey;
+  const apiKey = data.settings.apiKey; // own key, or undefined for the shared key
+  const aiOn = useAiAvailable(data.settings);
   const categories = useMemo(() => getCMECategories(deg), [deg]);
   const fileRef = useRef(null);
 
@@ -107,12 +110,12 @@ function CMEImport({ open, onClose }) {
   }, [deg, toReview, data.settings?.name]);
 
   const handleText = useCallback(async (t, why, dataUrl) => {
-    if (apiKey) {
+    if (aiOn) {
       try { if (await runAI({ text: t })) return; }
       catch (e) { showText(t, `${why} The AI reader could not structure it (${e.message}). Read it as columns or line by line below.`, dataUrl); return; }
     }
     showText(t, why, dataUrl);
-  }, [apiKey, runAI, showText]);
+  }, [aiOn, runAI, showText]);
 
   const handleFile = useCallback(async (file) => {
     setError(""); setBusy(true); setBusyLabel("Reading file");
@@ -122,7 +125,7 @@ function CMEImport({ open, onClose }) {
       if (r.kind === "text") { await handleText(r.text, "Text file loaded."); return; }
       // PDF
       if (r.error && !r.text) {
-        if (apiKey && r.dataUrl) { await runAI({ pdfDataUrl: r.dataUrl }); return; }
+        if (aiOn && r.dataUrl) { await runAI({ pdfDataUrl: r.dataUrl }); return; }
         throw new Error(r.error);
       }
       if (looksLikeCeBroker(r.text)) {
@@ -136,8 +139,8 @@ function CMEImport({ open, onClose }) {
         return;
       }
       if (r.unreadable || !r.text.trim()) {
-        if (apiKey && r.dataUrl) { await runAI({ pdfDataUrl: r.dataUrl }); return; }
-        throw new Error("This PDF has no readable text layer (it is probably a scan). Add a Gemini API key in Settings to have AI read it, or paste the text.");
+        if (aiOn && r.dataUrl) { await runAI({ pdfDataUrl: r.dataUrl }); return; }
+        throw new Error("This PDF has no readable text layer (it is probably a scan). AI is not on for your account yet, so paste the text instead, or add your own Gemini key in Settings.");
       }
       await handleText(r.text, "PDF text extracted. This is not a CE Broker or ACCME layout, so it is treated as a generic transcript.", r.dataUrl);
     } catch (e) {
@@ -145,7 +148,7 @@ function CMEImport({ open, onClose }) {
     } finally {
       setBusy(false); setBusyLabel("");
     }
-  }, [apiKey, deg, handleTable, handleText, runAI, showText, toReview]);
+  }, [aiOn, deg, handleTable, handleText, runAI, showText, toReview]);
 
   const handlePaste = useCallback(async () => {
     const t = pasteText.trim();
@@ -222,8 +225,9 @@ function CMEImport({ open, onClose }) {
         <>
           <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
             Bring credits in without retyping. Upload a CE Broker CE Report PDF, an ACCME CME Passport transcript PDF, an ACCME PARS Excel file, or any CSV or Excel export. Every row lands in a review list first, rows already in your log are unticked as duplicates, and nothing is saved until you add the batch.
-            {!apiKey && " Other PDF layouts are read on-device as text; add a Gemini API key in Settings to have AI structure them."}
-            {apiKey && " PDFs that are not CE Broker or ACCME layouts are sent to Gemini under your key to structure; you still review every row."}
+            {!aiOn && " Other PDF layouts are read on-device as text. AI is not on for your account yet; once it is (or with your own Gemini key in Settings) AI structures them for you."}
+            {aiOn && !apiKey && " PDFs that are not CE Broker or ACCME layouts are structured by AI (shared key, counted against your daily limit); you still review every row."}
+            {aiOn && apiKey && " PDFs that are not CE Broker or ACCME layouts are sent to Gemini under your own key to structure; you still review every row."}
           </div>
           <input type="file" ref={fileRef} accept={IMPORT_ACCEPT} style={{ display: "none" }}
             onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
@@ -271,7 +275,7 @@ function CMEImport({ open, onClose }) {
             <button onClick={() => { setStep("pick"); setError(""); }} style={secondaryBtn}>Back</button>
             <button onClick={textAsColumns} disabled={busy} style={{ ...primaryBtn(), flex: 1 }}>Read as columns</button>
             <button onClick={textAsLines} disabled={busy} style={{ ...primaryBtn(), flex: 1 }}>Read line by line</button>
-            {apiKey && <button onClick={textWithAI} disabled={busy} style={{ ...secondaryBtn, flex: 1 }}>{busy ? "AI reading..." : "Have AI read it"}</button>}
+            {aiOn && <button onClick={textWithAI} disabled={busy} style={{ ...secondaryBtn, flex: 1 }}>{busy ? "AI reading..." : "Have AI read it"}</button>}
           </div>
           {error && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{error}</div>}
         </>
