@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy | CredentialDoMD</title>
-<meta name="description" content="Privacy Policy for CredentialDoMD, the physician credential tracker. Last updated August 16, 2026.">
+<meta name="description" content="Privacy Policy for CredentialDoMD, the physician credential tracker. Last updated August 17, 2026.">
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="https://credentialdomd.com/app/privacy">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2310b981'/><rect x='12.2' y='6' width='7.7' height='20' rx='2' fill='white'/><rect x='6' y='12.2' width='20' height='7.7' rx='2' fill='white'/></svg>">
@@ -102,7 +102,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 <main>
   <div class="section-label">Legal</div>
   <h1>Privacy Policy</h1>
-  <div class="updated">Last updated August 16, 2026</div>
+  <div class="updated">Last updated August 17, 2026</div>
   <div class="intro">
     <p>CredentialDOMD, operated by Eric Whitney, DO. This policy says what the app collects, where it lives, which companies touch it, and how you get it back or delete it. Questions go to support@credentialdomd.com.</p>
     <p>CredentialDOMD is in free beta. Features, storage layout, and this policy will change as the product matures. The date above tells you which version you are reading.</p>
@@ -121,7 +121,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
   <li><strong>Locum and case data:</strong> case logs, work and billing entries, invoices, and contract terms.</li>
   <li><strong>Documents you upload</strong>, plus the fields the app extracts from them.</li>
   <li><strong>Support and feedback:</strong> tickets and replies, field proposals, and a log of assistant questions with a one-line summary of each answer.</li>
-  <li><strong>Settings</strong>, including any AI keys you enter so the app can call the provider on your behalf (section 4).</li>
+  <li><strong>Settings.</strong> Any AI keys you enter yourself stay on your device and are not stored in the database (section 4). The server keeps a count of your AI calls per day for the shared key's daily limit.</li>
 </ul>
 </section>
 
@@ -135,10 +135,11 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 </section>
 
 <section>
-<h2>4. AI features run on your own key</h2>
-<p>Document scanning, dictation, CPT coding, statement and row parsing, and the assistant (Vera) are bring-your-own-key. Nothing goes to an AI company until you paste a Google Gemini key, an Anthropic key, or both into Settings and use one of those features.</p>
-<p>When you do, what you submit (document images and PDFs, dictation transcripts, statement rows, and assistant chat including attached documents) is sent from your browser to Google or Anthropic under your key and is handled under their terms, not ours. Google's free Gemini tier permits human review and model training on submitted content; check the terms attached to your key. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.</p>
-<p>You are responsible for the key and any charges on it. AI output is a draft: review it before you rely on it.</p>
+<h2>4. AI features</h2>
+<p>Document scanning, dictation, CPT coding, statement and row parsing, CME import, and the assistant (Vera) run on Google's Gemini API. By default they use a shared key that we hold on the server: your request goes from your browser to our server, which forwards it to Google under that key and returns the answer. The server records the time, the model called, the size of the text sent, and whether it succeeded, so it can apply a per-user daily limit; it does not keep the content of the request. Nothing goes to an AI company until you use one of these features.</p>
+<p>You may add your own Google Gemini key, an Anthropic key, or both in Settings. Those keys stay on your device and are never stored in the database. With your own key the request goes straight from your browser to that provider under your key, the shared daily limit does not apply, and you are responsible for the key and any charges on it.</p>
+<p>Either way, what you submit (document images and PDFs, dictation transcripts, statement rows, and assistant chat including attached documents) is handled under Google's or Anthropic's terms, not ours. Google's free Gemini tier permits human review and model training on submitted content; check the terms attached to the key in use. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.</p>
+<p>AI output is a draft: review it before you rely on it.</p>
 </section>
 
 <section>
@@ -157,7 +158,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
   <li><strong>Cloudflare</strong>: proxy and CDN in front of credentialdomd.com, and Turnstile, the bot check Clerk shows at sign-in.</li>
   <li><strong>GitHub Pages</strong>: static hosting for the site and the app files.</li>
   <li><strong>Resend</strong>: transactional email, such as the early-access welcome note and account emails.</li>
-  <li><strong>Google</strong> (Gemini API) and <strong>Anthropic</strong> (Claude API): only under your own key and only when you use an AI feature (section 4).</li>
+  <li><strong>Google</strong> (Gemini API): when you use an AI feature, under the shared key or your own (section 4). <strong>Anthropic</strong> (Claude API): only under your own key.</li>
   <li><strong>CMS NPPES registry</strong> and <strong>NLM Clinical Tables</strong>: NPI lookup. Public government APIs that receive only the search terms (name, state, or NPI).</li>
   <li><strong>Telegram</strong>: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram.</li>
 </ul>
