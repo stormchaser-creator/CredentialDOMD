@@ -2,6 +2,7 @@ name: Deploy to GitHub Pages
 
 # Auto-deploys credentialdomd.com on every push to main.
 # - Marketing landing (landing/index.html)        → gh-pages root /index.html
+# - Legal pages (landing/privacy.html, terms.html) → gh-pages root /privacy, /terms
 # - State landing pages (landing/states/*.html)   → gh-pages /states/
 # - React SPA (npm run build → dist/)             → gh-pages /app/
 # - SEO files (public/sitemap.xml, robots.txt)    → gh-pages root
@@ -86,6 +87,11 @@ jobs:
 
           # Marketing landing page → gh-pages root
           cp src/landing/index.html gh-pages/index.html
+
+          # Legal pages → gh-pages root, served extensionless as /privacy and /terms.
+          # Generated from src/content/legalText.js by scripts/generate-legal-pages.mjs.
+          cp src/landing/privacy.html gh-pages/privacy.html
+          cp src/landing/terms.html gh-pages/terms.html
 
           # 50 state landing pages → gh-pages /states
           rm -rf gh-pages/states

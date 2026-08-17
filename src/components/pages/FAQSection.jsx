@@ -7,6 +7,10 @@ const FAQ_DATA = [
     category: "Pricing & Billing",
     items: [
       {
+        q: "Is CredentialDOMD free right now?",
+        a: "Yes. The app is in beta and free while the beta lasts; billing is switched off. The plan names below describe what pricing is expected to look like later. If paid plans launch you will hear about it in advance, and nothing is charged without your agreement.",
+      },
+      {
         q: "Is the free tier really free forever?",
         a: "Yes. Up to 5 credentials, no expiration, no credit card. Upgrade only when you need more.",
       },
@@ -36,7 +40,7 @@ const FAQ_DATA = [
       },
       {
         q: "Do you store my documents securely?",
-        a: "Yes. AES-256 at rest, TLS 1.3 in transit, US-region only. We sign BAAs on Practice and above.",
+        a: "Uploaded documents go to a private Supabase Storage bucket in the US region, in a folder only your account can reach (row-level security), encrypted in transit and at rest. Note that CredentialDOMD is built to hold no patient information, so we make no HIPAA compliance claim and do not offer a BAA on any plan.",
       },
     ],
   },
@@ -49,15 +53,15 @@ const FAQ_DATA = [
       },
       {
         q: "Is my data stored securely?",
-        a: "Yes. All your data is stored locally on your device using browser storage (localStorage). Nothing is sent to any server. Your data never leaves your device unless you explicitly share or export it. We recommend using the Data & Backup feature to create regular backups.",
+        a: "Your data is cached in this browser so the app opens offline, and synced under your account to a Supabase database (US region); uploaded document files go to a private storage bucket. Row-level security ties every row and file to your user id, and everything travels over TLS. Sign out on shared computers, and use Data & Backup for a JSON copy of your own. The one on-device-only item is the private note on a work entry, which never syncs. Details are in More > Privacy.",
       },
       {
         q: "Does CredentialDOMD work offline?",
-        a: "Yes. Since all data is stored locally on your device, CredentialDOMD works fully offline. The only features that require an internet connection are the NPI Lookup (which queries the NPPES registry) and the AI Document Scanner (which uses the Gemini API).",
+        a: "Mostly. The app reads from a local cache, so you can open it and view your credentials without a connection; changes sync to the cloud when you are back online. Sign-in, NPI Lookup (the NPPES registry via NLM Clinical Tables), AI features (your own Gemini or Anthropic key), and support tickets need a connection.",
       },
       {
         q: "How do I set up my profile?",
-        a: "Go to More > Settings. Enter your full name and tap \"Find My NPI\" — the app will search the NPPES registry and show matching providers. Select yourself to auto-fill your NPI, degree type (MD or DO), and practice state. Then add any additional states where you hold licenses.",
+        a: "Go to More > Settings. Enter your full name and tap \"Find My NPI\". The app will search the NPPES registry and show matching providers. Select yourself to auto-fill your NPI, degree type (MD or DO), and practice state. Then add any additional states where you hold licenses.",
       },
       {
         q: "What's the difference between MD and DO mode?",
@@ -78,7 +82,7 @@ const FAQ_DATA = [
       },
       {
         q: "Can I scan documents to add credentials?",
-        a: "Yes. Go to the Scan tab, upload or photograph a credential document, and the AI will extract the relevant information (type, license number, dates, state, etc.) and pre-fill the form for you. This requires a Gemini API key, which you can set in Settings.",
+        a: "Yes. Go to the Scan tab, upload or photograph a credential document, and the AI will extract the relevant information (type, license number, dates, state, etc.) and pre-fill the form for you. This requires your own Google Gemini API key, set in Settings; the image is sent to Google under that key. Upload the credential itself, never a patient record.",
       },
       {
         q: "How do I share credentials with a hospital or employer?",
@@ -129,23 +133,23 @@ const FAQ_DATA = [
     items: [
       {
         q: "How do I back up my data?",
-        a: "Go to More > Data & Backup. You can export all your data as a JSON file, which you can save anywhere and import later to restore. You can also print a formatted summary of all credentials. We strongly recommend regular backups since data is stored in your browser and could be lost if you clear your browser data.",
+        a: "Go to More > Data & Backup. You can export all your data as a JSON file, which you can save anywhere and import later to restore. You can also print a formatted summary of all credentials. Your data also syncs to the cloud under your account, but a JSON export is the copy you control, so take one now and then.",
       },
       {
         q: "Can I move my data to a new device?",
-        a: "Yes. Export your data as a JSON backup on your current device (More > Data & Backup > Export JSON). Transfer the file to your new device, then import it in CredentialDOMD on the new device. All your credentials, settings, and history will be restored.",
+        a: "Sign in on the new device and your synced data loads from the cloud. The private note on a work entry lives only in the browser it was written in; to carry it over, export on the old device (More > Data & Backup > Export JSON) and import on the new one. A JSON export also restores everything else if you ever need it.",
       },
       {
         q: "Does CredentialDOMD share my data with anyone?",
-        a: "No. Your data is stored exclusively on your device. Nothing is transmitted to any server. The only network requests the app makes are: (1) NPI Lookup calls the public NPPES API with just your NPI number, (2) Document scanning sends images to the Gemini API if you use the AI scanner. Neither stores your data.",
+        a: "We do not sell it or share it with anyone outside the services that run the app: Clerk (sign-in), Supabase (database and file storage, US region), Cloudflare (proxy), Resend (email), and, only when you use them, the NPPES registry for NPI lookup and Google or Anthropic for AI features under your own key. The operator (Eric Whitney, DO) has admin access for support and reads tickets, feedback, and the assistant log; tickets may be processed with AI tooling. The full list is in More > Privacy.",
       },
       {
         q: "What happens if I clear my browser data?",
-        a: "If you clear localStorage, your CredentialDOMD data will be deleted. This is why we strongly recommend using the Data & Backup feature to create regular JSON backups. You can restore from a backup at any time.",
+        a: "The local cache is wiped, and so is the on-device private vault (the private notes on work entries). Your synced credential data reloads from the cloud the next time you sign in. Keep a JSON export from Data & Backup if you want the vault notes to survive.",
       },
       {
         q: "Can I permanently delete all my data?",
-        a: "Yes. Go to More > Data Rights > Delete All My Data. You'll need to type DELETE to confirm. This permanently removes all credentials, settings, documents, and history from your device. We recommend exporting a backup first. This action cannot be undone.",
+        a: "Yes. Go to More > Data Rights > Delete All My Data. You'll need to type DELETE to confirm. This permanently removes all credentials, settings, documents, and history from this device, the cloud database, and file storage. We recommend exporting a backup first. This action cannot be undone. To close the sign-in account itself, email support@credentialdomd.com.",
       },
       {
         q: "Where can I find the Privacy Policy and Terms of Service?",
@@ -296,7 +300,7 @@ function FAQSection() {
       }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 4 }}>Still have questions?</div>
         <div style={{ fontSize: 12, color: T.textDim }}>
-          CredentialDOMD is built for physicians, by physicians. Your data stays on your device, your credentials stay organized.
+          CredentialDOMD is built for physicians, by a physician. Email support@credentialdomd.com or use Get help in the app.
         </div>
       </div>
     </div>

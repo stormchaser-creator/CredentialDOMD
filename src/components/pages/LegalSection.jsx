@@ -1,6 +1,8 @@
-import { useState, memo } from "react";
+import { useState, memo, Fragment } from "react";
 import { useApp } from "../../context/AppContext";
-import { deleteAllData } from "../../lib/supabase";
+import { deleteAllData, supabase } from "../../lib/supabase";
+import { clearVault } from "../../utils/privateVault";
+import { PRIVACY, TERMS, LEGAL_CONTACT } from "../../content/legalText";
 
 function LegalSection({ page }) {
   const { data, setData, userIdRef, theme: T } = useApp();
@@ -12,9 +14,21 @@ function LegalSection({ page }) {
     if (deleteInput !== "DELETE") return;
     // Clear from localStorage and Capacitor
     localStorage.removeItem("credentialdomd-data");
-    try { if (window.storage?.remove) window.storage.remove("credentialdomd-data"); } catch {}
-    // Clear from Supabase
+    try { if (window.storage?.remove) window.storage.remove("credentialdomd-data"); } catch { /* not in Capacitor */ }
+    // The on-device private vault is part of "all my data" too.
+    try { clearVault(); } catch { /* storage unavailable */ }
+    // Clear from Supabase: uploaded document files first (deleteAllData only
+    // covers the tables), then the rows.
     if (userIdRef?.current) {
+      const sub = window.Clerk?.user?.id;
+      if (supabase && sub) {
+        supabase.storage.from("documents").list(sub, { limit: 1000 })
+          .then(({ data: objs }) => {
+            const paths = (objs || []).map(o => `${sub}/${o.name}`);
+            return paths.length ? supabase.storage.from("documents").remove(paths) : null;
+          })
+          .catch(() => {});
+      }
       deleteAllData(userIdRef.current).catch(() => {});
     }
     setData({
@@ -33,8 +47,8 @@ function LegalSection({ page }) {
     setDeleteInput("");
   };
 
-  if (page === "privacy") return <PrivacyPolicy T={T} />;
-  if (page === "terms") return <TermsOfService T={T} />;
+  if (page === "privacy") return <LegalDoc doc={PRIVACY} T={T} />;
+  if (page === "terms") return <LegalDoc doc={TERMS} T={T} />;
   if (page === "data-rights") return (
     <DataRights
       T={T}
@@ -48,7 +62,25 @@ function LegalSection({ page }) {
   return null;
 }
 
-// Disclaimer removed — legal documents reviewed and finalized March 2026
+// The policy text itself lives in src/content/legalText.js so the in-app
+// pages and landing/privacy.html + landing/terms.html render the same words.
+
+/** Inline **bold** markers -> <strong>. Plain text otherwise. */
+function Inline({ text }) {
+  const parts = String(text).split(/\*\*(.+?)\*\*/g);
+  return parts.map((p, i) => (i % 2 ? <strong key={i}>{p}</strong> : <Fragment key={i}>{p}</Fragment>));
+}
+
+function Block({ block }) {
+  if (Array.isArray(block)) {
+    return (
+      <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 6 }}>
+        {block.map((li, i) => <li key={i} style={{ marginBottom: 3 }}><Inline text={li} /></li>)}
+      </ul>
+    );
+  }
+  return <p style={{ marginTop: 6 }}><Inline text={block} /></p>;
+}
 
 function Section({ title, children, T }) {
   return (
@@ -59,159 +91,19 @@ function Section({ title, children, T }) {
   );
 }
 
-function PrivacyPolicy({ T }) {
+function LegalDoc({ doc, T }) {
   return (
     <div>
-      <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Privacy Policy</h2>
-      <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textDim }}>Last updated: March 2026</p>
-
-      <Section title="1. Data We Collect" T={T}>
-        <p>CredentialDOMD collects and stores the following data that you voluntarily provide:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li>Physician profile information (name, NPI, degree type, email, phone)</li>
-          <li>Medical licenses, certifications, and registration details</li>
-          <li>Continuing Medical Education (CME) records</li>
-          <li>Hospital privilege and appointment records</li>
-          <li>Professional liability insurance information</li>
-          <li>Work history and peer references</li>
-          <li>Malpractice claim history</li>
-          <li>Health clearance records (vaccinations, TB tests, fit tests)</li>
-          <li>Uploaded document images</li>
-          <li>Education and training records</li>
-        </ul>
-      </Section>
-
-      <Section title="2. How Your Data Is Stored" T={T}>
-        <p>Your data is stored in two places:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li><strong>Locally on your device</strong> — in your browser's localStorage, serving as an offline cache so the app works without an internet connection.</li>
-          <li><strong>Supabase cloud database</strong> — a PostgreSQL database hosted by Supabase (supabase.com). Your credential data is synced to the cloud to enable cross-device access and backup. Data is encrypted in transit via HTTPS/TLS.</li>
-        </ul>
-        <p style={{ marginTop: 6 }}>The data synced to Supabase includes: your profile information, licenses, CME records, privileges, insurance, health records, education, case logs, work history, peer references, malpractice history, document metadata, and notification/share logs. Uploaded document images (the raw image data) are stored locally only and are not synced to the cloud.</p>
-        <p style={{ marginTop: 6 }}>External services contacted:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li><strong>Supabase</strong> — cloud database for data sync and backup</li>
-          <li><strong>NPPES Registry</strong> (npiregistry.cms.hhs.gov) — for NPI lookup, a free public government API</li>
-          <li><strong>Gemini API</strong> (generativelanguage.googleapis.com) — for AI-powered document scanning and CPT code lookup, only when you provide your own API key and initiate a scan or lookup. Document images are sent to Google's Gemini API for analysis and are subject to Google's data handling policies.</li>
-        </ul>
-      </Section>
-
-      <Section title="3. Data Sharing" T={T}>
-        <p>We do not sell, rent, or share your data with any third party. When you use the Share/Send feature, credential information is composed into an email or text message on your device — we do not send it on your behalf or retain copies.</p>
-      </Section>
-
-      <Section title="4. Data Security" T={T}>
-        <p>Your data is protected by multiple layers:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li><strong>In transit:</strong> All communication with Supabase and external APIs uses HTTPS/TLS encryption.</li>
-          <li><strong>At rest (cloud):</strong> Supabase encrypts data at rest on their infrastructure. Row Level Security (RLS) policies restrict database access to your device's identifier.</li>
-          <li><strong>At rest (local):</strong> Local data is as secure as your device and browser. Use a device with a passcode or biometric lock.</li>
-        </ul>
-        <p style={{ marginTop: 6 }}>We recommend:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li>Not using CredentialDOMD on shared or public computers</li>
-          <li>Regularly backing up your data using the Export feature</li>
-          <li>Not sharing your Gemini API key with others</li>
-          <li>Clearing browser data if you suspect unauthorized device access</li>
-        </ul>
-      </Section>
-
-      <Section title="5. HIPAA Considerations" T={T}>
-        <p><strong>CredentialDOMD is built to hold no Protected Health Information, and that is deliberate.</strong> It records your credentials, your billable time, and your case codes &mdash; your professional data, not your patients&rsquo;. Because no PHI is stored or transmitted, the app operates outside HIPAA and we do not offer business associate agreements.</p>
-        <p><strong>You agree not to upload patient records</strong> &mdash; operative notes, progress notes, discharge summaries, face sheets, chart printouts, or any document created to record a patient&rsquo;s care. Upload the credential itself: the license, the certificate, the agreement, the lab slip. The app screens uploads and will refuse a document that reads as a patient record, but that check is a safety net and not a substitute for your judgement.</p>
-        <p><strong>You agree not to enter patient identifiers</strong> &mdash; names, medical record numbers, dates of birth, addresses, or phone numbers &mdash; into any synced field, and not to upload documents containing them. The AI features are instructed to omit identifiers, and the assistant will decline to store them.</p>
-        <p><strong>The one exception is the private note on a work entry.</strong> It is stored in your own browser on your own device, is never uploaded to our servers, and never appears on an invoice or in a shared packet. It exists so you can recognise which patient a billed call concerned. Because it never leaves your device, it does not follow you to another one unless you export and restore it yourself from Data &amp; Backup.</p>
-        <p>Two disclosures you should weigh before entering anything clinical: (1) the AI features (document scanning, dictation, CPT coding, and the assistant) transmit what you supply to Google&rsquo;s Gemini API using your own API key, and Google&rsquo;s free-tier terms permit human review and model training of submitted content; (2) support tickets, feedback, and assistant transcripts are stored and read by the developer. If you work under a covered entity, consult your compliance officer before using AI features on anything clinical.</p>
-        <p style={{ marginTop: 6 }}>Additional safeguards may be required for deployments involving institutional use, multi-user environments, or integration with covered entity systems.</p>
-      </Section>
-
-      <Section title="6. Your Rights" T={T}>
-        <p>You have full control over your data:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li><strong>Access:</strong> All your data is visible within the app at all times</li>
-          <li><strong>Export:</strong> Use Data & Backup to download all your data as JSON</li>
-          <li><strong>Delete:</strong> Use the Data Rights page to permanently delete all your data from both your device and the cloud database</li>
-          <li><strong>Portability:</strong> Exported JSON files can be imported into any compatible system</li>
-        </ul>
-      </Section>
-
-      <Section title="7. Cookies & Tracking" T={T}>
-        <p>CredentialDOMD does not use cookies, analytics, tracking pixels, or any form of user tracking. We do not collect usage statistics or behavioral data. All fonts are self-hosted and no external font services are contacted.</p>
-      </Section>
-
-      <Section title="8. Changes to This Policy" T={T}>
-        <p>This privacy policy may be updated as the application evolves. Material changes will be noted in the app's changelog. Continued use of the app after changes constitutes acceptance of the updated policy.</p>
-      </Section>
-
-      <Section title="9. Contact" T={T}>
-        <p>For privacy-related questions or data requests, contact us at <strong>support@credentialdomd.com</strong>.</p>
-      </Section>
-    </div>
-  );
-}
-
-function TermsOfService({ T }) {
-  return (
-    <div>
-      <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Terms of Service</h2>
-      <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textDim }}>Last updated: March 2026</p>
-
-      <Section title="1. Acceptance of Terms" T={T}>
-        <p>By using CredentialDOMD, you agree to these Terms of Service. If you do not agree, do not use the application.</p>
-      </Section>
-
-      <Section title="2. Description of Service" T={T}>
-        <p>CredentialDOMD is a personal credential management tool designed to help physicians organize, track, and share their professional credentials. The app stores data locally on your device and syncs it to a cloud database for backup and cross-device access. It does not currently require an account or registration; access is scoped by a device identifier.</p>
-      </Section>
-
-      <Section title="3. Intended Use" T={T}>
-        <p>This application is intended for use by licensed physicians (MD and DO) for personal credential tracking. It is <strong>not</strong> intended as a substitute for:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li>Official credentialing verification organizations (NCQA, CAQH, Joint Commission)</li>
-          <li>State medical board licensing systems</li>
-          <li>Hospital credentialing departments</li>
-          <li>Official CME tracking through accrediting bodies</li>
-        </ul>
-        <p style={{ marginTop: 6 }}>Always verify credential information against official sources before submitting for credentialing applications.</p>
-      </Section>
-
-      <Section title="4. Data Accuracy" T={T}>
-        <p>You are solely responsible for the accuracy of data entered into CredentialDOMD. The app performs automated compliance calculations based on published state requirements, but these calculations are informational only and may not reflect the most current regulations. Always verify CME requirements with your state medical board.</p>
-      </Section>
-
-      <Section title="5. No Warranty" T={T}>
-        <p>CredentialDOMD is provided "AS IS" without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement. We do not warrant that the app will be error-free, uninterrupted, or that defects will be corrected.</p>
-      </Section>
-
-      <Section title="6. Limitation of Liability" T={T}>
-        <p>In no event shall the developers of CredentialDOMD be liable for any direct, indirect, incidental, special, or consequential damages arising from the use or inability to use this application, including but not limited to:</p>
-        <ul style={{ paddingLeft: 18, marginTop: 4 }}>
-          <li>Loss of credential data</li>
-          <li>Missed renewal deadlines</li>
-          <li>Inaccurate compliance calculations</li>
-          <li>Credentialing application issues based on app-generated data</li>
-        </ul>
-      </Section>
-
-      <Section title="7. AI Document Scanning" T={T}>
-        <p>The AI document scanning feature uses the Gemini API with a user-provided API key. You are responsible for your API key and any charges incurred. AI-extracted data should always be reviewed for accuracy before relying on it.</p>
-      </Section>
-
-      <Section title="8. Intellectual Property" T={T}>
-        <p>CredentialDOMD and its original content, features, and functionality are the property of its developers. The app's brand, logos, and design are protected by applicable intellectual property laws.</p>
-      </Section>
-
-      <Section title="9. Modifications" T={T}>
-        <p>We reserve the right to modify these terms at any time. Material changes will be communicated through the application. Your continued use after changes constitutes acceptance.</p>
-      </Section>
-
-      <Section title="10. Governing Law" T={T}>
-        <p>These terms shall be governed by the laws of the State of Texas, without regard to conflict of law provisions.</p>
-      </Section>
-
-      <Section title="11. Contact" T={T}>
-        <p>Questions about these Terms? Contact us at <strong>support@credentialdomd.com</strong>.</p>
-      </Section>
+      <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>{doc.title}</h2>
+      <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textDim }}>Last updated {doc.updated}</p>
+      <div style={{ fontSize: 13, lineHeight: 1.7, color: T.textMuted, marginBottom: 16 }}>
+        {doc.intro.map((p, i) => <p key={i} style={{ marginTop: i ? 6 : 0 }}><Inline text={p} /></p>)}
+      </div>
+      {doc.sections.map(s => (
+        <Section key={s.title} title={s.title} T={T}>
+          {s.blocks.map((b, i) => <Block key={i} block={b} />)}
+        </Section>
+      ))}
     </div>
   );
 }
@@ -237,9 +129,11 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 8 }}>Data Storage</h3>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.6 }}>
-          Your data is stored locally on this device (as an offline cache) and synced to a Supabase
-          cloud database for backup and cross-device access. All transfers are encrypted via HTTPS.
-          Deleting your data below removes it from <strong>both</strong> this device and the cloud database.
+          Your data is cached on this device so the app opens offline, and synced under your account
+          to a Supabase database (US region) with uploaded document files in a private storage bucket.
+          All transfers are encrypted with TLS. The private note on a work entry stays on this device
+          only. Deleting your data below removes it from <strong>this device, the database, and
+          file storage</strong>. To close the account itself, email <strong>{LEGAL_CONTACT}</strong>.
         </p>
       </div>
 
