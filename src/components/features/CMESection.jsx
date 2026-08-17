@@ -5,13 +5,15 @@ import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import ComplianceBar from "../shared/ComplianceBar";
+import RuleProvenance from "../shared/RuleProvenance";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getCMECategories } from "../../constants/credentialTypes";
-import { AOA_NATIONAL } from "../../constants/boardRequirements";
-import { getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
+import { AOA_NATIONAL, BOARD_REQS_META } from "../../constants/boardRequirements";
+import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { generateId, formatDate } from "../../utils/helpers";
 import { complianceFor } from "../../utils/compliance";
+import { computeBoardCompliance, boardIdsFromLicenses } from "../../utils/boardCompliance";
 
 function CMESection({ onShare }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate } = useApp();
@@ -60,6 +62,17 @@ function CMESection({ onShare }) {
   }, [showCompliance, allTrackedStates, data.cme, deg]);
 
   const totalHours = useMemo(() => data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0), [data.cme]);
+
+  // Board MOC standing: boards picked in Settings plus any board implied by
+  // a "Board Certification" license record (matched by code or name), run
+  // through the same cycle-windowed engine Home uses.
+  const boardComps = useMemo(() => {
+    if (!showCompliance) return [];
+    const fromLicenses = boardIdsFromLicenses(data.licenses);
+    const specialties = [...new Set([...(data.settings.specialties || []), ...fromLicenses])];
+    if (specialties.length === 0) return [];
+    return computeBoardCompliance({ ...data, settings: { ...data.settings, specialties } });
+  }, [showCompliance, data]);
 
   return (
     <div>
@@ -144,8 +157,51 @@ function CMESection({ onShare }) {
                   )}
                 </div>
               ))}
+              <RuleProvenance
+                reportKey={st}
+                subject={`${st}${hasSeparateBoards(st) ? ` (${deg || "MD"})` : ""}`}
+                citation={comp.source}
+                meta={STATE_REQS_META}
+                verified={comp.verified}
+              />
             </div>
           ))}
+
+          {/* Board MOC: the matched board's continuing-certification CME,
+              from Settings → Board Specialties or a Board Certification
+              license record. Same window logic as the Home card. */}
+          {boardComps.length > 0 && (
+            <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: T.shadow1 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>Board MOC</div>
+              <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>Continuing certification CME for your board{boardComps.filter(b => !b.followsParent).length > 1 ? "s" : ""}</div>
+              {boardComps.filter(b => !b.followsParent).map(b => (
+                <div key={b.id} style={{ marginBottom: 12 }}>
+                  <ComplianceBar label={b.label} earned={b.earned} required={b.required} met={b.met}
+                    note={`${b.unit} \u00b7 ${b.windowLabel}${b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}`} />
+                  {b.cat1aRequired > 0 && (
+                    <ComplianceBar label="AOA Cat 1-A minimum" earned={b.cat1aEarned} required={b.cat1aRequired} met={b.cat1aEarned >= b.cat1aRequired} />
+                  )}
+                  {b.assessment && (
+                    <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.4 }}>Also required: {b.assessment}</div>
+                  )}
+                  {b.notes && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 3 }}>{b.notes}</div>}
+                  <RuleProvenance
+                    reportKey={`board:${b.code}`}
+                    subject={b.label}
+                    citation={b.citation}
+                    meta={BOARD_REQS_META}
+                    verified={b.verified}
+                    compact
+                  />
+                </div>
+              ))}
+              {boardComps.filter(b => b.followsParent).map(b => (
+                <div key={b.id} style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>
+                  {b.label}: CME follows the primary board above
+                </div>
+              ))}
+            </div>
+          )}
 
           {deg === "DO" && (
             <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: T.shadow1 }}>

@@ -108,6 +108,11 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     mate,
     fullyCompliant: totalMet && cat1Met && allTopicsMet && (!mate || mate.met),
     notes: entry?.notes,
+    // Provenance for the rule set behind these numbers: the statute or rule
+    // citation, and the month it was last checked against the regulator (if
+    // it has been). Empty when the state is unknown to the database.
+    source: entry?.source || "",
+    verified: entry?.verified || null,
     noGeneralReq,
     // True when the physician has not chosen MD or DO and this state runs
     // separate boards: the numbers above use the MD rule set as a stand-in.

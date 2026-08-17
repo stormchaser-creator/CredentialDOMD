@@ -75,11 +75,13 @@ export function computeBoardCompliance(data) {
         c => (c.category || "").includes("AMA PRA Category 1"));
       out.push({
         id, source: "ABMS", code, name: subName || b.name,
-        label: `${subName || b.name} — ABMS ${code}`,
+        label: `${subName || b.name}, ABMS ${code}`,
         required: b.hours, earned, met: earned >= b.hours,
         unit: b.unit, windowLabel, daysLeft,
         from, to: `${today.getFullYear()}-12-31`, countRule: "AMA PRA Category 1",
         assessment: b.assessment || "", notes: b.notes || "",
+        citation: `ABMS ${code} continuing certification (${b.name})`,
+        verified: b.verified || null,
       });
     } else if (kind === "AOA" && AOA_OCC[code]) {
       // Per-board OCC numbers (verified 2026-07): OCC participants /
@@ -95,7 +97,7 @@ export function computeBoardCompliance(data) {
       const cat1a = hoursIn(cme, from, to, c => (c.category || "").includes("AOA Category 1-A"));
       out.push({
         id, source: "AOA", code, name: subName || b.name,
-        label: `${subName || b.name} — AOA ${code}`,
+        label: `${subName || b.name}, AOA ${code}`,
         from, to, countRule: null,
         required: req.hours, earned,
         met: earned >= req.hours && cat1a >= (req.cat1 || 0),
@@ -105,6 +107,8 @@ export function computeBoardCompliance(data) {
         daysLeft: Math.ceil((new Date(`${cyc.end}-12-31T23:59`) - today) / 86400000),
         assessment: b.occChecklist || "OCC: active licensure + lifelong learning/CME + cognitive assessment + practice performance",
         notes: req.specReq ? `Specialty requirement: ${req.specReq}` : "",
+        citation: `AOA OCC by-board CME table, ${code} (${b.name})`,
+        verified: b.verified || null,
       });
     } else if (kind === "AOA-SUB" && AOA_OCC[code]) {
       // An AOA discipline certificate (e.g. Neurological Surgery) — its own
@@ -119,7 +123,7 @@ export function computeBoardCompliance(data) {
       const cat1a = hoursIn(cme, from, to, c => (c.category || "").includes("AOA Category 1-A"));
       out.push({
         id, source: "AOA", code: `${code}-${subName}`, name: subName,
-        label: `${subName} — AOA`,
+        label: `${subName}, AOA`,
         from, to, countRule: null,
         required: req.hours, earned,
         met: earned >= req.hours && cat1a >= (req.cat1 || 0),
@@ -127,18 +131,54 @@ export function computeBoardCompliance(data) {
         unit: "total hrs, all categories (OCC participant)",
         windowLabel: `${cyc.start}–${cyc.end} AOA cycle`,
         daysLeft: Math.ceil((new Date(`${cyc.end}-12-31T23:59`) - today) / 86400000),
-        assessment: `Annual: unrestricted-license proof + discipline-specific 15-question open-book Longitudinal Assessment for ${subName} (80% = 12/15, $225/yr — completing it earns 5.0 Cat 1-B). Every 3 years: at least one QI/practice-performance attestation.`,
-        notes: "Tracked as its own certificate — not combined with the parent surgery board.",
+        assessment: `Annual: unrestricted-license proof + discipline-specific 15-question open-book Longitudinal Assessment for ${subName} (80% = 12/15, $225/yr; completing it earns 5.0 Cat 1-B). Every 3 years: at least one QI/practice-performance attestation.`,
+        notes: "Tracked as its own certificate, not combined with the parent surgery board.",
+        citation: `AOA OCC by-board CME table, ${code} (${b.name}), ${subName} certificate`,
+        verified: b.verified || null,
       });
     } else if (kind === "ABMS-SUB" || kind === "AOA-SUB" || kind === "UCNS" || kind === "ABPS") {
       out.push({
         id, source: kind, code, name: subName || code,
-        label: subName ? `${subName} — follows ${code}` : code,
+        label: subName ? `${subName} (${code})` : code,
         followsParent: true,
       });
     }
   }
   return out;
+}
+
+/**
+ * Board specialty ids implied by the physician's LICENSE records: any license
+ * whose type contains "Board Certification" is matched by board code (ABNS,
+ * AOBS, ...) or full board name in its display name / notes. Returns ids in
+ * the same "ABMS:CODE" / "AOA:CODE" shape Settings → Board Specialties uses,
+ * so they can be unioned with data.settings.specialties and fed to
+ * computeBoardCompliance. Codes win over names; among name matches only the
+ * longest phrase counts ("Neurological Surgery" must not also match "Surgery").
+ */
+export function boardIdsFromLicenses(licenses) {
+  const out = new Set();
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const hasPhrase = (text, phrase) => new RegExp(`(^|[^a-z0-9])${esc(phrase.toLowerCase())}([^a-z0-9]|$)`).test(text);
+  const scan = (registry, kind, text) => {
+    const codeHits = Object.keys(registry).filter(code => hasPhrase(text, code));
+    if (codeHits.length) { codeHits.forEach(code => out.add(`${kind}:${code}`)); return; }
+    const nameHits = Object.entries(registry)
+      .filter(([, b]) => b.name && hasPhrase(text, b.name.replace(/&/g, "and")))
+      .sort((a, b) => b[1].name.length - a[1].name.length);
+    if (nameHits.length) out.add(`${kind}:${nameHits[0][0]}`);
+  };
+  for (const l of licenses || []) {
+    const type = l.type || "";
+    if (!/board certification/i.test(type)) continue;
+    const text = `${l.name || ""} ${l.notes || ""}`.toLowerCase().replace(/&/g, "and");
+    if (!text.trim()) continue;
+    const isAOA = /\(AOA\)/i.test(type);
+    const isABMS = /\(ABMS\)/i.test(type);
+    if (isABMS || !isAOA) scan(ABMS_MOC, "ABMS", text);
+    if (isAOA || !isABMS) scan(AOA_OCC, "AOA", text);
+  }
+  return [...out];
 }
 
 /** The AOA national 120/3yr requirement, cycle-windowed — shown to every DO
