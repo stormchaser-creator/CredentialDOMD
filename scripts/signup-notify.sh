@@ -1,6 +1,8 @@
 #!/bin/zsh
 # Signup notifier — iMessages Eric when anyone new hits the waitlist,
-# founding signups, or creates an app profile. Runs from gui-domain
+# founding signups, or creates an app profile, and when a physician files a
+# support ticket or replies on one (non-admin authors only, so Eric's own
+# tickets and the ticket agent's replies stay quiet). Runs from gui-domain
 # launchd every 10 minutes (only gui launchd can read the keychain).
 STATE="$HOME/.credentialdomd-signup-notify"
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || exit 0
@@ -16,6 +18,12 @@ union all select 'FAILED ATTEMPT', coalesce(a.name,''), coalesce(a.email,''), co
   where a.created_at > '$SINCE' and a.created_at < now() - interval '3 minutes'
     and not exists (select 1 from early_access_leads l where lower(l.email)=lower(a.email)
                     and l.created_at between a.created_at - interval '15 minutes' and a.created_at + interval '15 minutes')
+union all select 'TICKET', coalesce(p.name,''), coalesce(p.email,''), left(coalesce(t.subject,''),80), t.created_at
+  from support_tickets t left join profiles p on p.id = t.user_id
+  where t.created_at > '$SINCE' and not public.is_admin(t.user_id)
+union all select 'TICKET REPLY', coalesce(p.name,''), coalesce(p.email,''), left(coalesce(t.subject,''),40) || ': ' || left(regexp_replace(m.body, '\s+', ' ', 'g'),80), m.created_at
+  from support_messages m join support_tickets t on t.id = m.ticket_id left join profiles p on p.id = m.author_id
+  where m.created_at > '$SINCE' and not public.is_admin(m.author_id)
 order by created_at"
 
 ROWS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
@@ -30,11 +38,14 @@ except Exception:
     sys.exit(0)
 if not isinstance(rows, list) or not rows:
     sys.exit(0)
-lines = ["CredentialDOMD signup" + ("s" if len(rows) > 1 else "")]
+tickets = any((r.get("kind") or "").startswith("TICKET") for r in rows)
+lines = ["CredentialDOMD activity" if tickets else "CredentialDOMD signup" + ("s" if len(rows) > 1 else "")]
 for r in rows:
     who = r.get("name") or "(no name)"
     email = r.get("email") or "(no email)"
-    extra = f" via {r['extra']}" if r.get("extra") else ""
+    kind = r.get("kind") or ""
+    sep = ": " if kind.startswith("TICKET") else " via "
+    extra = f"{sep}{r['extra']}" if r.get("extra") else ""
     lines.append(f"• [{r.get('kind')}] {who} — {email}{extra}")
 print("\n".join(lines))
 PY
