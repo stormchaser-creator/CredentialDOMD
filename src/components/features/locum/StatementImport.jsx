@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import Modal from "../../shared/Modal";
 import { generateId } from "../../../utils/helpers";
 import { analyzeStatement, categorizeStatementRows } from "../../../utils/documentScanner";
+import * as XLSX from "xlsx";
 
 /**
  * StatementImport — turn the business card's statement into deduction lines.
@@ -73,9 +74,59 @@ function parseCsv(text) {
     } else field += ch;
   }
   if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return parseGrid(rows);
+}
+
+/**
+ * Excel statements (.xlsx/.xls): every sheet is scanned; the first sheet
+ * whose header looks like a statement (date + description/amount) wins.
+ * Excel date serials become YYYY-MM-DD; header rows above the table
+ * (bank name, account, statement period) are skipped.
+ */
+function parseExcel(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: false });
+  const looksLikeHeader = (r) => {
+    const h = (r || []).map(x => String(x ?? "").trim().toLowerCase());
+    return h.some(x => /date/.test(x)) && h.some(x => /description|merchant|payee|details?$|name|amount|debit/.test(x));
+  };
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+    let start = grid.findIndex(looksLikeHeader);
+    if (start < 0) {
+      // No recognizable header: accept a sheet that has date-like first cells.
+      const dataRows = grid.filter(r => r && r.length >= 2 && (typeof r[0] === "number" || /\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/.test(String(r[0]))));
+      if (dataRows.length < 2) continue;
+      start = grid.indexOf(dataRows[0]);
+      const rows = grid.slice(start).map(r => r.map(cellToText));
+      const parsed = parseGrid(rows);
+      if (parsed.length) return parsed;
+      continue;
+    }
+    const rows = grid.slice(start).map(r => r.map(cellToText));
+    const parsed = parseGrid(rows);
+    if (parsed.length) return parsed;
+  }
+  return [];
+}
+
+// Excel serial dates -> "YYYY-MM-DD"; everything else -> trimmed text.
+function cellToText(v) {
+  if (v == null) return "";
+  if (typeof v === "number" && v > 20000 && v < 80000 && Number.isInteger(v)) {
+    // Excel serial day count from 1899-12-30 (the 1900 leap-year bug included).
+    const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
+  if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+  return String(v).trim();
+}
+
+function parseGrid(rows) {
   if (!rows.length) return [];
 
-  const header = rows[0].map(h => h.trim().toLowerCase());
+  const header = rows[0].map(h => String(h ?? "").trim().toLowerCase());
   const idx = (res) => header.findIndex(h => res.some(r => r.test(h)));
   let dateI = idx([/^date$/, /transaction date/, /^trans/, /date/]);
   let descI = idx([/description/, /merchant/, /payee/, /details?$/, /name/]);
@@ -165,6 +216,10 @@ function StatementImport({ open, onClose }) {
     try {
       if (/csv|text/.test(file.type) || /\.csv$/i.test(file.name)) {
         await toReview(parseCsv(await file.text()));
+      } else if (/spreadsheet|ms-excel|officedocument\.spreadsheetml/.test(file.type) || /\.(xlsx|xls|xlsm)$/i.test(file.name)) {
+        const parsed = parseExcel(await file.arrayBuffer());
+        if (!parsed.length) throw new Error("No transactions found in that workbook. Export the statement as CSV, or make sure the sheet has Date, Description, and Amount columns.");
+        await toReview(parsed);
       } else {
         const dataUrl = await new Promise((res, rej) => {
           const r = new FileReader();
@@ -219,9 +274,9 @@ function StatementImport({ open, onClose }) {
       {!rows && (
         <>
           <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
-            Upload the business card's statement — CSV reads instantly on-device; PDF or a photo goes through the AI scanner. You review and categorize every line before anything is saved, and rows already in the ledger are flagged as duplicates.
+            Upload the business card's statement: CSV or Excel reads instantly on-device; PDF or a photo goes through the AI scanner. You review and categorize every line before anything is saved, and rows already in the ledger are flagged as duplicates.
           </div>
-          <input type="file" ref={fileRef} accept=".csv,text/csv,application/pdf,image/*" style={{ display: "none" }}
+          <input type="file" ref={fileRef} accept=".csv,text/csv,.xlsx,.xls,.xlsm,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,image/*" style={{ display: "none" }}
             onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
           <button onClick={() => fileRef.current?.click()} disabled={busy} style={{
             width: "100%", padding: "14px", borderRadius: 12, border: "none",
