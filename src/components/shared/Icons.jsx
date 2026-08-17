@@ -36,21 +36,27 @@ export const GraduationIcon = memo(() => svg(<><path d="M22 10v6M2 10l10-5 10 5-
 
 // Brand mark — caduceus (matches the PWA icons in public/icons/):
 // winged staff with twin serpents, scaled from the same glyph.
-export const AsclepiusIcon = memo(({ size = 28, color }) => {
+// The app mark: a dragonfly (agile, watchful, universally readable). Kept
+// under the old AsclepiusIcon export name so every call site keeps working.
+export const DragonflyIcon = memo(({ size = 28, color, bg = "transparent" }) => {
   const c = color || "currentColor";
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="15.2" y="9.3" width="1.6" height="17" rx="0.8" fill={c} />
-      <circle cx="16" cy="7.6" r="1.5" fill={c} />
-      <path d="M14.8 11 C12.7 8.7 9 8.3 7 9.7 C8.7 10.5 10 11 11 11.8 C9.5 11.8 8 12.2 6.8 13 C9.2 14 12.7 13.7 14.8 12.2 Z" fill={c} />
-      <path d="M17.2 11 C19.3 8.7 23 8.3 25 9.7 C23.3 10.5 22 11 21 11.8 C22.5 11.8 24 12.2 25.2 13 C22.8 14 19.3 13.7 17.2 12.2 Z" fill={c} />
-      <path d="M11.2 14 C11.2 16.5 20.8 16.8 20.8 19.5 C20.8 22.2 11.2 22.5 11.2 25.2" stroke={c} strokeWidth="1.7" strokeLinecap="round" fill="none" />
-      <path d="M20.8 14 C20.8 16.5 11.2 16.8 11.2 19.5 C11.2 22.2 20.8 22.5 20.8 25.2" stroke={c} strokeWidth="1.7" strokeLinecap="round" fill="none" />
-      <circle cx="11.2" cy="13.7" r="1.15" fill={c} />
-      <circle cx="20.8" cy="13.7" r="1.15" fill={c} />
+      <g fill={c}>
+        <circle cx="16" cy="6.4" r="2"/>
+        <circle cx="14.55" cy="6.55" r="0.7" fill={bg}/><circle cx="17.45" cy="6.55" r="0.7" fill={bg}/>
+        <rect x="14.6" y="8.5" width="2.8" height="4.4" rx="1.4"/>
+        <rect x="15.3" y="12.6" width="1.4" height="14.6" rx="0.7"/>
+        <rect x="15" y="15.6" width="2" height="0.7" rx="0.35" fill={bg}/><rect x="15" y="18.2" width="2" height="0.7" rx="0.35" fill={bg}/><rect x="15" y="20.8" width="2" height="0.7" rx="0.35" fill={bg}/><rect x="15" y="23.4" width="2" height="0.7" rx="0.35" fill={bg}/>
+        <ellipse cx="9.2" cy="10.6" rx="7.4" ry="2.1" transform="rotate(-24 9.2 10.6)"/>
+        <ellipse cx="22.8" cy="10.6" rx="7.4" ry="2.1" transform="rotate(24 22.8 10.6)"/>
+        <ellipse cx="10" cy="17.4" rx="6.1" ry="1.9" transform="rotate(8 10 17.4)"/>
+        <ellipse cx="22" cy="17.4" rx="6.1" ry="1.9" transform="rotate(-8 22 17.4)"/>
+      </g>
     </svg>
   );
 });
+export const AsclepiusIcon = DragonflyIcon;
 
 // Logo lockup — Rod of Asclepius + CREDENTIALMD text
 export const LogoMark = memo(({ color = "#fff", accentColor, size = "default" }) => {

@@ -27,6 +27,7 @@ import { AssistantSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
 import HomeSearch, { SECTIONS } from "./components/features/HomeSearch";
+import Onboarding from "./components/features/Onboarding";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
@@ -411,6 +412,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       </div>
     </div>
   );
+
+  // Brand-new account: the setup wizard owns the screen until it is finished
+  // or explicitly skipped. Existing accounts (any records on file) never see it.
+  const brandNew = !data.settings?.onboardingDone
+    && (data.licenses || []).length === 0 && (data.documents || []).length === 0
+    && (data.cme || []).length === 0 && (data.privileges || []).length === 0;
+  if (brandNew) return <Onboarding onFinish={() => { setTab("home"); setSubPage(null); }} />;
 
   /* ─── HOME PAGE ──────────────────────────────────────────── */
   const openFromSearch = (sec, id) => {
