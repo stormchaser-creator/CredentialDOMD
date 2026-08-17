@@ -9,6 +9,7 @@ import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documen
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import ScanReviewCard from "./ScanReviewCard";
+import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
 
 function DocumentsSection() {
   const { data, setData, addItem, editItem, deleteItem: deleteItemCtx, updateSettings, theme: T, navigate } = useApp();
@@ -48,7 +49,7 @@ function DocumentsSection() {
     const files = docs.map(doc => {
       try {
         const [head, b64] = doc.data.split(",");
-        const mime = doc.type || head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
+        const mime = docMime(doc) || head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
         const bin = atob(b64);
         const arr = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
@@ -299,9 +300,9 @@ function DocumentsSection() {
 
     // Add the credential entry
     addItem(section, entry);
-    // Link the document to it
+    // Link the document to it (an emailed certificate leaves the inbox here)
     const doc = data.documents.find(d => d.id === docId);
-    if (doc) editItem("documents", { ...doc, linkedTo: `${section}:${id}` });
+    if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });
 
     setScanQueue(q => q.filter(item => item.docId !== docId));
   };
@@ -319,9 +320,10 @@ function DocumentsSection() {
     setScanning(true);
     setScanError(null);
     try {
-      const isPdf = doc.type === "application/pdf" || doc.data.startsWith("data:application/pdf");
+      const mime = docMime(doc);
+      const isPdf = mime === "application/pdf" || doc.data.startsWith("data:application/pdf");
       const result = isOfficeFile(doc)
-        ? await analyzeDocText(await extractOfficeText({ name: doc.name, type: doc.type, dataUrl: doc.data }), deg, apiKey)
+        ? await analyzeDocText(await extractOfficeText({ name: doc.name, type: mime, dataUrl: doc.data }), deg, apiKey)
         : isPdf
           ? await analyzePDF(doc.data, deg, apiKey)
           : await analyzeDocument(doc.data, deg, apiKey);
@@ -338,14 +340,95 @@ function DocumentsSection() {
     const byteStr = atob(doc.data.split(",")[1]);
     const arr = new Uint8Array(byteStr.length);
     for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-    const url = URL.createObjectURL(new Blob([arr], { type: doc.type || "application/pdf" }));
+    const url = URL.createObjectURL(new Blob([arr], { type: docMime(doc) || "application/pdf" }));
     window.open(url, "_blank");
   }, []);
 
   const deleteDoc = (id) => { if (window.confirm("Delete this document? This cannot be undone.")) deleteItemCtx("documents", id); };
   const linkDoc = (id, val) => {
     const doc = data.documents.find(d => d.id === id);
-    if (doc) editItem("documents", { ...doc, linkedTo: val });
+    if (doc) editItem("documents", { ...doc, ...(val ? leaveInbox(doc) : {}), linkedTo: val });
+  };
+
+  // Emailed certificates first, everything else after.
+  const inboxDocs = data.documents.filter(isInboxDoc);
+  const storedDocs = data.documents.filter(d => !isInboxDoc(d));
+
+  // One document card. Shared by the inbox group and the stored list.
+  const renderDoc = (doc) => {
+    const sectionKey = doc.linkedTo?.split(":")[0];
+    const metaKey = sectionKey === "licenses" ? "license" : sectionKey === "cme" ? "cme" : sectionKey === "privileges" ? "privilege" : sectionKey === "insurance" ? "insurance" : sectionKey === "healthRecords" ? "healthRecord" : sectionKey === "education" ? "education" : sectionKey === "locumContracts" ? "agreement" : "unknown";
+    const linkedMeta = doc.linkedTo ? SECTION_META[metaKey] : null;
+
+    const isSelected = selectedIds.has(doc.id);
+    const mime = docMime(doc);
+    return (
+      <div key={doc.id}
+        onClick={selectMode ? () => toggleSelected(doc.id) : undefined}
+        style={{
+          backgroundColor: T.card,
+          border: `1px solid ${selectMode && isSelected ? T.accent : T.border}`,
+          borderRadius: 14, padding: "12px 16px", boxShadow: T.shadow1,
+          cursor: selectMode ? "pointer" : "default",
+        }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+            {selectMode && (
+              <div style={{
+                width: 22, height: 22, borderRadius: 11, flexShrink: 0,
+                border: `2px solid ${isSelected ? T.accent : T.border}`,
+                backgroundColor: isSelected ? T.accent : "transparent",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#fff", fontSize: 13, fontWeight: 800,
+              }}>{isSelected ? "✓" : ""}</div>
+            )}
+            <span style={{ fontSize: 20 }}>{mime.includes("pdf") ? "\ud83d\udcd5" : mime.includes("image") ? "\ud83d\uddbc" : "\ud83d\udcc4"}</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{doc.name}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 13, color: T.textDim }}>{(doc.size / 1024).toFixed(0)} KB &middot; {new Date(doc.uploadedAt).toLocaleDateString()}</span>
+                {linkedMeta && <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 6, backgroundColor: linkedMeta.color + "20", color: linkedMeta.color, fontWeight: 600 }}>{linkedMeta.icon} Linked</span>}
+              </div>
+            </div>
+          </div>
+          {!selectMode && (
+            <button onClick={() => deleteDoc(doc.id)} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+          )}
+        </div>
+        {!doc.linkedTo && !doc.data && doc.storagePath && (
+          <div style={{ marginTop: 6, fontSize: 12, color: T.textDim }}>Fetching the file from your account. File with AI appears when it is here.</div>
+        )}
+        {!doc.linkedTo && (
+          <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
+            {doc.data && (mime.startsWith("image/") || mime === "application/pdf") && (
+              <button onClick={() => rescanDoc(doc)} disabled={scanning} style={{
+                flexShrink: 0, padding: "7px 12px", borderRadius: 8, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>
+                {scanning ? "Reading…" : "File with AI"}
+              </button>
+            )}
+            <select value={doc.linkedTo || ""} onChange={e => linkDoc(doc.id, e.target.value)} style={{ ...iS, fontSize: 14, padding: "6px 10px", appearance: "auto", flex: 1, minWidth: 0 }}>
+              <option value="">Link to credential...</option>
+              {linkables.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+            </select>
+          </div>
+        )}
+        {mime.includes("image") && doc.data && (
+          <div style={{ marginTop: 8 }}>
+            <img src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
+              style={{ maxWidth: "100%", maxHeight: 140, borderRadius: 8, objectFit: "contain", cursor: "zoom-in" }} />
+            <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>Tap image to enlarge</div>
+          </div>
+        )}
+        {mime.includes("pdf") && doc.data && (
+          <button onClick={() => openPdfDoc(doc)} style={{
+            marginTop: 8, padding: "7px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
+            backgroundColor: T.input, color: T.text, fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>📕 View PDF</button>
+        )}
+      </div>
+    );
   };
 
   const btnStyle = {
@@ -444,13 +527,27 @@ function DocumentsSection() {
         </div>
       )}
 
+      {inboxDocs.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.accent, textTransform: "uppercase", marginBottom: 4 }}>
+            From your inbox, not filed yet ({inboxDocs.length})
+          </div>
+          <div style={{ fontSize: 13, color: T.textDim, marginBottom: 10, lineHeight: 1.45 }}>
+            Certificates you forwarded to {CME_INBOX_ADDRESS}. Use File with AI, or link one to a CME entry, so it counts.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {inboxDocs.map(doc => renderDoc(doc))}
+          </div>
+        </div>
+      )}
+
       {data.documents.length === 0 && scanQueue.length === 0 ? (
-        <EmptyState icon={"\ud83d\udcc1"} title="No documents" subtitle="Upload, scan, or photograph your credentials. AI will read and file them automatically." />
-      ) : data.documents.length > 0 && (
+        <EmptyState icon={"\ud83d\udcc1"} title="No documents" subtitle={`Upload, scan, or photograph your credentials. AI will read and file them automatically. CME certificates can also be forwarded to ${CME_INBOX_ADDRESS}.`} />
+      ) : storedDocs.length > 0 && (
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: T.textMuted, textTransform: "uppercase" }}>
-              Stored Documents ({data.documents.length})
+              Stored Documents ({storedDocs.length})
             </div>
             <button onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()); setBundleMsg(null); }} style={{
               padding: "6px 14px", borderRadius: 16, fontSize: 13, fontWeight: 700, cursor: "pointer",
@@ -474,77 +571,7 @@ function DocumentsSection() {
             </button>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {data.documents.map(doc => {
-              const sectionKey = doc.linkedTo?.split(":")[0];
-              const metaKey = sectionKey === "licenses" ? "license" : sectionKey === "cme" ? "cme" : sectionKey === "privileges" ? "privilege" : sectionKey === "insurance" ? "insurance" : sectionKey === "healthRecords" ? "healthRecord" : sectionKey === "education" ? "education" : sectionKey === "locumContracts" ? "agreement" : "unknown";
-              const linkedMeta = doc.linkedTo ? SECTION_META[metaKey] : null;
-
-              const isSelected = selectedIds.has(doc.id);
-              return (
-                <div key={doc.id}
-                  onClick={selectMode ? () => toggleSelected(doc.id) : undefined}
-                  style={{
-                    backgroundColor: T.card,
-                    border: `1px solid ${selectMode && isSelected ? T.accent : T.border}`,
-                    borderRadius: 14, padding: "12px 16px", boxShadow: T.shadow1,
-                    cursor: selectMode ? "pointer" : "default",
-                  }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
-                      {selectMode && (
-                        <div style={{
-                          width: 22, height: 22, borderRadius: 11, flexShrink: 0,
-                          border: `2px solid ${isSelected ? T.accent : T.border}`,
-                          backgroundColor: isSelected ? T.accent : "transparent",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          color: "#fff", fontSize: 13, fontWeight: 800,
-                        }}>{isSelected ? "✓" : ""}</div>
-                      )}
-                      <span style={{ fontSize: 20 }}>{doc.type?.includes("pdf") ? "\ud83d\udcd5" : doc.type?.includes("image") ? "\ud83d\uddbc" : "\ud83d\udcc4"}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{doc.name}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 13, color: T.textDim }}>{(doc.size / 1024).toFixed(0)} KB &middot; {new Date(doc.uploadedAt).toLocaleDateString()}</span>
-                          {linkedMeta && <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 6, backgroundColor: linkedMeta.color + "20", color: linkedMeta.color, fontWeight: 600 }}>{linkedMeta.icon} Linked</span>}
-                        </div>
-                      </div>
-                    </div>
-                    {!selectMode && (
-                      <button onClick={() => deleteDoc(doc.id)} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
-                    )}
-                  </div>
-                  {!doc.linkedTo && (
-                    <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
-                      {doc.data && (doc.type?.startsWith("image/") || doc.type === "application/pdf") && (
-                        <button onClick={() => rescanDoc(doc)} disabled={scanning} style={{
-                          flexShrink: 0, padding: "7px 12px", borderRadius: 8, border: "none",
-                          backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                        }}>
-                          {scanning ? "Reading…" : "File with AI"}
-                        </button>
-                      )}
-                      <select value={doc.linkedTo || ""} onChange={e => linkDoc(doc.id, e.target.value)} style={{ ...iS, fontSize: 14, padding: "6px 10px", appearance: "auto", flex: 1, minWidth: 0 }}>
-                        <option value="">Link to credential...</option>
-                        {linkables.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {doc.type?.includes("image") && doc.data && (
-                    <div style={{ marginTop: 8 }}>
-                      <img src={doc.data} alt={doc.name} onClick={() => setLightbox(doc)}
-                        style={{ maxWidth: "100%", maxHeight: 140, borderRadius: 8, objectFit: "contain", cursor: "zoom-in" }} />
-                      <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>Tap image to enlarge</div>
-                    </div>
-                  )}
-                  {doc.type?.includes("pdf") && doc.data && (
-                    <button onClick={() => openPdfDoc(doc)} style={{
-                      marginTop: 8, padding: "7px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
-                      backgroundColor: T.input, color: T.text, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                    }}>📕 View PDF</button>
-                  )}
-                </div>
-              );
-            })}
+            {storedDocs.map(doc => renderDoc(doc))}
           </div>
         </div>
       )}
