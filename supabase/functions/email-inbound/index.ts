@@ -1,7 +1,7 @@
 /**
  * email-inbound: Resend "email.received" webhook for @credentialdomd.com.
  *
- * Two routes, decided by the local part of the address the message was sent to:
+ * Three routes, decided by the local part of the address the message was sent to:
  *
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
  *     Sender must match a profile (lower(profiles.email) = lower(from)). Every
@@ -12,6 +12,17 @@
  *     sender gets a confirmation. An unknown sender gets one short reply
  *     explaining how to register the address (rate-limited, never to bounces or
  *     auto-submitted mail).
+ *
+ *   docs@ | requests@ | packets@credentialdomd.com   Document requests.
+ *     A credentialer asked the physician for documents; the physician forwards
+ *     that email here from the address on their profile. Same sender matching
+ *     and authentication as cme@. The ORIGINAL requester (From:), subject and
+ *     body are parsed out of the forwarded text (Gmail / Outlook / Apple Mail
+ *     header blocks) and a `document_requests` row is written; PDF / image
+ *     attachments (the requester's checklist) are stored as documents with
+ *     type = "request-attachment-inbox". The physician gets a short reply
+ *     pointing at More > Requests, where the packet is built and sent by
+ *     the send-packet-email function.
  *
  *   anything else (support@, hello@, whit@, privacy@, ...)   Mailbox relay.
  *     The whole message (subject prefixed "[credentialdomd.com <local>] ",
@@ -38,8 +49,8 @@
  *
  * Caps (all in this file, no DB config):
  *   GLOBAL_PER_10MIN         inbound messages accepted per 10 minutes (429 beyond, Resend retries later)
- *   CME_PER_SENDER_PER_HOUR  cme messages per sender per hour (excess recorded, no reply)
- *   UNREG_REPLY_PER_DAY      "not registered" replies per sender per day (backscatter control)
+ *   CME_PER_SENDER_PER_HOUR  cme / docs messages per sender per hour per route (excess recorded, no reply)
+ *   UNREG_REPLY_PER_DAY      "not registered" replies per sender per day per route (backscatter control)
  *   MAX_FILES / MAX_FILE_BYTES / MAX_TOTAL_BYTES  per message, both routes
  *
  * Secrets: RESEND_API_KEY (already set for the send-* functions),
@@ -54,13 +65,18 @@ import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 
 const INBOX_DOMAIN = "credentialdomd.com";
 const CME_LOCAL = "cme";
+const DOCS_LOCALS = new Set(["docs", "requests", "packets"]);
+const DOCS_ADDR = `docs@${INBOX_DOMAIN}`;
 const FORWARD_TO = "stormchaser@elryx.com";
 const FROM_ADDR = "whit@credentialdomd.com";
 const FROM_CME = `CredentialDOMD <${FROM_ADDR}>`;
+const FROM_DOCS = `CredentialDOMD <${DOCS_ADDR}>`;
 const FROM_RELAY = `CredentialDOMD Inbox <${FROM_ADDR}>`;
 const APP_URL = "https://credentialdomd.com/app/";
 const INBOX_DOC_TYPE = "cme-certificate-inbox";
+const REQUEST_DOC_TYPE = "request-attachment-inbox";
 const STORAGE_BUCKET = "documents";
+const MAX_REQUEST_BODY_CHARS = 20_000;   // document_requests.body_text
 
 const GLOBAL_PER_10MIN = 120;
 const CME_PER_SENDER_PER_HOUR = 20;
@@ -146,6 +162,15 @@ interface LedgerRow {
   status: string;
   created_at: string;
   updated_at: string;
+}
+
+type Route = "cme" | "docs" | "forward";
+
+interface MatchedProfile {
+  id: string;
+  auth_user_id: string;
+  email: string | null;
+  access_status: string | null;
 }
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -327,7 +352,7 @@ const PG_UNIQUE_VIOLATION = "23505";
  * already been handled (finished, or another attempt is in flight).
  */
 async function claim(row: {
-  message_id: string; email_id: string; from_addr: string; to_addr: string; subject: string; route: "cme" | "forward";
+  message_id: string; email_id: string; from_addr: string; to_addr: string; subject: string; route: Route;
 }): Promise<string | null> {
   const { data, error } = await db.from("inbound_emails").insert(row).select("id").single();
   if (!error && data) return (data as { id: string }).id;
@@ -364,96 +389,85 @@ async function countSince(minutes: number, apply: (q: AnyQuery) => AnyQuery = (q
   return count ?? 0;
 }
 
-// ─── Route: cme@ ──────────────────────────────────────────────────────────────
+// ─── Shared by the physician routes (cme@, docs@) ─────────────────────────────
 
-async function handleCme(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
-  // Per-sender cap: recorded and dropped, no reply (a reply per message would
-  // hand a spammer a free reflector).
-  const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "cme").neq("id", ledgerId));
-  if (recent >= CME_PER_SENDER_PER_HOUR) {
-    await finish(ledgerId, "rate_limited", `${recent} cme messages from this sender in the last hour`);
-    return json({ ok: true, route: "cme", result: "rate_limited" });
-  }
-
-  // Sender -> profile. profiles.email is what the physician typed in Settings.
+/** Sender -> profile. profiles.email is what the physician typed in Settings. */
+async function matchProfile(from: string): Promise<MatchedProfile | null> {
   const { data: rows, error: pErr } = await db.from("profiles")
     .select("id, auth_user_id, email, access_status")
     .ilike("email", ilikeLiteral(from))
     .limit(5);
   if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
   const profiles = ((rows ?? []) as { id: string; auth_user_id: string | null; email: string | null; access_status: string | null }[])
-    .filter((p) => (p.email ?? "").trim().toLowerCase() === from && p.auth_user_id);
+    .filter((p) => (p.email ?? "").trim().toLowerCase() === from && p.auth_user_id) as MatchedProfile[];
   profiles.sort((a, b) => (a.access_status === "active" ? 0 : 1) - (b.access_status === "active" ? 0 : 1));
-  const profile = profiles[0] ?? null;
+  return profiles[0] ?? null;
+}
 
-  const replySubject = `Re: ${(subject || "your certificate").slice(0, 150)}`;
+function replyThreading(messageId: string): Record<string, string> {
   const mid = messageId ? (messageId.startsWith("<") ? messageId : `<${messageId}>`) : "";
-  const replyHeaders = mid ? { "In-Reply-To": mid, "References": mid } : {};
+  return mid ? { "In-Reply-To": mid, "References": mid } : {};
+}
 
-  if (!profile) {
-    // Unknown sender. One reply per sender per day, never to automated mail
-    // (bounces, list mail, auto-replies), so a forged From cannot use cme@ as
-    // a reflector.
-    const email = await getReceivedEmail(emailId, "cid");
-    if (isAutomatedSender(from, lowerKeys(email.headers))) {
-      await finish(ledgerId, "unregistered", "automated sender, no reply");
-      return json({ ok: true, route: "cme", result: "unregistered", replied: false });
-    }
-    const priorReplies = await countSince(
-      24 * 60,
-      (q) => q.eq("from_addr", from).eq("route", "cme").eq("status", "unregistered").neq("id", ledgerId).eq("detail", UNREG_REPLIED),
-    );
-    if (priorReplies >= UNREG_REPLY_PER_DAY) {
-      await finish(ledgerId, "unregistered", "no reply, already replied today");
-      return json({ ok: true, route: "cme", result: "unregistered", replied: false });
-    }
-    const r = await sendEmail({
-      from: FROM_CME,
-      to: [from],
-      subject: replySubject,
-      headers: replyHeaders,
-      text: `This address is not registered to a CredentialDOMD account; forward from the email on your account or add it in Settings.
-
-Open the app: ${APP_URL} (More > Settings > Email)
-
-CredentialDOMD
-https://credentialdomd.com`,
-    });
-    await finish(ledgerId, "unregistered", r.ok ? UNREG_REPLIED : `reply failed: ${r.status}`);
-    return json({ ok: true, route: "cme", result: "unregistered", replied: r.ok });
+/**
+ * Unknown sender. One reply per sender per day per route, never to automated
+ * mail (bounces, list mail, auto-replies), so a forged From cannot use the
+ * address as a reflector.
+ */
+async function replyUnregistered(
+  ledgerId: string, route: Route, email: ReceivedEmail, from: string, fromHeader: string,
+  replySubject: string, replyHeaders: Record<string, string>, text: string,
+) {
+  if (isAutomatedSender(from, lowerKeys(email.headers))) {
+    await finish(ledgerId, "unregistered", "automated sender, no reply");
+    return json({ ok: true, route, result: "unregistered", replied: false });
   }
-
-  // Sender authentication: the From header is trusted only when the inbound
-  // path's Authentication-Results do not say it failed. A forged From with
-  // dmarc=fail (or spf and dkim both failed) is dropped silently: no upload,
-  // no reply. A missing header is treated as pass (residual risk noted in
-  // docs/EMAIL-INBOUND.md).
-  {
-    const email = await getReceivedEmail(emailId, "cid");
-    const h = lowerKeys(email.headers);
-    const auth = (h["authentication-results"] || h["arc-authentication-results"] || "").toLowerCase();
-    if (auth) {
-      const dmarcFail = /dmarc=fail/.test(auth);
-      const spfFail = /spf=(fail|softfail)/.test(auth);
-      const dkimFail = /dkim=fail/.test(auth) || !/dkim=pass/.test(auth);
-      if (dmarcFail || (spfFail && dkimFail)) {
-        await finish(ledgerId, "failed", `sender authentication failed: ${auth.slice(0, 200)}`);
-        return json({ ok: true, route: "cme", result: "rejected_auth" });
-      }
-    }
+  const priorReplies = await countSince(
+    24 * 60,
+    (q) => q.eq("from_addr", from).eq("route", route).eq("status", "unregistered").neq("id", ledgerId).eq("detail", UNREG_REPLIED),
+  );
+  if (priorReplies >= UNREG_REPLY_PER_DAY) {
+    await finish(ledgerId, "unregistered", "no reply, already replied today");
+    return json({ ok: true, route, result: "unregistered", replied: false });
   }
+  const r = await sendEmail({ from: fromHeader, to: [from], subject: replySubject, headers: replyHeaders, text });
+  await finish(ledgerId, "unregistered", r.ok ? UNREG_REPLIED : `reply failed: ${r.status}`);
+  return json({ ok: true, route, result: "unregistered", replied: r.ok });
+}
 
-  // Attachments: PDFs always; images unless they are small inline logos.
-  const { files, skipped, total } = await downloadAttachments(emailId, (a) => {
-    const name = safeFilename(a.filename, "");
-    const ct = (a.content_type ?? "").toLowerCase();
-    if (!isCertificateType(ct, name)) return false;
-    const inline = (a.content_disposition ?? "").toLowerCase() === "inline";
-    if (inline && ct.startsWith("image/") && (a.size ?? 0) < MIN_INLINE_IMAGE_BYTES) return false;
-    return true;
-  });
+/**
+ * Sender authentication: the From header is trusted only when the inbound
+ * path's Authentication-Results do not say it failed. A forged From with
+ * dmarc=fail (or spf and dkim both failed) is dropped silently: no upload,
+ * no reply. A missing header is treated as pass (residual risk noted in
+ * docs/EMAIL-INBOUND.md). Returns the offending header text, or "" when ok.
+ */
+function senderAuthFailure(email: ReceivedEmail): string {
+  const h = lowerKeys(email.headers);
+  const auth = (h["authentication-results"] || h["arc-authentication-results"] || "").toLowerCase();
+  if (!auth) return "";
+  const dmarcFail = /dmarc=fail/.test(auth);
+  const spfFail = /spf=(fail|softfail)/.test(auth);
+  const dkimFail = /dkim=fail/.test(auth) || !/dkim=pass/.test(auth);
+  return dmarcFail || (spfFail && dkimFail) ? auth : "";
+}
 
-  // Skip a file this user already has (same name and size), same rule as the app.
+/** Attachments worth keeping: PDFs always; images unless they are small inline logos. */
+function acceptCertificateLike(a: ReceivedAttachment): boolean {
+  const name = safeFilename(a.filename, "");
+  const ct = (a.content_type ?? "").toLowerCase();
+  if (!isCertificateType(ct, name)) return false;
+  const inline = (a.content_disposition ?? "").toLowerCase() === "inline";
+  if (inline && ct.startsWith("image/") && (a.size ?? 0) < MIN_INLINE_IMAGE_BYTES) return false;
+  return true;
+}
+
+/**
+ * Copy downloaded files into the physician's Documents (Storage + documents
+ * row with the given type, no linked_to). Skips a file this user already has
+ * (same name and size), same rule as the app.
+ */
+async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], docType: string) {
   const have = new Set<string>();
   if (files.length > 0) {
     const { data: existingDocs } = await db.from("documents")
@@ -462,6 +476,7 @@ https://credentialdomd.com`,
   }
 
   const now = new Date().toISOString();
+  const docIds: string[] = [];
   let stored = 0;
   let duplicates = 0;
   let failed = 0;
@@ -487,7 +502,7 @@ https://credentialdomd.com`,
       uploaded_at: now,
       created_at: now,
       updated_at: now,
-      type: INBOX_DOC_TYPE,
+      type: docType,
     });
     if (dErr) {
       console.error(`documents insert failed for ${docId}: ${dErr.message}`);
@@ -496,8 +511,46 @@ https://credentialdomd.com`,
       continue;
     }
     have.add(`${f.filename}|${f.bytes.byteLength}`);
+    docIds.push(docId);
     stored++;
   }
+  return { stored, duplicates, failed, docIds };
+}
+
+// ─── Route: cme@ ──────────────────────────────────────────────────────────────
+
+async function handleCme(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
+  // Per-sender cap: recorded and dropped, no reply (a reply per message would
+  // hand a spammer a free reflector).
+  const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "cme").neq("id", ledgerId));
+  if (recent >= CME_PER_SENDER_PER_HOUR) {
+    await finish(ledgerId, "rate_limited", `${recent} cme messages from this sender in the last hour`);
+    return json({ ok: true, route: "cme", result: "rate_limited" });
+  }
+
+  const profile = await matchProfile(from);
+  const replySubject = `Re: ${(subject || "your certificate").slice(0, 150)}`;
+  const replyHeaders = replyThreading(messageId);
+  const email = await getReceivedEmail(emailId, "cid");
+
+  if (!profile) {
+    return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders,
+      `This address is not registered to a CredentialDOMD account; forward from the email on your account or add it in Settings.
+
+Open the app: ${APP_URL} (More > Settings > Email)
+
+CredentialDOMD
+https://credentialdomd.com`);
+  }
+
+  const authFail = senderAuthFailure(email);
+  if (authFail) {
+    await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
+    return json({ ok: true, route: "cme", result: "rejected_auth" });
+  }
+
+  const { files, skipped, total } = await downloadAttachments(emailId, acceptCertificateLike);
+  const { stored, duplicates, failed } = await storeAsDocuments(profile, files, INBOX_DOC_TYPE);
 
   const notes: string[] = [];
   if (duplicates > 0) notes.push(`${duplicates} file${duplicates === 1 ? " was" : "s were"} already in your Documents and skipped.`);
@@ -521,6 +574,189 @@ If the app is already open, refresh it to see the new file.`;
   const detail = `stored ${stored}, duplicates ${duplicates}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
   await finish(ledgerId, failed > 0 && stored === 0 && total > 0 ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });
   return json({ ok: true, route: "cme", stored, duplicates, skipped, failed, confirmed: r.ok });
+}
+
+// ─── Route: docs@ / requests@ / packets@ ──────────────────────────────────────
+
+interface ParsedForward {
+  found: boolean;              // a forwarded header block with a From: line was located
+  from_addr: string;           // "" when not found
+  from_name: string | null;
+  subject: string | null;
+  body_text: string;
+  original_message_id: string | null;
+}
+
+const FORWARD_MARKER = /^(?:-{2,}\s*(?:forwarded message|original message|forwarded by[^-]*)\s*-{2,}|begin forwarded message:?|-{2,}\s*forwarded message\s*-{2,}.*)$/i;
+const HEADER_LINE = /^(from|date|sent|subject|to|cc|reply-to|message-id)\s*:\s*(.*)$/i;
+const EMAIL_RE = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+
+/** Remove quoted-reply chevrons ("> > text" -> "text") and normalize line endings. */
+function stripChevrons(text: string): string[] {
+  return text.replace(/\r\n?/g, "\n").split("\n").map((l) => l.replace(/^(\s*>)+\s?/, ""));
+}
+
+/** "Name <a@b.c>" | "a@b.c" | "Name [mailto:a@b.c]" | "a@b.c (Name)" -> parts. */
+function parseMailbox(v: string): { addr: string; name: string | null } {
+  const m = v.match(EMAIL_RE);
+  if (!m) return { addr: "", name: v.trim() || null };
+  const addr = m[0].toLowerCase();
+  let name = v.replace(m[0], "")
+    .replace(/mailto:/gi, "")
+    .replace(/[<>\[\]()]/g, " ")
+    .replace(/^\s*["']+|["']+\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+  if (!name || name.toLowerCase() === addr) name = "";
+  return { addr, name: name || null };
+}
+
+function stripFwdPrefix(s: string): string {
+  return s.replace(/^\s*(?:(?:fwd?|fw|tr|wg|vs)\s*:\s*)+/i, "").trim();
+}
+
+/**
+ * Pull the ORIGINAL request out of a forwarded email. Looks for the client's
+ * forwarding marker (Gmail "---------- Forwarded message ---------", Outlook
+ * "-----Original Message-----", Apple Mail "Begin forwarded message:") or, failing
+ * that, the first "From:" line that starts a header block. The header block is
+ * consecutive From/Date/Sent/Subject/To/Cc/Reply-To/Message-ID lines (blank
+ * lines inside are tolerated); the body is everything below it.
+ */
+function parseForwarded(text: string): ParsedForward {
+  const lines = stripChevrons(text);
+  const notFound = (): ParsedForward => ({
+    found: false, from_addr: "", from_name: null, subject: null, original_message_id: null,
+    body_text: lines.join("\n").trim(),
+  });
+
+  // Where does the header block start? Prefer a marker, then the first From: line
+  // followed within 8 lines by another header line.
+  let start = -1;
+  const markerAt = lines.findIndex((l) => FORWARD_MARKER.test(l.trim()));
+  if (markerAt >= 0) {
+    for (let i = markerAt + 1; i < Math.min(lines.length, markerAt + 8); i++) {
+      if (/^from\s*:/i.test(lines[i].trim())) { start = i; break; }
+    }
+  }
+  if (start < 0) {
+    for (let i = 0; i < lines.length; i++) {
+      if (!/^from\s*:/i.test(lines[i].trim())) continue;
+      const followed = lines.slice(i + 1, i + 9).some((l) => HEADER_LINE.test(l.trim()));
+      if (followed) { start = i; break; }
+    }
+  }
+  if (start < 0) return notFound();
+
+  const hdr: Record<string, string> = {};
+  let last = "";
+  let i = start;
+  let blanks = 0;
+  for (; i < lines.length; i++) {
+    const raw = lines[i];
+    const t = raw.trim();
+    if (!t) { blanks++; if (blanks > 2) break; continue; }
+    const m = t.match(HEADER_LINE);
+    if (m) {
+      const key = m[1].toLowerCase();
+      if (key in hdr && key === "from") break;   // a second From: means the block ended and a nested quote began
+      hdr[key] = m[2].trim();
+      last = key;
+      blanks = 0;
+      continue;
+    }
+    // Continuation of the previous header (indented, or a wrapped To: list).
+    if (last && /^\s/.test(raw) && blanks === 0) { hdr[last] += ` ${t}`; continue; }
+    break;
+  }
+  if (!hdr["from"]) return notFound();
+
+  const { addr, name } = parseMailbox(hdr["from"]);
+  // A forward of one of our own replies is not a request; let the physician fix the address.
+  const ours = domainPart(addr) === INBOX_DOMAIN || domainPart(addr).endsWith(`.${INBOX_DOMAIN}`);
+  if (addr && ours) return notFound();
+  const subject = hdr["subject"] ? stripFwdPrefix(hdr["subject"]).slice(0, 500) || null : null;
+  const midRaw = (hdr["message-id"] ?? "").trim();
+  const original_message_id = midRaw ? (midRaw.startsWith("<") ? midRaw : `<${midRaw}>`).slice(0, 500) : null;
+  const body_text = lines.slice(i).join("\n").trim();
+  return { found: Boolean(addr), from_addr: addr, from_name: name, subject, original_message_id, body_text };
+}
+
+async function handleDocsRequest(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
+  const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "docs").neq("id", ledgerId));
+  if (recent >= CME_PER_SENDER_PER_HOUR) {
+    await finish(ledgerId, "rate_limited", `${recent} docs messages from this sender in the last hour`);
+    return json({ ok: true, route: "docs", result: "rate_limited" });
+  }
+
+  const profile = await matchProfile(from);
+  const replySubject = `Re: ${(subject || "your document request").slice(0, 150)}`;
+  const replyHeaders = replyThreading(messageId);
+  const email = await getReceivedEmail(emailId, "cid");
+
+  if (!profile) {
+    return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
+      `This address is not registered to a CredentialDOMD account; forward the request from the email on your account, or add it in Settings (More > Settings > Email).
+
+Open the app: ${APP_URL}
+
+CredentialDOMD
+https://credentialdomd.com`);
+  }
+
+  const authFail = senderAuthFailure(email);
+  if (authFail) {
+    await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
+    return json({ ok: true, route: "docs", result: "rejected_auth" });
+  }
+
+  // The original request lives inside the forwarded text.
+  const rawText = (email.text && email.text.trim()) ? email.text : (email.html ? stripHtml(email.html) : "");
+  const parsed = parseForwarded(rawText);
+  const fromAddr = parsed.found ? parsed.from_addr : from;
+  let bodyText = parsed.body_text;
+  if (!parsed.found) {
+    bodyText = `Requester address not found in the forwarded text; edit before replying.\n\n${bodyText}`.trim();
+  }
+  bodyText = bodyText.slice(0, MAX_REQUEST_BODY_CHARS);
+  const requestSubject = parsed.subject ?? (stripFwdPrefix(subject) || null);
+
+  // The requester's checklist PDF, when one rides along (rare).
+  const { files, skipped } = await downloadAttachments(emailId, acceptCertificateLike);
+  const { stored, failed } = await storeAsDocuments(profile, files, REQUEST_DOC_TYPE);
+
+  const { data: reqRow, error: rErr } = await db.from("document_requests").insert({
+    user_id: profile.id,
+    from_addr: fromAddr,
+    from_name: parsed.found ? parsed.from_name : null,
+    subject: requestSubject,
+    body_text: bodyText,
+    message_id: messageId,
+    original_message_id: parsed.original_message_id,
+    forwarded_by: from,
+    received_at: email.created_at || new Date().toISOString(),
+    status: "new",
+    inbound_ledger_id: ledgerId,
+  }).select("id").single();
+  if (rErr) throw new Error(`document_requests insert: ${rErr.message}`);
+  const requestId = (reqRow as { id: string }).id;
+
+  const notes: string[] = [];
+  if (!parsed.found) notes.push("The requester's address was not found in the forwarded text, so the request is addressed to you for now. Open it and correct the To address before replying.");
+  if (stored > 0) notes.push(`${stored} attachment${stored === 1 ? "" : "s"} from the request ${stored === 1 ? "was" : "were"} saved to your Documents.`);
+  if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
+  if (failed > 0) notes.push(`${failed} attachment${failed === 1 ? "" : "s"} could not be saved.`);
+
+  let text = `Got it. The request from ${fromAddr} is in your app under More > Requests. Open it to build the packet and reply by email.`;
+  if (notes.length) text += `\n\n${notes.join("\n")}`;
+  text += `\n\nOpen the app: ${APP_URL} (More > Requests)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
+
+  const r = await sendEmail({ from: FROM_DOCS, to: [from], subject: replySubject, headers: replyHeaders, text });
+  const detail = `request ${requestId}, from ${fromAddr}${parsed.found ? "" : " (requester not found)"}, attachments ${stored}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  await finish(ledgerId, "done", detail, { attachment_count: stored, profile_id: profile.id });
+  return json({ ok: true, route: "docs", request_id: requestId, requester_found: parsed.found, stored, skipped, failed, confirmed: r.ok });
 }
 
 // ─── Route: everything else -> relay to the owner ─────────────────────────────
@@ -618,7 +854,8 @@ Deno.serve(async (req) => {
   const ourAddr = pickOurAddress(d);
   const subject = String(d.subject ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 500);
   const messageId = (String(d.message_id ?? "").trim() || `resend:${emailId}`).slice(0, 500);
-  const route: "cme" | "forward" = localPart(ourAddr) === CME_LOCAL ? "cme" : "forward";
+  const local = localPart(ourAddr);
+  const route: Route = local === CME_LOCAL ? "cme" : DOCS_LOCALS.has(local) ? "docs" : "forward";
 
   // Global ceiling. 429 makes Resend retry later instead of dropping the mail.
   try {
@@ -639,9 +876,9 @@ Deno.serve(async (req) => {
   if (!ledgerId) return json({ ok: true, duplicate: true });
 
   try {
-    return route === "cme"
-      ? await handleCme(ledgerId, emailId, from, subject, messageId)
-      : await handleForward(ledgerId, emailId, from, ourAddr, subject, messageId);
+    if (route === "cme") return await handleCme(ledgerId, emailId, from, subject, messageId);
+    if (route === "docs") return await handleDocsRequest(ledgerId, emailId, from, subject, messageId);
+    return await handleForward(ledgerId, emailId, from, ourAddr, subject, messageId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`inbound ${emailId} (${route}) failed: ${msg}`);
