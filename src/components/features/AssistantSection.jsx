@@ -7,9 +7,10 @@ import { buildExport, makeSpreadsheetFile } from "../../utils/exportData";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { supabase } from "../../lib/supabase";
 import Modal from "../shared/Modal";
+import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../../utils/storageScope";
 
-const CHAT_KEY = "credentialdomd-assistant-chat";
-const ARCHIVE_KEY = "credentialdomd-assistant-archives";
+// Transcript and archives live on-device under the signed-in user's own key
+// (storageScope), so another account on the same device never sees them.
 
 // What an archived conversation keeps: the words. Action cards, attachments,
 // and retry state are live-thread machinery — they don't belong in a record.
@@ -27,7 +28,7 @@ function AssistantSection({ onFileTicket }) {
   const iS = useInputStyle();
   const [msgs, setMsgs] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(CHAT_KEY)) || [];
+      const saved = lsGetJSON(BASE_KEYS.chat) || [];
       // Trailing user messages with no reply = the app closed mid-send;
       // mark them failed so they get a Try again instead of looking sent.
       for (let i = saved.length - 1; i >= 0 && saved[i].role === "user"; i--) {
@@ -40,7 +41,7 @@ function AssistantSection({ onFileTicket }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [archives, setArchives] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY)) || []; } catch { return []; }
+    try { return lsGetJSON(BASE_KEYS.archives) || []; } catch { return []; }
   });
   const [showArchives, setShowArchives] = useState(false);
   const [viewArchive, setViewArchive] = useState(null);
@@ -61,13 +62,13 @@ function AssistantSection({ onFileTicket }) {
     try {
       // sourceAttach can hold a multi-MB file — never persist it (quota).
       const slim = msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
-      localStorage.setItem(CHAT_KEY, JSON.stringify(slim));
+      lsSetJSON(BASE_KEYS.chat, slim);
     } catch { /* quota */ }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);
   useEffect(() => {
-    try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archives)); } catch { /* quota */ }
+    try { lsSetJSON(BASE_KEYS.archives, archives); } catch { /* quota */ }
   }, [archives]);
 
   // ── Archive: the current chat moves out of the way but stays readable ──

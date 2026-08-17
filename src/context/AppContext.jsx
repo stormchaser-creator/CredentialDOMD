@@ -3,7 +3,9 @@ import { useUser, useClerk } from "@clerk/clerk-react";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
-import { loadData, saveData, clearLocalData } from "../utils/storage";
+import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
+import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage } from "../utils/storageScope";
+import { vaultCount } from "../utils/privateVault";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
 import { MS_PER_DAY } from "../utils/helpers";
@@ -50,27 +52,67 @@ export function AppProvider({ children, onNavigate }) {
   const [data, setData] = useState(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
   const userIdRef = useRef(null);
+  // Clerk id the in-memory `data` was loaded for. The on-device cache is
+  // written under this id only, so a stale timer can never file one
+  // account's data under another's key.
+  const dataOwnerRef = useRef(null);
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
 
   // ─── Auth: read from Clerk ────────────────────────────────
   const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
-  const { signOut: clerkSignOut } = useClerk();
+  const clerk = useClerk();
+  const { signOut: clerkSignOut } = clerk;
 
   const user = useMemo(() => normalizeClerkUser(isSignedIn ? clerkUser : null), [isSignedIn, clerkUser]);
   const authChecked = clerkLoaded;
+
+  // Every on-device key (file, vault, chat, timers) is namespaced by the
+  // Clerk user id. Set synchronously during render so children mounting in
+  // this same pass (their useState initializers read storage) see the
+  // right namespace. Idempotent, so StrictMode double-render is harmless.
+  if (getActiveUserId() !== (user?.id || null)) setActiveUserId(user?.id || null);
 
   // ─── Load data when user changes (sign in / sign out) ─────
   useEffect(() => {
     if (!authChecked) return;
 
+    // A different account (or none): drop what is in memory before loading
+    // so nothing of the previous account renders or gets cached under the
+    // new key. Also cancels the debounced cache write via its effect cleanup.
+    if (dataOwnerRef.current !== (user?.id || null)) {
+      dataOwnerRef.current = null;
+      userIdRef.current = null;
+      setLoaded(false);
+      setData(DEFAULT_DATA);
+    }
+
     if (user) {
       loadDataForUser(user.id);
     } else {
-      // Not authenticated — load from localStorage (offline / pre-signin)
-      loadLocalData();
+      // Not authenticated: nothing to load. There is no namespace without a
+      // user, so the local cache is not read (or written) at all.
+      setData(DEFAULT_DATA);
+      setLoaded(true);
     }
   }, [user?.id, authChecked]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Involuntary sign-out (session expiry, revocation from the Clerk
+  // dashboard, "sign out of all devices"): the provider unmounts, but the
+  // Clerk listener fires first, so purge this account's on-device keys
+  // right there. The vault is kept: those patient notes exist nowhere else
+  // and a token timing out must not destroy them; the namespaced key is
+  // unreadable to any other account. The Sign out button purges it too.
+  useEffect(() => {
+    if (!clerkLoaded || !user?.id || typeof clerk?.addListener !== "function") return;
+    const ownerId = user.id;
+    const unsub = clerk.addListener((e) => {
+      if ((e?.user?.id || null) !== ownerId) {
+        purgeUserStorage(ownerId, { keepVault: true }).catch(() => {});
+      }
+    });
+    return () => { try { unsub?.(); } catch { /* already gone */ } };
+  }, [clerkLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadDataForUser(authUserId) {
     try {
@@ -99,11 +141,20 @@ export function AppProvider({ children, onNavigate }) {
             "encounters", "screenings", "alertAcks", "professionalPhotos",
             "publications", "memberships", "taskNotes", "dutyDays", "travelDocs", "travelExpenses", "taxPayments", "scheduleDays",
           ];
-          let local = null;
-          try {
-            const raw = localStorage.getItem("credentialdomd-data");
-            if (raw) local = JSON.parse(raw);
-          } catch { /* ignore */ }
+          // This account's own on-device copy. First load after the
+          // namespacing change: decide what happens to the pre-namespace
+          // keys (adopted only when this cloud profile already holds data
+          // that overlaps the local file; see adoptLegacyStorage). A new
+          // account therefore never pushes someone else's cache up.
+          let local = readCachedData(authUserId);
+          if (!local) {
+            const cloudIds = new Set();
+            for (const key of COLLECTION_KEYS) for (const x of merged[key] || []) if (x?.id) cloudIds.add(x.id);
+            const cloudHasData = cloudIds.size > 0 || !!merged.settings?.name;
+            try {
+              local = adoptLegacyStorage(authUserId, { cloudIds, cloudHasData });
+            } catch { local = null; }
+          }
 
           // Deletion ledger: anything deleted anywhere stays deleted.
           let tombstones = new Set();
@@ -158,13 +209,12 @@ export function AppProvider({ children, onNavigate }) {
             return d;
           });
 
+          dataOwnerRef.current = authUserId;
           setData(merged);
           setLoaded(true);
 
-          // Cache to localStorage
-          try {
-            localStorage.setItem("credentialdomd-data", JSON.stringify(merged));
-          } catch { /* quota */ }
+          // Cache on-device under this account's key
+          saveData(merged, authUserId).catch(() => {});
 
           // Background: reconcile document FILES with cloud storage.
           //  - file on this device but not in the cloud → upload it
@@ -177,8 +227,8 @@ export function AppProvider({ children, onNavigate }) {
       console.warn("CredentialDOMD: Supabase load failed:", err.message);
     }
 
-    // Fallback to local
-    loadLocalData();
+    // Fallback to this account's own local copy (offline)
+    loadLocalData(authUserId);
   }
 
   async function reconcileDocumentFiles(profileId, docs) {
@@ -201,38 +251,52 @@ export function AppProvider({ children, onNavigate }) {
     }
   }
 
-  async function loadLocalData() {
-    const d = await loadData();
+  async function loadLocalData(authUserId) {
+    const d = await loadData(authUserId);
     if (d._userId) {
       userIdRef.current = d._userId;
       delete d._userId;
     }
+    dataOwnerRef.current = authUserId || null;
     setData(d);
     setLoaded(true);
   }
 
   // ─── Auth actions (Clerk) ─────────────────────────────────
   const handleSignOut = useCallback(async () => {
+    const ownerId = user?.id || getActiveUserId();
+    // The vault is erased with everything else on sign-out and those notes
+    // exist nowhere else, so say so once when there is something to lose.
+    const n = vaultCount();
+    if (n > 0 && typeof window !== "undefined" && !window.confirm(
+      `Signing out erases the ${n} private note${n === 1 ? "" : "s"} kept only on this device. Export them first under Data & Backup if you need them. Sign out anyway?`
+    )) return;
     try {
       await clerkSignOut();
     } catch (err) {
       console.warn("Sign out failed:", err.message);
     }
     userIdRef.current = null;
+    dataOwnerRef.current = null;
     setData(DEFAULT_DATA);
     setLoaded(false);
-    // Purge the on-device cache: it holds the whole file, patient
-    // identifiers included, and the next account on this device must
-    // never inherit it.
-    await clearLocalData();
-  }, [clerkSignOut]);
+    // Purge everything this account kept on the device: the file (patient
+    // identifiers included), the private vault, the Assistant transcript
+    // and archives, the live timer. The next account on this device must
+    // never inherit any of it.
+    await clearLocalData(ownerId);
+  }, [clerkSignOut, user?.id]);
 
-  // Persist to localStorage on change (debounced backup)
+  // Persist to localStorage on change (debounced backup), under the key of
+  // the account the data was loaded for.
   const saveTimer = useRef(null);
   useEffect(() => {
     if (!loaded) return;
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveData(data), 300);
+    saveTimer.current = setTimeout(() => {
+      const owner = dataOwnerRef.current;
+      if (owner) saveData(data, owner);
+    }, 300);
     return () => clearTimeout(saveTimer.current);
   }, [data, loaded]);
 

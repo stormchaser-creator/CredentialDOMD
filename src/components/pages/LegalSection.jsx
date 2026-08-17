@@ -1,18 +1,19 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { deleteAllData } from "../../lib/supabase";
+import { purgeUserStorage } from "../../utils/storageScope";
 
 function LegalSection({ page }) {
-  const { data, setData, userIdRef, theme: T } = useApp();
+  const { data, setData, userIdRef, user, theme: T } = useApp();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
 
   // Permanently delete all user data
   const handleDeleteAllData = () => {
     if (deleteInput !== "DELETE") return;
-    // Clear from localStorage and Capacitor
-    localStorage.removeItem("credentialdomd-data");
-    try { if (window.storage?.remove) window.storage.remove("credentialdomd-data"); } catch {}
+    // Clear everything this account keeps on the device: the file, the
+    // private vault, the Assistant transcript, timers (localStorage + Capacitor).
+    purgeUserStorage(user?.id).catch(() => {});
     // Clear from Supabase
     if (userIdRef?.current) {
       deleteAllData(userIdRef.current).catch(() => {});

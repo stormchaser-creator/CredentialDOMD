@@ -11,17 +11,17 @@
  * The trade, stated plainly in the UI: these notes do not follow you to
  * another device, because the only way to make them follow you is to send
  * them to a server, which is the thing we are declining to do.
+ *
+ * The vault is namespaced by the signed-in Clerk user (see storageScope):
+ * on a shared device each physician's notes sit under their own key, and
+ * another account cannot read, count or export them.
  */
 
-const VAULT_KEY = "credentialdomd-private-vault";
+import { BASE_KEYS, lsGetJSON, lsSet, lsRemove, scopedKey } from "./storageScope";
 
 function readVault() {
-  try {
-    const raw = localStorage.getItem(VAULT_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  const v = lsGetJSON(BASE_KEYS.vault);
+  return v && typeof v === "object" ? v : {};
 }
 
 /**
@@ -39,13 +39,12 @@ function askPersist() {
 }
 
 function writeVault(v) {
-  try {
-    localStorage.setItem(VAULT_KEY, JSON.stringify(v));
-    askPersist();
-    return true;
-  } catch {
+  if (!scopedKey(BASE_KEYS.vault)) return false; // nobody signed in
+  if (!lsSet(BASE_KEYS.vault, JSON.stringify(v))) {
     return false; // storage full or blocked; the caller shows the failure
   }
+  askPersist();
+  return true;
 }
 
 /** True when the browser has promised not to evict this origin's storage. */
@@ -85,7 +84,8 @@ export function importVault(obj) {
 }
 
 export function clearVault() {
-  try { localStorage.removeItem(VAULT_KEY); return true; } catch { return false; }
+  lsRemove(BASE_KEYS.vault);
+  return true;
 }
 
 export function vaultCount() {
