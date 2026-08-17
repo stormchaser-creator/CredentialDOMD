@@ -5,6 +5,7 @@ import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import ComplianceBar from "../shared/ComplianceBar";
+import CMEImport from "./CMEImport";
 import RuleProvenance from "../shared/RuleProvenance";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
 import { CME_TOPICS } from "../../constants/cmeTopics";
@@ -25,6 +26,7 @@ function CMESection({ onShare }) {
   const [form, setForm] = useState({});
   const [showCompliance, setShowCompliance] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [transcriptBusy, setTranscriptBusy] = useState(false);
   const [note, setNote] = useState("");
 
@@ -147,7 +149,11 @@ function CMESection({ onShare }) {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>CME Credits</h2>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => setShowImport(true)} title="Import a CE Broker, ACCME CME Passport, PARS, or any CSV/Excel transcript" style={{
+            padding: "8px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
+            backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>Import transcript</button>
           <button onClick={openTranscript} disabled={transcriptBusy} title="Board-ready CME transcript PDF for a state renewal or board" style={{
             padding: "8px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
             backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 600,
@@ -172,6 +178,9 @@ function CMESection({ onShare }) {
       {note && (
         <div style={{ fontSize: 13, color: T.accent, marginBottom: 12, padding: "8px 12px", borderRadius: 10, backgroundColor: T.accentGlow }}>{note}</div>
       )}
+
+      {/* Transcript import: CE Broker / ACCME / PARS / CSV -> review -> addItem("cme") */}
+      <CMEImport open={showImport} onClose={() => setShowImport(false)} />
 
       {/* Transcript picker: which state renewal or board the PDF is for */}
       <Modal open={showTranscript} onClose={() => setShowTranscript(false)} title="Transcript PDF" width={460}>
