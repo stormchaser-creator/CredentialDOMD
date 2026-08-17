@@ -1,4 +1,7 @@
-import { FED, CA, CO, ND, bracketTax, TAX_YEAR } from "./taxConstants.js";
+import {
+  FED, CA, CO, ND, bracketTax, TAX_YEAR, FILING_STATUSES,
+  NO_INCOME_TAX_STATES, MODELED_STATES,
+} from "./taxConstants.js";
 
 /**
  * Multistate tax estimate for a locum physician. Cash basis: income counts
@@ -6,7 +9,13 @@ import { FED, CA, CO, ND, bracketTax, TAX_YEAR } from "./taxConstants.js";
  * (contract.workState). Supports S-corp (W-2 salary + K-1 distribution)
  * and sole-proprietor (Schedule C + SE tax) entity models.
  *
- * This is a PLANNING estimate — the numbers that ride on facts only a
+ * Resident state and filing status come from settings.taxPrep. The resident
+ * state is taxed on everything with a credit for tax paid to work states;
+ * each work state is taxed by the ratio method (schedule tax on all income
+ * x that state's share of income). States without a loaded model are
+ * reported as unmodeled, never estimated with borrowed brackets.
+ *
+ * This is a PLANNING estimate. The numbers that ride on facts only a
  * return preparer resolves (reasonable comp, apportionment formulas,
  * PTET elections) are surfaced as assumptions, not decided here.
  */
@@ -51,83 +60,143 @@ export function deductionTotal(items) {
   }, 0);
 }
 
+const VALID_FS = new Set(FILING_STATUSES.map(f => f.id));
+
+/**
+ * State income tax on ALL income, as if the taxpayer were a full-year
+ * resident of `st`. Returns null when no model is loaded for that state.
+ * `agi` = pass-through + other income; `fedTaxable` = after federal std deduction.
+ */
+function stateScheduleTax(st, fs, agi, fedTaxable) {
+  if (NO_INCOME_TAX_STATES.includes(st)) return { taxable: 0, tax: 0, label: "no state income tax" };
+  if (st === "CA") {
+    const taxable = Math.max(0, agi - CA.STD_DEDUCTION[fs]);
+    const tax = bracketTax(taxable, CA.BRACKETS[fs]) + CA.MHST_RATE * Math.max(0, taxable - CA.MHST_THRESHOLD);
+    return { taxable, tax, label: "FTB schedule + 1% BHST over $1M" };
+  }
+  if (st === "CO") {
+    return { taxable: fedTaxable, tax: CO.FLAT_RATE * fedTaxable, label: `${(CO.FLAT_RATE * 100).toFixed(2)}% flat on federal taxable income` };
+  }
+  if (st === "ND") {
+    return { taxable: fedTaxable, tax: bracketTax(fedTaxable, ND.BRACKETS[fs]), label: "0 / 1.95 / 2.5% schedule on federal taxable income" };
+  }
+  return null;
+}
+
 /**
  * Full estimate. `tp` = settings.taxPrep:
- * { entity: "scorp"|"soleprop", scorpSalary, otherIncome, priorYearTax }
+ * { residentState, filingStatus, entity: "scorp"|"soleprop", scorpSalary, otherIncome, priorYearTax }
+ * `ready` is false until residentState and filingStatus are both set; the
+ * math then falls back to MFJ so callers never crash, but the UI must not
+ * show those numbers.
  */
 export function estimate({ income, deductions, tp }) {
   const entity = tp.entity || "scorp";
+  const fs = VALID_FS.has(tp.filingStatus) ? tp.filingStatus : "mfj";
+  const res = tp.residentState || null;
+  const ready = VALID_FS.has(tp.filingStatus) && !!res;
   const otherIncome = parseFloat(tp.otherIncome) || 0;
   const gross = income.total;
   const profit = Math.max(0, gross - deductions);
   const notes = [];
+  const caEntity = res === "CA"; // CA payroll/franchise items ride on a CA-domiciled entity
 
-  let salary = 0, k1 = 0, employerPayroll = 0, employeePayroll = 0, caFranchise = 0, seTax = 0, sdi = 0;
+  let salary = 0, k1 = 0, employerPayroll = 0, employeePayroll = 0, franchise = 0, seTax = 0, sdi = 0;
 
   if (entity === "scorp") {
     salary = Math.min(parseFloat(tp.scorpSalary) || 0, profit);
-    if (!salary && profit > 0) notes.push("Set your S-corp W-2 salary (reasonable compensation) — with $0 salary this estimate treats everything as distribution, which is not a filing position your CPA will take.");
+    if (!salary && profit > 0) notes.push("Set your S-corp W-2 salary (reasonable compensation). With $0 salary this estimate treats everything as distribution, which is not a filing position your CPA will take.");
     const ssEr = FED.SS_RATE * Math.min(salary, FED.SS_WAGE_BASE);
     const medEr = FED.MEDICARE_RATE * salary;
-    const futa = (CA.FUTA_NET_RATE || FED.FUTA_RATE) * Math.min(salary, FED.FUTA_WAGE_BASE);
-    const sui = CA.SUI_NEW_EMPLOYER_RATE * Math.min(salary, CA.SUI_WAGE_BASE) + CA.ETT_RATE * Math.min(salary, CA.SUI_WAGE_BASE);
+    const futa = (caEntity ? CA.FUTA_NET_RATE : FED.FUTA_RATE) * Math.min(salary, FED.FUTA_WAGE_BASE);
+    const sui = caEntity
+      ? CA.SUI_NEW_EMPLOYER_RATE * Math.min(salary, CA.SUI_WAGE_BASE) + CA.ETT_RATE * Math.min(salary, CA.SUI_WAGE_BASE)
+      : 0;
     employerPayroll = ssEr + medEr + futa + sui;
-    caFranchise = profit > 0 ? Math.max(CA.SCORP_FRANCHISE_MIN, CA.SCORP_FRANCHISE_RATE * Math.max(0, profit - salary - employerPayroll)) : 0;
-    k1 = Math.max(0, profit - salary - employerPayroll - caFranchise);
+    franchise = caEntity && profit > 0
+      ? Math.max(CA.SCORP_FRANCHISE_MIN, CA.SCORP_FRANCHISE_RATE * Math.max(0, profit - salary - employerPayroll))
+      : 0;
+    k1 = Math.max(0, profit - salary - employerPayroll - franchise);
     employeePayroll = FED.SS_RATE * Math.min(salary, FED.SS_WAGE_BASE)
       + FED.MEDICARE_RATE * salary
-      + FED.ADDL_MEDICARE_RATE * Math.max(0, salary - FED.ADDL_MEDICARE_THRESHOLD_MFJ);
-    sdi = CA.SDI_RATE * salary;
+      + FED.ADDL_MEDICARE_RATE * Math.max(0, salary - FED.ADDL_MEDICARE_THRESHOLD[fs]);
+    sdi = caEntity ? CA.SDI_RATE * salary : 0;
+    if (res && !caEntity && salary > 0) {
+      notes.push(`Employer-side state unemployment insurance and any entity-level state tax for ${res} are not in this estimate.`);
+    }
   } else {
     // Sole proprietor: SE tax on 92.35% of profit, half deductible
     const seBase = profit * 0.9235;
     seTax = FED.SS_RATE * 2 * Math.min(seBase, FED.SS_WAGE_BASE)
       + FED.MEDICARE_RATE * 2 * seBase
-      + FED.ADDL_MEDICARE_RATE * Math.max(0, seBase - FED.ADDL_MEDICARE_THRESHOLD_MFJ);
+      + FED.ADDL_MEDICARE_RATE * Math.max(0, seBase - FED.ADDL_MEDICARE_THRESHOLD[fs]);
     k1 = Math.max(0, profit - seTax / 2); // half-SE deduction
   }
 
   const passThrough = salary + k1;
-  const fedTaxable = Math.max(0, passThrough + otherIncome - FED.STD_DEDUCTION_MFJ);
-  if (fedTaxable > FED.QBI_SSTB_PHASEOUT_END_MFJ) {
+  const agi = passThrough + otherIncome;
+  const fedTaxable = Math.max(0, agi - FED.STD_DEDUCTION[fs]);
+  if (fedTaxable > FED.QBI_SSTB_PHASEOUT_END[fs]) {
     notes.push("No QBI deduction: physician income is an SSTB and taxable income is beyond the 199A phase-out.");
   }
-  const fedIncomeTax = bracketTax(fedTaxable, FED.BRACKETS_MFJ);
+  const fedIncomeTax = bracketTax(fedTaxable, FED.BRACKETS[fs]);
   const fedTotal = fedIncomeTax + employeePayroll + seTax;
 
   // State sourcing: allocate the economic income by each state's revenue share
   const share = (st) => gross > 0 ? (income.by[st] || 0) / gross : 0;
-  const coSource = share("CO") * passThrough;
-  const ndSource = share("ND") * passThrough;
+  const workStates = Object.keys(income.by).filter(st => st !== "Unassigned");
 
-  const coTax = CO.FLAT_RATE * coSource;
-  // ND ratio method: schedule tax on total income × ND-source share
-  const ndScheduleTax = bracketTax(Math.max(0, passThrough + otherIncome), ND.BRACKETS_MFJ);
-  const ndTax = fedTaxable > 0 ? ndScheduleTax * (ndSource / Math.max(1, passThrough + otherIncome)) : 0;
+  // Nonresident work states: schedule tax on all income x that state's share (ratio method)
+  const nonresident = [];
+  for (const st of workStates) {
+    if (st === res) continue;
+    const source = share(st) * passThrough;
+    const model = stateScheduleTax(st, fs, agi, fedTaxable);
+    if (!model) { nonresident.push({ state: st, source, owed: null, modeled: false }); continue; }
+    const ratio = agi > 0 ? Math.min(1, source / agi) : 0;
+    nonresident.push({ state: st, source, owed: model.tax * ratio, modeled: true, label: model.label });
+  }
+  const modeledNR = nonresident.filter(n => n.modeled);
+  const nrOwed = modeledNR.reduce((s, n) => s + n.owed, 0);
+  const nrSource = modeledNR.reduce((s, n) => s + n.source, 0);
 
-  // California resident: taxed on everything, credit for the double-taxed part
-  const caTaxable = Math.max(0, passThrough + otherIncome - CA.STD_DEDUCTION_MFJ);
-  const caGrossTax = bracketTax(caTaxable, CA.BRACKETS_MFJ)
-    + CA.MHST_RATE * Math.max(0, caTaxable - CA.MHST_THRESHOLD);
-  const ostc = caTaxable > 0
-    ? Math.min(coTax + ndTax, caGrossTax * ((coSource + ndSource) / caTaxable))
-    : 0;
-  const caTax = Math.max(0, caGrossTax - ostc);
+  // Resident state: taxed on everything, credit for the double-taxed part
+  let resident = null;
+  if (res) {
+    const model = stateScheduleTax(res, fs, agi, fedTaxable);
+    if (!model) {
+      resident = { state: res, modeled: false, source: passThrough - nonresident.reduce((s, n) => s + n.source, 0), grossTax: null, credit: null, owed: null };
+    } else {
+      const grossTax = model.tax;
+      const credit = model.taxable > 0
+        ? Math.min(nrOwed, grossTax * Math.min(1, nrSource / model.taxable))
+        : 0;
+      resident = {
+        state: res, modeled: true, label: model.label,
+        source: passThrough - nonresident.reduce((s, n) => s + n.source, 0),
+        grossTax, credit, owed: Math.max(0, grossTax - credit),
+        noIncomeTax: NO_INCOME_TAX_STATES.includes(res),
+      };
+    }
+  }
 
-  const totalStateLocal = caTax + coTax + ndTax + caFranchise + sdi;
-  const totalAll = fedTotal + totalStateLocal;
+  const unmodeled = [
+    ...(resident && !resident.modeled ? [res] : []),
+    ...nonresident.filter(n => !n.modeled).map(n => n.state),
+  ];
+
+  const stateLocal = (resident?.owed || 0) + nrOwed + franchise + sdi;
+  const totalAll = fedTotal + stateLocal;
 
   return {
+    ready, filingStatus: fs, residentState: res,
     gross, deductions, profit, salary, k1, employerPayroll, employeePayroll,
-    caFranchise, sdi, seTax, otherIncome, fedTaxable, fedIncomeTax, fedTotal,
-    states: {
-      CA: { source: passThrough - coSource - ndSource, grossTax: caGrossTax, credit: ostc, owed: caTax },
-      CO: { source: coSource, owed: coTax },
-      ND: { source: ndSource, owed: ndTax },
-    },
+    franchise, sdi, seTax, otherIncome, agi, fedTaxable, fedIncomeTax, fedTotal,
+    resident, nonresident, unmodeled, stateLocal,
     totalAll,
     setAsideRate: gross > 0 ? totalAll / gross : 0,
     safeHarbor: (parseFloat(tp.priorYearTax) || 0) * FED.SAFE_HARBOR_PCT_HIGH_AGI || null,
     notes,
+    supportedStates: [...MODELED_STATES],
   };
 }

@@ -1,23 +1,15 @@
 /**
  * Deduction aggregation shared by the Finance ledger and the tax estimator.
- * Auto items are derived from data the app already holds — license renewal
- * costs, DEA fees, malpractice premiums, CME costs, society dues, and the
- * subscription itself. Manual + imported items live in data.deductibles.
+ * Auto items are derived from data the app already holds: license renewal
+ * costs, DEA fees, malpractice premiums, CME costs, society dues. Manual +
+ * imported items live in data.deductibles. Nothing is invented: software
+ * subscriptions (this app included) are entered by the user once actually
+ * paid.
  */
 
-export function autoDeductions(data, plan, year) {
+export function autoDeductions(data, year) {
   const items = [];
   const y = String(year);
-
-  const subAmount = plan === "locum" ? 348 : plan === "solo" ? 228 : 0;
-  if (subAmount > 0) {
-    items.push({
-      source: "auto", date: `${y}-01-01`,
-      category: "Software / SaaS (CredentialDoMD, Doximity, etc.)",
-      description: `CredentialDoMD ${plan === "locum" ? "Locum" : "Solo"} annual subscription`,
-      amount: subAmount, taxYear: y,
-    });
-  }
 
   (data.licenses || []).forEach((l) => {
     const cost = parseFloat(l.renewalCost || l.cost || l.renewalFee || 0);
@@ -74,11 +66,11 @@ export function autoDeductions(data, plan, year) {
 }
 
 /** Auto + manual/imported for a year, newest first. */
-export function allDeductions(data, plan, year) {
+export function allDeductions(data, year) {
   const y = String(year);
   const manual = (data.deductibles || [])
     .filter((d) => d.taxYear === y)
     .map((m) => ({ ...m, source: m.source || "manual" }));
-  return [...autoDeductions(data, plan, y), ...manual]
+  return [...autoDeductions(data, y), ...manual]
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }

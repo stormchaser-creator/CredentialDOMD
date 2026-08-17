@@ -9,6 +9,12 @@ import { generateId, formatDate } from "../../../utils/helpers";
 import DocAttach from "../DocAttach";
 import ContractSummary from "./ContractSummary";
 import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentScanner";
+import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils/taxConstants";
+import { STATE_NAMES } from "../../../constants/states";
+
+// Work-state hint reads from the tax engine's own list so it never promises a
+// state the estimator cannot model.
+const WORK_STATE_HINT = `Where the work physically happens. Tax Prep allocates this contract's income here; state tax is modeled today for ${MODELED_STATES.join(", ")} and the no-income-tax states (${NO_INCOME_TAX_STATES.join(", ")}). Other states show income only, no state tax estimate yet.`;
 
 /**
  * Contracts — locum agreements with the terms that drive billing.
@@ -127,10 +133,10 @@ function Contracts() {
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Agreement" : "Add Agreement"}>
         <Field label="Hospital / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Riverside Community Hospital" /></Field>
         <Field label="Agency (if any)"><input value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={iS} placeholder="e.g. CompHealth" /></Field>
-        <Field label="Work state (for taxes)" hint="Where the work physically happens — the tax estimator allocates this contract's income here.">
+        <Field label="Work state (for taxes)" hint={WORK_STATE_HINT}>
           <select value={form.workState || ""} onChange={e => setForm(f => ({ ...f, workState: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
-            <option value="">— pick a state —</option>
-            {["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"].map(st => <option key={st} value={st}>{st}</option>)}
+            <option value="">Pick a state</option>
+            {TAX_STATES.map(st => <option key={st} value={st}>{st}, {STATE_NAMES[st] || st}</option>)}
           </select>
         </Field>
         <Field label="Location" hint="City / state of the facility"><input value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={iS} placeholder="e.g. Colorado Springs, CO" /></Field>
