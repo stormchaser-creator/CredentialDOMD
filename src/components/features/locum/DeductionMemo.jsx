@@ -83,10 +83,21 @@ export default function DeductionMemo() {
     return acc;
   }, {});
 
+  const [formMsg, setFormMsg] = useState("");
+  const [savedMsg, setSavedMsg] = useState("");
   const save = () => {
-    if (!form.amount || !form.description) return;
+    // "$2,499.00", "2499", "2 499,00" all become a number; say what is missing
+    // instead of ignoring the tap.
+    const amt = parseFloat(String(form.amount || "").replace(/[^0-9.-]/g, ""));
+    if (!form.description?.trim()) { setFormMsg("Add a description (what you bought)."); return; }
+    if (!amt || isNaN(amt)) { setFormMsg("Add the amount, digits only (for example 2499.00)."); return; }
+    const taxYear = form.taxYear || String(form.date || "").slice(0, 4) || yearFilter;
     // addItem = local + cloud; setData was local-only and entries never synced
-    addItem("deductibles", { id: makeId(), ...form, amount: parseFloat(form.amount) || 0, source: "manual" });
+    addItem("deductibles", { id: makeId(), ...form, description: form.description.trim(), amount: Math.round(amt * 100) / 100, taxYear, source: "manual" });
+    setFormMsg("");
+    setSavedMsg(`Added ${form.description.trim()}, $${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${taxYear}).`);
+    setTimeout(() => setSavedMsg(""), 6000);
+    if (taxYear !== yearFilter) setYearFilter(taxYear);
     setForm(BLANK_FORM);
     setShowForm(false);
   };
@@ -236,9 +247,13 @@ export default function DeductionMemo() {
           form={form}
           setForm={setForm}
           onSave={save}
-          onCancel={() => { setForm(BLANK_FORM); setShowForm(false); }}
+          onCancel={() => { setForm(BLANK_FORM); setShowForm(false); setFormMsg(""); }}
+          msg={formMsg}
           T={T}
         />
+      )}
+      {savedMsg && (
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.success || "#10b981", margin: "0 0 8px" }}>{savedMsg}</div>
       )}
 
       {/* Items */}
@@ -313,7 +328,7 @@ export default function DeductionMemo() {
   );
 }
 
-function DeductionForm({ form, setForm, onSave, onCancel, T }) {
+function DeductionForm({ form, setForm, onSave, onCancel, msg, T }) {
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const inputStyle = {
     width: "100%", padding: "8px 10px",
@@ -335,19 +350,19 @@ function DeductionForm({ form, setForm, onSave, onCancel, T }) {
         <input style={inputStyle} placeholder="Description (e.g., Texas medical license app fee)" value={form.description} onChange={update("description")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 8 }}>
           <input style={inputStyle} type="date" value={form.date} onChange={update("date")} />
-          <input style={inputStyle} type="number" step="0.01" placeholder="Amount" value={form.amount} onChange={update("amount")} />
+          <input style={inputStyle} type="text" inputMode="decimal" placeholder="Amount (2499.00)" value={form.amount} onChange={update("amount")} />
           <input style={inputStyle} placeholder="Year" maxLength={4} value={form.taxYear} onChange={update("taxYear")} />
         </div>
       </div>
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 600, color: T.danger || "#ef4444", marginTop: 8 }}>{msg}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <button
           onClick={onSave}
-          disabled={!form.amount || !form.description}
           style={{
             flex: 1, padding: "10px", borderRadius: 8, border: "none",
-            backgroundColor: form.amount && form.description ? T.accent : T.textDim,
+            backgroundColor: T.accent,
             color: "#fff", fontSize: 13, fontWeight: 700,
-            cursor: form.amount && form.description ? "pointer" : "not-allowed",
+            cursor: "pointer",
           }}
         >
           Add
