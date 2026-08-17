@@ -73,7 +73,7 @@ export const IMPORT_SOURCES = [
     label: "ACCME CME Passport transcript (PDF)",
     how: "cmepassport.org: your transcript, saved or printed to PDF.",
     columns: "Completion Date, Activity (title with the provider beneath), Credits Earned (AMA PRA Category 1 credits, board MOC points and credit types).",
-    status: "Read directly. Layout taken from the sample transcript in ACCME's PARS guide for state boards. No certificate number.",
+    status: "Read directly. Layout taken from the sample transcript in ACCME's PARS guide for state boards. No certificate number. Rows with only board MOC points get no hours (points are not CME hours); the points stay in notes.",
     verified: true,
   },
   {
@@ -162,7 +162,7 @@ export function detectSource(headers) {
       id: "pars-batch",
       label: "ACCME PARS learner batch file",
       verified: true,
-      note: "Column layout verified against the ACCME Excel learner batch template. This file has no activity title or provider name: the ACCME Activity ID is kept as the title until you edit it. CME credits are treated as AMA PRA Category 1.",
+      note: "Columns verified against the ACCME Excel learner batch template. This file has no activity title or provider name: the ACCME Activity ID is kept as the title until you edit it. CME credits are treated as AMA PRA Category 1.",
     };
   }
   if (hasAny("accme activity id", "activity id") && hasAny("completion date", "date completed") && hasAny("activity title", "activity name", "title")) {
@@ -389,7 +389,7 @@ export function mapCreditType(raw, deg) {
   if (/self.?assessment|sam\b|self assessment examination/.test(s)) {
     return { category: pick(deg === "DO" ? "OCC Component 2 (Lifelong Learning)" : "Self-Assessment"), assumed: false };
   }
-  if (/moc part ii|part 2|lifelong learning|medical knowledge|component 2|llsa|moc/.test(s)) {
+  if (/moc part ii|part 2|lifelong learning|medical knowledge|component 2|llsa|(^|[^a-z])moc([^a-z]|$)(?!.*(category 1|ama pra))/.test(s) && !/category 1|ama pra|cat\.? ?1/.test(s)) {
     return { category: pick(deg === "DO" ? "OCC Component 2 (Lifelong Learning)" : "MOC Part II (Lifelong Learning)"), assumed: false };
   }
   if (/grand rounds/.test(s)) return { category: pick("Grand Rounds"), assumed: false };
@@ -500,14 +500,35 @@ function finishRow(r, deg) {
  * Apply a column mapping to a table (array of arrays). `headerIndex` is the
  * row holding column names (-1 for none). Returns rows ready for review.
  */
-export function rowsFromTable(table, mapping, { deg, headerIndex = 0, source } = {}) {
+export function rowsFromTable(table, mapping, { deg, headerIndex = 0, source, ownerName = "" } = {}) {
   const out = [];
   const get = (r, key) => (mapping[key] == null ? "" : (r[mapping[key]] ?? ""));
   const headers = headerIndex >= 0 ? (table[headerIndex] || []).map(normHeader) : [];
   const boardIdx = headers.findIndex(h => h === "certifying board");
+  // PARS batch files list one row per learner: only Add rows for THIS
+  // physician count; anything else is unticked and labelled.
+  const actionIdx = headers.findIndex(h => h === "record action");
+  const firstIdx = headers.findIndex(h => h === "first name");
+  const lastIdx = headers.findIndex(h => h === "last name");
+  const ownerToks = String(ownerName || "").toLowerCase().replace(/\b(dr|md|do|phd|jr|sr|ii|iii)\b\.?/g, "").split(/[^a-z]+/).filter(t => t.length >= 2);
+  const learnerMatches = (first, last) => {
+    if (!ownerToks.length) return true;
+    const toks = `${first} ${last}`.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+    if (!toks.length) return true;
+    return toks.some(t => ownerToks.includes(t)) && (ownerToks.includes(String(last || "").toLowerCase()) || ownerToks.length < 2);
+  };
   for (let i = headerIndex + 1; i < table.length; i++) {
     const r = table[i];
     if (!r || !r.some(v => String(v ?? "").trim() !== "")) continue;
+    let learnerNote = "", differentLearner = false, skipRow = false;
+    if (source?.id === "pars-batch") {
+      const action = actionIdx >= 0 ? String(r[actionIdx] ?? "").trim().toLowerCase() : "";
+      if (action && action !== "add") skipRow = true; // Delete / Update rows are not new credit
+      const first = firstIdx >= 0 ? String(r[firstIdx] ?? "").trim() : "";
+      const last = lastIdx >= 0 ? String(r[lastIdx] ?? "").trim() : "";
+      if (first || last) { learnerNote = `learner: ${[first, last].filter(Boolean).join(" ")}`; differentLearner = !learnerMatches(first, last); }
+    }
+    if (skipRow) continue;
     const dateRaw = get(r, "date");
     const titleRaw = String(get(r, "title") ?? "").trim();
     const hoursRaw = get(r, "hours");
@@ -541,9 +562,11 @@ export function rowsFromTable(table, mapping, { deg, headerIndex = 0, source } =
       row.rawCategory = "AMA PRA Category 1";
       const b = boardIdx >= 0 ? String(r[boardIdx] ?? "").trim() : "";
       const bits = [];
+      if (learnerNote) bits.unshift(learnerNote);
       if (b) bits.push(`PARS: reported for ${b} MOC`);
       if (mocType) bits.push(`MOC credit type: ${mocType}`);
       row.notes = bits.join("; ");
+      if (differentLearner) { row.include = false; row.warnings = [...(row.warnings || []), "different learner"]; }
     }
     out.push(finishRow(row, deg));
   }
@@ -1282,12 +1305,10 @@ export function parseCmePassportText(text, { deg } = {}) {
       else notes.push(`${m[1]} ${what}`);
     }
     if (hours == null && notes.length) {
-      // MOC-only line: points count as the hours, the first credit type names the kind
-      const pts = notes.find(n => /points?$/i.test(n));
+      // MOC-only line: board points are NOT CME hours (the state total sums
+      // every category), so hours stay empty; the credit type names the
+      // kind and the points ride along in notes for the reviewer.
       const type = notes.find(n => !/points?$/i.test(n));
-      const src = pts || type;
-      const m = src.match(/^(\d+(?:\.\d+)?)\s+(.*)$/);
-      hours = parseFloat(m[1]);
       rawCategory = type ? type.replace(/^[\d.]+\s+/, "") : "MOC";
     }
     rows.push(finishRow(newRow({
@@ -1366,7 +1387,7 @@ export async function readImportFile(file) {
     return { kind: "table", table: best?.table || [], sheet: best?.name || "", sheetCount: sheets.filter(s => s.table.length).length };
   }
   const text = await file.text();
-  if (name.endsWith(".csv") || name.endsWith(".tsv") || type === "text/csv" || /[,\t;|]/.test(text.split("\n")[0] || "")) {
+  if (name.endsWith(".csv") || name.endsWith(".tsv") || type === "text/csv" || /[\t;|]/.test(text.split("\n")[0] || "")) {
     return { kind: "table", table: parseCSV(text) };
   }
   return { kind: "text", text };

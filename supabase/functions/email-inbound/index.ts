@@ -145,6 +145,7 @@ interface LedgerRow {
   id: string;
   status: string;
   created_at: string;
+  updated_at: string;
 }
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -334,7 +335,7 @@ async function claim(row: {
 
   // Duplicate delivery. Re-claim only a failed or stale attempt.
   const { data: existing } = await db.from("inbound_emails")
-    .select("id, status, created_at").eq("message_id", row.message_id).maybeSingle();
+    .select("id, status, created_at, updated_at").eq("message_id", row.message_id).maybeSingle();
   const ex = existing as LedgerRow | null;
   if (!ex) return null;
   const staleBefore = Date.now() - STALE_PROCESSING_MIN * 60 * 1000;
@@ -342,7 +343,7 @@ async function claim(row: {
   if (ex.status !== "failed" && !stale) return null;
   const { data: re } = await db.from("inbound_emails")
     .update({ status: "processing", detail: null, updated_at: new Date().toISOString() })
-    .eq("id", ex.id).in("status", ["failed", "processing"]).select("id").maybeSingle();
+    .eq("id", ex.id).in("status", ["failed", "processing"]).eq("updated_at", ex.updated_at).select("id").maybeSingle();
   return re ? (re as { id: string }).id : null;
 }
 
@@ -386,7 +387,8 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
   const profile = profiles[0] ?? null;
 
   const replySubject = `Re: ${(subject || "your certificate").slice(0, 150)}`;
-  const replyHeaders = messageId.startsWith("<") ? { "In-Reply-To": messageId, "References": messageId } : {};
+  const mid = messageId ? (messageId.startsWith("<") ? messageId : `<${messageId}>`) : "";
+  const replyHeaders = mid ? { "In-Reply-To": mid, "References": mid } : {};
 
   if (!profile) {
     // Unknown sender. One reply per sender per day, never to automated mail
@@ -412,13 +414,33 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
       headers: replyHeaders,
       text: `This address is not registered to a CredentialDOMD account; forward from the email on your account or add it in Settings.
 
-Open the app: ${APP_URL} (More > Settings > professional email)
+Open the app: ${APP_URL} (More > Settings > Email)
 
 CredentialDOMD
 https://credentialdomd.com`,
     });
     await finish(ledgerId, "unregistered", r.ok ? UNREG_REPLIED : `reply failed: ${r.status}`);
     return json({ ok: true, route: "cme", result: "unregistered", replied: r.ok });
+  }
+
+  // Sender authentication: the From header is trusted only when the inbound
+  // path's Authentication-Results do not say it failed. A forged From with
+  // dmarc=fail (or spf and dkim both failed) is dropped silently: no upload,
+  // no reply. A missing header is treated as pass (residual risk noted in
+  // docs/EMAIL-INBOUND.md).
+  {
+    const email = await getReceivedEmail(emailId, "cid");
+    const h = lowerKeys(email.headers);
+    const auth = (h["authentication-results"] || h["arc-authentication-results"] || "").toLowerCase();
+    if (auth) {
+      const dmarcFail = /dmarc=fail/.test(auth);
+      const spfFail = /spf=(fail|softfail)/.test(auth);
+      const dkimFail = /dkim=fail/.test(auth) || !/dkim=pass/.test(auth);
+      if (dmarcFail || (spfFail && dkimFail)) {
+        await finish(ledgerId, "failed", `sender authentication failed: ${auth.slice(0, 200)}`);
+        return json({ ok: true, route: "cme", result: "rejected_auth" });
+      }
+    }
   }
 
   // Attachments: PDFs always; images unless they are small inline logos.

@@ -114,7 +114,7 @@ eq("pars row date (excel serial)", parsRows[0].date, "2022-06-30");
 eq("pars row hours", parsRows[0].hours, 10);
 eq("pars row title fallback", parsRows[0].title, "ACCME activity 202212345");
 eq("pars row category", parsRows[0].category, "AMA PRA Category 1");
-eq("pars row note", parsRows[0].notes, "PARS: reported for ABIM MOC; MOC credit type: Medical Knowledge");
+eq("pars row note", parsRows[0].notes, "learner: All Learner; PARS: reported for ABIM MOC; MOC credit type: Medical Knowledge");
 
 // The real ACCME template (downloaded from accme.org/resource/excel-learner-batch-template/):
 // row 1 is guidance text, row 2 the header, and the workbook has ValidValues /
@@ -248,7 +248,7 @@ const cp = parseCmePassportText(cmep, { deg: "MD" });
 eq("cmep row count", cp.length, 3);
 eq("cmep r1", [cp[0].date, cp[0].title, cp[0].provider, cp[0].hours, cp[0].category, cp[0].categoryAssumed], ["2022-04-21", "Testing out CME Passport", "Western Regional Medical Center", 7, "AMA PRA Category 1", false]);
 eq("cmep r1 note", cp[0].notes, "CME Passport: 7 ABO Points, 7 Improvement in Medical Practice, 7 Lifelong Learning");
-eq("cmep r2 moc-only", [cp[1].hours, cp[1].category, cp[1].provider], [5, "MOC Part II (Lifelong Learning)", "AAA Test Organization"]);
+eq("cmep r2 moc-only", [cp[1].hours, cp[1].category, cp[1].provider], [null, "MOC Part II (Lifelong Learning)", "AAA Test Organization"]);
 eq("cmep r3 wrapped title", [cp[2].title, cp[2].provider, cp[2].hours], ["Opioid Analgesics: Risk Evaluation and Mitigation Strategy Update for Ophthalmic Surgeons", "Western Regional Medical Center", 1.5]);
 ok("cmep r3 topics", cp[2].topics.includes("Opioid Prescribing"), JSON.stringify(cp[2].topics));
 
@@ -258,7 +258,7 @@ if (existsSync(cmepPdf)) {
   const ex = await extractPdfText(readFileSync(cmepPdf), { inflate });
   ok("cmep pdf detect", looksLikeCmePassport(ex.text), ex.text.slice(0, 200));
   const r = parseCmePassportText(ex.text, { deg: "MD" });
-  eq("cmep pdf rows", r.map(x => [x.date, x.hours]), [["2022-04-21", 7], ["2022-02-16", 5], ["2022-02-02", 5], ["2021-12-02", 1.5]]);
+  eq("cmep pdf rows", r.map(x => [x.date, x.hours]), [["2022-04-21", 7], ["2022-02-16", null], ["2022-02-02", null], ["2021-12-02", 1.5]]);
   eq("cmep pdf r4 title", r[3].title, "Opioid Analgesics: Risk Evaluation and Mitigation Strategy Update for Ophthalmic Surgeons");
   eq("cmep pdf r3 category", r[2].category, "MOC Part II (Lifelong Learning)");
 } else {

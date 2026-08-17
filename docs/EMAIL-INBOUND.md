@@ -121,3 +121,7 @@ Code: `supabase/functions/email-inbound/index.ts`, migration
 recorded, no reply), `UNREG_REPLY_PER_DAY` 1, `MAX_FILES` 10, `MAX_FILE_BYTES` 10 MB,
 `MAX_TOTAL_BYTES` 20 MB, inline images under 40 KB are treated as signature logos on the
 cme route. All in `supabase/functions/email-inbound/index.ts`.
+
+## Sender authentication (cme@ route)
+
+The function trusts the From address only after checking the inbound path's `Authentication-Results` header: `dmarc=fail`, or `spf` and `dkim` both failing, drops the message with no upload and no reply (ledger status `failed`, detail starts with "sender authentication failed"). If the header is absent the message is treated as authenticated; that residual risk is bounded by the per-sender cap (20 messages/hour, 10 files each) and by the fact that dropped files land only in the matched physician's own inbox list, unfiled, where they are obvious.

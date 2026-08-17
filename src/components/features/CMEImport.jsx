@@ -97,12 +97,14 @@ function CMEImport({ open, onClose }) {
     const map = hi >= 0 ? guessMapping(headers) : Object.fromEntries(IMPORT_FIELDS.map(f => [f.key, null]));
     setTable(tbl); setHeaderIndex(hi); setSource(src); setMapping(map);
     const complete = map.date != null && map.hours != null && (map.title != null || src.id === "pars-batch");
-    if (src.id !== "generic" && complete) {
-      toReview(rowsFromTable(tbl, map, { deg, headerIndex: hi, source: src }), src);
+    // PARS batch files carry other learners' rows; always show the mapping
+    // step so the physician sees what is about to be imported.
+    if (src.id !== "generic" && src.id !== "pars-batch" && complete) {
+      toReview(rowsFromTable(tbl, map, { deg, headerIndex: hi, source: src, ownerName: data.settings?.name }), src);
     } else {
       setStep("map"); setError("");
     }
-  }, [deg, toReview]);
+  }, [deg, toReview, data.settings?.name]);
 
   const handleText = useCallback(async (t, why, dataUrl) => {
     if (apiKey) {
@@ -180,7 +182,7 @@ function CMEImport({ open, onClose }) {
   const sampleRow = useMemo(() => (table || []).slice(headerIndex + 1).find(r => r.some(v => String(v ?? "").trim())) || [], [table, headerIndex]);
   const applyMapping = useCallback(() => {
     if (mapping.date == null && mapping.title == null) { setError("Map at least the date or the title column."); return; }
-    toReview(rowsFromTable(table, mapping, { deg, headerIndex, source }), source);
+    toReview(rowsFromTable(table, mapping, { deg, headerIndex, source, ownerName: data.settings?.name }), source);
   }, [mapping, table, deg, headerIndex, source, toReview]);
 
   // Review step
@@ -208,7 +210,7 @@ function CMEImport({ open, onClose }) {
   const sourceBanner = (src) => src && (
     <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 10, padding: "8px 10px", borderRadius: 10, backgroundColor: src.verified ? T.successDim : T.warningDim, border: `1px solid ${src.verified ? T.success : T.warning}`, lineHeight: 1.45 }}>
       <span style={{ fontWeight: 700, color: T.text }}>{src.label}</span>
-      {" "}{badge(src.verified ? "layout verified" : "generic, check mapping", src.verified ? T.success : T.warning, "transparent")}
+      {" "}{badge(src.verified ? "known layout" : "generic, check mapping", src.verified ? T.success : T.warning, "transparent")}
       <div style={{ marginTop: 2 }}>{src.note}</div>
     </div>
   );
@@ -221,6 +223,7 @@ function CMEImport({ open, onClose }) {
           <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
             Bring credits in without retyping. Upload a CE Broker CE Report PDF, an ACCME CME Passport transcript PDF, an ACCME PARS Excel file, or any CSV or Excel export. Every row lands in a review list first, rows already in your log are unticked as duplicates, and nothing is saved until you add the batch.
             {!apiKey && " Other PDF layouts are read on-device as text; add a Gemini API key in Settings to have AI structure them."}
+            {apiKey && " PDFs that are not CE Broker or ACCME layouts are sent to Gemini under your key to structure; you still review every row."}
           </div>
           <input type="file" ref={fileRef} accept={IMPORT_ACCEPT} style={{ display: "none" }}
             onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
@@ -244,7 +247,7 @@ function CMEImport({ open, onClose }) {
                 <div key={s.id} style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.border}`, fontSize: 12, color: T.textMuted, lineHeight: 1.45 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 700, color: T.text, fontSize: 13 }}>{s.label}</span>
-                    {badge(s.verified ? "layout verified" : "generic CSV", s.verified ? T.success : T.warning, s.verified ? T.successDim : T.warningDim)}
+                    {badge(s.verified ? "known layout" : "generic CSV", s.verified ? T.success : T.warning, s.verified ? T.successDim : T.warningDim)}
                   </div>
                   <div><span style={{ color: T.textDim }}>Where: </span>{s.how}</div>
                   <div><span style={{ color: T.textDim }}>Columns: </span>{s.columns}</div>
