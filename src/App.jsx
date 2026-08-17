@@ -26,7 +26,7 @@ import { ScreeningsSection } from "./components/features";
 import { AssistantSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
-import HomeSearch from "./components/features/HomeSearch";
+import HomeSearch, { SECTIONS } from "./components/features/HomeSearch";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
@@ -61,7 +61,8 @@ function statusFromColor(color) {
 export default function App() {
   const [tab, setTab] = useState("home");
   const [subPage, setSubPage] = useState(null);
-  const handleNavigate = useCallback((t, sub) => { setTab(t); setSubPage(sub); }, []);
+  const [navRecord, setNavRecord] = useState(null); // { sec, id } from Vera / deep links
+  const handleNavigate = useCallback((t, sub, record) => { setTab(t); setSubPage(sub); if (record) setNavRecord({ ...record, nonce: Date.now() }); }, []);
 
   return (
     <>
@@ -70,7 +71,7 @@ export default function App() {
       </SignedOut>
       <SignedIn>
         <AppProvider onNavigate={handleNavigate}>
-          <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} />
+          <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
         </AppProvider>
       </SignedIn>
       {/* Update check/refresh button — outside the auth gate so a stale
@@ -119,7 +120,7 @@ function ProGate({ T, onUpgrade, featureName }) {
   );
 }
 
-function AppInner({ tab, setTab, subPage, setSubPage }) {
+function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
   const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta } = useApp();
@@ -406,6 +407,15 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (sec.tab === "more") { setTab("more"); setSubPage(sec.sub); return; }
   };
   const askVera = (q) => { setVeraSeed(q); setTab("more"); setSubPage("assistant"); };
+  // Vera's open_record lands here: the section is already selected by
+  // handleNavigate; open the record itself.
+  useEffect(() => {
+    if (!navRecord?.id) return;
+    const sec = SECTIONS.find(x => x.key === navRecord.sec);
+    if (!sec) return;
+    if (sec.tab === "credentials") setAutoEditTarget({ sec: sec.key, id: navRecord.id });
+    else if (sec.tab === "locum") setLocumSeed({ sub: sec.sub, id: navRecord.id });
+  }, [navRecord?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderHome = () => (
     <div className="cmd-fade-in">

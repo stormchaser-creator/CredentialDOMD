@@ -375,8 +375,9 @@ export function AppProvider({ children, onNavigate }) {
     return [...states];
   }, [data.settings.primaryState, data.settings.additionalStates, data.licenses]);
 
-  const navigate = useCallback((tab, sub) => {
-    if (onNavigate) onNavigate(tab, sub || null);
+  // record = { sec, id } opens that record's editor after the section renders
+  const navigate = useCallback((tab, sub, record) => {
+    if (onNavigate) onNavigate(tab, sub || null, record || null);
   }, [onNavigate]);
 
   const value = useMemo(() => ({

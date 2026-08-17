@@ -13,7 +13,7 @@ import { describeItem } from "../../utils/helpers";
  */
 
 // Section key -> where it lives in the app + label. Order = display order.
-const SECTIONS = [
+export const SECTIONS = [
   { key: "licenses", label: "Licenses & certs", tab: "credentials", sub: "licenses" },
   { key: "privileges", label: "Privileges", tab: "credentials", sub: "privileges" },
   { key: "cme", label: "CME", tab: "credentials", sub: "cme" },
@@ -44,6 +44,18 @@ const TEXT_FIELDS = ["name", "type", "title", "facility", "state", "city", "prov
   "invoiceNumber", "contact", "email", "phone", "portalUrl", "loginUsername", "specialty", "role", "procedure", "cptCodes", "codes",
   "subject", "text", "label", "degree", "school", "employer", "position", "journal", "authors", "location", "billTo", "billToLabel"];
 
+// "RUHS" should find "Riverside University Health System": add the
+// initials of every multi-word value (with and without small words) to
+// the haystack, and let a query token match either the text or an acronym.
+const SMALL = new Set(["of", "the", "and", "for", "at", "in", "on", "de", "la", "&"]);
+function acronyms(str) {
+  const words = String(str).split(/[\s\-\/,.()]+/).filter(Boolean);
+  if (words.length < 2) return [];
+  const all = words.map(w => w[0]).join("");
+  const big = words.filter(w => !SMALL.has(w.toLowerCase())).map(w => w[0]).join("");
+  return [all, big].filter(a => a.length >= 2).map(a => a.toLowerCase());
+}
+
 function itemText(item) {
   const parts = [];
   for (const k of TEXT_FIELDS) {
@@ -51,9 +63,45 @@ function itemText(item) {
     if (v == null || v === "") continue;
     if (Array.isArray(v)) parts.push(v.map(x => (typeof x === "object" ? Object.values(x).join(" ") : String(x))).join(" "));
     else if (typeof v === "object") parts.push(Object.values(v).filter(x => typeof x !== "object").join(" "));
-    else parts.push(String(v));
+    else { parts.push(String(v)); parts.push(...acronyms(v)); }
   }
   return parts.join(" ").toLowerCase();
+}
+
+/**
+ * searchRecords(data, q, { limitPerSection }) -> [{ sec, hits:[{id,label,sub}], total }]
+ * Shared by the Home search box and Vera's open_record action.
+ */
+export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
+  const toks = tokens(q);
+  if (!toks.length) return [];
+  const out = [];
+  for (const sec of SECTIONS) {
+    const items = data[sec.key] || [];
+    const hits = [];
+    for (const it of items) {
+      if (!it || it.deleted) continue;
+      const label = (() => { try { return describeItem(it, data.settings?.name, sec.key); } catch { return it.name || it.title || ""; } })();
+      const hay = `${label} ${acronyms(label).join(" ")} ${itemText(it)}`.toLowerCase();
+      if (toks.every(t => hay.includes(t))) {
+        const sub = [it.state, it.facility, it.provider, it.expirationDate && `exp ${it.expirationDate}`, it.date, it.total != null && `$${it.total}`]
+          .filter(Boolean).join(" · ");
+        hits.push({ id: it.id, label: label || "(untitled)", sub });
+      }
+      if (hits.length >= limitPerSection) break;
+    }
+    if (hits.length) out.push({ sec, hits, total: items.filter(it => it && !it.deleted).length });
+  }
+  return out;
+}
+
+/** Section lookup for Vera: accepts a section key or a human label. */
+export function findSection(nameOrKey) {
+  const n = String(nameOrKey || "").toLowerCase().replace(/[^a-z]/g, "");
+  return SECTIONS.find(s => s.key.toLowerCase() === n)
+    || SECTIONS.find(s => s.label.toLowerCase().replace(/[^a-z]/g, "") === n)
+    || SECTIONS.find(s => n && (s.label.toLowerCase().replace(/[^a-z]/g, "").includes(n) || n.includes(s.key.toLowerCase())))
+    || null;
 }
 
 function tokens(q) {
@@ -74,28 +122,7 @@ export default function HomeSearch({ onOpen, onAskVera }) {
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("touchstart", onDoc); };
   }, [focus]);
 
-  const results = useMemo(() => {
-    const toks = tokens(q);
-    if (!toks.length) return [];
-    const out = [];
-    for (const sec of SECTIONS) {
-      const items = data[sec.key] || [];
-      const hits = [];
-      for (const it of items) {
-        if (!it || it.deleted) continue;
-        const label = (() => { try { return describeItem(it, data.settings?.name, sec.key); } catch { return it.name || it.title || ""; } })();
-        const hay = `${label} ${itemText(it)}`.toLowerCase();
-        if (toks.every(t => hay.includes(t))) {
-          const sub = [it.state, it.facility, it.provider, it.expirationDate && `exp ${it.expirationDate}`, it.date, it.total != null && `$${it.total}`]
-            .filter(Boolean).join(" · ");
-          hits.push({ id: it.id, label: label || "(untitled)", sub });
-        }
-        if (hits.length >= 6) break;
-      }
-      if (hits.length) out.push({ sec, hits, total: items.filter(it => it && !it.deleted).length });
-    }
-    return out;
-  }, [q, data]);
+  const results = useMemo(() => searchRecords(data, q), [q, data]);
 
   const show = focus && q.trim().length >= 2;
   const totalHits = results.reduce((n, g) => n + g.hits.length, 0);
@@ -119,7 +146,7 @@ export default function HomeSearch({ onOpen, onAskVera }) {
           placeholder="Search everything, or ask Vera"
           autoCapitalize="none"
           autoCorrect="off"
-          style={{ flex: 1, border: "none", outline: "none", background: "transparent", color: T.text, fontSize: 15, minWidth: 0 }}
+          style={{ flex: 1, border: "none", outline: "none", background: "transparent", color: T.text, fontSize: 16, minWidth: 0 }}
         />
         {q && (
           <button onClick={() => { setQ(""); }} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>{"×"}</button>
@@ -127,7 +154,7 @@ export default function HomeSearch({ onOpen, onAskVera }) {
       </div>
 
       {show && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: "calc(100% + 6px)", backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, boxShadow: T.shadow2 || "0 12px 32px rgba(0,0,0,0.25)", maxHeight: "60vh", overflowY: "auto", padding: 6 }}>
+        <div style={{ position: "absolute", left: 0, right: 0, top: "calc(100% + 6px)", maxWidth: "100%", boxSizing: "border-box", backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, boxShadow: T.shadow2 || "0 12px 32px rgba(0,0,0,0.25)", maxHeight: "60vh", overflowY: "auto", padding: 6 }}>
           {results.map(g => (
             <div key={g.sec.key} style={{ padding: "4px 4px 6px" }}>
               <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: T.textMuted, padding: "6px 8px 2px" }}>{g.sec.label}</div>

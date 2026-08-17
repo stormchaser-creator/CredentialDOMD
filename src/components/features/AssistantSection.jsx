@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
+import { searchRecords, findSection } from "./HomeSearch";
 import { useInputStyle } from "../shared/useInputStyle";
 import { generateId } from "../../utils/helpers";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
@@ -24,7 +25,7 @@ const slimForArchive = (msgs) =>
  * straight to the developer. Actions only run after you approve them.
  */
 function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed }) {
-  const { data, addItem, editItem, allTrackedStates, userIdRef, theme: T } = useApp();
+  const { data, addItem, editItem, allTrackedStates, userIdRef, navigate, theme: T } = useApp();
   const iS = useInputStyle();
   const [msgs, setMsgs] = useState(() => {
     try {
@@ -181,6 +182,28 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed }) {
           category: "idea",
           text: meatiest.slice(0, 800),
         }];
+      }
+      // open_record navigates right away (read-only) and becomes a small
+      // "Opened ..." card instead of an approval card.
+      const nav = (result.actions || []).find(a => a.kind === "open_record");
+      if (nav) {
+        const sec = findSection(nav.section) || null;
+        let target = null;
+        if (sec && nav.id && (data[sec.key] || []).some(x => x?.id === nav.id)) target = { sec, id: nav.id };
+        else {
+          const q = nav.query || nav.summary || "";
+          const groups = searchRecords(data, q, { limitPerSection: 3 });
+          const g = (sec && groups.find(x => x.sec.key === sec.key)) || groups[0];
+          if (g?.hits?.length) target = { sec: g.sec, id: g.hits[0].id };
+          else if (sec) target = { sec, id: null };
+        }
+        if (target) {
+          navigate(target.sec.tab, target.sec.sub, target.id ? { sec: target.sec.key, id: target.id } : null);
+          result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, done: true, summary: `Opened ${target.sec.label}${target.id ? "" : " (record not found, showing the section)"}` } : a);
+        } else {
+          result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, dismissed: true } : a);
+          result.reply = `${result.reply || ""}\n\nI could not find that record. Try the search box on Home, or tell me the exact name.`.trim();
+        }
       }
       const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions };
       // Keep the file with the proposal so Approve can save it to Files too —
@@ -515,7 +538,8 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed }) {
                 backgroundColor: T.card,
               }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: a.done ? (T.success || "#22c55e") : T.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  {a.kind === "feedback" ? "Feedback for the developer"
+                  {a.kind === "open_record" ? "Navigation"
+                    : a.kind === "feedback" ? "Feedback for the developer"
                     : a.kind === "send_packet" ? `Send packet · ${(a.docIds || []).length} documents`
                       : a.kind === "update_document" ? "File / rename a document"
                         : a.kind === "update_record" ? `Update in ${a.section}` : `New record → ${a.section}`}
