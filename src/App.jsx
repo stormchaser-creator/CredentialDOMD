@@ -29,6 +29,7 @@ import PeerNotify from "./components/features/PeerNotify";
 import { LocumDashboard, MultiStateMatrix } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
+import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
@@ -132,6 +133,25 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   const [autoEditTarget, setAutoEditTarget] = useState(null);
   const [npiImporting, setNpiImporting] = useState(false);
   const [npiImportMsg, setNpiImportMsg] = useState(null);
+
+  // Beta gate: invite-only. Admins are always in; everyone else must be
+  // 'active' in profiles.access_status (activated by the Clerk webhook, the
+  // self-claim RPC against the JWT email, or the owner from Admin > Users).
+  const [access, setAccess] = useState(null);
+  const recheckAccess = useCallback(async () => {
+    if (!user) return;
+    if (isAdminUser(user)) { setAccess("active"); claimBetaAccess().catch(() => {}); return; }
+    const r = await claimBetaAccess();
+    if (r === "unknown") setAccess(data.settings?.accessStatus === "active" ? "active" : "pending");
+    else setAccess(r);
+  }, [user, data.settings?.accessStatus]);
+  useEffect(() => {
+    if (!loaded || !user) return;
+    recheckAccess();
+    touchLastSeen();
+    const t = setInterval(touchLastSeen, 15 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [loaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useNotifications();
 
@@ -379,6 +399,33 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
       <div style={{ textAlign: "center" }}>
         <AsclepiusIcon size={40} color={T.accent} />
         <div style={{ marginTop: 12, fontSize: 14, fontWeight: 500 }}>Loading...</div>
+      </div>
+    </div>
+  );
+
+  if (access !== "active") return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.text, padding: 24 }}>
+      <div style={{ maxWidth: 420, textAlign: "center" }}>
+        <AsclepiusIcon size={44} color={T.accent} />
+        {access === null ? (
+          <div style={{ marginTop: 12, fontSize: 14, color: T.textMuted }}>Checking your invitation...</div>
+        ) : access === "revoked" ? (
+          <>
+            <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800 }}>Access paused</div>
+            <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>Your beta access has been paused. Reply to your invitation email if you think this is a mistake.</div>
+          </>
+        ) : (
+          <>
+            <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800 }}>CredentialDOMD is invite-only right now</div>
+            <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>
+              You are signed in as <b style={{ color: T.text }}>{user?.email || "this account"}</b>, but that address has not been invited yet. If you received an invitation, sign in with the exact email it was sent to. Otherwise join the waitlist at credentialdomd.com and we will let you know.
+            </div>
+            <button onClick={recheckAccess} style={{ marginTop: 18, padding: "10px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 700, cursor: "pointer" }}>Check again</button>
+          </>
+        )}
+        <div style={{ marginTop: 14 }}>
+          <button onClick={signOut} style={{ background: "transparent", border: "none", color: T.textDim, fontSize: 13, textDecoration: "underline", cursor: "pointer" }}>Sign out</button>
+        </div>
       </div>
     </div>
   );

@@ -127,8 +127,8 @@ const SETTINGS_TO_PROFILE = {
   profilePhoto: "profile_photo",
   theme: "theme",
   fontSize: "font_size",
-  apiKey: "api_key",
-  anthropicApiKey: "anthropic_api_key",
+  // apiKey / anthropicApiKey are deliberately NOT here: AI keys live on the
+  // device only (see deviceKeys below), never in Postgres.
   taxPrep: "tax_prep",
   reminderLeadDays: "reminder_lead_days",
   notifyEmail: "notify_email",
@@ -165,7 +165,82 @@ function profileRowToSettings(row) {
       settings[settingsKey] = row[col];
     }
   }
+  // Read-only, server-owned: the beta gate. Never written back (not in the map).
+  if (row.access_status) settings.accessStatus = row.access_status;
   return settings;
+}
+
+// ─── Device-local AI keys ────────────────────────────────────
+// Gemini / Anthropic keys are per device and per Clerk user. They ride in
+// settings state like before (every reader keeps working) but persist to a
+// per-user localStorage slot and are stripped from every cloud write.
+const DEVICE_KEY_FIELDS = ["apiKey", "anthropicApiKey"];
+const deviceKeySlot = (authUserId) => `credentialdomd-keys:${authUserId}`;
+
+export function loadDeviceKeys(authUserId) {
+  if (!authUserId) return {};
+  try {
+    const raw = localStorage.getItem(deviceKeySlot(authUserId));
+    if (raw) return JSON.parse(raw) || {};
+  } catch { /* ignore */ }
+  // One-time adoption: keys used to live inside the synced settings blob and
+  // in Postgres. Pull them out of any local cache copy on this device so the
+  // founder's keys survive the switch, then they live only in the slot.
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith("credentialdomd-data")) continue;
+      const cached = JSON.parse(localStorage.getItem(k) || "null");
+      const st = cached?.settings || {};
+      const found = {};
+      for (const f of DEVICE_KEY_FIELDS) if (st[f]) found[f] = st[f];
+      if (Object.keys(found).length) {
+        localStorage.setItem(deviceKeySlot(authUserId), JSON.stringify(found));
+        return found;
+      }
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+// Merge semantics: a field absent from `updates` is untouched; an empty
+// string removes it. Partial settings updates must never wipe the other key.
+export function saveDeviceKeys(authUserId, updates) {
+  if (!authUserId || !updates) return;
+  if (!DEVICE_KEY_FIELDS.some(f => f in updates)) return;
+  let cur = {};
+  try { cur = JSON.parse(localStorage.getItem(deviceKeySlot(authUserId)) || "{}") || {}; } catch { /* ignore */ }
+  for (const f of DEVICE_KEY_FIELDS) {
+    if (!(f in updates)) continue;
+    if (updates[f]) cur[f] = updates[f]; else delete cur[f];
+  }
+  try {
+    if (Object.keys(cur).length) localStorage.setItem(deviceKeySlot(authUserId), JSON.stringify(cur));
+    else localStorage.removeItem(deviceKeySlot(authUserId));
+  } catch { /* ignore */ }
+}
+
+// The Clerk user id of the session that last loaded data on this device;
+// lets saveSettings route keys to the right slot without callers changing.
+let currentAuthUserId = null;
+
+export function clearDeviceKeys(authUserId) {
+  try { if (authUserId) localStorage.removeItem(deviceKeySlot(authUserId)); } catch { /* ignore */ }
+}
+
+// ─── Beta access gate ────────────────────────────────────────
+// Asks Postgres whether this Clerk user is allowed in. The function trusts
+// only the JWT email claim; admins are always active.
+export async function claimBetaAccess() {
+  if (!supabase) return "active"; // offline/local dev: no gate
+  const { data, error } = await supabase.rpc("claim_beta_access");
+  if (error) { console.warn("claim_beta_access:", error.message); return "unknown"; }
+  return data || "pending";
+}
+
+export async function touchLastSeen() {
+  if (!supabase) return;
+  try { await supabase.rpc("touch_last_seen"); } catch { /* ignore */ }
 }
 
 // ─── Ensure profile exists (now uses auth user id) ──────────
@@ -210,7 +285,8 @@ export async function loadFromSupabase(userId) {
   if (!profile) return null;
 
   const profileId = profile.id;
-  const settings = profileRowToSettings(profile);
+  currentAuthUserId = userId;
+  const settings = { ...profileRowToSettings(profile), ...loadDeviceKeys(userId) };
 
   // Fetch all collections in parallel. PostgREST caps any single response at
   // 1,000 rows — a career case log blows straight past that, so every
@@ -260,7 +336,8 @@ export async function loadFromSupabase(userId) {
 }
 
 // ─── Save settings to Supabase ───────────────────────────────
-export async function saveSettings(userId, settings) {
+export async function saveSettings(userId, settings, authUserId = currentAuthUserId) {
+  if (authUserId) saveDeviceKeys(authUserId, settings);
   if (!supabase || !userId) return;
   const row = settingsToProfileRow(settings);
   row.updated_at = new Date().toISOString();

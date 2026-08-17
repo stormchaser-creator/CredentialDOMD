@@ -19,6 +19,8 @@ export default function AdminDashboard() {
   const [waitlist, setWaitlist] = useState([]);
   const [attempts, setAttempts] = useState([]);
   const [fields, setFields] = useState([]);
+  const [users, setUsers] = useState([]);       // profiles directory (admin read)
+  const [invites, setInvites] = useState([]);   // beta_access allowlist
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openTicket, setOpenTicket] = useState(null);
@@ -110,7 +112,9 @@ export default function AdminDashboard() {
       supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
-    ]).then(([t, f, s, v, w, wa, fp]) => {
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi").order("created_at", { ascending: false }).limit(500),
+      supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
+    ]).then(([t, f, s, v, w, wa, fp, pr, ba]) => {
       if (cancelled) return;
       if (t.error) setError(`Tickets: ${t.error.message}`);
       else setTickets(t.data || []);
@@ -124,6 +128,9 @@ export default function AdminDashboard() {
       if (!wa.error) setAttempts(wa.data || []);
       if (fp.error) setError((prev) => prev || `Fields: ${fp.error.message}`);
       else setFields(fp.data || []);
+      if (pr.error) setError((prev) => prev || `Users: ${pr.error.message}`);
+      else setUsers(pr.data || []);
+      if (!ba.error) setInvites(ba.data || []);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -144,6 +151,7 @@ export default function AdminDashboard() {
   const archivedTickets = tickets.filter(t => t.archived_at);
   const TABS = [
     { id: "tickets",   label: `Tickets (${activeTickets.length})` },
+    { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
     { id: "signups",   label: "Signups" },
     { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
@@ -242,7 +250,16 @@ export default function AdminDashboard() {
           <SignupsList rows={signups} T={T} />
         </>
       )}
-      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} T={T} />}
+      {tab === "users" && !loading && <UsersPanel users={users} setUsers={setUsers} invites={invites} setInvites={setInvites} T={T} />}
+      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} T={T} onInvite={async (r) => {
+        const res = await sendInvite({ email: r.email, name: r.name, lead_id: r.id });
+        if (res.ok) {
+          setWaitlist(rs => rs.map(x => x.id === r.id ? { ...x, status: "invited", invited_at: new Date().toISOString() } : x));
+          const { data } = await supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500);
+          if (data) setInvites(data);
+        }
+        return res;
+      }} />}
       {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}
 
       {/* Tap a ticket → read it, answer it, close it */}
@@ -484,7 +501,171 @@ function SignupsList({ rows, T }) {
   );
 }
 
-function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
+/** Calls the admin-only send-invite function. Returns { ok, error }. */
+async function sendInvite(body) {
+  try {
+    const { data, error } = await supabase.functions.invoke("send-invite", { body });
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch { /* ignore */ }
+      return { ok: false, error: msg };
+    }
+    if (data?.error) return { ok: false, error: data.error };
+    return { ok: true, data };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+function timeAgo(iso) {
+  if (!iso) return "never";
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 2) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.round(h / 24)} d ago`;
+}
+
+function accessColor(st) {
+  return st === "active" ? "#10b981" : st === "revoked" ? "#ef4444" : "#f59e0b";
+}
+
+/**
+ * Users: the account directory plus the invite allowlist. Two people can be
+ * approved today; this is where that happens and where it can be undone.
+ */
+function UsersPanel({ users, setUsers, invites, setInvites, T }) {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [showTest, setShowTest] = useState(false);
+
+  const refresh = async () => {
+    const [pr, ba] = await Promise.all([
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi").order("created_at", { ascending: false }).limit(500),
+      supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
+    ]);
+    if (pr.data) setUsers(pr.data);
+    if (ba.data) setInvites(ba.data);
+  };
+
+  const invite = async () => {
+    const e = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setMsg("Enter a valid email."); return; }
+    setBusy(true); setMsg("");
+    const r = await sendInvite({ email: e, name: name.trim() });
+    setBusy(false);
+    if (r.ok) { setMsg(`Invitation sent to ${e}.`); setEmail(""); setName(""); refresh(); }
+    else setMsg(`Could not invite: ${r.error}`);
+  };
+
+  const resend = async (inv) => {
+    setBusy(true); setMsg("");
+    const r = await sendInvite({ email: inv.email, name: inv.name, resend: true });
+    setBusy(false);
+    setMsg(r.ok ? `Re-sent to ${inv.email}.` : `Could not re-send: ${r.error}`);
+    if (r.ok) refresh();
+  };
+
+  const setInviteStatus = async (inv, status) => {
+    setInvites(rs => rs.map(x => x.id === inv.id ? { ...x, status } : x));
+    await supabase.from("beta_access").update({ status, updated_at: new Date().toISOString() }).eq("id", inv.id);
+    if (inv.profile_id) {
+      await supabase.rpc("admin_set_access", { p_profile: inv.profile_id, p_status: status === "active" ? "active" : status === "revoked" ? "revoked" : "pending" });
+    }
+    refresh();
+  };
+
+  const removeInvite = async (inv) => {
+    if (!confirm(`Remove ${inv.email} from the invite list?`)) return;
+    setInvites(rs => rs.filter(x => x.id !== inv.id));
+    await supabase.from("beta_access").delete().eq("id", inv.id);
+    if (inv.profile_id) await supabase.rpc("admin_set_access", { p_profile: inv.profile_id, p_status: "pending" });
+    refresh();
+  };
+
+  const setAccess = async (u, status) => {
+    setUsers(rs => rs.map(x => x.id === u.id ? { ...x, access_status: status } : x));
+    const { error } = await supabase.rpc("admin_set_access", { p_profile: u.id, p_status: status });
+    if (error) setMsg(`Could not update: ${error.message}`);
+    refresh();
+  };
+
+  const isTest = (u) => !u.email && !u.name && !u.npi && !u.last_seen_at;
+  const shown = users.filter(u => showTest || !isTest(u));
+  const hiddenCount = users.length - shown.length;
+  const inviteByEmail = Object.fromEntries(invites.map(i => [i.email.toLowerCase(), i]));
+
+  const card = { backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8 };
+  const chip = (label, color, onClick, active) => (
+    <button key={label} onClick={onClick} disabled={busy} style={{ fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, cursor: "pointer", border: `1px solid ${active ? color : T.border}`, backgroundColor: active ? color : "transparent", color: active ? "#fff" : T.textDim }}>{label}</button>
+  );
+
+  return (
+    <div>
+      <div style={{ ...card, marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 6 }}>Invite a physician</div>
+        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>They get an email from whit@credentialdomd.com and can sign up with that exact address. Nobody else gets past the sign-in screen.</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)" style={{ flex: "1 1 120px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
+          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@domain.com" type="email" autoCapitalize="none" style={{ flex: "2 1 180px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
+          <button onClick={invite} disabled={busy} style={{ padding: "8px 14px", borderRadius: 8, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{busy ? "..." : "Send invite"}</button>
+        </div>
+        {msg && <div style={{ fontSize: 12, color: msg.startsWith("Could not") ? "#ef4444" : "#10b981", marginTop: 6 }}>{msg}</div>}
+      </div>
+
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>Invited ({invites.length})</div>
+      {invites.length === 0 && <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>No invitations yet.</div>}
+      {invites.map(inv => (
+        <div key={inv.id} style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inv.name || inv.email}</div>
+              <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inv.name ? inv.email : ""}</div>
+              <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
+                invited {timeAgo(inv.invited_at)}{inv.invite_sent_at ? ` · email sent ${timeAgo(inv.invite_sent_at)}` : " · email not sent"}{inv.activated_at ? ` · joined ${timeAgo(inv.activated_at)}` : " · not joined yet"}
+              </div>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(inv.status === "invited" ? "pending" : inv.status), flexShrink: 0 }}>{inv.status}</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            {inv.status !== "revoked" && chip("Re-send email", T.accent, () => resend(inv), false)}
+            {inv.status === "revoked"
+              ? chip("Restore access", "#10b981", () => setInviteStatus(inv, inv.profile_id ? "active" : "invited"), false)
+              : chip("Pause access", "#ef4444", () => setInviteStatus(inv, "revoked"), false)}
+            {chip("Remove", T.textDim, () => removeInvite(inv), false)}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "14px 0 6px" }}>
+        Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty test account{hiddenCount === 1 ? "" : "s"}</button>}
+      </div>
+      {shown.map(u => {
+        const inv = u.email ? inviteByEmail[u.email.toLowerCase()] : null;
+        return (
+          <div key={u.id} style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || u.email || "(no name yet)"}</div>
+                <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name && u.email ? u.email : ""}{u.degree_type ? ` · ${u.degree_type}` : ""}{u.primary_state ? ` · ${u.primary_state}` : ""}</div>
+                <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>joined {timeAgo(u.created_at)} · last seen {timeAgo(u.last_seen_at)}{inv ? "" : u.access_status === "active" ? "" : " · not on invite list"}</div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status), flexShrink: 0 }}>{u.access_status}</span>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+              {u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
+              {u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
+              {u.access_status === "revoked" && chip("Back to pending", T.textDim, () => setAccess(u, "pending"), false)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WaitlistList({ rows, setRows, attempts, setAttempts, T, onInvite }) {
   // Full back-end control: see everyone, add someone by hand (a physician
   // whose network ate the form), remove test rows, and review attempts
   // that never became signups.
@@ -501,6 +682,8 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
     if (!error && data) { setRows(rs => [data, ...rs]); setAddName(""); setAddEmail(""); }
   };
   // Conversion funnel: tap the chip to advance waiting → invited → joined → paying
+  const [inviting, setInviting] = useState(null);
+  const [inviteMsg, setInviteMsg] = useState("");
   const STATUSES = [null, "invited", "joined", "paying"];
   const cycleStatus = async (r) => {
     const next = STATUSES[(STATUSES.indexOf(r.status || null) + 1) % STATUSES.length];
@@ -535,6 +718,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
           <div style={{ fontSize: 11, color: T.textMuted }}>
             on the list · {rows.filter(r => r.status === "invited").length} invited · {rows.filter(r => r.status === "joined").length} joined · {rows.filter(r => r.status === "paying").length} paying
           </div>
+          {inviteMsg && <div style={{ fontSize: 12, marginTop: 4, color: inviteMsg.startsWith("Could not") ? "#ef4444" : "#10b981" }}>{inviteMsg}</div>}
         </div>
         <button onClick={copyAll} style={{
           padding: "8px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
@@ -578,6 +762,17 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T }) {
                   color: r.status === "paying" ? "#fff" : r.status ? T.accent : T.textDim,
                 }}>{r.status || "waiting"}</button>
                 <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
+                {onInvite && r.status !== "joined" && r.status !== "paying" && (
+                  <button disabled={inviting === r.id} onClick={async () => {
+                    if (!window.confirm(`Send ${r.email} a beta invitation? They will be able to sign up with that address.`)) return;
+                    setInviting(r.id); setInviteMsg("");
+                    const res = await onInvite(r);
+                    setInviting(null);
+                    setInviteMsg(res.ok ? `Invitation sent to ${r.email}.` : `Could not invite ${r.email}: ${res.error}`);
+                  }} style={{
+                    padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                  }}>{inviting === r.id ? "..." : r.status === "invited" ? "Re-invite" : "Invite"}</button>
+                )}
                 <button onClick={() => removeLead(r)} style={{
                   padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)",
                   color: T.danger || "#ef4444", fontSize: 11, fontWeight: 800, cursor: "pointer",
