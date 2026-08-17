@@ -1,9 +1,25 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ClerkProvider } from "@clerk/clerk-react";
+import { ClerkProvider, useUser } from "@clerk/clerk-react";
 import App from "./App";
-import ErrorBoundary from "./components/shared/ErrorBoundary";
+import { install as installErrorReporting, ErrorBoundary, setErrorUser } from "./lib/errorReport";
 import "./styles/base.css";
+
+// Global error sink (window.onerror + unhandledrejection -> report-error
+// function -> public.client_errors). Installed before anything renders so a
+// crash inside Clerk or App init is still captured.
+installErrorReporting();
+
+// Attaches the Clerk user id to error reports once auth resolves. Lives
+// inside ClerkProvider so it can use the hook without touching App.
+// eslint-disable-next-line react-refresh/only-export-components
+function ErrorUserSync() {
+  const { isLoaded, user } = useUser();
+  React.useEffect(() => {
+    if (isLoaded) setErrorUser(user?.id || null);
+  }, [isLoaded, user?.id]);
+  return null;
+}
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -64,6 +80,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         signInFallbackRedirectUrl="/app/"
         signUpFallbackRedirectUrl="/app/"
       >
+        <ErrorUserSync />
         <App />
       </ClerkProvider>
     </ErrorBoundary>
