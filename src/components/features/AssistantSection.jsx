@@ -8,6 +8,7 @@ import { buildExport, makeSpreadsheetFile } from "../../utils/exportData";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { supabase } from "../../lib/supabase";
 import Modal from "../shared/Modal";
+import EmailPacketModal from "./EmailPacketModal";
 import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../../utils/storageScope";
 
 // Transcript and archives live on-device under the signed-in user's own key
@@ -23,10 +24,17 @@ const slimForArchive = (msgs) =>
  * own data, hand it documents that fit no existing format (everything
  * lands, unmapped details included), and every suggestion you make goes
  * straight to the developer. Actions only run after you approve them.
+ *
+ * requestContext ({ id, from_addr, subject } or null): the document request
+ * this conversation was opened from (Requests inbox). Send-packet cards then
+ * offer "Reply by email", which answers that request with the documents
+ * attached and marks it replied.
  */
-function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed }) {
+function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null }) {
   const { data, addItem, editItem, allTrackedStates, userIdRef, navigate, theme: T } = useApp();
   const iS = useInputStyle();
+  // Send-packet card handed to the email modal: { msgId, idx, docIds, note }
+  const [emailPacket, setEmailPacket] = useState(null);
   const [msgs, setMsgs] = useState(() => {
     try {
       const saved = lsGetJSON(BASE_KEYS.chat) || [];
@@ -557,12 +565,24 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed }) {
                   </div>
                 )}
                 {a.error && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{a.error}</div>}
+                {a.done && a.emailedTo && (
+                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>Emailed to {a.emailedTo}</div>
+                )}
                 {!a.done && (
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     <button onClick={() => runAction(m.id, i)} style={{
-                      flex: 1, padding: "9px", borderRadius: 9, border: "none",
+                      flex: 1, minWidth: 100, padding: "9px", borderRadius: 9, border: "none",
                       backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
                     }}>Approve</button>
+                    {a.kind === "send_packet" && (
+                      <button
+                        title="Send these documents as email attachments from CredentialDOMD, replies come to you"
+                        onClick={() => setEmailPacket({ msgId: m.id, idx: i, docIds: a.docIds || [], note: a.coverNote || "" })}
+                        style={{
+                          flex: 1, minWidth: 120, padding: "9px", borderRadius: 9, border: `1px solid ${T.accent}`,
+                          backgroundColor: "transparent", color: T.accent, fontSize: 13, fontWeight: 800, cursor: "pointer",
+                        }}>Reply by email</button>
+                    )}
                     <button onClick={() => dismissAction(m.id, i)} style={{
                       padding: "9px 14px", borderRadius: 9, border: `1px solid ${T.border}`,
                       backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
@@ -681,6 +701,18 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed }) {
           </>
         )}
       </Modal>
+
+      {/* Send-packet card → real email with attachments (server-side send) */}
+      <EmailPacketModal
+        open={!!emailPacket}
+        onClose={() => setEmailPacket(null)}
+        request={requestContext}
+        initialDocIds={emailPacket?.docIds}
+        initialNote={emailPacket?.note}
+        onSent={(res) => {
+          if (emailPacket) markAction(emailPacket.msgId, emailPacket.idx, { done: true, emailedTo: res?.to || requestContext?.from_addr || "" });
+        }}
+      />
     </div>
   );
 }
