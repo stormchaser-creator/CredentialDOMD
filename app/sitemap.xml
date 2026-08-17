@@ -312,4 +312,6 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+  <url><loc>https://credentialdomd.com/app/privacy</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://credentialdomd.com/app/terms</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
