@@ -78,9 +78,12 @@ function SettingsSection() {
       settingsUpdates.name = `${result.firstName} ${result.lastName}`;
     }
     if (result.credential) {
-      const cred = result.credential.toUpperCase();
-      if (cred.includes("DO")) settingsUpdates.degreeType = "DO";
-      else if (cred.includes("MD")) settingsUpdates.degreeType = "MD";
+      // NPPES returns "D.O.", "M.D.", "MD, PHD", "DO FACOS" and similar.
+      // Strip the dots, then match whole tokens so "MD" inside another word
+      // (or a stray "DO" substring) cannot flip the degree.
+      const cred = result.credential.toUpperCase().replace(/\./g, "");
+      if (/\bDO\b/.test(cred)) settingsUpdates.degreeType = "DO";
+      else if (/\bMD\b/.test(cred)) settingsUpdates.degreeType = "MD";
     }
     if (result.address?.state) {
       settingsUpdates.primaryState = result.address.state;
@@ -262,9 +265,16 @@ function SettingsSection() {
             </div>
           )}
         </Field>
-        <Field label="Degree" hint="Affects CME categories, board certification types, and requirements">
-          <div style={{ display: "flex", gap: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${T.inputBorder}` }}>
-            {["DO", "MD"].map(d => (
+        <Field label="Degree" hint={s.degreeType
+          ? "Affects CME categories, board certification types, and requirements"
+          : "Choose one. Until you do, CME rules, license types, and your CV leave the degree blank rather than guessing."}>
+          {!s.degreeType && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.warning, marginBottom: 6 }}>
+              MD or DO? Pick your degree so state CME rules and board lists match it.
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${s.degreeType ? T.inputBorder : T.warning}` }}>
+            {["MD", "DO"].map(d => (
               <button key={d} onClick={() => update("degreeType", d)} style={{
                 flex: 1, padding: "12px 0", border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer",
                 backgroundColor: s.degreeType === d ? T.accent : T.input,
@@ -289,10 +299,14 @@ function SettingsSection() {
         <Field label="Languages" hint="e.g. Fluent in Spanish"><input value={s.languages || ""} onChange={e => update("languages", e.target.value)} style={iS} placeholder="Languages beyond English" /></Field>
         <Field label="Professional Summary" hint="Opening paragraph of your CV"><textarea value={s.professionalSummary || ""} onChange={e => update("professionalSummary", e.target.value)} style={{ ...iS, minHeight: 96, resize: "vertical", fontFamily: "inherit" }} placeholder="Board-certified neurosurgeon with…" /></Field>
         <Field label="CV Highlight Line" hint="One bold line under the summary — books, projects, distinctions"><input value={s.cvHighlights || ""} onChange={e => update("cvHighlights", e.target.value)} style={iS} placeholder="e.g. Author of two books" /></Field>
-        <Field label="API Key (Gemini)" hint={s.apiKey ? "Saved \u2713 \u2014 saves automatically as you type. AI scanning is enabled." : "Required for AI document scanning. Get one free at aistudio.google.com/apikey \u2014 saves automatically, no save button needed."}>
+        <Field label="API Key (Gemini)" hint={s.apiKey
+          ? "Saved \u2713 on this device only. AI scanning is on. Keys are not synced to your account; enter it again on any other device you use."
+          : "Required for AI document scanning. Get one free at aistudio.google.com/apikey. Saves as you type, stored on this device only and never synced to your account."}>
           <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza..." />
         </Field>
-        <Field label="API Key (Anthropic, optional)" hint={s.anthropicApiKey ? "Saved \u2713 \u2014 Vera now thinks on Claude Opus. Document scanning still uses the Gemini key." : "Give Vera a stronger mind: with an Anthropic key (console.anthropic.com) she runs on Claude Opus, billed to your key. Leave blank to keep the free Gemini brain."}>
+        <Field label="API Key (Anthropic, optional)" hint={s.anthropicApiKey
+          ? "Saved \u2713 on this device only. Vera now thinks on Claude Opus; document scanning still uses the Gemini key. Not synced, so enter it again on other devices."
+          : "Give Vera a stronger mind: with an Anthropic key (console.anthropic.com) she runs on Claude Opus, billed to your key. Stored on this device only, never synced to your account. Leave blank to keep the free Gemini brain."}>
           <input type="password" value={s.anthropicApiKey || ""} onChange={e => update("anthropicApiKey", e.target.value)} style={iS} placeholder="sk-ant-..." />
         </Field>
       </div>
@@ -316,7 +330,9 @@ function SettingsSection() {
                     <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{st}</span>
                     {isPrimary && <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", padding: "1px 6px", borderRadius: 4, backgroundColor: T.accent, color: "#fff" }}>Primary</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>{req.hours} hrs / {req.cycle}-yr cycle</div>
+                  <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
+                    {s.degreeType || !hasSeparateBoards(st) ? `${req.hours} hrs / ${req.cycle}-yr cycle` : "Separate MD and DO boards. Set your degree above to see hours."}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
                   {!isPrimary && <button onClick={() => makePrimary(st)} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Set Primary</button>}
@@ -471,7 +487,24 @@ function SettingsSection() {
 
       {/* CME Requirements */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, boxShadow: T.shadow1 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 10 }}>CME Requirements ({s.degreeType})</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 10 }}>CME Requirements{s.degreeType ? ` (${s.degreeType})` : ""}</h3>
+
+        {!s.degreeType && (
+          <div style={{ padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 10, marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.warning, marginBottom: 4 }}>Which degree do you hold?</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>
+              Several states run separate MD and DO boards with different hour and category rules. Pick yours and this section fills in.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {["MD", "DO"].map(d => (
+                <button key={d} onClick={() => update("degreeType", d)} style={{
+                  flex: 1, padding: "10px 0", borderRadius: 10, border: "none",
+                  backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>{d === "MD" ? "I am an MD" : "I am a DO"}</button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {s.degreeType === "DO" && (
           <div style={{ padding: "10px 12px", backgroundColor: T.accentGlow, border: `1px solid ${T.accent}`, borderRadius: 10, marginBottom: 10 }}>
@@ -492,7 +525,7 @@ function SettingsSection() {
           <div style={{ fontSize: 12, color: T.textMuted }}>{MATE_ACT.note}</div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {s.degreeType && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {allTrackedStates.map(st => {
             const stEntry = getStateEntry(st, s.degreeType);
             const noCME = stEntry.total === 0;
@@ -536,7 +569,7 @@ function SettingsSection() {
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
     </div>
   );

@@ -237,7 +237,7 @@ export function AppProvider({ children, onNavigate }) {
   }, [data, loaded]);
 
   // ─── Subscription ─────────────────────────────────────────
-  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode } = useSubscription(user ?? null);
+  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta } = useSubscription(user ?? null);
 
   // Theme
   const theme = useMemo(() => THEMES[data.settings.theme] || THEMES.light, [data.settings.theme]);
@@ -318,8 +318,8 @@ export function AppProvider({ children, onNavigate }) {
     user, authChecked,
     signOut: handleSignOut,
     // Subscription
-    plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode,
-  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode]);
+    plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
+  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

@@ -20,7 +20,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
 
   const credText = buildCredentialText(item, section, data.settings);
   const subject = buildEmailSubject(item, section, data.settings);
-  const physician = data.settings?.name ? `${data.settings.name}, ${data.settings.degreeType || "MD"}` : "the physician";
+  const physician = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "the physician";
   const hasDocs = (linkedDocs?.length ?? 0) > 0;
   // A letter-shaped body — recipients are credentialing staff, not the app.
   const full = [

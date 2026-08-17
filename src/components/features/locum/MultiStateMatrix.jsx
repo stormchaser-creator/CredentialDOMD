@@ -42,7 +42,7 @@ function statusLabel(days) {
 
 export default function MultiStateMatrix() {
   const { data, theme: T } = useApp();
-  const degreeType = data.settings?.degreeType || "DO";
+  const degreeType = data.settings?.degreeType || "";
 
   const stateRows = useMemo(() => {
     const licenses = data.licenses || [];
@@ -180,7 +180,7 @@ export default function MultiStateMatrix() {
                   padding: "2px 8px", borderRadius: 10,
                   backgroundColor: T.input, color: T.textMuted,
                 }}>
-                  {degreeType}
+                  {degreeType || "MD or DO?"}
                 </span>
               </div>
 

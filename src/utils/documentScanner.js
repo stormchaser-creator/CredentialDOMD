@@ -118,7 +118,7 @@ ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical Licens
   Fields: type (MUST be one of: "Driver's License", "Passport", "Known Traveler (TSA PreCheck)", "Global Entry", "Visa", "Airline loyalty", "Hotel loyalty", "Rental car membership", "Other"), name (display label, e.g. "CA Driver's License — notarized copy"), provider (issuing state, country, or company), number (document or membership number), expirationDate (YYYY-MM-DD), notes (e.g. "notarized copy, notarized 2026-07-30")
 - "unknown": Cannot determine document type
 
-The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : "an MD"}.
+The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : degreeType === "MD" ? "an MD" : "an MD or DO (degree not yet specified in their profile; classify from the document itself)"}.
 Return JSON: { "documentType": "...", "confidence": "high"|"medium"|"low", "extracted": { ...fields }, "notes": "..." }
 Use YYYY-MM-DD dates. Omit fields that are not visible. Use 2-letter state abbreviations.
 IMPORTANT: the "name" field is a DISPLAY LABEL describing the credential itself (e.g. "CO Medical License", "DEA Registration", "MMR Vaccination", "DO Diploma - PCOM") — NEVER the physician's own name. Do not put a person's name in "name".`;
@@ -185,7 +185,7 @@ export async function analyzePDF(pdfData, degreeType, apiKey) {
               data: extractBase64(pdfData),
             },
           },
-          { text: `Analyze this medical credential document for a ${degreeType}. Return ONLY JSON.` },
+          { text: `Analyze this medical credential document${degreeType ? ` for a ${degreeType}` : ""}. Return ONLY JSON.` },
         ],
       }],
       generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },

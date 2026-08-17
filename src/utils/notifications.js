@@ -89,7 +89,7 @@ export function buildNotificationMessage(data, alerts) {
   const fmtDate = (d) => formatDate(d);
 
   const lines = [];
-  lines.push(`CredentialDOMD Alert for ${name}, ${deg}`);
+  lines.push(`CredentialDOMD Alert for ${name}${deg ? `, ${deg}` : ""}`);
   lines.push(`Report generated: ${fmtDate(now)}`);
   lines.push("\u2550".repeat(27));
 

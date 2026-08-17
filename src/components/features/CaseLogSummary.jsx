@@ -26,7 +26,7 @@ function CaseLogSummary({ cases, year, onYear }) {
           ...last12Cases.reduce((s, c) => ({ cases: s.cases + 1, wRVU: s.wRVU + caseWRVU(c) }), { cases: 0, wRVU: 0 }) }
       : { label: pgyLabelOf(year), detail: `Jul 1 ${String(year).slice(0, 4)} - Jun 30 ${parseInt(String(year).slice(0, 4), 10) + 1}`,
           ...(years.find(y => y.year === year) || { cases: 0, wRVU: 0 }) };
-  const physician = data.settings.name ? `${data.settings.name}, ${data.settings.degreeType || "MD"}` : "Physician";
+  const physician = data.settings.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
 
   const report = async (kind) => {
     if (selected.length === 0) { flash("No cases in that range."); return; }

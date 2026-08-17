@@ -31,8 +31,8 @@ const STATE_NAMES = {
 export function buildCvContent(data, template = "clinical") {
   const s = data.settings || {};
     const sections = [];
-    const deg = s.degreeType || "MD";
-    const fullDegree = deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine";
+    const deg = s.degreeType || "";
+    const fullDegree = deg === "DO" ? "Doctor of Osteopathic Medicine" : deg === "MD" ? "Doctor of Medicine" : "";
     const yr = (d) => (d ? String(d).slice(0, 4) : "");
     // A CV states only the precision it has. A stored Jan-1 date means
     // "that year" — printing "January 1, 2006" would assert a day nobody knew.

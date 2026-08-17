@@ -4,11 +4,16 @@ import { generateCredentialZip, downloadBlob } from "../../utils/credentialExpor
 import { supabase } from "../../lib/supabase";
 
 function CancellationPage() {
-  const { data, theme: T, user, userIdRef, navigate } = useApp();
+  const { data, theme: T, user, userIdRef, navigate, hasSubscription, isFreeBeta } = useApp();
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [error, setError] = useState(null);
+
+  // Nothing to cancel: no live subscription (always the case during the free
+  // beta) and no cancellation on record. Never show a data-wipe countdown to
+  // someone who has never paid and never asked to leave.
+  const nothingToCancel = !data.settings?.cancelledAt && (isFreeBeta || !hasSubscription);
 
   // Calculate days remaining from cancelled_at stored in profile
   const { daysLeft, deletionDate, cancelledAt } = useMemo(() => {
@@ -61,6 +66,34 @@ function CancellationPage() {
 
   const countdownColor = daysLeft <= 2 ? "#ef4444" : daysLeft <= 4 ? "#f59e0b" : "#10b981";
 
+  if (nothingToCancel) {
+    return (
+      <div className="cmd-fade-in" style={{ maxWidth: 440, margin: "0 auto", textAlign: "center", padding: "32px 24px" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: T.text, margin: "0 0 12px" }}>
+          Nothing to cancel
+        </h1>
+        <p style={{ fontSize: 15, color: T.textMuted, lineHeight: 1.6, margin: "0 0 20px" }}>
+          {isFreeBeta
+            ? "You are on the free beta. There is no subscription, no card on file, and nothing scheduled for deletion. When paid plans open you will be told first."
+            : "There is no active subscription on this account, so there is nothing to cancel and nothing scheduled for deletion."}
+        </p>
+        <p style={{ fontSize: 13, color: T.textDim, lineHeight: 1.6, margin: "0 0 24px" }}>
+          Want a copy of your data anyway? Export it any time from More, then Export Data.
+        </p>
+        <button
+          onClick={() => navigate("more", null)}
+          style={{
+            width: "100%", padding: "14px 24px", borderRadius: 14,
+            border: `1px solid ${T.border}`, backgroundColor: T.card,
+            color: T.text, fontSize: 15, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="cmd-fade-in" style={{ maxWidth: 440, margin: "0 auto" }}>
       {/* Header */}
@@ -93,7 +126,7 @@ function CancellationPage() {
           fontSize: 15, color: T.textMuted, lineHeight: 1.6,
           margin: "0 0 8px",
         }}>
-          We understand — and we don't want to leave you hanging.
+          We understand, and we don't want to leave you hanging.
         </p>
         <p style={{
           fontSize: 15, color: T.textMuted, lineHeight: 1.6,

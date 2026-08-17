@@ -1066,7 +1066,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       )) return;
     }
     const s = data.settings || {};
-    const physician = s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician";
+    const physician = s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician";
     const div = "─".repeat(40);
     const num = nextInvoiceNumber(data.invoices);
     const billing = computeBilling(contract, selEntries, true, contractEntries, data.invoices, daySet);
@@ -1173,7 +1173,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const s = data.settings || {};
     return {
       number: preview.number,
-      physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
+      physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
       npi: s.npi, email: s.email,
       facility: contract?.facility, agency: contract?.agency,
       location: contract?.location, billTo: contract?.billTo,

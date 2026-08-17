@@ -18,24 +18,27 @@ import { useUser } from "@clerk/clerk-react";
 import { supabase } from "../lib/supabase";
 import { TIERS, getTier } from "../utils/pricingEngine";
 import { tierIncludesFeature, FEATURES } from "../utils/featureMap";
+import { isAdminUser } from "../lib/admin";
+import { isFreeBetaActive } from "../constants/beta";
 
 const VALID_TIER_IDS = new Set(Object.keys(TIERS));
 
 // Dev mode: stripe not yet wired, allow tier switching via localStorage.
 const MOCK_STORAGE_KEY = "credentialdomd-mock-tier";
 const PREVIEW_STORAGE_KEY = "credentialdomd-preview-tier";
-// TEMPORARY pre-launch unlock: every signed-in user gets the full Locum
-// feature set while the app is being polished (single-user phase).
-// Set to false before public launch so tiers gate normally again.
-export const UNLOCK_ALL_FEATURES = true;
+// Free beta: every signed-in user gets the full Locum feature set while
+// billing is off. The switch lives in src/constants/beta.js (FREE_BETA);
+// this constant is kept as a back-compat alias for older call sites.
+export const UNLOCK_ALL_FEATURES = isFreeBetaActive();
 
 export const IS_DEV_MODE =
   import.meta.env.DEV && !import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 
-// Founder-only preview override. Visit /app/?preview_tier=locum to flip the
+// Admin-only preview override. Visit /app/?preview_tier=locum to flip the
 // active tier in localStorage so you can test tier-locked features (Locum
 // dashboard, etc.) before Stripe is wired. Visit /app/?preview_tier=clear
-// to reset. Persists across reloads until cleared.
+// to reset. Persists across reloads until cleared. Ignored (and never
+// written to localStorage) unless the signed-in user is in ADMIN_EMAILS.
 function isValidTier(t) {
   return typeof t === "string" && VALID_TIER_IDS.has(t);
 }
@@ -57,11 +60,14 @@ function readPreviewTierFromURL() {
   return null;
 }
 
-function getPreviewTier() {
+function getPreviewTier(user) {
+  if (typeof window === "undefined" || !isAdminUser(user)) return null;
   const fromUrl = readPreviewTierFromURL();
   if (fromUrl) return fromUrl;
-  try { return localStorage.getItem(PREVIEW_STORAGE_KEY) || null; }
-  catch { return null; }
+  try {
+    const stored = localStorage.getItem(PREVIEW_STORAGE_KEY);
+    return isValidTier(stored) ? stored : null;
+  } catch { return null; }
 }
 
 function getMockTier() {
@@ -77,14 +83,19 @@ export function useSubscription(userOverride) {
   const user = userOverride
     ?? (isSignedIn ? { id: clerkUser?.id, email: clerkUser?.primaryEmailAddress?.emailAddress } : null);
 
-  // Founder-only preview override (URL or localStorage). Beats Stripe-resolved tier.
-  const previewTier = typeof window !== "undefined" ? getPreviewTier() : null;
+  // Admin-only preview override (URL or localStorage). Beats Stripe-resolved tier.
+  const previewTier = getPreviewTier(user);
   const [tier, setTier] = useState(() => {
     if (previewTier) return previewTier;
     if (IS_DEV_MODE) return getMockTier();
     return "free";
   });
   const [loading, setLoading] = useState(!IS_DEV_MODE && !previewTier);
+  // True only when the subscriptions table holds a live (non-canceled) paid
+  // tier for this user. Independent of the beta unlock and of preview
+  // overrides, so billing UI (Manage Billing, Cancel Subscription) can key
+  // off a real subscription rather than the effective feature tier.
+  const [hasSubscription, setHasSubscription] = useState(false);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [foundingLockEndsAt, setFoundingLockEndsAt] = useState(null);
@@ -114,12 +125,13 @@ export function useSubscription(userOverride) {
   // Load real subscription state from Supabase
   useEffect(() => {
     if (IS_DEV_MODE) { setLoading(false); return; }
-    // If founder-only preview override is active, don't overwrite the tier
+    // If the admin preview override is active, don't overwrite the tier
     // with whatever Supabase returns. Used to test tier-locked features
     // before Stripe is wired.
-    if (previewTier) { setLoading(false); return; }
+    if (previewTier) { setTier(previewTier); setLoading(false); return; }
     if (!user || !supabase) {
       setTier("free");
+      setHasSubscription(false);
       setLoading(false);
       return;
     }
@@ -134,8 +146,10 @@ export function useSubscription(userOverride) {
         const incomingTier = data?.tier;
         if (isValidTier(incomingTier) && data.status !== "canceled") {
           setTier(incomingTier);
+          setHasSubscription(incomingTier !== "free" && incomingTier !== "resident");
         } else {
           setTier("free");
+          setHasSubscription(false);
         }
         setPeriodEnd(data?.period_end ?? null);
         setTrialEndsAt(data?.trial_ends_at ?? null);
@@ -162,7 +176,9 @@ export function useSubscription(userOverride) {
               practice: "practice",
             };
             const mapped = legacyMap[data?.plan_type];
-            setTier(isValidTier(mapped) ? mapped : "free");
+            const legacyLive = isValidTier(mapped) && data?.status !== "canceled";
+            setTier(legacyLive ? mapped : "free");
+            setHasSubscription(legacyLive);
             setPeriodEnd(data?.period_end ?? null);
             setLoading(false);
           });
@@ -175,7 +191,7 @@ export function useSubscription(userOverride) {
       .eq("user_id", user.id)
       .then(({ count }) => setCredentialUsage(count ?? 0))
       .catch(() => {});
-  }, [user]);
+  }, [user, previewTier]);
 
   // Mock tier setter (dev mode only)
   const setMockTier = useCallback((newTier) => {
@@ -198,6 +214,9 @@ export function useSubscription(userOverride) {
       setMockTier(tierId);
       return { mock: true, tier: tierId };
     }
+
+    // Billing is off during the free beta: nothing to buy yet.
+    if (isFreeBetaActive()) return { ok: false, error: "free_beta" };
 
     if (!supabase) return;
 
@@ -234,16 +253,20 @@ export function useSubscription(userOverride) {
   const manage = useCallback(async () => {
     if (IS_DEV_MODE) return;
     if (!supabase) return;
+    // No Stripe customer exists without a real subscription; the portal
+    // would only 401. Callers should hide the button when !hasSubscription.
+    if (!hasSubscription) return;
     const res = await supabase.functions.invoke("customer-portal", {
       body: { returnUrl: window.location.origin + "/" },
     });
     if (res.data?.url) window.location.href = res.data.url;
-  }, []);
+  }, [hasSubscription]);
 
   // Derived state.
-  // While UNLOCK_ALL_FEATURES is on, everyone is treated as Locum (the full
+  // While the free beta is on, everyone is treated as Locum (the full
   // individual feature set) regardless of what the subscriptions table says.
-  const effectiveTier = UNLOCK_ALL_FEATURES ? "locum" : tier;
+  const freeBeta = isFreeBetaActive();
+  const effectiveTier = freeBeta ? "locum" : tier;
   const tierObject = getTier(effectiveTier);
   const isPaid = effectiveTier !== "free" && effectiveTier !== "resident";
   const isFreeAtLimit = effectiveTier === "free" && credentialUsage >= (tierObject?.credentialLimit ?? Infinity);
@@ -275,6 +298,12 @@ export function useSubscription(userOverride) {
     isFreeAtLimit,
     isTrialing,
     isFoundingLocked,
+    // Billing truth, independent of the beta unlock: is there a live paid
+    // subscription row for this user? Drives Manage Billing / Cancel.
+    hasSubscription,
+    // Free-beta switch (src/constants/beta.js). While true, plan labels read
+    // "Free beta" and every Stripe surface is hidden.
+    isFreeBeta: freeBeta,
 
     // Dates
     periodEnd,

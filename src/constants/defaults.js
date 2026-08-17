@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS = {
   reminderLeadDays: 90,
   name: "",
   npi: "",
-  degreeType: "DO",
+  degreeType: "", // unset until the physician chooses MD or DO; never assume
   specialties: [],
   email: "",
   phone: "",

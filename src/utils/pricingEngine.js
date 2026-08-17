@@ -239,7 +239,6 @@ export const TIERS = {
       "Everything in Group",
       "SSO and SCIM",
       "Audit log export",
-      "Custom DPA and BAA",
       "Uptime SLA",
       "Custom integrations",
     ],
