@@ -1,0 +1,13 @@
+# Reference config for the credentialdomd-api Worker. The production deploy
+# path is deploy.sh (Cloudflare API upload with the keychain token); this
+# file exists so `npx wrangler deploy` from this directory also works if
+# wrangler is ever installed and logged in.
+name = "credentialdomd-api"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+account_id = "a49d649a94a2c5f45a061cecbad6ace4"
+workers_dev = false
+
+[[routes]]
+pattern = "credentialdomd.com/api/*"
+zone_id = "682edbf58b5b13fce0a6276768672152"
