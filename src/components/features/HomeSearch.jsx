@@ -72,6 +72,20 @@ function itemText(item) {
  * searchRecords(data, q, { limitPerSection }) -> [{ sec, hits:[{id,label,sub}], total }]
  * Shared by the Home search box and Vera's open_record action.
  */
+// Per-record search text, computed once per object (records are replaced,
+// not mutated, on edit, so a WeakMap keyed by the object stays correct).
+// Without this a user with thousands of case logs paid describeItem() for
+// every record on every keystroke.
+const HAY = new WeakMap();
+function hayFor(it, sec, ownerName) {
+  let h = HAY.get(it);
+  if (h) return h;
+  const label = (() => { try { return describeItem(it, ownerName, sec.key); } catch { return it.name || it.title || ""; } })();
+  h = { label, hay: `${label} ${acronyms(label).join(" ")} ${itemText(it)}`.toLowerCase() };
+  HAY.set(it, h);
+  return h;
+}
+
 export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
   const toks = tokens(q);
   if (!toks.length) return [];
@@ -80,9 +94,8 @@ export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
     const items = data[sec.key] || [];
     const hits = [];
     for (const it of items) {
-      if (!it || it.deleted) continue;
-      const label = (() => { try { return describeItem(it, data.settings?.name, sec.key); } catch { return it.name || it.title || ""; } })();
-      const hay = `${label} ${acronyms(label).join(" ")} ${itemText(it)}`.toLowerCase();
+      if (!it || typeof it !== "object" || it.deleted) continue;
+      const { label, hay } = hayFor(it, sec, data.settings?.name);
       if (toks.every(t => hay.includes(t))) {
         const sub = [it.state, it.facility, it.provider, it.expirationDate && `exp ${it.expirationDate}`, it.date, it.total != null && `$${it.total}`]
           .filter(Boolean).join(" · ");
@@ -122,7 +135,11 @@ export default function HomeSearch({ onOpen, onAskVera }) {
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("touchstart", onDoc); };
   }, [focus]);
 
-  const results = useMemo(() => searchRecords(data, q), [q, data]);
+  // Debounce the scoring, not the typing: the box stays responsive while
+  // the record scan runs 180 ms after the last keystroke.
+  const [dq, setDq] = useState("");
+  useEffect(() => { const t = setTimeout(() => setDq(q), 180); return () => clearTimeout(t); }, [q]);
+  const results = useMemo(() => searchRecords(data, dq), [dq, data]);
 
   const show = focus && q.trim().length >= 2;
   const totalHits = results.reduce((n, g) => n + g.hits.length, 0);
