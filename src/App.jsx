@@ -435,6 +435,54 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <span style={{ color: T.accent, fontWeight: 800 }}>{"\u203a"}</span>
         </div>
       )}
+      {/* First-run checklist — the road from empty app to protected
+          credentials, built around the NPI import wow moment. First thing a
+          new user sees; vanishes forever once complete or dismissed. */}
+      {(() => {
+        if (data.settings.onboardingDone) return null;
+        const steps = [
+          { key: "npi", label: "Enter your NPI", detail: "Your licenses import automatically from the NPI registry", done: !!data.settings.npi, go: () => { setTab("more"); setSubPage("settings"); } },
+          { key: "lic", label: "Confirm your licenses", detail: "Tap Import from NPI, then add DEA and board certs", done: (data.licenses || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
+          { key: "doc", label: "Upload one document", detail: "A license PDF or a photo — packets build themselves from these", done: (data.documents || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
+          { key: "alert", label: "Turn on expiration alerts", detail: "The whole point: never let anything lapse silently", done: !!(data.settings.notifyEmail || data.settings.notifyBrowser || data.settings.notifyText), go: () => { setTab("more"); setSubPage("settings"); } },
+          { key: "ai", label: "Turn on AI (2 minutes)", detail: "Paste a free Google AI Studio key in Settings. It stays on this device. Unlocks scanning, dictation, and the RVU coder", done: !!(data.settings.apiKey || data.settings.anthropicApiKey), go: () => { setTab("more"); setSubPage("settings"); } },
+        ];
+        const remaining = steps.filter(st => !st.done);
+        if (!remaining.length) return null;
+        const doneCount = steps.length - remaining.length;
+        return (
+          <div style={{ marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <h3 style={{ fontSize: 15, fontWeight: 800, color: T.text, margin: 0 }}>Get set up · {doneCount}/{steps.length}</h3>
+              <button onClick={() => updateSettings({ onboardingDone: true })} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>dismiss</button>
+            </div>
+            <div style={{ display: "flex", gap: 4, margin: "8px 0 10px" }}>
+              {steps.map(st => (
+                <div key={st.key} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: st.done ? T.accent : T.border }} />
+              ))}
+            </div>
+            {steps.map(st => (
+              <div key={st.key} onClick={st.done ? undefined : st.go} style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "9px 0",
+                borderBottom: `1px solid ${T.border}`, cursor: st.done ? "default" : "pointer",
+                opacity: st.done ? 0.55 : 1,
+              }}>
+                <span style={{
+                  width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                  backgroundColor: st.done ? T.accent : "transparent", border: `2px solid ${st.done ? T.accent : T.border}`,
+                  color: "#fff", fontSize: 13, fontWeight: 800,
+                }}>{st.done ? "✓" : ""}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, textDecoration: st.done ? "line-through" : "none" }}>{st.label}</div>
+                  {!st.done && <div style={{ fontSize: 12, color: T.textMuted }}>{st.detail}</div>}
+                </div>
+                {!st.done && <span style={{ marginLeft: "auto", color: T.accent, fontWeight: 800 }}>›</span>}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Hero: Compliance Ring + Stats */}
       {allCreds.length > 0 ? (
         <div style={{
@@ -887,54 +935,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           );
         })()}
       </Modal>
-
-      {/* First-run checklist — the road from empty app to protected
-          credentials, built around the NPI import wow moment. Vanishes
-          forever once complete or dismissed. */}
-      {(() => {
-        if (data.settings.onboardingDone) return null;
-        const steps = [
-          { key: "npi", label: "Enter your NPI", detail: "Your licenses import automatically from the NPI registry", done: !!data.settings.npi, go: () => { setTab("more"); setSubPage("settings"); } },
-          { key: "lic", label: "Confirm your licenses", detail: "Tap Import from NPI, then add DEA and board certs", done: (data.licenses || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
-          { key: "doc", label: "Upload one document", detail: "A license PDF or a photo — packets build themselves from these", done: (data.documents || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
-          { key: "alert", label: "Turn on expiration alerts", detail: "The whole point: never let anything lapse silently", done: !!(data.settings.notifyEmail || data.settings.notifyBrowser || data.settings.notifyText), go: () => { setTab("more"); setSubPage("settings"); } },
-          { key: "ai", label: "Turn on AI (2 minutes)", detail: "Paste a free Google AI Studio key in Settings. It stays on this device. Unlocks scanning, dictation, and the RVU coder", done: !!(data.settings.apiKey || data.settings.anthropicApiKey), go: () => { setTab("more"); setSubPage("settings"); } },
-        ];
-        const remaining = steps.filter(st => !st.done);
-        if (!remaining.length) return null;
-        const doneCount = steps.length - remaining.length;
-        return (
-          <div style={{ marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <h3 style={{ fontSize: 15, fontWeight: 800, color: T.text, margin: 0 }}>Get set up · {doneCount}/{steps.length}</h3>
-              <button onClick={() => updateSettings({ onboardingDone: true })} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>dismiss</button>
-            </div>
-            <div style={{ display: "flex", gap: 4, margin: "8px 0 10px" }}>
-              {steps.map(st => (
-                <div key={st.key} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: st.done ? T.accent : T.border }} />
-              ))}
-            </div>
-            {steps.map(st => (
-              <div key={st.key} onClick={st.done ? undefined : st.go} style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "9px 0",
-                borderBottom: `1px solid ${T.border}`, cursor: st.done ? "default" : "pointer",
-                opacity: st.done ? 0.55 : 1,
-              }}>
-                <span style={{
-                  width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                  backgroundColor: st.done ? T.accent : "transparent", border: `2px solid ${st.done ? T.accent : T.border}`,
-                  color: "#fff", fontSize: 13, fontWeight: 800,
-                }}>{st.done ? "✓" : ""}</span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, textDecoration: st.done ? "line-through" : "none" }}>{st.label}</div>
-                  {!st.done && <div style={{ fontSize: 12, color: T.textMuted }}>{st.detail}</div>}
-                </div>
-                {!st.done && <span style={{ marginLeft: "auto", color: T.accent, fontWeight: 800 }}>›</span>}
-              </div>
-            ))}
-          </div>
-        );
-      })()}
 
       {/* Surgical cases captured by RVU logging that still need role/category */}
       {(() => {
