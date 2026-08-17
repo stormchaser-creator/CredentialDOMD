@@ -215,18 +215,18 @@ PRICE_FOUNDING_A=$(create_price "$PROD_FOUNDING" 12000 year "founding_annual_usd
   "tier=founding,display_price=\$120,billing=annual,lock_months=24,post_lock_lookup_key=solo_annual_usd_v1")
 
 # Solo (14-day trial)
-PRICE_SOLO_M=$(create_price "$PROD_SOLO" 1900 month "solo_monthly_usd_v1" \
+PRICE_SOLO_M=$(create_price "$PROD_SOLO" 1500 month "solo_monthly_usd_v1" \
   "Solo Monthly" "tier=solo,display_price=\$19,billing=monthly" 14)
 
-PRICE_SOLO_A=$(create_price "$PROD_SOLO" 19000 year "solo_annual_usd_v1" \
-  "Solo Annual" "tier=solo,display_price=\$190,billing=annual,monthly_equivalent=1583" 14)
+PRICE_SOLO_A=$(create_price "$PROD_SOLO" 14900 year "solo_annual_usd_v1" \
+  "Solo Annual" "tier=solo,display_price=\$149,billing=annual,monthly_equivalent=1242" 14)
 
 # Locum (14-day trial)
-PRICE_LOCUM_M=$(create_price "$PROD_LOCUM" 2900 month "locum_monthly_usd_v1" \
+PRICE_LOCUM_M=$(create_price "$PROD_LOCUM" 2500 month "locum_monthly_usd_v1" \
   "Locum Monthly" "tier=locum,display_price=\$29,billing=monthly" 14)
 
-PRICE_LOCUM_A=$(create_price "$PROD_LOCUM" 29000 year "locum_annual_usd_v1" \
-  "Locum Annual" "tier=locum,display_price=\$290,billing=annual,monthly_equivalent=2416" 14)
+PRICE_LOCUM_A=$(create_price "$PROD_LOCUM" 24500 year "locum_annual_usd_v1" \
+  "Locum Annual" "tier=locum,display_price=\$245,billing=annual,monthly_equivalent=2042" 14)
 
 # Practice / Group (per-seat, annual only)
 PRICE_PRACTICE=$(create_price "$PROD_PRACTICE" 39000 year "practice_annual_per_seat_usd_v1" \

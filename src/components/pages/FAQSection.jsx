@@ -16,19 +16,19 @@ const FAQ_DATA = [
       },
       {
         q: "Why is there a free tier for residents?",
-        a: "Because residents earn $60K and already pay for board prep. Once you graduate, the system flips you to Solo at $19/mo automatically. You can cancel anytime.",
+        a: "Because residents earn $60K and already pay for board prep. Once you graduate, the system flips you to Core at $15/mo (or $149 a year) automatically, 90 days after graduation. You can cancel anytime.",
       },
       {
         q: "Can I deduct CredentialDoMD on my taxes?",
-        a: "If you are a 1099 locum or self-employed physician, yes. We export an itemized deduction memo on the Locum tier.",
+        a: "If you are a 1099 locum or self-employed physician, yes. The Locum add-on keeps a deduction ledger and exports an itemized deduction memo for your CPA.",
       },
       {
         q: "What is the Founding Physician tier?",
-        a: "The first 100 physicians lock in $12/mo for 24 months. After 24 months, you convert to Solo at the standard rate. The slots are limited and counted live.",
+        a: "The first 100 physicians lock in $12/mo for 24 months. After 24 months, you convert to Core at the standard rate. The slots are limited and counted live.",
       },
       {
-        q: "Why is Solo $19/mo and not $9?",
-        a: "Because a tool that touches your license has to be reliable, secure, and supported. We priced it the same as Doximity Dialer Pro and AMBOSS clinician.",
+        q: "How is Core priced against other trackers?",
+        a: "Core is $149 a year or $15 month to month. Mocingbird starts at $199 a year, annual only, and CE Broker's paid tiers run $40 to $125. Core costs less than Mocingbird and adds MOC tables, AI reading of your certificates, packets, a CV builder, an assistant, and offline use. Locums billing is a $96 a year add-on on top of Core ($25 a month, $245 a year together).",
       },
       {
         q: "How does Practice billing work?",

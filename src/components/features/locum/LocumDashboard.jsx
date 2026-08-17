@@ -108,7 +108,7 @@ function UpgradeCard({ T }) {
           Locum tier required
         </div>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
-          The Locum tier ($29/mo) unlocks the multi-state license matrix, hospital
+          The Locum add-on ($10/mo on top of Core) unlocks the multi-state license matrix, hospital
           rotation tracker, and 1099 deduction memo export. Built for physicians
           who hold 2+ state licenses and work locum or rotating assignments.
         </p>

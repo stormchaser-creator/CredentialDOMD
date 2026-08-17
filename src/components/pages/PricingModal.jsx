@@ -127,7 +127,7 @@ export default function PricingModal({ open, onClose }) {
           <p style={{ fontSize: 13, color: T.textMuted, margin: "0 0 14px" }}>
             {betaMode
               ? `${FREE_BETA_BLURB} Paid plans open after the beta; the ladder below is what is coming.`
-              : "14-day free trial on Solo and Locum. No credit card required."}
+              : "14-day free trial on Core and Core + Locum. No credit card required."}
           </p>
 
           {/* Annual / Monthly toggle — annual pre-selected */}
