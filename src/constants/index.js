@@ -1,11 +1,11 @@
 export { STATES, NO_CME_STATES } from "./states";
 export { CME_TOPICS } from "./cmeTopics";
 export {
-  STATE_REQS, DEFAULT_STATE_REQ,
+  STATE_REQS, STATE_REQS_META, DEFAULT_STATE_REQ,
   getStateReq, getStateEntry, hasSeparateBoards,
 } from "./stateRequirements";
 export {
-  MATE_ACT, AOA_NATIONAL, ABMS_MOC, AOA_OCC,
+  MATE_ACT, AOA_NATIONAL, ABMS_MOC, AOA_OCC, BOARD_REQS_META,
   ABMS_SUBSPECIALTIES, AOA_SUBSPECIALTIES, UCNS_CERTS, ABPS_CERTS,
 } from "./boardRequirements";
 export {

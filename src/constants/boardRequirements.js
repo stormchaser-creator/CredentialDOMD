@@ -5,6 +5,10 @@
 // including primary boards and subspecialties.
 // ============================================================================
 
+// Provenance: the database was compiled Feb 2026; entries checked against the
+// board's own site since then carry `verified: "YYYY-MM"` (see ABNS, AOBS).
+export const BOARD_REQS_META = { databaseDate: "2026-02", lastReviewed: "2026-07" };
+
 // ----------------------------------------------------------------------------
 // 1. MATE Act Requirement
 // ----------------------------------------------------------------------------
@@ -100,6 +104,7 @@ export const ABMS_MOC = {
     unit: "AMA PRA Cat 1/year",
     assessment: "Annual by Sept 30: Adaptive Learning Tool (General & Emergency, 80% within 2 attempts for CME) + CC Pledge & standing questionnaire + privileges attestation + IHHC quality-improvement attestation. License verified by ABNS directly.",
     notes: "20 Cat 1/yr per the ABMS directory (ABNS rules don't restate an hour figure). 2025 redesign REMOVED the Chief of Staff survey and the standalone patient-safety module. Verified 2026-07 vs abns.org.",
+    verified: "2026-07",
   },
   ABNM: {
     name: "Nuclear Medicine",
@@ -1625,7 +1630,8 @@ export const AOA_OCC = {
     // PRA Category 1 credit counts fully toward the total.
     timeLimited: { hours: 60, cat1: 0, specReq: "" },
     nonTimeLimited: { hours: 120, cat1: 0, specReq: "" },
-    occChecklist: "Annual: unrestricted-license proof + 15-question open-book Longitudinal Assessment (80% = 12/15, two attempts, $225/yr — completing it earns 5.0 Cat 1-B). Every 3 years: at least one QI/practice-performance attestation via the AOA portal.",
+    occChecklist: "Annual: unrestricted-license proof + 15-question open-book Longitudinal Assessment (80% = 12/15, two attempts, $225/yr; completing it earns 5.0 Cat 1-B). Every 3 years: at least one QI/practice-performance attestation via the AOA portal.",
+    verified: "2026-07",
   },
 };
 
