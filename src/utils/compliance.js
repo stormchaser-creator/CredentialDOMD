@@ -37,7 +37,11 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const cycleYears = entry?.cycle || 2;
 
   // ── Renewal window ──
-  const licenseExpiration = opts.licenseExpiration ? new Date(opts.licenseExpiration) : null;
+  // "YYYY-MM-DD" parses as UTC midnight; add a local time so the window
+  // prints on the actual expiration day in US time zones.
+  const licenseExpiration = opts.licenseExpiration
+    ? new Date(String(opts.licenseExpiration).length === 10 ? opts.licenseExpiration + "T00:00:00" : opts.licenseExpiration)
+    : null;
   const hasAnchor = licenseExpiration && !isNaN(licenseExpiration);
   const windowEnd = hasAnchor ? licenseExpiration : new Date();
   const windowStart = new Date(windowEnd);
