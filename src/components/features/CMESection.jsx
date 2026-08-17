@@ -10,8 +10,10 @@ import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getCMECategories } from "../../constants/credentialTypes";
 import { AOA_NATIONAL } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
+import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
 import { complianceFor } from "../../utils/compliance";
+import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf } from "../../utils/cmeTranscriptPdf";
 
 function CMESection({ onShare }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate } = useApp();
@@ -20,6 +22,9 @@ function CMESection({ onShare }) {
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({});
   const [showCompliance, setShowCompliance] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [transcriptBusy, setTranscriptBusy] = useState(false);
+  const [note, setNote] = useState("");
 
   const deg = data.settings.degreeType;
   const categories = getCMECategories(deg);
@@ -61,11 +66,77 @@ function CMESection({ onShare }) {
 
   const totalHours = useMemo(() => data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0), [data.cme]);
 
+  // ── Transcript PDF: one per state (or board), built from the same
+  //    compliance engine the cards use, with linked certificates embedded.
+  const flash = useCallback((msg) => { setNote(msg); setTimeout(() => setNote(""), 6000); }, []);
+
+  const transcriptOptions = useMemo(() => {
+    if (!showTranscript) return { states: [], boards: [] };
+    return {
+      states: allTrackedStates.map(st => ({ st, model: stateTranscriptModel(data, st) })),
+      boards: boardTranscriptOptions(data).map(b => ({ board: b, model: boardTranscriptModel(data, b) })),
+    };
+  }, [showTranscript, allTrackedStates, data]);
+
+  const runTranscript = useCallback(async (model) => {
+    if (!model || model.error) { flash(model?.error || "Nothing to put in a transcript yet."); return; }
+    setTranscriptBusy(true);
+    try {
+      const result = await shareTranscriptPdf(model);
+      if (result === "download") flash(`${model.fileName} downloaded.`);
+      else if (result === "share") flash("Transcript PDF is in the share sheet.");
+      if (result) setShowTranscript(false);
+    } catch (err) {
+      flash(`Couldn't build the transcript: ${err.message}`);
+    } finally {
+      setTranscriptBusy(false);
+    }
+  }, [flash]);
+
+  const openTranscript = useCallback(() => {
+    const boards = boardTranscriptOptions(data);
+    if (allTrackedStates.length === 0 && boards.length === 0) {
+      flash("Add a state medical license or set your primary state in Settings, then come back for a transcript.");
+      return;
+    }
+    // One state, no boards: no picker needed, go straight to the PDF.
+    if (allTrackedStates.length === 1 && boards.length === 0) {
+      runTranscript(stateTranscriptModel(data, allTrackedStates[0]));
+      return;
+    }
+    setShowTranscript(true);
+  }, [data, allTrackedStates, flash, runTranscript]);
+
+  const optionSummary = (model) => {
+    if (model.error) return model.error;
+    const certs = model.certs.length;
+    const embeddable = model.certs.filter(c => c.mode === "image" || c.mode === "convert").length;
+    return `${model.rows.length} entr${model.rows.length === 1 ? "y" : "ies"} in window, ${certs} certificate${certs === 1 ? "" : "s"}${certs && embeddable < certs ? ` (${certs - embeddable} listed, not embedded)` : ""}`;
+  };
+
+  const optionButton = (key, title, model, meta) => (
+    <button key={key} onClick={() => runTranscript(model)} disabled={transcriptBusy} style={{
+      display: "block", width: "100%", textAlign: "left", padding: "10px 12px", marginBottom: 6,
+      borderRadius: 10, border: `1px solid ${model.error ? T.border : T.accent}`,
+      backgroundColor: model.error ? "transparent" : T.accentGlow, cursor: transcriptBusy ? "wait" : "pointer",
+      opacity: transcriptBusy ? 0.6 : 1,
+    }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: model.error ? T.textMuted : T.text }}>{title}</div>
+      {meta && <div style={{ fontSize: 12, color: T.textDim, marginTop: 1 }}>{meta}</div>}
+      <div style={{ fontSize: 12, color: model.error ? T.warning : T.textDim, marginTop: 2 }}>{optionSummary(model)}</div>
+    </button>
+  );
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>CME Credits</h2>
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={openTranscript} disabled={transcriptBusy} title="Board-ready CME transcript PDF for a state renewal or board" style={{
+            padding: "8px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
+            backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 600,
+            cursor: transcriptBusy ? "wait" : "pointer", opacity: transcriptBusy ? 0.6 : 1,
+          }}>{transcriptBusy ? "Building PDF" : "Transcript PDF"}</button>
           <button onClick={() => setShowCompliance(!showCompliance)} style={{
             padding: "8px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
             backgroundColor: showCompliance ? T.accentGlow : "transparent",
@@ -79,9 +150,41 @@ function CMESection({ onShare }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 13, color: T.textDim, marginBottom: 16 }}>
+      <div style={{ fontSize: 13, color: T.textDim, marginBottom: note ? 6 : 16 }}>
         {data.cme.length} entries &middot; {totalHours} total hours
       </div>
+      {note && (
+        <div style={{ fontSize: 13, color: T.accent, marginBottom: 12, padding: "8px 12px", borderRadius: 10, backgroundColor: T.accentGlow }}>{note}</div>
+      )}
+
+      {/* Transcript picker: which state renewal or board the PDF is for */}
+      <Modal open={showTranscript} onClose={() => setShowTranscript(false)} title="Transcript PDF" width={460}>
+        <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12 }}>
+          One PDF per renewal: physician and license details, the cycle window, each requirement with hours earned, every CME entry in the window, and the linked certificates as pages. Boards audit renewals; hospital reappointment asks for the same summary.
+        </div>
+        {transcriptOptions.states.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", marginBottom: 6 }}>State renewal</div>
+            {transcriptOptions.states.map(({ st, model }) => optionButton(
+              `state:${st}`,
+              `${STATE_NAMES[st] || st} (${st})${st === data.settings.primaryState ? ", primary" : ""}`,
+              model,
+              model.error ? null : `${formatDate(model.window.start)} to ${formatDate(model.window.end)}`,
+            ))}
+          </div>
+        )}
+        {transcriptOptions.boards.length > 0 && (
+          <div style={{ marginBottom: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, textTransform: "uppercase", marginBottom: 6 }}>Board continuing certification</div>
+            {transcriptOptions.boards.map(({ board, model }) => optionButton(
+              `board:${board.id}`,
+              String(board.label || board.name).replace(/\s*—\s*/g, ", "),
+              model,
+              model.error ? null : `${formatDate(board.from)} to ${formatDate(board.to)}`,
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {showCompliance && (
         <div style={{ marginBottom: 16 }}>
