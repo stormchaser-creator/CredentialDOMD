@@ -5,11 +5,15 @@
  * subscription itself. Manual + imported items live in data.deductibles.
  */
 
+import { isFreeBetaActive } from "../constants/beta";
+
 export function autoDeductions(data, plan, year) {
   const items = [];
   const y = String(year);
 
-  const subAmount = plan === "locum" ? 348 : plan === "solo" ? 228 : 0;
+  // No one pays during the free beta, so no subscription line: the ledger
+  // must not deduct $348 nobody spent. `plan` is the beta-unlocked tier.
+  const subAmount = isFreeBetaActive() ? 0 : plan === "locum" ? 348 : plan === "solo" ? 228 : 0;
   if (subAmount > 0) {
     items.push({
       source: "auto", date: `${y}-01-01`,

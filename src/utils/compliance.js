@@ -1,4 +1,4 @@
-import { getStateEntry } from "../constants/stateRequirements";
+import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 
 /**
  * CME compliance engine — cycle-windowed.
@@ -109,6 +109,10 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     fullyCompliant: totalMet && cat1Met && allTopicsMet && (!mate || mate.met),
     notes: entry?.notes,
     noGeneralReq,
+    // True when the physician has not chosen MD or DO and this state runs
+    // separate boards: the numbers above use the MD rule set as a stand-in.
+    // Callers should surface a "set your degree" prompt rather than assert.
+    degreeUnknown: !degreeType && !!hasSeparateBoards(state),
     // Window info for display + transcripts
     windowStart,
     windowEnd,

@@ -39,7 +39,7 @@ function CVGenerator() {
         if (section.phone) lines.push(`  ${section.phone}`);
         if (section.specialties.length > 0) {
           const names = section.specialties.map(id => id.split(":").pop());
-          lines.push(`  ${section.fullDegree} \u2014 ${names.join(", ")}`);
+          lines.push(`  ${section.fullDegree ? section.fullDegree + " \u2014 " : ""}${names.join(", ")}`);
         }
         lines.push(divider);
         lines.push("");
@@ -151,7 +151,7 @@ function CVGenerator() {
                       <div style={{ fontSize: 13, color: T.textMuted }}>{[section.email, section.website, section.phone].filter(Boolean).join(" \u00b7 ")}</div>
                       {section.specialties.length > 0 && (
                         <div style={{ fontSize: 14, color: T.accent, fontWeight: 600, marginTop: 2 }}>
-                          {`${section.fullDegree} — ${section.specialties.map(id => id.split(":").pop()).join(", ")}`}
+                          {`${section.fullDegree ? section.fullDegree + " — " : ""}${section.specialties.map(id => id.split(":").pop()).join(", ")}`}
                         </div>
                       )}
                     </div>

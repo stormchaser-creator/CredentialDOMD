@@ -36,7 +36,7 @@ const FAQ_DATA = [
       },
       {
         q: "Do you store my documents securely?",
-        a: "Yes. AES-256 at rest, TLS 1.3 in transit, US-region only. We sign BAAs on Practice and above.",
+        a: "Yes. AES-256 at rest, TLS 1.3 in transit, US-region only.",
       },
     ],
   },

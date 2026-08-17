@@ -107,7 +107,7 @@ function DutyLog({ contract }) {
       `${zeroCalls} call period${zeroCalls === 1 ? "" : "s"} price at $0 — the hospital on the logged day doesn't match the contract's rate grid anymore. Fix the day or the contract first, or build the invoice anyway?`
     )) return;
     const s = data.settings || {};
-    const physician = s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician";
+    const physician = s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician";
     const num = nextInvoiceNumber(data.invoices);
     const lines = [];
     let total = 0;
@@ -178,7 +178,7 @@ function DutyLog({ contract }) {
     const subject = `Invoice ${invoicePreview.number} — ${s.name || "Locum"} — ${contract.facility}`;
     const how = await exportInvoice({
       number: invoicePreview.number,
-      physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
+      physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
       npi: s.npi, email: s.email,
       facility: contract.facility, agency: contract.agency,
       location: contract.location, billTo: contract.billTo,

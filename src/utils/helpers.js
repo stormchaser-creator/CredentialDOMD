@@ -56,11 +56,11 @@ export function daysUntil(dateStr) {
 export function buildCredentialText(item, section, settings) {
   const lines = [];
   const name = settings.name || "Dr.";
-  const deg = settings.degreeType || "MD";
+  const deg = settings.degreeType || "";
   const div = "\u2500".repeat(36);
 
   lines.push("CREDENTIAL VERIFICATION", div);
-  lines.push("Physician: " + name + ", " + deg);
+  lines.push("Physician: " + name + (deg ? ", " + deg : ""));
   if (settings.npi) lines.push("NPI: " + settings.npi);
   if (settings.specialties?.length) {
     const names = settings.specialties.map(id => {

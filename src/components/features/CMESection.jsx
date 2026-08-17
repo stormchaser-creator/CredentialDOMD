@@ -95,9 +95,14 @@ function CMESection({ onShare }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{st}</span>
                     {st === data.settings.primaryState && <span style={{ fontSize: 11, color: T.accent }}>(PRIMARY)</span>}
-                    {hasSeparateBoards(st) && <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, backgroundColor: T.warningDim, color: T.warning, fontWeight: 600 }}>{deg} Board</span>}
+                    {hasSeparateBoards(st) && <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, backgroundColor: T.warningDim, color: T.warning, fontWeight: 600 }}>{deg ? `${deg} Board` : "MD or DO board? Set your degree in Settings"}</span>}
                   </div>
                   <div style={{ fontSize: 13, color: T.textDim }}>{comp.noGeneralReq ? "No general hour requirement" : `${comp.cycle}-year cycle`}</div>
+                  {comp.degreeUnknown && (
+                    <div style={{ fontSize: 12, color: T.warning, marginTop: 2 }}>
+                      Shown with MD rules until you set your degree in Settings.
+                    </div>
+                  )}
                 </div>
                 <div style={{
                   width: 26, height: 26, borderRadius: 13,

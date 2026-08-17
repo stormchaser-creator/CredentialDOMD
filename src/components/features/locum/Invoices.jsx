@@ -132,7 +132,7 @@ function Invoices() {
       const s = data.settings || {};
       const how = await exportInvoice({
         number: inv.number,
-        physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
+        physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
         npi: s.npi, email: s.email,
         facility: c?.facility, agency: c?.agency, location: c?.location, billTo: c?.billTo,
         periodStart: inv.periodStart, periodEnd: inv.periodEnd,

@@ -120,7 +120,7 @@ function Expenses() {
       const dates = sel.map(e => e.date).sort();
       const inv = {
         number,
-        physician: s.name ? `${s.name}, ${s.degreeType || "MD"}` : "Physician",
+        physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
         npi: s.npi, email: s.email,
         facility: invAgency || "Locums agency", // BILL TO: the agency itself
         periodStart: dates[0], periodEnd: dates[dates.length - 1],

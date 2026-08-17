@@ -56,7 +56,7 @@ function DocumentsSection() {
       } catch { return null; }
     }).filter(Boolean);
 
-    const sName = data.settings?.name ? `${data.settings.name}, ${data.settings.degreeType || "MD"}` : "Physician";
+    const sName = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
     const text = [
       "To whom it may concern,",
       "",

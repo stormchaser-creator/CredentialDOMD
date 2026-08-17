@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { mailtoHref } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
+import { FREE_BETA_LABEL, FREE_BETA_BLURB } from "../../constants/beta";
 import {
   TIERS,
   getPublicTiers,
@@ -25,7 +26,10 @@ import {
  */
 
 export default function PricingModal({ open, onClose }) {
-  const { theme: T, plan, checkout, isDevMode } = useApp();
+  const { theme: T, plan, checkout, isDevMode, isFreeBeta } = useApp();
+  // Free beta: billing is off. Show the tier ladder for orientation but no
+  // prices, no CTAs, no Stripe. Dev mode keeps its mock switcher.
+  const betaMode = isFreeBeta && !isDevMode;
   const [billing, setBilling] = useState("annual");  // annual pre-selected per spec 3.4
   const [foundingClaimed, setFoundingClaimed] = useState(0);
   const [mockMsg, setMockMsg] = useState(null);
@@ -51,6 +55,7 @@ export default function PricingModal({ open, onClose }) {
   const handleCTA = async (tierId) => {
     const t = TIERS[tierId];
     if (!t) return;
+    if (betaMode) return;
     if (t.id === "practice" || t.id === "group" || t.id === "enterprise") {
       window.location.href = mailtoHref("hello@credentialdomd.com", `${t.name} tier inquiry`, "");
       return;
@@ -60,9 +65,11 @@ export default function PricingModal({ open, onClose }) {
       setMockMsg(`Switched to ${t.name}`);
       setTimeout(() => { setMockMsg(null); onClose(); }, 1200);
     } else if (result?.ok === false) {
-      // Checkout couldn't start (payments not live / network issue) —
-      // never leave the user with a button that visibly does nothing.
-      setMockMsg("Payments aren't available right now — please email hello@credentialdomd.com and we'll set you up.");
+      // Checkout couldn't start (payments not live / network issue).
+      // Never leave the user with a button that visibly does nothing.
+      setMockMsg(result.error === "free_beta"
+        ? "Billing is off during the free beta. Every feature is already on."
+        : "Payments aren't available right now. Email hello@credentialdomd.com and we'll set you up.");
       setTimeout(() => setMockMsg(null), 5000);
     }
   };
@@ -115,13 +122,16 @@ export default function PricingModal({ open, onClose }) {
         {/* Header */}
         <div style={{ padding: "16px 20px 0", textAlign: "center" }}>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: T.text, margin: "0 0 4px" }}>
-            Choose your plan
+            {betaMode ? FREE_BETA_LABEL : "Choose your plan"}
           </h2>
           <p style={{ fontSize: 13, color: T.textMuted, margin: "0 0 14px" }}>
-            14-day free trial on Solo and Locum. No credit card required.
+            {betaMode
+              ? `${FREE_BETA_BLURB} Paid plans open after the beta; the ladder below is what is coming.`
+              : "14-day free trial on Solo and Locum. No credit card required."}
           </p>
 
           {/* Annual / Monthly toggle — annual pre-selected */}
+          {!betaMode && (
           <div
             style={{
               display: "inline-flex", borderRadius: 10,
@@ -145,6 +155,7 @@ export default function PricingModal({ open, onClose }) {
               </button>
             ))}
           </div>
+          )}
         </div>
 
         {/* Dev mode banner */}
@@ -177,7 +188,7 @@ export default function PricingModal({ open, onClose }) {
         )}
 
         {/* Founding cohort progress — only shown when threshold met */}
-        {shouldShowFoundingCounter(foundingClaimed) && visibleTiers.some(t => t.id === "founding") && (
+        {!betaMode && shouldShowFoundingCounter(foundingClaimed) && visibleTiers.some(t => t.id === "founding") && (
           <div
             style={{
               margin: "10px 16px 0", padding: "10px 14px", borderRadius: 10,
@@ -199,8 +210,13 @@ export default function PricingModal({ open, onClose }) {
           }}
         >
           {visibleTiers.map(tier => {
-            const isCurrent = plan === tier.id;
-            const { display, perInterval, secondaryLine } = priceFor(tier.id, billing);
+            // During the beta nobody is "on" a paid tier; every account has
+            // the Locum feature set for free, so no card is marked current.
+            const isCurrent = !betaMode && plan === tier.id;
+            const priced = priceFor(tier.id, billing);
+            const display = betaMode ? "Coming later" : priced.display;
+            const perInterval = betaMode ? null : priced.perInterval;
+            const secondaryLine = betaMode ? null : priced.secondaryLine;
             const isRecommended = tier.recommended;
             const accent =
               tier.id === "free"     ? "#64748b"
@@ -270,7 +286,7 @@ export default function PricingModal({ open, onClose }) {
                   <div style={{ textAlign: "right" }}>
                     <span
                       style={{
-                        fontSize: tier.id === "enterprise" ? 16 : 24,
+                        fontSize: tier.id === "enterprise" || betaMode ? 16 : 24,
                         fontWeight: 800,
                         color: isCurrent ? accent : T.text,
                       }}
@@ -319,12 +335,12 @@ export default function PricingModal({ open, onClose }) {
                 </div>
 
                 {/* Practice tier: live total calculator */}
-                {tier.id === "practice" && (
+                {tier.id === "practice" && !betaMode && (
                   <PracticeTotalRow accent={accent} T={T} />
                 )}
 
-                {/* CTA */}
-                {!isCurrent && (
+                {/* CTA (hidden during the free beta: nothing to buy yet) */}
+                {!isCurrent && !betaMode && (
                   <button
                     onClick={() => handleCTA(tier.id)}
                     style={{
@@ -351,11 +367,13 @@ export default function PricingModal({ open, onClose }) {
         </div>
 
         {/* Tax-deductible footnote */}
+        {!betaMode && (
         <div style={{ padding: "0 20px", textAlign: "center" }}>
           <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>
             Every paid plan is fully tax-deductible for 1099 physicians.
           </p>
         </div>
+        )}
 
         {/* Trust signals */}
         <div style={{ padding: "12px 20px 8px", textAlign: "center" }}>
@@ -369,14 +387,16 @@ export default function PricingModal({ open, onClose }) {
             <div style={{ fontWeight: 700, color: T.text, marginBottom: 4, fontSize: 13 }}>
               Encrypted and isolated to your account. Your data stays yours.
             </div>
-            AES-256 at rest, TLS 1.3 in transit, US-region only. We sign BAAs on Practice and above.
+            AES-256 at rest, TLS 1.3 in transit, US-region only.
           </div>
         </div>
 
         {/* Footer */}
         <div style={{ padding: "8px 20px 32px", textAlign: "center" }}>
           <p style={{ fontSize: 12, color: T.textDim, margin: 0 }}>
-            Secure checkout via Stripe · Cancel anytime · Built by a neurosurgeon
+            {betaMode
+              ? "No card on file, nothing to cancel · Built by a neurosurgeon"
+              : "Secure checkout via Stripe · Cancel anytime · Built by a neurosurgeon"}
           </p>
         </div>
       </div>

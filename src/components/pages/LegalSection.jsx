@@ -22,8 +22,8 @@ function LegalSection({ page }) {
       healthRecords: [], education: [], documents: [], shareLog: [],
       notificationLog: [], workHistory: [], peerReferences: [], malpracticeHistory: [],
       settings: {
-        primaryState: "CA", additionalStates: [], reminderLeadDays: 90,
-        name: "", npi: "", degreeType: "DO", specialties: [],
+        primaryState: "", additionalStates: [], reminderLeadDays: 90,
+        name: "", npi: "", degreeType: "", specialties: [],
         email: "", phone: "", theme: data.settings.theme, apiKey: "",
         notifyEmail: true, notifyText: true, notifyFreqDays: 7,
         lastNotified: null, alertsFingerprint: null, snoozedUntil: null,
