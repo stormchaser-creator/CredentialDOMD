@@ -1,25 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#10b981"/>
-      <stop offset="100%" stop-color="#047857"/>
-    </linearGradient>
-  </defs>
-  <rect width="192" height="192" rx="0" fill="url(#g)"/>
-  <g transform="translate(96 96) scale(0.8) translate(-96 -96)">
-  <g fill="none" stroke="#ffffff" stroke-linecap="round">
-    <!-- staff -->
-    <rect x="91.8" y="56" width="8.4" height="102" rx="4.2" fill="#ffffff" stroke="none"/>
-    <circle cx="96" cy="47" r="8" fill="#ffffff" stroke="none"/>
-    <!-- wings -->
-    <path d="M89 66 C76 52 54 50 42 58 C52 63 60 66 66 71 C57 71 48 73 41 78 C55 84 76 82 89 73 Z" fill="#ffffff" stroke="none"/>
-    <path d="M103 66 C116 52 138 50 150 58 C140 63 132 66 126 71 C135 71 144 73 151 78 C137 84 116 82 103 73 Z" fill="#ffffff" stroke="none"/>
-    <!-- snakes: two S-curves crossing the staff -->
-    <path d="M67 84 C67 99 125 101 125 117 C125 133 67 135 67 151" stroke-width="8.5"/>
-    <path d="M125 84 C125 99 67 101 67 117 C67 133 125 135 125 151" stroke-width="8.5"/>
-    <!-- heads -->
-    <circle cx="67" cy="82" r="6.2" fill="#ffffff" stroke="none"/>
-    <circle cx="125" cy="82" r="6.2" fill="#ffffff" stroke="none"/>
-  </g>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="192" height="192">
+<rect width="32" height="32"  fill="#10b981"/>
+<g transform="translate(4 4) scale(0.75)"><g fill="#ffffff">
+  <circle cx="16" cy="6.4" r="2"/>
+  <circle cx="14.55" cy="6.55" r="0.7" fill="#10b981"/><circle cx="17.45" cy="6.55" r="0.7" fill="#10b981"/>
+  <rect x="14.6" y="8.5" width="2.8" height="4.4" rx="1.4"/>
+  <rect x="15.3" y="12.6" width="1.4" height="14.6" rx="0.7"/>
+  <rect x="15" y="15.6" width="2" height="0.7" rx="0.35" fill="#10b981"/><rect x="15" y="18.2" width="2" height="0.7" rx="0.35" fill="#10b981"/><rect x="15" y="20.8" width="2" height="0.7" rx="0.35" fill="#10b981"/><rect x="15" y="23.4" width="2" height="0.7" rx="0.35" fill="#10b981"/>
+  <ellipse cx="9.2" cy="10.6" rx="7.4" ry="2.1" transform="rotate(-24 9.2 10.6)"/>
+  <ellipse cx="22.8" cy="10.6" rx="7.4" ry="2.1" transform="rotate(24 22.8 10.6)"/>
+  <ellipse cx="10" cy="17.4" rx="6.1" ry="1.9" transform="rotate(8 10 17.4)"/>
+  <ellipse cx="22" cy="17.4" rx="6.1" ry="1.9" transform="rotate(-8 22 17.4)"/>
+</g></g>
 </svg>
