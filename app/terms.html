@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms of Service | CredentialDoMD</title>
+<meta name="description" content="Terms of Service for CredentialDoMD, the physician credential tracker. Last updated August 16, 2026.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://credentialdomd.com/terms">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2310b981'/><rect x='12.2' y='6' width='7.7' height='20' rx='2' fill='white'/><rect x='6' y='12.2' width='20' height='7.7' rx='2' fill='white'/></svg>">
+<link rel="apple-touch-icon" href="/app/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a1014;
+  --bg-elevated: #0e161c;
+  --bg-card: #101b22;
+  --surface: #182831;
+  --border: #21363f;
+  --border-subtle: #17262e;
+  --emerald: #10b981;
+  --emerald-light: #34d399;
+  --emerald-dim: rgba(16, 185, 129, 0.08);
+  --emerald-border: rgba(16, 185, 129, 0.2);
+  --text: #eef4f2;
+  --text-secondary: #a2b6b3;
+  --text-muted: #6d8582;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden; }
+a { color: var(--emerald); text-decoration: none; transition: color 0.2s; }
+a:hover { color: var(--emerald-light); }
+
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(13, 13, 26, 0.8); border-bottom: 1px solid var(--border-subtle); }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; padding: 16px 24px; }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); }
+.logo-mark { width: 36px; height: 36px; background: linear-gradient(135deg, var(--emerald), #059669); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; color: white; }
+.logo-text span { color: var(--emerald); }
+.nav-links { display: flex; gap: 32px; align-items: center; }
+.nav-links a { color: var(--text-secondary); font-size: 14px; font-weight: 500; }
+.nav-links a:hover { color: var(--text); }
+.btn-primary { display: inline-flex; align-items: center; justify-content: center; padding: 10px 22px; border-radius: var(--radius-md); background: var(--emerald); color: #0d0d1a; font-weight: 700; font-size: 13px; letter-spacing: -0.01em; transition: all 0.2s ease; }
+.btn-primary:hover { background: var(--emerald-light); color: #0d0d1a; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3); }
+
+main { max-width: 800px; margin: 0 auto; padding: 128px 24px 64px; }
+.section-label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--emerald); margin-bottom: 16px; }
+h1 { font-size: clamp(30px, 4vw, 44px); font-weight: 800; line-height: 1.15; letter-spacing: -1.5px; margin-bottom: 8px; }
+.updated { font-size: 14px; color: var(--text-muted); margin-bottom: 28px; }
+.intro { font-size: 17px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 36px; }
+.intro p + p { margin-top: 12px; }
+section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px 28px; margin-bottom: 16px; }
+section h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 10px; color: var(--text); }
+section p, section li { font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+section p + p, section ul + p, section p + ul { margin-top: 10px; }
+section ul { padding-left: 20px; }
+section li { margin-bottom: 6px; }
+section li::marker { color: var(--emerald); }
+strong { color: var(--text); font-weight: 600; }
+.doc-switch { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; font-size: 14px; }
+.doc-switch a { padding: 8px 14px; border: 1px solid var(--border); border-radius: 9999px; color: var(--text-secondary); }
+.doc-switch a:hover { border-color: var(--emerald-border); color: var(--text); background: var(--emerald-dim); }
+
+footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); background: var(--bg); }
+.footer-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
+.footer-brand { font-size: 16px; font-weight: 700; color: var(--text); }
+.footer-brand span { color: var(--emerald); }
+.footer-copy { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+.footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+.footer-links a { font-size: 13px; color: var(--text-muted); }
+.footer-links a:hover { color: var(--text-secondary); }
+
+@media (max-width: 640px) {
+  .nav-links a:not(.btn-primary) { display: none; }
+  main { padding: 104px 18px 48px; }
+  section { padding: 20px 18px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-mark">D</div>
+      <div class="logo-text">Credential<span>DOMD</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/#faq">FAQ</a>
+      <a href="/app/">Sign in</a>
+      <a href="/#early-access" class="btn-primary">Get Early Access</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="section-label">Legal</div>
+  <h1>Terms of Service</h1>
+  <div class="updated">Last updated August 16, 2026</div>
+  <div class="intro">
+    <p>These terms are the agreement between you and CredentialDOMD, operated by Eric Whitney, DO (&quot;we&quot;). By creating an account or using the app you accept them. If you do not agree, do not use the app.</p>
+  </div>
+
+<section>
+<h2>1. Beta status</h2>
+<p>CredentialDOMD is in beta. It is free while the beta lasts. If paid plans launch, you will be told in advance and nothing will be charged without your agreement. Features may change, be renamed, or be removed. There is no uptime guarantee and no service-level commitment; export a backup regularly.</p>
+</section>
+
+<section>
+<h2>2. Your account</h2>
+<p>An account is required and is issued through Clerk. Keep your sign-in method to yourself, sign out on shared computers, and tell us if you think someone else has used your account. One person per account. You must be at least 18 and either a physician (MD or DO), a resident or fellow, or someone with permission to manage a physician's credentials.</p>
+</section>
+
+<section>
+<h2>3. What the app is</h2>
+<p>CredentialDOMD helps physicians organize, track, and share their own professional credentials and locum work. It keeps a cache on your device and syncs to a cloud database and private file storage under your account (details in the Privacy Policy).</p>
+<p>It is not a credentialing verification organization, a state medical board system, a hospital medical staff office, or an accredited CME tracker. Verify against the official source before you submit anything for credentialing.</p>
+</section>
+
+<section>
+<h2>4. Your data, your responsibility</h2>
+<p>You are responsible for the accuracy of what you enter. Compliance and CME calculations are based on published state requirements and are informational; requirements change, and the state board's page is the authority. Reminders are a convenience: keep your own calendar for anything you cannot afford to miss.</p>
+</section>
+
+<section>
+<h2>5. AI features and your keys</h2>
+<p>AI features run on API keys you supply (Google Gemini, Anthropic, or both). You are responsible for those keys, for the charges on them, and for complying with the provider's terms. Content you submit to an AI feature goes to that provider under your key. AI output is a draft for your review; do not rely on it without checking.</p>
+</section>
+
+<section>
+<h2>6. No patient information</h2>
+<p>You agree not to upload patient records and not to enter patient identifiers into any synced field or document. The private note on a work or case entry, stored only on your device, is the one place for a patient-identifying cue. We hold no PHI by design, make no HIPAA compliance claim, and do not offer a BAA on any plan, now or later. If your use requires a BAA, do not use this app for it.</p>
+</section>
+
+<section>
+<h2>7. Acceptable use</h2>
+<p>Do not use the app to store or share credentials that are not yours without permission, to misrepresent qualifications, to probe or overload the service, or to break the law. We may suspend accounts that do.</p>
+</section>
+
+<section>
+<h2>8. Support</h2>
+<p>Support is by email at support@credentialdomd.com and through Get help in the app. Tickets are read by the operator and may be processed with AI tooling. During beta there is no guaranteed response time.</p>
+</section>
+
+<section>
+<h2>9. Ownership</h2>
+<p>You own your data. We own the app, its code, design, and brand, and you receive a personal, revocable, non-transferable license to use it. Feedback you send may be used to improve the product without obligation to you.</p>
+</section>
+
+<section>
+<h2>10. Warranty and liability</h2>
+<p>The app is provided as is, without warranty of any kind, express or implied. To the fullest extent the law allows, we are not liable for indirect, incidental, special, or consequential damages, including lost credential data, missed renewal deadlines, inaccurate compliance calculations, or credentialing problems based on app data. Where liability cannot be excluded, it is capped at the amount you paid us in the twelve months before the claim, which during the free beta is zero.</p>
+</section>
+
+<section>
+<h2>11. Ending the relationship</h2>
+<p>You can stop any time: export, delete your data from More &gt; Data Rights, and email us to close the account. We may suspend or end access for breach of these terms or if the beta ends, and will give notice and time to export where we can.</p>
+</section>
+
+<section>
+<h2>12. Changes to these terms</h2>
+<p>We may change these terms. The date at the top moves and material changes are announced in the app. Continued use after a change is acceptance.</p>
+</section>
+
+<section>
+<h2>13. Governing law</h2>
+<p>These terms are governed by the laws of the State of Texas, without regard to conflict-of-law rules.</p>
+</section>
+
+<section>
+<h2>14. Contact</h2>
+<p><strong>support@credentialdomd.com</strong>. CredentialDOMD, operated by Eric Whitney, DO.</p>
+</section>
+
+  <div class="doc-switch">
+    <a href="/privacy">Privacy Policy</a>
+    <a href="mailto:support@credentialdomd.com">Contact: support@credentialdomd.com</a>
+    <a href="/">Back to credentialdomd.com</a>
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">Credential<span>DOMD</span></div>
+      <div class="footer-copy">&copy; 2026 CredentialDOMD. All rights reserved.</div>
+    </div>
+    <div class="footer-links">
+      <a href="/app/privacy">Privacy Policy</a>
+      <a href="/app/terms">Terms of Service</a>
+      <a href="mailto:support@credentialdomd.com">Contact</a>
+      <a href="mailto:support@credentialdomd.com">Support</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

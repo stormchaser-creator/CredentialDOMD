@@ -2775,10 +2775,10 @@ footer {
         <div class="footer-copy">&copy; 2026 CredentialDOMD. All rights reserved.</div>
       </div>
       <div class="footer-links">
-        <a href="#">Privacy Policy</a>
-        <a href="#">Terms of Service</a>
-        <a href="#">Contact</a>
-        <a href="#">Support</a>
+        <a href="/app/privacy">Privacy Policy</a>
+        <a href="/app/terms">Terms of Service</a>
+        <a href="mailto:support@credentialdomd.com">Contact</a>
+        <a href="mailto:support@credentialdomd.com">Support</a>
       </div>
     </div>
   </div>
@@ -2789,16 +2789,20 @@ footer {
 // Early-access waitlist → same-origin /api relay (Cloudflare Worker) with
 // direct-Supabase fallback. One binder covers every .wl-form on the page
 // (hero quick-join + full form). Honeypot is flag-and-send, never drop.
+// Both paths call the rate-limited RPCs waitlist_signup / waitlist_attempt
+// (anon cannot insert into the tables directly); payload keys are the RPC
+// argument names (p_email, p_name, ...). 400 = bad address, 409 = already
+// listed, 429 = throttled.
 (function() {
   var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
   var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
   var loadedAt = Date.now();
 
-  var postSignup = function(apiPath, supaTable, payload) {
+  var postSignup = function(apiPath, rpcName, payload) {
     var direct = function() {
-      return fetch(SUPABASE_URL + '/rest/v1/' + supaTable, {
+      return fetch(SUPABASE_URL + '/rest/v1/rpc/' + rpcName, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Prefer': 'return=minimal' },
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON },
         body: JSON.stringify(payload), keepalive: true
       });
     };
@@ -2828,19 +2832,19 @@ footer {
       if (hpEl && (hpEl.value || '').trim()) flags.push('honeypot');
       if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
       var noteFlags = flags.length ? flags.join(',') : null;
-      var payload = { email: email, name: name || null, source: window.location.pathname || '/', note: noteFlags };
+      var payload = { p_email: email, p_name: name || null, p_source: window.location.pathname || '/', p_note: noteFlags };
 
       // Attempt trace lands BEFORE the real insert — a failed signup still
       // leaves the email behind for follow-up.
       try {
-        postSignup('/api/waitlist-attempt', 'waitlist_attempts',
-          { email: email, name: name || null, source: payload.source, stage: noteFlags || 'normal' }).catch(function() {});
+        postSignup('/api/waitlist-attempt', 'waitlist_attempt',
+          { p_email: email, p_name: name || null, p_source: payload.p_source, p_stage: noteFlags || 'normal' }).catch(function() {});
       } catch (err) {}
 
       if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Joining\u2026'; }
       if (msg) msg.textContent = '';
 
-      postSignup('/api/waitlist', 'early_access_leads', payload).then(function(res) {
+      postSignup('/api/waitlist', 'waitlist_signup', payload).then(function(res) {
         if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
         if (!msg) return;
         if (res.ok) {
@@ -2850,6 +2854,9 @@ footer {
         } else if (res.status === 409) {
           msg.style.color = 'var(--emerald)';
           msg.textContent = "You're already on the list. We've got you.";
+        } else if (res.status === 429) {
+          msg.style.color = 'var(--amber, #f59e0b)';
+          msg.textContent = 'The list is busy right now. Try again in a few minutes.';
         } else {
           msg.style.color = 'var(--amber, #f59e0b)';
           msg.textContent = "That didn't go through. Check the address and try again.";

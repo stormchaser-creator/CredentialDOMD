@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy | CredentialDoMD</title>
+<meta name="description" content="Privacy Policy for CredentialDoMD, the physician credential tracker. Last updated August 16, 2026.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://credentialdomd.com/privacy">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2310b981'/><rect x='12.2' y='6' width='7.7' height='20' rx='2' fill='white'/><rect x='6' y='12.2' width='20' height='7.7' rx='2' fill='white'/></svg>">
+<link rel="apple-touch-icon" href="/app/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a1014;
+  --bg-elevated: #0e161c;
+  --bg-card: #101b22;
+  --surface: #182831;
+  --border: #21363f;
+  --border-subtle: #17262e;
+  --emerald: #10b981;
+  --emerald-light: #34d399;
+  --emerald-dim: rgba(16, 185, 129, 0.08);
+  --emerald-border: rgba(16, 185, 129, 0.2);
+  --text: #eef4f2;
+  --text-secondary: #a2b6b3;
+  --text-muted: #6d8582;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden; }
+a { color: var(--emerald); text-decoration: none; transition: color 0.2s; }
+a:hover { color: var(--emerald-light); }
+
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(13, 13, 26, 0.8); border-bottom: 1px solid var(--border-subtle); }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; padding: 16px 24px; }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); }
+.logo-mark { width: 36px; height: 36px; background: linear-gradient(135deg, var(--emerald), #059669); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; color: white; }
+.logo-text span { color: var(--emerald); }
+.nav-links { display: flex; gap: 32px; align-items: center; }
+.nav-links a { color: var(--text-secondary); font-size: 14px; font-weight: 500; }
+.nav-links a:hover { color: var(--text); }
+.btn-primary { display: inline-flex; align-items: center; justify-content: center; padding: 10px 22px; border-radius: var(--radius-md); background: var(--emerald); color: #0d0d1a; font-weight: 700; font-size: 13px; letter-spacing: -0.01em; transition: all 0.2s ease; }
+.btn-primary:hover { background: var(--emerald-light); color: #0d0d1a; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3); }
+
+main { max-width: 800px; margin: 0 auto; padding: 128px 24px 64px; }
+.section-label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--emerald); margin-bottom: 16px; }
+h1 { font-size: clamp(30px, 4vw, 44px); font-weight: 800; line-height: 1.15; letter-spacing: -1.5px; margin-bottom: 8px; }
+.updated { font-size: 14px; color: var(--text-muted); margin-bottom: 28px; }
+.intro { font-size: 17px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 36px; }
+.intro p + p { margin-top: 12px; }
+section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px 28px; margin-bottom: 16px; }
+section h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 10px; color: var(--text); }
+section p, section li { font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+section p + p, section ul + p, section p + ul { margin-top: 10px; }
+section ul { padding-left: 20px; }
+section li { margin-bottom: 6px; }
+section li::marker { color: var(--emerald); }
+strong { color: var(--text); font-weight: 600; }
+.doc-switch { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; font-size: 14px; }
+.doc-switch a { padding: 8px 14px; border: 1px solid var(--border); border-radius: 9999px; color: var(--text-secondary); }
+.doc-switch a:hover { border-color: var(--emerald-border); color: var(--text); background: var(--emerald-dim); }
+
+footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); background: var(--bg); }
+.footer-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
+.footer-brand { font-size: 16px; font-weight: 700; color: var(--text); }
+.footer-brand span { color: var(--emerald); }
+.footer-copy { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+.footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+.footer-links a { font-size: 13px; color: var(--text-muted); }
+.footer-links a:hover { color: var(--text-secondary); }
+
+@media (max-width: 640px) {
+  .nav-links a:not(.btn-primary) { display: none; }
+  main { padding: 104px 18px 48px; }
+  section { padding: 20px 18px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-mark">D</div>
+      <div class="logo-text">Credential<span>DOMD</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/#faq">FAQ</a>
+      <a href="/app/">Sign in</a>
+      <a href="/#early-access" class="btn-primary">Get Early Access</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="section-label">Legal</div>
+  <h1>Privacy Policy</h1>
+  <div class="updated">Last updated August 16, 2026</div>
+  <div class="intro">
+    <p>CredentialDOMD, operated by Eric Whitney, DO. This policy says what the app collects, where it lives, which companies touch it, and how you get it back or delete it. Questions go to support@credentialdomd.com.</p>
+    <p>CredentialDOMD is in free beta. Features, storage layout, and this policy will change as the product matures. The date above tells you which version you are reading.</p>
+  </div>
+
+<section>
+<h2>1. An account is required</h2>
+<p>You sign in with an account managed by Clerk (email plus a one-time code, a passkey, or a password, depending on what you set up). Clerk holds the sign-in credentials; we receive your Clerk user id, the email address on the account, and the name you gave at sign-up. Everything you store in the app is keyed to that user id.</p>
+</section>
+
+<section>
+<h2>2. What you put in the app</h2>
+<ul>
+  <li><strong>Profile:</strong> name, NPI, degree, specialties, contact details, and the states you hold licenses in.</li>
+  <li><strong>Credentials:</strong> licenses and registrations, DEA, board certifications, CME, hospital privileges, liability insurance, health clearances, education and training, work history, peer references, and malpractice history.</li>
+  <li><strong>Locum and case data:</strong> case logs, work and billing entries, invoices, and contract terms.</li>
+  <li><strong>Documents you upload</strong>, plus the fields the app extracts from them.</li>
+  <li><strong>Support and feedback:</strong> tickets and replies, field proposals, and a log of assistant questions with a one-line summary of each answer.</li>
+  <li><strong>Settings</strong>, including any AI keys you enter so the app can call the provider on your behalf (section 4).</li>
+</ul>
+</section>
+
+<section>
+<h2>3. Where it is stored</h2>
+<ul>
+  <li><strong>On your device.</strong> Browser storage holds a cache so the app opens and reads offline; it syncs when you are online. Sign out when you finish on a shared computer, because that cache belongs to whoever opens the app there next.</li>
+  <li><strong>Supabase, US region.</strong> A Postgres database holds your records, and a private Storage bucket holds uploaded document files in a folder per user. Row-level security ties every row and every file to your user id. Traffic is encrypted with TLS and Supabase encrypts data at rest.</li>
+  <li><strong>The private vault.</strong> On this device only, never synced. See section 5.</li>
+</ul>
+</section>
+
+<section>
+<h2>4. AI features run on your own key</h2>
+<p>Document scanning, dictation, CPT coding, statement and row parsing, and the assistant (Vera) are bring-your-own-key. Nothing goes to an AI company until you paste a Google Gemini key, an Anthropic key, or both into Settings and use one of those features.</p>
+<p>When you do, what you submit (document images and PDFs, dictation transcripts, statement rows, and assistant chat including attached documents) is sent from your browser to Google or Anthropic under your key and is handled under their terms, not ours. Google's free Gemini tier permits human review and model training on submitted content; check the terms attached to your key. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.</p>
+<p>You are responsible for the key and any charges on it. AI output is a draft: review it before you rely on it.</p>
+</section>
+
+<section>
+<h2>5. No patient information, by design</h2>
+<p>CredentialDOMD is built for your professional data, not your patients'. Do not upload patient records (operative notes, progress notes, discharge summaries, face sheets, chart printouts) and do not type patient identifiers (names, medical record numbers, dates of birth, addresses, phone numbers) into any synced field or document. Upload the credential itself: the license, the certificate, the agreement, the lab slip.</p>
+<p>The app screens uploads and refuses a document that reads as a patient record, and the AI features are instructed to omit identifiers. That is a safety net, not a substitute for your judgment.</p>
+<p><strong>The one exception is the private note on a work or case entry.</strong> It lives in the private vault in your browser, is never uploaded, never sent to an AI provider, and never printed on an invoice or shared packet. It exists so you can recognize which patient a billed call concerned. It does not follow you to another device unless you export and restore it from Data &amp; Backup.</p>
+<p><strong>Because the app holds no PHI, we make no HIPAA compliance claim and do not offer a business associate agreement (BAA), on any plan, now or in the future.</strong> If your group requires a BAA before staff can use a tool, this is not that tool.</p>
+</section>
+
+<section>
+<h2>6. Companies that process your data</h2>
+<ul>
+  <li><strong>Clerk</strong> (clerk.com): sign-in, sessions, and the cookies that keep you signed in.</li>
+  <li><strong>Supabase</strong> (supabase.com), US region: database, file storage, and the server functions behind tickets and feedback.</li>
+  <li><strong>Cloudflare</strong>: proxy and CDN in front of credentialdomd.com, and Turnstile, the bot check Clerk shows at sign-in.</li>
+  <li><strong>GitHub Pages</strong>: static hosting for the site and the app files.</li>
+  <li><strong>Resend</strong>: transactional email, such as the early-access welcome note and account emails.</li>
+  <li><strong>Google</strong> (Gemini API) and <strong>Anthropic</strong> (Claude API): only under your own key and only when you use an AI feature (section 4).</li>
+  <li><strong>CMS NPPES registry</strong> and <strong>NLM Clinical Tables</strong>: NPI lookup. Public government APIs that receive only the search terms (name, state, or NPI).</li>
+  <li><strong>Telegram</strong>: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram.</li>
+</ul>
+<p>We do not sell your data and do not share it with anyone not on this list. Share and Send compose an email or text message on your device; we do not send it for you and keep no copy.</p>
+</section>
+
+<section>
+<h2>7. Who can see it</h2>
+<ul>
+  <li><strong>You</strong>, in the app.</li>
+  <li><strong>The operator</strong>, Eric Whitney, DO, has administrative access to the database and storage for support, debugging, and abuse prevention, and reads tickets, feedback, and the assistant log. Tickets and feedback may be triaged and acted on with AI tooling. Credential data is opened only when needed to run the service.</li>
+  <li><strong>The companies in section 6</strong>, to the extent needed to provide their service.</li>
+  <li><strong>Anyone you choose to share</strong> a credential or packet with.</li>
+  <li><strong>Authorities</strong>, if we are legally required to disclose.</li>
+</ul>
+</section>
+
+<section>
+<h2>8. Cookies and the marketing site</h2>
+<p>Inside the app there are no third-party analytics, ad pixels, or trackers; the only cookies are Clerk's session cookies. On the marketing site at credentialdomd.com, a first-party beacon records the page path, referrer, and utm source of each visit, without cookies or identifiers, so we can see which pages are read. The site loads the Inter typeface from Google Fonts, which shows Google your IP address the way any hosted font does. If you join the early-access list, we keep the email address (and name, if you gave one) to send your invite.</p>
+</section>
+
+<section>
+<h2>9. Retention and deletion</h2>
+<ul>
+  <li>Your data stays as long as your account does.</li>
+  <li>Deleting a record in the app removes it from the database and, for documents, removes the file from storage. A tombstone holding only the record id is kept so the deletion reaches your other devices.</li>
+  <li><strong>More &gt; Data Rights &gt; Delete All My Data</strong> clears this device, deletes your records from the database, and removes your uploaded files. It cannot be undone; export first.</li>
+  <li>To close the account itself, or to have anything else removed, email support@credentialdomd.com from the address on the account.</li>
+  <li>Support tickets and the assistant log are kept as operating records; ask and we will delete yours.</li>
+</ul>
+</section>
+
+<section>
+<h2>10. Your rights</h2>
+<ul>
+  <li><strong>Access and correction:</strong> everything you stored is visible and editable in the app.</li>
+  <li><strong>Export:</strong> More &gt; Data &amp; Backup downloads all of it as JSON, which imports back into CredentialDOMD or any system that reads JSON.</li>
+  <li><strong>Deletion:</strong> section 9.</li>
+  <li>If your state's privacy law gives you additional rights, email us and we will honor them.</li>
+</ul>
+</section>
+
+<section>
+<h2>11. Changes to this policy</h2>
+<p>We update this policy as the product changes and move the date at the top. Material changes are announced in the app. Continued use after a change means you accept it.</p>
+</section>
+
+<section>
+<h2>12. Contact</h2>
+<p><strong>support@credentialdomd.com</strong>. CredentialDOMD, operated by Eric Whitney, DO.</p>
+</section>
+
+  <div class="doc-switch">
+    <a href="/terms">Terms of Service</a>
+    <a href="mailto:support@credentialdomd.com">Contact: support@credentialdomd.com</a>
+    <a href="/">Back to credentialdomd.com</a>
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">Credential<span>DOMD</span></div>
+      <div class="footer-copy">&copy; 2026 CredentialDOMD. All rights reserved.</div>
+    </div>
+    <div class="footer-links">
+      <a href="/app/privacy">Privacy Policy</a>
+      <a href="/app/terms">Terms of Service</a>
+      <a href="mailto:support@credentialdomd.com">Contact</a>
+      <a href="mailto:support@credentialdomd.com">Support</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
