@@ -12,7 +12,7 @@
  * who land here get a friendly upsell card.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import TaskNotes from "./TaskNotes";
 import WorkLog from "./WorkLog";
@@ -32,9 +32,12 @@ const SUBTABS = [
   { id: "todo", label: "To do" },
 ];
 
-export default function LocumDashboard({ initialSub }) {
+export default function LocumDashboard({ initialSub, focusId, onFocusConsumed }) {
   const { theme: T, plan, isDevMode } = useApp();
   const [sub, setSub] = useState(initialSub || "work");
+  // Home search can land here on a specific sub-view (contracts, invoices...).
+  useEffect(() => { if (initialSub) setSub(initialSub); }, [initialSub]);
+  useEffect(() => { if (focusId) onFocusConsumed?.(); }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [billDraft, setBillDraft] = useState(null);
 
   const isLocum = plan === "locum" || isDevMode;

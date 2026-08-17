@@ -26,6 +26,7 @@ import { ScreeningsSection } from "./components/features";
 import { AssistantSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
+import HomeSearch from "./components/features/HomeSearch";
 import { LocumDashboard, MultiStateMatrix } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
@@ -124,6 +125,8 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
+  const [veraSeed, setVeraSeed] = useState(null); // first question for Vera, from Home search
+  const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
   // Reply emails link to /app/#support: open the sheet on "Your tickets".
   useEffect(() => {
     if (window.location.hash === "#support") {
@@ -440,8 +443,17 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
   );
 
   /* ─── HOME PAGE ──────────────────────────────────────────── */
+  const openFromSearch = (sec, id) => {
+    if (sec.tab === "credentials") { setTab("credentials"); setSubPage(sec.sub); setAutoEditTarget({ sec: sec.key, id }); return; }
+    if (sec.tab === "documents") { setTab("documents"); setSubPage(null); return; }
+    if (sec.tab === "locum") { setLocumSeed({ sub: sec.sub, id }); setTab("locum"); setSubPage(sec.sub); return; }
+    if (sec.tab === "more") { setTab("more"); setSubPage(sec.sub); return; }
+  };
+  const askVera = (q) => { setVeraSeed(q); setTab("more"); setSubPage("assistant"); };
+
   const renderHome = () => (
     <div className="cmd-fade-in">
+      <HomeSearch onOpen={openFromSearch} onAskVera={askVera} />
       {/* Hero: Compliance Ring + Stats */}
       {allCreds.length > 0 ? (
         <div style={{
@@ -1367,7 +1379,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={subPage.split(":")[1]} />;
     if (subPage === "privileges") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;
-      return <CrudSection title="Privileges" sectionKey="privileges" autoEditId={autoEditTarget?.sec === "privileges" ? autoEditTarget.id : null} autoFocusField={autoEditTarget?.sec === "privileges" ? autoEditTarget.focus : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+      return <CrudSection title="Privileges" sectionKey="privileges" autoEditId={autoEditTarget?.sec === "privileges" ? autoEditTarget.id : null} autoFocusField={autoEditTarget?.sec === "privileges" ? autoEditTarget.focus : null} onAutoEditDone={() => setAutoEditTarget(null)} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "portalUrl", label: "Credentialing / portal URL", type: "url", placeholder: "medstaff.hospital.org" }, { key: "loginUsername", label: "Portal username" }, { key: "loginSecret", label: "Portal password", type: "secret", hint: "Encrypted with your lock code before it syncs. Show it from the record's detail view." }, { key: "notes", label: "Notes", type: "textarea", placeholder: "Medical staff office contact, reappointment steps, badge, parking, dictation line..." }]} />;
     }
     if (subPage === "insurance") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
@@ -1498,7 +1510,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (subPage === "finance") return <FinanceSection />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
-    if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} />;
+    if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} />;
     if (subPage === "faq") return <FAQSection />;
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;
@@ -1813,7 +1825,7 @@ function AppInner({ tab, setTab, subPage, setSubPage }) {
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
     if (tab === "credentials") return renderCredentials();
-    if (tab === "locum") return <LocumDashboard initialSub={subPage === "todo" ? "todo" : undefined} />;
+    if (tab === "locum") return <LocumDashboard initialSub={locumSeed?.sub || (subPage === "todo" ? "todo" : undefined)} focusId={locumSeed?.id} onFocusConsumed={() => setLocumSeed(null)} />;
     if (tab === "team") return <TeamSection />;
     if (tab === "more") return renderMore();
   };

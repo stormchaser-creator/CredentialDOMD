@@ -12,6 +12,21 @@ export function generateId() {
   });
 }
 
+/**
+ * Records that legitimately never expire (device/course certifications,
+ * personal coverage) must not read as "missing a date": they show green
+ * with "Does not expire" instead of gray.
+ */
+export function isNonExpiring(item, sectionKey) {
+  if (!item || item.expirationDate) return false;
+  if (item.noExpiration === true) return true;
+  const t = String(item.type || "");
+  if (sectionKey === "licenses" && /course \/ device training/i.test(t)) return true;
+  if (sectionKey === "insurance" && /health insurance|dental|vision|life insurance|disability/i.test(t)) return true;
+  if (sectionKey === "healthRecords" && /immune|titer/i.test(String(item.name || "") + " " + String(item.category || "")) && !item.expirationDate) return true;
+  return false;
+}
+
 export function getStatusColor(expDate, lead = 90) {
   if (!expDate) return "gray";
   const days = Math.ceil((new Date(expDate) - new Date()) / MS_PER_DAY);

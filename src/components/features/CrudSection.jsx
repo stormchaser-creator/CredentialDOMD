@@ -8,11 +8,12 @@ import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { isContactPickerSupported, pickContact, parseVCard } from "../../utils/contactImport";
 import CPTCodePicker from "./CPTCodePicker";
+import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
 
 // Every billed code, spelled out — number, what it entails, units, value.
 // Structured detail from the import wins; a hand-typed code string still
@@ -43,7 +44,7 @@ function billedCodes(item) {
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, filterTabs, prefillItem, onPrefillDone, contactImport }) {
-  const { data, setData, addItem, theme: T } = useApp();
+  const { data, setData, addItem, theme: T , user } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -267,6 +268,28 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
   // Tap-anywhere detail view + full-screen picture viewer
   const [viewItem, setViewItem] = useState(null);
+  // Secret fields (portal passwords): masked, encrypted on save with a
+  // device-held lock code, revealed on demand in the detail view.
+  const [showSecret, setShowSecret] = useState({});
+  const [lockCodeDraft, setLockCodeDraft] = useState("");
+  const [lockMsg, setLockMsg] = useState("");
+  const [revealed, setRevealed] = useState({});
+  useEffect(() => { setSecretUser(user?.id || null); }, [user?.id]);
+  const hasSecretFields = fields.some(f => f.type === "secret");
+  const needsLockCode = hasSecretFields && !hasLockCode() && fields.some(f => f.type === "secret" && form[f.key] && !isEncrypted(form[f.key]));
+  const revealSecret = async (f) => {
+    const v = viewItem?.[f.key];
+    if (!v) return;
+    let code = hasLockCode() ? null : window.prompt("Enter the lock code you set for saved passwords (it is remembered on this device):");
+    if (!hasLockCode() && !code) return;
+    try {
+      const plain = await decryptSecret(v, code || undefined);
+      if (code) saveLockCode(code);
+      setRevealed(r => ({ ...r, [f.key]: plain }));
+    } catch (e) {
+      window.alert(e.message === "wrong-lock-code" ? "That lock code did not open this password." : "Could not read this password on this device.");
+    }
+  };
   const [lightbox, setLightbox] = useState(null);
   // Optional category tabs (e.g. Licenses: Medical / DEA / Board / Life
   // Support) — mixed record types in one flat list are unreadable.
@@ -317,7 +340,21 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     }
     setRequiredError(null);
     const itemId = editItem ? editItem.id : generateId();
-    if (editItem) onEdit({ ...editItem, ...form });
+    const secretFields = fields.filter(f => f.type === "secret" && form[f.key] && !isEncrypted(form[f.key]));
+    if (secretFields.length) {
+      if (!hasLockCode()) {
+        if (lockCodeDraft.trim().length < 4) { setLockMsg("Set a lock code of at least 4 characters to save a password. It stays on this device only."); return; }
+        saveLockCode(lockCodeDraft.trim());
+        setLockCodeDraft("");
+      }
+      // Encrypt, then persist; async because WebCrypto is.
+      (async () => {
+        const enc = { ...form };
+        for (const f of secretFields) enc[f.key] = await encryptSecret(form[f.key]);
+        if (editItem) onEdit({ ...editItem, ...enc });
+        else onAdd({ ...enc, id: itemId });
+      })();
+    } else if (editItem) onEdit({ ...editItem, ...form });
     else onAdd({ ...form, id: itemId });
 
     // Save attached documents and link them — addItem syncs each to cloud
@@ -421,6 +458,30 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 value={form[f.key] || ""}
                 onChange={val => setField(f.key, val)}
               />
+            ) : f.type === "secret" ? (
+              <div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    data-fkey={f.key}
+                    type={showSecret[f.key] ? "text" : "password"}
+                    autoComplete="off"
+                    value={isEncrypted(form[f.key]) ? "" : (form[f.key] || "")}
+                    onChange={e => setField(f.key, e.target.value)}
+                    placeholder={isEncrypted(form[f.key]) ? "Saved (encrypted). Type to replace." : (f.placeholder || "")}
+                    style={{ ...iS, flex: 1 }}
+                  />
+                  <button type="button" onClick={() => setShowSecret(v => ({ ...v, [f.key]: !v[f.key] }))} style={{ padding: "0 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{showSecret[f.key] ? "Hide" : "Show"}</button>
+                </div>
+                {needsLockCode && (
+                  <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, backgroundColor: T.accentDim, border: `1px solid ${T.accent}` }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: T.text }}>Set a lock code for saved passwords</div>
+                    <div style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 8px" }}>Passwords are encrypted with it before they sync. The code stays on this device; enter it once on any other device. Nobody, including us, can read them without it.</div>
+                    <input type="password" autoComplete="new-password" value={lockCodeDraft} onChange={e => { setLockCodeDraft(e.target.value); setLockMsg(""); }} placeholder="Lock code (4+ characters)" style={iS} />
+                    {lockMsg && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{lockMsg}</div>}
+                  </div>
+                )}
+                {!needsLockCode && f.hint && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 4 }}>{f.hint}</div>}
+              </div>
             ) : f.type === "textarea" ? (
               <textarea
                 data-fkey={f.key}
@@ -536,7 +597,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       </Modal>
 
       {/* Read-only detail view — opened by tapping anywhere on a card */}
-      <Modal open={!!viewItem} onClose={() => setViewItem(null)} title={viewItem ? describeItem(viewItem, data.settings.name, sectionKey) : "Details"}>
+      <Modal open={!!viewItem} onClose={() => { setViewItem(null); setRevealed({}); }} title={viewItem ? describeItem(viewItem, data.settings.name, sectionKey) : "Details"}>
         {viewItem && (
           <>
             {fields.filter(f => viewItem[f.key]).map(f => (
@@ -545,6 +606,20 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {(() => {
                     const v = viewItem[f.key];
+                    if (f.type === "secret") {
+                      const open = revealed[f.key];
+                      return (
+                        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                          <span style={{ fontFamily: open ? "ui-monospace, monospace" : "inherit", userSelect: "all" }}>{open ? open : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}</span>
+                          <button onClick={(e) => { e.stopPropagation(); if (open) setRevealed(r => ({ ...r, [f.key]: null })); else revealSecret(f); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.accent, cursor: "pointer" }}>{open ? "Hide" : "Show"}</button>
+                          {open && <button onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(open); }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, cursor: "pointer" }}>Copy</button>}
+                        </span>
+                      );
+                    }
+                    if (f.type === "url") {
+                      const href = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+                      return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{String(v).replace(/^https?:\/\//i, "")}</a>;
+                    }
                     if (f.type === "currency") {
                       const n = parseFloat(v);
                       return isNaN(n) ? String(v) : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -694,8 +769,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {shownItems.map(item => {
-            const color = getStatusColor(item.expirationDate);
-            const needsReview = item.npiImported && !item.expirationDate;
+            const nonExpiring = isNonExpiring(item, sectionKey);
+            const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
+            const needsReview = item.npiImported && !item.expirationDate && !nonExpiring;
             return (
               <div key={item.id} onClick={() => setViewItem(item)} style={{
                 backgroundColor: T.card, border: `1px solid ${needsReview ? T.danger : T.border}`,
@@ -745,6 +821,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                                 parseFloat(item.renewalCost) > 0 && `${fmtMoney(item.renewalCost)} renewal`,
                                 item.graduationDate && !item.expirationDate && ("Graduated " + new Date(item.graduationDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" })),
                                 item.expirationDate && getStatusLabel(item.expirationDate),
+                                nonExpiring && "Does not expire",
                               ].filter(Boolean).join(" \u00b7 ");
                             })()}
                           </div>

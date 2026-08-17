@@ -23,7 +23,7 @@ const slimForArchive = (msgs) =>
  * lands, unmapped details included), and every suggestion you make goes
  * straight to the developer. Actions only run after you approve them.
  */
-function AssistantSection({ onFileTicket }) {
+function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed }) {
   const { data, addItem, editItem, allTrackedStates, userIdRef, theme: T } = useApp();
   const iS = useInputStyle();
   const [msgs, setMsgs] = useState(() => {
@@ -198,6 +198,15 @@ function AssistantSection({ onFileTicket }) {
     }
     setBusy(false);
   }, [input, attachment, msgs, data, allTrackedStates, logToCloud]);
+
+  // Home search hands Vera a first question; ask it once, then clear the seed.
+  const seededRef = useRef(null);
+  useEffect(() => {
+    if (!initialQuestion || seededRef.current === initialQuestion) return;
+    seededRef.current = initialQuestion;
+    send(initialQuestion);
+    onSeedConsumed?.();
+  }, [initialQuestion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const retryFailed = useCallback((msg) => {
     const kept = failedMapRef.current.get(msg.id);
