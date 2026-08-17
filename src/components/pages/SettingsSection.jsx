@@ -394,8 +394,8 @@ function SettingsSection() {
         )}
 
         {/* Email toggle */}
-        <ToggleRow label="Email Notifications" sub={s.email || "Add email in profile"} active={s.notifyEmail} onToggle={() => update("notifyEmail", !s.notifyEmail)} color={T.accent} T={T} />
-        <ToggleRow label="Text Notifications" sub={s.phone || "Add phone in profile"} active={s.notifyText} onToggle={() => update("notifyText", !s.notifyText)} color="#10b981" T={T} />
+        <ToggleRow label="Email reminders" sub={s.email ? `Daily check, sent to ${s.email} only when something is due or changed` : "Add email in profile"} active={s.notifyEmail} onToggle={() => update("notifyEmail", !s.notifyEmail)} color={T.accent} T={T} />
+        <ToggleRow label="Text Notifications" sub={s.phone ? `${s.phone} (not sending yet; email and in-app alerts are live)` : "Add phone in profile"} active={s.notifyText} onToggle={() => update("notifyText", !s.notifyText)} color="#10b981" T={T} />
 
         {/* Frequency */}
         <div style={{ padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
