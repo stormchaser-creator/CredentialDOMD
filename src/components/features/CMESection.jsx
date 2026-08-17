@@ -17,6 +17,7 @@ import { generateId, formatDate } from "../../utils/helpers";
 import { complianceFor } from "../../utils/compliance";
 import { computeBoardCompliance, boardIdsFromLicenses } from "../../utils/boardCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf } from "../../utils/cmeTranscriptPdf";
+import { CME_INBOX_ADDRESS } from "../../utils/inboxDocs";
 
 function CMESection({ onShare }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate } = useApp();
@@ -172,8 +173,15 @@ function CMESection({ onShare }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 13, color: T.textDim, marginBottom: note ? 6 : 16 }}>
+      <div style={{ fontSize: 13, color: T.textDim, marginBottom: 4 }}>
         {data.cme.length} entries &middot; {totalHours} total hours
+      </div>
+      {/* Certificate intake by email: the email-inbound function matches the
+          sender to profiles.email, so the hint names the address that works. */}
+      <div style={{ fontSize: 13, color: T.textDim, marginBottom: note ? 6 : 16, lineHeight: 1.45 }}>
+        Forward certificate emails to <span style={{ fontWeight: 600, color: T.text }}>{CME_INBOX_ADDRESS}</span> from {data.settings.email
+          ? <span style={{ fontWeight: 600, color: T.text }}>{data.settings.email}</span>
+          : <span>the email on your account (<span onClick={() => navigate("more", "settings")} style={{ color: T.accent, cursor: "pointer", fontWeight: 600 }}>add it in Settings</span>)</span>}
       </div>
       {note && (
         <div style={{ fontSize: 13, color: T.accent, marginBottom: 12, padding: "8px 12px", borderRadius: 10, backgroundColor: T.accentGlow }}>{note}</div>
