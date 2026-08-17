@@ -3,7 +3,7 @@
 /**
  * CredentialDOMD - State Page Generator
  *
- * Reads template.html and states-data.json to generate
+ * Reads ../state-template.html and states-data.json to generate
  * individual SEO pages for all 50 US states.
  *
  * Usage:
@@ -19,7 +19,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TEMPLATE_PATH = path.join(__dirname, 'template.html');
+// Template lives one level up so the published states/ folder holds only real pages.
+const TEMPLATE_PATH = path.join(__dirname, '..', 'state-template.html');
 const DATA_PATH = path.join(__dirname, 'states-data.json');
 const OUTPUT_DIR = __dirname;
 const YEAR = new Date().getFullYear();
