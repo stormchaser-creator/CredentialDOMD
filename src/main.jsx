@@ -79,6 +79,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         afterSignOutUrl="/app/"
         signInFallbackRedirectUrl="/app/"
         signUpFallbackRedirectUrl="/app/"
+        // Email code sign-in is enabled on the instance; make it read as a
+        // real choice under the password box instead of a small grey link.
+        localization={{
+          signIn: {
+            password: { actionLink: "Email me a sign-in code instead", subtitle: "Enter your password, or get a one-time code by email" },
+            alternativeMethods: { title: "Sign in another way", subtitle: "Pick how you want to sign in", blockButton__emailCode: "Email a code to {{identifier}}", getHelp: { blockButton__emailSupport: "Email support" } },
+            emailCode: { title: "Check your email", subtitle: "Enter the code we just sent to {{identifier}}", formTitle: "Sign-in code", resendButton: "Send a new code" },
+          },
+        }}
       >
         <ErrorUserSync />
         <App />

@@ -167,6 +167,17 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     return () => clearInterval(t);
   }, [loaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Vera's open_record lands here: the section is already selected by
+  // handleNavigate; open the record itself. (Must stay above the loading
+  // early-returns: hooks cannot be conditional.)
+  useEffect(() => {
+    if (!navRecord?.id) return;
+    const sec = SECTIONS.find(x => x.key === navRecord.sec);
+    if (!sec) return;
+    if (sec.tab === "credentials") setAutoEditTarget({ sec: sec.key, id: navRecord.id });
+    else if (sec.tab === "locum") setLocumSeed({ sub: sec.sub, id: navRecord.id });
+  }, [navRecord?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useNotifications();
 
   const alerts = useMemo(() => generateAlerts(data), [data]);
@@ -407,15 +418,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (sec.tab === "more") { setTab("more"); setSubPage(sec.sub); return; }
   };
   const askVera = (q) => { setVeraSeed(q); setTab("more"); setSubPage("assistant"); };
-  // Vera's open_record lands here: the section is already selected by
-  // handleNavigate; open the record itself.
-  useEffect(() => {
-    if (!navRecord?.id) return;
-    const sec = SECTIONS.find(x => x.key === navRecord.sec);
-    if (!sec) return;
-    if (sec.tab === "credentials") setAutoEditTarget({ sec: sec.key, id: navRecord.id });
-    else if (sec.tab === "locum") setLocumSeed({ sub: sec.sub, id: navRecord.id });
-  }, [navRecord?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderHome = () => (
     <div className="cmd-fade-in">

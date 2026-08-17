@@ -145,6 +145,10 @@ function AuthPage() {
                     boxShadow: T.shadow2,
                     borderRadius: 16,
                   },
+                  // "Email me a sign-in code instead" as a full-width button
+                  // right under the password field, not a small text link.
+                  alternativeMethodsBlockButton: { width: "100%", justifyContent: "center", padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.accent}`, fontWeight: 700 },
+                  footerActionLink: { fontWeight: 700 },
                 },
                 variables: {
                   colorPrimary: "#10b981",
