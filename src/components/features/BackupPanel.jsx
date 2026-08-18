@@ -104,20 +104,33 @@ function BackupPanel() {
       // No profile_id: the function reads the Clerk JWT and backs up the
       // caller's own account, which is the only account it will ever hand back.
       const res = await supabase.functions.invoke("build-backup", { body: {} });
-      if (res.error) throw new Error(res.error.message || "The backup did not finish.");
-      const out = res.data || {};
+      if (res.error) {
+        // invoke() reports every non-2xx as the same generic sentence; the
+        // useful text (rate limit, no key) is in the response body.
+        let msg = "";
+        try { msg = (await res.error.context?.json())?.error || ""; } catch { /* not JSON */ }
+        throw new Error(msg || res.error.message || "The backup did not finish.");
+      }
+      // The function answers { ok, results: [ per-account ] }; this call only
+      // ever asks for one account, so the counts live in results[0].
+      const out = res.data?.results?.[0] || res.data || {};
       if (out.error) throw new Error(String(out.error));
 
       const bits = [];
       if (out.record_count != null) bits.push(`${out.record_count} records`);
       if (out.document_count != null) bits.push(`${out.document_count} documents`);
-      const size = sizeLabel(out.bytes);
+      const totalBytes = Array.isArray(out.results)
+        ? out.results.reduce((n, part) => n + (Number(part.bytes) || 0), 0)
+        : Number(out.bytes) || 0;
+      const size = sizeLabel(totalBytes);
       if (size) bits.push(size);
       const parts = Number(out.parts) || 1;
 
-      const where = s.email
+      // The function returns 200 even when it built but could not email, so
+      // only say "on its way" when it actually says it sent one.
+      const where = out.emailed
         ? `The download link is on its way to ${s.email}.`
-        : "Add your email address in Settings if you want the link by email. Until then, download it from the list below.";
+        : `It is in the list below. Nothing was emailed${out.note ? `: ${out.note}` : ""}.`;
       setBuildMsg(
         `Backup ready${bits.length ? `: ${bits.join(", ")}` : ""}${parts > 1 ? `, split into ${parts} files` : ""}. ${where}`
       );
@@ -136,7 +149,11 @@ function BackupPanel() {
     setRowErr((m) => ({ ...m, [row.id]: "" }));
     try {
       const res = await supabase.functions.invoke("backup-link", { body: { backup_id: row.id } });
-      if (res.error) throw new Error(res.error.message || "Could not create a download link.");
+      if (res.error) {
+        let msg = "";
+        try { msg = (await res.error.context?.json())?.error || ""; } catch { /* not JSON */ }
+        throw new Error(msg || res.error.message || "Could not create a download link.");
+      }
       const url = res.data?.url;
       if (!url) throw new Error("Could not create a download link.");
       const w = window.open(url, "_blank", "noopener,noreferrer");

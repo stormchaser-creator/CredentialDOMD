@@ -19,6 +19,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { isOwnStorageObject } from "../_shared/storagePath.ts";
 import { BACKUP_BUCKET, LINK_TTL_SECONDS } from "../build-backup/lib.ts";
 
 const RECENT_LIMIT = 12;
@@ -74,7 +75,7 @@ serve(async (req) => {
       .select("auth_user_id").eq("id", who.profileId).maybeSingle();
     if (pErr) throw pErr;
     const authUserId = String(prof?.auth_user_id ?? "");
-    if (!authUserId || !String(row.storage_path).startsWith(`${authUserId}/`)) {
+    if (!isOwnStorageObject(authUserId, String(row.storage_path).split("/").slice(0, 2).join("/")) || !String(row.storage_path).startsWith(`${authUserId}/`) || String(row.storage_path).includes("..")) {
       console.error(`backup-link: path outside caller folder for backup ${backupId}`);
       return json(403, { error: "That backup is not in your account" });
     }

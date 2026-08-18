@@ -57,6 +57,9 @@ export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
     .maybeSingle();
   if (!data) return null;
 
-  const email = (data.email || claimEmail || "").toLowerCase();
+  // The verified JWT claim wins over profiles.email, which is a field the
+  // user edits. (A DB trigger also reverts user email changes; this is the
+  // second lock.)
+  const email = (claimEmail || data.email || "").toLowerCase();
   return { profileId: data.id, email, isAdmin: ADMIN_EMAILS.has(email), db };
 }

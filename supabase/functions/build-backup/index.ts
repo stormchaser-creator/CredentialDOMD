@@ -110,6 +110,10 @@ async function readAll(db: SupabaseClient, table: string, userId: string): Promi
     const { data, error } = await db.from(table).select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: true })
+      // created_at ties are common (a bulk import stamps one timestamp for
+      // the whole batch), and OFFSET paging over a non-unique sort can
+      // repeat or drop rows across page boundaries.
+      .order("id", { ascending: true })
       .range(start, start + PAGE - 1);
     if (error) throw new Error(`could not read ${table}: ${error.message}`);
     rows.push(...((data ?? []) as Row[]));
@@ -207,11 +211,20 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
   let includedDocuments = 0;
   let includedBytes = 0;
 
+  // One id per build run: it namespaces this run's objects and makes an
+  // interrupted run visible instead of leaving nothing behind.
+  const runId = crypto.randomUUID().slice(0, 8);
   for (let i = 0; i < parts; i++) {
     const partNo = i + 1;
-    const path = backupStoragePath(authUserId || userId, period, partNo, parts);
+    const path = backupStoragePath(authUserId || userId, period, partNo, parts, runId);
     const failures: SkippedDoc[] = [];
     const partSkipped = () => (i === 0 ? [...prepared.skipped, ...failures] : failures);
+    // Claim the row before the memory-heavy work: if the isolate is killed
+    // mid-build, the user sees "Building" rather than a silent gap.
+    const { data: pendingRow } = await db.from("backups").insert({
+      user_id: userId, period, storage_path: path, part: partNo, parts, status: "pending",
+    }).select("id").single();
+    const pendingId = (pendingRow as { id: string } | null)?.id ?? null;
     try {
       const zip = new JSZip();
 
@@ -278,7 +291,7 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
       }
 
       const expiresAt = new Date(Date.now() + LINK_TTL_SECONDS * 1000).toISOString();
-      const { data: rowIns, error: rowErr } = await db.from("backups").insert({
+      const rowFields = {
         user_id: userId,
         period,
         storage_path: path,
@@ -290,8 +303,12 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
         skipped_documents: partSkipped().length,
         status: "ready",
         expires_at: expiresAt,
-      }).select("id").single();
-      if (rowErr) throw new Error(`backups insert failed: ${rowErr.message}`);
+      };
+      const written = pendingId
+        ? await db.from("backups").update(rowFields).eq("id", pendingId).select("id").single()
+        : await db.from("backups").insert(rowFields).select("id").single();
+      const rowIns = written.data;
+      if (written.error) throw new Error(`backups insert failed: ${written.error.message}`);
 
       includedDocuments += included.length;
       includedBytes += sourceBytes;
@@ -305,11 +322,13 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
       const message = e instanceof Error ? e.message : String(e);
       console.error(`backup: part ${partNo} of ${parts} failed for ${userId}: ${message}`);
       allSkipped.push(...failures);
-      await db.from("backups").insert({
+      const failFields = {
         user_id: userId, period, storage_path: path, part: partNo, parts,
         record_count: recordCount, document_count: 0, skipped_documents: partSkipped().length,
         status: "failed", error: message.slice(0, 500),
-      });
+      };
+      if (pendingId) await db.from("backups").update(failFields).eq("id", pendingId);
+      else await db.from("backups").insert(failFields);
       results.push({ rowId: null, part: partNo, parts, bytes: 0, documentCount: 0, skipped: partSkipped().length, url: null, path, error: message });
     }
   }

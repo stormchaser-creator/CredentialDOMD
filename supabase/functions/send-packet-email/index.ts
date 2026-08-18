@@ -27,6 +27,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { isOwnStorageObject } from "../_shared/storagePath.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_API = (Deno.env.get("RESEND_API_BASE") ?? "https://api.resend.com").replace(/\/$/, "");
@@ -205,7 +206,7 @@ serve(async (req) => {
       // user can edit their own row's storage_path, and the service role
       // must not become a way around storage RLS.
       const path = d.storage_path || (prof.auth_user_id ? `${prof.auth_user_id}/${d.id}` : "");
-      if (!path || !prof.auth_user_id || !path.startsWith(`${prof.auth_user_id}/`)) { skipped.push(filename); continue; }
+      if (!isOwnStorageObject(prof.auth_user_id, path)) { skipped.push(filename); continue; }
       const dl = await db.storage.from(STORAGE_BUCKET).download(path);
       if (dl.error || !dl.data) {
         console.error(`storage download failed for ${path}: ${dl.error?.message ?? "no data"}`);

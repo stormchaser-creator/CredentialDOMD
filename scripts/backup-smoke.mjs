@@ -85,7 +85,10 @@ const recordCount = countRecords(dataByTable);
 const sectionCounts = SECTIONS.map((s) => ({ label: s.label, table: s.table, count: dataByTable[s.table].length }));
 const recordIndex = buildRecordIndex(dataByTable);
 const prepared = prepareDocuments(documents, AUTH_USER_ID, recordIndex, undefined);
-const planned = planDocumentParts(prepared.items, PART_CAP_BYTES);
+// The fixture is sized for a fixed cap on purpose: production can retune
+// PART_CAP_BYTES without silently changing what this test asserts.
+const TEST_CAP = 120 * 1024 * 1024;
+const planned = planDocumentParts(prepared.items, TEST_CAP);
 const parts = planned.length;
 
 const built = [];
@@ -229,7 +232,7 @@ check("135 MB of scans split into parts under the cap", () => {
   assert.ok(parts >= 2, `expected a multi-part plan, got ${parts}`);
   for (const p of planned) {
     const total = p.reduce((n, d) => n + d.size, 0);
-    assert.ok(total <= PART_CAP_BYTES || p.length === 1, `a part holds ${total} bytes, over the cap`);
+    assert.ok(total <= TEST_CAP || p.length === 1, `a part holds ${total} bytes, over the cap`);
   }
 });
 
@@ -249,7 +252,7 @@ check("the email says what is inside, when the link dies, and what is missing", 
   });
   assert.ok(text.startsWith("Test,"), `greeting is wrong: ${text.slice(0, 20)}`);
   assert.ok(text.includes("September 21, 2026"), "no expiry date");
-  assert.ok(text.includes("More > Settings > Data and Backup"), "no path to a fresh link");
+  assert.ok(text.includes("More > Data and Backup"), "no path to a fresh link");
   assert.ok(text.includes(VAULT_NOTE), "the vault sentence is missing");
   assert.ok(text.includes("turn Monthly backup off"), "no way to opt out");
   assert.ok(/Part 1 of 2/.test(text) && /Part 2 of 2/.test(text), "the parts are not both linked");

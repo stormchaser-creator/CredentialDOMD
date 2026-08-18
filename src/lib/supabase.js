@@ -135,6 +135,9 @@ const SETTINGS_TO_PROFILE = {
   // apiKey / anthropicApiKey are deliberately NOT here: AI keys live on the
   // device only (see deviceKeys below), never in Postgres.
   taxPrep: "tax_prep",
+  // Monthly server-built backup, opt-out. Column is NOT NULL DEFAULT true and
+  // the client reads undefined as on, so an untouched account agrees.
+  backupMonthly: "backup_monthly",
   reminderLeadDays: "reminder_lead_days",
   notifyEmail: "notify_email",
   notifyBrowser: "notify_browser",
@@ -523,6 +526,7 @@ export async function deleteAllData(userId) {
       specialties: "[]", additional_states: "[]",
       theme: "light", font_size: "M", reminder_lead_days: 90,
       notify_email: true, notify_text: true, notify_freq_days: 7,
+      backup_monthly: true,
       cme_verification_results: "{}", cme_verification_alerted: false,
       updated_at: new Date().toISOString(),
     })

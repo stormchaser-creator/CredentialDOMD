@@ -1,3 +1,4 @@
+import { isOwnStorageObject } from "../_shared/storagePath.ts";
 /**
  * Pure helpers for the monthly backup: no Deno, no network, no JSZip.
  *
@@ -54,7 +55,11 @@ export const SECTIONS: Section[] = [
 export const PROFILE_SECRET_FIELDS = ["api_key", "anthropic_api_key"];
 
 /** 120 MB of source bytes per ZIP part. Bigger accounts get part 2, 3, ... */
-export const PART_CAP_BYTES = 120 * 1024 * 1024;
+// Source bytes per part. JSZip holds the inputs and the generated output at
+// the same time, so peak memory is roughly twice this against a 256 MB
+// isolate. Raise with the BACKUP_PART_MAX_BYTES secret only after watching a
+// real build succeed.
+export const PART_CAP_BYTES = 48 * 1024 * 1024;
 
 /** Signed links live 35 days. The email and the backups row both say so. */
 export const LINK_TTL_SECONDS = 35 * 24 * 60 * 60;
@@ -135,7 +140,11 @@ export function escapeHtml(s: unknown): string {
 
 export function csvCell(v: unknown): string {
   if (v === null || v === undefined) return "";
-  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  let s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  // Filenames can arrive from a forwarded email, so a cell must never be
+  // read as a formula when the README tells the physician to open this in
+  // Excel. A leading apostrophe makes it text.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -197,8 +206,11 @@ export function backupObjectName(period: string, part: number, parts: number): s
     : `CredentialDOMD-backup-${period}.zip`;
 }
 
-export function backupStoragePath(authUserId: string, period: string, part: number, parts: number): string {
-  return `${authUserId}/${period}/${backupObjectName(period, part, parts)}`;
+export function backupStoragePath(authUserId: string, period: string, part: number, parts: number, runId?: string): string {
+  // runId keeps a rebuild from overwriting the object an earlier backups row
+  // still points at (that row would keep its old size and counts and lie).
+  const dir = runId ? `${period}/${runId}` : period;
+  return `${authUserId}/${dir}/${backupObjectName(period, part, parts)}`;
 }
 
 // ── Records and their documents ──────────────────────────────────────────────
@@ -297,7 +309,7 @@ export function prepareDocuments(
   for (const d of ordered) {
     const originalName = safeFilename(d.name, `document-${items.length + 1}`);
     const path = String(d.storage_path || (authUserId ? `${authUserId}/${d.id}` : ""));
-    if (!authUserId || !path || !path.startsWith(`${authUserId}/`)) {
+    if (!isOwnStorageObject(authUserId, path)) {
       skipped.push({ name: originalName, reason: "the file is not stored in your account folder" });
       continue;
     }
@@ -365,7 +377,7 @@ export interface SnapshotMeta {
 }
 
 /**
- * data/backup.json, the file the app reads back in.
+ * data/backup.json, the complete machine-readable copy.
  *
  * `data` is keyed by Postgres table name and rows keep their database column
  * names exactly as stored, so the snapshot is a faithful copy. `table_map`
@@ -540,7 +552,7 @@ ${dataBlock}
 <p><strong>${escapeHtml(VAULT_NOTE)}</strong></p>
 <p>${escapeHtml(KEYS_NOTE)}</p>
 </div>
-<p>To keep a copy of the private vault, export it from the device that holds it: More, then Private Vault, then Export.</p>
+<p>To keep a copy of the private vault, export it from the device that holds it: More, then Data and Backup, then Private notes, then Export.</p>
 
 ${skippedBlock}
 
@@ -548,12 +560,12 @@ ${skippedBlock}
 <ul>
 <li>Unzip the file. Everything inside is a plain file: HTML, JSON, CSV, and your original documents.</li>
 <li>CSV files open in Excel, Numbers, or Google Sheets.</li>
-<li><code>data/backup.json</code> is the file the app reads back in. In CredentialDOMD, go to More, then Settings, then Data and Backup, and choose Restore from backup.</li>
+<li><code>data/backup.json</code> is the complete machine-readable copy of every record, ready for whatever comes next. Loading a server backup straight back into the app is not a one-tap feature yet, so if you ever need that, write to stormchaser@elryx.com and we will do it with you. The CSVs and your documents need nothing but a spreadsheet and a file viewer.</li>
 <li>Your documents are ordinary PDFs and images. Open them with anything.</li>
 </ul>
 
 <h2>Turning these off</h2>
-<p>Monthly backups are on for every account. To stop them, open the app, go to More, then Settings, then Data and Backup, and turn Monthly backup off. You can still build one on demand from the same screen.</p>
+<p>Monthly backups are on for every account. To stop them, open the app, go to More, then Data and Backup, and turn Monthly backup off. You can still build one on demand from the same screen.</p>
 
 <p class="sub">CredentialDOMD &middot; questions to stormchaser@elryx.com</p>
 </body>
@@ -597,7 +609,7 @@ export function renderEmailText(info: EmailInfo): string {
     `  ${formatCount(info.recordCount)} record${info.recordCount === 1 ? "" : "s"} across ${formatCount(info.sectionCount)} section${info.sectionCount === 1 ? "" : "s"}`,
     `  ${formatCount(info.documentCount)} document${info.documentCount === 1 ? "" : "s"}, ${formatBytes(info.documentBytes)}`,
     "  README.html, which explains every file",
-    "  data/backup.json, the file the app reads back in",
+    "  data/backup.json, the complete machine-readable copy",
     "  One CSV per section, for Excel or Numbers",
   ].join("\n");
 
@@ -612,7 +624,7 @@ export function renderEmailText(info: EmailInfo): string {
 
   const missing = Number(info.missingParts) || 0;
   const opening = missing
-    ? `Your CredentialDOMD backup for ${monthLabel(info.period)} is ready, but ${formatCount(missing)} of its ${formatCount(missing + info.links.length)} parts did not finish building. What is below is real and complete as far as it goes. Build a new backup from More > Settings > Data and Backup, and write to us if it fails again.`
+    ? `Your CredentialDOMD backup for ${monthLabel(info.period)} is ready, but ${formatCount(missing)} of its ${formatCount(missing + info.links.length)} parts did not finish building. What is below is real and complete as far as it goes. Build a new backup from More > Data and Backup, and write to us if it fails again.`
     : `Your complete CredentialDOMD backup for ${monthLabel(info.period)} is ready.`;
 
   return `${info.greetingName},
@@ -624,11 +636,11 @@ ${inside}
 
 ${download}
 
-${multi ? "The links expire" : "The link expires"} on ${longDate(info.expiresAt)}. A fresh one is always waiting in the app under More > Settings > Data and Backup.
+${multi ? "The links expire" : "The link expires"} on ${longDate(info.expiresAt)}. A fresh one is always waiting in the app under More > Data and Backup.
 
 ${VAULT_NOTE} ${KEYS_NOTE}
 ${skipped}
-To stop these monthly backups, open More > Settings > Data and Backup and turn Monthly backup off.
+To stop these monthly backups, open More > Data and Backup and turn Monthly backup off.
 
 CredentialDOMD
 `;

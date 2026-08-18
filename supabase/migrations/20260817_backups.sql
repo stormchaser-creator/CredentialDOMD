@@ -75,9 +75,11 @@ comment on table public.backups is
 -- bucket_id = 'documents'. So no anon or authenticated role can list, read or
 -- write anything in "backups": the only ways in are the service role and a
 -- signed URL minted for one object. Do not add a policy here.
-insert into storage.buckets (id, name, public)
-values ('backups', 'backups', false)
-on conflict (id) do nothing;
+-- 200 MB per object: the project default is 50 MB, which every real archive
+-- would exceed (one account already holds 60 MB of scans).
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('backups', 'backups', false, 209715200)
+on conflict (id) do update set file_size_limit = excluded.file_size_limit;
 
 -- ── 3. The opt-out ───────────────────────────────────────────────────────────
 alter table public.profiles
@@ -157,3 +159,35 @@ select cron.schedule(
 );
 
 notify pgrst, 'reload schema';
+
+-- ── Retention: keep the three most recent months per user ───────────────────
+-- A 60 MB archive every month fills a 1 GB project in about a year. The
+-- physician keeps whatever they have already downloaded; the app keeps the
+-- last three months. Ranking is by MONTH, not by row, so every part of a
+-- multi-part archive lives or dies together. Storage objects go first so no
+-- surviving row can point at a deleted file.
+create or replace function public.prune_old_backups()
+returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  n integer := 0;
+begin
+  create temp table _doomed on commit drop as
+  with ranked as (
+    select id, storage_path, user_id, period,
+           dense_rank() over (partition by user_id order by period desc) as month_rank
+      from public.backups
+  )
+  select id, storage_path from ranked where month_rank > 3;
+
+  delete from storage.objects o
+   using _doomed d
+   where o.bucket_id = 'backups' and o.name = d.storage_path;
+
+  delete from public.backups b using _doomed d where b.id = d.id;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+select cron.unschedule(jobid) from cron.job where jobname = 'prune-backups';
+select cron.schedule('prune-backups', '30 13 1 * *', $cron$ select public.prune_old_backups(); $cron$);
