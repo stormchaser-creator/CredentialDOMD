@@ -44,7 +44,7 @@ function billedCodes(item) {
 
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, filterTabs, prefillItem, onPrefillDone, contactImport }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport }) {
   const { data, setData, addItem, theme: T , user } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -271,6 +271,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
   // Tap-anywhere detail view + full-screen picture viewer
   const [viewItem, setViewItem] = useState(null);
+  // Opening one record from somewhere else (the dashboard list, search, Vera)
+  // shows its details, the same thing tapping the card does.
+  useEffect(() => {
+    if (!autoViewId) return;
+    const it = items.find(x => x.id === autoViewId);
+    if (it) { setViewItem(it); onAutoViewDone?.(); }
+  }, [autoViewId, items, onAutoViewDone]);
   // Secret fields (portal passwords): masked, encrypted on save with a
   // device-held lock code, revealed on demand in the detail view.
   const [showSecret, setShowSecret] = useState({});

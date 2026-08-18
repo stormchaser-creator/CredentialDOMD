@@ -10,7 +10,7 @@ import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, getHealthRecordResults,
 import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
 
-function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
+function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId, onAutoViewDone }) {
   const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -100,6 +100,13 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone }) {
     const it = items.find(x => x.id === autoEditId);
     if (it) { openEdit(it); onAutoEditDone?.(); }
   }, [autoEditId, items, openEdit, onAutoEditDone]);
+
+  // Opened from the dashboard list or search: show the record's details.
+  useEffect(() => {
+    if (!autoViewId) return;
+    const it = items.find(x => x.id === autoViewId);
+    if (it) { setViewItem(it); onAutoViewDone?.(); }
+  }, [autoViewId, items, onAutoViewDone]);
 
   const typeOptions = useMemo(() => getHealthRecordTypes(form.category), [form.category]);
 
