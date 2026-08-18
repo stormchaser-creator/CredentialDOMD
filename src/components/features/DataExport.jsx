@@ -3,6 +3,7 @@ import { exportVault, importVault, vaultCount, clearVault } from "../../utils/pr
 import { useApp } from "../../context/AppContext";
 import { STORAGE_KEY } from "../../constants/defaults";
 import { bulkSync, saveSettings } from "../../lib/supabase";
+import BackupPanel from "./BackupPanel";
 
 function DataExport() {
   const { data, setData, userIdRef, theme: T } = useApp();
@@ -283,7 +284,13 @@ function DataExport() {
         <div style={{ fontSize: 13, color: T.textDim, marginTop: 8 }}>{totalItems} total items</div>
       </div>
 
+      {/* Monthly backup: server-built, emailed as a link. Sits above the
+          manual buttons because it is the one that runs without being asked. */}
+      <div style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "0 0 8px" }}>Monthly backup</div>
+      <BackupPanel />
+
       {/* Export */}
+      <div style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "18px 0 8px" }}>Export it yourself</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
         {/* The private vault: identifiers that never leave the device */}
         <div style={{ backgroundColor: T.card, border: `1px dashed ${T.border}`, borderRadius: 12, padding: "13px 15px", marginBottom: 10 }}>
