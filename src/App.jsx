@@ -133,20 +133,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [veraRequest, setVeraRequest] = useState(null); // {id, from_addr, subject}: the document request Vera is working
   const newRequestCount = useNewRequestCount();
 
-  // Target props for a section: "view" opens the record's details (a tap from
-  // the dashboard, search, or Vera), "edit" opens the form on a specific
-  // field (the fix-this-expiration cards).
-  const crudTarget = useCallback((sec) => {
-    if (autoEditTarget?.sec !== sec) return {};
-    const edit = autoEditTarget.mode === "edit";
-    return {
-      autoEditId: edit ? autoEditTarget.id : null,
-      autoFocusField: edit ? (autoEditTarget.focus || null) : null,
-      onAutoEditDone: () => setAutoEditTarget(null),
-      autoViewId: edit ? null : autoEditTarget.id,
-      onAutoViewDone: () => setAutoEditTarget(null),
-    };
-  }, [autoEditTarget]);
 
   const aiOn = useAiAvailable(data.settings);
   const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
@@ -166,6 +152,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [autoAddLicense, setAutoAddLicense] = useState(false);
   // {sec, id} — opens that record's edit form after navigating (Home → fix-it links)
   const [autoEditTarget, setAutoEditTarget] = useState(null);
+
+  // Target props for a section: "view" opens the record's details (a tap from
+  // the dashboard, search, or Vera), "edit" opens the form on a specific
+  // field (the fix-this-expiration cards).
+  const crudTarget = useCallback((sec) => {
+    if (autoEditTarget?.sec !== sec) return {};
+    const edit = autoEditTarget.mode === "edit";
+    return {
+      autoEditId: edit ? autoEditTarget.id : null,
+      autoFocusField: edit ? (autoEditTarget.focus || null) : null,
+      onAutoEditDone: () => setAutoEditTarget(null),
+      autoViewId: edit ? null : autoEditTarget.id,
+      onAutoViewDone: () => setAutoEditTarget(null),
+    };
+  }, [autoEditTarget]);
   const [npiImporting, setNpiImporting] = useState(false);
   const [npiImportMsg, setNpiImportMsg] = useState(null);
 
