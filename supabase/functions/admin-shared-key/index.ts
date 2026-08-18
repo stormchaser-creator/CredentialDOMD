@@ -16,7 +16,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 
 const SECRET_NAME = "gemini_shared_key";
-const KEY_RE = /^AIza[0-9A-Za-z_-]{20,}$/;
+// Google issues more than one key shape: the classic "AIza..." and the
+// current AI Studio "AQ.Ab8..." form. Pinning to AIza rejected a valid key,
+// so this is only a sanity check on the paste (no spaces, plausible length)
+// and Google's own answer below is what actually decides.
+const KEY_RE = /^[A-Za-z0-9._~+/=-]{20,300}$/;
 // A cheap, model-agnostic-enough probe. Only 400/403 "invalid key" style
 // answers reject the save; anything else (404 model, 429, network) lets it through.
 const PROBE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:countTokens";
@@ -80,12 +84,12 @@ serve(async (req) => {
   try { body = await req.json(); } catch { return json(400, { error: "Bad JSON" }); }
   const value = typeof body.value === "string" ? body.value.trim() : "";
   if (!KEY_RE.test(value)) {
-    return json(400, { error: "That does not look like a Google AI Studio key (it should start with AIza)." });
+    return json(400, { error: "That does not look like an API key. Copy it again from Google AI Studio, with no spaces or line breaks." });
   }
 
   const probe = await probeKey(value);
   if (!probe.ok) {
-    return json(400, { error: `Google rejected that key: ${probe.reason || "invalid key"}` });
+    return json(400, { error: `Google rejected that key: ${probe.reason || "invalid key"}. If you pasted an Anthropic key (sk-ant-...), it will not work here: this proxy calls Gemini.` });
   }
 
   const { error } = await db
