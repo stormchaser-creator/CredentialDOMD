@@ -84,14 +84,25 @@ function Forecast() {
   // Day editor
   const [editDay, setEditDay] = useState(null); // date string
   const [form, setForm] = useState({});
-  const openDay = (date) => {
-    const existing = (schedByDate[date] || [])[0];
-    const cid = existing?.contractId || contracts[0]?.id || "";
+  const blankEntry = (date) => {
+    const cid = contracts[0]?.id || "";
     const defKind = (contracts.find(c => c.id === cid)?.payModel === "daily") ? "day" : "call";
-    setForm(existing
-      ? { ...existing }
-      : { date, contractId: cid, kind: defKind, expected: suggestFor(cid, defKind) || "" });
+    return { date, contractId: cid, kind: defKind, expected: suggestFor(cid, defKind) || "" };
+  };
+  // A day can hold entries from more than one contract (overlapping coverage
+  // periods do exactly that). Show them all: opening straight into the first
+  // one hid the others and made them impossible to delete.
+  const openDay = (date) => {
+    const entries = schedByDate[date] || [];
+    setForm(entries.length === 1 ? { ...entries[0] } : null);
     setEditDay(date);
+  };
+  const editEntry = (entry) => setForm({ ...entry });
+  const removeEntry = (id) => {
+    if (id && sched.some(s => s.id === id)) deleteItem("scheduleDays", id);
+    const left = (schedByDate[editDay] || []).filter(s => s.id !== id);
+    if (left.length === 0) setEditDay(null);
+    else setForm(null);
   };
   const saveDay = () => {
     const entry = {
@@ -101,11 +112,14 @@ function Forecast() {
     };
     if (sched.some(s => s.id === entry.id)) editItem("scheduleDays", entry);
     else addItem("scheduleDays", entry);
-    setEditDay(null);
+    const others = (schedByDate[editDay] || []).filter(s => s.id !== entry.id);
+    if (others.length) setForm(null); else setEditDay(null);
   };
   const removeDay = () => {
-    if (form.id && sched.some(s => s.id === form.id)) deleteItem("scheduleDays", form.id);
-    setEditDay(null);
+    if (form?.id && sched.some(s => s.id === form.id)) deleteItem("scheduleDays", form.id);
+    const left = (schedByDate[editDay] || []).filter(s => s.id !== form?.id);
+    if (left.length === 0) setEditDay(null);
+    else setForm(null);
   };
 
   // One tap: every coverage day on every contract becomes a scheduled day
@@ -200,7 +214,7 @@ function Forecast() {
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: T.text }}>{parseInt(date.slice(8), 10)}</div>
                 {entries.length > 0 && (
                   <div style={{ fontSize: 9, fontWeight: 800, color: T.accent, lineHeight: 1.2 }}>
-                    {facilityShort(entries[0].contractId)}<br />{short(est)}
+                    {entries.length > 1 ? `${entries.length}\u00d7 ${facilityShort(entries[0].contractId)}` : facilityShort(entries[0].contractId)}<br />{short(est)}
                   </div>
                 )}
                 {/* The green billed figure only earns its row when it differs
@@ -256,8 +270,47 @@ function Forecast() {
 
       {/* Day editor */}
       <Modal open={!!editDay} onClose={() => setEditDay(null)} title={editDay ? formatDate(editDay) : ""}>
+        {/* The day's booking list: every entry, from every contract, each one
+            editable and removable. Shown when nothing is being edited. */}
+        {editDay && !form && (() => {
+          const entries = schedByDate[editDay] || [];
+          const dayTotal = entries.reduce((n, e) => n + (parseFloat(e.expected) || 0), 0);
+          return (
+            <div>
+              {entries.length > 1 && (
+                <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10, lineHeight: 1.5 }}>
+                  {entries.length} entries are booked on this day, so the calendar adds them up to {money(dayTotal)}. Remove any that should not be there.
+                </div>
+              )}
+              {entries.map(e => {
+                const c = contracts.find(x => x.id === e.contractId);
+                return (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c?.facility || "No contract"}</div>
+                      <div style={{ fontSize: 12.5, color: T.textMuted }}>{e.kind === "day+call" ? "Day + call" : e.kind === "day" ? "Day" : "Call"} · {money(e.expected)}{e.invoiceId ? " · invoiced" : ""}</div>
+                    </div>
+                    <button onClick={() => editEntry(e)} style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Edit</button>
+                    <button onClick={() => removeEntry(e.id)} style={{ padding: "7px 12px", borderRadius: 9, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Remove</button>
+                  </div>
+                );
+              })}
+              {entries.length === 0 && (
+                <div style={{ fontSize: 13.5, color: T.textMuted, padding: "6px 0 12px" }}>Nothing booked on this day yet.</div>
+              )}
+              {editDay && actuals[editDay] > 0 && (
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", marginTop: 10 }}>Actually billed this day: {money(actuals[editDay])}</div>
+              )}
+              <button onClick={() => setForm(blankEntry(editDay))} style={{ width: "100%", marginTop: 14, padding: "12px 16px", borderRadius: 10, border: `1px solid ${T.accent}`, backgroundColor: "transparent", color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                Add another entry
+              </button>
+            </div>
+          );
+        })()}
+
+        {form && (<>
         <Field label="Contract">
-          <select value={form.contractId || ""} onChange={e => {
+          <select value={form?.contractId || ""} onChange={e => {
             const cid = e.target.value;
             setForm(f => ({ ...f, contractId: cid, expected: suggestFor(cid, f.kind) || "" }));
           }} style={{ ...iS, appearance: "auto" }}>
@@ -269,24 +322,24 @@ function Forecast() {
             {[["call", "Call"], ["day", "Day"], ["day+call", "Day + call"]].map(([k, label]) => (
               <button key={k} onClick={() => setForm(f => ({ ...f, kind: k, expected: suggestFor(f.contractId, k) || f.expected }))} style={{
                 flex: 1, padding: "9px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${form.kind === k ? T.accent : T.border}`,
-                backgroundColor: form.kind === k ? (T.accentDim || "rgba(16,185,129,0.14)") : "transparent",
-                color: form.kind === k ? T.accent : T.textMuted,
+                border: `1px solid ${form?.kind === k ? T.accent : T.border}`,
+                backgroundColor: form?.kind === k ? (T.accentDim || "rgba(16,185,129,0.14)") : "transparent",
+                color: form?.kind === k ? T.accent : T.textMuted,
               }}>{label}</button>
             ))}
           </div>
         </Field>
         <Field label="Expected earnings ($)" hint={(() => {
-          const c = contracts.find(x => x.id === form.contractId);
+          const c = contracts.find(x => x.id === form?.contractId);
           const day = parseFloat(c?.dayRate) || 0;
           const call = parseFloat(c?.callStipend) || 0;
           if (day) return `Contract rates: day ${money(day)} · day + call ${money(day + call)} — the type above sets the price.`;
-          const k = kindAvgs[form.contractId] || {};
+          const k = kindAvgs[form?.contractId] || {};
           if (k.callAvg) return `Call days here have averaged ${money(k.callAvg)} (stipend ${money(call)} + overage)${k.dayAvg ? `; non-call days ${money(k.dayAvg)}` : ""}. The type above sets the price.`;
           if (call) return `Call stipend ${money(call)} per call day — no history yet, so the stipend is the starting point.`;
-          return avgOf[form.contractId] ? `This contract has averaged ${money(avgOf[form.contractId])} per worked day.` : "No history yet — contract rate used as the starting point.";
+          return avgOf[form?.contractId] ? `This contract has averaged ${money(avgOf[form?.contractId])} per worked day.` : "No history yet — contract rate used as the starting point.";
         })()}>
-          <input type="number" inputMode="decimal" value={form.expected ?? ""} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={iS} />
+          <input type="number" inputMode="decimal" value={form?.expected ?? ""} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={iS} />
         </Field>
         {editDay && actuals[editDay] > 0 && (
           <div style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", marginTop: 4 }}>
@@ -294,11 +347,15 @@ function Forecast() {
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          {form.id && sched.some(s => s.id === form.id) && (
+          {form?.id && sched.some(s => s.id === form.id) && (
             <button onClick={removeDay} style={{ padding: "12px 16px", borderRadius: 10, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Remove</button>
           )}
           <button onClick={saveDay} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>Save day</button>
         </div>
+        {(schedByDate[editDay] || []).length > 1 && (
+          <button onClick={() => setForm(null)} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: T.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Back to all entries for this day</button>
+        )}
+        </>)}
       </Modal>
     </div>
   );
