@@ -1,7 +1,7 @@
-// 20260817T2317-a6f3b8d is replaced at build time (see stampBuildId in vite.config.js).
+// 20260818T0249-f9d059c is replaced at build time (see stampBuildId in vite.config.js).
 // Because the id changes every deploy, this file's bytes change every deploy,
 // which is what makes the browser fire `updatefound` and install the new SW.
-const BUILD_ID = "20260817T2317-a6f3b8d";
+const BUILD_ID = "20260818T0249-f9d059c";
 const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
