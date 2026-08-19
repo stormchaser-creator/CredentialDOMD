@@ -47,7 +47,7 @@ const KINDS = new Set(["error", "unhandledrejection", "react"]);
 
 // Anything that looks like a credential is replaced before it touches the DB.
 const SECRET_RE =
-  /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{6,}|\bsk-[A-Za-z0-9_-]{16,}|\bAIza[0-9A-Za-z_-]{20,}|\bre_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g;
+  /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{6,}|\bsk-[A-Za-z0-9_-]{16,}|\bAIza[0-9A-Za-z_-]{20,}|\bAQ\.[A-Za-z0-9._-]{20,}|\bre_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g;
 const scrub = (s: string) => s.replace(SECRET_RE, "[redacted]");
 
 function str(v: unknown, max: number): string | null {

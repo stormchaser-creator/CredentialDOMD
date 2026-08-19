@@ -30,7 +30,7 @@ const MAX_REPORTS_PER_SESSION = 25;
 // Anything credential-shaped is replaced before it leaves the browser.
 // The function scrubs again server-side.
 const SECRET_RE =
-  /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{6,}|\bsk-[A-Za-z0-9_-]{16,}|\bAIza[0-9A-Za-z_-]{20,}|\bre_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|"?(?:apikey|authorization|x-api-key)"?\s*[:=]\s*"?[^",\s}]{6,}/gi;
+  /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{6,}|\bsk-[A-Za-z0-9_-]{16,}|\bAIza[0-9A-Za-z_-]{20,}|\bAQ\.[A-Za-z0-9._-]{20,}|\bre_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|"?(?:apikey|authorization|x-api-key)"?\s*[:=]\s*"?[^",\s}]{6,}/gi;
 
 let currentUserId = null;
 let installed = false;

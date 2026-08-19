@@ -325,7 +325,7 @@ function SettingsSection() {
         <Field label="Your own Gemini key (optional)" hint={s.apiKey
           ? "Saved \u2713 on this device only. Your calls run on this key instead of the shared one, so the shared daily limit does not apply. Keys are not synced to your account; enter it again on any other device you use."
           : "AI is on without this. Add your own key (free at aistudio.google.com/apikey) to lift the shared daily limit; calls then bill to your key. Saves as you type, stored on this device only and never synced to your account."}>
-          <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza..." />
+          <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza... or AQ...." />
         </Field>
         <Field label="Your own Anthropic key (optional)" hint={s.anthropicApiKey
           ? "Saved \u2713 on this device only. Vera now thinks on Claude Opus; document scanning still uses Gemini. Not synced, so enter it again on other devices."

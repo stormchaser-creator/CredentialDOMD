@@ -957,7 +957,9 @@ function AiPanel({ users, ownKey, T }) {
 
   const saveKey = async (value, label) => {
     const v = (value || "").trim();
-    if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(v)) { setMsg("Could not save: that does not look like a Google AI Studio key (starts with AIza)."); return; }
+    // Google issues both "AIza..." and the current "AQ.Ab8..." keys, so only
+    // obvious pastes are stopped here; Google itself is the real judge.
+    if (!/^[A-Za-z0-9._~+/=-]{20,300}$/.test(v)) { setMsg("Could not save: that does not look like an API key. Copy it again from Google AI Studio, with no spaces or line breaks."); return; }
     setBusy(true); setMsg("");
     const r = await callFn("admin-shared-key", { method: "POST", body: { value: v } });
     setBusy(false);
@@ -1030,7 +1032,7 @@ function AiPanel({ users, ownKey, T }) {
           Paste a Google AI Studio key. It is stored on the server only (app_secrets, service role) and is never sent to a browser. Google is asked to confirm the key before it is saved.
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="AIza..." type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
+          <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="AIza... or AQ...." type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
             style={{ flex: "1 1 220px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13, fontFamily: "ui-monospace, monospace" }} />
           {btn(busy ? "..." : "Save shared key", () => saveKey(keyInput), { primary: true, disabled: !keyInput.trim() })}
         </div>
