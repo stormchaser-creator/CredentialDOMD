@@ -232,24 +232,28 @@ function Forecast() {
             const est = entries.reduce((t, s) => t + (parseFloat(s.expected) || 0), 0);
             const act = actuals[date] || 0;
             const isPast = date < today;
+            const isPastOrToday = date <= today;
             const isToday = date === today;
+            const hasActivity = entries.length > 0 || act > 0;
             return (
               <div key={date} onClick={() => openDay(date)} style={{
                 minHeight: 46, minWidth: 0, overflow: "hidden", borderRadius: 8, padding: "3px 2px", cursor: "pointer", textAlign: "center",
-                border: `1px solid ${isToday ? T.accent : entries.length ? (T.accentDim || "rgba(16,185,129,0.35)") : "transparent"}`,
-                backgroundColor: entries.length ? (T.accentGlow || "rgba(16,185,129,0.08)") : T.input,
-                opacity: isPast && !entries.length && !act ? 0.55 : 1,
+                border: `1px solid ${isToday ? T.accent : hasActivity ? (T.accentDim || "rgba(16,185,129,0.35)") : "transparent"}`,
+                backgroundColor: hasActivity ? (T.accentGlow || "rgba(16,185,129,0.08)") : T.input,
+                opacity: isPast && !hasActivity ? 0.55 : 1,
               }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: T.text }}>{parseInt(date.slice(8), 10)}</div>
-                {entries.length > 0 && (
+                {entries.length > 0 ? (
                   <div style={{ fontSize: 9, fontWeight: 800, color: T.accent, lineHeight: 1.2 }}>
                     {entries.length > 1 ? `${entries.length}\u00d7 ${facilityShort(entries[0].contractId)}` : facilityShort(entries[0].contractId)}<br />{short(est)}
                   </div>
-                )}
+                ) : act > 0 ? (
+                  <div style={{ fontSize: 9, fontWeight: 800, color: "#22c55e", lineHeight: 1.2 }}>Logged<br />{short(act)}</div>
+                ) : null}
                 {/* The green billed figure only earns its row when it differs
                     from the estimate — past days seeded from actuals would
                     otherwise print the same number twice. */}
-                {isPast && act > 0 && Math.round(act) !== Math.round(est) && (
+                {isPastOrToday && act > 0 && entries.length > 0 && Math.round(act) !== Math.round(est) && (
                   <div style={{ fontSize: 8.5, fontWeight: 700, color: "#22c55e" }}>{short(act)}</div>
                 )}
               </div>
