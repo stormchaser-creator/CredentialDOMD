@@ -16,6 +16,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import renewalLinks from "./renewalLinks.json" with { type: "json" };
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -99,7 +100,7 @@ serve(async (req) => {
       for (const r of (data || []) as any[]) {
         if (!r.expiration_date || acked.has(r.id)) continue;
         const bits = [r.name, r.type && r.type !== r.name ? r.type : null, r.state].filter(Boolean);
-        items.push({ id: r.id, table: t.table, label: t.label, name: bits.join(" · ") || t.label, exp: r.expiration_date, days: dayDiff(r.expiration_date) });
+        items.push({ id: r.id, table: t.table, label: t.label, name: bits.join(" · ") || t.label, exp: r.expiration_date, days: dayDiff(r.expiration_date), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
       }
     }
     if (!items.length) { results.push({ profile: p.id, sent: false, reason: "nothing due" }); continue; }
@@ -114,7 +115,16 @@ serve(async (req) => {
     const expired = items.filter(i => i.days < 0);
     const soon = items.filter(i => i.days >= 0 && i.days <= 30);
     const later = items.filter(i => i.days > 30);
-    const line = (i: typeof items[0]) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})`;
+    // A warning without the door to fix it is homework, not help: every
+    // license line names where to renew it.
+    const renewLine = (i: typeof items[0]) => {
+      if (i.isDea) return "\n      Renew: https://www.deadiversion.usdoj.gov/online_forms_apps.html";
+      if (!i.isLicense || !i.state) return "";
+      const r = (renewalLinks as Record<string, { portal?: string; board?: string; due?: string; guide?: string }>)[i.state];
+      if (!r?.portal) return "";
+      return `\n      Renew: ${r.portal}${r.guide ? `\n      Steps and fees: ${r.guide}` : ""}`;
+    };
+    const line = (i: typeof items[0]) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}`;
     const parts: string[] = [];
     if (expired.length) parts.push(`EXPIRED\n${expired.map(line).join("\n")}`);
     if (soon.length) parts.push(`Due within 30 days\n${soon.map(line).join("\n")}`);

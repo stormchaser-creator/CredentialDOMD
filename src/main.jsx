@@ -39,6 +39,9 @@ if (import.meta.env.PROD) {
     // Clerk frontend API (the *.clerk.accounts.dev / *.clerk.com hosts the SDK calls)
     "https://*.clerk.accounts.dev",
     "https://*.clerk.com",
+    // Production Clerk lives on our own domain once the cutover lands.
+    "https://clerk.credentialdomd.com",
+    "https://accounts.credentialdomd.com",
     "https://clerk-telemetry.com",
     // Clerk's Smart CAPTCHA is Cloudflare Turnstile — its widget posts back here.
     "https://challenges.cloudflare.com",
@@ -55,13 +58,13 @@ if (import.meta.env.PROD) {
     "default-src 'self'",
     // Clerk injects a small bootstrap script that needs to run on the page.
     // Cloudflare Turnstile (Clerk's CAPTCHA) ships its bootstrap from challenges.cloudflare.com.
-    "script-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
+    "script-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.credentialdomd.com https://challenges.cloudflare.com",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "connect-src " + connectSources.join(" "),
     "img-src 'self' data: blob: https://img.clerk.com",
     // Turnstile renders the challenge in an iframe from challenges.cloudflare.com.
-    "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com",
+    "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://clerk.credentialdomd.com https://accounts.credentialdomd.com https://challenges.cloudflare.com",
     "worker-src 'self' blob:",
   ].join("; ");
   document.head.prepend(csp);

@@ -1,4 +1,5 @@
 import { complianceFor, findStateLicense } from "./compliance";
+import { RENEWAL_INFO } from "../constants/renewalInfo";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
 import { CPT_DESCS } from "../constants/cptDescs";
 import { CME_PROVIDERS } from "../constants/cmeProviders";
@@ -116,6 +117,15 @@ export function buildSnapshot(data, allTrackedStates = []) {
     privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate })),
     insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate })),
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
+    // Researched renewal logistics for the states this physician holds, so a
+    // "how do I renew" answer can be a real walkthrough with real links.
+    renewalInfo: Object.fromEntries(
+      allTrackedStates.filter(st => RENEWAL_INFO[st]).map(st => {
+        const r = RENEWAL_INFO[st];
+        return [st, { board: r.board, portal: r.portalUrl, cycle: r.cycle, due: r.due, fee: r.fee, steps: (r.steps || []).slice(0, 6), guide: r.guideUrl }];
+      })
+    ),
+    deaRenewal: { portal: "https://www.deadiversion.usdoj.gov/online_forms_apps.html", cycle: "3 years", fee: "$888" },
     cme: short(data.cme, x => ({ id: x.id, title: x.title, hours: x.hours, category: x.category, date: x.date, provider: x.provider })),
     healthRecords: short(data.healthRecords, h => ({ id: h.id, category: h.category, name: h.name, result: h.result, value: h.resultValue, expires: h.expirationDate })),
     screenings: short(data.screenings, s => ({ id: s.id, name: s.name, result: s.result, reported: s.reportDate, expires: s.expirationDate })),
@@ -210,6 +220,15 @@ found, (3) put each requested item you could NOT find into "missing" — that ga
 gaps (e.g. scan the diploma with the + button; the MMR titer shows NOT immune — a vaccine
 series + re-titer will be needed, not just a copy). Documents with onDevice=false can still
 be sent — the app fetches them from the cloud when possible.
+
+RENEWALS: when asked how to renew a license, DEA registration, or anything expiring,
+answer as a WALKTHROUGH, not a summary: numbered steps from renewalInfo (or the
+generic board process when steps are missing), the fee and deadline when present,
+and ALWAYS the direct links: the state's portal URL, and the guide URL for the
+full steps and pitfalls. For DEA use deaRenewal. Cross-reference the physician's
+own license record (number, expiration) in the walkthrough. If renewalInfo lacks
+their state, say the app's state guide is the place to check and link
+https://credentialdomd.com/states/. Never invent a fee or deadline.
 
 NAVIGATION: when the user asks to see, open, go to, show, or "take me to" a record or a
 section ("take me to RUHS privileges", "open my DEA", "show the Penrose contract"),

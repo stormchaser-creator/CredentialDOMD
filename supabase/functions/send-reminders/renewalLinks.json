@@ -1,0 +1,302 @@
+{
+ "AL": {
+  "portal": "https://www.albme.org",
+  "board": "Alabama Board of Medical Examiners",
+  "due": "January",
+  "guide": "https://credentialdomd.com/states/alabama"
+ },
+ "AK": {
+  "portal": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx",
+  "board": "Alaska State Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/alaska"
+ },
+ "AZ": {
+  "portal": "https://www.azmd.gov",
+  "board": "Arizona Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/arizona"
+ },
+ "AR": {
+  "portal": "https://www.armedicalboard.org",
+  "board": "Arkansas State Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/arkansas"
+ },
+ "CA": {
+  "portal": "https://www.mbc.ca.gov",
+  "board": "Medical Board of California",
+  "due": "Birth month (biennial)",
+  "guide": "https://credentialdomd.com/states/california"
+ },
+ "CO": {
+  "portal": "https://dpo.colorado.gov/MedicalBoard",
+  "board": "Colorado Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/colorado"
+ },
+ "CT": {
+  "portal": "https://portal.ct.gov/DPH/Practitioner-Licensing--Investigations/Medical-Examining-Board",
+  "board": "Connecticut Medical Examining Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/connecticut"
+ },
+ "DE": {
+  "portal": "https://dpr.delaware.gov/boards/medicalpractice/",
+  "board": "Delaware Board of Medical Licensure and Discipline",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/delaware"
+ },
+ "FL": {
+  "portal": "https://flboardofmedicine.gov",
+  "board": "Florida Board of Medicine",
+  "due": "January 31 (odd or even years by group)",
+  "guide": "https://credentialdomd.com/states/florida"
+ },
+ "GA": {
+  "portal": "https://medicalboard.georgia.gov",
+  "board": "Georgia Composite Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/georgia"
+ },
+ "HI": {
+  "portal": "https://cca.hawaii.gov/pvl/boards/medical/",
+  "board": "Hawaii Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/hawaii"
+ },
+ "ID": {
+  "portal": "https://bom.idaho.gov",
+  "board": "Idaho Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/idaho"
+ },
+ "IL": {
+  "portal": "https://idfpr.illinois.gov",
+  "board": "Illinois Department of Financial and Professional Regulation",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/illinois"
+ },
+ "IN": {
+  "portal": "https://www.in.gov/pla/professions/medical-licensing-board/",
+  "board": "Indiana Medical Licensing Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/indiana"
+ },
+ "IA": {
+  "portal": "https://medicalboard.iowa.gov",
+  "board": "Iowa Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/iowa"
+ },
+ "KS": {
+  "portal": "https://www.ksbha.org",
+  "board": "Kansas State Board of Healing Arts",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/kansas"
+ },
+ "KY": {
+  "portal": "https://kbml.ky.gov",
+  "board": "Kentucky Board of Medical Licensure",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/kentucky"
+ },
+ "LA": {
+  "portal": "https://www.lsbme.la.gov",
+  "board": "Louisiana State Board of Medical Examiners",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/louisiana"
+ },
+ "ME": {
+  "portal": "https://www.maine.gov/md/",
+  "board": "Maine Board of Licensure in Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/maine"
+ },
+ "MD": {
+  "portal": "https://www.mbp.state.md.us",
+  "board": "Maryland Board of Physicians",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/maryland"
+ },
+ "MA": {
+  "portal": "https://www.mass.gov/orgs/board-of-registration-in-medicine",
+  "board": "Massachusetts Board of Registration in Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/massachusetts"
+ },
+ "MI": {
+  "portal": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/medicine",
+  "board": "Michigan Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/michigan"
+ },
+ "MN": {
+  "portal": "https://mn.gov/boards/medical-practice/",
+  "board": "Minnesota Board of Medical Practice",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/minnesota"
+ },
+ "MS": {
+  "portal": "https://www.msbml.ms.gov",
+  "board": "Mississippi State Board of Medical Licensure",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/mississippi"
+ },
+ "MO": {
+  "portal": "https://pr.mo.gov/healingarts.asp",
+  "board": "Missouri State Board of Registration for the Healing Arts",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/missouri"
+ },
+ "MT": {
+  "portal": "https://boards.bsd.dli.mt.gov/medical-examiners",
+  "board": "Montana Board of Medical Examiners",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/montana"
+ },
+ "NE": {
+  "portal": "https://dhhs.ne.gov/licensure/Pages/Medicine-and-Surgery.aspx",
+  "board": "Nebraska Board of Medicine and Surgery",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/nebraska"
+ },
+ "NV": {
+  "portal": "https://medboard.nv.gov",
+  "board": "Nevada State Board of Medical Examiners",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/nevada"
+ },
+ "NH": {
+  "portal": "https://www.oplc.nh.gov/board-medicine",
+  "board": "New Hampshire Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/new-hampshire"
+ },
+ "NJ": {
+  "portal": "https://www.njconsumeraffairs.gov/bme/",
+  "board": "New Jersey State Board of Medical Examiners",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/new-jersey"
+ },
+ "NM": {
+  "portal": "https://www.nmmb.state.nm.us",
+  "board": "New Mexico Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/new-mexico"
+ },
+ "NY": {
+  "portal": "https://www.op.nysed.gov/professions/physicians",
+  "board": "New York State Education Department (NYSED) Office of the Professions",
+  "due": "Based on registration period",
+  "guide": "https://credentialdomd.com/states/new-york"
+ },
+ "NC": {
+  "portal": "https://www.ncmedboard.org",
+  "board": "North Carolina Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/north-carolina"
+ },
+ "ND": {
+  "portal": "https://www.ndbom.org",
+  "board": "North Dakota Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/north-dakota"
+ },
+ "OH": {
+  "portal": "https://med.ohio.gov",
+  "board": "State Medical Board of Ohio",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/ohio"
+ },
+ "OK": {
+  "portal": "https://www.okmedicalboard.org",
+  "board": "Oklahoma State Board of Medical Licensure and Supervision",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/oklahoma"
+ },
+ "OR": {
+  "portal": "https://www.oregon.gov/omb/",
+  "board": "Oregon Medical Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/oregon"
+ },
+ "PA": {
+  "portal": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine/",
+  "board": "Pennsylvania State Board of Medicine",
+  "due": "December 31 (even years for MDs)",
+  "guide": "https://credentialdomd.com/states/pennsylvania"
+ },
+ "RI": {
+  "portal": "https://health.ri.gov/licenses/detail.php?id=201",
+  "board": "Rhode Island Board of Medical Licensure and Discipline",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/rhode-island"
+ },
+ "SC": {
+  "portal": "https://llr.sc.gov/med/",
+  "board": "South Carolina Board of Medical Examiners",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/south-carolina"
+ },
+ "SD": {
+  "portal": "https://www.sdbmoe.gov",
+  "board": "South Dakota Board of Medical and Osteopathic Examiners",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/south-dakota"
+ },
+ "TN": {
+  "portal": "https://www.tn.gov/health/health-program-areas/health-professional-boards/me-board.html",
+  "board": "Tennessee Board of Medical Examiners",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/tennessee"
+ },
+ "TX": {
+  "portal": "https://www.tmb.state.tx.us",
+  "board": "Texas Medical Board (TMB)",
+  "due": "Based on registration period",
+  "guide": "https://credentialdomd.com/states/texas"
+ },
+ "UT": {
+  "portal": "https://dopl.utah.gov",
+  "board": "Utah Division of Occupational and Professional Licensing",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/utah"
+ },
+ "VT": {
+  "portal": "https://sos.vermont.gov/medical-board/",
+  "board": "Vermont Board of Medical Practice",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/vermont"
+ },
+ "VA": {
+  "portal": "https://www.dhp.virginia.gov/medicine/",
+  "board": "Virginia Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/virginia"
+ },
+ "WA": {
+  "portal": "https://wmc.wa.gov",
+  "board": "Washington Medical Commission",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/washington"
+ },
+ "WV": {
+  "portal": "https://wvbom.wv.gov",
+  "board": "West Virginia Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/west-virginia"
+ },
+ "WI": {
+  "portal": "https://dsps.wi.gov/pages/BoardsCouncils/MedicalExaminingBoard/Default.aspx",
+  "board": "Wisconsin Medical Examining Board",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/wisconsin"
+ },
+ "WY": {
+  "portal": "https://wyomedboard.wyo.gov",
+  "board": "Wyoming Board of Medicine",
+  "due": null,
+  "guide": "https://credentialdomd.com/states/wyoming"
+ }
+}
