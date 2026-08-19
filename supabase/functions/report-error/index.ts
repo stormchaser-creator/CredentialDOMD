@@ -164,5 +164,20 @@ Deno.serve(async (req) => {
     console.error("report-error insert failed:", error.message);
     return json({ error: "Insert failed" }, 500);
   }
+
+  // Self-cleaning: a report from THIS build means older builds are no longer
+  // being served, so their crashes cannot recur. Retire them once they are a
+  // day old (a grace period, in case a stale tab is still reporting), and
+  // drop anything older than a week whatever its build.
+  if (build) {
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    try {
+      await db.from("client_errors").delete().neq("build", build).lt("created_at", dayAgo);
+      await db.from("client_errors").delete().lt("created_at", weekAgo);
+    } catch (e) {
+      console.error("report-error prune failed:", e instanceof Error ? e.message : String(e));
+    }
+  }
   return json({ ok: true });
 });

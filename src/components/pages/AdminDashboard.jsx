@@ -511,6 +511,13 @@ function SignupsList({ rows, T }) {
 /** Client-side crashes reported by report-error. Last 50, newest first. */
 function ErrorsList({ rows, users, T, onCleared }) {
   const [openId, setOpenId] = useState(null);
+  const [liveBuild, setLiveBuild] = useState(null);
+  useEffect(() => {
+    // What the site serves right now: anything reported by an older build
+    // cannot happen again on current code.
+    fetch(`${import.meta.env.BASE_URL}version.json?cb=${Date.now()}`)
+      .then(r => r.json()).then(v => setLiveBuild(v?.build || null)).catch(() => {});
+  }, []);
   const [clearing, setClearing] = useState(false);
   const clearAll = async () => {
     if (!rows.length || !window.confirm(`Delete all ${rows.length} error reports? Do this once the cause is fixed.`)) return;
@@ -524,17 +531,46 @@ function ErrorsList({ rows, users, T, onCleared }) {
     return u ? (u.name || u.email || "account") : (e.auth_user_id ? "signed-in user" : "signed-out visitor");
   };
   if (!rows.length) return <div style={{ fontSize: 13, color: T.textMuted, padding: "20px 0", textAlign: "center" }}>No client errors reported.</div>;
+  // One row per distinct crash per build, with how many times it happened.
+  const groups = [];
+  const seen = new Map();
+  for (const e of rows) {
+    const key = `${e.build}|${e.kind}|${e.message}`;
+    if (seen.has(key)) { const g = seen.get(key); g.count++; g.ids.push(e.id); continue; }
+    const g = { ...e, count: 1, ids: [e.id] };
+    seen.set(key, g); groups.push(g);
+  }
+  const stale = groups.filter(g => liveBuild && g.build && g.build !== liveBuild);
+  const clearStale = async () => {
+    const ids = stale.flatMap(g => g.ids);
+    if (!ids.length) return;
+    setClearing(true);
+    const { error } = await supabase.from("client_errors").delete().in("id", ids);
+    setClearing(false);
+    if (!error) onCleared?.();
+  };
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div style={{ fontSize: 12, color: T.textMuted }}>{rows.length} report{rows.length === 1 ? "" : "s"}, newest first. Same message repeated = one bug hit several times.</div>
-        <button onClick={clearAll} disabled={clearing} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textDim, cursor: "pointer" }}>{clearing ? "..." : "Clear all"}</button>
+        <div style={{ fontSize: 12, color: T.textMuted }}>
+          {groups.length} distinct {groups.length === 1 ? "crash" : "crashes"} from {rows.length} report{rows.length === 1 ? "" : "s"}.
+          {stale.length > 0 && ` ${stale.length} already fixed by a later build; they clear themselves within a day.`}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          {stale.length > 0 && (
+            <button onClick={clearStale} disabled={clearing} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer" }}>Clear fixed</button>
+          )}
+          <button onClick={clearAll} disabled={clearing} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textDim, cursor: "pointer" }}>{clearing ? "..." : "Clear all"}</button>
+        </div>
       </div>
-      {rows.map(e => (
+      {groups.map(e => (
         <div key={e.id} onClick={() => setOpenId(openId === e.id ? null : e.id)} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color: e.kind === "react" ? "#ef4444" : "#f59e0b" }}>{e.kind}</span>
-            <span style={{ fontSize: 11, color: T.textDim }}>{timeAgo(e.created_at)} · {who(e)}{e.build ? ` · ${String(e.build).slice(-7)}` : ""}</span>
+            <span style={{ fontSize: 11, color: T.textDim }}>
+              {e.count > 1 ? `${e.count}x · ` : ""}{timeAgo(e.created_at)} · {who(e)}{e.build ? ` · ${String(e.build).slice(-7)}` : ""}
+              {liveBuild && e.build && e.build !== liveBuild ? " · fixed in a later build" : ""}
+            </span>
           </div>
           <div style={{ fontSize: 13, color: T.text, marginTop: 4, wordBreak: "break-word" }}>{e.message}</div>
           {openId === e.id && (
@@ -644,6 +680,9 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
   const shown = users.filter(u => showTest || !isTest(u));
   const hiddenCount = users.length - shown.length;
   const inviteByEmail = Object.fromEntries(invites.map(i => [i.email.toLowerCase(), i]));
+  const accountEmails = new Set(users.map(u => (u.email || "").toLowerCase()).filter(Boolean));
+  // Still outstanding: never signed in (no account, not activated), or paused.
+  const openInvites = invites.filter(i => i.status === "revoked" || (!i.activated_at && !accountEmails.has((i.email || "").toLowerCase())));
 
   const card = { backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8 };
   const chip = (label, color, onClick, active) => (
@@ -663,9 +702,15 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
         {msg && <div style={{ fontSize: 12, color: msg.startsWith("Could not") ? "#ef4444" : "#10b981", marginTop: 6 }}>{msg}</div>}
       </div>
 
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>Invited ({invites.length})</div>
-      {invites.length === 0 && <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>No invitations yet.</div>}
-      {invites.map(inv => (
+      {/* Only invitations still waiting on someone. Once they sign in they
+          are an account below, and listing them twice read as a duplicate. */}
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>Waiting on an invitation ({openInvites.length})</div>
+      {openInvites.length === 0 && (
+        <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>
+          {invites.length ? "Everyone invited has signed in; they are listed under Accounts." : "No invitations yet."}
+        </div>
+      )}
+      {openInvites.map(inv => (
         <div key={inv.id} style={card}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <div style={{ minWidth: 0 }}>
@@ -698,7 +743,7 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || u.email || "(no name yet)"}</div>
                 <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name && u.email ? u.email : ""}{u.degree_type ? ` · ${u.degree_type}` : ""}{u.primary_state ? ` · ${u.primary_state}` : ""}</div>
-                <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>joined {timeAgo(u.created_at)} · last seen {timeAgo(u.last_seen_at)}{inv ? "" : u.access_status === "active" ? "" : " · not on invite list"}</div>
+                <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>joined {timeAgo(u.created_at)} · last seen {timeAgo(u.last_seen_at)}{inv ? " · invited " + timeAgo(inv.invited_at) : u.access_status === "active" ? "" : " · not on invite list"}</div>
               </div>
               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status), flexShrink: 0 }}>{u.access_status}</span>
             </div>
