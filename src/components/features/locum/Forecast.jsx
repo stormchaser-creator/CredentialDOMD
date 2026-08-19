@@ -5,6 +5,7 @@ import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import { generateId, formatDate } from "../../../utils/helpers";
 import { iso, actualByDate, contractDayAverage, contractDayKindAverages, yearOutlook } from "../../../utils/forecast";
+import { contractsForDate, termLabel } from "../../../utils/contractsForDate";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const short = (n) => {
@@ -84,34 +85,8 @@ function Forecast() {
   // Day editor
   const [editDay, setEditDay] = useState(null); // date string
   const [form, setForm] = useState({});
-  // Which contract is actually in force on a given day. Coverage periods win
-  // when present; otherwise the term dates.
-  const coversDate = (c, date) => {
-    if (!c || !date) return false;
-    const periods = (c.coveragePeriods?.length ? c.coveragePeriods : [{ start: c.startDate || c.termStart, end: c.endDate || c.termEnd }]);
-    return periods.some(p => p?.start && date >= p.start && (!p.end || date <= p.end));
-  };
-  // Contracts covering the day first: with two agreements at the same
-  // facility, the one in force on that date is the one meant.
-  const contractsForDay = (date) => {
-    // Specificity beats span: a four-day coverage block is real evidence you
-    // are there that day, a three-year agreement is not.
-    const specificity = (c) => {
-      if (c.coveragePeriods?.length && c.coveragePeriods.some(p => p?.start && date >= p.start && (!p.end || date <= p.end))) return 0;
-      const from = c.startDate || c.termStart, to = c.endDate || c.termEnd;
-      if (!from || !to) return 3;
-      const days = Math.round((new Date(to) - new Date(from)) / 86400000);
-      return days <= 62 ? 1 : 2;
-    };
-    const covering = contracts.filter(c => coversDate(c, date)).sort((a, b) => specificity(a) - specificity(b));
-    const rest = contracts.filter(c => !coversDate(c, date));
-    return { covering, rest, ordered: [...covering, ...rest] };
-  };
-  const termLabel = (c) => {
-    const from = c.startDate || c.termStart, to = c.endDate || c.termEnd;
-    const fmt = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "";
-    return from ? `${fmt(from)} to ${to ? fmt(to) : "open"}` : "";
-  };
+  const contractsForDay = (date) => contractsForDate(contracts, date);
+  const termLabelFor = (c) => termLabel(c);
 
   const blankEntry = (date) => {
     const cid = contractsForDay(date).ordered[0]?.id || contracts[0]?.id || "";
@@ -349,7 +324,7 @@ function Forecast() {
           }} style={{ ...iS, appearance: "auto" }}>
             {(() => {
               const { covering, rest } = contractsForDay(editDay);
-              const label = (c) => `${c.facility}${termLabel(c) ? ` · ${termLabel(c)}` : ""}`;
+              const label = (c) => `${c.facility}${termLabelFor(c) ? ` · ${termLabelFor(c)}` : ""}`;
               return (
                 <>
                   {covering.map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}

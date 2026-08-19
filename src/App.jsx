@@ -33,6 +33,7 @@ import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptP
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
+import { isNonExpiring } from "./utils/helpers";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
@@ -1005,7 +1006,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           </div>
           <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
             {data.licenses.slice(0, 5).map((item, idx) => {
-              const sc = getStatusColor(item.expirationDate);
+              // Course and device certifications have no expiration by nature;
+              // grading them by date made them read as an unfinished "Draft".
+              const nonExp = isNonExpiring(item, "licenses");
+              const sc = nonExp ? "green" : getStatusColor(item.expirationDate);
               const d = item.expirationDate ? daysUntil(item.expirationDate) : null;
               return (
                 <div key={item.id} onClick={() => { setTab("credentials"); setSubPage("licenses"); setAutoEditTarget({ sec: "licenses", id: item.id, mode: "view" }); }} style={{
@@ -1020,7 +1024,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                       {describeItem(item, data.settings.name)}
                     </div>
                     <div style={{ fontSize: 13, color: T.textMuted, marginTop: 1 }}>
-                      {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : null].filter(Boolean).join(" \u00b7 ")}
+                      {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : nonExp ? "Does not expire" : null].filter(Boolean).join(" \u00b7 ")}
                       {d !== null && Number.isFinite(d) && (
                         <span style={{ fontWeight: 700, color: d <= 90 ? sc : T.textMuted }}>
                           {" \u00b7 "}
@@ -1029,7 +1033,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                       )}
                     </div>
                   </div>
-                  <StatusBadge status={statusFromColor(sc)} />
+                  <StatusBadge status={nonExp ? "active" : statusFromColor(sc)} customLabel={nonExp ? "On file" : undefined} />
                   <span style={{ color: T.textDim, fontSize: 16 }}>{"\u203a"}</span>
                 </div>
               );

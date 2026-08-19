@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, memo } from "react";
+import { supabase } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
@@ -145,6 +146,45 @@ function CMESection({ onShare }) {
     if (specialties.length === 0) return [];
     return computeBoardCompliance({ ...data, settings: { ...data.settings, specialties } });
   }, [showCompliance, data]);
+
+  // Newest first by when it was added, so a transcript imported today sits at
+  // the top even when its activities are years old.
+  const cmeNewestFirst = useMemo(() => {
+    const when = (c) => c.createdAt || c.created_at || c.uploadedAt || c.date || "";
+    return [...(data.cme || [])].sort((a, b) => String(when(b)).localeCompare(String(when(a))));
+  }, [data.cme]);
+
+  // The certificate or transcript this entry came from.
+  const sourceDoc = useCallback(
+    (item) => (data.documents || []).find(d => d.linkedTo === `cme:${item.id}`) || null,
+    [data.documents]
+  );
+  const [docBusy, setDocBusy] = useState(null);
+  const openSourceDoc = useCallback(async (doc) => {
+    if (!doc) return;
+    setDocBusy(doc.id);
+    try {
+      let blob = null;
+      if (doc.data) {
+        const b64 = String(doc.data).split(",")[1] || "";
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        blob = new Blob([arr], { type: doc.type || doc.mimeType || "application/pdf" });
+      } else if (doc.storagePath && supabase) {
+        // Not on this device: pull the bytes from the account's storage.
+        const { data: file, error } = await supabase.storage.from("documents").download(doc.storagePath);
+        if (error) throw error;
+        blob = file;
+      }
+      if (!blob) { window.alert("That file has not finished syncing to this device yet. Open Files once and try again."); return; }
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (e) {
+      window.alert(`Could not open that document: ${e.message || e}`);
+    } finally { setDocBusy(null); }
+  }, []);
 
   return (
     <div>
@@ -406,7 +446,7 @@ function CMESection({ onShare }) {
         <EmptyState icon={"\ud83c\udf93"} title="No CME logged" subtitle="Track your continuing education hours and topic compliance." onAction={openAdd} actionLabel="Add CME" />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {data.cme.map(item => (
+          {cmeNewestFirst.map(item => (
             <div key={item.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -421,6 +461,29 @@ function CMESection({ onShare }) {
                           {[item.category, item.hours && (item.hours + " hrs"), item.provider, item.date && formatDate(item.date)]
                             .filter(Boolean).filter(v => !inTitle(v)).join(" \u00b7 ")}
                         </div>
+                        {(() => {
+                          const doc = sourceDoc(item);
+                          if (doc) {
+                            return (
+                              <button onClick={(ev) => { ev.stopPropagation(); openSourceDoc(doc); }} style={{
+                                marginTop: 6, display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%",
+                                padding: "5px 10px", borderRadius: 9, border: `1px solid ${T.border}`,
+                                backgroundColor: T.input, color: T.accent, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                              }}>
+                                <span>{"\ud83d\udcc4"}</span>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {docBusy === doc.id ? "Opening..." : doc.name || "Source document"}
+                                </span>
+                              </button>
+                            );
+                          }
+                          const from = item.source || item.customFields?.["Imported from"];
+                          return (
+                            <div style={{ marginTop: 5, fontSize: 11.5, color: T.textDim }}>
+                              {from ? `From ${from}` : "Added by hand, no certificate attached"}
+                            </div>
+                          );
+                        })()}
                       </>
                     );
                   })()}

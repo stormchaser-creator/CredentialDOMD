@@ -4,6 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import EmptyState from "../../shared/EmptyState";
 import { TrashIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
+import { contractsForDate, contractIdForDate, termLabel } from "../../../utils/contractsForDate";
 import { codeFromText, parseDictatedDate } from "../../../utils/cptCoder";
 import { searchCPT } from "../../../utils/cptSearch";
 import { Modal, Field } from "../../shared";
@@ -43,9 +44,7 @@ function RVULog() {
   // The contract defaults to WHERE THE SURGEON IS — the contract whose
   // coverage period contains the entry date. contracts[0] as a default
   // silently mis-attributed weeks of RVUs to the wrong facility.
-  const coveringContract = useCallback((d) =>
-    contracts.find(c => (c.coveragePeriods || []).some(p => p.start && d >= p.start && d <= (p.end || p.start)))?.id || "",
-    [contracts]);
+  const coveringContract = useCallback((d) => contractIdForDate(contracts, d), [contracts]);
   const [contractId, setContractId] = useState(() => coveringContract(localDate(new Date())) || contracts[0]?.id || "");
   const [contractPinned, setContractPinned] = useState(false);
   useEffect(() => {
@@ -53,6 +52,7 @@ function RVULog() {
     const cov = coveringContract(date);
     if (cov) setContractId(cov);
   }, [date, contractPinned, coveringContract]);
+  const [saveNote, setSaveNote] = useState(null); // what the last save did
   const [viewEnc, setViewEnc] = useState(null);   // encounter opened for detail/edit
   const [encDraft, setEncDraft] = useState(null); // its editable copy
   const [encQ, setEncQ] = useState("");           // code search inside the modal
@@ -174,8 +174,33 @@ function RVULog() {
         customFields: { "From RVU entry": encId },
       });
     }
+    setSaveNote(surgical.length
+      ? { text: `Saved. ${surgical.length} operative code${surgical.length === 1 ? "" : "s"} also went to your case log.`, encId: null }
+      : { text: "Saved to the RVU log. These are evaluation and management codes, so nothing went to the career case log.", encId, date, codes: review.items, cid: contractId });
+    setTimeout(() => setSaveNote(n => (n && n.encId === encId ? null : n)), 12000);
     setText(""); setReview(null);
   }, [review, contractId, date, text, addItem, contracts]);
+
+  // Consults and rounding are not operative cases, so they never land in the
+  // career case log on their own. When one should (a bedside procedure, a case
+  // coded only by its E/M) this puts it there without retyping.
+  const addToCaseLog = useCallback((info) => {
+    if (!info) return;
+    const wRvu = (info.codes || []).reduce((s2, c) => s2 + (c.wRVU || 0) * (c.units || 1), 0);
+    addItem("caseLogs", {
+      id: generateId(),
+      date: info.date,
+      title: (info.codes || [])[0]?.desc || "Case from RVU log",
+      category: "Other",
+      cptCodes: (info.codes || []).map(c => (c.modifier ? `${c.code}-${c.modifier}` : c.code)).join(", "),
+      wRvu: Math.round(wRvu * 100) / 100,
+      facility: contracts.find(c2 => c2.id === info.cid)?.facility || "",
+      source: "RVU log",
+      customFields: { "From RVU entry": info.encId },
+    });
+    setSaveNote({ text: "Added to your case log. Set the role and category there when you get a moment.", encId: null });
+    setTimeout(() => setSaveNote(null), 8000);
+  }, [addItem, contracts]);
 
   // ── Totals ──
   const totals = useMemo(() => {
@@ -320,7 +345,14 @@ function RVULog() {
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />
               {contracts.length > 1 && (
                 <select value={contractId} onChange={e => { setContractId(e.target.value); setContractPinned(true); }} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
-                  {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+                  {(() => {
+                    const { covering, rest } = contractsForDate(contracts, date);
+                    const lbl = (c) => `${c.facility}${termLabel(c) ? ` · ${termLabel(c)}` : ""}`;
+                    return (<>
+                      {covering.map(c => <option key={c.id} value={c.id}>{lbl(c)}</option>)}
+                      {rest.map(c => <option key={c.id} value={c.id}>{lbl(c)} (not scheduled then)</option>)}
+                    </>);
+                  })()}
                 </select>
               )}
             </div>
@@ -328,6 +360,17 @@ function RVULog() {
               width: "100%", marginTop: 10, padding: "14px", borderRadius: 12, border: "none",
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
             }}>Save — {reviewTotal.toFixed(2)} wRVU</button>
+          </div>
+        )}
+        {saveNote && (
+          <div style={{ marginTop: 10, padding: "11px 13px", borderRadius: 12, backgroundColor: T.accentDim, border: `1px solid ${T.accent}` }}>
+            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.45 }}>{saveNote.text}</div>
+            {saveNote.encId && (
+              <button onClick={() => addToCaseLog(saveNote)} style={{
+                marginTop: 8, padding: "9px 14px", borderRadius: 10, border: `1px solid ${T.accent}`,
+                backgroundColor: "transparent", color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>Add it to my case log anyway</button>
+            )}
           </div>
         )}
       </div>
