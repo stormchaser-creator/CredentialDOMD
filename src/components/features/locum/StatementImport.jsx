@@ -22,6 +22,7 @@ const CATEGORIES = [
   "Malpractice premium", "Medical supplies / equipment",
   "Software / SaaS (CredentialDoMD, Doximity, etc.)", "Phone / internet",
   "Professional fees (CPA, legal)", "Postage / shipping", "Office supplies",
+  "Equipment (computer, capitalize or Section 179)",
   "Other deductible expense",
 ];
 
@@ -43,6 +44,9 @@ const RULES = [
   [/uber|lyft|taxi|shuttle|amtrak/i, "Travel — ground / rideshare"],
   [/hertz|avis|enterprise|budget rent|national car|alamo|shell|chevron|exxon|conoco|sinclair|gas\b|fuel/i, "Travel — rental car / fuel"],
   [/parking|park ?mobile|toll/i, "Travel — parking / tolls"],
+  // Hardware over the de minimis threshold is an asset decision, not an
+  // ordinary expense, so it gets its own line for the CPA.
+  [/apple store|apple\.com|\bmac ?(book|studio|mini|pro)\b|imac|\bipad\b|dell|lenovo|thinkpad|hp inc|b&h photo|best buy|monitor|workstation/i, "Equipment (computer, capitalize or Section 179)"],
   [/restaurant|grill|cafe|coffee|starbucks|chipotle|doordash|grubhub|steakhouse|sushi|pizza|deli|bistro|bakery/i, "Meals (50% deductible)"],
   [/medical board|state board|licens/i, "License renewal fee"],
   [/dea\b|drug enforcement/i, "DEA registration"],

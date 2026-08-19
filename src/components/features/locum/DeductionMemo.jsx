@@ -48,6 +48,7 @@ const CATEGORIES = [
   "Phone / internet",
   "Professional fees (CPA, legal)",
   "Medical supplies / equipment",
+  "Equipment (computer, capitalize or Section 179)",
   "Office supplies",
   "Other deductible expense",
 ];

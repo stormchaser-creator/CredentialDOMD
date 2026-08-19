@@ -229,7 +229,7 @@ export const TERMS = {
     {
       title: "13. Governing law",
       blocks: [
-        "These terms are governed by the laws of the State of Texas, without regard to conflict-of-law rules.",
+        "These terms are governed by the laws of the State of California, without regard to conflict-of-law rules.",
       ],
     },
     {
