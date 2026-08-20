@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Medical License Renewal in {{STATE_NAME}} — {{YEAR}} Complete Guide | CredentialDOMD</title>
-<meta name="description" content="Complete {{YEAR}} guide to {{STATE_NAME}} medical license renewal. {{BOARD_NAME}} requirements: {{CME_HOURS_DISPLAY}} CME, {{RENEWAL_FEE}} fee, {{RENEWAL_CYCLE}} renewal. Step-by-step process.">
+<title>{{STATE_NAME}} Medical License Renewal {{YEAR}}: {{FEE_SHORT}} fee, {{CME_HOURS_DISPLAY}} CME, {{DEADLINE_SHORT}} deadline | CredentialDOMD</title>
+<meta name="description" content="Renew your {{STATE_NAME}} medical license: {{FEE_SHORT}} fee, {{CME_HOURS_DISPLAY}} of CME, {{RENEWAL_CYCLE}}, due {{DEADLINE_SHORT}}. Board portal link, fees, deadlines, and the traps that catch physicians. Verified from the {{BOARD_NAME}}, {{VERIFIED_DATE}}.">
 <meta name="keywords" content="{{STATE_NAME}} medical license renewal, {{STATE_ABBREVIATION}} medical license, {{BOARD_NAME}}, {{STATE_NAME}} CME requirements, medical license renewal {{STATE_NAME}}, physician license {{STATE_ABBREVIATION}}">
 
 <!-- Open Graph -->
@@ -18,7 +18,7 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{STATE_NAME}} Medical License Renewal — {{YEAR}} Guide">
-<meta name="twitter:description" content="{{CME_HOURS_DISPLAY}} CME, {{RENEWAL_FEE}} fee, {{RENEWAL_CYCLE}} renewal. Complete guide for {{STATE_NAME}} physicians.">
+<meta name="twitter:description" content="{{FEE_SHORT}} fee, {{CME_HOURS_DISPLAY}} CME, due {{DEADLINE_SHORT}}. Board portal, fees, deadlines, verified from the {{BOARD_NAME}}.">
 
 <!-- Canonical -->
 <link rel="canonical" href="https://credentialdomd.com/states/{{STATE_SLUG}}">
@@ -48,12 +48,7 @@
   "@type": "HowTo",
   "name": "How to Renew Your Medical License in {{STATE_NAME}}",
   "description": "Step-by-step guide to renewing your {{STATE_NAME}} medical license through the {{BOARD_NAME}}.",
-  "totalTime": "{{PROCESSING_TIME_ISO}}",
-  "estimatedCost": {
-    "@type": "MonetaryAmount",
-    "currency": "USD",
-    "value": "{{RENEWAL_FEE_NUMBER}}"
-  },
+  "totalTime": "{{PROCESSING_TIME_ISO}}",{{ESTIMATED_COST_BLOCK}}
   "step": [
     {{HOWTO_SCHEMA_STEPS}}
   ]
@@ -246,8 +241,11 @@ a:hover { color: var(--emerald-light); }
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
       {{STATE_NAME}} ({{STATE_ABBREVIATION}})
     </div>
-    <h1>Medical License Renewal in <span class="accent">{{STATE_NAME}}</span> &mdash; {{YEAR}} Complete Guide</h1>
-    <p class="hero-subtitle">Everything you need to know about renewing your {{STATE_NAME}} medical license through the {{BOARD_NAME}}. Updated for {{YEAR}}.</p>
+    <h1>{{STATE_NAME}} Medical License Renewal, <span class="accent">{{YEAR}}</span></h1>
+    <p class="hero-subtitle">{{RENEWAL_CYCLE}} renewal through the {{BOARD_NAME}}. {{DEADLINE_SENTENCE}} Verified from the board's own pages, {{VERIFIED_DATE}}.</p>
+    <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="{{PORTAL_URL}}" target="_blank" rel="noopener" class="nav-cta" style="padding:12px 24px;font-size:15px;">Renew at the {{STATE_ABBREVIATION}} board portal &rarr;</a>
+    </div>
   </div>
 </section>
 
@@ -281,11 +279,15 @@ a:hover { color: var(--emerald-light); }
       </div>
       <div class="fact-item">
         <span class="fact-label">Renewal Due</span>
-        <span class="fact-value">{{RENEWAL_MONTH}}</span>
+        <span class="fact-value highlight">{{DEADLINE_SHORT}}</span>
       </div>
+      {{LATE_FEE_FACT}}
     </div>
   </div>
 </section>
+
+<!-- RENEWAL DETAIL -->
+{{RENEWAL_DETAIL_BLOCK}}
 
 <!-- STEP BY STEP -->
 <section class="container content-section">
@@ -349,7 +351,8 @@ a:hover { color: var(--emerald-light); }
 <section class="container related-states">
   <h2 class="content-section" style="margin-bottom:20px">Medical License Renewal in Nearby States</h2>
   <div class="related-grid">
-    {{RELATED_STATES_HTML}}
+    {{SOURCES_BLOCK}}
+{{RELATED_STATES_HTML}}
   </div>
 </section>
 

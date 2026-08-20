@@ -1835,6 +1835,11 @@ footer {
 .score-visual svg {
   animation: pulseGlow 4s ease-in-out infinite;
 }
+
+.state-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; text-decoration: none; transition: border-color .15s, transform .15s; }
+.state-card:hover { border-color: var(--emerald); background: var(--bg-card-hover); transform: translateY(-2px); }
+.state-card-name { font-weight: 700; color: var(--text); font-size: 15px; }
+.state-card-meta { font-size: 12.5px; color: var(--text-secondary); }
 </style>
 </head>
 
@@ -1850,6 +1855,7 @@ footer {
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#locum">For Locums</a>
+      <a href="/states/">Renewal Guides</a>
       <a href="#faq">FAQ</a>
       <a href="/app/">Sign in</a>
       <a href="#early-access" class="btn-primary nav-cta">Get Early Access</a>
@@ -2744,6 +2750,72 @@ footer {
 </section>
 
 <!-- ============ FINAL CTA ============ -->
+<section class="renewal-states" id="renewal-states" style="padding: 90px 0; background: var(--bg-elevated);">
+  <div class="container">
+    <div class="animate-on-scroll">
+      <div class="section-label">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+        Free renewal guides
+      </div>
+      <h2 class="section-title">Medical license renewal, by state</h2>
+      <p class="section-subtitle" style="max-width: 640px; margin: 0 auto 8px;">Real deadlines, fees, CME totals, and the exact board portal to renew at. Researched from each state medical board and kept current. No sign-up needed.</p>
+    </div>
+    <div class="states-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 32px;">
+        <a class="state-card" href="/states/california">
+          <span class="state-card-name">California</span>
+          <span class="state-card-meta">$1,206 fee · 50 CME · due January</span>
+        </a>
+        <a class="state-card" href="/states/texas">
+          <span class="state-card-name">Texas</span>
+          <span class="state-card-meta">$491 fee · 48 CME · due February</span>
+        </a>
+        <a class="state-card" href="/states/florida">
+          <span class="state-card-name">Florida</span>
+          <span class="state-card-meta">$355 fee · 40 CME · due January</span>
+        </a>
+        <a class="state-card" href="/states/new-york">
+          <span class="state-card-name">New York</span>
+          <span class="state-card-meta">$600 fee · CME varies</span>
+        </a>
+        <a class="state-card" href="/states/pennsylvania">
+          <span class="state-card-name">Pennsylvania</span>
+          <span class="state-card-meta">$360 fee · 100 CME · due October</span>
+        </a>
+        <a class="state-card" href="/states/ohio">
+          <span class="state-card-name">Ohio</span>
+          <span class="state-card-meta">$305 fee · 50 CME · due May</span>
+        </a>
+        <a class="state-card" href="/states/illinois">
+          <span class="state-card-name">Illinois</span>
+          <span class="state-card-meta">$543 fee · 150 CME · due July</span>
+        </a>
+        <a class="state-card" href="/states/michigan">
+          <span class="state-card-name">Michigan</span>
+          <span class="state-card-meta">$314 fee · 150 CME</span>
+        </a>
+        <a class="state-card" href="/states/north-carolina">
+          <span class="state-card-name">North Carolina</span>
+          <span class="state-card-meta">$250 fee · 60 CME</span>
+        </a>
+        <a class="state-card" href="/states/georgia">
+          <span class="state-card-name">Georgia</span>
+          <span class="state-card-meta">$230 fee · 40 CME</span>
+        </a>
+        <a class="state-card" href="/states/new-jersey">
+          <span class="state-card-name">New Jersey</span>
+          <span class="state-card-meta">$580 fee · 100 CME · due June</span>
+        </a>
+        <a class="state-card" href="/states/washington">
+          <span class="state-card-name">Washington</span>
+          <span class="state-card-meta">$996 fee · 200 CME</span>
+        </a>
+    </div>
+    <div style="text-align: center; margin-top: 28px;">
+      <a href="/states/" class="btn-secondary" style="display: inline-block;">See all 51 guides &rarr;</a>
+    </div>
+  </div>
+</section>
+
 <section class="final-cta" id="get-started">
   <div class="container">
     <div class="animate-on-scroll">
@@ -2775,6 +2847,7 @@ footer {
         <div class="footer-copy">&copy; 2026 CredentialDOMD. All rights reserved.</div>
       </div>
       <div class="footer-links">
+        <a href="/states/">License Renewal by State</a>
         <a href="/app/privacy">Privacy Policy</a>
         <a href="/app/terms">Terms of Service</a>
         <a href="mailto:support@credentialdomd.com">Contact</a>

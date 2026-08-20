@@ -97,7 +97,7 @@ function buildRelatedStatesHTML(relatedSlugs, allStates) {
   return relatedSlugs.map(slug => {
     const s = stateMap[slug];
     if (!s) return '';
-    return `    <a href="/states/${s.slug}.html" class="related-card">
+    return `    <a href="/states/${s.slug}" class="related-card">
       <span class="state-abbr">${s.abbreviation}</span>
       <span class="state-name">${s.name} License Renewal</span>
     </a>`;
@@ -114,7 +114,7 @@ function escapeHtml(text) {
 
 function extractFeeNumber(fee) {
   const match = fee.match(/[\d,]+/);
-  return match ? match[0].replace(/,/g, '') : '0';
+  return match ? match[0].replace(/,/g, '') : '';
 }
 
 function processingTimeToISO(time) {
@@ -124,52 +124,117 @@ function processingTimeToISO(time) {
   return `P${weeks * 7}D`;
 }
 
+function feeShort(state) {
+  if (!state.renewalFee) return null;
+  const m = state.renewalFee.match(/\$[\d,]+(?:\.\d\d)?/);
+  return m ? m[0].replace(/\.00$/, '') : null;
+}
+
 function getCmeDisplay(state) {
-  if (state.cmeHours === 0) {
-    return 'No fixed CME hours (mandatory topics only)';
-  }
+  if (state.cmeHours === 0) return 'No CME hours required';
+  if (state.cmeHours == null) return 'See board';
   return `${state.cmeHours} hours`;
+}
+
+// Short, snippet-friendly deadline for titles and quick facts.
+function deadlineShort(state) {
+  const a = state.renewalAnchor || '';
+  const m = a.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}/);
+  if (m) return m[0];
+  if (state.renewalMonth) return state.renewalMonth;
+  const m2 = a.match(/(birth month|anniversary|last name|odd years|even years)/i);
+  return m2 ? m2[0].replace(/^\w/, c => c.toUpperCase()) : 'See board';
+}
+function deadlineSentence(state) {
+  return state.renewalAnchor ? escapeHtml(state.renewalAnchor.split('.')[0] + '.') : `Renewal is due ${deadlineShort(state)}.`;
+}
+
+function factItem(label, value) {
+  return `      <div class="fact-item">
+        <span class="fact-label">${escapeHtml(label)}</span>
+        <span class="fact-value">${escapeHtml(value)}</span>
+      </div>`;
+}
+
+function renewalDetailBlock(state) {
+  const rows = [];
+  if (state.renewalAnchor) rows.push(['When it is due', state.renewalAnchor]);
+  if (state.renewalFee) rows.push(['Fee', state.renewalFee]);
+  if (state.lateFee) rows.push(['Late fee', state.lateFee]);
+  if (state.graceOrLapse) rows.push(['If you miss the deadline', state.graceOrLapse]);
+  if (state.processingTime) rows.push(['Processing time', state.processingTime]);
+  if (state.cmeSplit && state.cmeDetails) rows.push(['MD vs DO', 'This state runs separate MD and DO requirements. ' + state.cmeDetails]);
+  if (!rows.length) return '';
+  const items = rows.map(([k, v]) => `      <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
+        <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${escapeHtml(k)}</div>
+        <div style="color:var(--text-secondary);">${escapeHtml(v)}</div>
+      </div>`).join('\n');
+  return `<section class="container content-section">
+  <h2><span class="section-number">i</span> Deadlines, fees, and what happens if you are late</h2>
+  <div class="quick-facts" style="margin-top:8px;">
+${items}
+  </div>
+</section>`;
+}
+
+function sourcesBlock(state) {
+  const verified = state.verified === '2026-08' ? 'Double-checked against a second official source' : 'From the board\'s own pages';
+  const links = (state.sources || []).map(x => `      <li style="margin-bottom:6px;"><a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.what || x.url)}</a></li>`).join('\n');
+  const cme = state.cmeSourceUrl ? `      <li style="margin-bottom:6px;"><a href="${escapeHtml(state.cmeSourceUrl)}" target="_blank" rel="noopener">CME requirement: ${escapeHtml(state.cmeSource || 'state rule')}</a></li>` : '';
+  return `<section class="container content-section">
+  <h2><span class="section-number">&#10003;</span> Where this comes from</h2>
+  <p>${verified}, ${escapeHtml(state.verified && state.verified.startsWith('2026-08') ? 'August 2026' : 'recently')}. These are the primary sources we read:</p>
+  <ul style="list-style:none;padding:0;">
+${links}
+${cme}
+  </ul>
+  <p style="font-size:13px;color:var(--text-muted);">Boards change fees and rules; always confirm on the board page before you pay. Report anything out of date to support@credentialdomd.com.</p>
+</section>`;
 }
 
 // ─── Generate a Single State Page ────────────────────────────────
 
 function generateStatePage(state, allStates, template) {
   const cmeDisplay = getCmeDisplay(state);
-  const feeNumber = extractFeeNumber(state.renewalFee);
-  const isoTime = processingTimeToISO(state.processingTime);
+  const feeNumber = extractFeeNumber(state.renewalFee || '');
+  const dShort = deadlineShort(state);
 
   let html = template;
-
-  // Simple replacements
   const replacements = {
     '{{STATE_NAME}}': state.name,
     '{{STATE_ABBREVIATION}}': state.abbreviation,
     '{{STATE_SLUG}}': state.slug,
-    '{{BOARD_NAME}}': state.boardName,
-    '{{BOARD_URL}}': state.boardUrl,
-    '{{RENEWAL_CYCLE}}': state.renewalCycle,
+    '{{BOARD_NAME}}': state.boardName || 'the state medical board',
+    '{{BOARD_URL}}': state.boardUrl || '#',
+    '{{PORTAL_URL}}': state.portalUrl || state.boardUrl || '#',
+    '{{RENEWAL_CYCLE}}': state.renewalCycle || 'See board',
     '{{CME_HOURS_DISPLAY}}': cmeDisplay,
-    '{{RENEWAL_FEE}}': state.renewalFee,
-    '{{RENEWAL_FEE_NUMBER}}': feeNumber,
-    '{{PROCESSING_TIME}}': state.processingTime,
-    '{{PROCESSING_TIME_ISO}}': isoTime,
-    '{{RENEWAL_MONTH}}': state.renewalMonth,
-    '{{CME_DETAILS}}': state.cmeDetails,
+    '{{RENEWAL_FEE}}': state.renewalFee || 'See board',
+    '{{ESTIMATED_COST_BLOCK}}': feeNumber
+      ? `\n  "estimatedCost": { "@type": "MonetaryAmount", "currency": "USD", "value": "${feeNumber}" },`
+      : '',
+    '{{PROCESSING_TIME}}': state.processingTime || 'Not published',
+    '{{PROCESSING_TIME_ISO}}': processingTimeToISO(state.processingTime || ''),
+    '{{DEADLINE_SHORT}}': dShort,
+    '{{DEADLINE_SENTENCE}}': '',  // set below (needs raw HTML entities preserved)
+    '{{CME_DETAILS}}': state.cmeDetails || 'See the board for current CME requirements.',
+    '{{VERIFIED_DATE}}': (state.verified && state.verified.startsWith('2026-08')) ? 'August 2026' : 'recently',
     '{{YEAR}}': String(YEAR),
+    '{{FEE_SHORT}}': feeShort(state) || 'see board',
   };
+  for (const [k, v] of Object.entries(replacements)) html = html.split(k).join(String(v));
 
-  for (const [placeholder, value] of Object.entries(replacements)) {
-    html = html.split(placeholder).join(value);
-  }
-
-  // Complex replacements (HTML fragments)
-  html = html.replace('{{STEPS_HTML}}', buildStepsHTML(state.steps));
-  html = html.replace('{{PITFALLS_HTML}}', buildPitfallsHTML(state.pitfalls));
-  html = html.replace('{{FAQ_HTML}}', buildFaqHTML(state.faqs));
-  html = html.replace('{{FAQ_SCHEMA_ITEMS}}', buildFaqSchema(state.faqs));
-  html = html.replace('{{HOWTO_SCHEMA_STEPS}}', buildHowToSteps(state.steps));
-  html = html.replace('{{RELATED_STATES_HTML}}', buildRelatedStatesHTML(state.relatedStates, allStates));
-
+  // fragments (may contain markup)
+  html = html.split('{{DEADLINE_SENTENCE}}').join(deadlineSentence(state));
+  html = html.split('{{LATE_FEE_FACT}}').join(state.lateFee ? factItem('Late fee', state.lateFee.split('(')[0].trim()) : '');
+  html = html.split('{{RENEWAL_DETAIL_BLOCK}}').join(renewalDetailBlock(state));
+  html = html.split('{{SOURCES_BLOCK}}').join(sourcesBlock(state));
+  html = html.replace('{{STEPS_HTML}}', buildStepsHTML(state.steps || []));
+  html = html.replace('{{PITFALLS_HTML}}', buildPitfallsHTML(state.pitfalls || []));
+  html = html.replace('{{FAQ_HTML}}', buildFaqHTML(state.faqs || []));
+  html = html.replace('{{FAQ_SCHEMA_ITEMS}}', buildFaqSchema(state.faqs || []));
+  html = html.replace('{{HOWTO_SCHEMA_STEPS}}', buildHowToSteps(state.steps || []));
+  html = html.replace('{{RELATED_STATES_HTML}}', buildRelatedStatesHTML(state.relatedStates || [], allStates));
   return html;
 }
 

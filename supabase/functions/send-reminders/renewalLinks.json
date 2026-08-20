@@ -1,302 +1,308 @@
 {
  "AL": {
-  "portal": "https://www.albme.org",
-  "board": "Alabama Board of Medical Examiners",
-  "due": "January",
+  "portal": "https://dashboard.albme.gov",
+  "board": "Alabama Board of Medical Examiners & Medical Licensure Commission",
+  "due": "Fixed date: all licenses expire annually on December 31, regardless of when issued. Renewal window is October 1 through December 31 via the Licensee Gateway.",
   "guide": "https://credentialdomd.com/states/alabama"
  },
  "AK": {
-  "portal": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx",
-  "board": "Alaska State Medical Board",
-  "due": null,
+  "portal": "https://professionallicense.alaska.gov/MYLICENSE",
+  "board": "Alaska State Medical Board (Division of Corporations, Business and Professional Licensing, Department of Commerce, Community, and Economic Development)",
+  "due": "All medical licenses expire December 31 of even-numbered years, regardless of issuance date. Current cycle: January 1, 2025 through December 31, 2026. Licenses issued within 90 days of the expiration date are issued to the next biennial expiration date. One renewal notice is sent by email or mail at least 30 days before expiration, usually in late October.",
   "guide": "https://credentialdomd.com/states/alaska"
  },
  "AZ": {
-  "portal": "https://www.azmd.gov",
+  "portal": "https://azbomv7prod.glsuite.us/glsuiteweb/clients/azbom/Private/Renewals/LoginRenewal.aspx?RenewalType=MD",
   "board": "Arizona Medical Board",
-  "due": null,
+  "due": "MD: every other year on or before the licensee's birthday (A.R.S. 32-1430(A); the on-year depends on your license record, check your profile at azmd.gov Doctor Search). DO: December 31 of either even-numbered or odd-numbered years depending on the licensee's assigned renew-by date; the DO renewal portal opens on or about October 1.",
   "guide": "https://credentialdomd.com/states/arizona"
  },
  "AR": {
-  "portal": "https://www.armedicalboard.org",
+  "portal": "https://armedicalboard.adh.arkansas.gov/secured/licensees/Login.aspx",
   "board": "Arkansas State Medical Board",
-  "due": null,
+  "due": "Annually on or before the last day of the licensee's birth month. Board language: \"Your medical license, if granted, must be renewed annually on or before the last day of your birth month. There is no grace period.\" Email reminders go out about 60, 45, and 30 days before the end of the birth month; failure to receive notice is not an excuse.",
   "guide": "https://credentialdomd.com/states/arkansas"
  },
  "CA": {
-  "portal": "https://www.mbc.ca.gov",
+  "portal": "https://www.breeze.ca.gov/datamart/loginCADCA.do",
   "board": "Medical Board of California",
-  "due": "Birth month (biennial)",
+  "due": "MD: license expires at 11:59 p.m. on the last day of the month in which the license was originally issued, every two years (not birth month). Initial MD licenses issued on or after January 1, 2024 get a 26-month first cycle, then revert to 24 months. DO: biennial cycle renewed through BreEZe; OMBC's loaded pages state the two-year period runs between the prior and current expiration dates but do not explicitly publish the anchor rule (issuance month vs other), so that detail is left unstated rather than guessed.",
   "guide": "https://credentialdomd.com/states/california"
  },
  "CO": {
-  "portal": "https://dpo.colorado.gov/MedicalBoard",
-  "board": "Colorado Medical Board",
-  "due": null,
+  "portal": "https://apps2.colorado.gov/dora/licensing/",
+  "board": "Colorado Medical Board (Department of Regulatory Agencies, Division of Professions and Occupations)",
+  "due": "All Physician and Pro Bono Physician licenses expire on April 30 of odd-numbered years, regardless of when the license was issued (next expiration: April 30, 2027). Renewal opens in the DPO Online Services portal approximately 4 to 6 weeks before the expiration date (the Applications page says renewals open about 4-5 weeks prior; the DPO FAQ says the renewal link appears when the license is within 6 weeks of expiration).",
   "guide": "https://credentialdomd.com/states/colorado"
  },
  "CT": {
-  "portal": "https://portal.ct.gov/DPH/Practitioner-Licensing--Investigations/Medical-Examining-Board",
-  "board": "Connecticut Medical Examining Board",
-  "due": null,
+  "portal": "https://www.elicense.ct.gov/",
+  "board": "Connecticut Department of Public Health, Practitioner Licensing and Investigations Section (adjudicative board: Connecticut Medical Examining Board)",
+  "due": "Annually during the licensee's birth month. Per DPH, \"Most licenses expire in the first birth month following issuance and are renewable annually thereafter\"; Conn. Gen. Stat. 19a-88(b) requires each person licensed to practice medicine or surgery to register \"annually, during the month of such person's birth.\"",
   "guide": "https://credentialdomd.com/states/connecticut"
  },
  "DE": {
-  "portal": "https://dpr.delaware.gov/boards/medicalpractice/",
-  "board": "Delaware Board of Medical Licensure and Discipline",
-  "due": null,
+  "portal": "https://delpros.delaware.gov/",
+  "board": "Delaware Board of Medical Licensure and Discipline (Division of Professional Regulation)",
+  "due": "All physician licenses expire March 31 of odd-numbered years (next: March 31, 2027). A renewal notice is emailed to the address on record a few months before expiration.",
   "guide": "https://credentialdomd.com/states/delaware"
  },
+ "DC": {
+  "portal": "https://dohenterprise.my.site.com/dchealthrenewals/s/portal-page",
+  "board": "District of Columbia Board of Medicine (DC Health, Health Regulation and Licensing Administration)",
+  "due": "Last day of the licensee's birth month, in odd or even years matching the licensee's birth year. Board statement: all credentials issued or renewed on or after June 16, 2024 \"will expire on the last day of the holder's birth month,\" and \"if your birthday is in an odd year, your future renewals will occur in odd years (and the same for even years).\" This replaced the old fixed December 31 of even-numbered years anchor; licenses renewed before June 16, 2024 kept their existing expiration for that term and convert at their next renewal.",
+  "guide": "https://credentialdomd.com/states/district-of-columbia"
+ },
  "FL": {
-  "portal": "https://flboardofmedicine.gov",
-  "board": "Florida Board of Medicine",
-  "due": "January 31 (odd or even years by group)",
+  "portal": "https://mqa-vo.doh.state.fl.us/datamart/voservicesportal",
+  "board": "Florida Board of Medicine (Florida Department of Health, Division of Medical Quality Assurance)",
+  "due": "MD: fixed date, January 31. The board splits MD licensees into two groups: \"licenses in Group 1 expire on January 31 in even-numbered years and those in Group 2 expire on January 31 in odd-numbered years\" (your group is set by the board, not by your birth date or license anniversary; check your printed expiration date). DO: fixed date, the licensure biennial period concludes on March 31 of even-numbered years (all DOs renew together). Online renewal opens no later than 90 days before expiration; the deadline is midnight Eastern Time on the expiration date.",
   "guide": "https://credentialdomd.com/states/florida"
  },
  "GA": {
-  "portal": "https://medicalboard.georgia.gov",
+  "portal": "https://gateway.medicalboard.georgia.gov/",
   "board": "Georgia Composite Medical Board",
-  "due": null,
+  "due": "Last day of the licensee's birth month, every two years. Rule 360-2-.05: all active licenses must be renewed biennially by the last day of the month in which the applicant's birthday falls, and the license expires at the end of that birth month.",
   "guide": "https://credentialdomd.com/states/georgia"
  },
  "HI": {
-  "portal": "https://cca.hawaii.gov/pvl/boards/medical/",
-  "board": "Hawaii Medical Board",
-  "due": null,
+  "portal": "https://mypvl.dcca.hawaii.gov/",
+  "board": "Hawaii Medical Board (Department of Commerce and Consumer Affairs, Professional and Vocational Licensing Division)",
+  "due": "MD: January 31 of every even-numbered year, regardless of when the license was issued (current period February 1, 2026 to January 31, 2028). DO: June 30 of every even-numbered year (current period July 1, 2026 to June 30, 2028). Government-employed physicians (MDG) renew annually by January 31 of every year.",
   "guide": "https://credentialdomd.com/states/hawaii"
  },
  "ID": {
-  "portal": "https://bom.idaho.gov",
-  "board": "Idaho Board of Medicine",
-  "due": null,
+  "portal": "https://edopl.idaho.gov/OnlineServices/",
+  "board": "Idaho State Board of Medicine (Division of Occupational and Professional Licenses, DOPL)",
+  "due": "Licensee's birthdate. As of April 1, 2026, DOPL began transitioning the Board of Medicine to biennial licenses that expire on the licensee's birthday, phased in by odd/even birth year so renewals spread across two cycles. Before this transition, DOPL licenses renewed on a June cycle (1-year or 2-year licenses in the month of June). Renewal can be completed up to 60 days before the birthday expiration. Physicians mid-transition should confirm their individual expiration date in the eDOPL portal.",
   "guide": "https://credentialdomd.com/states/idaho"
  },
  "IL": {
-  "portal": "https://idfpr.illinois.gov",
-  "board": "Illinois Department of Financial and Professional Regulation",
-  "due": null,
+  "portal": "https://online-dfpr.micropact.com/",
+  "board": "Illinois Department of Financial and Professional Regulation (IDFPR), Division of Professional Regulation",
+  "due": "Fixed date: all Physician and Surgeon licenses expire July 31 every third year (68 Ill. Adm. Code 1285.120: \"every license issued under the Medical Practice Act of 1987 shall expire on July 31, 1990, and every third year thereafter\", so 2026, 2029, 2032). One-time exception: the 2026 renewal deadline was extended to August 31, 2026 by an IDFPR variance dated 7-20-2026, due to the Department's transition to new data and operating systems.",
   "guide": "https://credentialdomd.com/states/illinois"
  },
  "IN": {
-  "portal": "https://www.in.gov/pla/professions/medical-licensing-board/",
-  "board": "Indiana Medical Licensing Board",
-  "due": null,
+  "portal": "https://mylicense.in.gov/eGov/ML1PLA.html",
+  "board": "Indiana Medical Licensing Board (Indiana Professional Licensing Agency)",
+  "due": "All physician (MD and DO) licenses expire at 11:59 p.m. EDT on October 31 of odd-numbered years, statewide, regardless of issue date. The most recent cycle closed 10/31/2025; the next renewal deadline is 10/31/2027. Renewal notices are emailed approximately 90 days before expiration to the email address on file.",
   "guide": "https://credentialdomd.com/states/indiana"
  },
  "IA": {
-  "portal": "https://medicalboard.iowa.gov",
-  "board": "Iowa Board of Medicine",
-  "due": null,
+  "portal": "https://amanda-portal.idph.state.ia.us/ibm/portal/#/dashboards/index",
+  "board": "Iowa Board of Medicine (Department of Inspections, Appeals, and Licensing)",
+  "due": "License expires on the first day of the licensee's birth month; renewal issues a two-year license that again expires on the first day of the birth month (Iowa Admin. Code r. 481-652.12(3)). Online renewal opens no more than 60 days before the renewal date.",
   "guide": "https://credentialdomd.com/states/iowa"
  },
  "KS": {
-  "portal": "https://www.ksbha.org",
-  "board": "Kansas State Board of Healing Arts",
-  "due": null,
+  "portal": "https://boha.ks.gov/egov_boha/Login.aspx",
+  "board": "Kansas State Board of Healing Arts (KSBHA)",
+  "due": "Fixed calendar dates by license type, not birth month. MD: all Medical Doctor licenses expire July 31; the renewal cycle runs May 15 through July 31 each year, with on-time renewal due by June 30 and July 1 to July 31 as the late-renewal window. DO: all Osteopathic Doctor licenses expire October 31; renewal cycle August 15 through October 31, on-time by September 30, late window October 1 to October 31.",
   "guide": "https://credentialdomd.com/states/kansas"
  },
  "KY": {
-  "portal": "https://kbml.ky.gov",
-  "board": "Kentucky Board of Medical Licensure",
-  "due": null,
+  "portal": "https://services.kbml.ky.gov/ebusiness/Login.aspx?mode=login",
+  "board": "Kentucky Board of Medical Licensure (KBML)",
+  "due": "Fixed date for all licensees: renewal is due by March 1 of each year. Reminder notices are mailed to all active licensees in late December. Renewals paid after March 1 but before April 1 require a penalty fee; failure to renew by April 1 makes the license automatically inactive.",
   "guide": "https://credentialdomd.com/states/kentucky"
  },
  "LA": {
-  "portal": "https://www.lsbme.la.gov",
-  "board": "Louisiana State Board of Medical Examiners",
-  "due": null,
+  "portal": "https://online.lasbme.org",
+  "board": "Louisiana State Board of Medical Examiners (LSBME)",
+  "due": "License expires annually on the first day of the month in which the licensee was born (LAC 46:XLV.415: every license \"shall annually expire... on the first day of the month in which the licensee was born\"). Renewal must be filed on or before that date; the online window opens only 56 days before expiration.",
   "guide": "https://credentialdomd.com/states/louisiana"
  },
  "ME": {
-  "portal": "https://www.maine.gov/md/",
+  "portal": "https://licensing.web.maine.gov/cgi-bin/online/licensing/begin.pl?board_number=376",
   "board": "Maine Board of Licensure in Medicine",
-  "due": null,
+  "due": "Last day of the licensee's birth month, in even or odd years matching the licensee's birth year: physicians born in an even-numbered year expire on the last day of their birth month in an even-numbered year, those born in an odd-numbered year in an odd-numbered year (MD board FAQ). The DO board also sets the renewal date by date of birth per its application instructions; the DO statute (32 MRS 2581-1) leaves the exact schedule to board rule.",
   "guide": "https://credentialdomd.com/states/maine"
  },
  "MD": {
-  "portal": "https://www.mbp.state.md.us",
+  "portal": "https://www.mbp.state.md.us/mbp_al_2026/default.aspx",
   "board": "Maryland Board of Physicians",
-  "due": null,
+  "due": "Licenses expire September 30 in alternating years by last name: A-L expire in even years (renewal window July 15 to September 30, 2026, 11:59 pm EST), M-Z in odd years. Not tied to birth month.",
   "guide": "https://credentialdomd.com/states/maryland"
  },
  "MA": {
-  "portal": "https://www.mass.gov/orgs/board-of-registration-in-medicine",
-  "board": "Massachusetts Board of Registration in Medicine",
-  "due": null,
+  "portal": "https://medboard.mass.gov/login-register",
+  "board": "Massachusetts Board of Registration in Medicine (BORIM)",
+  "due": "Birth date. Board states: renewal of a full medical license occurs on the first birth date after license issuance, unless the birthday falls within 90 days of obtaining the initial license, in which case the first renewal moves to the following birth date. Renewals thereafter run on a two-year birth date cycle.",
   "guide": "https://credentialdomd.com/states/massachusetts"
  },
  "MI": {
-  "portal": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/medicine",
-  "board": "Michigan Board of Medicine",
-  "due": null,
+  "portal": "https://aca-prod.accela.com/MILARA",
+  "board": "Michigan Board of Medicine (Bureau of Professional Licensing, Department of Licensing and Regulatory Affairs)",
+  "due": "License-specific: medicine and osteopathic medicine licenses expire triennially on the anniversary of the license issue date (R 338.7002, Public Health Code General Rules). LARA states expiration dates vary and to check the date printed on the license. Online renewal in MiPLUS opens no sooner than 90 days before the expiration date.",
   "guide": "https://credentialdomd.com/states/michigan"
  },
  "MN": {
-  "portal": "https://mn.gov/boards/medical-practice/",
+  "portal": "https://bmp.hlb.state.mn.us/#/Login",
   "board": "Minnesota Board of Medical Practice",
-  "due": null,
+  "due": "Annual cycle ending on the last day of the licensee's month of birth (Minnesota Rules 5600.0605, subp. 4: renewal cycles \"begin on the last day of the month of the licensee's birth\"). Online renewal opens on the first day of the 2nd month before expiration; example given by the board: a license expiring June 30 can be renewed online starting May 1.",
   "guide": "https://credentialdomd.com/states/minnesota"
  },
  "MS": {
-  "portal": "https://www.msbml.ms.gov",
-  "board": "Mississippi State Board of Medical Licensure",
-  "due": null,
+  "portal": "https://gateway.msbml.ms.gov/",
+  "board": "Mississippi State Board of Medical Licensure (MSBML)",
+  "due": "Fixed statewide window: renewal opens May 1 and the deadline is June 30 each year, for every permanent MD/DO license. The renewal year runs July 1 to June 30. Late renewal begins August 1.",
   "guide": "https://credentialdomd.com/states/mississippi"
  },
  "MO": {
-  "portal": "https://pr.mo.gov/healingarts.asp",
+  "portal": "https://mopro.mo.gov/license/s/",
   "board": "Missouri State Board of Registration for the Healing Arts",
-  "due": null,
+  "due": "Fixed date: all physician licenses expire January 31 of every year. Renewal information is mailed and/or emailed on or before December 1. A renewal is timely if the fee is received before expiration; forms postmarked February 1 or after are delinquent, except that when January 31 falls on a weekend or legal holiday, a postmark on the next business day is not delinquent (20 CSR 2150-2.001(17)).",
   "guide": "https://credentialdomd.com/states/missouri"
  },
  "MT": {
-  "portal": "https://boards.bsd.dli.mt.gov/medical-examiners",
-  "board": "Montana Board of Medical Examiners",
-  "due": null,
+  "portal": "https://ebiz.mt.gov/POL/Default.aspx",
+  "board": "Montana Board of Medical Examiners (Department of Labor and Industry, Professional Licensing Bureau)",
+  "due": "Licenses expire March 31 of the expiration year. Physicians (MDs and osteopaths) renew online between February 1 and March 31 of their renewal year (board renewal-process and license-information pages; ARM 24.101.413 table lists \"Physician, Biennially, March 31\"). The board does not publish whether an individual's renewal year is even or odd; it is set per license.",
   "guide": "https://credentialdomd.com/states/montana"
  },
  "NE": {
-  "portal": "https://dhhs.ne.gov/licensure/Pages/Medicine-and-Surgery.aspx",
-  "board": "Nebraska Board of Medicine and Surgery",
-  "due": null,
+  "portal": "https://nebraska.mylicense.com/",
+  "board": "Nebraska Department of Health and Human Services, Division of Public Health, Licensure Unit (Board of Medicine and Surgery)",
+  "due": "All physician and osteopathic physician licenses expire October 1 of every even-numbered year, regardless of when the license was issued. Renewal application and fee must be postmarked (or submitted online) on or before October 1 of the even year. Next expiration: October 1, 2026.",
   "guide": "https://credentialdomd.com/states/nebraska"
  },
  "NV": {
-  "portal": "https://medboard.nv.gov",
+  "portal": "https://nsbme.us.thentiacloud.net/webs/nsbme/service/#/login",
   "board": "Nevada State Board of Medical Examiners",
-  "due": null,
+  "due": "MD: biennial registration due on or before June 30 of each odd-numbered year (or next business day if June 30 falls on a weekend or holiday), per NRS 630.267; the current registration period runs July 1, 2025 through June 30, 2027, so the next MD renewal is due June 30, 2027. DO: renewal due on or before December 31 (NRS 633.471); per the board's Summer 2025 newsletter, the last annual deadline was December 31, 2025, and starting in 2026 DO licenses renew in every even-numbered year for a two-year period, making December 31, 2026 the next DO renewal deadline.",
   "guide": "https://credentialdomd.com/states/nevada"
  },
  "NH": {
-  "portal": "https://www.oplc.nh.gov/board-medicine",
-  "board": "New Hampshire Board of Medicine",
-  "due": null,
+  "portal": "https://forms.nh.gov/license/Login.aspx",
+  "board": "New Hampshire Board of Medicine (under the Office of Professional Licensure and Certification, OPLC)",
+  "due": "License anniversary: under RSA 310:8, II, \"Licenses issued by the office shall be valid for 2 years from the date of issuance.\" The completed renewal application, fee, and supporting documents must be filed on or before the expiration of the license (RSA 310:8, III). OPLC must send renewal notice at least 2 months before expiration (RSA 310:8, IV), and the OPLC renewal page says licensees get an email renewal notification 90 days before expiration.",
   "guide": "https://credentialdomd.com/states/new-hampshire"
  },
  "NJ": {
-  "portal": "https://www.njconsumeraffairs.gov/bme/",
-  "board": "New Jersey State Board of Medical Examiners",
-  "due": null,
+  "portal": "https://newjersey.mylicense.com/eGov/Login.aspx",
+  "board": "New Jersey State Board of Medical Examiners (Division of Consumer Affairs)",
+  "due": "Fixed date: all MD and DO licenses expire June 30 of ODD-numbered years, regardless of when the license was issued. The board's licensing presentation states renewal is \"Every 2 years on odd years\" for MD and DO (example cycle: July 1, 2005 to June 30, 2007), and the DCA's own license verification system shows current MD licenses expiring 6/30/2027. Renewal notices are mailed at least 60 days before expiration (N.J.S.A. 45:1-7.1(e)).",
   "guide": "https://credentialdomd.com/states/new-jersey"
  },
  "NM": {
-  "portal": "https://www.nmmb.state.nm.us",
+  "portal": "https://nmrldlpi.my.site.com/nmmb/s/login",
   "board": "New Mexico Medical Board",
-  "due": null,
+  "due": "On or before July 1 of every third year (NMSA 1978 Section 61-6-26). Licenses expire July 1; online renewal must be completed by June 30. Renewal opens about 3 months before expiration. Initial licenses are issued for no more than 13 months and no less than 1 month, expiring the following July 1, which places the new licensee into the triennial cycle.",
   "guide": "https://credentialdomd.com/states/new-mexico"
  },
  "NY": {
-  "portal": "https://www.op.nysed.gov/professions/physicians",
-  "board": "New York State Education Department (NYSED) Office of the Professions",
-  "due": "Based on registration period",
+  "portal": "https://eservices.nysed.gov/professions/renewal/start",
+  "board": "New York State Education Department, Office of the Professions (State Board for Medicine)",
+  "due": "Rolling per-licensee registration period: NY Education Law 6502 has the Department establish the beginning date of each licensee's registration period, so the two-year cycle runs from your own registration date, not a birth month or fixed statewide date. NYSED mails a Registration Renewal Document with a PIN approximately four months before the registration expires (per the Office of the Professions FAQ). Physicians and medical physicists are on two-year periods; most other NY professions are three-year.",
   "guide": "https://credentialdomd.com/states/new-york"
  },
  "NC": {
-  "portal": "https://www.ncmedboard.org",
+  "portal": "https://portal.ncmedboard.org/index.aspx",
   "board": "North Carolina Medical Board",
-  "due": null,
+  "due": "Every year, no later than 30 days after the licensee's birthday, regardless of license issue date (N.C. Gen. Stat. 90-13.2). A licensee's first renewal is due within 30 days of their NEXT birthday, even if that birthday falls shortly after the license was issued.",
   "guide": "https://credentialdomd.com/states/north-carolina"
  },
  "ND": {
-  "portal": "https://www.ndbom.org",
+  "portal": "https://www.ndbom.org/practitioners/dashboard/index.asp",
   "board": "North Dakota Board of Medicine",
-  "due": null,
+  "due": "Licenses expire on the physician's birthday every other year (effective August 1, 2023). A new license first expires the second time the birthday comes around after Board approval. The online renewal window opens 59 days before the expiration date; email reminders go out 59 and 14 days before expiration.",
   "guide": "https://credentialdomd.com/states/north-dakota"
  },
  "OH": {
-  "portal": "https://med.ohio.gov",
+  "portal": "https://elicense.ohio.gov",
   "board": "State Medical Board of Ohio",
-  "due": null,
+  "due": "Individual expiration date: per ORC 4731.281, \"A license shall expire on the date that is two years from the date of issuance and may be renewed for additional two-year periods.\" Not tied to birth month or a fixed statewide date. Renewal can be submitted within 180 days before the expiration date (board renewal page).",
   "guide": "https://credentialdomd.com/states/ohio"
  },
  "OK": {
-  "portal": "https://www.okmedicalboard.org",
+  "portal": "https://www.medicalboard.ok.gov/s/",
   "board": "Oklahoma State Board of Medical Licensure and Supervision",
-  "due": null,
+  "due": "MD: annual reregistration during the month of initial licensure, per OAC 435:10-7-10 (\"Reregistration shall be conducted during the month of initial licensure of each individual licensee\"). It is NOT birth month and NOT a fixed calendar date. DO: all osteopathic licenses expire June 30 every year; the OSBOE renewal window opens May 1.",
   "guide": "https://credentialdomd.com/states/oklahoma"
  },
  "OR": {
-  "portal": "https://www.oregon.gov/omb/",
+  "portal": "https://omb.oregon.gov/renew",
   "board": "Oregon Medical Board",
-  "due": null,
+  "due": "Fixed date, statewide: the renewal application and fee must be received and satisfactorily complete on or before December 31 of each odd-numbered year for all physicians and physician associates (OAR 847-008-0005(1)). All MD/DO licensees share the same deadline regardless of when the license was issued; the current registration period ends December 31, 2027. Emeritus renews by December 31 every year; acupuncturists (also under this board) renew by June 30 of even-numbered years.",
   "guide": "https://credentialdomd.com/states/oregon"
  },
  "PA": {
-  "portal": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine/",
-  "board": "Pennsylvania State Board of Medicine",
-  "due": "December 31 (even years for MDs)",
+  "portal": "https://www.pals.pa.gov",
+  "board": "Pennsylvania State Board of Medicine (Bureau of Professional and Occupational Affairs, Department of State)",
+  "due": "Fixed dates in even-numbered years, and the two boards differ: MD licenses expire December 31 of every even-numbered year (except MD Training licenses); DO licenses expire October 31 of every even-numbered year. Current cycle ends 10/31/2026 (DO) and 12/31/2026 (MD). Renewal opens in PALS approximately 60 days before expiration.",
   "guide": "https://credentialdomd.com/states/pennsylvania"
  },
  "RI": {
-  "portal": "https://health.ri.gov/licenses/detail.php?id=201",
-  "board": "Rhode Island Board of Medical Licensure and Discipline",
-  "due": null,
+  "portal": "https://healthri.mylicense.com/Login.aspx",
+  "board": "Rhode Island Board of Medical Licensure and Discipline (Rhode Island Department of Health)",
+  "due": "Fixed statewide date, not tied to birth month or issue anniversary. Per 216-RICR-40-05-1.5.6(A), licenses \"expire biennially on the first (1st) day of July of the next even-numbered year,\" i.e. the license runs through June 30 of the even year. The renewal application and fee must be filed before July 1 of each even-numbered year, with payment postmarked on or before July 1 (1.5.6(B)); RIGL 5-37-10 sets the application submission at on or before June 1, with the new certificate effective July 1 and expiring June 30 two years later.",
   "guide": "https://credentialdomd.com/states/rhode-island"
  },
  "SC": {
-  "portal": "https://llr.sc.gov/med/",
-  "board": "South Carolina Board of Medical Examiners",
-  "due": null,
+  "portal": "https://eservice.llr.sc.gov/SSO/Login/LoginPage?ReturnUrl=%2fOnlineRenewals%2f",
+  "board": "South Carolina Board of Medical Examiners (SC Department of Labor, Licensing and Regulation)",
+  "due": "Fixed statewide date: licenses expire June 30 of odd-numbered years (current cycle is 2025-2027; the prior license lapsed June 30, 2025 if not renewed, per the board's 2025-2027 late renewal application). SC Code 40-47-41 provides that a license \"may be renewed biennially or as otherwise provided by the board.\" The board page does not publish the exact opening date of the on-time renewal window for MD/DO.",
   "guide": "https://credentialdomd.com/states/south-carolina"
  },
  "SD": {
-  "portal": "https://www.sdbmoe.gov",
+  "portal": "https://my.sdbmoe.gov/",
   "board": "South Dakota Board of Medical and Osteopathic Examiners",
-  "due": null,
+  "due": "Fixed common date: all physician licenses must be renewed on or before March 1 of odd-numbered years (SDCL 36-4-24.2). The online renewal opens 90 days before expiration (ARSD 20:47:03:13), i.e. around December 1 of the preceding even-numbered year.",
   "guide": "https://credentialdomd.com/states/south-dakota"
  },
  "TN": {
-  "portal": "https://www.tn.gov/health/health-program-areas/health-professional-boards/me-board.html",
-  "board": "Tennessee Board of Medical Examiners",
-  "due": null,
+  "portal": "https://lars.tn.gov/datamart/login.do",
+  "board": "Tennessee Board of Medical Examiners (Tennessee Department of Health)",
+  "due": "Birth month. Rule 0880-02-.09(1)(a) (identical for DOs in 1050-02-.07): the due date is the license expiration date, which is the last day of the month in which the license holder's birthday falls, under the Division of Health Related Boards biennial birthdate renewal system (Rule 1200-10-1-.10). The board site states everyone renews every two years in their birth month, with the renewal year keyed to birth year (even birth years renew in even years, odd in odd). Online renewal opens 60 days before expiration; renewal notices go out roughly 90 days ahead (paper, or email for opted-in licensees).",
   "guide": "https://credentialdomd.com/states/tennessee"
  },
  "TX": {
-  "portal": "https://www.tmb.state.tx.us",
-  "board": "Texas Medical Board (TMB)",
-  "due": "Based on registration period",
+  "portal": "https://renewals.tmb.state.tx.us/ph/login.aspx",
+  "board": "Texas Medical Board",
+  "due": "Fixed quarterly dates assigned by TMB at licensure. Board text: \"Physician licenses expire at one of 4 times during the year; February 28th, May 31st, August 31st, or November 30th.\" The year is set by license-number parity: \"Even number licenses expire in even number years and odd number licenses expire in odd number years.\" Initial registration is pro-rated (12-month $281.48 or 24-month $467.48) to land the license on its assigned cycle.",
   "guide": "https://credentialdomd.com/states/texas"
  },
  "UT": {
-  "portal": "https://dopl.utah.gov",
-  "board": "Utah Division of Occupational and Professional Licensing",
-  "due": null,
+  "portal": "https://utahdoc.mylicenseone.com/",
+  "board": "Utah Division of Professional Licensing (DOPL), Physicians Licensing Board",
+  "due": "MD: \"Physician licenses expire on January 31 of even years.\" DO: \"Osteopathic Physician and Surgeon license renewals are due May 31st of even years.\" Controlled substance licenses renew at the same time as the main license. (Next renewal for both: 2028, since the 2026 dates have passed.)",
   "guide": "https://credentialdomd.com/states/utah"
  },
  "VT": {
-  "portal": "https://sos.vermont.gov/medical-board/",
-  "board": "Vermont Board of Medical Practice",
-  "due": null,
+  "portal": "https://medicallicensing.vermont.gov/portal/public",
+  "board": "Vermont Board of Medical Practice (Vermont Department of Health)",
+  "due": "MD: licenses expire November 30 of even-numbered years (next deadline November 30, 2026); a license issued before September 1 of an even year expires that same November 30 and must be renewed at the full fee. DO: licenses renew September 30 of even-numbered years per the OPR fee and renewal-date schedule (next deadline September 30, 2026).",
   "guide": "https://credentialdomd.com/states/vermont"
  },
  "VA": {
-  "portal": "https://www.dhp.virginia.gov/medicine/",
-  "board": "Virginia Board of Medicine",
-  "due": null,
+  "portal": "https://www.license.dhp.virginia.gov/license/Login.aspx",
+  "board": "Virginia Board of Medicine (Department of Health Professions)",
+  "due": "During the licensee's birth month in each even-numbered year. 18VAC85-20-230(A) requires renewal \"biennially during his birth month,\" and the fee regulation 18VAC85-20-22 sets the medicine/osteopathic medicine renewal fee as due in the licensee's birth month in each even-numbered year.",
   "guide": "https://credentialdomd.com/states/virginia"
  },
  "WA": {
-  "portal": "https://wmc.wa.gov",
-  "board": "Washington Medical Commission",
-  "due": null,
+  "portal": "https://secureaccess.wa.gov/",
+  "board": "Washington Medical Commission (WMC)",
+  "due": "MD: \"Licenses must be renewed every two years on the practitioner's birthday\" (WAC 246-919-990; postgraduate limited licenses renew annually on program dates). DO: licenses must be renewed every year on the physician's birthday (WAC 246-853-990).",
   "guide": "https://credentialdomd.com/states/washington"
  },
  "WV": {
-  "portal": "https://wvbom.wv.gov",
+  "portal": "https://wvbom.wv.gov/practitioners/MD/renew/",
   "board": "West Virginia Board of Medicine",
-  "due": null,
+  "due": "MD: staggered by last name. Physicians whose last names begin with A through L renew in even-numbered years; M through Z renew in odd-numbered years. The online renewal window opens in early May (May 6 in 2026) and closes promptly at 4:30 pm EDT on June 30; unrenewed licenses expire at 11:59 pm EDT on June 30. DO: license is valid for a term of 2 years and must be renewed by June 30 of the second year (W. Va. Code R. 24-1-4); the statute states renewal is biennial on or before July 1 (W. Va. Code 30-14-10), and the DO board requires the application and fees by June 30.",
   "guide": "https://credentialdomd.com/states/west-virginia"
  },
  "WI": {
-  "portal": "https://dsps.wi.gov/pages/BoardsCouncils/MedicalExaminingBoard/Default.aspx",
-  "board": "Wisconsin Medical Examining Board",
-  "due": null,
+  "portal": "https://license.wi.gov/",
+  "board": "Wisconsin Medical Examining Board (Department of Safety and Professional Services, DSPS)",
+  "due": "October 31 of each odd-numbered year, for all physicians statewide (Wis. Stat. 440.08(2)). The board states this applies even if the initial license was issued in the months just before the date: a license issued shortly before October 31 of an odd year still must be renewed by that date. Next renewal deadline: October 31, 2027.",
   "guide": "https://credentialdomd.com/states/wisconsin"
  },
  "WY": {
-  "portal": "https://wyomedboard.wyo.gov",
+  "portal": "https://wyomedboard.wyo.gov/physicians/renew-license",
   "board": "Wyoming Board of Medicine",
-  "due": null,
+  "due": "Fixed date: all physician licenses must be renewed no later than June 30 of each calendar year, and each renewal carries the license through the next June 30 (Board rule, Ch. 1 Sec. 10; W.S. 33-26-305 requires annual lapse on a board-set date). First-time renewal depends on issue date: licenses issued July 1 through February 28/29 renew by the immediately following June 30; licenses issued March 1 through June 30 renew by June 30 of the next calendar year.",
   "guide": "https://credentialdomd.com/states/wyoming"
  }
 }
