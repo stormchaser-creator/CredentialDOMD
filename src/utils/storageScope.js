@@ -22,6 +22,7 @@ export const BASE_KEYS = {
   archives: "credentialdomd-assistant-archives",
   timer: "credentialdomd-live-timer",
   lastContract: "credentialdomd-last-contract",
+  pendingOps: "credentialdomd-pending-ops", // writes that failed to reach the cloud, replayed next load
 };
 
 let activeUserId = null;

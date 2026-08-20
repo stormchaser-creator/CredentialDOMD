@@ -48,6 +48,9 @@ export const DEFAULT_DATA = {
   travelDocs: [],     // [{ id, type, name, provider, number, expirationDate, notes }]
   memberships: [],    // [{ id, organization, role, startDate, endDate, notes }]
   malpracticeHistory: [],
+  travelExpenses: [], // [{ id, date, category, description, amount, taxYear }]
+  taxPayments: [],    // [{ id, date, quarter, taxYear, jurisdiction, amount, method, notes }]
+  scheduleDays: [],   // [{ id, contractId, date, shift, notes }]
   // Locum tier features
   rotations: [],     // [{ id, hospital, city, state, startDate, endDate, role, agency, notes }]
   deductibles: [],   // [{ id, date, category, description, amount, taxYear }]
