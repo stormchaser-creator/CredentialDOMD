@@ -242,21 +242,16 @@ function StatementImport({ open, onClose }) {
   const setRow = (i, patch) => setRows(rs => rs.map((r, j) => j === i ? { ...r, ...patch } : r));
   const included = (rows || []).filter(r => r.include);
   const total = included.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  // A row billed to an agency is reimbursed, so it is not also a deduction:
+  // it goes to Work Expenses only. Deducting it while excluding the
+  // reimbursement from income would count the same dollar twice.
+  const willBill = (r) => r.alsoBill && BILLABLE_CATEGORY[r.category] && (r.agency || "").trim();
+  const billedCount = included.filter(willBill).length;
 
   const saveBatch = () => {
-    let billed = 0;
+    let billed = 0, deducted = 0;
     for (const r of included) {
-      addItem("deductibles", {
-        id: generateId(),
-        date: r.date,
-        category: r.category,
-        description: r.merchant,
-        merchant: r.merchant,
-        amount: parseFloat(r.amount) || 0,
-        taxYear: String(r.date || "").slice(0, 4),
-        source: "card import",
-      });
-      if (r.alsoBill && BILLABLE_CATEGORY[r.category] && (r.agency || "").trim()) {
+      if (willBill(r)) {
         addItem("travelExpenses", {
           id: generateId(),
           date: r.date,
@@ -267,9 +262,21 @@ function StatementImport({ open, onClose }) {
           notes: "Imported from statement",
         });
         billed++;
+      } else {
+        addItem("deductibles", {
+          id: generateId(),
+          date: r.date,
+          category: r.category,
+          description: r.merchant,
+          merchant: r.merchant,
+          amount: parseFloat(r.amount) || 0,
+          taxYear: String(r.date || "").slice(0, 4),
+          source: "card import",
+        });
+        deducted++;
       }
     }
-    setDone({ count: included.length, billed });
+    setDone({ count: deducted, billed });
     setRows(null);
   };
 
@@ -291,7 +298,7 @@ function StatementImport({ open, onClose }) {
           {done != null && (
             <div style={{ fontSize: 13.5, fontWeight: 700, color: "#22c55e", marginTop: 12 }}>
               Added {done.count} deduction line{done.count === 1 ? "" : "s"} to the ledger. They're in the Deductions list and the tax estimate now.
-              {done.billed > 0 && ` Also added ${done.billed} to Work Expenses to invoice.`}
+              {done.billed > 0 && ` ${done.billed} row${done.billed === 1 ? " was" : "s were"} sent to Work Expenses to invoice the agency instead, not deducted, since a reimbursed expense is not also a deduction.`}
             </div>
           )}
           {error && <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 12 }}>{error}</div>}
@@ -302,6 +309,11 @@ function StatementImport({ open, onClose }) {
         <>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 8 }}>
             {included.length} of {rows.length} lines selected · {money(total)}
+            {billedCount > 0 && (
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: T.textMuted, marginTop: 2 }}>
+                {billedCount} billed to an agency will be recorded as reimbursements, not deductions.
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: "50vh", overflowY: "auto" }}>
             {rows.map((r, i) => (
@@ -333,10 +345,13 @@ function StatementImport({ open, onClose }) {
                   <div style={{ marginTop: 6 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textMuted, cursor: "pointer" }}>
                       <input type="checkbox" checked={r.alsoBill} onChange={e => setRow(i, { alsoBill: e.target.checked })} style={{ width: 15, height: 15, flexShrink: 0 }} />
-                      Also bill to agency (Work Expenses)
+                      Bill to agency instead (Work Expenses)
                     </label>
                     {r.alsoBill && (
                       <>
+                        <div style={{ fontSize: 11, color: T.warning, marginTop: 4, lineHeight: 1.4 }}>
+                          Recorded as a reimbursable expense to invoice, not a deduction. A reimbursed expense cannot also be deducted.
+                        </div>
                         <input list={`import-agencies-${i}`} value={r.agency} onChange={e => setRow(i, { agency: e.target.value })}
                           placeholder="Agency name" style={{
                             width: "100%", marginTop: 6, padding: "7px 10px", borderRadius: 8, fontSize: 12.5,
@@ -357,7 +372,7 @@ function StatementImport({ open, onClose }) {
             <button onClick={saveBatch} disabled={!included.length} style={{
               flex: 1, padding: "12px 16px", borderRadius: 10, border: "none",
               backgroundColor: included.length ? T.accent : T.border, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer",
-            }}>Add {included.length} to deductions — {money(total)}</button>
+            }}>Save {included.length} line{included.length === 1 ? "" : "s"}, {money(total)}</button>
           </div>
         </>
       )}
