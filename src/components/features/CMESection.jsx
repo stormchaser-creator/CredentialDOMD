@@ -387,7 +387,7 @@ function CMESection({ onShare }) {
       {/* Add/Edit Modal */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit CME" : "Add CME"}>
         <Field label="Activity / Title"><input value={form.title || ""} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={iS} placeholder="e.g. Annual Pain Management Conference" /></Field>
-        <Field label="Credit Category">
+        <Field label="Credit Category" hint={deg === "DO" ? "Dually accredited activity (AOA 1-A and AMA PRA 1)? File it as AOA Category 1-A: for a DO it counts toward AOA, osteopathic boards, and AMA-rule states alike." : undefined}>
           <select value={form.category || ""} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
             <option value="">Select category...</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
