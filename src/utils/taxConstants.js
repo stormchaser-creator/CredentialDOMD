@@ -65,6 +65,10 @@ export const FED = {
   // SSTB (physician) QBI fully phases out above these taxable incomes
   // (Rev. Proc. 2025-32 sec. 3.26 "phase-in range amount" column).
   QBI_SSTB_PHASEOUT_END: { mfj: 553500, single: 276750, mfs: 276775, hoh: 276750 },
+  // Taxable income at which the SSTB phase-down begins: the threshold amount
+  // (Rev. Proc. 2025-32 sec. 3.26) = phase-out end minus the OBBBA phase-in
+  // range of $150k MFJ / $75k all other statuses. Below this, QBI is full.
+  QBI_SSTB_THRESHOLD: { mfj: 403500, single: 201750, mfs: 201775, hoh: 201750 },
   QUARTERLY_DUE: ["2026-04-15", "2026-06-15", "2026-09-15", "2027-01-15"],
 };
 

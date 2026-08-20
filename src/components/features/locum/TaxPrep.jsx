@@ -149,6 +149,11 @@ function TaxPrep() {
           {money(totalPaid)} paid · <b style={{ color: est.totalAll - totalPaid > 0 ? T.warning : "#22c55e" }}>{money(Math.max(0, est.totalAll - totalPaid))} remaining</b>
           {" · "}set aside <b>{(est.setAsideRate * 100).toFixed(0)}%</b> of every payment
         </div>
+        {isScorp && est.employerPayroll > 0 && (
+          <div style={{ marginTop: 4, fontSize: 12, color: T.textMuted }}>
+            That set-aside covers income and self-employment taxes. Your company also remits {money(est.employerPayroll)} in employer payroll taxes through payroll, so reserve about <b>{(est.cashReserveRate * 100).toFixed(0)}%</b> of gross to cover the full year's cash.
+          </div>
+        )}
         {est.unmodeled.length > 0 && (
           <div style={{ marginTop: 6, fontSize: 12, color: T.textMuted, fontWeight: 600 }}>
             Excludes state tax for {est.unmodeled.join(", ")} (state model not loaded yet).
@@ -225,13 +230,19 @@ function TaxPrep() {
           {heading("Federal")}
           {isScorp ? (<>
             {line("W-2 salary from S-corp", money2(est.salary))}
-            {line(est.franchise > 0 ? "K-1 distribution (after payroll + franchise)" : "K-1 distribution (after payroll)", money2(est.k1))}
+            {line(est.k1 < 0 ? "K-1 loss passed through (after payroll + franchise)" : (est.franchise > 0 ? "K-1 distribution (after payroll + franchise)" : "K-1 distribution (after payroll)"), money2(est.k1))}
             {line("Payroll taxes, employee side", money2(est.employeePayroll))}
             {line("Payroll taxes, company side (deducted)", money2(est.employerPayroll), { muted: true })}
           </>) : (
             line("Self-employment tax", money2(est.seTax))
           )}
-          {line(`Taxable income (${fsLabel(fs)}, after ${money(FED.STD_DEDUCTION[fs])} std deduction)`, money2(est.fedTaxable))}
+          {est.qbiDed > 0 ? (<>
+            {line(`Taxable income before QBI (${fsLabel(fs)}, after ${money(FED.STD_DEDUCTION[fs])} std deduction)`, money2(est.fedTaxable + est.qbiDed))}
+            {line("QBI deduction (Sec. 199A, 20%)", `− ${money2(est.qbiDed)}`)}
+            {line("Taxable income", money2(est.fedTaxable), { big: true })}
+          </>) : (
+            line(`Taxable income (${fsLabel(fs)}, after ${money(FED.STD_DEDUCTION[fs])} std deduction)`, money2(est.fedTaxable))
+          )}
           {line("Federal income tax", money2(est.fedIncomeTax))}
           {line("Federal total", money2(est.fedTotal), { big: true, color: T.warning })}
         </>)}

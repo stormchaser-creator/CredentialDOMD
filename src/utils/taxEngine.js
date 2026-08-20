@@ -105,6 +105,7 @@ export function estimate({ income, deductions, tp }) {
 
   if (entity === "scorp") {
     salary = Math.min(parseFloat(tp.scorpSalary) || 0, profit);
+    if ((parseFloat(tp.scorpSalary) || 0) > profit && profit > 0) notes.push("Your configured W-2 salary exceeds year-to-date profit; the estimate caps salary at profit and passes the entity-level payroll/franchise cost through as a loss.");
     if (!salary && profit > 0) notes.push("Set your S-corp W-2 salary (reasonable compensation). With $0 salary this estimate treats everything as distribution, which is not a filing position your CPA will take.");
     const ssEr = FED.SS_RATE * Math.min(salary, FED.SS_WAGE_BASE);
     const medEr = FED.MEDICARE_RATE * salary;
@@ -116,7 +117,10 @@ export function estimate({ income, deductions, tp }) {
     franchise = caEntity && profit > 0
       ? Math.max(CA.SCORP_FRANCHISE_MIN, CA.SCORP_FRANCHISE_RATE * Math.max(0, profit - salary - employerPayroll))
       : 0;
-    k1 = Math.max(0, profit - salary - employerPayroll - franchise);
+    // No floor: when salary is capped at profit, the employer payroll and
+    // franchise cost pass through as a K-1 loss instead of vanishing. AGI is
+    // floored at 0 below so a negative K-1 never produces negative tax.
+    k1 = profit - salary - employerPayroll - franchise;
     employeePayroll = FED.SS_RATE * Math.min(salary, FED.SS_WAGE_BASE)
       + FED.MEDICARE_RATE * salary
       + FED.ADDL_MEDICARE_RATE * Math.max(0, salary - FED.ADDL_MEDICARE_THRESHOLD[fs]);
@@ -125,20 +129,42 @@ export function estimate({ income, deductions, tp }) {
       notes.push(`Employer-side state unemployment insurance and any entity-level state tax for ${res} are not in this estimate.`);
     }
   } else {
-    // Sole proprietor: SE tax on 92.35% of profit, half deductible
+    // Sole proprietor: SE tax on 92.35% of profit. Only the SS + regular
+    // Medicare portion is halved for the above-the-line deduction; the 0.9%
+    // Additional Medicare tax is not deductible (Form 1040 Schedule SE / 8959).
     const seBase = profit * 0.9235;
-    seTax = FED.SS_RATE * 2 * Math.min(seBase, FED.SS_WAGE_BASE)
-      + FED.MEDICARE_RATE * 2 * seBase
-      + FED.ADDL_MEDICARE_RATE * Math.max(0, seBase - FED.ADDL_MEDICARE_THRESHOLD[fs]);
-    k1 = Math.max(0, profit - seTax / 2); // half-SE deduction
+    const ssMedSE = FED.SS_RATE * 2 * Math.min(seBase, FED.SS_WAGE_BASE)
+      + FED.MEDICARE_RATE * 2 * seBase;
+    const addlMedSE = FED.ADDL_MEDICARE_RATE * Math.max(0, seBase - FED.ADDL_MEDICARE_THRESHOLD[fs]);
+    seTax = ssMedSE + addlMedSE;
+    k1 = profit - ssMedSE / 2; // half-SE deduction excludes the 0.9% additional Medicare
   }
 
-  const passThrough = salary + k1;
-  const agi = passThrough + otherIncome;
-  const fedTaxable = Math.max(0, agi - FED.STD_DEDUCTION[fs]);
-  if (fedTaxable > FED.QBI_SSTB_PHASEOUT_END[fs]) {
-    notes.push("No QBI deduction: physician income is an SSTB and taxable income is beyond the 199A phase-out.");
+  const passThrough = salary + k1; // may fall below salary when K-1 is a loss
+  const agi = Math.max(0, passThrough + otherIncome);
+  const fedTaxableBeforeQbi = Math.max(0, agi - FED.STD_DEDUCTION[fs]);
+
+  // QBI (Sec. 199A). Physician income is an SSTB: full 20% below the
+  // threshold, a linear phase-down through the phase-in range, and zero at or
+  // above the phase-out end. The 20%-of-QBI figure is capped at 20% of taxable
+  // income before the deduction; net capital gains are out of scope here.
+  const qbiIncome = k1; // K-1 (S-corp, excludes W-2 salary) or Schedule C profit less half-SE
+  let qbiDed = 0;
+  if (qbiIncome > 0 && fedTaxableBeforeQbi > 0) {
+    const full = 0.20 * Math.min(qbiIncome, fedTaxableBeforeQbi);
+    const thr = FED.QBI_SSTB_THRESHOLD[fs];
+    const end = FED.QBI_SSTB_PHASEOUT_END[fs];
+    if (fedTaxableBeforeQbi <= thr) {
+      qbiDed = full;
+    } else if (fedTaxableBeforeQbi >= end) {
+      qbiDed = 0;
+      notes.push("No QBI deduction: physician income is an SSTB and taxable income is beyond the 199A phase-out.");
+    } else {
+      qbiDed = full * (end - fedTaxableBeforeQbi) / (end - thr);
+      notes.push("QBI (199A) deduction is phased down because physician income is an SSTB; this estimate approximates the phase-down linearly.");
+    }
   }
+  const fedTaxable = Math.max(0, fedTaxableBeforeQbi - qbiDed);
   const fedIncomeTax = bracketTax(fedTaxable, FED.BRACKETS[fs]);
   const fedTotal = fedIncomeTax + employeePayroll + seTax;
 
@@ -191,10 +217,13 @@ export function estimate({ income, deductions, tp }) {
   return {
     ready, filingStatus: fs, residentState: res,
     gross, deductions, profit, salary, k1, employerPayroll, employeePayroll,
-    franchise, sdi, seTax, otherIncome, agi, fedTaxable, fedIncomeTax, fedTotal,
+    franchise, sdi, seTax, otherIncome, agi, fedTaxable, qbiDed, fedIncomeTax, fedTotal,
     resident, nonresident, unmodeled, stateLocal,
     totalAll,
     setAsideRate: gross > 0 ? totalAll / gross : 0,
+    // Income-and-SE-tax reserve above, plus the employer-side payroll the
+    // company remits through payroll, so the reserve covers all the cash out.
+    cashReserveRate: gross > 0 ? (totalAll + employerPayroll) / gross : 0,
     safeHarbor: (parseFloat(tp.priorYearTax) || 0) * FED.SAFE_HARBOR_PCT_HIGH_AGI || null,
     notes,
     supportedStates: [...MODELED_STATES],
