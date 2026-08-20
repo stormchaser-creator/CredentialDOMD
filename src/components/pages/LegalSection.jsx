@@ -1,7 +1,8 @@
 import { useState, memo, Fragment } from "react";
 import { useApp } from "../../context/AppContext";
-import { deleteAllData, supabase } from "../../lib/supabase";
+import { deleteAllData, supabase, clearDeviceKeys } from "../../lib/supabase";
 import { purgeUserStorage } from "../../utils/storageScope";
+import { DEFAULT_DATA, DEFAULT_SETTINGS } from "../../constants/defaults";
 import { PRIVACY, TERMS, LEGAL_CONTACT } from "../../content/legalText";
 
 function LegalSection({ page }) {
@@ -12,35 +13,35 @@ function LegalSection({ page }) {
   // Permanently delete all user data
   const handleDeleteAllData = () => {
     if (deleteInput !== "DELETE") return;
-    // Clear everything this account keeps on the device: the file, the
-    // private vault, the Assistant transcript, timers (localStorage + Capacitor).
+    // Clear everything this account keeps on the device: the file, the private
+    // vault, the Assistant transcript, timers (localStorage + Capacitor), and
+    // the device-key slot (AI keys + the portal password lock code).
     purgeUserStorage(user?.id).catch(() => {});
+    clearDeviceKeys(user?.id);
     // Clear from Supabase: uploaded document files first (deleteAllData only
     // covers the tables), then the rows.
     if (userIdRef?.current) {
       const sub = window.Clerk?.user?.id;
       if (supabase && sub) {
-        supabase.storage.from("documents").list(sub, { limit: 1000 })
-          .then(({ data: objs }) => {
-            const paths = (objs || []).map(o => `${sub}/${o.name}`);
-            return paths.length ? supabase.storage.from("documents").remove(paths) : null;
-          })
-          .catch(() => {});
+        // Page through the folder: a single list() caps at 1,000 objects, so a
+        // document-heavy account would leave the overflow behind.
+        (async () => {
+          try {
+            for (let offset = 0; ; offset += 1000) {
+              const { data: objs } = await supabase.storage.from("documents").list(sub, { limit: 1000, offset });
+              if (!objs || objs.length === 0) break;
+              const paths = objs.map(o => `${sub}/${o.name}`);
+              if (paths.length) await supabase.storage.from("documents").remove(paths);
+              if (objs.length < 1000) break;
+            }
+          } catch { /* best effort */ }
+        })();
       }
       deleteAllData(userIdRef.current).catch(() => {});
     }
-    setData({
-      licenses: [], cme: [], privileges: [], caseLogs: [], insurance: [],
-      healthRecords: [], education: [], documents: [], shareLog: [],
-      notificationLog: [], workHistory: [], peerReferences: [], malpracticeHistory: [],
-      settings: {
-        primaryState: "", additionalStates: [], reminderLeadDays: 90,
-        name: "", npi: "", degreeType: "", specialties: [],
-        email: "", phone: "", theme: data.settings.theme, apiKey: "",
-        notifyEmail: true, notifyText: true, notifyFreqDays: 7,
-        lastNotified: null, alertsFingerprint: null, snoozedUntil: null,
-      },
-    });
+    // Reset from the canonical defaults so every collection key exists (the old
+    // hand-built object dropped locum/tax/travel collections and crashed adds).
+    setData({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme: data.settings.theme } });
     setShowDeleteConfirm(false);
     setDeleteInput("");
   };

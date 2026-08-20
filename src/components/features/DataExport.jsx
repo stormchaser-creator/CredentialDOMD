@@ -2,7 +2,7 @@ import { useState, useRef, memo } from "react";
 import { exportVault, importVault, vaultCount, clearVault } from "../../utils/privateVault";
 import { useApp } from "../../context/AppContext";
 import { STORAGE_KEY } from "../../constants/defaults";
-import { bulkSync, saveSettings } from "../../lib/supabase";
+import { bulkSync, saveSettings, COLLECTION_KEYS } from "../../lib/supabase";
 import BackupPanel from "./BackupPanel";
 
 function DataExport() {
@@ -100,24 +100,23 @@ function DataExport() {
       return;
     }
 
-    // Allowed top-level keys (whitelist)
-    const ALLOWED_KEYS = [
-      "licenses", "cme", "privileges", "caseLogs", "insurance",
-      "healthRecords", "education", "documents", "shareLog",
-      "notificationLog", "workHistory", "peerReferences",
-      "malpracticeHistory", "publications", "memberships",
-      "screenings", "professionalPhotos", "settings",
-    ];
+    // Allowed top-level keys (whitelist). Derived from the collection registry
+    // so a new collection can never silently fall out of restore again.
+    const ALLOWED_KEYS = [...COLLECTION_KEYS, "settings"];
 
     // Max string length for any field value
     const MAX_STR_LEN = 5000;
+    // Max array length. A career case log or a multi-year work log runs to many
+    // thousands of rows; the old 1,000 cap silently truncated real data on
+    // import. Keep a large bound only to blunt a hostile deeply-repeated array.
+    const MAX_ARRAY_LEN = 100000;
 
     // Recursively sanitize: strip __proto__/constructor/prototype, enforce string limits
     const sanitize = (obj) => {
       if (obj === null || obj === undefined) return obj;
       if (typeof obj === "string") return obj.length > MAX_STR_LEN ? obj.slice(0, MAX_STR_LEN) : obj;
       if (typeof obj === "number" || typeof obj === "boolean") return obj;
-      if (Array.isArray(obj)) return obj.slice(0, 1000).map(sanitize);
+      if (Array.isArray(obj)) return obj.slice(0, MAX_ARRAY_LEN).map(sanitize);
       if (typeof obj === "object") {
         const clean = {};
         for (const [k, v] of Object.entries(obj)) {
@@ -185,13 +184,7 @@ function DataExport() {
         // Sync imported data to Supabase
         if (userIdRef?.current) {
           const uid = userIdRef.current;
-          const COLLECTIONS = [
-            "licenses", "cme", "privileges", "insurance", "healthRecords",
-            "education", "caseLogs", "workHistory", "peerReferences",
-            "malpracticeHistory", "documents", "shareLog", "notificationLog",
-            "publications", "memberships", "screenings", "professionalPhotos",
-          ];
-          for (const key of COLLECTIONS) {
+          for (const key of COLLECTION_KEYS) {
             if (merged[key]?.length > 0) bulkSync(uid, key, merged[key]).catch(() => {});
           }
           if (merged.settings) saveSettings(uid, merged.settings).catch(() => {});

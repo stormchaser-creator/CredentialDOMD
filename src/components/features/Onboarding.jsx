@@ -33,9 +33,9 @@ export default function Onboarding({ onFinish }) {
   const [step, setStep] = useState(0);
   const key = STEPS[step];
 
-  // Step 1: you
-  const clerkName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
-  const [name, setName] = useState(s.name || clerkName || "");
+  // Step 1: you. normalizeClerkUser exposes fullName (not first/last), so
+  // prefill from that — the old firstName/lastName read was always empty.
+  const [name, setName] = useState(s.name || user?.fullName || "");
   const [degree, setDegree] = useState(s.degreeType || "");
   const [state, setState] = useState(s.primaryState || "");
 

@@ -23,6 +23,9 @@ import {
   downloadDocumentFile,
   recordTombstone,
   listTombstones,
+  replayPendingOps,
+  clearDeviceKeys,
+  COLLECTION_KEYS,
 } from "../lib/supabase";
 
 const AppContext = createContext(null);
@@ -120,10 +123,19 @@ export function AppProvider({ children, onNavigate }) {
       // Ensure profile exists for this auth user
       const profile = await ensureProfile(authUserId);
       if (profile) {
+        // Replay any writes that never reached the cloud (offline edits and
+        // deletes, transient failures) BEFORE reading back, so the snapshot we
+        // merge already reflects them.
+        try { await replayPendingOps(profile.id, authUserId); } catch { /* offline */ }
         const sbData = await loadFromSupabase(authUserId);
         if (sbData) {
           const profileId = sbData._userId;
           delete sbData._userId;
+          // Collections whose read FAILED (not empty) — never overwrite their
+          // last-known-good with an empty set, and never push stale local rows
+          // over cloud data we couldn't see.
+          const erroredKeys = sbData._errored || new Set();
+          delete sbData._errored;
           userIdRef.current = profileId;
 
           // Merge with defaults
@@ -133,15 +145,6 @@ export function AppProvider({ children, onNavigate }) {
             settings: { ...DEFAULT_DATA.settings, ...(sbData.settings || {}) },
           };
 
-          // Check if localStorage has data not yet in Supabase (first-time migration)
-          const COLLECTION_KEYS = [
-            "licenses", "cme", "privileges", "insurance", "healthRecords",
-            "education", "caseLogs", "workHistory", "peerReferences",
-            "malpracticeHistory", "documents", "shareLog", "notificationLog",
-            "rotations", "deductibles", "locumContracts", "workLog", "invoices",
-            "encounters", "screenings", "alertAcks", "professionalPhotos",
-            "publications", "memberships", "taskNotes", "dutyDays", "travelDocs", "travelExpenses", "taxPayments", "scheduleDays",
-          ];
           // This account's own on-device copy. First load after the
           // namespacing change: decide what happens to the pre-namespace
           // keys (adopted only when this cloud profile already holds data
@@ -160,6 +163,15 @@ export function AppProvider({ children, onNavigate }) {
               const adopted = adoptLegacyStorage(authUserId, { cloudIds, cloudHasData });
               local = adopted || local;
             } catch { /* keep local */ }
+          }
+
+          // A collection we failed to READ keeps this device's last-known-good
+          // copy rather than the empty set the merge would otherwise show — and
+          // is excluded from the self-heal push below.
+          if (erroredKeys.size && local) {
+            for (const key of erroredKeys) {
+              if (local[key]) merged[key] = local[key];
+            }
           }
 
           // Deletion ledger: anything deleted anywhere stays deleted.
@@ -181,14 +193,31 @@ export function AppProvider({ children, onNavigate }) {
             // greater risk.
             let pushed = 0;
             for (const key of COLLECTION_KEYS) {
+              // A collection whose read failed has an unknown cloud state —
+              // pushing local rows could clobber newer cloud data. Skip it.
+              if (erroredKeys.has(key)) continue;
               const localItems = local[key] || [];
               if (localItems.length === 0) continue;
-              const cloudIds = new Set((merged[key] || []).map(x => x?.id));
-              const missing = localItems.filter(x => x?.id && !cloudIds.has(x.id) && !tombstones.has(x.id));
-              if (missing.length > 0) {
-                merged[key] = [...(merged[key] || []), ...missing];
-                bulkSync(profileId, key, missing).catch(() => {});
-                pushed += missing.length;
+              const cloudById = new Map((merged[key] || []).map(x => [x?.id, x]));
+              const toPush = [];
+              for (const x of localItems) {
+                if (!x?.id || tombstones.has(x.id)) continue;
+                const cloud = cloudById.get(x.id);
+                if (!cloud) { toPush.push(x); continue; } // never reached the cloud
+                // A local edit whose cloud write failed is newer than the cloud
+                // row; push it so the edit isn't silently reverted on next load.
+                const localT = x.updatedAt ? Date.parse(x.updatedAt) : 0;
+                const cloudT = cloud.updatedAt ? Date.parse(cloud.updatedAt) : 0;
+                if (localT && localT > cloudT) toPush.push(x);
+              }
+              if (toPush.length > 0) {
+                // Replace-in-place for rows already present, append the missing.
+                const byId = new Map();
+                for (const x of (merged[key] || [])) byId.set(x?.id, x);
+                for (const x of toPush) byId.set(x.id, x);
+                merged[key] = [...byId.values()];
+                bulkSync(profileId, key, toPush).catch(() => {});
+                pushed += toPush.length;
               }
             }
             if (!merged.settings.name && local.settings?.name) {
@@ -214,6 +243,21 @@ export function AppProvider({ children, onNavigate }) {
             }
             return d;
           });
+
+          // A cloud document row carries metadata only (bytes live in Storage).
+          // Re-attach any bytes this device still holds locally so the merge
+          // can never overwrite the last copy of a file that was never uploaded
+          // (or whose Storage object went missing).
+          if (local?.documents?.length && merged.documents?.length) {
+            const localBytes = new Map(
+              local.documents.filter(d => d?.id && d.data).map(d => [d.id, d.data])
+            );
+            if (localBytes.size) {
+              merged.documents = merged.documents.map(d =>
+                (!d.data && localBytes.has(d.id)) ? { ...d, data: localBytes.get(d.id) } : d
+              );
+            }
+          }
 
           dataOwnerRef.current = authUserId;
           setData(merged);
@@ -291,8 +335,10 @@ export function AppProvider({ children, onNavigate }) {
     // Purge everything this account kept on the device: the file (patient
     // identifiers included), the private vault, the Assistant transcript
     // and archives, the live timer. The next account on this device must
-    // never inherit any of it.
+    // never inherit any of it. The device-key slot (AI keys + the portal
+    // password lock code) lives outside the namespaced set, so clear it too.
     await clearLocalData(ownerId);
+    clearDeviceKeys(ownerId);
   }, [clerkSignOut, user?.id]);
 
   // Persist to localStorage on change (debounced backup), under the key of
@@ -311,8 +357,9 @@ export function AppProvider({ children, onNavigate }) {
   // ─── Subscription ─────────────────────────────────────────
   const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta } = useSubscription(user ?? null);
 
-  // Theme
-  const theme = useMemo(() => THEMES[data.settings.theme] || THEMES.light, [data.settings.theme]);
+  // Theme. An unknown stored theme (e.g. the recycled 'arctic' profile
+  // default) falls back to the app's real default, dark — not light.
+  const theme = useMemo(() => THEMES[data.settings.theme] || THEMES.dark || THEMES.light, [data.settings.theme]);
 
   const toggleTheme = useCallback(() => {
     setData(d => {
@@ -337,15 +384,18 @@ export function AppProvider({ children, onNavigate }) {
   }, []);
 
   const addItem = useCallback((key, item) => {
-    updateSection(key, items => [...items, item]);
+    updateSection(key, items => [...(items || []), item]);
     // Sync to Supabase
     sbInsert(userIdRef.current, key, item).catch(() => {});
   }, [updateSection]);
 
   const editItem = useCallback((key, item) => {
-    updateSection(key, items => items.map(x => x.id === item.id ? item : x));
+    // Stamp the edit time so the self-heal pass can tell a newer local edit
+    // (whose cloud write may have failed) from an older cloud row.
+    const stamped = { ...item, updatedAt: new Date().toISOString() };
+    updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x));
     // Sync to Supabase
-    sbUpdate(userIdRef.current, key, item).catch(() => {});
+    sbUpdate(userIdRef.current, key, stamped).catch(() => {});
   }, [updateSection]);
 
   const deleteItemFn = useCallback((key, id) => {
@@ -355,12 +405,12 @@ export function AppProvider({ children, onNavigate }) {
     if (key !== "documents") {
       const linkedDocs = (dataRef.current.documents || []).filter(d => d.linkedTo === `${key}:${id}`);
       for (const doc of linkedDocs) {
-        updateSection("documents", items => items.filter(x => x.id !== doc.id));
+        updateSection("documents", items => (items || []).filter(x => x.id !== doc.id));
         sbDelete(profileId, "documents", doc.id).catch(() => {});
         recordTombstone(profileId, "documents", doc.id).catch(() => {});
       }
     }
-    updateSection(key, items => items.filter(x => x.id !== id));
+    updateSection(key, items => (items || []).filter(x => x.id !== id));
     sbDelete(profileId, key, id).catch(() => {});
     // The tombstone makes this delete final across every device.
     recordTombstone(profileId, key, id).catch(() => {});
