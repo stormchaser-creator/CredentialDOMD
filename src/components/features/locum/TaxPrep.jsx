@@ -151,7 +151,7 @@ function TaxPrep() {
         </div>
         {isScorp && est.employerPayroll > 0 && (
           <div style={{ marginTop: 4, fontSize: 12, color: T.textMuted }}>
-            That set-aside covers income and self-employment taxes. Your company also remits {money(est.employerPayroll)} in employer payroll taxes through payroll, so reserve about <b>{(est.cashReserveRate * 100).toFixed(0)}%</b> of gross to cover the full year's cash.
+            That set-aside covers income and employee-side payroll taxes. Your company also remits {money(est.employerPayroll)} in employer payroll taxes through payroll, so reserve about <b>{(est.cashReserveRate * 100).toFixed(0)}%</b> of gross to cover the full year's cash.
           </div>
         )}
         {est.unmodeled.length > 0 && (
