@@ -11,12 +11,12 @@ import RuleProvenance from "../shared/RuleProvenance";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getCMECategories } from "../../constants/credentialTypes";
-import { AOA_NATIONAL, BOARD_REQS_META } from "../../constants/boardRequirements";
+import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
 import { complianceFor } from "../../utils/compliance";
-import { computeBoardCompliance, boardIdsFromLicenses } from "../../utils/boardCompliance";
+import { computeBoardCompliance, boardIdsFromLicenses, aoaNationalEntry } from "../../utils/boardCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf } from "../../utils/cmeTranscriptPdf";
 import { CME_INBOX_ADDRESS } from "../../utils/inboxDocs";
 
@@ -228,7 +228,7 @@ function CMESection({ onShare }) {
       )}
 
       {/* Transcript import: CE Broker / ACCME / PARS / CSV -> review -> addItem("cme") */}
-      <CMEImport open={showImport} onClose={() => setShowImport(false)} />
+      <CMEImport open={showImport} onClose={() => setShowImport(false)} requiredTopics={requiredTopics} />
 
       {/* Transcript picker: which state renewal or board the PDF is for */}
       <Modal open={showTranscript} onClose={() => setShowTranscript(false)} title="Transcript PDF" width={460}>
@@ -320,6 +320,20 @@ function CMESection({ onShare }) {
                   )}
                 </div>
               ))}
+              {/* Board/MOC exemption: surfaced (not auto-applied) when a Board
+                  Certification record is on file and the state names one, so
+                  the physician can claim it rather than the app silently
+                  dropping the requirement. */}
+              {(() => {
+                const hasBoardCert = (data.licenses || []).some(l => /board certification/i.test(l.type || ""));
+                const moc = (getStateEntry(st, deg)?.moc || "").trim();
+                if (!hasBoardCert || !moc || /^no$/i.test(moc)) return null;
+                return (
+                  <div style={{ fontSize: 12, color: T.textMuted, backgroundColor: T.accentGlow, borderRadius: 8, padding: "7px 10px", marginTop: 6, marginBottom: 2, lineHeight: 1.4 }}>
+                    <span style={{ fontWeight: 700, color: T.accent }}>You may be exempt.</span> {moc}. Not applied automatically; confirm with the board and claim it on your renewal if it applies.
+                  </div>
+                );
+              })()}
               <RuleProvenance
                 reportKey={st}
                 subject={`${st}${hasSeparateBoards(st) ? ` (${deg || "MD"})` : ""}`}
@@ -368,19 +382,21 @@ function CMESection({ onShare }) {
             </div>
           )}
 
-          {deg === "DO" && (
-            <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: T.shadow1 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>AOA National</div>
-              <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>{AOA_NATIONAL.cycle}-year cycle</div>
-              <ComplianceBar label="Total" earned={totalHours} required={AOA_NATIONAL.hours} met={totalHours >= AOA_NATIONAL.hours} />
-              <ComplianceBar
-                label="Cat 1-A minimum"
-                earned={data.cme.filter(c => c.category === "AOA Category 1-A").reduce((s, c) => s + (parseFloat(c.hours) || 0), 0)}
-                required={AOA_NATIONAL.cat1a}
-                met={data.cme.filter(c => c.category === "AOA Category 1-A").reduce((s, c) => s + (parseFloat(c.hours) || 0), 0) >= AOA_NATIONAL.cat1a}
-              />
-            </div>
-          )}
+          {/* AOA National 120/3-yr requirement, cycle-windowed via the same
+              engine the transcript and Home use (the old block compared a
+              LIFETIME hour sum to a 3-year requirement). Suppressed when an
+              AOA board card is already shown, matching Home's logic. */}
+          {deg === "DO" && !boardComps.some(b => b.source === "AOA" && !b.followsParent) && (() => {
+            const aoa = aoaNationalEntry(data);
+            return (
+              <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: T.shadow1 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>AOA National</div>
+                <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>{aoa.windowLabel}{aoa.daysLeft != null ? ` · ${aoa.daysLeft} days left` : ""}</div>
+                <ComplianceBar label="Total" earned={aoa.earned} required={aoa.required} met={aoa.met} />
+                <ComplianceBar label="Cat 1-A minimum" earned={aoa.cat1aEarned} required={aoa.cat1aRequired} met={aoa.cat1aEarned >= aoa.cat1aRequired} />
+              </div>
+            );
+          })()}
         </div>
       )}
 

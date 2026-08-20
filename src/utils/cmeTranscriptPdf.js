@@ -60,13 +60,16 @@ function mimeOf(doc) {
 }
 
 /** Same in-window test the compliance engine uses, so the transcript's
- *  numbers match the compliance card to the entry. */
+ *  numbers match the compliance card to the entry. Entry dates parse at LOCAL
+ *  midnight to match the engine's window bounds (a bare YYYY-MM-DD is UTC
+ *  midnight otherwise, which drops the first day of the cycle in US zones). */
 function entriesBetween(cme, start, end) {
   const s = dateOf(start), e = dateOf(end);
   return (cme || [])
     .filter(c => {
       if (!c.date) return false;
-      const d = new Date(c.date);
+      const str = String(c.date);
+      const d = new Date(str.length === 10 ? str + "T00:00:00" : str);
       return d >= s && d <= e;
     })
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -154,6 +157,16 @@ export function stateTranscriptModel(data, state) {
     fileName: `CME-Transcript-${state}-${isoToday()}.pdf`,
     footnotes: [
       comp.degreeUnknown ? "Degree not set in Settings. MD board rules were applied." : "",
+      // Surface a board/MOC exemption when a Board Certification record is on
+      // file, rather than silently applying it: the physician (or their board)
+      // decides whether it is claimed. Only shown when the state names one.
+      (() => {
+        const hasBoardCert = (data.licenses || []).some(l => /board certification/i.test(l.type || ""));
+        const moc = plain(req.moc || "").trim();
+        return hasBoardCert && moc && !/^no$/i.test(moc)
+          ? `You may be exempt from the ${stateName} CME requirement: ${moc}. This transcript does not apply the exemption; confirm with the board and claim it on your renewal if it applies to you.`
+          : "";
+      })(),
       req.notes && req.notes !== "Not specified" ? `State notes: ${plain(req.notes)}` : "",
     ].filter(Boolean),
   };
@@ -248,9 +261,16 @@ function stateRequirementRows(model) {
     rows.push({ name: label, rule: plain(req.cat1note), required: fmtHrs(comp.cat1Required), earned: fmtHrs(comp.cat1Earned), met: comp.cat1Met });
   }
   for (const t of comp.topicResults || []) {
+    let rule = plain(t.note);
+    // Non-cycle mandates count outside the renewal window; say so, the way the
+    // MATE row does, or the "earned" number looks inconsistent with the cycle.
+    const periodNote = t.period === "lifetime"
+      ? "counted across all dates, not just this cycle"
+      : (t.period && t.period.years ? `counted over the last ${t.period.years} years, not just this cycle` : "");
+    if (periodNote) rule = rule ? `${rule} (${periodNote})` : periodNote[0].toUpperCase() + periodNote.slice(1);
     rows.push({
       name: t.topic,
-      rule: plain(t.note),
+      rule,
       required: t.checklist ? "Any activity" : fmtHrs(t.required),
       earned: fmtHrs(t.earned),
       met: t.met,
@@ -259,7 +279,7 @@ function stateRequirementRows(model) {
   if (comp.mate) {
     rows.push({
       name: "MATE Act opioid/SUD training",
-      rule: "One-time 8 hours for DEA registrants; counted across all dates, not just this cycle",
+      rule: "One-time 8 hours of opioid or substance use disorder training for DEA registrants; counted across all dates, not just this cycle",
       required: fmtHrs(comp.mate.required),
       earned: fmtHrs(comp.mate.earned),
       met: comp.mate.met,

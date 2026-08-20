@@ -59,26 +59,31 @@ export function computeBoardCompliance(data) {
       seen.add(`ABMS:${code}`);
       const b = ABMS_MOC[code];
       const cycleYears = b.cycle || 1;
-      let from, windowLabel, daysLeft;
+      let from, to, windowLabel, daysLeft;
       if (cycleYears === 1) {
         from = `${today.getFullYear()}-01-01`;
+        to = todayISO;
         windowLabel = `${today.getFullYear()} (no carryover)`;
         daysLeft = Math.ceil((new Date(`${today.getFullYear()}-12-31T23:59`) - today) / 86400000);
       } else {
         const f = new Date(today);
         f.setFullYear(f.getFullYear() - cycleYears);
         from = f.toISOString().slice(0, 10);
+        to = todayISO;
         windowLabel = `rolling ${cycleYears}-year window`;
         daysLeft = null;
       }
-      const earned = hoursIn(cme, from, todayISO.slice(0, 4) + "-12-31",
+      // Count and display through TODAY, not Dec 31: a rolling window that ran
+      // to year-end swept in up to a year of future-dated entries, and the
+      // annual window counted CME dated later this year that has not happened.
+      const earned = hoursIn(cme, from, to,
         c => (c.category || "").includes("AMA PRA Category 1"));
       out.push({
         id, source: "ABMS", code, name: subName || b.name,
         label: `${subName || b.name}, ABMS ${code}`,
         required: b.hours, earned, met: earned >= b.hours,
         unit: b.unit, windowLabel, daysLeft,
-        from, to: `${today.getFullYear()}-12-31`, countRule: "AMA PRA Category 1",
+        from, to, countRule: "AMA PRA Category 1",
         assessment: b.assessment || "", notes: b.notes || "",
         citation: `ABMS ${code} continuing certification (${b.name})`,
         verified: b.verified || null,

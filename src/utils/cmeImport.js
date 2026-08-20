@@ -430,16 +430,25 @@ const TOPIC_PATTERNS = [
   ["Trauma-Informed Care", /trauma.informed/],
 ];
 
-/** Guess topic tags from a title (and optional subject text) using keywords; only returns strings from CME_TOPICS. */
-export function guessTopics(text, subjects = "") {
+/**
+ * Guess topic tags from a title (and optional subject text) using keywords.
+ * Returns strings from CME_TOPICS plus any `extraTopics` passed in (the topics
+ * a tracked state mandates that are not in the general CME_TOPICS list, e.g.
+ * "Florida Laws and Rules", "Organ and Tissue Donation"): without those the
+ * intake could never tag a state-only mandate, so its compliance bar could
+ * never be met from an imported or scanned entry.
+ */
+export function guessTopics(text, subjects = "", extraTopics = []) {
   const hay = `${text || ""} ${subjects || ""}`.toLowerCase();
   if (!hay.trim()) return [];
+  const allowed = new Set([...CME_TOPICS, ...(extraTopics || [])]);
   const out = [];
   for (const [topic, re] of TOPIC_PATTERNS) {
-    if (CME_TOPICS.includes(topic) && re.test(hay)) out.push(topic);
+    if (allowed.has(topic) && re.test(hay)) out.push(topic);
   }
-  // Direct subject-area names from the source (e.g. CE Broker "Medical Errors")
-  for (const t of CME_TOPICS) {
+  // Direct subject-area names from the source (e.g. CE Broker "Medical Errors",
+  // or a state-only topic name that appears verbatim in the activity title).
+  for (const t of allowed) {
     if (t === "General / No Specific Topic") continue;
     const stem = t.toLowerCase().replace(/\s*\(.*\)/, "").split("/")[0].trim();
     if (stem.length > 3 && hay.includes(stem) && !out.includes(t)) out.push(t);
@@ -478,7 +487,7 @@ function cleanText(v) {
   return String(v ?? "").normalize("NFKC").replace(/\s+/g, " ").trim();
 }
 
-function finishRow(r, deg) {
+function finishRow(r, deg, extraTopics = []) {
   r.title = cleanText(r.title);
   r.provider = cleanText(r.provider);
   r.rawSubjects = cleanText(r.rawSubjects);
@@ -486,7 +495,7 @@ function finishRow(r, deg) {
   const cat = mapCreditType(r.rawCategory, deg);
   r.category = r.category || cat.category;
   r.categoryAssumed = r.categoryAssumed || (!r.rawCategory ? true : cat.assumed);
-  if (!r.topics?.length) r.topics = guessTopics(r.title, r.rawSubjects);
+  if (!r.topics?.length) r.topics = guessTopics(r.title, r.rawSubjects, extraTopics);
   const w = [];
   if (!r.date) w.push("no date");
   if (!r.title) w.push("no title");
@@ -501,7 +510,7 @@ function finishRow(r, deg) {
  * Apply a column mapping to a table (array of arrays). `headerIndex` is the
  * row holding column names (-1 for none). Returns rows ready for review.
  */
-export function rowsFromTable(table, mapping, { deg, headerIndex = 0, source, ownerName = "" } = {}) {
+export function rowsFromTable(table, mapping, { deg, headerIndex = 0, source, ownerName = "", requiredTopics = [] } = {}) {
   const out = [];
   const get = (r, key) => (mapping[key] == null ? "" : (r[mapping[key]] ?? ""));
   const headers = headerIndex >= 0 ? (table[headerIndex] || []).map(normHeader) : [];
@@ -569,7 +578,7 @@ export function rowsFromTable(table, mapping, { deg, headerIndex = 0, source, ow
       row.notes = bits.join("; ");
       if (differentLearner) { row.include = false; row.warnings = [...(row.warnings || []), "different learner"]; }
     }
-    out.push(finishRow(row, deg));
+    out.push(finishRow(row, deg, requiredTopics));
   }
   return out;
 }
@@ -620,7 +629,7 @@ const HOURS_TOKEN = /(\d+(?:\.\d+)?)\s*(?:AMA PRA Category 1 Credits?|AMA PRA Ca
  * small decimal on the line; the title is the longest remaining text run.
  * Also tries the CE Broker "date on the same line as the title" shape.
  */
-export function parseTranscriptText(text, { deg } = {}) {
+export function parseTranscriptText(text, { deg, requiredTopics = [] } = {}) {
   // Keep column gaps (tabs or 2+ spaces) so title / provider can be told apart
   const lines = String(text || "").replace(/\r/g, "").split("\n").map(l => l.replace(/\t+/g, "   ").replace(/ {2,}/g, "   ").trim()).filter(Boolean);
   const rows = [];
@@ -649,7 +658,7 @@ export function parseTranscriptText(text, { deg } = {}) {
     const title = chunks[0] || "";
     const provider = chunks[1] && chunks[1].length > 2 && !/^\d+$/.test(chunks[1]) ? chunks[1] : "";
     if (!title && hours == null) continue;
-    rows.push(finishRow(newRow({ date, title, provider, hours, rawCategory, raw: line }), deg));
+    rows.push(finishRow(newRow({ date, title, provider, hours, rawCategory, raw: line }), deg, requiredTopics));
   }
   return rows;
 }
@@ -1185,7 +1194,7 @@ export function looksLikeCeBroker(text) {
  * row starts at every M/D/YYYY line in the Completed column. Cell text is
  * rebuilt line by line so kerned runs ("3/1" + "1/2024") rejoin correctly.
  */
-export function parseCeBrokerPages(pages, { deg } = {}) {
+export function parseCeBrokerPages(pages, { deg, requiredTopics = [] } = {}) {
   const rows = [];
   let cols = null; // [{name, x}] sorted by x, reused for continuation pages without a header
   const isNumberTag = (s) => /^#\s*\d+-\d+/.test(s);
@@ -1254,7 +1263,7 @@ export function parseCeBrokerPages(pages, { deg } = {}) {
         rawSubjects: subjects.join(" "),
         notes: noteBits.join("; "),
         raw: linesFromRuns(inRow).map(l => l.text).join(" | "),
-      }), deg));
+      }), deg, requiredTopics));
     }
   }
   return rows;
@@ -1284,7 +1293,7 @@ const CMEP_SKIP = /^(official transcript|published\b|\d+ of \d+$|\d{3} michigan 
  * chunks after the title are the provider, with earlier extras treated as a
  * wrapped title.
  */
-export function parseCmePassportText(text, { deg } = {}) {
+export function parseCmePassportText(text, { deg, requiredTopics = [] } = {}) {
   const lines = String(text || "").replace(/\r/g, "").split("\n").map(l => l.trim()).filter(Boolean);
   const rows = [];
   let cur = null;
@@ -1316,7 +1325,7 @@ export function parseCmePassportText(text, { deg } = {}) {
       date: cur.date, title, provider, hours, rawCategory,
       notes: notes.length ? `CME Passport: ${notes.join(", ")}` : "",
       raw: cur.lines.join(" | "),
-    }), deg));
+    }), deg, requiredTopics));
     cur = null;
   };
   let started = false;
@@ -1406,7 +1415,7 @@ Rules: date is the completion date. hours is the credit total for that activity 
  * apiKey is the user's own key (optional); without one the shared key is
  * used via ai-proxy. Returns review rows.
  */
-export async function structureTranscriptWithAI({ text, pdfDataUrl }, deg, apiKey) {
+export async function structureTranscriptWithAI({ text, pdfDataUrl }, deg, apiKey, requiredTopics = []) {
   const parts = [];
   if (text && text.trim()) parts.push({ text: `TRANSCRIPT TEXT:\n\n${text.slice(0, 120000)}` });
   else if (pdfDataUrl) parts.push({ inlineData: { mimeType: "application/pdf", data: pdfDataUrl.split(",")[1] } });
@@ -1426,11 +1435,11 @@ export async function structureTranscriptWithAI({ text, pdfDataUrl }, deg, apiKe
   }
   const json = await response.json();
   const raw = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  return rowsFromAI(raw, deg);
+  return rowsFromAI(raw, deg, requiredTopics);
 }
 
 /** Turn the model's JSON text into review rows (exported so the shape is testable). */
-export function rowsFromAI(raw, deg) {
+export function rowsFromAI(raw, deg, requiredTopics = []) {
   const clean = String(raw || "").replace(/```json|```/g, "").trim();
   let arr;
   try { arr = JSON.parse(clean); } catch { throw new Error("The AI reply was not valid JSON."); }
@@ -1444,5 +1453,5 @@ export function rowsFromAI(raw, deg) {
     rawCategory: String(o.creditType || "").trim(),
     rawSubjects: String(o.subjects || "").trim(),
     raw: o,
-  }), deg));
+  }), deg, requiredTopics));
 }
