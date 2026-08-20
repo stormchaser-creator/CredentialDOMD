@@ -17,6 +17,16 @@ export function generateId() {
  * personal coverage) must not read as "missing a date": they show green
  * with "Does not expire" instead of gray.
  */
+// A facility's short display label. If the full name matches a locum
+// agreement that carries a short name (e.g. "ANMG" for "Arrowhead
+// Neurosurgical Medical Group"), show that; otherwise show the full name.
+// The stored value stays the full name — credentialing exports need it.
+export function shortFacility(facility, contracts) {
+  if (!facility || !Array.isArray(contracts)) return facility || "";
+  const m = contracts.find(c => c && c.shortName && c.facility === facility);
+  return m ? m.shortName : facility;
+}
+
 export function isNonExpiring(item, sectionKey) {
   if (!item || item.expirationDate) return false;
   if (item.noExpiration === true) return true;

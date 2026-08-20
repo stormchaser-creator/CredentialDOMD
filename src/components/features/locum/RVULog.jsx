@@ -4,7 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import EmptyState from "../../shared/EmptyState";
 import { TrashIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
-import { contractsForDate, contractIdForDate, termLabel } from "../../../utils/contractsForDate";
+import { contractsForDate, contractIdForDate, termLabel, coversDate } from "../../../utils/contractsForDate";
 import { codeFromText, parseDictatedDate } from "../../../utils/cptCoder";
 import { searchCPT } from "../../../utils/cptSearch";
 import { Modal, Field } from "../../shared";
@@ -45,13 +45,25 @@ function RVULog() {
   // coverage period contains the entry date. contracts[0] as a default
   // silently mis-attributed weeks of RVUs to the wrong facility.
   const coveringContract = useCallback((d) => contractIdForDate(contracts, d), [contracts]);
-  const [contractId, setContractId] = useState(() => coveringContract(localDate(new Date())) || contracts[0]?.id || "");
-  const [contractPinned, setContractPinned] = useState(false);
-  useEffect(() => {
-    if (contractPinned) return;
+  // What the surgeon explicitly picked, if anything. The contract actually
+  // used is derived below, never stored, so it can't go stale against the date.
+  const [pickedId, setPickedId] = useState("");
+  // The agreement in force on the entry date wins. A pick only holds while its
+  // own term still covers that date: a contract picked once used to stay
+  // selected as the date changed, so August work silently landed on an October
+  // agreement and the case log froze that wrong facility.
+  const contractId = useMemo(() => {
     const cov = coveringContract(date);
-    if (cov) setContractId(cov);
-  }, [date, contractPinned, coveringContract]);
+    if (pickedId && contracts.some(c => c.id === pickedId && coversDate(c, date))) return pickedId;
+    if (cov) return cov;
+    return pickedId || contracts[0]?.id || "";
+  }, [pickedId, contracts, date, coveringContract]);
+  const setContractId = setPickedId;
+  // True when the chosen agreement's term does not include the entry date.
+  const selectedOutOfTerm = useMemo(() => {
+    const c = contracts.find(x => x.id === contractId);
+    return !!(c && !coversDate(c, date));
+  }, [contracts, contractId, date]);
   const [saveNote, setSaveNote] = useState(null); // what the last save did
   const [viewEnc, setViewEnc] = useState(null);   // encounter opened for detail/edit
   const [encDraft, setEncDraft] = useState(null); // its editable copy
@@ -256,7 +268,7 @@ function RVULog() {
   }, [filtered]);
 
   const reviewTotal = (review?.items || []).reduce((s, it) => s + (it.wRVU || 0) * (it.units || 1), 0);
-  const facilityOf = (cid) => contracts.find(x => x.id === cid)?.facility;
+  const facilityOf = (cid) => { const c = contracts.find(x => x.id === cid); return c ? (c.shortName || c.facility) : undefined; };
 
   return (
     <div>
@@ -344,10 +356,10 @@ function RVULog() {
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />
               {contracts.length > 1 && (
-                <select value={contractId} onChange={e => { setContractId(e.target.value); setContractPinned(true); }} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
+                <select value={contractId} onChange={e => setContractId(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
                   {(() => {
                     const { covering, rest } = contractsForDate(contracts, date);
-                    const lbl = (c) => `${c.facility}${termLabel(c) ? ` · ${termLabel(c)}` : ""}`;
+                    const lbl = (c) => `${c.shortName || c.facility}${termLabel(c) ? ` · ${termLabel(c)}` : ""}`;
                     return (<>
                       {covering.map(c => <option key={c.id} value={c.id}>{lbl(c)}</option>)}
                       {rest.map(c => <option key={c.id} value={c.id}>{lbl(c)} (not scheduled then)</option>)}
@@ -356,6 +368,11 @@ function RVULog() {
                 </select>
               )}
             </div>
+            {selectedOutOfTerm && (
+              <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, backgroundColor: T.dangerDim, color: T.danger, fontSize: 12, fontWeight: 600 }}>
+                Heads up: {facilityOf(contractId) || "this agreement"}'s term does not include {formatDate(date)}. Pick the agreement you actually worked under so the case lands at the right facility.
+              </div>
+            )}
             <button onClick={save} style={{
               width: "100%", marginTop: 10, padding: "14px", borderRadius: 12, border: "none",
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
@@ -379,7 +396,7 @@ function RVULog() {
       {encounters.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-            {[{ id: "all", label: "All" }, ...contracts.filter(c => encounters.some(e => e.contractId === c.id)).map(c => ({ id: c.id, label: (c.facility || "Contract").split(" ").slice(0, 2).join(" ") }))].map(ch => (
+            {[{ id: "all", label: "All" }, ...contracts.filter(c => encounters.some(e => e.contractId === c.id)).map(c => ({ id: c.id, label: c.shortName || (c.facility || "Contract").split(" ").slice(0, 2).join(" ") }))].map(ch => (
               <button key={ch.id} onClick={() => setFltContract(ch.id)} style={{
                 padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
                 border: `1px solid ${fltContract === ch.id ? T.accent : T.border}`,
@@ -465,7 +482,7 @@ function RVULog() {
               <Field label="Facility / contract">
                 <select value={encDraft.contractId || ""} onChange={ev => setEncDraft(d => ({ ...d, contractId: ev.target.value || null }))} style={{ ...iS, appearance: "auto" }}>
                   <option value="">— none —</option>
-                  {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+                  {contracts.map(c => <option key={c.id} value={c.id}>{c.shortName || c.facility}</option>)}
                 </select>
               </Field>
             )}
@@ -532,6 +549,18 @@ function RVULog() {
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button onClick={() => {
                 editItem("encounters", { ...encDraft, codes: (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? 0, modifier: c.modifier || "" })) });
+                // A case log born from this RVU entry froze its facility at
+                // creation, so re-tagging the entry to another agreement used
+                // to leave the case at the old hospital. Move the linked case
+                // to the new agreement's facility (and date) so the two agree.
+                if (viewEnc && encDraft.contractId !== viewEnc.contractId) {
+                  const newFacility = contracts.find(c => c.id === encDraft.contractId)?.facility || "";
+                  for (const cl of (data.caseLogs || [])) {
+                    if (cl?.customFields?.["From RVU entry"] === encDraft.id) {
+                      editItem("caseLogs", { ...cl, facility: newFacility, date: encDraft.date || cl.date });
+                    }
+                  }
+                }
                 setViewEnc(null); setEncDraft(null);
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" }}>Save changes</button>
               <button onClick={() => { setViewEnc(null); setEncDraft(null); }} style={{ padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Cancel</button>

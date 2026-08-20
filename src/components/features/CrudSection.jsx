@@ -8,7 +8,7 @@ import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
@@ -825,7 +825,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                             {(() => {
                               const fmtMoney = (n) => `$${parseFloat(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
                               return [
-                                ...[item.state, item.facility, item.provider, item.institution, item.licenseNumber, item.policyNumber, item.number]
+                                ...[item.state, shortFacility(item.facility, data.locumContracts), item.provider, item.institution, item.licenseNumber, item.policyNumber, item.number]
                                   .filter(Boolean).filter(v => !said(v)),
                                 parseFloat(item.cost) > 0 && `${fmtMoney(item.cost)}/yr`,
                                 parseFloat(item.renewalCost) > 0 && `${fmtMoney(item.renewalCost)} renewal`,

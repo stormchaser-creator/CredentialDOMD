@@ -132,6 +132,7 @@ function Contracts() {
 
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Agreement" : "Add Agreement"}>
         <Field label="Hospital / Facility"><input value={form.facility || ""} onChange={e => setForm(f => ({ ...f, facility: e.target.value }))} style={iS} placeholder="e.g. Riverside Community Hospital" /></Field>
+        <Field label="Short name" hint="Optional. A quick label shown in the RVU picker, case log, and lists (the full name still goes on exports). e.g. ANMG"><input value={form.shortName || ""} onChange={e => setForm(f => ({ ...f, shortName: e.target.value }))} style={iS} placeholder="e.g. ANMG" /></Field>
         <Field label="Agency (if any)"><input value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={iS} placeholder="e.g. CompHealth" /></Field>
         <Field label="Work state (for taxes)" hint={WORK_STATE_HINT}>
           <select value={form.workState || ""} onChange={e => setForm(f => ({ ...f, workState: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
