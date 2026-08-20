@@ -448,7 +448,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 {form[f.key] && !(f.options || []).includes(form[f.key]) && (
                   <option value={form[f.key]}>{form[f.key]} (from document)</option>
                 )}
-                {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                {f.groups
+                  ? f.groups.map(g => (
+                    <optgroup key={g.header} label={g.header}>
+                      {g.options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </optgroup>
+                  ))
+                  : (f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             ) : f.type === "datalist" ? (
               <>

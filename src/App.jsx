@@ -40,7 +40,7 @@ import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import {
-  STATES, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES,
+  STATES, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
 import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardCompliance";
@@ -127,7 +127,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta, isLifetime } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
@@ -1406,7 +1406,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (subPage === "travelDocs") return <CrudSection title="Travel & IDs" sectionKey="travelDocs" {...crudTarget("travelDocs")} filterTabs={[
       { key: "ids", label: "Personal IDs", match: i => /driver|passport|visa|global entry|known traveler|tsa/i.test(i.type || "") },
       { key: "programs", label: "Travel Programs", match: i => /loyalty|rental|credit/i.test(i.type || "") },
-    ]} items={data.travelDocs || []} {...crud("travelDocs")} onShare={openShare} emptyIcon={"✈️"} emptyTitle="No travel records" emptySub="Passports, driver's licenses, Known Traveler Number, loyalty programs, rental memberships, airline credits — the numbers every locum assignment asks for." fields={[
+    ]} items={data.travelDocs || []} {...crud("travelDocs")} onShare={openShare} emptyIcon={"✈️"} emptyTitle="No travel records" emptySub="Passports, driver's licenses, Known Traveler Number, loyalty programs, rental memberships, airline credits. The numbers every new assignment asks for." fields={[
       { key: "type", label: "Type", type: "select", options: ["Driver\u2019s License", "Passport", "Known Traveler (TSA PreCheck)", "Global Entry", "Visa", "Airline loyalty", "Airline credit", "Hotel loyalty", "Rental car membership", "Other"] },
       { key: "provider", label: "Airline / Hotel / Company", placeholder: "e.g. Delta, Marriott, Enterprise" },
       { key: "number", label: "Number", placeholder: "membership or document number" },
@@ -1423,7 +1423,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         return <>
           <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
           <CaseDictate categories={CASE_CATEGORIES} onDraft={setCaseDraft} />
-          <CrudSection title="Case Logs" sectionKey="caseLogs" {...crudTarget("caseLogs")} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
+          <CrudSection title="Case Logs" sectionKey="caseLogs" {...crudTarget("caseLogs")} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
               {item.role && <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{item.role}</span>}
               {caseWRVU(item) > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{caseWRVU(item).toFixed(2)} wRVU</span>}
@@ -1551,10 +1551,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Current Plan</div>
                 <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
-                  {isFreeBeta && !hasSubscription ? "Free beta" : isPractice ? "Practice" : isPro ? "Pro" : "Free"}
+                  {isFreeBeta && !hasSubscription ? "Free beta" : isLifetime ? "Founding Lifetime" : isPractice ? "Clinic" : isPro ? "Pro" : "Free"}
                 </div>
                 {isFreeBeta && !hasSubscription && (
                   <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>All features on. No card, nothing to cancel.</div>
+                )}
+                {!isFreeBeta && isLifetime && (
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>Paid once. Nothing renews.</div>
                 )}
               </div>
               {!isPro && !isFreeBeta && (
@@ -1574,7 +1577,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 backgroundColor: "rgba(255,255,255,0.1)", color: "#fff",
                 fontSize: 13, fontWeight: 600, cursor: "pointer", width: "100%",
               }}>
-                Manage Billing
+                {isLifetime ? "Receipts and payment details" : "Manage Billing"}
               </button>
             )}
           </div>
@@ -1824,8 +1827,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </div>
           </div>
 
-          {/* Cancel Subscription (only when authenticated + subscribed) */}
-          {user && isPro && hasSubscription && (
+          {/* Cancel Subscription (only when authenticated + on a recurring plan).
+              Founding Lifetime paid once and renews nothing, so there is
+              nothing for that account to cancel. */}
+          {user && isPro && hasSubscription && !isLifetime && (
             <button onClick={() => setSubPage("cancellation")} className="cmd-card-hover" style={{
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               backgroundColor: T.card, border: `1px solid ${T.border}`,
@@ -1868,7 +1873,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // Eric is a locum so this lights up for him.
   const isLocumTier = plan === "locum";
   const slot4 = isLocumTier
-    ? { id: "locum", label: "Locum", icon: <span style={{ fontSize: 18 }}>🏥</span> }
+    ? { id: "locum", label: "Practice", icon: <span style={{ fontSize: 18 }}>🏥</span> }
     : { id: "team", label: "Team", icon: <span style={{ fontSize: 18 }}>👥</span> };
 
   const tabItems = [
@@ -1879,7 +1884,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     { id: "more", label: "More", icon: <MoreIcon /> },
   ];
 
-  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : tab === "locum" ? "Locum" : tab === "team" ? "Team" : "More";
+  const pageTitle = tab === "home" ? "Dashboard" : tab === "documents" ? "Documents" : tab === "share" ? "Share" : tab === "credentials" ? "Credentials" : tab === "locum" ? "Practice" : tab === "team" ? "Team" : "More";
 
   const FONT_ZOOM = { S: 0.88, M: 1, L: 1.1, XL: 1.2, XXL: 1.35 };
   const fontZoom = FONT_ZOOM[data.settings.fontSize] || 1;

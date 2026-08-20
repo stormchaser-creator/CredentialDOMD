@@ -88,23 +88,63 @@ export const CME_CATEGORIES_DO = [
 
 export const getCMECategories = (deg) => deg === "DO" ? CME_CATEGORIES_DO : CME_CATEGORIES_MD;
 
-export const CASE_CATEGORIES = [
-  "Craniotomy - Tumor",
-  "Craniotomy - Vascular",
-  "Craniotomy - Trauma",
-  "Spinal Fusion - Cervical",
-  "Spinal Fusion - Thoracic",
-  "Spinal Fusion - Lumbar",
-  "Spinal Decompression",
-  "VP Shunt",
-  "Endoscopic Procedure",
-  "Stereotactic/Functional",
-  "Peripheral Nerve",
-  "Pediatric Neurosurgery",
-  "Spine - Minimally Invasive",
-  "Interventional",
-  "Other",
+// Case categories follow the ACGME Review Committee for Neurological Surgery's
+// "Defined Case Categories" (effective 7/1/2019) so a case log groups the same
+// way a residency case log and credentialing reviewers already expect.
+export const CASE_CATEGORY_GROUPS = [
+  {
+    header: "Cranial",
+    options: [
+      "Cranial: Tumor General",
+      "Cranial: Tumor Sellar/Parasellar",
+      "Cranial: Trauma/Other",
+      "Cranial: Vascular Open",
+      "Cranial: Vascular Endovascular",
+      "Cranial: CSF Diversion/ETV/Other",
+      "Cranial/Extracranial: Pain",
+      "Cranial/Extracranial: Functional Disorder",
+      "Cranial/Extracranial: Epilepsy",
+    ],
+  },
+  {
+    header: "Spinal",
+    options: [
+      "Spinal: Anterior Cervical",
+      "Spinal: Posterior Cervical",
+      "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion",
+      "Spinal: Lumbar Laminectomy/Laminotomy",
+      "Spinal: Stimulation/Lesion/Pump/Other",
+    ],
+  },
+  {
+    header: "Peripheral Nerve & Other",
+    options: ["Peripheral Nerve", "Radiosurgery", "Peripheral Device Management"],
+  },
+  {
+    header: "Critical Care",
+    options: [
+      "Airway Management",
+      "Angiography",
+      "Arterial Line Placement",
+      "CVP Line Placement",
+      "EVD/Transdural Monitor Placement",
+      "Lumbar/Other Puncture/Drain Placement",
+      "Percutaneous Tap of CSF Reservoir",
+    ],
+  },
+  {
+    header: "Pediatric",
+    options: [
+      "Pediatric: Cranial Tumor",
+      "Pediatric: Cranial Trauma/Other",
+      "Pediatric: CSF Diversion/ETV/Other",
+      "Pediatric: Spinal",
+    ],
+  },
+  { header: "Other", options: ["Other"] },
 ];
+
+export const CASE_CATEGORIES = CASE_CATEGORY_GROUPS.flatMap(g => g.options);
 
 export const HEALTH_RECORD_CATEGORIES = ["Vaccination", "Titer / Immunity", "TB Test", "Drug Screen", "Fit Test"];
 
@@ -230,7 +270,7 @@ export const SECTION_META = {
   insurance: { label: "Insurance Policy", icon: "\ud83d\udee1\ufe0f", color: "#ef4444", section: "insurance" },
   healthRecord: { label: "Health Record", icon: "\ud83d\udc89", color: "#ec4899", section: "healthRecords" },
   education: { label: "Education / Training", icon: "\ud83c\udf93", color: "#8b5cf6", section: "education" },
-  agreement: { label: "Locum Agreement", icon: "\ud83d\udcdd", color: "#0ea5e9", section: "locumContracts" },
+  agreement: { label: "Contract", icon: "\ud83d\udcdd", color: "#0ea5e9", section: "locumContracts" },
   travel: { label: "ID / Travel Document", icon: "\ud83e\udeaa", color: "#0891b2", section: "travelDocs" },
   unknown: { label: "Unrecognized Document", icon: "\u2753", color: "#6b7280", section: null },
 };
