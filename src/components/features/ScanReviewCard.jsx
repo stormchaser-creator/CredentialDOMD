@@ -1,8 +1,9 @@
-import { useState, memo } from "react";
+import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../../constants/credentialTypes";
 import { CME_TOPICS } from "../../constants/cmeTopics";
+import { getStateEntry } from "../../constants/stateRequirements";
 
 const FIELD_DEFS = {
   license: [
@@ -97,8 +98,20 @@ function remapEdited(prevDocType, nextDocType, prev) {
 }
 
 function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
-  const { theme: T, data } = useApp();
+  const { theme: T, data, allTrackedStates } = useApp();
   const iS = useInputStyle();
+  // Topics a tracked state mandates, including ones not in the general
+  // CME_TOPICS list (e.g. "Florida Laws and Rules"): a state mandate counts
+  // only when the entry carries its tag, so the scan reviewer has to be able
+  // to apply it. Required-by-state topics are offered first.
+  const cmeTopicOptions = useMemo(() => {
+    const deg = data.settings?.degreeType;
+    const required = [...new Set((allTrackedStates || []).flatMap(st =>
+      (getStateEntry(st, deg)?.topics || []).map(t => t.topic)
+    ))];
+    const rest = CME_TOPICS.filter(t => t !== "General / No Specific Topic" && !required.includes(t));
+    return [...required, ...rest];
+  }, [allTrackedStates, data.settings?.degreeType]);
   const [edited, setEdited] = useState({ ...result.extracted });
   const [docType, setDocType] = useState(result.documentType);
   const meta = SECTION_META[docType] || SECTION_META.unknown;
@@ -214,7 +227,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   Topics — tap to toggle (state mandates count only when tagged)
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                  {CME_TOPICS.filter(t => t !== "General / No Specific Topic").map(t => {
+                  {cmeTopicOptions.map(t => {
                     const on = (edited.topics || []).includes(t);
                     return (
                       <button key={t} onClick={() => setEdited(p => ({

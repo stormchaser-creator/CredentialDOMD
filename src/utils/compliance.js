@@ -1,4 +1,4 @@
-import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
+import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
 
 /**
  * CME compliance engine — cycle-windowed.
@@ -15,20 +15,32 @@ import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements
  *     rule names 1-A specifically count ONLY AOA Category 1-A)
  *
  * Topics:
+ *   - a topic's `period` sets how far back its hours are counted:
+ *       (absent)        → the current renewal cycle (default)
+ *       "lifetime"      → all logged dates (one-time mandates)
+ *       { years: N }    → the N years ending at the window end
  *   - hours > 0 → progress bar toward the mandated hours
  *   - hours === 0 → required checklist item with no fixed hour count
- *     (met when at least one in-window entry is tagged with the topic)
+ *     (met when at least one entry in the topic's period is tagged)
  *
- * MATE Act: DEA registrants owe a ONE-TIME 8 hours of opioid/SUD training —
- * checked against ALL entries (not windowed) tagged with qualifying topics.
+ * MATE Act: DEA registrants owe a ONE-TIME 8 hours of opioid or substance use
+ * disorder training — checked against ALL entries (not windowed) tagged with a
+ * qualifying topic. Generic pain-management or controlled-substance CME does
+ * NOT satisfy it, so only the two specific topics count here.
  */
 
-const MATE_TOPICS = ["Opioid Prescribing", "Substance Use Disorders", "Pain Management", "Controlled Substances"];
+const MATE_TOPICS = ["Opioid Prescribing", "Substance Use Disorders"];
 export const MATE_HOURS = 8;
 
+// Parse a logged entry's date at LOCAL midnight, matching how the window
+// bounds (and the license-expiration anchor) are built. A bare "YYYY-MM-DD"
+// otherwise parses as UTC midnight, which in US time zones lands the evening
+// BEFORE and drops an entry dated on the first day of the cycle. The boundary
+// day (window start and window end) is in-cycle.
 function inWindow(entry, start, end) {
   if (!entry.date) return false;
-  const d = new Date(entry.date);
+  const s = String(entry.date);
+  const d = new Date(s.length === 10 ? s + "T00:00:00" : s);
   return d >= start && d <= end;
 }
 
@@ -55,18 +67,51 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const hours = (c) => parseFloat(c.hours) || 0;
   const totalHrs = windowed.reduce((s, c) => s + hours(c), 0);
 
-  // ── Category 1 counting (strict for 1-A-only DO states) ──
+  // ── Category 1 counting ──
+  // What counts toward the Category 1 minimum is DATA (`cat1Accepted`: the
+  // exact credit-type strings the state accepts), not a regex over the rule
+  // prose. The old heuristic mis-read notes like CO ("...AOA Category 1-A...")
+  // as "1-A only" and dropped the AMA PRA hours that CO accepts, and CA/DO
+  // ("1A or 1B") as "AMA counts too" and over-credited the AOA-only minimum.
+  // The heuristic stays only as a fallback for states without the field yet.
   const oneAOnly = degreeType === "DO" && /1-?A\b/.test(entry?.cat1note || "") && !/1-?B/.test(entry?.cat1note || "");
-  const cat1Keywords = degreeType === "DO"
-    ? (oneAOnly ? ["AOA Category 1-A"] : ["AOA Category 1-A", "AOA Category 1-B", "AMA PRA Category 1"])
-    : ["AMA PRA Category 1"];
+  const cat1FromData = Array.isArray(entry?.cat1Accepted) && entry.cat1Accepted.length > 0;
+  const cat1Keywords = cat1FromData
+    ? entry.cat1Accepted
+    : degreeType === "DO"
+      ? (oneAOnly ? ["AOA Category 1-A"] : ["AOA Category 1-A", "AOA Category 1-B", "AMA PRA Category 1"])
+      : ["AMA PRA Category 1"];
   const cat1Hrs = windowed
     .filter(c => cat1Keywords.some(k => c.category === k))
     .reduce((s, c) => s + hours(c), 0);
 
   // ── Topic mandates: hour-based bars + zero-hour checklist items ──
+  // Most topics are per renewal cycle (default: counted in `windowed`). A
+  // one-time mandate carries `period: "lifetime"` and counts over ALL logged
+  // dates (like the MATE Act); a longer-period mandate carries
+  // `period: { years: N }` and counts over the N years ending at the window
+  // end. Without this a satisfied one-time or 6-year topic ages out of the
+  // cycle window and is wrongly re-demanded every renewal.
+  //
+  // Residual limitation: a one-time mandate the physician completed BEFORE
+  // they started logging CME in the app still shows unmet; a per-topic
+  // "attest completed" override stored per user is the follow-on for that.
+  // The periodicity fix alone stops satisfied credits from aging out.
   const topicResults = (entry?.topics || []).map(t => {
-    const tagged = windowed.filter(c => (c.topics || []).includes(t.topic));
+    let pool, period;
+    if (t.period === "lifetime") {
+      pool = cmeEntries || [];
+      period = "lifetime";
+    } else if (t.period && typeof t.period === "object" && t.period.years > 0) {
+      const pStart = new Date(windowEnd);
+      pStart.setFullYear(pStart.getFullYear() - t.period.years);
+      pool = (cmeEntries || []).filter(c => inWindow(c, pStart, windowEnd));
+      period = { years: t.period.years };
+    } else {
+      pool = windowed;
+      period = null;
+    }
+    const tagged = pool.filter(c => (c.topics || []).includes(t.topic));
     const earned = tagged.reduce((s, c) => s + hours(c), 0);
     const checklist = !(t.hours > 0);
     return {
@@ -76,6 +121,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       checklist,
       met: checklist ? tagged.length > 0 : earned >= t.hours,
       note: t.note,
+      period,
     };
   });
 
@@ -106,6 +152,12 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     cat1Met,
     cat1Remaining: Math.max(0, cat1Required - cat1Hrs),
     cat1OneAOnly: oneAOnly,
+    // The exact credit-type strings counted toward the Category 1 minimum,
+    // and whether they came from state data (`cat1Accepted`) or the fallback
+    // heuristic. Callers render this so the "counts:" line can never disagree
+    // with the math the engine ran.
+    cat1Keywords,
+    cat1FromData,
     cycle: cycleYears,
     topicResults,
     allTopicsMet,
