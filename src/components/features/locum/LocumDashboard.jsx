@@ -48,15 +48,6 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
 
   return (
     <div>
-      <div style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: T.text }}>
-          Locum
-        </h2>
-        <p style={{ margin: 0, fontSize: 12, color: T.textMuted }}>
-          Tools built for physicians who hold multiple state licenses.
-        </p>
-      </div>
-
       {/* Sub-tab nav */}
       <div style={{
         display: "flex", gap: 4, marginBottom: 16,
@@ -98,11 +89,6 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
 function UpgradeCard({ T }) {
   return (
     <div>
-      <div style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: T.text }}>
-          Locum
-        </h2>
-      </div>
       <div style={{
         backgroundColor: T.card, border: `2px dashed ${T.accent}`,
         borderRadius: 14, padding: "20px 18px",
