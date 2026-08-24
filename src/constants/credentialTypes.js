@@ -98,6 +98,8 @@ export const CASE_CATEGORY_GROUPS = [
       "Cranial: Tumor General",
       "Cranial: Tumor Sellar/Parasellar",
       "Cranial: Trauma/Other",
+      "Cranial: Decompressive Hemicraniectomy",
+      "Cranial: Evacuation of Intraparenchymal Hematoma",
       "Cranial: Vascular Open",
       "Cranial: Vascular Endovascular",
       "Cranial: CSF Diversion/ETV/Other",
