@@ -9,6 +9,7 @@ import { codeFromText, parseDictatedDate } from "../../../utils/cptCoder";
 import { searchCPT } from "../../../utils/cptSearch";
 import { Modal, Field } from "../../shared";
 import { CPT_DESCS } from "../../../constants/cptDescs";
+import { CASE_CATEGORY_GROUPS } from "../../../constants/credentialTypes";
 
 const localDate = (d) => {
   const x = new Date(d);
@@ -66,6 +67,17 @@ function RVULog() {
   }, [contracts, contractId, date]);
   const [saveNote, setSaveNote] = useState(null); // what the last save did
   const [viewEnc, setViewEnc] = useState(null);   // encounter opened for detail/edit
+  // The category the surgeon picks for an operative case before it lands in
+  // the career case log — left blank ("Other") silently mis-tagged real
+  // trauma/tumor cases and required a second trip to Case Logs to fix.
+  const [caseCategory, setCaseCategory] = useState("");
+  const surgicalPreview = useMemo(() => {
+    if (!review?.items) return [];
+    return review.items.filter(({ code }) => {
+      const n = parseInt(code, 10);
+      return Number.isFinite(n) && n >= 10000 && n < 70000;
+    });
+  }, [review]);
   const [encDraft, setEncDraft] = useState(null); // its editable copy
   const [encQ, setEncQ] = useState("");           // code search inside the modal
   const [encResults, setEncResults] = useState([]);
@@ -174,8 +186,7 @@ function RVULog() {
         id: generateId(),
         date,
         title: surgical[0].desc || `CPT ${surgical[0].code}`,
-        category: "Other", // cloud requires one; the dashboard still nags for role
-
+        category: caseCategory || "Other",
         cptCodes: surgical.map(c => {
           const base = c.modifier ? `${c.code}-${c.modifier}` : c.code;
           return (c.units || 1) > 1 ? `${base} x${c.units}` : base;
@@ -190,8 +201,8 @@ function RVULog() {
       ? { text: `Saved. ${surgical.length} operative code${surgical.length === 1 ? "" : "s"} also went to your case log.`, encId: null }
       : { text: "Saved to the RVU log. These are evaluation and management codes, so nothing went to the career case log.", encId, date, codes: review.items, cid: contractId });
     setTimeout(() => setSaveNote(n => (n && n.encId === encId ? null : n)), 12000);
-    setText(""); setReview(null);
-  }, [review, contractId, date, text, addItem, contracts]);
+    setText(""); setReview(null); setCaseCategory("");
+  }, [review, contractId, date, text, addItem, contracts, caseCategory]);
 
   // Consults and rounding are not operative cases, so they never land in the
   // career case log on their own. When one should (a bedside procedure, a case
@@ -203,16 +214,17 @@ function RVULog() {
       id: generateId(),
       date: info.date,
       title: (info.codes || [])[0]?.desc || "Case from RVU log",
-      category: "Other",
+      category: caseCategory || "Other",
       cptCodes: (info.codes || []).map(c => (c.modifier ? `${c.code}-${c.modifier}` : c.code)).join(", "),
       wRvu: Math.round(wRvu * 100) / 100,
       facility: contracts.find(c2 => c2.id === info.cid)?.facility || "",
       source: "RVU log",
       customFields: { "From RVU entry": info.encId },
     });
-    setSaveNote({ text: "Added to your case log. Set the role and category there when you get a moment.", encId: null });
+    setSaveNote({ text: "Added to your case log.", encId: null });
+    setCaseCategory("");
     setTimeout(() => setSaveNote(null), 8000);
-  }, [addItem, contracts]);
+  }, [addItem, contracts, caseCategory]);
 
   // ── Totals ──
   const totals = useMemo(() => {
@@ -353,6 +365,21 @@ function RVULog() {
               ))}
             </div>
 
+            {surgicalPreview.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: T.textMuted, display: "block", marginBottom: 4 }}>
+                  Case log category — {surgicalPreview.length} operative code{surgicalPreview.length === 1 ? "" : "s"} will land here
+                </label>
+                <select value={caseCategory} onChange={e => setCaseCategory(e.target.value)} style={{ ...iS, appearance: "auto" }}>
+                  <option value="">Other (pick one to skip fixing it later)</option>
+                  {CASE_CATEGORY_GROUPS.map(g => (
+                    <optgroup key={g.header} label={g.header}>
+                      {g.options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />
               {contracts.length > 1 && (
@@ -382,6 +409,17 @@ function RVULog() {
         {saveNote && (
           <div style={{ marginTop: 10, padding: "11px 13px", borderRadius: 12, backgroundColor: T.accentDim, border: `1px solid ${T.accent}` }}>
             <div style={{ fontSize: 13, color: T.text, lineHeight: 1.45 }}>{saveNote.text}</div>
+            {saveNote.encId && (
+              <select value={caseCategory} onChange={e => setCaseCategory(e.target.value)}
+                style={{ ...iS, appearance: "auto", marginTop: 8 }}>
+                <option value="">Other (pick one to skip fixing it later)</option>
+                {CASE_CATEGORY_GROUPS.map(g => (
+                  <optgroup key={g.header} label={g.header}>
+                    {g.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            )}
             {saveNote.encId && (
               <button onClick={() => addToCaseLog(saveNote)} style={{
                 marginTop: 8, padding: "9px 14px", borderRadius: 10, border: `1px solid ${T.accent}`,

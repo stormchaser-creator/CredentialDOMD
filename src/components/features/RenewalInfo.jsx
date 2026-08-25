@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { RENEWAL_INFO } from "../../constants/renewalInfo";
 import { getStatusColor } from "../../utils/helpers";
@@ -12,6 +12,7 @@ import { getStatusColor } from "../../utils/helpers";
  */
 function RenewalInfo({ item }) {
   const { theme: T } = useApp();
+  const [expanded, setExpanded] = useState(false);
   const st = item?.state;
   const info = st ? RENEWAL_INFO[st] : null;
   if (!info || !/license|dea/i.test(item?.type || "")) return null;
@@ -21,7 +22,8 @@ function RenewalInfo({ item }) {
   const urgent = color === "red" || color === "orange" || color === "amber";
   const portal = isDea ? "https://www.deadiversion.usdoj.gov/online_forms_apps.html" : info.portalUrl;
   const label = isDea ? "DEA Diversion Control portal" : (info.board || "State board");
-  const facts = isDea ? ["3-year cycle", "$888 fee"] : [info.cycle, info.due && `due ${info.due}`, info.fee].filter(Boolean);
+  const summary = isDea ? "3-year cycle" : info.cycle;
+  const details = isDea ? ["$888 fee"] : [info.due && `Due: ${info.due}`, info.fee && `Fee: ${info.fee}`].filter(Boolean);
 
   return (
     <div style={{
@@ -32,8 +34,21 @@ function RenewalInfo({ item }) {
       <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
         How to renew
       </div>
-      {facts.length > 0 && (
-        <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 8 }}>{facts.join(" · ")}</div>
+      {(summary || details.length > 0) && (
+        <div
+          onClick={(e) => { e.stopPropagation(); setExpanded(x => !x); }}
+          style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 8, cursor: "pointer" }}
+        >
+          {summary}
+          {details.length > 0 && (
+            <span style={{ color: T.accent, fontWeight: 600, marginLeft: summary ? 6 : 0 }}>
+              {expanded ? "less" : "more info"}
+            </span>
+          )}
+          {expanded && details.length > 0 && (
+            <div style={{ marginTop: 4 }}>{details.join(" · ")}</div>
+          )}
+        </div>
       )}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {portal && (
