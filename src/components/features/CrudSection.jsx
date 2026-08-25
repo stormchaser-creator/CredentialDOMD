@@ -13,6 +13,7 @@ import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documen
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { isContactPickerSupported, pickContact, parseVCard } from "../../utils/contactImport";
+import { STATE_NAMES } from "../../constants/states";
 import CPTCodePicker from "./CPTCodePicker";
 import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
 
@@ -43,6 +44,24 @@ function billedCodes(item) {
 }
 
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
+
+// AI-scanned text for a select field (e.g. a DEA card's "Florida" instead of
+// "FL") won't exact-match its dropdown options, which breaks state-keyed
+// lookups elsewhere (RenewalInfo, MultiStateMatrix). Snap it to the matching
+// option when one exists; otherwise leave the raw text so the "(from
+// document)" fallback below can still show and preserve it for review.
+function canonicalizeSelectValue(fieldDef, raw) {
+  if (!fieldDef || fieldDef.type !== "select" || typeof raw !== "string") return raw;
+  const options = fieldDef.groups ? fieldDef.groups.flatMap(g => g.options) : (fieldDef.options || []);
+  const trimmed = raw.trim();
+  const ciMatch = options.find(o => o.toLowerCase() === trimmed.toLowerCase());
+  if (ciMatch) return ciMatch;
+  if (fieldDef.key === "state") {
+    const byName = Object.entries(STATE_NAMES).find(([, name]) => name.toLowerCase() === trimmed.toLowerCase());
+    if (byName && options.includes(byName[0])) return byName[0];
+  }
+  return raw;
+}
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport }) {
   const { data, setData, addItem, theme: T , user } = useApp();
@@ -183,7 +202,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               for (const [key, value] of Object.entries(extracted)) {
                 if (value != null && value !== "" && !merged[key]) {
                   // Handle arrays (like topics) properly
-                  merged[key] = Array.isArray(value) ? value : String(value);
+                  const strValue = Array.isArray(value) ? value : String(value);
+                  const fieldDef = fields.find(f => f.key === key);
+                  merged[key] = canonicalizeSelectValue(fieldDef, strValue);
                 }
               }
               return merged;
@@ -202,7 +223,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         setScanningDoc(false);
       }
     }
-  }, [aiOn, data.settings.apiKey, data.settings.degreeType]);
+  }, [aiOn, data.settings.apiKey, data.settings.degreeType, fields]);
 
   const handleImportContact = useCallback(async () => {
     setContactMsg(null);
