@@ -48,10 +48,14 @@ function Invoices() {
     if (fromLedger > 0) return fromLedger;
     return inv.paidAt ? (parseFloat(inv.totalAmount) || 0) : 0;
   };
-  const balanceOf = (inv) => Math.max(0, (parseFloat(inv.totalAmount) || 0) - paidOf(inv));
+  // Written off = closed out without counting as money received, so tax
+  // estimates (which read paidOf/payments) never see a write-off as income.
+  const balanceOf = (inv) => inv.writeOffAt ? 0 : Math.max(0, (parseFloat(inv.totalAmount) || 0) - paidOf(inv));
 
   const outstanding = invoices.filter(i => balanceOf(i) > 0.005);
-  const paidList = invoices.filter(i => balanceOf(i) <= 0.005);
+  // Written-off invoices have a zero balance but weren't actually paid —
+  // keep them out of the "Paid" bucket so its total still means real income.
+  const paidList = invoices.filter(i => !i.writeOffAt && balanceOf(i) <= 0.005);
   const sumOut = outstanding.reduce((s, i) => s + balanceOf(i), 0);
   const sumPaid = invoices.reduce((s, i) => s + paidOf(i), 0);
   const sumBilled = invoices.reduce((s, i) => s + (parseFloat(i.totalAmount) || 0), 0);
@@ -122,6 +126,8 @@ function Invoices() {
     setPayFor(null);
   };
   const markUnpaid = (inv) => editItem("invoices", { ...inv, paidAt: null, payments: [] });
+  const writeOffBalance = (inv) => editItem("invoices", { ...inv, writeOffAt: new Date().toISOString() });
+  const undoWriteOff = (inv) => editItem("invoices", { ...inv, writeOffAt: null });
 
   // Format chooser state: which invoice is about to be sent, in what shape
   const [sendFor, setSendFor] = useState(null);
@@ -429,6 +435,16 @@ function Invoices() {
             }}>
               {payFor && parseFloat(payAmt) >= balanceOf(payFor) - 0.005 ? "Record — settles the invoice" : "Record partial payment"}
             </button>
+            <button onClick={() => {
+              if (!payFor) return;
+              if (window.confirm(`Write off the remaining ${money(balanceOf(payFor))} on ${payFor.number}? It closes the invoice without counting as money received — won't count toward income.`)) {
+                writeOffBalance(payFor);
+                setPayFor(null);
+              }
+            }} style={{
+              width: "100%", padding: "11px", marginTop: 8, borderRadius: 12, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>Write off remaining balance instead</button>
           </>
         )}
       </Modal>
@@ -436,15 +452,16 @@ function Invoices() {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {invoices.map(inv => {
           const paid = paidOf(inv);
+          const writtenOff = !!inv.writeOffAt;
           const balance = balanceOf(inv);
-          const isPaid = balance <= 0.005;
-          const isPartial = !isPaid && paid > 0;
+          const isPaid = !writtenOff && balance <= 0.005;
+          const isPartial = !writtenOff && !isPaid && paid > 0;
           const age = inv.sentAt ? daysSince(inv.sentAt) : 0;
-          const overdue = !isPaid && age > 30;
+          const overdue = !isPaid && !writtenOff && age > 30;
           return (
             <div key={inv.id} onClick={() => setViewInv(inv)} style={{
               backgroundColor: T.card, borderRadius: 14, padding: "13px 15px", boxShadow: T.shadow1,
-              border: `1px solid ${overdue ? T.danger : isPaid ? T.border : T.warning}`,
+              border: `1px solid ${overdue ? T.danger : (isPaid || writtenOff) ? T.border : T.warning}`,
               cursor: "pointer",
             }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
@@ -460,10 +477,10 @@ function Invoices() {
                     <span style={{
                       marginLeft: 8, padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800,
                       textTransform: "uppercase", letterSpacing: 0.5,
-                      backgroundColor: isPaid ? (T.successDim || "rgba(34,197,94,0.15)") : overdue ? T.dangerDim : T.warningDim,
-                      color: isPaid ? (T.success || "#22c55e") : overdue ? T.danger : T.warning,
+                      backgroundColor: isPaid ? (T.successDim || "rgba(34,197,94,0.15)") : writtenOff ? T.border + "55" : overdue ? T.dangerDim : T.warningDim,
+                      color: isPaid ? (T.success || "#22c55e") : writtenOff ? T.textMuted : overdue ? T.danger : T.warning,
                     }}>
-                      {isPaid ? "paid" : isPartial ? "partial" : `owed · ${age}d`}
+                      {isPaid ? "paid" : writtenOff ? "written off" : isPartial ? "partial" : `owed · ${age}d`}
                     </span>
                   </div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
@@ -473,27 +490,38 @@ function Invoices() {
                     Sent {inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "—"}
                     {inv.periodStart && ` · work ${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? "–" + formatDate(inv.periodEnd) : ""}`}
                     {isPaid && inv.paidAt && ` · paid ${formatDate(inv.paidAt.slice(0, 10))}`}
+                    {writtenOff && ` · written off ${formatDate(inv.writeOffAt.slice(0, 10))}`}
                   </div>
                   {isPartial && (
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, marginTop: 2 }}>
                       {money(paid)} received · {money(balance)} still owed
                     </div>
                   )}
+                  {writtenOff && paid > 0.005 && (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginTop: 2 }}>
+                      {money(paid)} received · {money((parseFloat(inv.totalAmount) || 0) - paid)} written off
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
                   <div style={{
                     fontSize: 17, fontWeight: 800, fontVariantNumeric: "tabular-nums",
-                    color: isPaid ? (T.success || "#22c55e") : overdue ? T.danger : T.warning,
+                    color: isPaid ? (T.success || "#22c55e") : writtenOff ? T.textMuted : overdue ? T.danger : T.warning,
                   }}>
-                    {isPaid ? money(inv.totalAmount) : money(balance)}
+                    {isPaid ? money(inv.totalAmount) : writtenOff ? money(paid) : money(balance)}
                   </div>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.4 }}>
-                    {isPaid ? "collected" : "owed to you"}
+                    {isPaid ? "collected" : writtenOff ? "written off" : "owed to you"}
                   </div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                {isPaid ? (
+                {writtenOff ? (
+                  <button onClick={(ev) => { ev.stopPropagation(); undoWriteOff(inv); }} style={{
+                    padding: "8px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
+                    backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  }}>Undo write-off</button>
+                ) : isPaid ? (
                   <button onClick={(ev) => { ev.stopPropagation(); markUnpaid(inv); }} style={{
                     padding: "8px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
                     backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
