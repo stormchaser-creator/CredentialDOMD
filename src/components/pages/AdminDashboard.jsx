@@ -257,7 +257,7 @@ export default function AdminDashboard() {
       )}
       {tab === "errors" && !loading && <ErrorsList rows={errors} users={users} T={T} onCleared={() => setErrors([])} />}
       {tab === "users" && !loading && <UsersPanel users={users} setUsers={setUsers} invites={invites} setInvites={setInvites} T={T} />}
-      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} T={T} onInvite={async (r) => {
+      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} T={T} onInvite={async (r) => {
         const res = await sendInvite({ email: r.email, name: r.name, lead_id: r.id });
         if (res.ok) {
           setWaitlist(rs => rs.map(x => x.id === r.id ? { ...x, status: "invited", invited_at: new Date().toISOString() } : x));
@@ -759,7 +759,7 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
   );
 }
 
-function WaitlistList({ rows, setRows, attempts, setAttempts, T, onInvite }) {
+function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite }) {
   // Full back-end control: see everyone, add someone by hand (a physician
   // whose network ate the form), remove test rows, and review attempts
   // that never became signups.
@@ -794,6 +794,12 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T, onInvite }) {
     setAttempts(as2 => as2.filter(x => x.id !== a.id));
     await supabase.from("waitlist_attempts").delete().eq("id", a.id);
   };
+  // A lead sticks around looking stale once they've already signed up, since
+  // status only advances when someone taps the chip — flag it instead of
+  // auto-removing so the admin can verify before clearing it.
+  const activeEmails = new Set(
+    (users || []).filter(u => u.access_status === "active" && u.email).map(u => u.email.toLowerCase())
+  );
   const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
   const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
   const copyAll = () => {
@@ -845,6 +851,9 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, T, onInvite }) {
                   <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.name || "(no name)"}</span>
                   {r.note && <span style={{ fontSize: 10, fontWeight: 800, color: T.warning, textTransform: "uppercase" }}>{r.note}</span>}
                   {r.source === "admin-manual" && <span style={{ fontSize: 10, fontWeight: 800, color: T.accent, textTransform: "uppercase" }}>added by you</span>}
+                  {activeEmails.has((r.email || "").toLowerCase()) && (
+                    <span style={{ fontSize: 10, fontWeight: 800, color: "#10b981", textTransform: "uppercase" }}>already a user</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>
               </div>
