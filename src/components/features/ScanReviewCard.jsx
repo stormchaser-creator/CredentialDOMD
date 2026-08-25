@@ -4,11 +4,12 @@ import { useInputStyle } from "../shared/useInputStyle";
 import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../../constants/credentialTypes";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getStateEntry } from "../../constants/stateRequirements";
+import { STATES } from "../../constants/states";
 
 const FIELD_DEFS = {
   license: [
     { key: "type", label: "Type" }, { key: "name", label: "Display Name" },
-    { key: "licenseNumber", label: "License #" }, { key: "state", label: "State" },
+    { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select" },
     { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date" },
   ],
   cme: [
@@ -18,7 +19,7 @@ const FIELD_DEFS = {
   ],
   privilege: [
     { key: "type", label: "Type" }, { key: "name", label: "Display Name" },
-    { key: "facility", label: "Facility" }, { key: "state", label: "State" },
+    { key: "facility", label: "Facility" }, { key: "state", label: "State", type: "select" },
     { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Expires", type: "date" },
   ],
   insurance: [
@@ -210,6 +211,15 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   >
                     <option value="">Select type...</option>
                     {typeOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : f.key === "state" && f.type === "select" ? (
+                  <select
+                    value={STATES.includes(edited[f.key]) ? edited[f.key] : ""}
+                    onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
+                    style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
+                  >
+                    <option value="">Select state...</option>
+                    {STATES.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : (
                   <input
