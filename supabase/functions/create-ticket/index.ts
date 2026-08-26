@@ -1,9 +1,16 @@
 /**
  * POST /functions/v1/create-ticket
  *
- * Body: { subject, body, category, priority?, context_page?, context_payload? }
+ * Body: { subject, body, category, priority?, context_page?, context_payload?,
+ *         attachment?: { data: "data:<mime>;base64,....", mime? } }
  * Auth: Required.
  * Side effect: Telegram ping with priority indicator + first reply to user via email.
+ * An attachment is uploaded to the private "documents" bucket under
+ * tickets/<ticket_id>/ using the service-role client (bypasses the
+ * documents_owner storage RLS, which otherwise requires the caller's own
+ * Clerk sub as path prefix) and its storage path recorded in
+ * context_payload.attachment_path — the only way an admin (a different
+ * caller) can later reach it is via a signed URL from ticket-attachment-url.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -18,6 +25,25 @@ const corsHeaders = {
 
 const VALID_CATEGORIES = ["bug", "billing", "feature_request", "data_issue", "compliance", "other"];
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
+const ATTACHMENT_BUCKET = "documents";
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB decoded
+
+const MIME_EXT: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+};
+
+function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; mime: string } | null {
+  const match = /^data:([^;,]+)(?:;charset=[^;,]+)?;base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  const mime = match[1];
+  if (!MIME_EXT[mime]) return null;
+  try {
+    const bin = atob(match[2]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, mime };
+  } catch { return null; }
+}
 
 const PRIORITY_EMOJI: Record<string, string> = {
   urgent: "🚨",
@@ -69,6 +95,26 @@ serve(async (req) => {
       });
     }
 
+    let attachmentBytes: Uint8Array | null = null;
+    let attachmentMime = "";
+    if (body.attachment?.data) {
+      const decoded = decodeDataUrl(String(body.attachment.data));
+      if (!decoded) {
+        return new Response(JSON.stringify({ error: "Attachment must be a JPEG, PNG, WEBP, or GIF image." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (decoded.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+        return new Response(JSON.stringify({ error: "Attachment is too large (5 MB max)." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      attachmentBytes = decoded.bytes;
+      attachmentMime = decoded.mime;
+    }
+
+    const contextPayload = { ...(body.context_payload || {}) };
+
     const { data, error } = await user.db
       .from("support_tickets")
       .insert({
@@ -78,12 +124,25 @@ serve(async (req) => {
         category,
         priority,
         context_page: body.context_page?.slice(0, 200) || null,
-        context_payload: body.context_payload || {},
+        context_payload: contextPayload,
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    if (attachmentBytes) {
+      const path = `tickets/${data.id}/screenshot.${MIME_EXT[attachmentMime]}`;
+      const { error: upErr } = await user.db.storage.from(ATTACHMENT_BUCKET)
+        .upload(path, attachmentBytes, { contentType: attachmentMime, upsert: true });
+      if (upErr) {
+        console.error(`create-ticket: attachment upload failed for ${data.id}: ${upErr.message}`);
+      } else {
+        await user.db.from("support_tickets")
+          .update({ context_payload: { ...contextPayload, attachment_path: path } })
+          .eq("id", data.id);
+      }
+    }
 
     // Operator alert
     const emoji = PRIORITY_EMOJI[priority] || "📩";

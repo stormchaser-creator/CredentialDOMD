@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
+import { compressImage } from "../../utils/documentScanner";
 
 const CATEGORIES = [
   { id: "bug",             label: "Bug / something broken" },
@@ -64,6 +65,12 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  const [attachment, setAttachment] = useState(null); // { data: dataURL, name }
+  const [attachError, setAttachError] = useState("");
+  const fileRef = useRef(null);
+
+  // Owner-or-admin-only signed link to a ticket's screenshot (ticket-attachment-url).
+  const [attachmentUrl, setAttachmentUrl] = useState(null);
 
   // Your tickets
   const [tickets, setTickets] = useState([]);
@@ -89,7 +96,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       if (!profile) { setTickets([]); return; }
       const { data: rows, error: e1 } = await supabase
         .from("support_tickets")
-        .select("id, subject, body, status, created_at, updated_at")
+        .select("id, subject, body, status, created_at, updated_at, context_payload")
         .eq("user_id", profile.id)
         .order("updated_at", { ascending: false })
         .limit(100);
@@ -121,11 +128,33 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   }, [open, tab, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openThread = async (t) => {
-    setOpenTicket(t); setThread([]); setReply(""); setReplyMsg("");
+    setOpenTicket(t); setThread([]); setReply(""); setReplyMsg(""); setAttachmentUrl(null);
     setThreadLoading(true);
     const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
     setThread(data || []);
     setThreadLoading(false);
+    if (t.context_payload?.attachment_path) {
+      const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
+      if (!res.error && res.data?.url) setAttachmentUrl(res.data.url);
+    }
+  };
+
+  const pickAttachment = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setAttachError("");
+    if (!file.type.startsWith("image/")) { setAttachError("Attach an image (screenshot)."); return; }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const compressed = await compressImage(ev.target.result);
+        setAttachment({ data: compressed, name: file.name });
+      } catch {
+        setAttachError("Could not read that image.");
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const sendReply = async () => {
@@ -167,6 +196,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           category: category === "feedback" ? "other" : category,
           priority,
           context_page: contextPage || window.location.pathname,
+          ...(attachment ? { attachment: { data: attachment.data } } : {}),
         },
       });
       if (res.error) throw new Error(res.error.message || "Failed to submit");
@@ -183,6 +213,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
     setRating(0); setDone(false); setError("");
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
+    setAttachment(null); setAttachError(""); setAttachmentUrl(null);
   };
 
   const close = () => { onClose(); reset(); };
@@ -255,6 +286,24 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           placeholder="As much detail as helps: steps, error messages, what you expected."
           style={{ ...inputStyle, minHeight: 120, resize: "vertical", fontFamily: "inherit" }}
         />
+
+        <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Screenshot (optional)</label>
+        <input ref={fileRef} type="file" accept="image/*" onChange={pickAttachment} style={{ display: "none" }} />
+        {attachment ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <img src={attachment.data} alt="Attached screenshot" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: `1px solid ${T.border}` }} />
+            <button onClick={() => setAttachment(null)} style={{
+              padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+            }}>Remove</button>
+          </div>
+        ) : (
+          <button onClick={() => fileRef.current?.click()} style={{
+            padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`,
+            backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer", textAlign: "left",
+          }}>{"📎"} Attach a screenshot</button>
+        )}
+        {attachError && <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{attachError}</div>}
       </div>
 
       {error && (
@@ -361,6 +410,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               You {"·"} {new Date(openTicket.created_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{openTicket.body}</div>
+            {attachmentUrl && (
+              <a href={attachmentUrl} target="_blank" rel="noreferrer">
+                <img src={attachmentUrl} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}` }} />
+              </a>
+            )}
           </div>
         )}
         {thread.map((m) => (

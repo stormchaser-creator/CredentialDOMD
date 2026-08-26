@@ -36,7 +36,7 @@ function validateResponse(parsed) {
   return parsed;
 }
 
-function compressImage(dataUrl) {
+export function compressImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const base64 = extractBase64(dataUrl);
     const byteSize = Math.ceil(base64.length * 3 / 4);

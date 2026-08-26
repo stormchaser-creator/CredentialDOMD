@@ -30,6 +30,7 @@ export default function AdminDashboard() {
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [ticketMsg, setTicketMsg] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState(null);
   // Manual ticket controls — the assistant sometimes fails to raise a card,
   // and resolved tickets pile up; both get first-class buttons here.
   const [showArchived, setShowArchived] = useState(false);
@@ -48,9 +49,13 @@ export default function AdminDashboard() {
 
   // Tap a ticket → read it, see the whole thread, answer it, change its state.
   const openTicketDetail = async (t) => {
-    setOpenTicket(t); setReply(""); setTicketMsg("");
+    setOpenTicket(t); setReply(""); setTicketMsg(""); setAttachmentUrl(null);
     const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
     setThread(data || []);
+    if (t.context_payload?.attachment_path) {
+      const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
+      if (!res.error && res.data?.url) setAttachmentUrl(res.data.url);
+    }
   };
 
   const createTicket = async () => {
@@ -76,6 +81,30 @@ export default function AdminDashboard() {
     if (e2) { setTicketMsg(e2.message); return; }
     setOpenTicket(null);
     await refreshTickets();
+  };
+
+  // One tap: mark resolved and archive, instead of two separate trips into the ticket.
+  const resolveAndArchive = async () => {
+    if (!openTicket) return;
+    const body = reply.trim();
+    setBusy(true); setTicketMsg("");
+    try {
+      const res = await supabase.functions.invoke("reply-ticket", {
+        body: { ticket_id: openTicket.id, body: body || "Status set to resolved.", status: "resolved" },
+      });
+      if (res.error) throw new Error(res.error.message);
+      const { error: e2 } = await supabase.from("support_tickets")
+        .update({ archived_at: new Date().toISOString() })
+        .eq("id", openTicket.id);
+      if (e2) throw new Error(e2.message);
+      setReply("");
+      setTicketMsg("Resolved and archived.");
+      await refreshTickets();
+      setTimeout(() => setOpenTicket(null), 900);
+    } catch (e2) {
+      setTicketMsg(e2.message);
+    }
+    setBusy(false);
   };
 
   const sendReply = async (newStatus) => {
@@ -306,6 +335,11 @@ export default function AdminDashboard() {
             <div style={{ fontSize: 14, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.55, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
               {openTicket.body}
             </div>
+            {attachmentUrl && (
+              <a href={attachmentUrl} target="_blank" rel="noreferrer">
+                <img src={attachmentUrl} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 200, maxHeight: 200, borderRadius: 8, border: `1px solid ${T.border}` }} />
+              </a>
+            )}
 
             {thread.length > 0 && (
               <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -348,6 +382,12 @@ export default function AdminDashboard() {
                 padding: "12px 14px", borderRadius: 10, border: "none",
                 backgroundColor: "#10b981", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
               }}>Resolve</button>
+              {!openTicket.archived_at && (
+                <button onClick={resolveAndArchive} disabled={busy} style={{
+                  padding: "12px 14px", borderRadius: 10, border: "none",
+                  backgroundColor: "#0d9488", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
+                }}>Resolve &amp; archive</button>
+              )}
               <button onClick={() => setArchived(openTicket, !openTicket.archived_at)} disabled={busy} style={{
                 padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
