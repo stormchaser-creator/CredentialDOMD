@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { isAdminUser } from "../../lib/admin";
 import { Modal } from "../shared";
+import { compressImage } from "../../utils/documentScanner";
 
 /**
  * AdminDashboard — gated to admin emails only.
@@ -39,6 +40,9 @@ export default function AdminDashboard() {
   const [newBody, setNewBody] = useState("");
   const [newCategory, setNewCategory] = useState("feature_request");
   const [creating, setCreating] = useState(false);
+  const [newAttachment, setNewAttachment] = useState(null); // { data: dataURL, name }
+  const [newAttachError, setNewAttachError] = useState("");
+  const newFileRef = useRef(null);
 
   const isAdmin = isAdminUser(user);
 
@@ -58,6 +62,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const pickNewAttachment = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setNewAttachError("");
+    if (!file.type.startsWith("image/")) { setNewAttachError("Attach an image (screenshot)."); return; }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const compressed = await compressImage(ev.target.result);
+        setNewAttachment({ data: compressed, name: file.name });
+      } catch {
+        setNewAttachError("Could not read that image.");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const createTicket = async () => {
     const subject = newSubject.trim();
     const body = newBody.trim();
@@ -65,10 +87,13 @@ export default function AdminDashboard() {
     setCreating(true); setTicketMsg("");
     try {
       const res = await supabase.functions.invoke("create-ticket", {
-        body: { subject: subject.slice(0, 180), body, category: newCategory, priority: "normal", context_page: "admin" },
+        body: {
+          subject: subject.slice(0, 180), body, category: newCategory, priority: "normal", context_page: "admin",
+          ...(newAttachment ? { attachment: { data: newAttachment.data } } : {}),
+        },
       });
       if (res.error) throw new Error(res.error.message);
-      setNewOpen(false); setNewSubject(""); setNewBody("");
+      setNewOpen(false); setNewSubject(""); setNewBody(""); setNewAttachment(null); setNewAttachError("");
       await refreshTickets();
     } catch (e2) { setTicketMsg(e2.message); }
     setCreating(false);
@@ -398,7 +423,7 @@ export default function AdminDashboard() {
       </Modal>
 
       {/* Manual ticket entry — the direct road when the assistant fumbles */}
-      <Modal open={newOpen} onClose={() => setNewOpen(false)} title="New ticket">
+      <Modal open={newOpen} onClose={() => { setNewOpen(false); setNewAttachment(null); setNewAttachError(""); }} title="New ticket">
         <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
           placeholder="One-line summary"
           style={{
@@ -422,6 +447,22 @@ export default function AdminDashboard() {
             backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
             fontSize: 16, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box",
           }} />
+        <input ref={newFileRef} type="file" accept="image/*" onChange={pickNewAttachment} style={{ display: "none" }} />
+        {newAttachment ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <img src={newAttachment.data} alt="Attached screenshot" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: `1px solid ${T.border}` }} />
+            <button onClick={() => setNewAttachment(null)} style={{
+              padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+            }}>Remove</button>
+          </div>
+        ) : (
+          <button onClick={() => newFileRef.current?.click()} style={{
+            marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`,
+            backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer", textAlign: "left",
+          }}>{"📎"} Attach a screenshot</button>
+        )}
+        {newAttachError && <div style={{ marginTop: 6, fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{newAttachError}</div>}
         {ticketMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{ticketMsg}</div>}
         <button onClick={createTicket} disabled={creating} style={{
           width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",
