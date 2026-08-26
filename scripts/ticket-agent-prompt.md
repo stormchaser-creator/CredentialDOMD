@@ -19,10 +19,15 @@ Supabase project `hkpnnsjcwprrwobmpqyy`. Query via the management API:
 
 ```bash
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w)
-printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s) AND public.is_admin(t.user_id) ORDER BY t.created_at"}' "'" "'" > /tmp/tickets.json
+printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND public.is_admin(t.user_id) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) ORDER BY t.created_at"}' "'" "'" "'" "'" "'" "'" "'" "'" > /tmp/tickets.json
 curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d @/tmp/tickets.json
 ```
+
+A `resolved` ticket reaches you too if it has a genuine new message after your last reply
+(a physician saying "actually this isn't fixed" or asking a follow-up) — the `NOT ILIKE`
+clause excludes the automatic "Status set to ..." log line a status change writes, so
+already-settled tickets don't come back just because someone touched their status.
 
 Also read each ticket's thread (`support_messages` where ticket_id = …, ordered by created_at)
 — the newest message may refine or approve the ask. NOTE: the owner is also the app admin, so
@@ -37,8 +42,8 @@ newer than that stamp as the user talking to you.
 - **Reply instead of building** when a ticket is ambiguous, large enough to need phasing, or
   touches anything in the DO NOT list. Post one concrete plan or question, then leave the
   ticket open — the last-message-is-yours rule keeps you from looping on it.
-- A ticket that is a question rather than a change request gets a helpful answer as a reply,
-  then status `resolved`.
+- A ticket that is a question rather than a change request gets a helpful answer as a reply.
+  Leave it `open` either way — resolving is Eric's call, made in-app, never yours.
 
 ## Build and verify (the repo's loop — follow it exactly)
 
@@ -52,12 +57,12 @@ newer than that stamp as the user talking to you.
 6. Wait for the CDN: poll `https://credentialdomd.com/app/version.json?cb=<n>` until it
    reports the new short SHA (up to 10 minutes). Poll in the FOREGROUND — never hand this
    to a background task and exit: your session ends when you stop, and an unfinished
-   verification means no reply and no stamp. Everything in "Reply and close" must be DONE
+   verification means no reply and no stamp. Everything in "Reply" must be DONE
    before your final message. If the CDN never lands, say so in the reply.
 7. If the build fails and you cannot fix it cleanly: `git reset --hard origin/main` and reply
    with what you found instead of shipping.
 
-## Reply and close
+## Reply
 
 Insert an admin reply and update the ticket (dollar-quote text with `$q$...$q$`):
 
@@ -65,15 +70,18 @@ Insert an admin reply and update the ticket (dollar-quote text with `$q$...$q$`)
 INSERT INTO support_messages (id, ticket_id, author_id, body, is_admin_reply, created_at)
 SELECT gen_random_uuid(), t.id, t.user_id, $q$<what you shipped / your question>$q$, true, now()
 FROM support_tickets t WHERE t.id = '<ticket_id>';
-UPDATE support_tickets SET status = '<resolved|open>', updated_at = now(),
-  agent_last_reply_at = now(),
-  resolved_at = CASE WHEN '<resolved|open>' = 'resolved' THEN now() ELSE resolved_at END
+UPDATE support_tickets SET status = 'open', updated_at = now(),
+  agent_last_reply_at = now()
 WHERE id = '<ticket_id>';
 ```
 
-`resolved` = shipped and live (name the build SHA in the reply). Leave `open` + your reply
-when you asked a question. Keep replies short, concrete, and in plain language — the reader
-is a physician on his phone.
+Always leave it `open` — even when you shipped and verified the fix (name the build SHA
+in the reply). Marking a ticket `resolved` is Eric's call, made in-app after he's checked
+your work himself; it is never yours to set, no matter how confident you are that the fix
+landed. This also means a ticket he already marked `resolved` gets reopened by this same
+UPDATE if it turns out (from his follow-up) that it wasn't actually done — that's correct,
+not a bug. Keep replies short, concrete, and in plain language — the reader is a physician
+on his phone.
 
 ## DO NOT — hard limits, no exceptions
 
