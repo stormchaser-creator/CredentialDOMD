@@ -121,6 +121,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
   const typeOpts = TYPE_OPTIONS[docType]?.(data.settings.degreeType, edited) || null;
   const licenseExpiryRequired = docType === "license" && edited.type !== CERTIFICATION_TYPE;
   const expiryBlocked = (["privilege", "insurance"].includes(docType) || licenseExpiryRequired) && !edited.expirationDate;
+  const stateBlocked = docType === "license" && /license|dea/i.test(edited.type || "") && !edited.state;
 
   return (
     <div style={{ backgroundColor: T.card, border: `2px solid ${meta.color}`, borderRadius: 16, overflow: "hidden", marginBottom: 12, boxShadow: T.shadow1 }}>
@@ -304,11 +305,16 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
               This {SECTION_META[docType].label.toLowerCase()} expires — enter the expiration date above before saving so the app can warn you in time.
             </div>
           )}
+          {stateBlocked && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
+              Select the issuing state above before saving — without it this won&rsquo;t show up in your state compliance tracking.
+            </div>
+          )}
           <div style={{ display: "flex", gap: 10 }}>
           <button
-            disabled={expiryBlocked}
+            disabled={expiryBlocked || stateBlocked}
             onClick={() => onSave(docType, edited, imageData, fileName)} style={{
-            opacity: expiryBlocked ? 0.5 : 1,
+            opacity: (expiryBlocked || stateBlocked) ? 0.5 : 1,
             flex: 1, padding: "12px", borderRadius: 12, border: "none", backgroundColor: meta.color, color: "#fff",
             fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}>
