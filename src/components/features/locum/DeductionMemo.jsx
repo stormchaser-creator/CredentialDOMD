@@ -8,6 +8,8 @@
  *   - Malpractice premiums (from insurance[])
  *   - CME course costs (from cme[].cost)
  *   - Professional society dues (from memberships[].cost)
+ *   - Unreimbursed travel expenses (from travelExpenses[], once the linked
+ *     invoice has settled — a payment landed or it was written off)
  *
  * Plus user-entered manual line items (data.deductibles[]) for things the
  * app doesn't know about (license application fees, board exam fees, etc.)

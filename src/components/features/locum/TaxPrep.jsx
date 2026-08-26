@@ -321,7 +321,7 @@ function TaxPrep() {
       </>)}
 
       <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.5, padding: "0 4px 12px" }}>
-        Planning estimate. {VERIFIED_NOTE} Assumes revenue-share apportionment, ratio-method nonresident tax, and no PTET election; your CPA's return controls. Colorado at {(CO.FLAT_RATE * 100).toFixed(2)}% flat. Reimbursed travel (expense invoices) is excluded from income, and card-import meals are counted at 50%.
+        Planning estimate. {VERIFIED_NOTE} Assumes revenue-share apportionment, ratio-method nonresident tax, and no PTET election; your CPA's return controls. Colorado at {(CO.FLAT_RATE * 100).toFixed(2)}% flat. Reimbursed travel (expense invoices) is excluded from income; the unreimbursed share of a settled travel expense is deducted instead, and card-import meals are counted at 50%.
       </div>
 
       <StatementImport open={showImport} onClose={() => setShowImport(false)} />
