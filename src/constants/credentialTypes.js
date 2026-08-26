@@ -1,4 +1,4 @@
-export const CERTIFICATION_TYPE = "Certification (course / device training)";
+export const CERTIFICATION_TYPE = "Certification";
 
 export const LICENSE_TYPES_MD = [
   "State Medical License",

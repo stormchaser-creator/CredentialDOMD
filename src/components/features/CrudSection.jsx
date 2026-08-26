@@ -63,6 +63,14 @@ function canonicalizeSelectValue(fieldDef, raw) {
   return raw;
 }
 
+// label/placeholder can vary by the record being edited (e.g. Certification
+// asks a different question than a license does) — same function-of-form
+// pattern already used for `required`.
+function resolveFieldProp(f, key, form) {
+  const v = f[key];
+  return typeof v === "function" ? v(form) : v;
+}
+
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport }) {
   const { data, setData, addItem, theme: T , user } = useApp();
   const iS = useInputStyle();
@@ -366,7 +374,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     const isRequired = (f) => typeof f.required === "function" ? f.required(form) : f.required;
     const missing = fields.filter(f => isRequired(f) && !form[f.key]);
     if (missing.length > 0) {
-      setRequiredError(`Required: ${missing.map(f => f.label).join(", ")}. Expiration dates are how the app warns you before anything lapses.`);
+      setRequiredError(`Required: ${missing.map(f => resolveFieldProp(f, "label", form)).join(", ")}. Expiration dates are how the app warns you before anything lapses.`);
       return;
     }
     setRequiredError(null);
@@ -453,7 +461,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           </div>
         )}
         {fields.map(f => (
-          <Field key={f.key} label={f.label + ((typeof f.required === "function" ? f.required(form) : f.required) ? " *" : "")}>
+          <Field key={f.key} label={resolveFieldProp(f, "label", form) + ((typeof f.required === "function" ? f.required(form) : f.required) ? " *" : "")}>
             {f.type === "select" ? (
               <select
                 value={form[f.key] || ""}
@@ -483,7 +491,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   list={`dl-${f.key}`}
                   value={form[f.key] || ""}
                   onChange={e => setField(f.key, e.target.value)}
-                  placeholder={f.placeholder}
+                  placeholder={resolveFieldProp(f, "placeholder", form)}
                   style={iS}
                 />
                 <datalist id={`dl-${f.key}`}>
@@ -504,7 +512,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     autoComplete="off"
                     value={isEncrypted(form[f.key]) ? "" : (form[f.key] || "")}
                     onChange={e => setField(f.key, e.target.value)}
-                    placeholder={isEncrypted(form[f.key]) ? "Saved (encrypted). Type to replace." : (f.placeholder || "")}
+                    placeholder={isEncrypted(form[f.key]) ? "Saved (encrypted). Type to replace." : (resolveFieldProp(f, "placeholder", form) || "")}
                     style={{ ...iS, flex: 1 }}
                   />
                   <button type="button" onClick={() => setShowSecret(v => ({ ...v, [f.key]: !v[f.key] }))} style={{ padding: "0 12px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{showSecret[f.key] ? "Hide" : "Show"}</button>
@@ -524,7 +532,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 data-fkey={f.key}
                 value={form[f.key] || ""}
                 onChange={e => setField(f.key, e.target.value)}
-                placeholder={f.placeholder}
+                placeholder={resolveFieldProp(f, "placeholder", form)}
                 style={{ ...iS, minHeight: 60, resize: "vertical" }}
               />
             ) : (
@@ -536,7 +544,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 min={f.type === "currency" ? "0" : undefined}
                 value={form[f.key] || ""}
                 onChange={e => setField(f.key, e.target.value)}
-                placeholder={f.placeholder}
+                placeholder={resolveFieldProp(f, "placeholder", form)}
                 style={iS}
               />
             )}
@@ -639,7 +647,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           <>
             {fields.filter(f => viewItem[f.key]).map(f => (
               <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
-                <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{f.label}</span>
+                <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{resolveFieldProp(f, "label", viewItem)}</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {(() => {
                     const v = viewItem[f.key];
