@@ -37,7 +37,12 @@ export function generateAlerts(data) {
 
   allStates.forEach(st => {
     const comp = complianceFor(data, st);
-    if (!comp.fullyCompliant) {
+    // Only surface a CME gap once its renewal is within the reminder lead
+    // window (default 90 days) — same gating "soon" license alerts get.
+    // With no linked license expiration we don't know how far out it is,
+    // so err toward showing it.
+    const withinLead = comp.daysLeft == null || comp.daysLeft <= lead;
+    if (!comp.fullyCompliant && withinLead) {
       const issues = [];
       if (!comp.totalMet && !comp.noGeneralReq) issues.push(`${comp.totalEarned}/${comp.totalRequired} total hrs`);
       if (!comp.cat1Met && comp.cat1Required > 0) issues.push(`Cat 1: ${comp.cat1Earned}/${comp.cat1Required} hrs`);

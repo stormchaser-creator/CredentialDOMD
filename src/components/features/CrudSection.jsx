@@ -816,7 +816,15 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           {shownItems.map(item => {
             const nonExpiring = isNonExpiring(item, sectionKey);
             const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
-            const needsReview = item.npiImported && !item.expirationDate && !nonExpiring;
+            // A field required today (e.g. State on a license/DEA entry) can still be
+            // blank on an older record saved before that rule existed — flag it the
+            // same way an unreviewed NPI import gets flagged, instead of letting it
+            // silently render differently from its siblings forever.
+            const missingRequired = fields.filter(f => {
+              const req = typeof f.required === "function" ? f.required(item) : f.required;
+              return req && !item[f.key];
+            });
+            const needsReview = (item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0;
             return (
               <div key={item.id} onClick={() => setViewItem(item)} style={{
                 backgroundColor: T.card, border: `1px solid ${needsReview ? T.danger : T.border}`,
@@ -875,7 +883,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     })()}
                     {needsReview && (
                       <div style={{ fontSize: 12, fontWeight: 600, color: T.danger, marginTop: 3 }}>
-                        Needs review — tap edit to add expiration date, issued date, and verify details
+                        {missingRequired.length > 0
+                          ? `Needs review — tap edit to add ${missingRequired.map(f => resolveFieldProp(f, "label", item)).join(", ")}`
+                          : "Needs review — tap edit to add expiration date, issued date, and verify details"}
                       </div>
                     )}
                     {renderExtra && <div onClick={(e) => e.stopPropagation()}>{renderExtra(item)}</div>}
