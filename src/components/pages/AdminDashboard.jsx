@@ -155,6 +155,10 @@ export default function AdminDashboard() {
 
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = tickets.filter(t => t.archived_at);
+  const activeUserEmails = new Set(
+    users.filter(u => u.access_status === "active" && u.email).map(u => u.email.toLowerCase())
+  );
+  const openWaitlist = waitlist.filter(r => !activeUserEmails.has((r.email || "").toLowerCase()));
   const messagesSeenAt = data?.settings?.adminInboxSeenAt;
   const unreadMessages = messages.filter(m =>
     m.last_physician_reply_at && (!messagesSeenAt || new Date(m.last_physician_reply_at) > new Date(messagesSeenAt))
@@ -165,7 +169,7 @@ export default function AdminDashboard() {
     { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
     { id: "errors",    label: `Errors (${errors.filter(e => Date.now() - new Date(e.created_at).getTime() < 7 * 86400000).length})` },
     { id: "signups",   label: "Signups" },
-    { id: "waitlist",  label: `Waitlist (${waitlist.length})` },
+    { id: "waitlist",  label: `Waitlist (${openWaitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
     { id: "ai",        label: "AI" },
   ];

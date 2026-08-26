@@ -265,8 +265,19 @@ function Expenses() {
           ))}
         </div>
         <input placeholder="Vendor (e.g. United, Marriott, Hertz)" value={form.vendor || ""} onChange={e => setForm(f => ({ ...f, vendor: e.target.value }))} style={{ ...iS, width: "100%", boxSizing: "border-box", marginBottom: 10 }} />
-        <input list="expense-agencies" placeholder="Bill to agency (e.g. MPLT Healthcare)" value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={{ ...iS, width: "100%", boxSizing: "border-box", marginBottom: 10 }} />
-        <datalist id="expense-agencies">{agencies.map(a => <option key={a} value={a} />)}</datalist>
+        {agencies.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {agencies.map(a => (
+              <button key={a} onClick={() => setForm(f => ({ ...f, agency: a }))} style={{
+                padding: "7px 11px", borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                border: `1px solid ${form.agency === a ? T.accent : T.border}`,
+                backgroundColor: form.agency === a ? T.accent : "transparent",
+                color: form.agency === a ? "#fff" : T.textMuted,
+              }}>{a}</button>
+            ))}
+          </div>
+        )}
+        <input placeholder="Bill to agency (e.g. MPLT Healthcare)" value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={{ ...iS, width: "100%", boxSizing: "border-box", marginBottom: 10 }} />
         <textarea placeholder="Notes (trip, assignment, confirmation #)" value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, width: "100%", boxSizing: "border-box", minHeight: 60, fontFamily: "inherit", marginBottom: 10 }} />
 
         {/* receipts */}
@@ -312,7 +323,19 @@ function Expenses() {
       {/* Invoice picker */}
       <Modal open={invOpen} onClose={() => !busy && setInvOpen(false)} title="Invoice expenses">
         <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Bill to</div>
-        <input list="expense-agencies" value={invAgency} onChange={e => pickAgency(e.target.value)} style={{ ...iS, width: "100%", boxSizing: "border-box", marginBottom: 10 }} placeholder="Agency name" />
+        {agencies.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {agencies.map(a => (
+              <button key={a} onClick={() => pickAgency(a)} style={{
+                padding: "7px 11px", borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                border: `1px solid ${invAgency === a ? T.accent : T.border}`,
+                backgroundColor: invAgency === a ? T.accent : "transparent",
+                color: invAgency === a ? "#fff" : T.textMuted,
+              }}>{a}</button>
+            ))}
+          </div>
+        )}
+        <input value={invAgency} onChange={e => pickAgency(e.target.value)} style={{ ...iS, width: "100%", boxSizing: "border-box", marginBottom: 10 }} placeholder="Agency name" />
         {unbilled.map(e => (
           <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${T.border}`, cursor: "pointer" }}>
             <input type="checkbox" checked={!!checked[e.id]} onChange={ev => setChecked(c => ({ ...c, [e.id]: ev.target.checked }))} />
