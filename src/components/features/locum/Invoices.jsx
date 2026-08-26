@@ -508,7 +508,7 @@ function Invoices() {
                     fontSize: 17, fontWeight: 800, fontVariantNumeric: "tabular-nums",
                     color: isPaid ? (T.success || "#22c55e") : writtenOff ? T.textMuted : overdue ? T.danger : T.warning,
                   }}>
-                    {isPaid ? money(inv.totalAmount) : writtenOff ? money(paid) : money(balance)}
+                    {isPaid ? money(inv.totalAmount) : writtenOff ? money((parseFloat(inv.totalAmount) || 0) - paid) : money(balance)}
                   </div>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.4 }}>
                     {isPaid ? "collected" : writtenOff ? "written off" : "owed to you"}
