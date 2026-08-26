@@ -10,7 +10,7 @@ import { Modal } from "../shared";
  * views (created in supabase-tracking-migration.sql).
  */
 export default function AdminDashboard() {
-  const { theme: T, user, data } = useApp();
+  const { theme: T, user, data, userIdRef } = useApp();
   const [tab, setTab] = useState("tickets");
   const [tickets, setTickets] = useState([]);
   const [feedback, setFeedback] = useState([]);
@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);       // profiles directory (admin read)
   const [invites, setInvites] = useState([]);   // beta_access allowlist
   const [errors, setErrors] = useState([]);     // client_errors (report-error sink)
+  const [messages, setMessages] = useState([]); // admin_messages_overview (sent notes)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openTicket, setOpenTicket] = useState(null);
@@ -116,7 +117,8 @@ export default function AdminDashboard() {
       supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("client_errors").select("id, created_at, kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra").order("created_at", { ascending: false }).limit(50),
-    ]).then(([t, f, s, v, w, wa, fp, pr, ba, ce]) => {
+      supabase.from("admin_messages_overview").select("*").limit(200),
+    ]).then(([t, f, s, v, w, wa, fp, pr, ba, ce, am]) => {
       if (cancelled) return;
       if (t.error) setError(`Tickets: ${t.error.message}`);
       else setTickets(t.data || []);
@@ -134,6 +136,7 @@ export default function AdminDashboard() {
       else setUsers(pr.data || []);
       if (!ba.error) setInvites(ba.data || []);
       if (!ce.error) setErrors(ce.data || []);
+      if (!am.error) setMessages(am.data || []);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -154,6 +157,7 @@ export default function AdminDashboard() {
   const archivedTickets = tickets.filter(t => t.archived_at);
   const TABS = [
     { id: "tickets",   label: `Tickets (${activeTickets.length})` },
+    { id: "messages",  label: `Messages (${messages.length})` },
     { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
     { id: "errors",    label: `Errors (${errors.filter(e => Date.now() - new Date(e.created_at).getTime() < 7 * 86400000).length})` },
     { id: "signups",   label: "Signups" },
@@ -224,6 +228,9 @@ export default function AdminDashboard() {
             </>
           )}
         </>
+      )}
+      {tab === "messages" && !loading && (
+        <MessagesPanel messages={messages} setMessages={setMessages} users={users} myProfileId={userIdRef.current} T={T} />
       )}
       {tab === "signups"  && !loading && (
         <>
@@ -1139,6 +1146,224 @@ function AiPanel({ users, ownKey, T }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Messages: a private channel to one physician or a broadcast to everyone.
+ * Broadcast replies fan out into one thread per physician (admin_message_
+ * reply_threads) so nobody sees anyone else's reply.
+ */
+function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [recipient, setRecipient] = useState(""); // "" = broadcast
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [composeMsg, setComposeMsg] = useState("");
+
+  const [openMsg, setOpenMsg] = useState(null);
+  const [broadcastThreads, setBroadcastThreads] = useState([]); // who replied, for a broadcast
+  const [viewingUser, setViewingUser] = useState(null);         // drilled-into broadcast replier
+  const [directThread, setDirectThread] = useState([]);         // actual reply rows
+  const [replyBody, setReplyBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [detailMsg, setDetailMsg] = useState("");
+
+  const activeUsers = users.filter(u => u.access_status === "active");
+
+  const refreshMessages = async () => {
+    const { data } = await supabase.from("admin_messages_overview").select("*").limit(200);
+    setMessages(data || []);
+  };
+
+  const send = async () => {
+    const text = body.trim();
+    if (!text) { setComposeMsg("Write something first."); return; }
+    setSending(true); setComposeMsg("");
+    const { error } = await supabase.from("admin_messages").insert({
+      sender_id: myProfileId,
+      recipient_id: recipient || null,
+      subject: subject.trim() || null,
+      body: text,
+    });
+    setSending(false);
+    if (error) { setComposeMsg(error.message); return; }
+    setComposeOpen(false); setRecipient(""); setSubject(""); setBody("");
+    refreshMessages();
+  };
+
+  const openDetail = async (m) => {
+    setOpenMsg(m); setDetailMsg(""); setViewingUser(null); setBroadcastThreads([]); setDirectThread([]);
+    if (m.recipient_id) {
+      const { data } = await supabase.from("admin_message_replies").select("*")
+        .eq("message_id", m.id).order("created_at");
+      setDirectThread(data || []);
+    } else {
+      const { data } = await supabase.from("admin_message_reply_threads").select("*")
+        .eq("message_id", m.id).order("last_reply_at", { ascending: false });
+      setBroadcastThreads(data || []);
+    }
+  };
+
+  const openBroadcastThread = async (row) => {
+    setViewingUser(row); setDetailMsg("");
+    const { data } = await supabase.from("admin_message_replies").select("*")
+      .eq("message_id", openMsg.id).eq("user_id", row.user_id).order("created_at");
+    setDirectThread(data || []);
+  };
+
+  const sendReply = async () => {
+    const text = replyBody.trim();
+    if (!text || !openMsg) return;
+    const targetUserId = openMsg.recipient_id || viewingUser?.user_id;
+    if (!targetUserId) { setDetailMsg("Pick a physician's thread first — this is a broadcast."); return; }
+    setBusy(true); setDetailMsg("");
+    const { error } = await supabase.from("admin_message_replies").insert({
+      message_id: openMsg.id, user_id: targetUserId, author_id: myProfileId, body: text, is_admin_reply: true,
+    });
+    setBusy(false);
+    if (error) { setDetailMsg(error.message); return; }
+    setReplyBody("");
+    const { data } = await supabase.from("admin_message_replies").select("*")
+      .eq("message_id", openMsg.id).eq("user_id", targetUserId).order("created_at");
+    setDirectThread(data || []);
+    refreshMessages();
+  };
+
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10,
+    backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 15,
+  };
+
+  const showingThread = openMsg && (openMsg.recipient_id ? true : !!viewingUser);
+
+  return (
+    <div>
+      <button onClick={() => { setComposeOpen(true); setComposeMsg(""); }} style={{
+        width: "100%", padding: "11px", borderRadius: 10, border: "none", marginBottom: 12,
+        backgroundColor: T.accent, color: "#fff", fontSize: 13.5, fontWeight: 800, cursor: "pointer",
+      }}>+ New message</button>
+
+      {messages.length === 0 ? (
+        <Empty T={T} text="No messages sent yet. Reach one physician or everyone at once." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {messages.map(m => (
+            <div key={m.id} role="button" tabIndex={0} onClick={() => openDetail(m)}
+              onKeyDown={(ev) => { if (ev.key === "Enter") openDetail(m); }}
+              style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{m.subject || "(no subject)"}</span>
+                <span style={{
+                  fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 10, flexShrink: 0,
+                  color: m.recipient_id ? T.accent : "#fff",
+                  backgroundColor: m.recipient_id ? (T.accentDim || "rgba(59,130,246,0.12)") : T.accent,
+                }}>{m.recipient_id ? (m.recipient_name || m.recipient_email || "one physician") : "EVERYONE"}</span>
+              </div>
+              <div style={{
+                fontSize: 12, color: T.textMuted, marginTop: 3, lineHeight: 1.4,
+                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+              }}>{m.body}</div>
+              <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>
+                {new Date(m.created_at).toLocaleString()} · {m.reply_count} {m.reply_count === 1 ? "reply" : "replies"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal open={composeOpen} onClose={() => setComposeOpen(false)} title="New message">
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Send to</div>
+        <select value={recipient} onChange={e => setRecipient(e.target.value)} style={{ ...inputStyle, marginBottom: 10 }}>
+          <option value="">Everyone (broadcast)</option>
+          {activeUsers.map(u => (
+            <option key={u.id} value={u.id}>{u.name || u.email}</option>
+          ))}
+        </select>
+        <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject (optional)"
+          style={{ ...inputStyle, marginBottom: 10 }} />
+        <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="What do you want to say?"
+          style={{ ...inputStyle, minHeight: 110, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
+        {composeMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{composeMsg}</div>}
+        <button onClick={send} disabled={sending} style={{
+          width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",
+          backgroundColor: sending ? T.textDim : T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800,
+          cursor: sending ? "wait" : "pointer",
+        }}>{sending ? "Sending…" : "Send"}</button>
+      </Modal>
+
+      <Modal open={!!openMsg} onClose={() => setOpenMsg(null)} title={openMsg?.subject || "Message"}>
+        {openMsg && (
+          <>
+            <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10 }}>
+              {openMsg.recipient_id ? (openMsg.recipient_name || openMsg.recipient_email) : "Everyone"} · {new Date(openMsg.created_at).toLocaleString()}
+            </div>
+            <div style={{ fontSize: 14, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.55, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
+              {openMsg.body}
+            </div>
+
+            {!openMsg.recipient_id && !viewingUser && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  Replies ({broadcastThreads.length})
+                </div>
+                {broadcastThreads.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: T.textDim }}>No one has replied yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {broadcastThreads.map(t => (
+                      <div key={t.user_id} role="button" tabIndex={0} onClick={() => openBroadcastThread(t)}
+                        style={{ padding: "8px 11px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.card, cursor: "pointer", display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{t.user_name || t.user_email}</span>
+                        <span style={{ fontSize: 11, color: T.textMuted }}>{t.reply_count} {t.reply_count === 1 ? "reply" : "replies"} · {timeAgo(t.last_reply_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!openMsg.recipient_id && viewingUser && (
+              <button onClick={() => { setViewingUser(null); setDirectThread([]); }} style={{
+                marginTop: 12, padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>&larr; All replies</button>
+            )}
+
+            {showingThread && (
+              <>
+                {directThread.length > 0 && (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {directThread.map(r => (
+                      <div key={r.id} style={{
+                        padding: "9px 11px", borderRadius: 10,
+                        backgroundColor: r.is_admin_reply ? (T.accentDim || "rgba(59,130,246,0.12)") : T.card,
+                        border: `1px solid ${T.border}`,
+                      }}>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: r.is_admin_reply ? T.accent : T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
+                          {r.is_admin_reply ? "You" : (viewingUser?.user_name || viewingUser?.user_email || "Physician")} · {new Date(r.created_at).toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{r.body}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <textarea value={replyBody} onChange={e => setReplyBody(e.target.value)}
+                  placeholder="Reply — they see this on their dashboard."
+                  style={{ ...inputStyle, minHeight: 80, marginTop: 12, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
+                {detailMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{detailMsg}</div>}
+                <button onClick={sendReply} disabled={busy} style={{
+                  width: "100%", marginTop: 10, padding: "12px", borderRadius: 10, border: "none",
+                  backgroundColor: busy ? T.textDim : T.accent, color: "#fff", fontSize: 14, fontWeight: 800,
+                  cursor: busy ? "wait" : "pointer",
+                }}>{busy ? "Sending…" : "Send reply"}</button>
+              </>
+            )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

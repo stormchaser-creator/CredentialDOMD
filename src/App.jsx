@@ -32,7 +32,7 @@ import Onboarding from "./components/features/Onboarding";
 import { useAiAvailable } from "./utils/aiClient";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
-import { AuthPage, NotificationCenter, NotificationBanner, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
+import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { isNonExpiring } from "./utils/helpers";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
@@ -1978,6 +1978,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       {/* ─── CONTENT ───────────────────────────────────── */}
       <div style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
         {tab === "home" && <NotificationBanner onOpenCenter={() => setNotifCenterOpen(true)} onGoSettings={() => { setTab("more"); setSubPage("settings"); }} />}
+        {tab === "home" && <AdminMessageCard />}
         <div style={{ padding: "16px 16px 0" }}>{renderContent()}</div>
       </div>
 
