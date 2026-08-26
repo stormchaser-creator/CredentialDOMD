@@ -10,7 +10,7 @@ import { Modal } from "../shared";
  * views (created in supabase-tracking-migration.sql).
  */
 export default function AdminDashboard() {
-  const { theme: T, user, data, userIdRef } = useApp();
+  const { theme: T, user, data, userIdRef, updateSettings } = useApp();
   const [tab, setTab] = useState("tickets");
   const [tickets, setTickets] = useState([]);
   const [feedback, setFeedback] = useState([]);
@@ -155,9 +155,13 @@ export default function AdminDashboard() {
 
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = tickets.filter(t => t.archived_at);
+  const messagesSeenAt = data?.settings?.adminInboxSeenAt;
+  const unreadMessages = messages.filter(m =>
+    m.last_physician_reply_at && (!messagesSeenAt || new Date(m.last_physician_reply_at) > new Date(messagesSeenAt))
+  ).length;
   const TABS = [
     { id: "tickets",   label: `Tickets (${activeTickets.length})` },
-    { id: "messages",  label: `Messages (${messages.length})` },
+    { id: "messages",  label: unreadMessages > 0 ? `Messages (${unreadMessages})` : "Messages" },
     { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
     { id: "errors",    label: `Errors (${errors.filter(e => Date.now() - new Date(e.created_at).getTime() < 7 * 86400000).length})` },
     { id: "signups",   label: "Signups" },
@@ -180,7 +184,10 @@ export default function AdminDashboard() {
         {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              setTab(t.id);
+              if (t.id === "messages") updateSettings({ adminInboxSeenAt: new Date().toISOString() });
+            }}
             style={{
               flex: 1, padding: "8px", borderRadius: 8, border: "none",
               backgroundColor: tab === t.id ? T.card : "transparent",
@@ -801,16 +808,20 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
     setAttempts(as2 => as2.filter(x => x.id !== a.id));
     await supabase.from("waitlist_attempts").delete().eq("id", a.id);
   };
-  // A lead sticks around looking stale once they've already signed up, since
-  // status only advances when someone taps the chip — flag it instead of
-  // auto-removing so the admin can verify before clearing it.
+  // A lead who's already signed up gets pulled off the active list — they're
+  // not deleted (data stays for the record and the "already a user" badge
+  // still shows if you dig them up), just hidden by default so the list only
+  // shows people you still need to convert.
   const activeEmails = new Set(
     (users || []).filter(u => u.access_status === "active" && u.email).map(u => u.email.toLowerCase())
   );
+  const [showJoined, setShowJoined] = useState(false);
+  const alreadyJoined = rows.filter(r => activeEmails.has((r.email || "").toLowerCase()));
+  const visibleRows = showJoined ? rows : rows.filter(r => !activeEmails.has((r.email || "").toLowerCase()));
   const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
   const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
   const copyAll = () => {
-    const text = rows.map((r) => `${r.name || ""} <${r.email}>`).join(", ");
+    const text = visibleRows.map((r) => `${r.name || ""} <${r.email}>`).join(", ");
     try { navigator.clipboard.writeText(text); } catch { /* older browser */ }
   };
   return (
@@ -821,7 +832,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
         borderRadius: 12, padding: "12px 16px", marginBottom: 12,
       }}>
         <div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{rows.length}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{visibleRows.length}</div>
           <div style={{ fontSize: 11, color: T.textMuted }}>
             on the list · {rows.filter(r => r.status === "invited").length} invited · {rows.filter(r => r.status === "joined").length} joined · {rows.filter(r => r.status === "paying").length} paying
           </div>
@@ -832,6 +843,13 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
           backgroundColor: "transparent", color: T.text, fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>Copy all emails</button>
       </div>
+
+      {alreadyJoined.length > 0 && (
+        <button onClick={() => setShowJoined(s => !s)} style={{
+          display: "block", marginBottom: 12, padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+          backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+        }}>{showJoined ? "Hide" : "Show"} already-joined leads ({alreadyJoined.length})</button>
+      )}
 
       {/* Manual add — for signups that arrive by text, call, or hallway */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -845,9 +863,9 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
         }}>Add</button>
       </div>
 
-      {rows.length === 0 && <Empty T={T} text="No early-access signups yet. Share the site!" />}
+      {visibleRows.length === 0 && <Empty T={T} text={rows.length === 0 ? "No early-access signups yet. Share the site!" : "Everyone left on the list already signed up."} />}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {rows.map((r) => (
+        {visibleRows.map((r) => (
           <div key={r.id || r.email + r.created_at} style={{
             backgroundColor: T.card, border: `1px solid ${T.border}`,
             borderRadius: 10, padding: "10px 12px",
