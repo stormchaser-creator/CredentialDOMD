@@ -1,3 +1,5 @@
+import { CERTIFICATION_TYPE } from "../constants/credentialTypes";
+
 export const MS_PER_DAY = 86400000;
 
 export function generateId() {
@@ -31,7 +33,7 @@ export function isNonExpiring(item, sectionKey) {
   if (!item || item.expirationDate) return false;
   if (item.noExpiration === true) return true;
   const t = String(item.type || "");
-  if (sectionKey === "licenses" && /course \/ device training/i.test(t)) return true;
+  if (sectionKey === "licenses" && t === CERTIFICATION_TYPE) return true;
   if (sectionKey === "insurance" && /health insurance|dental|vision|life insurance|disability/i.test(t)) return true;
   if (sectionKey === "healthRecords" && /immune|titer/i.test(String(item.name || "") + " " + String(item.category || "")) && !item.expirationDate) return true;
   return false;
