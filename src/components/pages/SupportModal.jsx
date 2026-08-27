@@ -239,7 +239,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         Help & feedback
       </h2>
       <p style={{ margin: "0 0 16px", fontSize: 13, color: T.textMuted }}>
-        Bug, question, or just a thought. It goes to Whit and he answers personally.
+        Bug, question, or just a thought. It goes to Eric Whitney, DO, and he answers personally.
         Replies arrive by email at {user?.email || "your account address"} and here under Your tickets.
       </p>
 
@@ -349,7 +349,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     <>
       <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800, color: T.text }}>Your tickets</h2>
       <p style={{ margin: "0 0 14px", fontSize: 13, color: T.textMuted }}>
-        Everything you have sent, with Whit's replies. New replies also land in your email.
+        Everything you have sent, with Eric's replies. New replies also land in your email.
       </p>
       {ticketsLoading && <div style={{ fontSize: 13, color: T.textMuted, padding: "12px 0" }}>Loading...</div>}
       {ticketsError && <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600, padding: "8px 0" }}>{ticketsError}</div>}
@@ -373,7 +373,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               </span>
             </div>
             <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 3 }}>
-              {t.last_from_admin ? "Reply from Whit " : "Last message "}{timeAgo(t.last_message_at)}
+              {t.last_from_admin ? "Reply from Eric " : "Last message "}{timeAgo(t.last_message_at)}
             </div>
           </button>
         ))}
@@ -424,7 +424,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
             border: `1px solid ${T.border}`,
           }}>
             <div style={{ fontSize: 10, fontWeight: 800, color: m.is_admin_reply ? T.accent : T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
-              {m.is_admin_reply ? "Whit" : "You"} {"·"} {new Date(m.created_at).toLocaleString()}
+              {m.is_admin_reply ? "Eric" : "You"} {"·"} {new Date(m.created_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
           </div>

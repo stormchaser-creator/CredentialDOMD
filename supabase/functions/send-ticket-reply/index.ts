@@ -20,7 +20,7 @@ const replyText = (reply: string) => `${reply}
 
 Reply here: ${APP_URL}#support (More > Support > Your tickets)
 
-Whit
+Eric
 
 --
 Whit Whitney, DO
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: "Whit Whitney, DO <whit@credentialdomd.com>",
+      from: "Eric Whitney, DO <whit@credentialdomd.com>",
       to: [email],
       reply_to: "stormchaser@elryx.com",
       subject,

@@ -20,7 +20,7 @@ One question, and I read every reply: what's the most painful part of credential
 
 One email when early access opens. That's the deal.
 
-Whit
+Eric
 
 --
 Whit Whitney, DO
@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: "Whit Whitney, DO <whit@credentialdomd.com>",
+      from: "Eric Whitney, DO <whit@credentialdomd.com>",
       to: [email],
       reply_to: "stormchaser@elryx.com",
       subject: position ? `You're #${position} on the CredentialDOMD founding list` : "You're on the CredentialDOMD founding list",
