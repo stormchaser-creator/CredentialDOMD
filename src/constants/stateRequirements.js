@@ -11,6 +11,17 @@
 // current and the physician still sees what is coming.
 // STATE_REQS_META dates the database as a whole. Full 2026-08 recheck:
 // docs/CME-RULES-CHANGELOG-2026-08.md.
+//
+// `firstCycle` (optional) carries a state's FIRST-CYCLE proration as data, the
+// way `cat1Accepted` carries credit types as data instead of a regex over the
+// rule prose. Shapes:
+//   { mode: "tiered", basis: "monthsFromIssueToExpiry",
+//     tiers: [ { underMonths: N, hours: H }, ... ] }  // ascending underMonths
+//   { mode: "fixed", hours: H, underMonths: N }       // single step
+// The compliance engine reads it with the LICENSE ISSUE DATE (never a
+// hand-entered cycle start) and shows the result BESIDE the full requirement
+// with its citation. A state without the field owes its full number, always;
+// showing a prorated alternative where no rule exists would invent a number.
 
 export const STATE_REQS_META = {
   databaseDate: "2026-02",
@@ -44,7 +55,25 @@ export const STATE_REQS = {
     { topic: "Substance Use Disorders", hours: 1.0, note: "Min 1 hr on addiction to Schedule II drugs or opioids each renewal cycle (OMBC CME document effective 2025-10-01; BPC 2454.5)" },
     { topic: "Implicit Bias", hours: 0, note: "AB 241: CME must include implicit bias content" },
   ], notes: "One-time 12 hrs pain management/terminally ill (within 4 yrs of licensure or by 2nd renewal; pathology and radiology exempt); min 1 hr Schedule II/opioid addiction each cycle; implicit bias content (AB 241). 50/2yr + 20 AOA 1-A/1-B verified vs OMBC 2026-07", rollover: "No", moc: "No", source: "OMBC (Cal. B&P Code \u00a7 2454.5); AB 241", verified: "2026-08", sourceUrl: "https://www.ombc.ca.gov/licensees/cme" } },
-  CO: { total: 30, cycle: 2, cat1min: 30, cat1note: "All 30 hrs must be from accepted programs: AMA PRA Category 1 (ACCME), AAFP Prescribed credit, AOA Category 1-A, or programs required to maintain national board certification (not self-claimed). Applies to renewals on or after Jan 1 2026.", cat1Accepted: ["AMA PRA Category 1", "AOA Category 1-A"], topics: [
+  CO: { total: 30, cycle: 2, cat1min: 30, cat1note: "All 30 hrs must be from accepted programs: AMA PRA Category 1 (ACCME), AAFP Prescribed credit, AOA Category 1-A, or programs required to maintain national board certification (not self-claimed). Applies to renewals on or after Jan 1 2026.", cat1Accepted: ["AMA PRA Category 1", "AOA Category 1-A"], firstCycle: {
+    mode: "tiered", basis: "monthsFromIssueToExpiry",
+    // DORA's published table, the same 22/15/10/5/0 this entry's `notes` field
+    // already records. C.R.S. 12-240-130.5 commands the proration ("the board
+    // shall adjust proportionately... to ensure that a physician is not
+    // required to obtain thirty CME credit hours in fewer than twenty-four
+    // months"); DORA implements it in these steps. The loaded table stops at
+    // 20 months, so an initial license issued 20-24 months before expiration
+    // is not covered here and owes the full 30 until that band is verified.
+    tiers: [
+      { underMonths: 4, hours: 0 },
+      { underMonths: 6, hours: 5 },
+      { underMonths: 12, hours: 10 },
+      { underMonths: 18, hours: 15 },
+      { underMonths: 20, hours: 22 },
+    ],
+    note: "First renewal on an initial CO license issued less than 24 months before expiration is prorated (22/15/10/5/0 hrs by time licensed). The board may also waive the first renewal entirely if you were licensed within 12 months of finishing training.",
+    source: "C.R.S. 12-240-130.5; Colorado DORA Physician CME page",
+  }, topics: [
     { topic: "Substance Use Disorders", hours: 2.0, note: "2 cumulative hrs substance use prevention training each renewal (opioid prescribing best practices, SUD recognition and referral, PDMP use); counts within the 30 hrs. Exempt if you hold national board certification requiring equivalent training or attest you do not prescribe opioids." },
   ], notes: "30 hrs accepted CME per 2-yr renewal, including 2 hrs SUD training. Prorated for a first renewal under 24 months (22/15/10/5/0 hrs by time licensed). Board may audit up to 5% of physicians annually, oversampling non-board-certified. Board may waive first renewal if licensed within 12 months of finishing training. Verified vs DORA and CRS 12-240-130.5, 2026-08.", rollover: "No", moc: "Programs required to maintain national board certification count toward the 30 hrs; board cert with equivalent SUD training exempts the 2-hr SUD requirement", source: "HB 24-1153 (effective 2026-01-01)", verified: "2026-08", sourceUrl: "https://dpo.colorado.gov/Medical/CME", upcoming: [
     "Board stakeholder process (per CRS 12-240-130.5(7)(b)(II)) is considering required CME in health disparities and outcomes data, reproductive/sexual/gender-based health care, and explicit/implicit bias; no adopted rule or hour count found in loaded sources; any mandate must fit within the 30 hrs",

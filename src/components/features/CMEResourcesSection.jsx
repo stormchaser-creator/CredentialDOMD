@@ -2,6 +2,7 @@ import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { SearchIcon, ExternalLinkIcon, GraduationIcon, CheckIcon } from "../shared/Icons";
 import { CME_PROVIDERS, getProvidersForTopic, getMateActProviders, getDualAccreditedProviders } from "../../constants/cmeProviders";
+import { providerAoaLine } from "../../constants/creditEquivalence";
 import { complianceFor } from "../../utils/compliance";
 import { getProviderVerificationStatus } from "../../utils/cmeVerification";
 
@@ -288,20 +289,20 @@ function CMEResourcesSection({ initialTopicFilter }) {
                 {topicMatched.length > 0 && (
                   <>
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, padding: "4px 0" }}>Addresses Your Unmet Topics</div>
-                    {topicMatched.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} />)}
+                    {topicMatched.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} degreeType={deg} />)}
                   </>
                 )}
                 {generalOnly.length > 0 && (
                   <>
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, padding: "8px 0 4px" }}>General Hours</div>
-                    {generalOnly.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} />)}
+                    {generalOnly.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} degreeType={deg} />)}
                   </>
                 )}
               </>
             );
           })()}
           {(viewMode !== "forYou" || isFullyCompliant) && filteredProviders.map(provider => (
-            <ProviderCard key={provider.id} provider={provider} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} />
+            <ProviderCard key={provider.id} provider={provider} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} degreeType={deg} />
           ))}
         </div>
       )}
@@ -322,7 +323,7 @@ function FilterChip({ label, active, onClick, T }) {
 
 const VERIFY_COLORS = { ok: "#22c55e", timeout: "#eab308", unreachable: "#eab308", unchecked: "#9ca3af" };
 
-const ProviderCard = memo(function ProviderCard({ provider, T, unmetTopics, verificationResults }) {
+const ProviderCard = memo(function ProviderCard({ provider, T, unmetTopics, verificationResults, degreeType }) {
   const [expanded, setExpanded] = useState(false);
   const pricing = PRICING_COLORS[provider.pricing] || PRICING_COLORS.paid;
   const matchingUnmet = provider.topics.filter(t => unmetTopics.includes(t));
@@ -387,6 +388,20 @@ const ProviderCard = memo(function ProviderCard({ provider, T, unmetTopics, veri
           <div style={{ fontSize: 12, color: T.textDim, marginBottom: 4 }}>
             <strong>Accreditation:</strong> {provider.accreditation.join(", ")}
           </div>
+          {/* What that accreditation means for a DO. Derived from the
+              equivalence table, not from a per-provider string, so it cannot
+              drift provider by provider. `aoaNote` adds only what is specific
+              to this product. */}
+          {degreeType === "DO" && (() => {
+            const line = providerAoaLine(provider);
+            if (!line && !provider.aoaNote) return null;
+            return (
+              <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 4, lineHeight: 1.5, padding: "6px 8px", borderRadius: 8, backgroundColor: T.accentGlow }}>
+                <strong style={{ color: T.accent }}>For a DO:</strong> {line}
+                {provider.aoaNote && <span> {provider.aoaNote}</span>}
+              </div>
+            );
+          })()}
           <div style={{ fontSize: 12, color: T.textDim, marginBottom: 4 }}>
             <strong>Format:</strong> {provider.format.join(", ")}
           </div>

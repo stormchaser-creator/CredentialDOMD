@@ -71,6 +71,14 @@ function resolveFieldProp(f, key, form) {
   return typeof v === "function" ? v(form) : v;
 }
 
+// A field may declare `show(form)` to appear only for some record types (the
+// licenses form is shared by medical licenses, DEA registrations and
+// certifications). Hidden fields are skipped by the form AND by required-field
+// validation, so a hidden field can never block a save.
+function isShown(f, form) {
+  return typeof f.show === "function" ? !!f.show(form) : true;
+}
+
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport }) {
   const { data, setData, addItem, theme: T , user } = useApp();
   const iS = useInputStyle();
@@ -372,7 +380,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     // The whole point is knowing when things expire — expiring record
     // types can't be saved without their dates.
     const isRequired = (f) => typeof f.required === "function" ? f.required(form) : f.required;
-    const missing = fields.filter(f => isRequired(f) && !form[f.key]);
+    const missing = fields.filter(f => isShown(f, form) && isRequired(f) && !form[f.key]);
     if (missing.length > 0) {
       setRequiredError(`Required: ${missing.map(f => resolveFieldProp(f, "label", form)).join(", ")}. Expiration dates are how the app warns you before anything lapses.`);
       return;
@@ -460,8 +468,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             )}
           </div>
         )}
-        {fields.map(f => (
-          <Field key={f.key} label={resolveFieldProp(f, "label", form) + ((typeof f.required === "function" ? f.required(form) : f.required) ? " *" : "")}>
+        {fields.filter(f => isShown(f, form)).map(f => (
+          <Field
+            key={f.key}
+            label={resolveFieldProp(f, "label", form) + ((typeof f.required === "function" ? f.required(form) : f.required) ? " *" : "")}
+            hint={f.type === "secret" ? undefined : resolveFieldProp(f, "hint", form)}
+          >
             {f.type === "select" ? (
               <select
                 value={form[f.key] || ""}

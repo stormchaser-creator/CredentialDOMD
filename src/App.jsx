@@ -10,6 +10,7 @@ import StatusDot from "./components/shared/StatusDot";
 import Modal from "./components/shared/Modal";
 import StatusBadge from "./components/shared/StatusBadge";
 import ComplianceRing from "./components/shared/ComplianceRing";
+import { cat1BucketLabel } from "./constants/creditEquivalence";
 import { ShareModal } from "./components/features";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
@@ -47,7 +48,7 @@ import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardComplianc
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
-import { complianceFor, findStateLicense } from "./utils/compliance";
+import { complianceFor, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
 import { lookupNPI, extractLicensesFromNPI } from "./utils/npiLookup";
 
@@ -746,9 +747,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {cmeDetail && (() => {
           const { comp } = cmeDetail;
           const deg = data.settings.degreeType;
-          const cat1Keys = deg === "DO"
-            ? (comp.cat1OneAOnly ? ["AOA Category 1-A"] : ["AOA Category 1-A", "AOA Category 1-B", "AMA PRA Category 1"])
-            : ["AMA PRA Category 1"];
+          // The credit types the engine actually filtered on. This used to be
+          // recomputed here from the degree, which for a CA DO listed AMA PRA
+          // Category 1 as counting and green-tagged AMA entries "counts as
+          // Cat 1" while the engine excluded them. The modal exists to explain
+          // the math, so it has to read the math's own inputs.
+          const cat1Keys = comp.cat1Keywords || [];
           const mandateTopics = comp.topicResults.map(t => t.topic);
           const inWin = [], outWin = [];
           for (const c of data.cme || []) {
@@ -756,13 +760,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             if (d && d >= comp.windowStart && d <= comp.windowEnd) inWin.push(c);
             else outWin.push(c);
           }
-          const fmtD = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
           return (
             <>
               <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
-                Cycle window: <strong style={{ color: T.text }}>{fmtD(comp.windowStart)} – {fmtD(comp.windowEnd)}</strong>
-                {comp.windowAnchored ? " (anchored to your license renewal)" : " (rolling — add the license's expiration date to anchor it)"}
-                {comp.daysLeft != null && ` · ${comp.daysLeft} days left`}. Only hours dated inside this window count toward this renewal.
+                <strong style={{ color: T.text }}>{comp.windowLabel}.</strong>
+                {comp.daysLeft != null && ` ${comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
+                {windowNotes(comp).map((n, i) => (
+                  <div key={i} style={{ marginTop: 4, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
+                ))}
               </div>
 
               {/* Requirement scoreboard */}
@@ -775,7 +780,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 )}
                 {comp.cat1Required > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                    <span style={{ color: T.text, fontWeight: 600 }}>{comp.cat1OneAOnly ? "AOA Category 1-A" : "Category 1"} minimum
+                    <span style={{ color: T.text, fontWeight: 600 }}>{cat1BucketLabel(cat1Keys, deg)}
                       <span style={{ display: "block", fontSize: 11, color: T.textDim, fontWeight: 500 }}>counts: {cat1Keys.join(", ")}</span>
                     </span>
                     <span style={{ fontWeight: 800, color: comp.cat1Met ? T.success : T.warning }}>{comp.cat1Earned} / {comp.cat1Required}</span>
@@ -1120,6 +1125,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                     )}
                   </div>
 
+                  {/* Which dates actually count. Tapping the card opens the
+                      full explanation; this line means it is never a guess. */}
+                  <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.4, marginBottom: 8 }}>
+                    {comp.windowLabel}.
+                    {comp.windowSource === "custom" && " Start set on this license."}
+                    {comp.cycleStartIgnored && (
+                      <span style={{ color: T.warning, fontWeight: 700 }}> CME cycle start on this license is on or after the renewal date, so it was not used.</span>
+                    )}
+                  </div>
+
                   {/* Progress bar */}
                   {!comp.noGeneralReq && comp.totalRequired > 0 && (
                     <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginBottom: unmetTopics.length > 0 ? 8 : 0 }}>
@@ -1148,7 +1163,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   {!comp.cat1Met && comp.cat1Required > 0 && (
                     <div style={{ marginTop: 6 }}>
                       <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
-                        {comp.cat1OneAOnly ? "AOA Cat 1-A" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h needed
+                        {(comp.cat1Keywords || []).every(k => k.startsWith("AOA Category")) ? "AOA Cat 1" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h needed
                       </span>
                     </div>
                   )}
@@ -1383,7 +1398,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
+        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
       </>);
     }
     if (subPage === "cme") return <CMESection onShare={openShare} />;

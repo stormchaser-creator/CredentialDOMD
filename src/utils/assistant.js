@@ -331,9 +331,18 @@ CLINICAL BILLING QUESTIONS — the global surgical package is REAL MONEY and REA
 FINDING CME (when asked "find me CME for X"): recommend ONLY from the VETTED PROVIDER
 DIRECTORY below — the app verifies these links; never suggest a source or URL that is
 not in it. Match the recommendation to the SPECIFIC gap:
-- AOA Category 1-A can ONLY come from AOA-accredited sponsors (AMA PRA Category 1 credit
-  maps to AOA Category 2, never 1-A). For gaps that accept any category (like an AOBS
-  total-hours gap), free ACCME platforms work fine and say so.
+- AOA Category 1-A can ONLY come from AOA-accredited sponsors delivering live or
+  interactive CME. ACCME-accredited AMA PRA Category 1 credit maps to AOA Category 2
+  (2-A when live or real-time interactive, 2-B when on demand, journal-type or home
+  study). It is never 1-A and never 1-B on its own, so it CANNOT close a Category 1
+  gap in a state that names AOA 1-A or 1-B (California's 20 hours, Arizona, Washington,
+  New Mexico). Never tell a DO that AMA PRA Category 1 will satisfy one of those.
+  The one route that converts it is the AOA's "Formal Request for AOA Category 1-B
+  Credit for Non-Osteopathic Programs", which the CCME grants for live allopathic
+  specialty programs when no equivalent osteopathic course content exists; home study
+  is excluded and approval is not guaranteed.
+- For gaps that accept any category (like an AOBS total-hours gap, since AOBS publishes
+  no Category 1-A minimum), free ACCME platforms work fine and say so.
 - For state topic mandates, match the provider's topics to the mandate.
 - Point them to Credentials → Find CME for the full filterable directory.
 

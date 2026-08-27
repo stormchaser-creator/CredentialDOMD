@@ -5,6 +5,7 @@ import { complianceFor, findStateLicense } from "./compliance";
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 import { STATE_NAMES } from "../constants/states";
 import { computeBoardCompliance, aoaNationalEntry } from "./boardCompliance";
+import { cat1BucketLabel } from "../constants/creditEquivalence";
 
 /**
  * Board-ready CME transcript PDF.
@@ -145,9 +146,13 @@ export function stateTranscriptModel(data, state) {
     window: {
       start: comp.windowStart,
       end: comp.windowEnd,
-      label: comp.windowAnchored
-        ? `${comp.cycle}-year cycle ending at license expiration`
-        : `rolling ${comp.cycle}-year window ending today (no ${state} license expiration on file)`,
+      // A board reading this needs the window the hours were counted in, and
+      // whether it came from the license record or from the physician.
+      label: comp.windowSource === "custom"
+        ? `CME cycle start set on the ${state} license record, ending at license expiration`
+        : comp.windowAnchored
+          ? `${comp.cycle}-year cycle ending at license expiration`
+          : `rolling ${comp.cycle}-year window ending today (no ${state} license expiration on file)`,
     },
     comp,
     req,
@@ -255,9 +260,13 @@ function stateRequirementRows(model) {
     });
   }
   if (comp.cat1Required > 0) {
-    const label = comp.cat1OneAOnly ? "AOA Category 1-A minimum"
-      : deg === "DO" ? "AOA Category 1-A/1-B or AMA PRA Category 1 minimum"
-        : "AMA PRA Category 1 minimum";
+    // Label from the credit types the engine actually counted, never from the
+    // degree. The old line called every DO row "AOA Category 1-A/1-B or AMA
+    // PRA Category 1 minimum", which for California is false: OMBC accepts
+    // AOA 1-A or 1-B here and reads AMA-designated credit as Category 2. This
+    // is the page a board sees at audit, so the row has to name the same
+    // credit types the earned figure was filtered on.
+    const label = cat1BucketLabel(comp.cat1Keywords, deg);
     rows.push({ name: label, rule: plain(req.cat1note), required: fmtHrs(comp.cat1Required), earned: fmtHrs(comp.cat1Earned), met: comp.cat1Met });
   }
   for (const t of comp.topicResults || []) {

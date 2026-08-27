@@ -22,5 +22,12 @@ export {
   getMateActProviders, getProviderById, getAllCoveredTopics,
   searchProviders, getProvidersByPricing,
 } from "./cmeProviders";
+export {
+  CREDIT_EQUIVALENCE, CREDIT_EQUIVALENCE_META, AOA_CATEGORIES, AOA_CATEGORY_BY_CODE,
+  AOA_REPORTING, CAT1B_CONVERSION, SMALL_SPECIALTY_EXCEPTION, TRAINING_CREDIT,
+  NON_CREDIT_ACTIVITIES, MODALITY, SOURCES as CREDIT_EQUIVALENCE_SOURCES,
+  equivalenceFor, equivalenceRowsFor, aoaCategoryFor, shortCategory, logNoteFor,
+  cat1BucketLabel, cat1Breakdown, cat1RouteNote, smallSpecialtyNote, providerAoaLine,
+} from "./creditEquivalence";
 export { THEMES } from "./themes";
 export { STORAGE_KEY, DEFAULT_SETTINGS, DEFAULT_DATA } from "./defaults";

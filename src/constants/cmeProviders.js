@@ -9,6 +9,13 @@
 //   "ABIM MOC"             = ABIM Maintenance of Certification points
 //   "Joint Accreditation"  = ACCME + ACPE + ANCC (interprofessional)
 //
+// What these accreditations mean for a DO is NOT recorded per provider. It is
+// one rule, and it lives in src/constants/creditEquivalence.js: modality
+// decides the AOA letter, not the accreditor. ACCME-accredited AMA PRA
+// Category 1 posts as AOA Category 2-A when live or real-time interactive and
+// 2-B when on demand, journal-type or home study, and never as 1-A or 1-B.
+// A per-provider `aoaNote` is only for a fact specific to THAT product.
+//
 // Pricing key:
 //   "free"                 = No cost (may require free registration)
 //   "freemium"             = Free courses available + paid premium options
@@ -57,6 +64,30 @@ export const CME_PROVIDERS = [
     stateSpecificNote: null,
     dualAccredited: false,
     format: ["Online modules", "Video", "Podcasts", "Case-based learning"],
+  },
+  {
+    // Added 2026-08. Topics are deliberately limited to the general bucket:
+    // the accreditation and credit mechanics below are sourced, the topic
+    // coverage is not, and guessing it would put this platform in front of a
+    // state topic mandate it may not actually cover.
+    // Sources: creditEquivalence.js SOURCES.openEvidence (AKH Inc. joint
+    // accreditation, AMA PRA Category 1, 0.25-credit increments, MOC through
+    // select boards) and SOURCES.akh (AKH is ACCME/ACPE/ANCC accredited and
+    // lists no AOA accreditation).
+    id: "openevidence",
+    name: "OpenEvidence",
+    url: "https://www.openevidence.com/",
+    pricing: "free",
+    pricingNote: "Free for verified clinicians",
+    accreditation: ["AMA PRA Category 1", "Joint Accreditation"],
+    accreditedBy: "AKH Inc., Advancing Knowledge in Healthcare (ACCME/ACPE/ANCC jointly accredited)",
+    topics: ["General / No Specific Topic"],
+    description: "Point-of-care clinical evidence platform. Its education platform is planned and implemented jointly with AKH Inc. and designates AMA PRA Category 1 Credit in 0.25-credit (15-minute) increments, plus MOC through select certifying boards. Physicians, NPs and PAs can earn CME/CE; only physicians can earn the MOC.",
+    stateSpecific: false,
+    stateSpecificNote: null,
+    dualAccredited: false,
+    aoaNote: "AKH is not an AOA-accredited Category 1 sponsor, so for a DO this is AOA Category 2, never 1-A or 1-B. It is asynchronous point-of-care content, which the AOA activity table treats as 2-B while the AOA's blanket reporting rule posts ACCME AMA PRA Category 1 as 2-A. California pools 2-A and 2-B in one 30-hour allowance, so the split changes nothing there: 50 hours of this would still leave California's 20-hour AOA Category 1-A/1-B minimum unmet. It also never reaches your AOA record unless you self-report the certificate.",
+    format: ["Point-of-care (search-based)", "On demand", "Mobile app"],
   },
   {
     id: "primed",
@@ -298,7 +329,17 @@ export const CME_PROVIDERS = [
     stateSpecific: false,
     stateSpecificNote: null,
     dualAccredited: false,
-    aoaNote: "AMA PRA Category 1 credits recognized as AOA Category 2-B; not direct 1-A",
+    // Corrected 2026-08 against the AOA's own sources. The old note read
+    // "AMA PRA Category 1 credits recognized as AOA Category 2-B; not direct
+    // 1-A", which stated a per-product reading as if it were the general rule.
+    // The AOA's Category 1-B request form says the AOA awards 2-A for ALL
+    // ACCME-accredited AMA PRA Category 1 programs; the 2025-2027 activity
+    // table then carves the non-live modalities out into 2-B. UpToDate is
+    // point-of-care and non-interactive, so 2-B is the defensible reading for
+    // this product specifically, and the ambiguity changes no California
+    // number. Sources: creditEquivalence.js SOURCES.aoaCat1BForm,
+    // SOURCES.aoaActivityDescriptions, SOURCES.ombcCme.
+    aoaNote: "Point-of-care and non-interactive, so the AOA activity table places it in Category 2-B (the AOA's blanket reporting rule posts ACCME AMA PRA Category 1 as 2-A). Either way it is AOA Category 2, never 1-A or 1-B. California pools 2-A and 2-B in one 30-hour Category 2 allowance, so this cannot touch California's 20-hour AOA Category 1-A/1-B minimum.",
     format: ["Point-of-care (search-based)", "Clinical summaries", "Mobile app"],
   },
   {

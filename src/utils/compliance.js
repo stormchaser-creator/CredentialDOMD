@@ -10,6 +10,19 @@ import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements
  *   - otherwise a rolling window of the cycle length ending today
  * Never a lifetime sum.
  *
+ * Window override (`opts.cycleStart`, stored per license as `cmeCycleStart`):
+ * a physician whose CME clock did not start a full cycle back can say so, and
+ * the window becomes [cycleStart, expiration]. Real rules need both directions.
+ * A CA DO's FIRST requirement period runs from initial licensure to the first
+ * expiration and may be LONGER than 24 months (16 CCR 1635(d)); a physician
+ * whose clock started at training completion needs a SHORTER one. Either way
+ * the hour target is untouched: window length and hour count are independent
+ * variables in the rules, and a user-editable field that silently lowered the
+ * target would be a false-compliant generator. Where a state's own data models
+ * first-cycle proration (`firstCycle`), the prorated number is computed from
+ * the license ISSUE DATE and surfaced beside the full requirement, never
+ * substituted for it.
+ *
  * Category strictness:
  *   - cat1min > 0 → those hours must be Category 1 (for DOs, states whose
  *     rule names 1-A specifically count ONLY AOA Category 1-A)
@@ -32,16 +45,65 @@ import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements
 const MATE_TOPICS = ["Opioid Prescribing", "Substance Use Disorders"];
 export const MATE_HOURS = 8;
 
-// Parse a logged entry's date at LOCAL midnight, matching how the window
-// bounds (and the license-expiration anchor) are built. A bare "YYYY-MM-DD"
-// otherwise parses as UTC midnight, which in US time zones lands the evening
-// BEFORE and drops an entry dated on the first day of the cycle. The boundary
-// day (window start and window end) is in-cycle.
-function inWindow(entry, start, end) {
-  if (!entry.date) return false;
-  const s = String(entry.date);
+const MS_PER_DAY = 86400000;
+
+// Parse a date at LOCAL midnight. A bare "YYYY-MM-DD" otherwise parses as UTC
+// midnight, which in US time zones lands the evening BEFORE and drops an entry
+// dated on the first day of the cycle. Every window bound, the expiration
+// anchor, the cycle-start override and each logged entry go through this, so
+// the boundary day (window start and window end) is in-cycle.
+function parseLocalDate(value) {
+  if (!value) return null;
+  const s = String(value);
   const d = new Date(s.length === 10 ? s + "T00:00:00" : s);
-  return d >= start && d <= end;
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function inWindow(entry, start, end) {
+  const d = parseLocalDate(entry.date);
+  return !!d && d >= start && d <= end;
+}
+
+// Whole months from `a` to `b`. Used only for state first-cycle rules, whose
+// tiers are written in months ("issued 12 to 18 months before expiration").
+function wholeMonthsBetween(a, b) {
+  let m = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+  if (b.getDate() < a.getDate()) m -= 1;
+  return m;
+}
+
+const showDate = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+/**
+ * First-cycle proration, data-driven and keyed to the LICENSE ISSUE DATE.
+ *
+ * Every proration rule found in the databases reads a fact off the license
+ * record, never a self-declared date: CO keys off an initial license issued
+ * less than 24 months before expiration, ND off "more than one year but less
+ * than two full years" licensed, CA MD off an "initial license issued for less
+ * than 13 months". So this reads `licenseIssued` and ignores `cycleStart`
+ * entirely. Otherwise a physician could move a regulatory number by typing a
+ * different date.
+ *
+ * The result is an ALTERNATIVE shown beside the full requirement with its
+ * citation, not a replacement for it. The app cannot tell a first renewal from
+ * a later one (an `issuedDate` may be the current term's), and under-stating
+ * the requirement is the failure that surfaces in a board audit.
+ */
+function firstCycleAllowance(rule, licenseIssued, windowEnd) {
+  if (!rule || !licenseIssued || licenseIssued >= windowEnd) return null;
+  const months = wholeMonthsBetween(licenseIssued, windowEnd);
+  const base = { months, mode: rule.mode, note: rule.note || "", source: rule.source || "" };
+  if (rule.mode === "tiered") {
+    // Tiers ascend by `underMonths`; the first one the span falls under wins.
+    const tier = (rule.tiers || []).find(t => months < t.underMonths);
+    return tier ? { ...base, hours: tier.hours } : null;
+  }
+  if (rule.mode === "fixed") {
+    if (rule.underMonths != null && months >= rule.underMonths) return null;
+    return { ...base, hours: rule.hours };
+  }
+  return null;
 }
 
 export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
@@ -49,17 +111,35 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const cycleYears = entry?.cycle || 2;
 
   // ── Renewal window ──
-  // "YYYY-MM-DD" parses as UTC midnight; add a local time so the window
-  // prints on the actual expiration day in US time zones.
-  const licenseExpiration = opts.licenseExpiration
-    ? new Date(String(opts.licenseExpiration).length === 10 ? opts.licenseExpiration + "T00:00:00" : opts.licenseExpiration)
-    : null;
-  const hasAnchor = licenseExpiration && !isNaN(licenseExpiration);
+  const licenseExpiration = parseLocalDate(opts.licenseExpiration);
+  const hasAnchor = !!licenseExpiration;
   const windowEnd = hasAnchor ? licenseExpiration : new Date();
-  const windowStart = new Date(windowEnd);
-  windowStart.setFullYear(windowStart.getFullYear() - cycleYears);
+
+  // Default: a full state cycle back from the end.
+  const defaultStart = new Date(windowEnd);
+  defaultStart.setFullYear(defaultStart.getFullYear() - cycleYears);
+
+  // Override: the license's own `cmeCycleStart`, when the physician set one.
+  // A start on or after the window end would empty the window and silently
+  // discard every entry, so it is refused and reported rather than applied.
+  const requestedStart = parseLocalDate(opts.cycleStart);
+  const startUsable = !!requestedStart && requestedStart < windowEnd;
+  const windowStart = startUsable ? requestedStart : defaultStart;
+  const windowSource = startUsable ? "custom" : "cycle";
+  const cycleStartIgnored = !!requestedStart && !startUsable;
+
+  const windowDays = Math.round((windowEnd - windowStart) / MS_PER_DAY);
+  const fullCycleDays = Math.round((windowEnd - defaultStart) / MS_PER_DAY);
+  const windowShort = windowDays < fullCycleDays;
+  const windowLong = windowDays > fullCycleDays;
+  const windowLabel = `Counting CME dated ${showDate(windowStart)} through ${showDate(windowEnd)}`;
+
+  // State-modeled first-cycle proration, from the license issue date. Shown
+  // beside the full requirement; `totalRequired` never moves.
+  const firstCycleRule = firstCycleAllowance(entry?.firstCycle, parseLocalDate(opts.licenseIssued), windowEnd);
+
   const daysLeft = hasAnchor
-    ? Math.ceil((licenseExpiration - new Date()) / 86400000)
+    ? Math.ceil((licenseExpiration - new Date()) / MS_PER_DAY)
     : null;
 
   const windowed = (cmeEntries || []).filter(c => inWindow(c, windowStart, windowEnd));
@@ -179,12 +259,81 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     // separate boards: the numbers above use the MD rule set as a stand-in.
     // Callers should surface a "set your degree" prompt rather than assert.
     degreeUnknown: !degreeType && !!hasSeparateBoards(state),
-    // Window info for display + transcripts
+    // Window info for display + transcripts. `windowLabel` is the one plain
+    // sentence every surface prints, so the counting window can never be
+    // invisible or described two different ways in two places.
     windowStart,
     windowEnd,
+    windowLabel,
     windowAnchored: hasAnchor,
+    // "custom" when the license carries a cmeCycleStart, "cycle" when the
+    // window is the default full cycle back from the expiration.
+    windowSource,
+    windowShort,
+    windowLong,
+    windowDays,
+    fullCycleDays,
+    // True when a cmeCycleStart was set but falls on or after the window end;
+    // the default window is in force and the UI should say so.
+    cycleStartIgnored,
+    // The state's own first-cycle number when its data models one, computed
+    // from the license issue date. Advisory: `totalRequired` is unchanged.
+    firstCycleRule,
     daysLeft,
   };
+}
+
+/**
+ * Plain-text explanation of a counting window, so the dashboard, the CME page
+ * and the transcript describe it the same way instead of three ways.
+ *
+ * Returns an array of sentences to print under `comp.windowLabel`:
+ *   1. where the start came from
+ *   2. a refused cycle start, if one was set badly
+ *   3. what a short or long window does to the hour target (nothing)
+ *   4. the state's own first-cycle number, when its data carries one
+ */
+export function windowNotes(comp) {
+  if (!comp) return [];
+  const out = [];
+  const cyc = `${comp.cycle}-year cycle`;
+
+  if (comp.windowSource === "custom") {
+    out.push(`Start set on this license, not derived from the renewal date.`);
+  } else if (comp.windowAnchored) {
+    out.push(`Default window: one full ${cyc} back from your renewal date.`);
+  } else {
+    out.push(`Rolling ${cyc} ending today. Add the license's expiration date to anchor it to your renewal.`);
+  }
+
+  if (comp.cycleStartIgnored) {
+    out.push("The CME cycle start on this license falls on or after the renewal date, so it was not used. Fix it on the license record.");
+  }
+
+  // A shorter or longer window never moves the hour target. Say so, because
+  // the physician who just set a start date is about to assume it did.
+  if (comp.totalRequired > 0 && comp.windowShort) {
+    out.push(`This window is shorter than a full ${cyc}. ${comp.state} still requires ${comp.totalRequired} hours inside it.`);
+  } else if (comp.totalRequired > 0 && comp.windowLong) {
+    out.push(`This window is longer than a full ${cyc}, which is what a first requirement period running from initial licensure looks like. The requirement is still ${comp.totalRequired} hours.`);
+  }
+
+  // The state's own proration, computed from the license issue date and shown
+  // beside the full number rather than replacing it: the app cannot tell a
+  // first renewal from a later one, and a short number the board does not
+  // accept is the failure that shows up in an audit.
+  const fc = comp.firstCycleRule;
+  if (fc) {
+    out.push(
+      `${comp.state} prorates a first renewal: ${fc.hours} hours for a license issued ${fc.months} months before it expires. ` +
+      `Shown against the full ${comp.totalRequired} until you confirm with the board that this is your first renewal. ` +
+      `${fc.note}${fc.source ? ` (${fc.source})` : ""}`
+    );
+  } else if (comp.totalRequired > 0 && comp.windowShort) {
+    out.push(`${comp.state} publishes no first-cycle proration for a short window, so the full requirement stands.`);
+  }
+
+  return out;
 }
 
 /**
@@ -214,6 +363,9 @@ export function complianceFor(data, state) {
   const lic = findStateLicense(data.licenses, state);
   return computeCompliance(data.cme, state, data.settings.degreeType, {
     licenseExpiration: lic?.expirationDate || null,
+    // Already on the license record; every state proration rule reads it.
+    licenseIssued: lic?.issuedDate || null,
+    cycleStart: lic?.cmeCycleStart || null,
     hasDEA: hasDEARegistration(data.licenses),
   });
 }

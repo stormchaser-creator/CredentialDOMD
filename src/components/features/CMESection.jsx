@@ -6,6 +6,9 @@ import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import ComplianceBar from "../shared/ComplianceBar";
+import Cat1Bucket from "../shared/Cat1Bucket";
+import CreditEquivalenceNote from "../shared/CreditEquivalenceNote";
+import SmallSpecialtyNote from "../shared/SmallSpecialtyNote";
 import CMEImport from "./CMEImport";
 import RuleProvenance from "../shared/RuleProvenance";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
@@ -15,7 +18,7 @@ import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor } from "../../utils/compliance";
+import { complianceFor, windowNotes } from "../../utils/compliance";
 import { computeBoardCompliance, boardIdsFromLicenses, aoaNationalEntry } from "../../utils/boardCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf } from "../../utils/cmeTranscriptPdf";
 import { CME_INBOX_ADDRESS } from "../../utils/inboxDocs";
@@ -287,6 +290,18 @@ function CMESection({ onShare }) {
                   color: comp.fullyCompliant ? T.success : T.danger, fontSize: 15, fontWeight: 700,
                 }}>{comp.fullyCompliant ? "\u2713" : "\u2717"}</div>
               </div>
+              {/* The counting window, in plain text. It used to be invisible,
+                  so a physician had to guess which of their entries counted
+                  toward this renewal. */}
+              <div style={{
+                fontSize: 12.5, color: T.textMuted, lineHeight: 1.5,
+                backgroundColor: T.input, borderRadius: 8, padding: "8px 10px", marginBottom: 12,
+              }}>
+                <span style={{ fontWeight: 700, color: T.text }}>{comp.windowLabel}.</span>
+                {windowNotes(comp).map((n, i) => (
+                  <div key={i} style={{ marginTop: 3, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
+                ))}
+              </div>
               {!comp.noGeneralReq && (
                 <>
                   <ComplianceBar label="Total Hours" earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} />
@@ -298,17 +313,16 @@ function CMESection({ onShare }) {
                   )}
                 </>
               )}
-              {comp.cat1Required > 0 && (
-                <>
-                  <ComplianceBar label={deg === "DO" ? "Cat 1-A / AMA Cat 1" : "AMA PRA Cat 1"} earned={comp.cat1Earned} required={comp.cat1Required} met={comp.cat1Met} />
-                  {!comp.cat1Met && (
-                    <button onClick={() => navigate("credentials", "findCme")} style={{
-                      padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
-                      backgroundColor: T.accentGlow, color: T.accent, cursor: "pointer", marginTop: 2, marginBottom: 4, marginLeft: 2,
-                    }}>Find Cat 1 CME &rarr;</button>
-                  )}
-                </>
-              )}
+              {/* The Category 1 minimum is its own requirement, not a second
+                  bar under the total. Label and accepted-type list both come
+                  from the engine's `cat1Keywords`, so the words match the math.
+                  The hours that did NOT count are itemised there too. */}
+              <Cat1Bucket
+                comp={comp}
+                entries={data.cme}
+                degreeType={deg}
+                onFindCme={() => navigate("credentials", "findCme")}
+              />
               {comp.topicResults.map(tr => (
                 <div key={tr.topic}>
                   <ComplianceBar label={tr.topic} earned={tr.earned} required={tr.required} met={tr.met} note={tr.note} />
@@ -358,7 +372,14 @@ function CMESection({ onShare }) {
                   <ComplianceBar label={b.label} earned={b.earned} required={b.required} met={b.met}
                     note={`${b.unit} \u00b7 ${b.windowLabel}${b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}`} />
                   {b.cat1aRequired > 0 && (
-                    <ComplianceBar label="AOA Cat 1-A minimum" earned={b.cat1aEarned} required={b.cat1aRequired} met={b.cat1aEarned >= b.cat1aRequired} />
+                    <>
+                      <ComplianceBar label="AOA Cat 1-A minimum" earned={b.cat1aEarned} required={b.cat1aRequired} met={b.cat1aEarned >= b.cat1aRequired} />
+                      {/* The small-specialty exception operates inside AOA
+                          board and membership accounting, which is exactly
+                          here. It is not offered on state cards, where it does
+                          not reach. */}
+                      {b.cat1aEarned < b.cat1aRequired && <SmallSpecialtyNote degreeType={deg} />}
+                    </>
                   )}
                   {b.assessment && (
                     <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.4 }}>Also required: {b.assessment}</div>
@@ -394,6 +415,10 @@ function CMESection({ onShare }) {
                 <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>{aoa.windowLabel}{aoa.daysLeft != null ? ` · ${aoa.daysLeft} days left` : ""}</div>
                 <ComplianceBar label="Total" earned={aoa.earned} required={aoa.required} met={aoa.met} />
                 <ComplianceBar label="Cat 1-A minimum" earned={aoa.cat1aEarned} required={aoa.cat1aRequired} met={aoa.cat1aEarned >= aoa.cat1aRequired} />
+                <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5, marginTop: -4 }}>
+                  Only an AOA-accredited Category 1 sponsor produces 1-A. AMA PRA Category 1 posts here as AOA Category 2 and counts toward the total above, never toward this line.
+                </div>
+                {aoa.cat1aEarned < aoa.cat1aRequired && <SmallSpecialtyNote degreeType={deg} />}
               </div>
             );
           })()}
@@ -409,6 +434,12 @@ function CMESection({ onShare }) {
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </Field>
+        {/* What the selected category actually counts as for a DO, at the
+            moment of logging. The case this closes: OpenEvidence CME is
+            accredited through AKH Inc. (ACCME) and awards AMA PRA Category 1,
+            which for a DO is AOA Category 2 and can never satisfy California's
+            20-hour AOA Category 1-A/1-B minimum. */}
+        <CreditEquivalenceNote category={form.category} degreeType={deg} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="Hours"><input type="number" step="0.5" value={form.hours || ""} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} style={iS} placeholder="0" /></Field>
           <Field label="Date Completed"><input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={iS} /></Field>
