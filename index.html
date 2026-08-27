@@ -58,23 +58,8 @@
 }
 </script>
 
-<!-- First-party visit beacon: path + referrer only, no cookies, no PII.
-     Readable only in Admin -> Signups (RLS: insert-only for the public key). -->
-<script>
-(function(){try{
-  if (navigator.webdriver) return;
-  var q = new URLSearchParams(location.search);
-  fetch('https://hkpnnsjcwprrwobmpqyy.supabase.co/rest/v1/page_visits', {
-    method: 'POST', keepalive: true,
-    headers: { 'Content-Type': 'application/json', 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U', 'Prefer': 'return=minimal' },
-    body: JSON.stringify({
-      path: location.pathname.slice(0, 200),
-      referrer: (document.referrer || '').slice(0, 300),
-      source: (q.get('utm_source') || '').slice(0, 100)
-    })
-  });
-}catch(e){}})();
-</script>
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. -->
+<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname,r:document.referrer}))</script>
 
 
 <!-- Favicon -->
@@ -132,6 +117,7 @@
 }
 
 html {
+  overflow-x: hidden;
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -144,6 +130,9 @@ body {
   overflow-x: hidden;
   line-height: 1.6;
 }
+
+/* Fixed nav is ~68px tall; keep anchored targets clear of it */
+section[id], form[id] { scroll-margin-top: 88px; }
 
 a { color: var(--emerald); text-decoration: none; transition: color 0.2s; }
 a:hover { color: var(--emerald-light); }
@@ -348,7 +337,12 @@ nav {
   display: flex;
   align-items: center;
   padding: 120px 0 80px;
+  /* clip, not hidden: hidden makes this box a scroll container (the glow orb
+     hanging below it creates ~185px of hidden scrollable overflow), and any
+     scrollIntoView on the hero form then scrolls the hero internally and
+     drags the headline out of view. clip clips without being scrollable. */
   overflow: hidden;
+  overflow: clip;
 }
 
 /* Background effects */
@@ -366,8 +360,8 @@ nav {
 
 .hero-glow-1 {
   position: absolute;
-  width: 700px;
-  height: 700px;
+  width: min(700px, 100vw);
+  height: min(700px, 100vw);
   top: -10%;
   left: -5%;
   background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.04) 40%, transparent 70%);
@@ -377,8 +371,8 @@ nav {
 
 .hero-glow-2 {
   position: absolute;
-  width: 600px;
-  height: 600px;
+  width: min(600px, 100vw);
+  height: min(600px, 100vw);
   bottom: -15%;
   right: -5%;
   background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(16, 185, 129, 0.05) 40%, transparent 70%);
@@ -413,7 +407,7 @@ nav {
 }
 
 .hero h1 {
-  font-size: clamp(36px, 5vw, 60px);
+  font-size: clamp(32px, 4.5vw, 54px);
   font-weight: 900;
   line-height: 1.08;
   letter-spacing: -2px;
@@ -1699,8 +1693,15 @@ footer {
     gap: 48px;
   }
 
+  /* Mockup renders AFTER the pitch and form (DOM order), cropped with a fade
+     so the hero stays one screen. It was previously promoted above the headline
+     with order:-1, which put a fake app screen alone on screen one. */
   .hero-visual {
-    order: -1;
+    align-items: flex-start;
+    max-height: 460px;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
   }
 
   .phone-mockup {
@@ -1738,15 +1739,23 @@ footer {
 
   .hero {
     min-height: auto;
-    padding: 100px 0 60px;
+    padding: 92px 0 48px;
   }
+
+  .hero-badge { margin-bottom: 18px; }
 
   .hero h1 {
-    font-size: 32px;
+    font-size: 30px;
     letter-spacing: -1px;
+    margin-bottom: 16px;
   }
 
-  .hero-subtitle { font-size: 16px; }
+  .hero-subtitle { font-size: 16px; margin-bottom: 24px; }
+
+  .hero .wl-form .wl-email { flex: 1 1 100%; min-width: 0; }
+  .hero .wl-form button[type="submit"] { width: 100%; }
+
+  .hero-visual { max-height: 400px; }
 
   .hero-buttons { flex-direction: column; }
   .hero-buttons .btn-primary,
@@ -1799,6 +1808,59 @@ footer {
 }
 
 /* =========================================
+   STICKY MOBILE CTA BAR
+   ========================================= */
+.sticky-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(10, 16, 20, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  transform: translateY(110%);
+  transition: transform 0.25s ease;
+}
+.sticky-cta.show { transform: translateY(0); }
+
+.sticky-cta-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sticky-cta .btn-primary {
+  padding: 10px 16px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.sticky-cta-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .sticky-cta { display: flex; }
+}
+
+/* =========================================
    ANIMATIONS
    ========================================= */
 @keyframes fadeUp {
@@ -1848,7 +1910,7 @@ footer {
 <!-- ============ NAVIGATION ============ -->
 <nav>
   <div class="nav-inner">
-    <a href="#" class="logo">
+    <a href="/" class="logo">
       <div class="logo-mark">D</div>
       <div class="logo-text">Credential<span>DOMD</span></div>
     </a>
@@ -1858,7 +1920,7 @@ footer {
       <a href="/states/">Renewal Guides</a>
       <a href="#faq">FAQ</a>
       <a href="/app/">Sign in</a>
-      <a href="#early-access" class="btn-primary nav-cta">Get Early Access</a>
+      <a href="#join" class="btn-primary nav-cta">Get Early Access</a>
     </div>
     <button class="mobile-menu-btn" aria-label="Open menu" onclick="document.querySelector('.nav-links').classList.toggle('mobile-open')">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1876,15 +1938,15 @@ footer {
 
   <div class="container">
     <div class="hero-content">
-      <div class="badge hero-badge">Built by a Board-Certified Neurosurgeon</div>
+      <div class="badge hero-badge">Invite-Only Beta &middot; Free During Beta</div>
 
-      <h1>Your credentials, contracts, invoices, and taxes. <span class="highlight">One system.</span></h1>
+      <h1>Every license, DEA, and CME deadline, <span class="highlight">in one place</span>.</h1>
 
       <p class="hero-subtitle">
-        Every license, DEA, board cert, CME cycle, and privilege across all 50 states, plus the locums business engine no other app has. Built and used every day by a practicing neurosurgeon.
+        CredentialDOMD tracks your licenses, DEA registrations, board certs, CME, and privileges across all 50 states, plus locums contracts, invoices, and taxes, built by a practicing neurosurgeon.
       </p>
 
-      <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+      <form class="wl-form" id="join" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
         <input type="email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 220px; padding: 15px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
@@ -1895,7 +1957,7 @@ footer {
         </button>
       </form>
       <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
-      <div style="display: flex; gap: 16px; align-items: center; font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">
+      <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">
         <span>30 seconds &middot; no card &middot; founding-member perks by signup order</span>
         <a href="#how-it-works" style="white-space: nowrap;">See how it works &rarr;</a>
       </div>
@@ -1905,7 +1967,7 @@ footer {
           <svg width="20" height="20" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <p class="trust-text">
-          <strong>Built by a physician who credentials at multiple hospitals.</strong>
+          <strong>Dr. Eric Whitney, DO, neurosurgeon and founder, runs his own licenses, CME, call logs, and invoices through it every day.</strong>
           <br>Not a tech company guessing at your workflow.
         </p>
       </div>
@@ -1921,7 +1983,7 @@ footer {
           </div>
           <div class="phone-dashboard">
             <div class="phone-greeting">Good morning,</div>
-            <div class="phone-name">Dr. Marcus Chen</div>
+            <div class="phone-name">Doctor</div>
 
             <!-- Compliance Ring -->
             <div class="compliance-ring-container">
@@ -2043,19 +2105,19 @@ footer {
 
       <div class="problem-stats animate-on-scroll">
         <div class="problem-stat-card">
-          <div class="problem-stat-number red">$47,000</div>
-          <div class="problem-stat-label">Average revenue lost per lapsed credential</div>
-          <div class="problem-stat-desc">One missed renewal can mean 30+ days without privileges. For a locum tenens physician, that is catastrophic.</div>
+          <div class="problem-stat-number red">90&ndash;120 days</div>
+          <div class="problem-stat-label">Insurance panel re-credentialing after a lapse</div>
+          <div class="problem-stat-desc">A missed renewal is not a paperwork problem. It is weeks of work you cannot bill while the re-credentialing queue clears.</div>
         </div>
         <div class="problem-stat-card">
-          <div class="problem-stat-number amber">23</div>
-          <div class="problem-stat-label">Average credentials per physician</div>
-          <div class="problem-stat-desc">Licenses, DEA, boards, privileges, insurance panels, CME, each with its own renewal cycle and requirements.</div>
+          <div class="problem-stat-number amber">$75 / $150</div>
+          <div class="problem-stat-label">Texas's late-renewal penalty ladder</div>
+          <div class="problem-stat-desc">Boards escalate. Texas fines late renewals; after one year expired, Texas requires a full new license application.</div>
         </div>
         <div class="problem-stat-card">
           <div class="problem-stat-number">0</div>
           <div class="problem-stat-label">Margin for error</div>
-          <div class="problem-stat-desc">Insurance panels can take 90-120 days to re-credential. One lapse creates a cascade. You cannot afford to miss a single date.</div>
+          <div class="problem-stat-desc">Licenses, DEA registrations, boards, privileges, panels, CME. Each on its own cycle, each with its own consequence for lapsing.</div>
         </div>
       </div>
     </div>
@@ -2821,10 +2883,10 @@ footer {
     <div class="animate-on-scroll">
       <div class="section-label" style="justify-content: center;">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        Don't Wait
+        Join the Waitlist
       </div>
-      <h2 class="section-title">Right now, something in your credentialing file is 47 days from expiring.</h2>
-      <p class="section-subtitle">Get on the list now, and be the first to find out what it is, before it costs you a billing cycle.</p>
+      <h2 class="section-title">What in your credentialing file expires next? If you have to look it up, that is the problem.</h2>
+      <p class="section-subtitle">Get on the list. Invites go out in small batches, in signup order.</p>
 
       <div class="final-cta-buttons">
         <a href="#early-access" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
@@ -2856,6 +2918,13 @@ footer {
     </div>
   </div>
 </footer>
+
+<!-- Sticky mobile CTA: appears after the hero scrolls out of view, dismissible -->
+<div class="sticky-cta" id="sticky-cta" role="region" aria-label="Join the waitlist">
+  <span class="sticky-cta-text">Free invite-only beta &middot; invites by signup order</span>
+  <a href="#join" class="btn-primary">Join the waitlist</a>
+  <button type="button" class="sticky-cta-close" aria-label="Dismiss">&times;</button>
+</div>
 
 <!-- ============ SCRIPTS ============ -->
 <script>
@@ -2907,7 +2976,7 @@ footer {
       var noteFlags = flags.length ? flags.join(',') : null;
       var payload = { p_email: email, p_name: name || null, p_source: window.location.pathname || '/', p_note: noteFlags };
 
-      // Attempt trace lands BEFORE the real insert — a failed signup still
+      // Attempt trace lands BEFORE the real insert, so a failed signup still
       // leaves the email behind for follow-up.
       try {
         postSignup('/api/waitlist-attempt', 'waitlist_attempt',
@@ -2983,13 +3052,45 @@ function toggleFaq(btn) {
 // Smooth scroll for anchor links
 document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
   anchor.addEventListener('click', function(e) {
+    var href = this.getAttribute('href');
+    if (!href || href === '#') return;
+    var target = document.querySelector(href);
+    if (!target) return;
     e.preventDefault();
-    var target = document.querySelector(this.getAttribute('href'));
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var links = document.querySelector('.nav-links');
+    if (links) links.classList.remove('mobile-open');
   });
 });
+
+// Sticky mobile CTA bar: shows once the hero has scrolled out of view,
+// hides while the early-access form is on screen, dismiss lasts the visit.
+(function() {
+  var bar = document.getElementById('sticky-cta');
+  var hero = document.getElementById('hero');
+  if (!bar || !hero || !('IntersectionObserver' in window)) return;
+  var dismissed = false;
+  var heroVisible = true;
+  var formVisible = false;
+  var update = function() {
+    bar.classList.toggle('show', !dismissed && !heroVisible && !formVisible);
+  };
+  bar.querySelector('.sticky-cta-close').addEventListener('click', function() {
+    dismissed = true;
+    update();
+  });
+  new IntersectionObserver(function(entries) {
+    heroVisible = entries[entries.length - 1].isIntersecting;
+    update();
+  }).observe(hero);
+  var earlyAccess = document.getElementById('early-access');
+  if (earlyAccess) {
+    new IntersectionObserver(function(entries) {
+      formVisible = entries[entries.length - 1].isIntersecting;
+      update();
+    }, { threshold: 0.15 }).observe(earlyAccess);
+  }
+})();
 
 // Nav scroll effect
 (function() {
