@@ -3,6 +3,7 @@
 // first-party /api/* cannot be blocked without blocking the site itself.
 //
 // Route: credentialdomd.com/api/*  (zone 682edbf58b5b13fce0a6276768672152)
+// Also carries the /api/pv pageview beacon (2026-08-27), same relay shape.
 // Deploy: cloudflare/credentialdomd-api/deploy.sh (API upload, no wrangler).
 //
 // 2026-08-16: relays to the SECURITY DEFINER RPCs waitlist_signup /
@@ -33,6 +34,16 @@ const ROUTES = {
     rpc: "waitlist_attempt",
     limit: 15, // attempts precede signups; leave room for the trace of a blocked signup
     args: { name: "p_name", email: "p_email", source: "p_source", stage: "p_stage" },
+  },
+  // Pageview beacon (2026-08-27): landing pages sendBeacon {p, r} here; the
+  // RPC whitelists the path, reduces the referrer to its registrable domain,
+  // and upserts a (day, path, referrer_domain) counter. Counts only: no
+  // cookies, no IP storage, no fingerprinting. See
+  // supabase/migrations/20260827_page_views.sql.
+  "/api/pv": {
+    rpc: "track_pv",
+    limit: 60, // one call per pageview; 60 pages / 10 min covers real browsing
+    args: { p: "p_path", r: "p_ref" },
   },
 };
 const CORS = {

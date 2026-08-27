@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Medical License Renewal by State — 2026 Complete Guide | CredentialDOMD</title>
+<title>Medical License Renewal by State: 2026 Complete Guide | CredentialDOMD</title>
 <meta name="description" content="Complete 2026 guide to medical license renewal in all 50 US states. CME requirements, fees, deadlines, and renewal processes for every state medical board.">
 <meta name="keywords" content="medical license renewal by state, state medical license renewal, CME requirements by state, physician license renewal, medical board renewal, medical license fees by state">
 
 <!-- Open Graph -->
-<meta property="og:title" content="Medical License Renewal by State — 2026 Complete Guide">
+<meta property="og:title" content="Medical License Renewal by State: 2026 Complete Guide">
 <meta property="og:description" content="CME requirements, fees, deadlines, and step-by-step renewal guides for all 50 US states.">
 <meta property="og:image" content="https://credentialdomd.com/og-image.png">
 <meta property="og:type" content="website">
@@ -17,7 +17,7 @@
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Medical License Renewal by State — 2026 Guide">
+<meta name="twitter:title" content="Medical License Renewal by State: 2026 Guide">
 <meta name="twitter:description" content="Complete guide to physician license renewal in all 50 states. CME hours, fees, deadlines.">
 
 <!-- Canonical -->
@@ -843,22 +843,7 @@ searchInput.addEventListener('input', function() {
   noResults.style.display = visibleCount === 0 ? 'block' : 'none';
 });
 </script>
-<!-- First-party visit beacon: path + referrer only, no cookies, no PII.
-     Readable only in Admin -> Signups (RLS: insert-only for the public key). -->
-<script>
-(function(){try{
-  if (navigator.webdriver) return;
-  var q = new URLSearchParams(location.search);
-  fetch('https://hkpnnsjcwprrwobmpqyy.supabase.co/rest/v1/page_visits', {
-    method: 'POST', keepalive: true,
-    headers: { 'Content-Type': 'application/json', 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U', 'Prefer': 'return=minimal' },
-    body: JSON.stringify({
-      path: location.pathname.slice(0, 200),
-      referrer: (document.referrer || '').slice(0, 300),
-      source: (q.get('utm_source') || '').slice(0, 100)
-    })
-  });
-}catch(e){}})();
-</script>
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. -->
+<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname,r:document.referrer}))</script>
 </body>
 </html>

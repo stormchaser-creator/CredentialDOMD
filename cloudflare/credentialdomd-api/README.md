@@ -9,11 +9,19 @@ Cloudflare (this copy was pulled from the deployed script and then changed).
 |-------------------------|--------------------|-------------------|---------------|
 | `POST /api/waitlist`         | `waitlist_signup`  | 5 / 10 min        | 20 / 10 min   |
 | `POST /api/waitlist-attempt` | `waitlist_attempt` | 15 / 10 min       | 60 / 10 min   |
+| `POST /api/pv`               | `track_pv`         | 60 / 10 min       | see below     |
 
 The DB caps live in `supabase/migrations/20260816_ratelimit.sql` and are the
 real ceiling on how many Resend welcome emails can be provoked. The Worker
 cap is an in-memory Map per isolate (best-effort, resets when the isolate
 recycles, not shared across POPs).
+
+`/api/pv` (2026-08-27) is the pageview beacon: landing pages send
+`{p: location.pathname, r: document.referrer}` via `navigator.sendBeacon`;
+the RPC (supabase/migrations/20260827_page_views.sql) whitelists the path,
+reduces the referrer to its registrable domain, and upserts a daily counter.
+Counts only, no visitor data. DB-side ceilings: 100k hits/row/day, row
+cardinality folds to 'other' past 2,000 rows/day.
 
 Status codes seen by the landing page: 200 ok, 400 bad address, 409 already
 on the list, 413 body too large, 429 throttled (Worker or DB), 404 unknown path.

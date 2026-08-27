@@ -43,7 +43,7 @@ A few things to know:
 - Do not put patient names, MRNs, or dates of birth anywhere except the private on-device vault. Everything else syncs so you can use it on your phone and computer.
 - It is a beta. If something looks wrong or you want something changed, use Support inside the app or just reply to this email. I read every one.
 
-Whit Whitney, DO
+Eric Whitney, DO
 CredentialDOMD`;
 }
 

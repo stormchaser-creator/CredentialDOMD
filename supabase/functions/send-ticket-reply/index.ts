@@ -23,7 +23,7 @@ Reply here: ${APP_URL}#support (More > Support > Your tickets)
 Eric
 
 --
-Whit Whitney, DO
+Eric Whitney, DO
 CredentialDOMD: credential tracking for physicians, by a physician
 https://credentialdomd.com`;
 

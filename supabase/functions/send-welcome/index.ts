@@ -23,7 +23,7 @@ One email when early access opens. That's the deal.
 Eric
 
 --
-Whit Whitney, DO
+Eric Whitney, DO
 CredentialDOMD: credential tracking for physicians, by a physician
 https://credentialdomd.com`;
 
