@@ -1,0 +1,3827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4 agencies, 9 states, 1 ledger: locum tenens invoices, taxes, licenses | CredentialDoMD</title>
+<meta name="description" content="One ledger across every locum agency: invoices priced from your signed contract with a payment ledger, cash-basis multistate tax estimates cited to Rev. Proc. 2025-32, dictation to CPT with CY2026 work RVUs, and license, DEA and CME tracking in all 50 states. Free beta, no card.">
+<meta name="keywords" content="locum tenens taxes, locum tenens invoice, locum tenens multi state tax filing, locum tenens expense tracker, track multiple state medical licenses, locum tenens 1099 quarterly estimated taxes, physician credential tracker app, locum tenens S corp">
+
+<link rel="canonical" href="https://credentialdomd.com/locums">
+
+<!-- Open Graph -->
+<meta property="og:title" content="4 agencies, 9 states, 1 ledger: locum tenens invoices, taxes, licenses">
+<meta property="og:description" content="Every agency gives you an app. None of them can tell you what you made this year. Contract-priced invoices, a payment ledger, multistate tax estimates with the source cited, and 50-state license tracking.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://credentialdomd.com/locums">
+<meta property="og:site_name" content="CredentialDoMD">
+<meta property="og:image" content="https://credentialdomd.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Locum tenens invoices, multistate tax, and 50-state licenses in one ledger">
+<meta name="twitter:description" content="Built and used by a practicing neurosurgeon who works locums. Free beta, every feature on, no card.">
+<meta name="twitter:image" content="https://credentialdomd.com/og-image.png">
+
+<!-- Schema.org SoftwareApplication (no price: pricing is being finalized) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "CredentialDoMD for Locum Tenens Physicians",
+  "applicationCategory": "BusinessApplication",
+  "applicationSubCategory": "Medical practice management",
+  "operatingSystem": "Web, iOS and Android via PWA install",
+  "url": "https://credentialdomd.com/locums",
+  "description": "A single ledger for locum tenens physicians working across multiple agencies and states. Reads the signed locum agreement and prices every logged day from its own rates, builds itemized invoices with a payment ledger, codes dictated work to CPT with CMS CY2026 work RVUs, builds a Schedule C deduction memo, estimates multistate quarterly tax on a cash basis, and tracks licenses, DEA registrations, CME and hospital privileges in all 50 states.",
+  "featureList": [
+    "Contract scanner that extracts pay model, day rate, call stipend, included hours, overage rate and per-hospital call grid",
+    "Contract-aware day pricing with a 7am to 7am call day",
+    "One-tap call timer that rounds to the contract billing increment",
+    "Dictation to CPT coding with CMS CY2026 work RVUs",
+    "Itemized invoices in PDF, Word and Excel with a partial-payment ledger",
+    "Travel expenses with receipts attached to the agency invoice",
+    "Business card statement import with automatic deduction categories",
+    "Schedule C deduction memo with CSV export",
+    "Cash-basis multistate tax estimate for S-corp or sole proprietor",
+    "Multi-state license, DEA, CME and privilege matrix"
+  ],
+  "audience": {
+    "@type": "Audience",
+    "audienceType": "Locum tenens physicians"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Eric Whitney",
+    "honorificSuffix": "DO",
+    "description": "Board-certified neurosurgeon"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "CredentialDoMD",
+    "url": "https://credentialdomd.com"
+  }
+}
+</script>
+
+<!-- Schema.org FAQPage -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "I already track this in a spreadsheet. What does this do that the spreadsheet cannot?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Three things. It reminds you before a license or DEA registration lapses. It does the multistate math, allocating collected income to the state where the work physically happened and crediting your resident state for tax paid elsewhere. And it keeps the receipt attached to the expense, so the proof goes out with the bill instead of following in a second email. A spreadsheet is a fine list. It is not a system that acts."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "My agency invoices for me and my CPA does my taxes. What is left for me?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The agency ledger covers that agency's assignments. Your CPA sees the year in March. Neither one tells you in September that an August invoice is still short by $1,531. This is your own copy of the record, and in March it hands the preparer a categorized deduction ledger as CSV plus billing by month attributed to the day the work was done."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I trust the tax numbers?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The 2026 figures are verified against IRS Rev. Proc. 2025-32, the FTB 2025 rate schedules and 540 booklet, tax.colorado.gov, and ND Form ND-1ES 2026, extracted August 16, 2026. The sources are named in the app next to the numbers, not buried in a changelog. It is a planning estimate: reasonable compensation for an S-corp and final apportionment are your preparer's call."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Which states have a tax model today?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "California, Colorado and North Dakota, plus the nine states with no income tax: Alaska, Florida, Nevada, New Hampshire, South Dakota, Tennessee, Texas, Washington and Wyoming. Work in any other state shows the income sourced there and is labeled state model not loaded yet. It is never estimated with another state's brackets. License and CME tracking, separately, covers all 50 states."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my patient data safe? Is this HIPAA compliant?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "There is no HIPAA compliance claim, because the design is no PHI at all. The app holds credential paperwork and billing data. The note saying which patient a phone call was about stays in that device's own storage and is never uploaded, and the billing description that reaches the invoice stays free of identifiers. The scanner warns when an upload reads like a chart rather than a credential. The trade is stated in the app: those private notes do not follow you to another device."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does it cost?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Right now it is a free invite beta with every feature on and no card. Paid pricing is being finalized, and every beta member sees the number before anything is ever charged."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How long does setup take with nine states and four contracts?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Budget about 45 minutes, most of it confirming what the scanner already filled in. Photograph each license, DEA registration and board certificate. Upload each signed agreement and let it read out the pay model, rates, included hours, overage and coverage dates. Set the work state on each contract. Import last month's card statement. Then forward the next credentialer email to the requests inbox instead of hunting through your files."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I get my data out?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Invoices export as a branded PDF plus Word and Excel versions of the same content for billing offices that re-key. Expense invoices go out with every receipt file attached. The Schedule C deduction memo exports to CSV for your accountant. Document packets go out as real email attachments, up to 10 files and 25 MB per send."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work in a rural hospital with no signal?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "It installs as a Progressive Web App and your data is cached on the device, so you can pull up a license number in a hospital basement. The running call timer lives on the device too, so a refresh or an app close does not lose it."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "I do locums part time alongside a W-2 job. Does this still apply?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. The entity models are the same at any volume: S-corp with a W-2 salary plus K-1, or sole proprietor on Schedule C with self-employment tax. Income is still allocated to the state where the work physically happened, and the deduction ledger still pulls your license, DEA, malpractice, CME and society costs whether you take four weeks of locums a year or fifty."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does the CPT coder know every CPT code?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. The catalog is 494 codes weighted to neurosurgery and hospital evaluation and management, carrying CMS CY2026 Physician Fee Schedule work RVUs, status and global period. The AI coder can only pick from that catalog and every code it returns is re-validated against it, so an invented code is dropped rather than saved."
+      }
+    }
+  ]
+}
+</script>
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. -->
+<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname,r:document.referrer}))</script>
+
+
+<!-- Favicon -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22 width=%2232%22 height=%2232%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%2310b981%22/><g transform=%22translate(0 0) scale(1.0)%22><g fill=%22%23ffffff%22>  <circle cx=%2216%22 cy=%226.4%22 r=%222%22/>  <circle cx=%2214.55%22 cy=%226.55%22 r=%220.7%22 fill=%22%2310b981%22/><circle cx=%2217.45%22 cy=%226.55%22 r=%220.7%22 fill=%22%2310b981%22/>  <rect x=%2214.6%22 y=%228.5%22 width=%222.8%22 height=%224.4%22 rx=%221.4%22/>  <rect x=%2215.3%22 y=%2212.6%22 width=%221.4%22 height=%2214.6%22 rx=%220.7%22/>  <rect x=%2215%22 y=%2215.6%22 width=%222%22 height=%220.7%22 rx=%220.35%22 fill=%22%2310b981%22/><rect x=%2215%22 y=%2218.2%22 width=%222%22 height=%220.7%22 rx=%220.35%22 fill=%22%2310b981%22/><rect x=%2215%22 y=%2220.8%22 width=%222%22 height=%220.7%22 rx=%220.35%22 fill=%22%2310b981%22/><rect x=%2215%22 y=%2223.4%22 width=%222%22 height=%220.7%22 rx=%220.35%22 fill=%22%2310b981%22/>  <ellipse cx=%229.2%22 cy=%2210.6%22 rx=%227.4%22 ry=%222.1%22 transform=%22rotate(-24 9.2 10.6)%22/>  <ellipse cx=%2222.8%22 cy=%2210.6%22 rx=%227.4%22 ry=%222.1%22 transform=%22rotate(24 22.8 10.6)%22/>  <ellipse cx=%2210%22 cy=%2217.4%22 rx=%226.1%22 ry=%221.9%22 transform=%22rotate(8 10 17.4)%22/>  <ellipse cx=%2222%22 cy=%2217.4%22 rx=%226.1%22 ry=%221.9%22 transform=%22rotate(-8 22 17.4)%22/></g></g></svg>">
+<link rel="apple-touch-icon" href="/app/apple-touch-icon.png">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* =========================================
+   RESET & BASE
+   ========================================= */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a1014;
+  --bg-elevated: #0e161c;
+  --bg-card: #101b22;
+  --bg-card-hover: #142229;
+  --surface: #182831;
+  --border: #21363f;
+  --border-subtle: #17262e;
+
+  --emerald: #10b981;
+  --emerald-light: #34d399;
+  --emerald-dim: rgba(16, 185, 129, 0.08);
+  --emerald-glow: rgba(16, 185, 129, 0.15);
+  --emerald-border: rgba(16, 185, 129, 0.2);
+
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.1);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245, 158, 11, 0.1);
+  --blue: #3b82f6;
+
+  --text: #eef4f2;
+  --text-secondary: #a2b6b3;
+  --text-muted: #6d8582;
+
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3), 0 2px 6px rgba(0,0,0,0.2);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.4), 0 8px 16px rgba(0,0,0,0.2);
+  --shadow-xl: 0 24px 64px rgba(0,0,0,0.5);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+a { color: var(--emerald); text-decoration: none; transition: color 0.2s; }
+a:hover { color: var(--emerald-light); }
+
+img { max-width: 100%; height: auto; }
+
+/* =========================================
+   LAYOUT
+   ========================================= */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.container-narrow {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* =========================================
+   COMPONENTS
+   ========================================= */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 32px;
+  border-radius: var(--radius-md);
+  background: var(--emerald);
+  color: #0a1014;
+  font-weight: 700;
+  font-size: 15px;
+  font-family: var(--font);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3);
+  color: #0a1014;
+  background: var(--emerald-light);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 32px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 15px;
+  font-family: var(--font);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+.btn-secondary:hover {
+  border-color: var(--text-muted);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+}
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--emerald);
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -1.5px;
+  margin-bottom: 16px;
+}
+
+.section-subtitle {
+  font-size: 18px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 600px;
+}
+
+/* =========================================
+   NAVIGATION
+   ========================================= */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 0;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(10, 16, 20, 0.8);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: all 0.3s ease;
+}
+
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--emerald), #059669);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  color: white;
+}
+
+.logo-text span {
+  color: var(--emerald);
+}
+
+.nav-links {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+}
+
+.nav-links a {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.2s;
+  text-decoration: none;
+}
+.nav-links a:hover { color: var(--text); }
+
+.nav-cta {
+  padding: 10px 22px !important;
+  font-size: 13px !important;
+}
+
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 8px;
+}
+
+/* =========================================
+   HERO SECTION
+   ========================================= */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding: 120px 0 80px;
+  overflow: hidden;
+}
+
+/* Background effects */
+.hero-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(42, 42, 74, 0.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(42, 42, 74, 0.25) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 70% 50% at 50% 40%, black 20%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 50% at 50% 40%, black 20%, transparent 100%);
+  pointer-events: none;
+}
+
+.hero-glow-1 {
+  position: absolute;
+  width: 700px;
+  height: 700px;
+  top: -10%;
+  left: -5%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.04) 40%, transparent 70%);
+  pointer-events: none;
+  animation: orbFloat 8s ease-in-out infinite;
+}
+
+.hero-glow-2 {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  bottom: -15%;
+  right: -5%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(16, 185, 129, 0.05) 40%, transparent 70%);
+  pointer-events: none;
+  animation: orbFloat 10s ease-in-out infinite reverse;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(20px, -20px) scale(1.05); }
+  66%  { transform: translate(-15px, 10px) scale(0.97); }
+}
+
+.hero .container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+}
+
+.hero-content {
+  max-width: 600px;
+}
+
+.hero-badge {
+  background: var(--emerald-dim);
+  color: var(--emerald);
+  border: 1px solid var(--emerald-border);
+  margin-bottom: 28px;
+}
+
+.hero h1 {
+  font-size: clamp(36px, 5vw, 60px);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -2px;
+  margin-bottom: 24px;
+}
+
+.hero h1 .highlight {
+  color: var(--emerald);
+}
+
+.hero-subtitle {
+  font-size: 18px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 36px;
+  max-width: 500px;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.hero-trust {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.trust-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-elevated), var(--surface));
+  border: 2px solid var(--emerald-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.trust-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.trust-text strong {
+  color: var(--text);
+}
+
+/* Phone Mockup */
+.hero-visual {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.phone-mockup {
+  width: 320px;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 40px;
+  padding: 12px;
+  box-shadow: var(--shadow-xl), 0 0 80px rgba(16, 185, 129, 0.06);
+  position: relative;
+}
+
+.phone-screen {
+  background: var(--bg);
+  border-radius: 30px;
+  overflow: hidden;
+}
+
+.phone-notch {
+  width: 100px;
+  height: 24px;
+  background: var(--bg-card);
+  border-radius: 0 0 16px 16px;
+  margin: 0 auto;
+}
+
+.phone-status-bar {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 20px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.phone-dashboard {
+  padding: 16px;
+}
+
+.phone-greeting {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.phone-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 2px 0 14px;
+}
+
+/* Compliance ring in phone */
+.compliance-ring-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.ring-svg {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 6;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: var(--emerald);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 188.5;
+  stroke-dashoffset: 18.85;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 1.5s ease-out;
+}
+
+.ring-text {
+  font-size: 18px;
+  font-weight: 800;
+  fill: var(--text);
+}
+
+.ring-label-text {
+  font-size: 8px;
+  font-weight: 600;
+  fill: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ring-details {
+  flex: 1;
+}
+
+.ring-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ring-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.ring-stat {
+  font-size: 10px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ring-stat .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-green { background: var(--emerald); }
+.dot-amber { background: var(--amber); }
+.dot-red { background: var(--red); }
+.dot-blue { background: var(--blue); }
+
+/* Credential items in phone */
+.phone-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.phone-credential {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
+.cred-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cred-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.cred-icon-green { background: rgba(16, 185, 129, 0.15); }
+.cred-icon-amber { background: rgba(245, 158, 11, 0.15); }
+.cred-icon-red { background: rgba(239, 68, 68, 0.15); }
+
+.cred-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cred-detail {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.cred-status {
+  padding: 3px 8px;
+  border-radius: 100px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.status-active { background: rgba(16,185,129,0.15); color: var(--emerald-light); }
+.status-expiring { background: rgba(245,158,11,0.15); color: #fbbf24; }
+.status-expired { background: rgba(239,68,68,0.15); color: #f87171; }
+
+/* Phone tab bar */
+.phone-tabbar {
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 0 6px;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+
+.phone-tab {
+  text-align: center;
+  font-size: 8px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.phone-tab.active { color: var(--emerald); }
+
+.phone-tab-icon {
+  font-size: 16px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* =========================================
+   PROBLEM SECTION
+   ========================================= */
+.problem {
+  padding: 100px 0;
+  position: relative;
+}
+
+.problem-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+
+.problem-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.problem-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  transition: border-color 0.3s;
+}
+.problem-stat-card:hover {
+  border-color: var(--emerald-border);
+}
+
+.problem-stat-number {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--emerald);
+  letter-spacing: -1px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.problem-stat-number.red { color: var(--red); }
+.problem-stat-number.amber { color: var(--amber); }
+
+.problem-stat-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.problem-stat-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.problem-callout {
+  background: var(--red-dim);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin-top: 24px;
+}
+
+.problem-callout p {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.6;
+  font-style: italic;
+}
+
+/* =========================================
+   CREDENTIAL HEALTH SCORE
+   ========================================= */
+.health-score {
+  padding: 100px 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.health-score::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.score-visual {
+  position: relative;
+  display: inline-block;
+  margin: 48px 0 40px;
+}
+
+.score-ring-outer {
+  width: 240px;
+  height: 240px;
+}
+
+.score-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 10;
+}
+
+.score-fill {
+  fill: none;
+  stroke: url(#scoreGradient);
+  stroke-width: 10;
+  stroke-linecap: round;
+  stroke-dasharray: 628.3;
+  stroke-dashoffset: 75.4;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.score-number {
+  font-size: 56px;
+  font-weight: 900;
+  fill: var(--text);
+  letter-spacing: -2px;
+}
+
+.score-percent {
+  font-size: 24px;
+  font-weight: 700;
+  fill: var(--emerald);
+}
+
+.score-label {
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.score-badges {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.score-badge-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.score-badge-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.health-score .section-subtitle {
+  margin: 0 auto 20px;
+  max-width: 500px;
+}
+
+/* =========================================
+   HOW IT WORKS
+   ========================================= */
+.how-it-works {
+  padding: 100px 0;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.how-it-works .section-title,
+.how-it-works .section-subtitle {
+  text-align: center;
+}
+
+.how-it-works .section-subtitle {
+  margin: 0 auto 64px;
+}
+
+.how-it-works .section-label {
+  display: block;
+  text-align: center;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  position: relative;
+}
+
+/* Connector line between steps */
+.steps-grid::before {
+  content: '';
+  position: absolute;
+  top: 56px;
+  left: calc(16.67% + 32px);
+  right: calc(16.67% + 32px);
+  height: 2px;
+  background: linear-gradient(90deg, var(--emerald-border), var(--emerald), var(--emerald-border));
+  z-index: 0;
+}
+
+.step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 36px 28px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s ease;
+}
+.step-card:hover {
+  border-color: var(--emerald-border);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 48px rgba(16, 185, 129, 0.08);
+}
+
+.step-number {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--emerald);
+  color: var(--bg);
+  font-size: 20px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.step-icon {
+  font-size: 32px;
+  margin-bottom: 16px;
+}
+
+.step-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+
+.step-desc {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.step-time {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: var(--emerald-dim);
+  color: var(--emerald);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* =========================================
+   FEATURES / VALUE STACK
+   ========================================= */
+.features {
+  padding: 100px 0;
+}
+
+.features .section-title,
+.features .section-subtitle {
+  text-align: center;
+}
+.features .section-subtitle {
+  margin: 0 auto 64px;
+}
+.features .section-label {
+  display: block;
+  text-align: center;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 48px;
+}
+
+.feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+.feature-card:hover {
+  border-color: var(--emerald-border);
+  transform: translateY(-2px);
+}
+
+.feature-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--emerald), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.feature-card:hover::after { opacity: 1; }
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--emerald-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 16px;
+}
+
+.feature-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: -0.2px;
+}
+
+.feature-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.feature-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.feature-value span {
+  color: var(--emerald);
+}
+
+/* Value stack total */
+.value-stack-total {
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-elevated));
+  border: 1px solid var(--emerald-border);
+  border-radius: var(--radius-xl);
+  padding: 40px;
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.value-stack-total .struck {
+  font-size: 20px;
+  color: var(--text-muted);
+  text-decoration: line-through;
+  margin-bottom: 4px;
+}
+
+.value-stack-total .price {
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--emerald);
+  letter-spacing: -2px;
+}
+
+.value-stack-total .price-period {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.value-stack-total .price-note {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* =========================================
+   LOCUM TENENS SECTION
+   ========================================= */
+.locum {
+  padding: 100px 0;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.locum-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+
+.locum-pain-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 32px 0;
+}
+
+.locum-pain-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.locum-pain-list .check-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--emerald-dim);
+  border: 1px solid var(--emerald-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--emerald);
+  margin-top: 2px;
+}
+
+.locum-visual {
+  position: relative;
+}
+
+.hospital-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.hospital-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.hospital-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.hospital-creds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hospital-cred-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.hospital-cred-name {
+  color: var(--text-secondary);
+}
+
+.hospital-cred-status {
+  padding: 2px 6px;
+  border-radius: 100px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.locum-cta {
+  margin-top: 24px;
+  padding: 20px 24px;
+  background: var(--emerald-dim);
+  border: 1px solid var(--emerald-border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.locum-cta p {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.locum-cta strong {
+  color: var(--emerald);
+}
+
+/* =========================================
+   SOCIAL PROOF
+   ========================================= */
+.social-proof {
+  padding: 100px 0;
+}
+
+.social-proof .section-title,
+.social-proof .section-subtitle {
+  text-align: center;
+}
+.social-proof .section-subtitle {
+  margin: 0 auto 64px;
+}
+.social-proof .section-label {
+  display: block;
+  text-align: center;
+}
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.testimonial-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  transition: border-color 0.3s;
+}
+.testimonial-card:hover { border-color: var(--emerald-border); }
+
+.testimonial-stars {
+  color: var(--amber);
+  font-size: 14px;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
+}
+
+.testimonial-text {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 20px;
+  font-style: italic;
+}
+
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.testimonial-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--surface), var(--bg-elevated));
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--emerald);
+}
+
+.testimonial-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.testimonial-role {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Stats row */
+.proof-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  padding: 40px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.proof-stat {
+  text-align: center;
+}
+
+.proof-stat-number {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--emerald);
+  letter-spacing: -1px;
+  margin-bottom: 4px;
+}
+
+.proof-stat-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* =========================================
+   PRICING
+   ========================================= */
+.pricing {
+  padding: 100px 0;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pricing .section-title,
+.pricing .section-subtitle {
+  text-align: center;
+}
+.pricing .section-subtitle {
+  margin: 0 auto 64px;
+}
+.pricing .section-label {
+  display: block;
+  text-align: center;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.pricing-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 36px 28px;
+  position: relative;
+  transition: all 0.3s;
+}
+.pricing-card:hover {
+  transform: translateY(-4px);
+}
+
+.pricing-card.featured {
+  border-color: var(--emerald);
+  box-shadow: 0 0 0 1px var(--emerald), 0 24px 64px rgba(16, 185, 129, 0.12);
+}
+
+.pricing-popular {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--emerald);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 16px;
+  border-radius: var(--radius-full);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.pricing-name {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.pricing-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.pricing-price {
+  margin-bottom: 24px;
+}
+
+.pricing-amount {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: -2px;
+}
+
+.pricing-amount.free {
+  font-size: 36px;
+  color: var(--text-secondary);
+}
+
+.pricing-period {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.pricing-annual {
+  font-size: 13px;
+  color: var(--emerald);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.pricing-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.pricing-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pricing-features .check {
+  color: var(--emerald);
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pricing-features .x-mark {
+  color: var(--text-muted);
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pricing-cta {
+  width: 100%;
+}
+
+/* =========================================
+   GUARANTEE
+   ========================================= */
+.guarantee {
+  padding: 80px 0;
+}
+
+.guarantee-box {
+  max-width: 800px;
+  margin: 0 auto;
+  background: var(--bg-card);
+  border: 1px solid var(--emerald-border);
+  border-radius: var(--radius-xl);
+  padding: 48px;
+  display: flex;
+  gap: 32px;
+  align-items: center;
+}
+
+.guarantee-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--emerald-dim);
+  border: 2px solid var(--emerald-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  flex-shrink: 0;
+}
+
+.guarantee-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 12px;
+  letter-spacing: -0.5px;
+}
+
+.guarantee-text {
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.guarantee-text strong {
+  color: var(--text);
+}
+
+/* =========================================
+   FAQ
+   ========================================= */
+.faq {
+  padding: 100px 0;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.faq .section-title {
+  text-align: center;
+}
+.faq .section-label {
+  display: block;
+  text-align: center;
+}
+
+.faq-grid {
+  max-width: 800px;
+  margin: 48px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.faq-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+.faq-item:hover { border-color: var(--emerald-border); }
+
+.faq-question {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font);
+  transition: color 0.2s;
+}
+.faq-question:hover { color: var(--emerald); }
+
+.faq-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+
+.faq-item.open .faq-toggle {
+  background: var(--emerald-dim);
+  color: var(--emerald);
+  transform: rotate(45deg);
+}
+
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.faq-item.open .faq-answer {
+  max-height: 300px;
+}
+
+.faq-answer-inner {
+  padding: 0 24px 20px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* =========================================
+   FINAL CTA
+   ========================================= */
+.final-cta {
+  padding: 120px 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.final-cta::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 800px;
+  height: 400px;
+  background: radial-gradient(ellipse, rgba(16, 185, 129, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.final-cta .section-title {
+  max-width: 700px;
+  margin: 0 auto 20px;
+}
+
+.final-cta .section-subtitle {
+  margin: 0 auto 40px;
+  max-width: 500px;
+}
+
+.final-cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* =========================================
+   FOOTER
+   ========================================= */
+footer {
+  padding: 48px 0 32px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg);
+}
+
+.footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-brand {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.footer-brand span {
+  color: var(--emerald);
+}
+
+.footer-copy {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.footer-links {
+  display: flex;
+  gap: 24px;
+}
+
+.footer-links a {
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+.footer-links a:hover { color: var(--text-secondary); }
+
+/* =========================================
+   RESPONSIVE
+   ========================================= */
+@media (max-width: 1024px) {
+  .hero .container {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  .hero-visual {
+    order: -1;
+  }
+
+  .phone-mockup {
+    width: 280px;
+  }
+
+  .steps-grid::before { display: none; }
+
+  .features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .locum-grid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  .testimonials-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    max-width: 420px;
+  }
+
+  .proof-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .mobile-menu-btn { display: block; }
+
+  .hero {
+    min-height: auto;
+    padding: 100px 0 60px;
+  }
+
+  .hero h1 {
+    font-size: 32px;
+    letter-spacing: -1px;
+  }
+
+  .hero-subtitle { font-size: 16px; }
+
+  .hero-buttons { flex-direction: column; }
+  .hero-buttons .btn-primary,
+  .hero-buttons .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .problem-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .steps-grid { grid-template-columns: 1fr; gap: 16px; }
+  .step-card { padding: 28px 24px; }
+
+  .features-grid { grid-template-columns: 1fr; }
+
+  .testimonials-grid { grid-template-columns: 1fr; }
+
+  .guarantee-box {
+    flex-direction: column;
+    text-align: center;
+    padding: 32px 24px;
+    gap: 24px;
+  }
+
+  .section-title {
+    font-size: 28px;
+    letter-spacing: -1px;
+  }
+
+  .footer-inner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .proof-stats { grid-template-columns: repeat(2, 1fr); }
+
+  .hospital-cards { grid-template-columns: 1fr; }
+
+  .value-stack-total { padding: 28px 20px; }
+  .value-stack-total .price { font-size: 36px; }
+}
+
+@media (max-width: 480px) {
+  .container { padding: 0 16px; }
+  .phone-mockup { width: 260px; }
+  .pricing-grid { max-width: 100%; }
+}
+
+/* =========================================
+   ANIMATIONS
+   ========================================= */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: all 0.6s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.animate-on-scroll.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Ring animation */
+@keyframes ringFill {
+  from { stroke-dashoffset: 188.5; }
+}
+
+.ring-fill {
+  animation: ringFill 1.5s ease-out forwards;
+}
+
+/* Subtle pulse on the compliance score */
+@keyframes pulseGlow {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.2)); }
+  50% { filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.4)); }
+}
+
+.score-visual svg {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+.state-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; text-decoration: none; transition: border-color .15s, transform .15s; }
+.state-card:hover { border-color: var(--emerald); background: var(--bg-card-hover); transform: translateY(-2px); }
+.state-card-name { font-weight: 700; color: var(--text); font-size: 15px; }
+.state-card-meta { font-size: 12.5px; color: var(--text-secondary); }
+</style>
+
+<!-- ============ LOCUMS PAGE ADDITIONS ============ -->
+<style>
+/* Nav: mark the current page */
+.nav-links a.current { color: var(--emerald); font-weight: 700; }
+
+/* FAQ answers on this page run longer than the homepage's */
+.faq-item.open .faq-answer { max-height: 620px; }
+
+/* ---------- HERO ---------- */
+.locums-hero {
+  position: relative;
+  padding: 150px 0 90px;
+  overflow: hidden;
+}
+.locums-hero .container {
+  display: grid;
+  grid-template-columns: 1.02fr 0.98fr;
+  gap: 56px;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+}
+.locums-hero h1 {
+  font-size: clamp(34px, 4.6vw, 54px);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -2px;
+  margin-bottom: 22px;
+}
+.locums-hero h1 .highlight { color: var(--emerald); }
+.locums-hero .hero-subtitle { margin-bottom: 28px; max-width: 540px; }
+
+/* Hero visual: block, not the homepage's flex row, and it never jumps above
+   the headline on small screens. */
+.locums-hero .hero-visual { display: block; position: relative; }
+@media (max-width: 1024px) {
+  .locums-hero .hero-visual { order: 0; }
+}
+
+/* ---------- MOCKUP FRAMES ---------- */
+.mock {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  box-shadow: var(--shadow-lg), 0 0 80px rgba(16, 185, 129, 0.05);
+}
+.mock svg { display: block; width: 100%; height: auto; }
+.mock-narrow { max-width: 470px; margin: 0 auto; }
+.mock-wide { max-width: 840px; margin: 0 auto; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.mock-wide svg { min-width: 620px; }
+.mock-cap {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 14px;
+  line-height: 1.6;
+}
+
+/* SVG mockup type tokens */
+.mock svg text { font-family: var(--font); }
+.mk-cap { font-size: 9.5px; font-weight: 800; letter-spacing: 0.7px; fill: var(--text-muted); }
+.mk-h   { font-size: 13px;  font-weight: 800; fill: var(--text); letter-spacing: -0.2px; }
+.mk-lg  { font-size: 19px;  font-weight: 800; fill: var(--text); letter-spacing: -0.5px; }
+.mk-md  { font-size: 15px;  font-weight: 800; fill: var(--text); letter-spacing: -0.3px; }
+.mk-b   { font-size: 10.5px; font-weight: 600; fill: var(--text-secondary); }
+.mk-v   { font-size: 11.5px; font-weight: 800; fill: var(--text); }
+.mk-s   { font-size: 9.5px; font-weight: 600; fill: var(--text-muted); }
+.mk-chip-t { font-size: 9px; font-weight: 800; letter-spacing: 0.3px; }
+.mk-em  { fill: var(--emerald); }
+.mk-eml { fill: var(--emerald-light); }
+.mk-am  { fill: #fbbf24; }
+.mk-rd  { fill: #f87171; }
+.mk-urg { fill: #f97316; }   /* statusColor(): <= 30 days */
+.mk-wrn { fill: #eab308; }   /* statusColor(): <= 90 days; cmePctColor(): 75-99% */
+.mk-cmelo { fill: #ef4444; } /* cmePctColor(): under 75% */
+.mk-bl  { fill: #60a5fa; }
+.mk-screen { fill: var(--bg); }
+.mk-card  { fill: var(--bg-card); stroke: var(--border); stroke-width: 1; }
+.mk-row   { fill: var(--bg-elevated); stroke: var(--border); stroke-width: 1; }
+.mk-rowg  { fill: rgba(16, 185, 129, 0.06); stroke: var(--emerald-border); stroke-width: 1; }
+.mk-rowa  { fill: rgba(245, 158, 11, 0.07); stroke: rgba(245, 158, 11, 0.35); stroke-width: 1; }
+.mk-rowr  { fill: rgba(239, 68, 68, 0.07); stroke: rgba(239, 68, 68, 0.35); stroke-width: 1; }
+.mk-rowu  { fill: rgba(249, 115, 22, 0.07); stroke: rgba(249, 115, 22, 0.35); stroke-width: 1; }
+.mk-roww  { fill: rgba(234, 179, 8, 0.07); stroke: rgba(234, 179, 8, 0.35); stroke-width: 1; }
+.mk-pill  { fill: rgba(16, 185, 129, 0.15); }
+.mk-pilla { fill: rgba(245, 158, 11, 0.15); }
+.mk-pillr { fill: rgba(239, 68, 68, 0.15); }
+.mk-pilln { fill: var(--surface); }
+.mk-btn   { fill: var(--emerald); }
+.mk-rule  { stroke: var(--border-subtle); stroke-width: 1; }
+.mk-num   { font-variant-numeric: tabular-nums; }
+
+/* ---------- ALTERNATING TWO-COLUMN BLOCKS ---------- */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
+  margin-top: 56px;
+}
+.two-col + .two-col { margin-top: 72px; }
+@media (min-width: 1025px) {
+  .two-col.rev .col-mock { order: -1; }
+}
+.col-text { max-width: 560px; }
+.col-text h3 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  margin-bottom: 14px;
+}
+.col-text > p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.bullets { list-style: none; display: flex; flex-direction: column; gap: 13px; margin-top: 22px; }
+.bullets li { display: flex; gap: 11px; font-size: 14.5px; color: var(--text-secondary); line-height: 1.6; }
+.bullets li svg { flex-shrink: 0; margin-top: 5px; }
+.bullets strong { color: var(--text); font-weight: 700; }
+
+/* ---------- PAIN LIST ---------- */
+.pain-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  margin-top: 44px;
+}
+.pain-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red);
+  border-radius: var(--radius-md);
+  padding: 22px 24px;
+}
+.pain-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.2px; }
+.pain-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
+
+/* ---------- NOTE / CITATION BLOCKS ---------- */
+.note-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--emerald);
+  border-radius: var(--radius-md);
+  padding: 22px 24px;
+  margin-top: 32px;
+}
+.note-card h3 { font-size: 15px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.2px; }
+.note-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+.note-card p + p { margin-top: 10px; }
+.note-card.amber { border-left-color: var(--amber); }
+
+.cite-strip {
+  margin-top: 24px;
+  padding: 16px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.cite-strip strong { color: var(--text-secondary); font-weight: 700; }
+
+/* ---------- COMPARISON TABLE ---------- */
+.cmp-wrap {
+  margin-top: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table.cmp { border-collapse: collapse; width: 100%; min-width: 760px; }
+table.cmp th, table.cmp td {
+  padding: 15px 18px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.55;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+table.cmp thead th {
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: var(--bg-elevated);
+}
+table.cmp thead th.us { color: var(--emerald); }
+table.cmp td.job { color: var(--text); font-weight: 700; width: 28%; }
+table.cmp td { color: var(--text-secondary); }
+table.cmp td.us { color: var(--text); background: rgba(16, 185, 129, 0.04); font-weight: 600; }
+table.cmp tbody tr:last-child td { border-bottom: none; }
+
+/* ---------- SETUP STEPS ---------- */
+.setup-list { counter-reset: step; list-style: none; margin-top: 40px; display: flex; flex-direction: column; gap: 14px; }
+.setup-list li {
+  counter-increment: step;
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+}
+.setup-list li::before {
+  content: counter(step);
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--emerald-dim);
+  border: 1px solid var(--emerald-border);
+  color: var(--emerald);
+  font-size: 13px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.setup-list strong { color: var(--text); font-weight: 700; }
+.setup-list span { font-size: 14.5px; color: var(--text-secondary); line-height: 1.65; }
+
+/* ---------- BETA CARD ---------- */
+.beta-card {
+  max-width: 640px;
+  margin: 44px auto 0;
+  background: var(--bg-card);
+  border: 1px solid var(--emerald-border);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px;
+  text-align: center;
+}
+.beta-card h3 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 10px; }
+.beta-card p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+
+/* ---------- AUTHOR ---------- */
+.author-box {
+  max-width: 760px;
+  margin: 44px auto 0;
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 30px;
+}
+.author-box p { font-size: 15px; color: var(--text-secondary); line-height: 1.75; }
+.author-box p + p { margin-top: 12px; }
+.author-mark {
+  flex-shrink: 0;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-elevated), var(--surface));
+  border: 2px solid var(--emerald-border);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ---------- WHERE IT LIVES ---------- */
+.lives-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+.lives-card { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 18px 20px; }
+.lives-card .lives-path { font-size: 12px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: var(--emerald); margin-bottom: 8px; }
+.lives-card p { font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; }
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 1024px) {
+  .locums-hero { padding: 120px 0 70px; }
+  .locums-hero .container { grid-template-columns: 1fr; gap: 44px; }
+  .locums-hero .hero-subtitle { max-width: 100%; }
+  .two-col { grid-template-columns: 1fr; gap: 36px; }
+  .lives-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .locums-hero h1 { font-size: 32px; letter-spacing: -1px; }
+  .pain-grid { grid-template-columns: 1fr; }
+  .col-text h3 { font-size: 20px; }
+  .author-box { flex-direction: column; }
+  .setup-list li { padding: 18px 18px; gap: 14px; }
+}
+</style>
+
+</head>
+
+<body>
+
+<!-- ============ NAVIGATION ============ -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-mark">D</div>
+      <div class="logo-text">Credential<span>DOMD</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/locums" class="current" aria-current="page">For Locums</a>
+      <a href="/states/">Renewal Guides</a>
+      <a href="#faq">FAQ</a>
+      <a href="/app/">Sign in</a>
+      <a href="#beta" class="btn-primary nav-cta">Get Early Access</a>
+    </div>
+    <button class="mobile-menu-btn" aria-label="Open menu" onclick="document.querySelector('.nav-links').classList.toggle('mobile-open')">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="locums-hero" id="hero">
+  <div class="hero-bg-grid"></div>
+  <div class="hero-glow-1"></div>
+  <div class="hero-glow-2"></div>
+
+  <div class="container">
+    <div class="hero-content">
+      <div class="badge hero-badge">For locum tenens physicians</div>
+
+      <h1>Every agency gives you an app. <span class="highlight">None of them can tell you what you made this year.</span></h1>
+
+      <p class="hero-subtitle">
+        One ledger across every agency and every state you work in. The license that has to stay current, the invoice nobody chased, and the quarterly estimate that comes out of both, in one place. Built and used by a practicing neurosurgeon who works locums.
+      </p>
+
+      <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+        <input type="email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
+          style="flex: 1; min-width: 220px; padding: 15px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
+          onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
+        <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
+          style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
+        <button type="submit" class="btn-primary" style="padding: 15px 24px; font-size: 16px; border: none; cursor: pointer; white-space: nowrap;">
+          Request beta access
+        </button>
+      </form>
+      <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
+      <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); margin-bottom: 22px;">
+        <span>Free beta &middot; every feature on &middot; no card</span>
+        <a href="#tax" style="white-space: nowrap;">See the tax engine &rarr;</a>
+      </div>
+
+      <div class="hero-trust">
+        <div class="trust-avatar">
+          <svg width="20" height="20" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="trust-text">
+          <strong>The beta is invite-only.</strong> Getting on the list is how you get in.
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-visual">
+      <!-- MOCKUP: cross-agency year to date -->
+      <div class="mock mock-narrow">
+        <svg viewBox="0 0 440 556" role="img" aria-label="App screen showing year-to-date billing consolidated across four locum agencies, with an overdue invoice and a tax set-aside rate">
+          <rect x="0" y="0" width="440" height="556" rx="16" class="mk-screen"/>
+
+          <text x="20" y="30" class="mk-cap">YEAR TO DATE &middot; 2026</text>
+          <rect x="330" y="16" width="94" height="20" rx="10" class="mk-pill"/>
+          <text x="377" y="30" text-anchor="middle" class="mk-chip-t mk-em">4 AGENCIES</text>
+
+          <rect x="16" y="44" width="408" height="86" rx="12" class="mk-row"/>
+          <text x="32" y="68" class="mk-s">BILLED</text>
+          <text x="32" y="98" class="mk-lg mk-num">$342,180</text>
+          <text x="32" y="118" class="mk-s">14 invoices</text>
+          <text x="170" y="68" class="mk-s">COLLECTED</text>
+          <text x="170" y="98" class="mk-lg mk-em mk-num">$296,940</text>
+          <text x="170" y="118" class="mk-s">11 paid in full</text>
+          <text x="304" y="68" class="mk-s">AWAITING</text>
+          <text x="304" y="98" class="mk-lg mk-am mk-num">$45,240</text>
+          <text x="304" y="118" class="mk-s">3 open</text>
+
+          <text x="20" y="154" class="mk-cap">BY AGENCY</text>
+
+          <rect x="16" y="162" width="408" height="44" rx="10" class="mk-row"/>
+          <text x="30" y="181" class="mk-v">Weatherby Healthcare</text>
+          <text x="30" y="196" class="mk-s">Sanford Medical Center Fargo &middot; ND</text>
+          <text x="410" y="181" text-anchor="end" class="mk-v mk-num">$148,900</text>
+          <text x="410" y="196" text-anchor="end" class="mk-s mk-num">collected $132,400</text>
+
+          <rect x="16" y="214" width="408" height="44" rx="10" class="mk-row"/>
+          <text x="30" y="233" class="mk-v">MPLT Healthcare</text>
+          <text x="30" y="248" class="mk-s">Great Plains Health &middot; NE</text>
+          <text x="410" y="233" text-anchor="end" class="mk-v mk-num">$96,300</text>
+          <text x="410" y="248" text-anchor="end" class="mk-s mk-num">collected $88,540</text>
+
+          <rect x="16" y="266" width="408" height="44" rx="10" class="mk-row"/>
+          <text x="30" y="285" class="mk-v">CompHealth</text>
+          <text x="30" y="300" class="mk-s">Valley Presbyterian &middot; CA</text>
+          <text x="410" y="285" text-anchor="end" class="mk-v mk-num">$61,480</text>
+          <text x="410" y="300" text-anchor="end" class="mk-s mk-num">collected $52,600</text>
+
+          <rect x="16" y="318" width="408" height="44" rx="10" class="mk-row"/>
+          <text x="30" y="337" class="mk-v">Avera Health (direct)</text>
+          <text x="30" y="352" class="mk-s">Sioux Falls &middot; SD</text>
+          <text x="410" y="337" text-anchor="end" class="mk-v mk-num">$35,500</text>
+          <text x="410" y="352" text-anchor="end" class="mk-s mk-num">collected $23,400</text>
+
+          <rect x="16" y="374" width="408" height="42" rx="10" class="mk-rowa"/>
+          <circle cx="34" cy="395" r="4" fill="#fbbf24"/>
+          <text x="48" y="391" class="mk-v mk-am">INV-2026-041 is 34 days out</text>
+          <text x="48" y="405" class="mk-s">Weatherby &middot; partially paid</text>
+          <text x="410" y="399" text-anchor="end" class="mk-md mk-am mk-num">$1,531.25</text>
+
+          <rect x="16" y="424" width="408" height="48" rx="10" class="mk-rowg"/>
+          <text x="30" y="445" class="mk-v">Set aside on every payment</text>
+          <text x="30" y="461" class="mk-s">S-corp &middot; resident CO &middot; work states ND, CA, SD, NE</text>
+          <text x="410" y="456" text-anchor="end" class="mk-lg mk-em mk-num">26%</text>
+
+          <line x1="16" y1="490" x2="424" y2="490" class="mk-rule"/>
+          <text x="32" y="516" class="mk-md mk-num">9</text>
+          <text x="32" y="532" class="mk-s">states licensed</text>
+          <text x="170" y="516" class="mk-md mk-num">24</text>
+          <text x="170" y="532" class="mk-s">licenses &amp; registrations</text>
+          <text x="304" y="516" class="mk-md mk-num">1,486</text>
+          <text x="304" y="532" class="mk-s">wRVU logged</text>
+        </svg>
+      </div>
+      <p class="mock-cap">Example data. Four agencies, one year, one number. No agency app can build this screen, because it can only see its own assignments.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ THE PROBLEM ============ -->
+<section class="problem" id="problem" style="padding: 100px 0;">
+  <div class="container">
+    <div class="animate-on-scroll">
+      <div class="section-label">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        The actual week
+      </div>
+      <h2 class="section-title">The work is one career. The records are in nine places.</h2>
+      <p class="section-subtitle">Nothing here is a product gap in any one tool. It is what happens when four companies each hand you a portal scoped to their own contracts.</p>
+    </div>
+
+    <div class="pain-grid">
+      <div class="pain-card animate-on-scroll">
+        <h3>Four agencies, four portals, no total</h3>
+        <p>Each agency app manages that agency's assignments, time and pay. None of them can show the year: what you billed everywhere, what is still unpaid, what you owe in tax because of it.</p>
+      </div>
+      <div class="pain-card animate-on-scroll">
+        <h3>Nine states on nine renewal clocks</h3>
+        <p>Different cycles, different CME hour counts, different mandated topics, different fees. A lapse does not cost you a fee, it costs you the assignment while credentialing restarts.</p>
+      </div>
+      <div class="pain-card animate-on-scroll">
+        <h3>An August invoice nobody chased</h3>
+        <p>An agency paid $5,500 of a $7,031 invoice and the ledger in your head marked it paid. An unpaid balance is invisible until someone goes looking, and nobody is looking.</p>
+      </div>
+      <div class="pain-card animate-on-scroll">
+        <h3>A quarterly estimate guessed at 30 percent</h3>
+        <p>You worked in four states and live in a fifth. Guess high and cash sits idle all year. Guess low and you pay a penalty for the privilege.</p>
+      </div>
+    </div>
+
+    <div class="note-card animate-on-scroll" style="max-width: 900px;">
+      <h3>The tool you are actually using is a spreadsheet, and it is a reasonable tool</h3>
+      <p>CompHealth tells you to keep an Excel or Google sheet of licenses and expiration dates. Locumstory tells you to keep a sheet of assignments and hours for quarterly taxes. That advice is not wrong. A spreadsheet is a good list.</p>
+      <p>It does three things badly, and they are the three that cost money. It does not remind you. It does not do the multistate math. And it cannot attach the hotel receipt to the line on the invoice, so the proof follows in a second email or not at all.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MULTI-STATE LICENSE MATRIX ============ -->
+<section class="matrix" id="licenses" style="padding: 100px 0; background: var(--bg-elevated); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center; margin-bottom: 8px;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+        One row per state
+      </div>
+      <h2 class="section-title">Your license expires on a state's schedule, not your assignment's.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Nine states means nine cycles, nine CME requirements and nine sets of mandated topics. The matrix puts all of it on one screen so a lapse is something you saw coming.</p>
+    </div>
+
+    <div class="animate-on-scroll" style="margin-top: 44px;">
+      <!-- MOCKUP: multi-state license matrix -->
+      <div class="mock mock-wide">
+        <svg viewBox="0 0 780 372" role="img" aria-label="Multi-state license matrix showing five of nine licensed states with license numbers, days to expiry, DEA status, CME hours logged against the requirement, and hospital privileges">
+          <rect x="0" y="0" width="780" height="372" rx="14" class="mk-screen"/>
+
+          <text x="20" y="30" class="mk-cap">CREDENTIALS &rsaquo; MATRIX</text>
+          <rect x="420" y="16" width="156" height="20" rx="10" class="mk-pilln"/>
+          <text x="498" y="30" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">SHOWING 5 OF 9 STATES</text>
+          <rect x="586" y="16" width="176" height="20" rx="10" class="mk-pilln"/>
+          <text x="674" y="30" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">CME SHOWN: AOA TRACK (DO)</text>
+
+          <text x="30" y="58" class="mk-cap">STATE</text>
+          <text x="96" y="58" class="mk-cap">LICENSE</text>
+          <text x="250" y="58" class="mk-cap">EXPIRES</text>
+          <text x="380" y="58" class="mk-cap">DEA</text>
+          <text x="470" y="58" class="mk-cap">CME LOGGED</text>
+          <text x="610" y="58" class="mk-cap">PRIVILEGES</text>
+          <line x1="16" y1="66" x2="764" y2="66" class="mk-rule"/>
+
+          <rect x="16" y="72" width="748" height="44" rx="10" class="mk-rowu"/>
+          <text x="30" y="100" class="mk-md">AZ</text>
+          <text x="96" y="91" class="mk-v mk-num">DO-8815</text>
+          <text x="96" y="105" class="mk-s">Osteopathic Board</text>
+          <text x="250" y="91" class="mk-v mk-urg">9 days</text>
+          <text x="250" y="105" class="mk-s">Sep 21, 2026</text>
+          <text x="380" y="91" class="mk-v">Active</text>
+          <text x="380" y="105" class="mk-s">exp Jun 2028</text>
+          <text x="470" y="91" class="mk-v mk-cmelo mk-num">18 / 40 h</text>
+          <text x="470" y="105" class="mk-s">needs opioid</text>
+          <text x="610" y="91" class="mk-v">1 hospital</text>
+          <text x="610" y="105" class="mk-s">reappt Apr 2027</text>
+
+          <rect x="16" y="122" width="748" height="44" rx="10" class="mk-roww"/>
+          <text x="30" y="150" class="mk-md">CA</text>
+          <text x="96" y="141" class="mk-v mk-num">A-118902</text>
+          <text x="96" y="155" class="mk-s">Medical Board of CA</text>
+          <text x="250" y="141" class="mk-v mk-wrn">47 days</text>
+          <text x="250" y="155" class="mk-s">Oct 29, 2026</text>
+          <text x="380" y="141" class="mk-v">Active</text>
+          <text x="380" y="155" class="mk-s">exp Mar 2027</text>
+          <text x="470" y="141" class="mk-v mk-em mk-num">50 / 50 h</text>
+          <text x="470" y="155" class="mk-s">requirement met</text>
+          <text x="610" y="141" class="mk-v">1 hospital</text>
+          <text x="610" y="155" class="mk-s">reappt Jun 2027</text>
+
+          <rect x="16" y="172" width="748" height="44" rx="10" class="mk-row"/>
+          <text x="30" y="200" class="mk-md">CO</text>
+          <text x="96" y="191" class="mk-v mk-num">DO-0018344</text>
+          <text x="96" y="205" class="mk-s">resident state</text>
+          <text x="250" y="191" class="mk-v mk-em">97 days</text>
+          <text x="250" y="205" class="mk-s">Dec 18, 2026</text>
+          <text x="380" y="191" class="mk-v">Active</text>
+          <text x="380" y="205" class="mk-s">exp Nov 2027</text>
+          <text x="470" y="191" class="mk-v mk-wrn mk-num">24 / 30 h</text>
+          <text x="470" y="205" class="mk-s">needs substance use, 2 h</text>
+          <text x="610" y="191" class="mk-v">1 hospital</text>
+          <text x="610" y="205" class="mk-s">reappt Nov 2026</text>
+
+          <rect x="16" y="222" width="748" height="44" rx="10" class="mk-row"/>
+          <text x="30" y="250" class="mk-md">ND</text>
+          <text x="96" y="241" class="mk-v mk-num">12447</text>
+          <text x="96" y="255" class="mk-s">Board of Medicine</text>
+          <text x="250" y="241" class="mk-v mk-em">191 days</text>
+          <text x="250" y="255" class="mk-s">Mar 22, 2027</text>
+          <text x="380" y="241" class="mk-v">Active</text>
+          <text x="380" y="255" class="mk-s">exp Jun 2028</text>
+          <text x="470" y="241" class="mk-v mk-wrn mk-num">36 / 40 h</text>
+          <text x="470" y="255" class="mk-s">4 h short, no topic gap</text>
+          <text x="610" y="241" class="mk-v">2 hospitals</text>
+          <text x="610" y="255" class="mk-s">reappt Mar 2027</text>
+
+          <rect x="16" y="272" width="748" height="44" rx="10" class="mk-row"/>
+          <text x="30" y="300" class="mk-md">TX</text>
+          <text x="96" y="291" class="mk-v mk-num">R-90214</text>
+          <text x="96" y="305" class="mk-s">Texas Medical Board</text>
+          <text x="250" y="291" class="mk-v mk-em">289 days</text>
+          <text x="250" y="305" class="mk-s">Jun 28, 2027</text>
+          <text x="380" y="291" class="mk-v mk-am">Not registered</text>
+          <text x="380" y="305" class="mk-s">no DEA in TX</text>
+          <text x="470" y="291" class="mk-v mk-wrn mk-num">38 / 48 h</text>
+          <text x="470" y="305" class="mk-s">needs 2 h ethics</text>
+          <text x="610" y="291" class="mk-v">0 privileges</text>
+          <text x="610" y="305" class="mk-s">not credentialed yet</text>
+
+          <line x1="16" y1="330" x2="764" y2="330" class="mk-rule"/>
+          <text x="20" y="352" class="mk-s">One row per state you hold, soonest expiry first. Showing 5 of 9; Nebraska and three others sit further out. CME branches on MD versus DO.</text>
+        </svg>
+      </div>
+      <p class="mock-cap">Example data. Wide on a phone: swipe the matrix sideways.</p>
+    </div>
+
+    <div class="two-col animate-on-scroll" style="margin-top: 56px;">
+      <div class="col-text">
+        <h3>What a row actually contains</h3>
+        <ul class="bullets">
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>License number and days to expiry.</strong> Not a date you have to subtract from today.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>The DEA registration in that state</strong>, which is its own registration and its own expiry.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>CME hours logged against that state's requirement</strong>, with the unmet mandated topics named. Eighteen of forty is a number. Needs opioid prescribing is an instruction.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Hospital privileges in that state</strong> and the earliest reappointment date across them.</span></li>
+        </ul>
+      </div>
+      <div class="col-mock">
+        <div class="note-card" style="margin-top: 0;">
+          <h3>The fees and cycles are cited to the state's own rule</h3>
+          <p>Behind the matrix, each state carries its renewal fee and cycle with a primary citation: Maryland Health Occ. sec. 1-209, 49 Pa. Code 16.13 and 25.231, Wisconsin DSPS RDAF rev. 08/07/2025, and so on, including the compact processing fee where a state's renewal carries one.</p>
+          <p style="margin-top: 14px;"><a href="/states/">Read the free renewal guide for your state &rarr;</a></p>
+        </div>
+        <div class="cite-strip">
+          <strong>Fifty states for licenses and CME.</strong> The 50-state claim on this page is about credential tracking only. Tax modeling is a shorter list and is named honestly further down.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ THE CREDENTIALING PACKET ============ -->
+<section class="packet" id="packet" style="padding: 90px 0;">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center; margin-bottom: 8px;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M3 8l9 6 9-6M3 8v10a1 1 0 001 1h16a1 1 0 001-1V8M3 8l9-5 9 5"/></svg>
+        The same 12 documents, again
+      </div>
+      <h2 class="section-title">Forward the credentialer's email. Reply with the packet.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Every new assignment asks for the same set: driver's license, state licenses, DEA, board certification, ACLS and BLS, immunization records, COI. The request does not have to become its own project.</p>
+    </div>
+
+    <div class="lives-grid" style="margin-top: 44px;">
+      <div class="lives-card animate-on-scroll">
+        <div class="lives-path">1. Forward it in</div>
+        <p>Send the credentialer's request to <strong style="color: var(--text);">docs@credentialdomd.com</strong>. It lands in your requests inbox as a card, with whatever they attached.</p>
+      </div>
+      <div class="lives-card animate-on-scroll">
+        <div class="lives-path">2. Pick the documents</div>
+        <p>Select from what you already have on file and reply straight from the app. They go out as real attachments, not links to a portal nobody wants an account for.</p>
+      </div>
+      <div class="lives-card animate-on-scroll">
+        <div class="lives-path">3. The reply comes to you</div>
+        <p>Mail is sent as <strong style="color: var(--text);">Name, DO via CredentialDOMD</strong> with reply-to set to your own inbox, so their answer lands with you and not with us.</p>
+      </div>
+    </div>
+
+    <div class="cite-strip animate-on-scroll" style="max-width: 900px; margin: 24px auto 0; text-align: center;">
+      <strong>The caps, up front:</strong> 10 files and 25 MB per send. Anything past that is left out and named for you after sending, so you find out before the credentialer does.
+    </div>
+  </div>
+</section>
+
+<!-- ============ THE BILLING LOOP ============ -->
+<section class="billing" id="billing" style="padding: 100px 0; background: var(--bg-elevated); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6M20 8a8 8 0 00-14.7-3M4 16a8 8 0 0014.7 3"/></svg>
+        Contract to payment
+      </div>
+      <h2 class="section-title">The signed agreement sets the rates. Everything downstream uses them.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Upload the paper once. After that the day is priced, the invoice is built and the payment is tracked from the same set of numbers, so the invoice and the contract cannot drift apart.</p>
+    </div>
+
+    <!-- 1. CONTRACT SCAN -->
+    <div class="two-col animate-on-scroll">
+      <div class="col-text">
+        <h3>Upload the agreement and it reads out the terms</h3>
+        <p>PDF, photo, Word or Excel. The scanner pulls the pay model, day rate, call stipend, the hours the stipend covers, the overage rate, orientation rates, coverage date blocks, billing increment, the minimum per call, and a per-hospital call rate grid, then fills the contract form for you to review.</p>
+        <ul class="bullets">
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>The extraction prompt is built around the mistakes that ruin billing data. It will not file a per-diem figure as an hourly rate.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>It will not read <strong>24-hour call period</strong> as <strong>24 included hours</strong>, which is the single most expensive misreading in locum billing.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>It will not derive a rate by dividing an annual target. If the number is not in the agreement, it does not invent one.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>Each agreement also carries the state where the work physically happens, which is what routes that money to the right state at tax time.</span></li>
+        </ul>
+      </div>
+      <div class="col-mock">
+        <!-- MOCKUP: contract scan readout -->
+        <div class="mock mock-narrow">
+          <svg viewBox="0 0 460 596" role="img" aria-label="Contract screen showing terms extracted from an uploaded locum agreement, including call stipend, included hours, overage rate, coverage dates and a per-hospital call rate grid">
+            <rect x="0" y="0" width="460" height="596" rx="16" class="mk-screen"/>
+
+            <text x="20" y="30" class="mk-cap">LOCUM &rsaquo; CONTRACTS</text>
+            <rect x="356" y="16" width="88" height="20" rx="10" class="mk-pill"/>
+            <text x="400" y="30" text-anchor="middle" class="mk-chip-t mk-em">SCANNED</text>
+
+            <rect x="16" y="44" width="428" height="44" rx="10" class="mk-row"/>
+            <rect x="28" y="54" width="24" height="24" rx="6" fill="var(--emerald-dim)" stroke="var(--emerald-border)"/>
+            <path d="M34 60h12M34 66h12M34 72h8" stroke="var(--emerald)" stroke-width="1.6" fill="none"/>
+            <text x="62" y="64" class="mk-v">Locum Agreement (signed).pdf</text>
+            <text x="62" y="79" class="mk-s">Weatherby Healthcare &middot; 6 pages &middot; uploaded Sep 2</text>
+
+            <text x="20" y="112" class="mk-cap">READ FROM THE AGREEMENT</text>
+
+            <rect x="16" y="120" width="428" height="32" rx="8" class="mk-row"/>
+            <text x="30" y="140" class="mk-b">Pay model</text>
+            <text x="428" y="140" text-anchor="end" class="mk-v">Call stipend + overage</text>
+
+            <rect x="16" y="156" width="428" height="32" rx="8" class="mk-row"/>
+            <text x="30" y="176" class="mk-b">Call stipend, 24 h period</text>
+            <text x="428" y="176" text-anchor="end" class="mk-v mk-num">$1,900.00</text>
+
+            <rect x="16" y="192" width="428" height="32" rx="8" class="mk-rowg"/>
+            <text x="30" y="212" class="mk-b">Hours included in the stipend</text>
+            <text x="428" y="212" text-anchor="end" class="mk-v mk-em mk-num">6.0 h</text>
+
+            <rect x="16" y="228" width="428" height="32" rx="8" class="mk-row"/>
+            <text x="30" y="248" class="mk-b">Overage beyond included</text>
+            <text x="428" y="248" text-anchor="end" class="mk-v mk-num">$325.00 / h</text>
+
+            <rect x="16" y="264" width="428" height="32" rx="8" class="mk-row"/>
+            <text x="30" y="284" class="mk-b">Orientation rate</text>
+            <text x="428" y="284" text-anchor="end" class="mk-v mk-num">$150.00 / h</text>
+
+            <rect x="16" y="300" width="428" height="32" rx="8" class="mk-row"/>
+            <text x="30" y="320" class="mk-b">Billing increment</text>
+            <text x="428" y="320" text-anchor="end" class="mk-v">15 min, rounded up</text>
+
+            <rect x="16" y="336" width="428" height="32" rx="8" class="mk-row"/>
+            <text x="30" y="356" class="mk-b">Minimum per call</text>
+            <text x="428" y="356" text-anchor="end" class="mk-v">30 min</text>
+
+            <rect x="16" y="372" width="428" height="32" rx="8" class="mk-row"/>
+            <text x="30" y="392" class="mk-b">Coverage dates</text>
+            <text x="428" y="392" text-anchor="end" class="mk-v">Sep 8 &ndash; Sep 21, 2026</text>
+
+            <rect x="16" y="408" width="428" height="32" rx="8" class="mk-rowg"/>
+            <text x="30" y="428" class="mk-b">Work state (routes the tax)</text>
+            <text x="428" y="428" text-anchor="end" class="mk-v mk-em">North Dakota</text>
+
+            <text x="20" y="464" class="mk-cap">PER-HOSPITAL CALL RATE GRID</text>
+
+            <rect x="16" y="472" width="428" height="40" rx="10" class="mk-row"/>
+            <text x="30" y="490" class="mk-v">Sanford Medical Center Fargo</text>
+            <text x="30" y="504" class="mk-s">primary / backup</text>
+            <text x="428" y="497" text-anchor="end" class="mk-v mk-num">$1,900 / $950</text>
+
+            <rect x="16" y="516" width="428" height="40" rx="10" class="mk-row"/>
+            <text x="30" y="534" class="mk-v">Sanford Bismarck</text>
+            <text x="30" y="548" class="mk-s">primary / backup</text>
+            <text x="428" y="541" text-anchor="end" class="mk-v mk-num">$1,500 / $750</text>
+
+            <text x="20" y="578" class="mk-s">Nothing saves until you confirm. The scanner fills the form, you sign off on it.</text>
+          </svg>
+        </div>
+        <p class="mock-cap">Example data.</p>
+      </div>
+    </div>
+
+    <!-- 2. WORK LOG -->
+    <div class="two-col rev animate-on-scroll">
+      <div class="col-text">
+        <h3>A 24-hour call runs 7am to 7am, and the app knows that</h3>
+        <p>Work logged before 7am belongs to the previous day's call coverage and its stipend, not to the new calendar date. The call day is frozen onto the entry in the timezone where the work happened, so opening the app in another state cannot re-partition your days and re-bill a stipend.</p>
+        <ul class="bullets">
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>One tap when the phone rings, one tap when you are done.</strong> The time rounds up to the contract's billing increment and honors its per-call minimum. The running timer lives on the device, so a refresh does not lose it.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Or say it in one breath.</strong> Dictation returns the work type, date, start and end times, duration and a clean billing description, prefilled for review. It never writes to the ledger on its own.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Overlap and allowance warnings fire when you save</strong>, not at invoice time three weeks later.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>The double-billing guard</strong> checks the date against your coverage blocks and speaks up if your schedule has you at another facility. It warns and never blocks, because you are the authority on where you actually were. Confirming records the override so that day never nags again.</span></li>
+        </ul>
+      </div>
+      <div class="col-mock">
+        <!-- MOCKUP: work log call day -->
+        <div class="mock mock-narrow">
+          <svg viewBox="0 0 460 576" role="img" aria-label="Work log screen for a 7am to 7am call day, showing a running call timer, four logged entries, an overage warning and the priced day total">
+            <rect x="0" y="0" width="460" height="576" rx="16" class="mk-screen"/>
+
+            <text x="20" y="30" class="mk-cap">LOCUM &rsaquo; WORK</text>
+            <rect x="346" y="16" width="98" height="20" rx="10" class="mk-pill"/>
+            <text x="395" y="30" text-anchor="middle" class="mk-chip-t mk-em">CALL DAY</text>
+
+            <rect x="16" y="44" width="428" height="46" rx="10" class="mk-rowg"/>
+            <text x="30" y="65" class="mk-v">Call day: Fri Sep 11</text>
+            <text x="30" y="80" class="mk-s">07:00 Fri &rarr; 07:00 Sat (Central) &middot; Sanford Fargo</text>
+            <text x="428" y="65" text-anchor="end" class="mk-v mk-em mk-num">$1,900</text>
+            <text x="428" y="80" text-anchor="end" class="mk-s">6.0 h included</text>
+
+            <rect x="16" y="98" width="428" height="52" rx="10" class="mk-row"/>
+            <circle cx="44" cy="124" r="15" fill="var(--emerald)"/>
+            <path d="M38 119a2 2 0 012-2h2l2 4-2 2a10 10 0 004 4l2-2 4 2v2a2 2 0 01-2 2 14 14 0 01-12-12z" fill="#0a1014"/>
+            <text x="72" y="119" class="mk-v">Call in progress</text>
+            <text x="72" y="134" class="mk-s">Rounds up to 15 min &middot; 30 min minimum</text>
+            <text x="428" y="129" text-anchor="end" class="mk-md mk-em mk-num">00:12:30</text>
+
+            <text x="20" y="172" class="mk-cap">ENTRIES</text>
+
+            <rect x="16" y="180" width="428" height="44" rx="10" class="mk-row"/>
+            <text x="30" y="199" class="mk-v">Rounds and two floor consults</text>
+            <text x="30" y="214" class="mk-s">07:40 &ndash; 09:25 &middot; Sanford Fargo</text>
+            <text x="428" y="206" text-anchor="end" class="mk-v mk-num">1.75 h</text>
+
+            <rect x="16" y="228" width="428" height="44" rx="10" class="mk-row"/>
+            <text x="30" y="247" class="mk-v">Phone consult, emergency department</text>
+            <text x="30" y="262" class="mk-s">13:20 &ndash; 13:35 &middot; 15 min, billed at the 30 min minimum</text>
+            <text x="428" y="254" text-anchor="end" class="mk-v mk-num">0.50 h</text>
+
+            <rect x="16" y="276" width="428" height="44" rx="10" class="mk-row"/>
+            <text x="30" y="295" class="mk-v">Bedside procedure and re-evaluation</text>
+            <text x="30" y="310" class="mk-s">18:00 &ndash; 21:30</text>
+            <text x="428" y="302" text-anchor="end" class="mk-v mk-num">3.50 h</text>
+
+            <rect x="16" y="324" width="428" height="44" rx="10" class="mk-rowg"/>
+            <text x="30" y="343" class="mk-v">Phone consult, transfer accepted</text>
+            <text x="30" y="358" class="mk-s mk-em">02:10 &ndash; 03:40 Sat &middot; before 07:00, so it counts to Sep 11</text>
+            <text x="428" y="350" text-anchor="end" class="mk-v mk-num">1.50 h</text>
+
+            <rect x="16" y="376" width="428" height="50" rx="10" class="mk-rowa"/>
+            <text x="30" y="397" class="mk-v mk-am">Past the 6.0 included hours by 1.25 h</text>
+            <text x="30" y="412" class="mk-s">7.25 h on the day &middot; 1.25 h at $325.00 overage</text>
+
+            <rect x="16" y="434" width="428" height="54" rx="10" class="mk-rowg"/>
+            <text x="30" y="456" class="mk-v">Day total</text>
+            <text x="30" y="472" class="mk-s">stipend $1,900.00 + overage $406.25</text>
+            <text x="428" y="466" text-anchor="end" class="mk-lg mk-em mk-num">$2,306.25</text>
+
+            <rect x="16" y="496" width="428" height="44" rx="10" class="mk-row"/>
+            <circle cx="36" cy="518" r="5" fill="var(--emerald)"/>
+            <text x="50" y="515" class="mk-b">Coverage confirmed: Sanford Fargo, Sep 8 &ndash; 21</text>
+            <text x="50" y="529" class="mk-s">The guard warns, it never blocks.</text>
+
+            <text x="20" y="554" class="mk-s">Minutes already billed on a prior invoice are stamped per day,</text>
+            <text x="20" y="567" class="mk-s">so re-invoicing the same call day cannot double-charge the stipend.</text>
+          </svg>
+        </div>
+        <p class="mock-cap">Example data.</p>
+      </div>
+    </div>
+
+    <!-- 3. INVOICE -->
+    <div class="two-col animate-on-scroll">
+      <div class="col-text">
+        <h3>Invoices carry a payment ledger, not a paid flag</h3>
+        <p>Pick which days to bill and the app builds an itemized invoice from the contract's own rates: a branded PDF for the hospital AP department, plus Word and Excel versions of the same content for billing offices that re-key everything anyway.</p>
+        <ul class="bullets">
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Agencies pay in pieces, so partial payments count.</strong> Each payment is a line in the ledger and the open balance is the number on the card.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Unpaid invoices age visibly</strong> and pass 30 days as overdue. Total billed, total collected and total awaiting payment sit at the top.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Billing by month is attributed to the day the work was done</strong>, so an invoice spanning two months splits between them instead of landing wherever it was sent.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Delete an invoice and its work comes back.</strong> Entries, duty days and expenses return to unbilled so they can be re-invoiced, with a warning first if another invoice bills the same call day.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>A cover letter is generated and copied to the clipboard, because iOS Mail collapses shared text into a single line.</span></li>
+        </ul>
+      </div>
+      <div class="col-mock">
+        <!-- MOCKUP: invoice with payment ledger -->
+        <div class="mock mock-narrow">
+          <svg viewBox="0 0 460 644" role="img" aria-label="Invoice screen with six itemized lines priced from the contract, a payment ledger with two partial payments, and the remaining open balance marked overdue">
+            <rect x="0" y="0" width="460" height="644" rx="16" class="mk-screen"/>
+
+            <text x="20" y="30" class="mk-cap">LOCUM &rsaquo; INVOICES</text>
+            <rect x="326" y="16" width="118" height="20" rx="10" class="mk-pilla"/>
+            <text x="385" y="30" text-anchor="middle" class="mk-chip-t mk-am">34 DAYS OPEN</text>
+
+            <rect x="16" y="44" width="428" height="52" rx="10" class="mk-row"/>
+            <text x="30" y="68" class="mk-md">INV-2026-041</text>
+            <text x="30" y="84" class="mk-s">Weatherby Healthcare &middot; Sanford Medical Center Fargo</text>
+            <text x="428" y="68" text-anchor="end" class="mk-s">Sent Aug 09</text>
+            <text x="428" y="84" text-anchor="end" class="mk-s">Net 30</text>
+
+            <text x="20" y="118" class="mk-cap">LINES</text>
+
+            <rect x="16" y="126" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="144" class="mk-s mk-num">Aug 03</text>
+            <text x="82" y="144" class="mk-b">Orientation, 4.0 h at $150.00/h</text>
+            <text x="428" y="144" text-anchor="end" class="mk-v mk-num">$600.00</text>
+
+            <rect x="16" y="158" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="176" class="mk-s mk-num">Aug 04</text>
+            <text x="82" y="176" class="mk-b">Call stipend, 24 h (6.0 h included)</text>
+            <text x="428" y="176" text-anchor="end" class="mk-v mk-num">$1,900.00</text>
+
+            <rect x="16" y="190" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="208" class="mk-s mk-num">Aug 05</text>
+            <text x="82" y="208" class="mk-b">Call stipend, 24 h (6.0 h included)</text>
+            <text x="428" y="208" text-anchor="end" class="mk-v mk-num">$1,900.00</text>
+
+            <rect x="16" y="222" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="240" class="mk-s mk-num">Aug 05</text>
+            <text x="82" y="240" class="mk-b">Overage 1.25 h at $325.00/h</text>
+            <text x="428" y="240" text-anchor="end" class="mk-v mk-num">$406.25</text>
+
+            <rect x="16" y="254" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="272" class="mk-s mk-num">Aug 07</text>
+            <text x="82" y="272" class="mk-b">Call stipend, 24 h (6.0 h included)</text>
+            <text x="428" y="272" text-anchor="end" class="mk-v mk-num">$1,900.00</text>
+
+            <rect x="16" y="286" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="304" class="mk-s mk-num">Aug 07</text>
+            <text x="82" y="304" class="mk-b">Overage 1.00 h at $325.00/h</text>
+            <text x="428" y="304" text-anchor="end" class="mk-v mk-num">$325.00</text>
+
+            <line x1="16" y1="326" x2="444" y2="326" class="mk-rule"/>
+            <text x="30" y="348" class="mk-v">Invoice total</text>
+            <text x="428" y="348" text-anchor="end" class="mk-md mk-num">$7,031.25</text>
+
+            <text x="20" y="382" class="mk-cap">PAYMENT LEDGER</text>
+
+            <rect x="16" y="390" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="408" class="mk-s mk-num">Aug 21</text>
+            <text x="82" y="408" class="mk-b">ACH from Weatherby AP</text>
+            <text x="428" y="408" text-anchor="end" class="mk-v mk-em mk-num">$4,000.00</text>
+
+            <rect x="16" y="422" width="428" height="28" rx="7" class="mk-row"/>
+            <text x="30" y="440" class="mk-s mk-num">Sep 04</text>
+            <text x="82" y="440" class="mk-b">ACH, partial remittance</text>
+            <text x="428" y="440" text-anchor="end" class="mk-v mk-em mk-num">$1,500.00</text>
+
+            <rect x="16" y="462" width="428" height="56" rx="10" class="mk-rowa"/>
+            <text x="30" y="484" class="mk-v mk-am">Open balance</text>
+            <text x="30" y="500" class="mk-s">Collected $5,500.00 of $7,031.25</text>
+            <text x="428" y="494" text-anchor="end" class="mk-lg mk-am mk-num">$1,531.25</text>
+
+            <rect x="16" y="526" width="428" height="36" rx="10" class="mk-rowr"/>
+            <circle cx="36" cy="544" r="5" fill="#f87171"/>
+            <text x="50" y="548" class="mk-b mk-rd">Passed 30 days on Sep 08, marked overdue</text>
+
+            <rect x="16" y="570" width="428" height="48" rx="10" class="mk-rowg"/>
+            <text x="30" y="590" class="mk-v">Share as</text>
+            <rect x="90" y="578" width="42" height="18" rx="9" class="mk-pill"/>
+            <text x="111" y="591" text-anchor="middle" class="mk-chip-t mk-em">PDF</text>
+            <rect x="138" y="578" width="52" height="18" rx="9" class="mk-pill"/>
+            <text x="164" y="591" text-anchor="middle" class="mk-chip-t mk-em">WORD</text>
+            <rect x="196" y="578" width="56" height="18" rx="9" class="mk-pill"/>
+            <text x="224" y="591" text-anchor="middle" class="mk-chip-t mk-em">EXCEL</text>
+            <text x="30" y="609" class="mk-s">Cover letter generated and copied to the clipboard.</text>
+
+            <text x="20" y="634" class="mk-s">Lines sort chronologically, with pre-7am work at the tail of its own call day.</text>
+          </svg>
+        </div>
+        <p class="mock-cap">Example data.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DICTATION TO CPT ============ -->
+<section class="rvus" id="rvus" style="padding: 100px 0;">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v2a7 7 0 01-14 0v-2M12 19v4"/></svg>
+        Say it, code it, keep it
+      </div>
+      <h2 class="section-title">Describe the day out loud. Get CPT codes with work RVUs attached.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Every code comes back with units, the CMS work RVU and a one-line reason. You accept, adjust or delete each line before anything saves.</p>
+    </div>
+
+    <div class="two-col animate-on-scroll">
+      <div class="col-text">
+        <h3>The coder can only pick from the app's own catalog</h3>
+        <p>494 codes weighted to neurosurgery and hospital evaluation and management, carrying CMS CY2026 Physician Fee Schedule work RVUs, status and global period, from a generated data file with the source release named in its header. Every code the model returns is re-validated against that catalog, so an invented code is silently dropped rather than saved.</p>
+        <ul class="bullets">
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>The coding rules know the anatomy.</strong> Vertebral segments are counted against interspaces, instrumentation constructs are sized by screw count, and an E/M code is suppressed for routine postoperative care inside a 90-day global.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Dictation mangles surgical shorthand, so it gets fixed first.</strong> "Tea lift", "T-lif" and "a c d f" are normalized to TLIF and ACDF before the coder ever sees them, and a spoken "for yesterday" or "last Tuesday" sets the entry date.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Assistant surgeon modifiers on every line.</strong> An 80, 81 or 82 picker sits on each coded line, and saying you assisted preselects 80 and flags that Medicare pays 16 percent of the fee.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Operative codes file themselves.</strong> A surgery-section code creates a career case log entry with the facility, the CPT string with modifiers and units, and the summed work RVU. An E/M-only encounter correctly does not go, and the app says so and offers a one-tap override for the bedside procedure that should have.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Or skip the AI entirely.</strong> Type a code number or a procedure name and get ranked matches with the work RVU attached, in the capture box or inside any saved encounter.</span></li>
+        </ul>
+      </div>
+      <div class="col-mock">
+        <!-- MOCKUP: dictation to CPT -->
+        <div class="mock mock-narrow">
+          <svg viewBox="0 0 460 768" role="img" aria-label="RVU log screen showing a dictated case turned into six CPT codes with CY2026 work RVUs, three of them added by the construct rule, an assistant modifier picker, the case total and a case log entry">
+            <rect x="0" y="0" width="460" height="768" rx="16" class="mk-screen"/>
+
+            <text x="20" y="30" class="mk-cap">LOCUM &rsaquo; RVUs</text>
+            <rect x="330" y="16" width="114" height="20" rx="10" class="mk-pill"/>
+            <text x="387" y="30" text-anchor="middle" class="mk-chip-t mk-em">CMS CY2026 wRVU</text>
+
+            <rect x="16" y="44" width="428" height="60" rx="10" class="mk-row"/>
+            <text x="32" y="66" class="mk-cap">SEP 10</text>
+            <text x="32" y="90" class="mk-md mk-num">54.42</text>
+            <text x="176" y="66" class="mk-cap">THIS MONTH</text>
+            <text x="176" y="90" class="mk-md mk-num">214.63</text>
+            <text x="316" y="66" class="mk-cap">ALL TIME</text>
+            <text x="316" y="90" class="mk-md mk-num">1,486.20</text>
+
+            <circle cx="44" cy="144" r="16" fill="var(--emerald-dim)" stroke="var(--emerald-border)"/>
+            <path d="M44 137a2.4 2.4 0 00-2.4 2.4v4.6a2.4 2.4 0 004.8 0v-4.6A2.4 2.4 0 0044 137zM39 145v.6a5 5 0 0010 0V145M44 150.6V153" stroke="var(--emerald)" stroke-width="1.5" fill="none"/>
+            <rect x="72" y="116" width="372" height="60" rx="12" fill="var(--emerald)"/>
+            <text x="88" y="140" font-size="10.5" font-weight="600" fill="#0a1014">Two level tea lift L4 to S1 with pedicle screws,</text>
+            <text x="88" y="158" font-size="10.5" font-weight="600" fill="#0a1014">six screws, at Sanford Fargo, for Thursday.</text>
+
+            <rect x="16" y="188" width="150" height="20" rx="10" class="mk-pilln"/>
+            <text x="91" y="202" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">"tea lift" &rarr; TLIF</text>
+            <rect x="174" y="188" width="186" height="20" rx="10" class="mk-pilln"/>
+            <text x="267" y="202" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">"Thursday" &rarr; Sep 10, 2026</text>
+
+            <text x="20" y="230" class="mk-cap">RETURNED, PENDING YOUR REVIEW</text>
+            <rect x="264" y="216" width="180" height="18" rx="9" class="mk-pilln"/>
+            <text x="354" y="229" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">3 ADDED BY CONSTRUCT RULE</text>
+
+            <rect x="16" y="238" width="428" height="52" rx="10" class="mk-row"/>
+            <text x="30" y="260" class="mk-md mk-num">22633</text>
+            <text x="30" y="276" class="mk-s">Arthrodesis with interbody, L4-5, single interspace</text>
+            <text x="428" y="260" text-anchor="end" class="mk-v mk-num">wRVU 26.13</text>
+            <text x="428" y="276" text-anchor="end" class="mk-s">1 unit &middot; accept, edit, delete</text>
+
+            <rect x="16" y="294" width="428" height="52" rx="10" class="mk-row"/>
+            <text x="30" y="316" class="mk-md mk-num">22634</text>
+            <text x="30" y="332" class="mk-s">Each additional interspace, L5-S1, add-on</text>
+            <text x="428" y="316" text-anchor="end" class="mk-v mk-num">wRVU 7.76</text>
+            <text x="428" y="332" text-anchor="end" class="mk-s">1 unit &middot; add-on to 22633</text>
+
+            <rect x="16" y="350" width="428" height="52" rx="10" class="mk-row"/>
+            <text x="30" y="372" class="mk-md mk-num">22842</text>
+            <text x="30" y="388" class="mk-s">Posterior instrumentation, 3 to 6 vertebral segments</text>
+            <text x="428" y="372" text-anchor="end" class="mk-v mk-num">wRVU 12.25</text>
+            <text x="428" y="388" text-anchor="end" class="mk-s">1 unit &middot; 6 screws</text>
+
+            <rect x="16" y="406" width="428" height="52" rx="10" class="mk-row"/>
+            <text x="30" y="428" class="mk-md mk-num">22853</text>
+            <text x="30" y="444" class="mk-s">Biomechanical device, L4-5 and L5-S1</text>
+            <text x="428" y="428" text-anchor="end" class="mk-v mk-num">wRVU 8.28</text>
+            <text x="428" y="444" text-anchor="end" class="mk-s">2 units at 4.14 each</text>
+
+            <rect x="16" y="462" width="428" height="52" rx="10" class="mk-row"/>
+            <text x="30" y="484" class="mk-md mk-num">20930</text>
+            <text x="30" y="500" class="mk-s">Morselized allograft, spine surgery, add-on</text>
+            <text x="428" y="484" text-anchor="end" class="mk-v mk-num">wRVU 0.00</text>
+            <text x="428" y="500" text-anchor="end" class="mk-s">1 unit &middot; status B, bundled</text>
+
+            <rect x="16" y="518" width="428" height="52" rx="10" class="mk-row"/>
+            <text x="30" y="540" class="mk-md mk-num">20936</text>
+            <text x="30" y="556" class="mk-s">Local autograft, same incision, add-on</text>
+            <text x="428" y="540" text-anchor="end" class="mk-v mk-num">wRVU 0.00</text>
+            <text x="428" y="556" text-anchor="end" class="mk-s">1 unit &middot; status B, bundled</text>
+
+            <rect x="16" y="578" width="428" height="46" rx="10" class="mk-row"/>
+            <text x="30" y="598" class="mk-v">Assistant modifier</text>
+            <text x="30" y="613" class="mk-s">Say you assisted and 80 preselects, at 16 percent of the fee.</text>
+            <rect x="322" y="592" width="30" height="18" rx="9" class="mk-pilln"/>
+            <text x="337" y="605" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">80</text>
+            <rect x="358" y="592" width="30" height="18" rx="9" class="mk-pilln"/>
+            <text x="373" y="605" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">81</text>
+            <rect x="394" y="592" width="30" height="18" rx="9" class="mk-pilln"/>
+            <text x="409" y="605" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">82</text>
+
+            <rect x="16" y="632" width="428" height="54" rx="10" class="mk-rowg"/>
+            <text x="30" y="654" class="mk-v">Case total</text>
+            <text x="30" y="670" class="mk-s">26.13 + 7.76 + 12.25 + 8.28 + 0 + 0, six codes</text>
+            <text x="428" y="664" text-anchor="end" class="mk-lg mk-em mk-num">54.42 wRVU</text>
+
+            <rect x="16" y="694" width="428" height="44" rx="10" class="mk-row"/>
+            <path d="M32 716l5 5 10-10" stroke="var(--emerald)" stroke-width="2.5" fill="none"/>
+            <text x="56" y="713" class="mk-b">Filed to the career case log</text>
+            <text x="56" y="727" class="mk-s">Sanford Fargo &middot; 22633, 22634, 22842, 22853 &times;2, 20930, 20936</text>
+
+            <text x="20" y="756" class="mk-s">Every returned code is re-validated against the app's own catalog before it can be saved.</text>
+          </svg>
+        </div>
+        <p class="mock-cap">Example data.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXPENSES AND STATEMENT IMPORT ============ -->
+<section class="expenses" id="expenses" style="padding: 100px 0; background: var(--bg-elevated); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 10h18M7 15h4"/></svg>
+        Receipts and deductions
+      </div>
+      <h2 class="section-title">Two jobs, one screen: bill it to the agency or deduct it.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Flights, hotels, rental cars, rideshares and parking, each with the receipt photo or PDF attached, invoiced to the agency in one tap. Everything else becomes a Schedule C line.</p>
+    </div>
+
+    <div class="two-col rev animate-on-scroll">
+      <div class="col-text">
+        <h3>Upload the card statement and it becomes deduction lines</h3>
+        <p>CSV and Excel parse on the device. PDF and photos go through the scanner. Every row lands in a review screen already categorized, de-duplicated against the ledger you already have, with credits and payments excluded before you approve the batch.</p>
+        <ul class="bullets">
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>A merchant keyword map is the floor and an AI pass categorizes the rest</strong>, so the ledger reaches your CPA sorted rather than as a wall of Other.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>A travel row can be routed to agency billing instead</strong>, and the app refuses to both deduct it and bill it, because that counts the same dollar twice.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>The expense invoice shares with every receipt file attached</strong> alongside the PDF, so the proof travels with the bill instead of following in a second email.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>The deduction memo builds itself from records you already keep.</strong> License renewal fees, DEA registration, malpractice premiums, CME costs and society dues come straight out of your credential records, joined by imported and manual lines, totaled by category, exported to CSV.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>The memo and the tax estimate cannot disagree</strong>, because the deductions derived from your license, insurance, CME and membership records are the same set the estimator subtracts.</span></li>
+        </ul>
+      </div>
+      <div class="col-mock">
+        <!-- MOCKUP: card statement import review -->
+        <div class="mock mock-narrow">
+          <svg viewBox="0 0 460 468" role="img" aria-label="Statement import review screen showing imported card rows auto-categorized, a credit excluded, duplicates skipped, and the year-to-date deduction total">
+            <rect x="0" y="0" width="460" height="468" rx="16" class="mk-screen"/>
+
+            <text x="20" y="30" class="mk-cap">FINANCE &rsaquo; DEDUCTIONS</text>
+            <rect x="292" y="16" width="152" height="20" rx="10" class="mk-pill"/>
+            <text x="368" y="30" text-anchor="middle" class="mk-chip-t mk-em">REVIEW BEFORE SAVE</text>
+
+            <rect x="16" y="44" width="428" height="44" rx="10" class="mk-row"/>
+            <rect x="28" y="54" width="24" height="24" rx="6" fill="var(--emerald-dim)" stroke="var(--emerald-border)"/>
+            <path d="M34 60h12M34 66h12M34 72h8" stroke="var(--emerald)" stroke-width="1.6" fill="none"/>
+            <text x="62" y="64" class="mk-v">Business card statement, August.csv</text>
+            <text x="62" y="79" class="mk-s">42 rows parsed on this device, nothing uploaded</text>
+
+            <text x="20" y="112" class="mk-cap">REVIEW</text>
+
+            <rect x="16" y="120" width="428" height="34" rx="8" class="mk-row"/>
+            <text x="30" y="141" class="mk-s mk-num">08/02</text>
+            <text x="76" y="141" class="mk-v">DELTA AIR LINES</text>
+            <text x="228" y="141" class="mk-s mk-em">Travel &middot; bill to agency</text>
+            <text x="428" y="141" text-anchor="end" class="mk-v mk-num">$412.30</text>
+
+            <rect x="16" y="158" width="428" height="34" rx="8" class="mk-row"/>
+            <text x="30" y="179" class="mk-s mk-num">08/07</text>
+            <text x="76" y="179" class="mk-v">HAMPTON INN FARGO</text>
+            <text x="228" y="179" class="mk-s mk-em">Lodging &middot; bill to agency</text>
+            <text x="428" y="179" text-anchor="end" class="mk-v mk-num">$128.44</text>
+
+            <rect x="16" y="196" width="428" height="34" rx="8" class="mk-row"/>
+            <text x="30" y="217" class="mk-s mk-num">08/18</text>
+            <text x="76" y="217" class="mk-v">ND BOARD OF MEDICINE</text>
+            <text x="228" y="217" class="mk-s">License fees &middot; deduct</text>
+            <text x="428" y="217" text-anchor="end" class="mk-v mk-num">$185.00</text>
+
+            <rect x="16" y="234" width="428" height="34" rx="8" class="mk-row"/>
+            <text x="30" y="255" class="mk-s mk-num">08/20</text>
+            <text x="76" y="255" class="mk-v" fill="var(--text-muted)">PAYMENT THANK YOU</text>
+            <text x="228" y="255" class="mk-s">Credit, excluded</text>
+            <text x="428" y="255" text-anchor="end" class="mk-v mk-num" fill="var(--text-muted)">-$1,900.00</text>
+
+            <rect x="16" y="276" width="428" height="30" rx="8" class="mk-row"/>
+            <text x="30" y="295" class="mk-b">3 rows already in the ledger, skipped as duplicates</text>
+
+            <rect x="16" y="314" width="428" height="46" rx="10" class="mk-rowg"/>
+            <text x="30" y="335" class="mk-v mk-em">Billed to the agency, so not also deducted</text>
+            <text x="30" y="350" class="mk-s">The same dollar is never counted twice.</text>
+
+            <text x="20" y="384" class="mk-cap">DEDUCTION LEDGER, YEAR TO DATE</text>
+
+            <rect x="16" y="392" width="428" height="50" rx="10" class="mk-row"/>
+            <text x="30" y="414" class="mk-v">Total across 5 categories</text>
+            <text x="30" y="430" class="mk-s">Malpractice, licenses and DEA, CME, travel, society dues</text>
+            <text x="428" y="424" text-anchor="end" class="mk-lg mk-num">$34,153</text>
+
+            <text x="20" y="460" class="mk-s">A merchant keyword map runs first. An AI pass categorizes whatever it did not recognize.</text>
+          </svg>
+        </div>
+        <p class="mock-cap">Example data.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MULTISTATE TAX ============ -->
+<section class="tax" id="tax" style="padding: 100px 0;">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        Estimated versus paid
+      </div>
+      <h2 class="section-title">You worked in four states and live in a fifth. Here is what you owe, and to whom.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Income counts when a payment actually lands, gets allocated to the state where the work physically happened, and is modeled as either S-corp with a W-2 salary plus K-1 or sole proprietor on Schedule C.</p>
+    </div>
+
+    <div class="animate-on-scroll" style="margin-top: 44px;">
+      <!-- MOCKUP: multistate tax prep -->
+      <div class="mock mock-wide">
+        <svg viewBox="0 0 780 452" role="img" aria-label="Tax prep screen showing estimated versus paid tax per jurisdiction, an unmodeled state shown as income only, the set-aside rate, and the deduction ledger by category">
+          <rect x="0" y="0" width="780" height="452" rx="14" class="mk-screen"/>
+
+          <text x="20" y="30" class="mk-cap">MORE &rsaquo; FINANCE &rsaquo; TAX PREP</text>
+          <rect x="590" y="16" width="172" height="20" rx="10" class="mk-pilln"/>
+          <text x="676" y="30" text-anchor="middle" class="mk-chip-t" fill="var(--text-secondary)">CASH BASIS &middot; 2026 &middot; SINGLE</text>
+
+          <text x="20" y="58" class="mk-cap">BY JURISDICTION</text>
+          <text x="30" y="78" class="mk-cap">JURISDICTION</text>
+          <text x="300" y="78" text-anchor="end" class="mk-cap">ESTIMATED</text>
+          <text x="372" y="78" text-anchor="end" class="mk-cap">PAID</text>
+          <text x="444" y="78" text-anchor="end" class="mk-cap">REMAINING</text>
+          <line x1="16" y1="86" x2="456" y2="86" class="mk-rule"/>
+
+          <rect x="16" y="92" width="440" height="38" rx="9" class="mk-row"/>
+          <text x="30" y="114" class="mk-v">Federal</text>
+          <text x="30" y="126" class="mk-s">income tax plus payroll &middot; next due Sep 15</text>
+          <text x="300" y="118" text-anchor="end" class="mk-v mk-num">$58,420</text>
+          <text x="372" y="118" text-anchor="end" class="mk-v mk-num">$42,000</text>
+          <text x="444" y="118" text-anchor="end" class="mk-v mk-am mk-num">$16,420</text>
+
+          <rect x="16" y="134" width="440" height="38" rx="9" class="mk-row"/>
+          <text x="30" y="156" class="mk-v">Colorado, resident</text>
+          <text x="30" y="168" class="mk-s">all income, credited for tax paid elsewhere</text>
+          <text x="300" y="160" text-anchor="end" class="mk-v mk-num">$9,110</text>
+          <text x="372" y="160" text-anchor="end" class="mk-v mk-num">$9,110</text>
+          <text x="444" y="160" text-anchor="end" class="mk-v mk-em mk-num">$0</text>
+
+          <rect x="16" y="176" width="440" height="38" rx="9" class="mk-row"/>
+          <text x="30" y="198" class="mk-v">North Dakota, work state</text>
+          <text x="30" y="210" class="mk-s">nonresident, ratio method</text>
+          <text x="300" y="202" text-anchor="end" class="mk-v mk-num">$3,240</text>
+          <text x="372" y="202" text-anchor="end" class="mk-v mk-num">$2,400</text>
+          <text x="444" y="202" text-anchor="end" class="mk-v mk-am mk-num">$840</text>
+
+          <rect x="16" y="218" width="440" height="38" rx="9" class="mk-row"/>
+          <text x="30" y="240" class="mk-v">California, work state</text>
+          <text x="30" y="252" class="mk-s">nonresident, ratio method</text>
+          <text x="300" y="244" text-anchor="end" class="mk-v mk-num">$6,875</text>
+          <text x="372" y="244" text-anchor="end" class="mk-v mk-num">$5,000</text>
+          <text x="444" y="244" text-anchor="end" class="mk-v mk-am mk-num">$1,875</text>
+
+          <rect x="16" y="260" width="440" height="38" rx="9" class="mk-row"/>
+          <text x="30" y="282" class="mk-v">California franchise</text>
+          <text x="30" y="294" class="mk-s">S-corp minimum</text>
+          <text x="300" y="286" text-anchor="end" class="mk-v mk-num">$800</text>
+          <text x="372" y="286" text-anchor="end" class="mk-v mk-num">$800</text>
+          <text x="444" y="286" text-anchor="end" class="mk-v mk-em mk-num">$0</text>
+
+          <rect x="16" y="302" width="440" height="38" rx="9" class="mk-row"/>
+          <text x="30" y="324" class="mk-v">South Dakota, work state</text>
+          <text x="30" y="336" class="mk-s">no state income tax on wages</text>
+          <text x="300" y="328" text-anchor="end" class="mk-v mk-num" fill="var(--text-muted)">$0</text>
+          <text x="372" y="328" text-anchor="end" class="mk-v mk-num" fill="var(--text-muted)">$0</text>
+          <text x="444" y="328" text-anchor="end" class="mk-v mk-num" fill="var(--text-muted)">$0</text>
+
+          <rect x="16" y="344" width="440" height="38" rx="9" class="mk-rowa"/>
+          <text x="30" y="366" class="mk-v mk-am">Nebraska, work state</text>
+          <text x="30" y="378" class="mk-s">state model not loaded yet, income shown only</text>
+          <text x="444" y="372" text-anchor="end" class="mk-v mk-am mk-num">$88,540 sourced</text>
+
+          <rect x="16" y="392" width="440" height="40" rx="10" class="mk-rowg"/>
+          <text x="30" y="412" class="mk-v">110 percent safe harbor, federal</text>
+          <text x="30" y="426" class="mk-s">based on last year's tax &middot; next payment Sep 15</text>
+          <text x="444" y="419" text-anchor="end" class="mk-md mk-em mk-num">$64,180</text>
+
+          <text x="476" y="58" class="mk-cap">SET-ASIDE RATE</text>
+          <rect x="472" y="66" width="292" height="76" rx="10" class="mk-rowg"/>
+          <text x="486" y="103" font-size="28" font-weight="800" class="mk-em mk-num">26%</text>
+          <text x="486" y="120" class="mk-s">of every payment that lands in the account</text>
+          <text x="486" y="134" class="mk-s">30% of gross once employer payroll tax counts</text>
+
+          <text x="476" y="166" class="mk-cap">DEDUCTION LEDGER</text>
+
+          <rect x="472" y="174" width="292" height="30" rx="8" class="mk-row"/>
+          <text x="486" y="193" class="mk-b">Malpractice premium</text>
+          <text x="750" y="193" text-anchor="end" class="mk-v mk-num">$18,400</text>
+
+          <rect x="472" y="208" width="292" height="30" rx="8" class="mk-row"/>
+          <text x="486" y="227" class="mk-b">Travel and lodging</text>
+          <text x="750" y="227" text-anchor="end" class="mk-v mk-num">$6,742</text>
+
+          <rect x="472" y="242" width="292" height="30" rx="8" class="mk-row"/>
+          <text x="486" y="261" class="mk-b">CME and board fees</text>
+          <text x="750" y="261" text-anchor="end" class="mk-v mk-num">$4,120</text>
+
+          <rect x="472" y="276" width="292" height="30" rx="8" class="mk-row"/>
+          <text x="486" y="295" class="mk-b">State licenses and DEA</text>
+          <text x="750" y="295" text-anchor="end" class="mk-v mk-num">$2,986</text>
+
+          <rect x="472" y="310" width="292" height="30" rx="8" class="mk-row"/>
+          <text x="486" y="329" class="mk-b">Society dues</text>
+          <text x="750" y="329" text-anchor="end" class="mk-v mk-num">$1,905</text>
+
+          <rect x="472" y="344" width="292" height="34" rx="9" class="mk-rowg"/>
+          <text x="486" y="365" class="mk-v">Schedule C total</text>
+          <text x="750" y="365" text-anchor="end" class="mk-md mk-em mk-num">$34,153</text>
+
+          <rect x="472" y="392" width="292" height="40" rx="10" class="mk-row"/>
+          <text x="486" y="412" class="mk-b">S-corp: W-2 $180,000 plus K-1</text>
+          <text x="486" y="426" class="mk-s">sole proprietor Schedule C also modeled</text>
+
+          <text x="20" y="446" class="mk-s">Verified against IRS Rev. Proc. 2025-32, FTB 2025 rate schedules and 540 booklet, tax.colorado.gov, and ND Form ND-1ES 2026.</text>
+        </svg>
+      </div>
+      <p class="mock-cap">Example data. Wide on a phone: swipe the panel sideways.</p>
+    </div>
+
+    <div class="two-col animate-on-scroll" style="margin-top: 56px;">
+      <div class="col-text">
+        <h3>What the engine actually does</h3>
+        <ul class="bullets" style="margin-top: 0;">
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Cash basis.</strong> Income counts when a payment actually lands, not when the invoice was sent, which is how your quarterly obligation actually works.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Allocated to where the work happened.</strong> Each agreement carries its work state, so the money follows the contract. Invoices with no contract assigned are named so you can fix them instead of quietly landing in the wrong state.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Federal brackets, standard deduction, and the 199A QBI phase-down</strong> for physician SSTB income by filing status, plus employer and employee payroll tax or self-employment tax depending on the entity.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>Resident state taxed on everything, with a credit for tax paid to work states</strong>, and each nonresident state by the ratio method.</span></li>
+          <li><svg width="12" height="12" fill="none" stroke="var(--emerald)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span><strong>A payment ledger per jurisdiction.</strong> Estimated minus paid equals remaining, on screen, for federal, your resident state, each nonresident work state and the California franchise, with the next due date and the 110 percent safe harbor figure.</span></li>
+        </ul>
+      </div>
+      <div class="col-mock">
+        <div class="note-card amber" style="margin-top: 0;">
+          <h3>The limits, stated here rather than in a footnote</h3>
+          <p><strong style="color: var(--text);">Three states are modeled today:</strong> California, Colorado and North Dakota, plus the nine states with no income tax. Work in any other state shows the income sourced there, labeled state model not loaded yet. It is never estimated with another state's brackets, because a confident wrong number is worse than an honest gap.</p>
+          <p><strong style="color: var(--text);">This is a planning estimate.</strong> Reasonable compensation for an S-corp and final apportionment are your preparer's call. The job here is that you walk into that conversation with the year already sorted.</p>
+        </div>
+        <div class="cite-strip">
+          <strong>Every figure is sourced in the code.</strong> IRS Rev. Proc. 2025-32 (sec. 3.01 rate tables, 3.14 standard deduction, 3.26 QBI thresholds), the FTB 2025 rate schedules and 540 booklet, tax.colorado.gov, and ND Form ND-1ES 2026. Extracted August 16, 2026, and named in the app next to the numbers.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ALSO IN THE LOCUM TAB ============ -->
+<section class="features" id="features" style="padding: 100px 0; background: var(--bg-elevated); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center; margin-bottom: 48px;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+        Also in the locum tab
+      </div>
+      <h2 class="section-title">The rest of it, without the tour</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Six things that ship today and only make sense to someone who has worked a locum contract.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>
+        <h3 class="feature-title">Day-rate duty log</h3>
+        <p class="feature-desc">For agreements that pay per day worked plus a flat rate per accepted call period, one row per date records whether the day was worked and which hospitals were covered as primary or backup, priced from the contract's own rate grid.</p>
+        <div class="feature-value"><span>Detail:</span> several hospitals on one date, each at its own grid rate, with month totals split by hospital and role.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h3 class="feature-title">Schedule view</h3>
+        <p class="feature-desc">Every contracted coverage block across every agreement in date order, marked active, upcoming with a countdown, or done, each carrying the facility, agency, location and call stipend terms.</p>
+        <div class="feature-value"><span>Answers:</span> where am I next, and under whose terms.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v6h-6"/></svg>
+        </div>
+        <h3 class="feature-title">Billing forecast</h3>
+        <p class="feature-desc">Assign future days per contract with an expected amount, project the year forward, and reconcile every past month, estimated against actually billed, over or under.</p>
+        <div class="feature-value"><span>Detail:</span> a call day prices from the historical call-day average of stipend plus overage, never the blended number that orientation days drag down.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.6L19 8.4V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h3 class="feature-title">Contract summary</h3>
+        <p class="feature-desc">Tap an agreement's name and see everything it produced: billed and collected, the days and hours on the ground, the RVUs logged, the cases done there, and the signed agreement itself.</p>
+        <div class="feature-value"><span>Answers:</span> was that assignment actually worth it.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <h3 class="feature-title">Right contract by default</h3>
+        <p class="feature-desc">The RVU log defaults to the agreement whose coverage period contains the entry date, and a contract you picked manually stops holding as soon as the date moves outside its term.</p>
+        <div class="feature-value"><span>Prevents:</span> a day logged against the agreement you happened to use last.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+        <h3 class="feature-title">Interrupted-work to do</h3>
+        <p class="feature-desc">A call comes in mid-case. Capture it in one line and move on. When you come back, enter the real start and end times and it becomes a billable work entry.</p>
+        <div class="feature-value"><span>Detail:</span> the capture time is only a reminder of when it came in. It never decides what gets billed.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COMPARISON ============ -->
+<section class="comparison" id="comparison" style="padding: 100px 0;">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+        Next to what you already use
+      </div>
+      <h2 class="section-title">Not a replacement for your agency. A replacement for the spreadsheet.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">The agency app is good at what it is for. So is the sheet. These are the jobs neither one can do, listed as jobs rather than features.</p>
+    </div>
+
+    <div class="cmp-wrap animate-on-scroll">
+      <table class="cmp">
+        <thead>
+          <tr>
+            <th scope="col">The job</th>
+            <th scope="col">Your agency's app</th>
+            <th scope="col">Spreadsheet and Drive</th>
+            <th scope="col" class="us">CredentialDoMD</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="job">Show every agency at once</td>
+            <td>Only its own assignments</td>
+            <td>Only what you kept typing</td>
+            <td class="us">Billed, collected and awaiting across every agency and direct contract</td>
+          </tr>
+          <tr>
+            <td class="job">Warn you before a license or DEA lapses</td>
+            <td>Not its job</td>
+            <td>No reminders at all</td>
+            <td class="us">Days remaining on every state you hold, with unmet CME topics named</td>
+          </tr>
+          <tr>
+            <td class="job">Price a day from your signed agreement</td>
+            <td>Its own rates, its own timesheet</td>
+            <td>You redo the math each time</td>
+            <td class="us">Reads the agreement, then prices stipend, included hours and overage on a 7am call day</td>
+          </tr>
+          <tr>
+            <td class="job">Track a partial payment on one invoice</td>
+            <td>Its remittance, not your ledger</td>
+            <td>A cell you have to remember to edit</td>
+            <td class="us">A payment ledger per invoice, with the open balance on the card and aging past 30 days</td>
+          </tr>
+          <tr>
+            <td class="job">Tell you what you owe and to whom</td>
+            <td>No</td>
+            <td>No</td>
+            <td class="us">Federal, resident state and each work state, estimated minus paid, per jurisdiction</td>
+          </tr>
+          <tr>
+            <td class="job">Keep the receipt with the bill</td>
+            <td>Reimbursement submission, one agency at a time</td>
+            <td>In a Drive folder somewhere</td>
+            <td class="us">Receipt files go out attached to the expense invoice itself</td>
+          </tr>
+          <tr>
+            <td class="job">Hand your CPA a clean ledger in March</td>
+            <td>One 1099 per agency</td>
+            <td>Whatever you typed</td>
+            <td class="us">Categorized deduction ledger as CSV, plus billing by month attributed to the work date</td>
+          </tr>
+          <tr>
+            <td class="job">Stop a day being logged to the wrong contract</td>
+            <td>Cannot see your other contracts</td>
+            <td>No</td>
+            <td class="us">Checks the date against your coverage blocks and warns, without blocking you</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mock-cap" style="margin-top: 16px;">Wide on a phone: swipe the table sideways.</p>
+  </div>
+</section>
+
+<!-- ============ PRIVACY ============ -->
+<section class="privacy" id="privacy" style="padding: 90px 0; background: var(--bg-elevated); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        No PHI by design
+      </div>
+      <h2 class="section-title">There is no HIPAA claim here, because there is no patient data here.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">The app holds credential paperwork and billing data. That is a deliberate design choice, not a gap waiting to be filled.</p>
+    </div>
+
+    <div class="lives-grid" style="margin-top: 44px;">
+      <div class="lives-card animate-on-scroll">
+        <div class="lives-path">The private vault</div>
+        <p>The note saying which patient a two-minute phone call was about stays in this device's own storage and is never uploaded. The billing description that reaches the invoice stays free of identifiers. Dictation routes any patient name it hears into the private note rather than the synced billing field.</p>
+      </div>
+      <div class="lives-card animate-on-scroll">
+        <div class="lives-path">The trade, stated plainly</div>
+        <p>Those private notes do not follow you to another device. The app says so, in the app. The only way to make them follow you is to send them to a server, and that is exactly the thing this design refuses to do.</p>
+      </div>
+      <div class="lives-card animate-on-scroll">
+        <div class="lives-path">The upload guard</div>
+        <p>The document scanner warns when an upload reads like a chart rather than a credential, because the fastest way to create a PHI problem is to photograph the wrong page in a hurry.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SETUP ============ -->
+<section class="setup" id="setup" style="padding: 100px 0;">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Nine states, four contracts
+      </div>
+      <h2 class="section-title">About 45 minutes, most of it confirming what the scanner already filled in.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Not "minutes". You are moving a career's worth of records, and the honest number is under an hour because almost nothing is typed by hand.</p>
+    </div>
+
+    <ol class="setup-list animate-on-scroll" style="max-width: 860px; margin-left: auto; margin-right: auto;">
+      <li><span><strong>Photograph the credentials.</strong> Each state license, each DEA registration, board certificates, ACLS and BLS cards, malpractice COI. The scanner reads the type, issuing authority, number, issue date and expiry, and you confirm.</span></li>
+      <li><span><strong>Upload each signed agreement.</strong> The scanner reads out the pay model, day rate, call stipend, included hours, overage rate, orientation rates, billing increment, per-call minimum, coverage dates and the per-hospital call grid.</span></li>
+      <li><span><strong>Set the work state on each contract.</strong> One field per agreement. It is the field that routes your income to the right state for the rest of the year.</span></li>
+      <li><span><strong>Import last month's business card statement.</strong> CSV or Excel parses on the device, PDF or a photo goes through the scanner, and the rows come back categorized and de-duplicated for you to approve as a batch.</span></li>
+      <li><span><strong>Then stop setting up.</strong> The next credentialer email gets forwarded to your requests inbox. The next call gets a timer tap. The next agreement gets uploaded when it is signed.</span></li>
+    </ol>
+
+    <div class="animate-on-scroll" style="max-width: 860px; margin: 40px auto 0;">
+      <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 6px;">Where each of these lives</h3>
+      <div class="lives-grid" style="margin-top: 18px;">
+        <div class="lives-card">
+          <div class="lives-path">Locum tab</div>
+          <p>Work, RVUs, Sched., Invoices, Contracts, Exp. and To do.</p>
+        </div>
+        <div class="lives-card">
+          <div class="lives-path">More &rsaquo; Finance</div>
+          <p>Tax Prep and the Deduction Memo, including the statement import.</p>
+        </div>
+        <div class="lives-card">
+          <div class="lives-path">Credentials &rsaquo; Matrix</div>
+          <p>The multi-state license, DEA, CME and privilege matrix.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BETA ACCESS ============ -->
+<section class="pricing" id="beta" style="padding: 100px 0; background: var(--bg-elevated); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M15 7h3a5 5 0 010 10h-3m-6 0H6A5 5 0 016 7h3m-1 5h8"/></svg>
+        Invite-only beta
+      </div>
+      <h2 class="section-title">Free beta. Every feature on. No card.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Access is invited from the list, which is how the beta stays small enough to fix things quickly.</p>
+    </div>
+
+    <div class="beta-card animate-on-scroll">
+      <h3>Request access</h3>
+      <p style="margin-bottom: 22px;">One email when your invite is ready. Paid pricing is being finalized, and every beta member sees the number before anything is ever charged.</p>
+      <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+        <input type="email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
+          style="flex: 1; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
+          onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
+        <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
+          style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
+        <button type="submit" class="btn-primary" style="padding: 16px 28px; font-size: 16px; border: none; cursor: pointer;">
+          Request beta access
+        </button>
+      </form>
+      <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 22px; margin-top: 12px;"></div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">30 seconds &middot; no card &middot; founding-member perks by signup order</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="faq" id="faq">
+  <div class="container">
+    <div class="animate-on-scroll">
+      <div class="section-label">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M8.2 9a3.8 3.8 0 017.4 1.2c0 2.5-3.8 3.8-3.8 3.8M12 18h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        Straight answers
+      </div>
+      <h2 class="section-title">The questions locums actually ask</h2>
+    </div>
+
+    <div class="faq-grid">
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          I already track this in a spreadsheet. What does this do that the spreadsheet cannot?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Three things. It reminds you before a license or DEA registration lapses. It does the multistate math, allocating collected income to the state where the work physically happened and crediting your resident state for tax paid elsewhere. And it keeps the receipt attached to the expense, so the proof goes out with the bill instead of following in a second email. A spreadsheet is a fine list. It is not a system that acts.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          My agency invoices for me and my CPA does my taxes. What is left for me?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          The agency ledger covers that agency's assignments. Your CPA sees the year in March. Neither one tells you in September that an August invoice is still short by $1,531. This is your own copy of the record, and in March it hands the preparer a categorized deduction ledger as CSV plus billing by month attributed to the day the work was done.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Can I trust the tax numbers?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          The 2026 figures are verified against IRS Rev. Proc. 2025-32, the FTB 2025 rate schedules and 540 booklet, tax.colorado.gov, and ND Form ND-1ES 2026, extracted August 16, 2026. The sources are named in the app next to the numbers, not buried in a changelog. It is a planning estimate: reasonable compensation for an S-corp and final apportionment are your preparer's call.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Which states have a tax model today?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          California, Colorado and North Dakota, plus the nine states with no income tax: Alaska, Florida, Nevada, New Hampshire, South Dakota, Tennessee, Texas, Washington and Wyoming. Work in any other state shows the income sourced there and is labeled state model not loaded yet. It is never estimated with another state's brackets. License and CME tracking, separately, covers all 50 states.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Is my patient data safe? Is this HIPAA compliant?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          There is no HIPAA compliance claim, because the design is no PHI at all. The app holds credential paperwork and billing data. The note saying which patient a phone call was about stays in that device's own storage and is never uploaded, and the billing description that reaches the invoice stays free of identifiers. The scanner warns when an upload reads like a chart rather than a credential. The trade is stated in the app: those private notes do not follow you to another device.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          What does it cost?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Right now it is a free invite beta with every feature on and no card. Paid pricing is being finalized, and every beta member sees the number before anything is ever charged.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          How long does setup take with nine states and four contracts?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Budget about 45 minutes, most of it confirming what the scanner already filled in. Photograph each license, DEA registration and board certificate. Upload each signed agreement and let it read out the pay model, rates, included hours, overage and coverage dates. Set the work state on each contract. Import last month's card statement. Then forward the next credentialer email to the requests inbox instead of hunting through your files.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Can I get my data out?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Invoices export as a branded PDF plus Word and Excel versions of the same content for billing offices that re-key. Expense invoices go out with every receipt file attached. The Schedule C deduction memo exports to CSV for your accountant. Document packets go out as real email attachments, up to 10 files and 25 MB per send.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Does it work in a rural hospital with no signal?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          It installs as a Progressive Web App and your data is cached on the device, so you can pull up a license number in a hospital basement. The running call timer lives on the device too, so a refresh or an app close does not lose it.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          I do locums part time alongside a W-2 job. Does this still apply?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Yes. The entity models are the same at any volume: S-corp with a W-2 salary plus K-1, or sole proprietor on Schedule C with self-employment tax. Income is still allocated to the state where the work physically happened, and the deduction ledger still pulls your license, DEA, malpractice, CME and society costs whether you take four weeks of locums a year or fifty.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Does the CPT coder know every CPT code?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          No. The catalog is 494 codes weighted to neurosurgery and hospital evaluation and management, carrying CMS CY2026 Physician Fee Schedule work RVUs, status and global period. The AI coder can only pick from that catalog and every code it returns is re-validated against it, so an invented code is dropped rather than saved.
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHO BUILT IT ============ -->
+<section class="author" id="author" style="padding: 90px 0;">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Who built it
+      </div>
+      <h2 class="section-title">Customer number one is a practicing neurosurgeon</h2>
+    </div>
+
+    <div class="author-box animate-on-scroll">
+      <div class="author-mark">
+        <svg width="22" height="22" fill="none" stroke="var(--emerald)" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div>
+        <p>Eric Whitney, DO, is a board-certified neurosurgeon who works locum contracts and built this because the spreadsheet stopped holding. The billing vocabulary in the work log came out of his own agreements: call stipends with included hours, overage past them, per-hospital primary and backup grids, a call day that starts at 7am.</p>
+        <p>Features get cut when they do not match reality. Flat hourly shift blocks were removed outright, because his contracts are stipend and call based and a feature nobody's contract uses is a feature that makes the app harder to read. When the reference material behind a number turns out to be wrong, that gets flagged in the app rather than quietly smoothed over.</p>
+        <p style="color: var(--text-muted); font-size: 14px;">That is authorship, not a testimonial. There are no customer reviews on this page, because there are none to quote yet.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINAL CTA ============ -->
+<section class="final-cta" id="get-started">
+  <div class="container">
+    <div class="animate-on-scroll">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        One list, one email
+      </div>
+      <h2 class="section-title">Somewhere in your files is an invoice that was never paid in full.</h2>
+      <p class="section-subtitle">Get on the list, and the first thing the app does is tell you which one it is.</p>
+
+      <div class="final-cta-buttons">
+        <a href="#beta" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
+          Get Early Access
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+        </a>
+      </div>
+
+      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">Free beta, every feature on, no card. Founding-member perks for the earliest names on the list.</p>
+    </div>
+  </div>
+</section>
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-left">
+        <div class="footer-brand">Credential<span>DOMD</span></div>
+        <div class="footer-copy">&copy; 2026 CredentialDOMD. All rights reserved.</div>
+      </div>
+      <div class="footer-links">
+        <a href="/states/">License Renewal by State</a>
+        <a href="/app/privacy">Privacy Policy</a>
+        <a href="/app/terms">Terms of Service</a>
+        <a href="mailto:support@credentialdomd.com">Contact</a>
+        <a href="mailto:support@credentialdomd.com">Support</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ SCRIPTS ============ -->
+<script>
+// Early-access waitlist → same-origin /api relay (Cloudflare Worker) with
+// direct-Supabase fallback. One binder covers every .wl-form on the page
+// (hero quick-join + full form). Honeypot is flag-and-send, never drop.
+// Both paths call the rate-limited RPCs waitlist_signup / waitlist_attempt
+// (anon cannot insert into the tables directly); payload keys are the RPC
+// argument names (p_email, p_name, ...). 400 = bad address, 409 = already
+// listed, 429 = throttled.
+(function() {
+  var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
+  var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
+  var loadedAt = Date.now();
+
+  var postSignup = function(apiPath, rpcName, payload) {
+    var direct = function() {
+      return fetch(SUPABASE_URL + '/rest/v1/rpc/' + rpcName, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON },
+        body: JSON.stringify(payload), keepalive: true
+      });
+    };
+    return fetch(apiPath, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), keepalive: true
+    }).then(function(res) {
+      if (res.status === 404 || res.status === 405 || res.status >= 500) return direct();
+      return res;
+    }).catch(direct);
+  };
+
+  var forms = document.querySelectorAll('.wl-form');
+  Array.prototype.forEach.call(forms, function(form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var emailEl = form.querySelector('.wl-email');
+      var nameEl = form.querySelector('.wl-name');
+      var hpEl = form.querySelector('.wl-hp');
+      var msg = form.parentElement.querySelector('.wl-msg') || form.querySelector('.wl-msg');
+      var btn = form.querySelector('button[type="submit"]');
+      var email = (emailEl && emailEl.value || '').trim();
+      var name = (nameEl && nameEl.value || '').trim();
+      if (!email) return;
+
+      var flags = [];
+      if (hpEl && (hpEl.value || '').trim()) flags.push('honeypot');
+      if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
+      var noteFlags = flags.length ? flags.join(',') : null;
+      var payload = { p_email: email, p_name: name || null, p_source: window.location.pathname || '/', p_note: noteFlags };
+
+      // Attempt trace lands BEFORE the real insert. A failed signup still
+      // leaves the email behind for follow-up.
+      try {
+        postSignup('/api/waitlist-attempt', 'waitlist_attempt',
+          { p_email: email, p_name: name || null, p_source: payload.p_source, p_stage: noteFlags || 'normal' }).catch(function() {});
+      } catch (err) {}
+
+      if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Joining\u2026'; }
+      if (msg) msg.textContent = '';
+
+      postSignup('/api/waitlist', 'waitlist_signup', payload).then(function(res) {
+        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
+        if (!msg) return;
+        if (res.ok) {
+          msg.style.color = 'var(--emerald)';
+          msg.textContent = "You're on the list. Check your email for your founding number.";
+          form.reset();
+        } else if (res.status === 409) {
+          msg.style.color = 'var(--emerald)';
+          msg.textContent = "You're already on the list. We've got you.";
+        } else if (res.status === 429) {
+          msg.style.color = 'var(--amber, #f59e0b)';
+          msg.textContent = 'The list is busy right now. Try again in a few minutes.';
+        } else {
+          msg.style.color = 'var(--amber, #f59e0b)';
+          msg.textContent = "That didn't go through. Check the address and try again.";
+        }
+      }).catch(function() {
+        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
+        if (msg) {
+          msg.style.color = 'var(--amber, #f59e0b)';
+          msg.textContent = 'Connection hiccup. Please try again.';
+        }
+      });
+    });
+  });
+})();
+
+// FAQ toggle
+function toggleFaq(btn) {
+  const item = btn.closest('.faq-item');
+  const wasOpen = item.classList.contains('open');
+
+  // Close all
+  document.querySelectorAll('.faq-item.open').forEach(function(openItem) {
+    openItem.classList.remove('open');
+  });
+
+  // Toggle clicked
+  if (!wasOpen) {
+    item.classList.add('open');
+  }
+}
+
+// Scroll animations (Intersection Observer)
+(function() {
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, {
+    threshold: 0.1,
+    rootMargin: '0px 0px -40px 0px'
+  });
+
+  document.querySelectorAll('.animate-on-scroll').forEach(function(el) {
+    observer.observe(el);
+  });
+})();
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
+  anchor.addEventListener('click', function(e) {
+    e.preventDefault();
+    var target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// Nav scroll effect
+(function() {
+  var nav = document.querySelector('nav');
+  var lastScroll = 0;
+
+  window.addEventListener('scroll', function() {
+    var currentScroll = window.pageYOffset;
+    if (currentScroll > 50) {
+      nav.style.background = 'rgba(10, 16, 20, 0.95)';
+      nav.style.borderBottomColor = 'rgba(33, 54, 63, 0.8)';
+    } else {
+      nav.style.background = 'rgba(10, 16, 20, 0.8)';
+      nav.style.borderBottomColor = 'rgba(23, 38, 46, 1)';
+    }
+    lastScroll = currentScroll;
+  });
+})();
+</script>
+
+<!-- Mobile nav styles (injected to keep CSS section clean) -->
+<style>
+@media (max-width: 768px) {
+  .nav-links {
+    display: none;
+    position: fixed;
+    top: 68px;
+    left: 0;
+    right: 0;
+    background: rgba(10, 16, 20, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    flex-direction: column;
+    padding: 24px;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    z-index: 999;
+  }
+
+  .nav-links.mobile-open {
+    display: flex;
+  }
+
+  .nav-links a {
+    font-size: 16px;
+    padding: 8px 0;
+  }
+
+  .nav-cta {
+    width: 100%;
+    text-align: center;
+    padding: 14px 24px !important;
+    font-size: 15px !important;
+  }
+}
+</style>
+
+</body>
+</html>
