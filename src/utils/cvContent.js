@@ -1,4 +1,5 @@
 import { formatDate } from "./helpers";
+import { websiteLabel } from "./contactFormat";
 
 /**
  * The one place a CV's shape is decided. Preview, plain text, and PDF all
@@ -70,7 +71,7 @@ export function buildCvContent(data, template = "clinical") {
       fullDegree,
       address: s.address || "",
       email: s.email,
-      website: s.website || "",
+      website: websiteLabel(s.website),
       phone: s.phone,
       npi: "", // NPI lives in the License section, as on the paper CV
       specialties: s.specialties || [],

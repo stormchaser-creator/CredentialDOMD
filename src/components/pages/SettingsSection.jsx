@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, memo } from "react";
-import { formatPhone, emailProblem } from "../../utils/contactFormat";
+import { formatPhone, emailProblem, websiteLabel } from "../../utils/contactFormat";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Field from "../shared/Field";
@@ -310,7 +310,12 @@ function SettingsSection() {
             style={iS} placeholder="(555) 123-4567" />
         </Field>
         <Field label="Address" hint="Appears on your CV header"><input name="address" autoComplete="street-address" value={s.address || ""} onChange={e => update("address", e.target.value)} style={iS} placeholder="Street, City, ST ZIP" /></Field>
-        <Field label="Website" hint="Personal or practice site — CV header"><input name="website" value={s.website || ""} onChange={e => update("website", e.target.value)} style={iS} placeholder="e.g. DrYourName.com" /></Field>
+        <Field label="Website" hint="Personal or practice site, shown on your CV header">
+          <input name="website" value={s.website || ""}
+            onChange={e => update("website", e.target.value)}
+            onBlur={e => { const c = websiteLabel(e.target.value); if (c !== e.target.value) update("website", c); }}
+            style={iS} placeholder="e.g. DrYourName.com" />
+        </Field>
         <Field label="Languages" hint="e.g. Fluent in Spanish"><input value={s.languages || ""} onChange={e => update("languages", e.target.value)} style={iS} placeholder="Languages beyond English" /></Field>
         <Field label="Professional Summary" hint="Opening paragraph of your CV"><textarea value={s.professionalSummary || ""} onChange={e => update("professionalSummary", e.target.value)} style={{ ...iS, minHeight: 96, resize: "vertical", fontFamily: "inherit" }} placeholder="Board-certified neurosurgeon with…" /></Field>
         <Field label="CV Highlight Line" hint="One bold line under the summary — books, projects, distinctions"><input value={s.cvHighlights || ""} onChange={e => update("cvHighlights", e.target.value)} style={iS} placeholder="e.g. Author of two books" /></Field>

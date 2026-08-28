@@ -47,6 +47,43 @@ export function phoneDigits(input) {
   return "";
 }
 
+/**
+ * A website has two correct forms and they are not the same one.
+ *
+ * On a printed CV the clean host reads best ("DrEricWhitney.com"), and a
+ * physician typing it in rarely includes a scheme. A link needs the scheme
+ * or the browser resolves it against the current page. Storing one form and
+ * deriving the other keeps the CV clean and the link working, whichever way
+ * it was typed.
+ */
+
+/** Display form: no scheme, no www, no trailing slash. */
+export function websiteLabel(input) {
+  const v = String(input || "").trim();
+  if (!v) return "";
+  return v
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")  // drop any scheme
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "");
+}
+
+/**
+ * Link form: always https unless the user explicitly asked for http.
+ * Returns "" when the value could not be a host, so callers render plain
+ * text rather than a broken anchor.
+ */
+export function websiteHref(input) {
+  const v = String(input || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v)) return v;
+  // Anything with another scheme (javascript:, data:) is not a website.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return "";
+  const host = websiteLabel(v);
+  // Needs at least one dot and no spaces to be a plausible host.
+  if (!host || /\s/.test(host) || !host.includes(".")) return "";
+  return `https://${host}`;
+}
+
 // Deliberately permissive on the local part (real addresses contain +, ', and
 // plenty else) and strict only where mistakes actually happen: a missing or
 // obviously incomplete domain.
