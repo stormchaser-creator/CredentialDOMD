@@ -139,6 +139,7 @@ const SETTINGS_TO_PROFILE = {
   profilePhoto: "profile_photo",
   theme: "theme",
   fontSize: "font_size",
+  showDashboardCredentials: "show_dashboard_credentials",
   // apiKey / anthropicApiKey are deliberately NOT here: AI keys live on the
   // device only (see deviceKeys below), never in Postgres.
   taxPrep: "tax_prep",

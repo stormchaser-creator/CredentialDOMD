@@ -400,8 +400,8 @@ function SettingsSection() {
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>Dashboard</h3>
         <ToggleRow label="Credentials list on Home"
           sub="The card listing your licenses under CME Progress"
-          active={s.showDashboardCredentials !== false}
-          onToggle={() => update("showDashboardCredentials", s.showDashboardCredentials === false)}
+          active={s.showDashboardCredentials === true}
+          onToggle={() => update("showDashboardCredentials", s.showDashboardCredentials !== true)}
           color={T.accent} T={T} />
       </div>
 

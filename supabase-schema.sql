@@ -19,6 +19,7 @@ CREATE TABLE profiles (
   specialties JSONB DEFAULT '[]',
   theme TEXT DEFAULT 'light',
   font_size TEXT DEFAULT 'M',
+  show_dashboard_credentials BOOLEAN DEFAULT false,
   api_key TEXT,
   anthropic_api_key TEXT,
   reminder_lead_days INTEGER DEFAULT 90,
