@@ -11,6 +11,7 @@ import CreditEquivalenceNote from "../shared/CreditEquivalenceNote";
 import SmallSpecialtyNote from "../shared/SmallSpecialtyNote";
 import CMEImport from "./CMEImport";
 import RuleProvenance from "../shared/RuleProvenance";
+import TopicProvenance from "../shared/TopicProvenance";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getCMECategories } from "../../constants/credentialTypes";
@@ -323,9 +324,20 @@ function CMESection({ onShare }) {
                 degreeType={deg}
                 onFindCme={() => navigate("credentials", "findCme")}
               />
+              {/* Every mandated topic carries its own periodicity and its own
+                  link to the rule, because the rule set's single sourceUrl
+                  cannot tell a physician where any one of these lines came
+                  from, or whether it is owed once or every renewal. */}
               {comp.topicResults.map(tr => (
                 <div key={tr.topic}>
                   <ComplianceBar label={tr.topic} earned={tr.earned} required={tr.required} met={tr.met} note={tr.note} />
+                  <TopicProvenance
+                    periodLabel={tr.periodLabel}
+                    cite={tr.cite}
+                    url={tr.url}
+                    sourceInherited={tr.sourceInherited}
+                    citeInherited={tr.citeInherited}
+                  />
                   {!tr.met && (
                     <button onClick={() => navigate("credentials", `findCme:${tr.topic}`)} style={{
                       padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",

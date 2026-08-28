@@ -4,6 +4,7 @@ import { useInputStyle } from "./useInputStyle";
 import Modal from "./Modal";
 import Field from "./Field";
 import { supabase } from "../../lib/supabase";
+import { safeHttpUrl } from "../../utils/safeUrl";
 
 /**
  * Provenance line for a rule set (state CME or board MOC) plus a one-tap
@@ -68,11 +69,6 @@ async function submitRuleChange({ reportKey, subject, citation, meta, verified, 
   });
   if (res.error) throw new Error(ins.error.message || res.error.message || "Could not send the report.");
   return { via: "ticket" };
-}
-
-/** Only http(s) links are rendered as anchors; anything else stays plain text. */
-function safeHttpUrl(u) {
-  return typeof u === "string" && /^https?:\/\//i.test(u.trim()) ? u.trim() : "";
 }
 
 function RuleProvenance({ reportKey, subject, citation, meta, verified, sourceUrl, upcoming, compact = false, style }) {

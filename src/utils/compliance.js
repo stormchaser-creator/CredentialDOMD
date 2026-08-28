@@ -35,6 +35,13 @@ import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements
  *   - hours > 0 → progress bar toward the mandated hours
  *   - hours === 0 → required checklist item with no fixed hour count
  *     (met when at least one entry in the topic's period is tagged)
+ *   - `cite` / `url` are OPTIONAL per-topic provenance. A state rule set has
+ *     one `sourceUrl`, but its topics rarely come from one place: California's
+ *     50-hour total is 16 CCR 1336 while its 12-hour pain-management mandate is
+ *     B&P 2190.5. Where a topic names its own statute the row links straight to
+ *     it; where it does not, the row inherits the rule set's `source` and
+ *     `sourceUrl` and says so, so a physician can always tell whether the link
+ *     lands on the rule itself or on the board's general page.
  *
  * MATE Act: DEA registrants owe a ONE-TIME 8 hours of opioid or substance use
  * disorder training — checked against ALL entries (not windowed) tagged with a
@@ -73,6 +80,24 @@ function wholeMonthsBetween(a, b) {
 }
 
 const showDate = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+/**
+ * Plain-English periodicity for one topic mandate.
+ *
+ * A physician looking at "12 hrs Pain Management" cannot tell a one-time
+ * career requirement from something owed at every renewal, and reading it the
+ * wrong way costs either 12 needless hours or a failed audit. Every surface
+ * that shows a topic row prints this, so the answer is never left implicit.
+ */
+export function topicPeriodLabel(period, cycleYears) {
+  if (period === "lifetime") return "One time, not every cycle";
+  if (period && typeof period === "object" && period.years > 0) {
+    return period.years === 1 ? "Every year" : `Every ${period.years} years`;
+  }
+  return cycleYears > 0
+    ? `Every renewal cycle (${cycleYears} yr${cycleYears === 1 ? "" : "s"})`
+    : "Every renewal cycle";
+}
 
 /**
  * First-cycle proration, data-driven and keyed to the LICENSE ISSUE DATE.
@@ -194,6 +219,12 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const tagged = pool.filter(c => (c.topics || []).includes(t.topic));
     const earned = tagged.reduce((s, c) => s + hours(c), 0);
     const checklist = !(t.hours > 0);
+    // Per-topic provenance, falling back to the rule set's own citation and
+    // URL. `citeInherited` / `sourceInherited` are what let the UI say "this
+    // link is the board's general page" instead of implying it points at the
+    // sentence that states this requirement.
+    const cite = t.cite || entry?.source || "";
+    const url = t.url || entry?.sourceUrl || "";
     return {
       topic: t.topic,
       required: t.hours || 0,
@@ -202,6 +233,11 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       met: checklist ? tagged.length > 0 : earned >= t.hours,
       note: t.note,
       period,
+      periodLabel: topicPeriodLabel(period, cycleYears),
+      cite,
+      url,
+      citeInherited: !t.cite && !!cite,
+      sourceInherited: !t.url && !!url,
     };
   });
 

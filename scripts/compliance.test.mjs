@@ -4,7 +4,9 @@
 // mandates, MATE Act topic scope, the cycle-window boundary, and intake
 // tagging of state-only topics.
 // Run: node scripts/compliance.test.mjs   (pure node, no test runner)
-import { computeCompliance, windowNotes } from "../src/utils/compliance.js";
+import { computeCompliance, windowNotes, topicPeriodLabel } from "../src/utils/compliance.js";
+import { safeHttpUrl } from "../src/utils/safeUrl.js";
+import { STATE_REQS } from "../src/constants/stateRequirements.js";
 import { guessTopics } from "../src/utils/cmeImport.js";
 import {
   aoaCategoryFor, cat1BucketLabel, cat1Breakdown, cat1RouteNote, logNoteFor,
@@ -261,6 +263,197 @@ ok("ACCME-only provider is called AOA Category 2",
   providerAoaLine({ accreditation: ["AMA PRA Category 1", "ABIM MOC"] }).includes("AOA Category 2"));
 ok("AOA-accredited provider is called Category 1",
   providerAoaLine({ accreditation: ["AOA Category 1-A", "AMA PRA Category 1"] }).includes("AOA Category 1"));
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// Per-rule verifiability: every mandated topic says how often it is owed and
+// links to the rule that says so.
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Periodicity, in words ──
+eq("one-time reads as one-time", topicPeriodLabel("lifetime", 2), "One time, not every cycle");
+eq("multi-year reads as N years", topicPeriodLabel({ years: 6 }, 2), "Every 6 years");
+eq("annual reads as annual", topicPeriodLabel({ years: 1 }, 3), "Every year");
+eq("default is the renewal cycle", topicPeriodLabel(null, 2), "Every renewal cycle (2 yrs)");
+eq("a 1-year cycle is not pluralised", topicPeriodLabel(null, 1), "Every renewal cycle (1 yr)");
+eq("no cycle known", topicPeriodLabel(null, 0), "Every renewal cycle");
+
+// The confusion that prompted this: a one-time 12-hour mandate and a recurring
+// one looked identical on the row. They no longer do.
+const caProv = computeCompliance([], "CA", "MD");
+const caPain = caProv.topicResults.find(t => t.topic === "Pain Management");
+eq("CA pain mgmt row says one time", caPain.periodLabel, "One time, not every cycle");
+const caBias = caProv.topicResults.find(t => t.topic === "Implicit Bias");
+eq("CA implicit bias row says every cycle", caBias.periodLabel, "Every renewal cycle (2 yrs)");
+
+// ── Per-topic citation and link ──
+// CA's rule-set citation is 16 CCR 1336 (the 50-hour total). The pain
+// management line is B&P 2190.5 and now links there, not at the 50-hour rule.
+ok("CA pain mgmt cites 2190.5, not 1336", caPain.cite.includes("2190.5") && !caPain.cite.includes("1336"));
+ok("CA pain mgmt links to leginfo", caPain.url.includes("leginfo.legislature.ca.gov"));
+ok("CA pain mgmt link is its own, not inherited", caPain.sourceInherited === false && caPain.citeInherited === false);
+
+// A topic with no source of its own inherits the rule set's, and says so, so
+// the UI can label the link "Board page" instead of implying it points at the
+// sentence that states the requirement.
+const caGeri = caProv.topicResults.find(t => t.topic === "Geriatric Medicine");
+eq("CA geriatrics inherits the board URL", caGeri.url, STATE_REQS.CA.md.sourceUrl);
+ok("CA geriatrics is marked inherited", caGeri.sourceInherited === true);
+ok("CA geriatrics still carries its own citation", caGeri.citeInherited === false && caGeri.cite.length > 0);
+
+// Coverage invariant: no mandated topic anywhere is unverifiable. Every row a
+// physician can be shown must carry a citation and a usable http(s) link.
+{
+  const bad = [];
+  for (const st of Object.keys(STATE_REQS)) {
+    for (const deg of ["MD", "DO"]) {
+      for (const t of computeCompliance([], st, deg).topicResults) {
+        if (!t.cite) bad.push(`${st}/${deg}/${t.topic}: no citation`);
+        if (!safeHttpUrl(t.url)) bad.push(`${st}/${deg}/${t.topic}: no safe URL`);
+        if (!t.periodLabel) bad.push(`${st}/${deg}/${t.topic}: no periodicity`);
+      }
+    }
+  }
+  ok("every mandated topic carries citation, link and periodicity", bad.length === 0, bad.slice(0, 5).join("; "));
+}
+
+// safeHttpUrl fails closed: rule data is hand-edited, so a non-http value must
+// never become an anchor.
+eq("javascript: URL is refused", safeHttpUrl("javascript:alert(1)"), "");
+eq("data: URL is refused", safeHttpUrl("data:text/html,x"), "");
+eq("relative path is refused", safeHttpUrl("/boards/cme"), "");
+eq("https is kept and trimmed", safeHttpUrl("  https://example.gov/cme  "), "https://example.gov/cme");
+
+// ══════════════════════════════════════════════════════════════════════════
+// Corrected rules. Each of these was demanding hours the board does not ask
+// for, or failing to ask for hours it does.
+// ══════════════════════════════════════════════════════════════════════════
+
+const topicOf = (st, deg, name) => computeCompliance([], st, deg).topicResults.find(t => t.topic === name);
+
+// MI: R 338.7004 wants 1 hr of implicit bias FOR EACH YEAR of the cycle.
+// Michigan renews every 3 years, so a renewal owes 3, not 1. This was the
+// under-demand: a physician logging 1 hr showed compliant while LARA wanted 3.
+eq("MI MD implicit bias is 3 hrs per 3-yr cycle", topicOf("MI", "MD", "Implicit Bias").required, 3);
+eq("MI DO implicit bias is 3 hrs per 3-yr cycle", topicOf("MI", "DO", "Implicit Bias").required, 3);
+ok("MI implicit bias cites the rule", topicOf("MI", "MD", "Implicit Bias").cite.includes("338.7004"));
+ok("MI human trafficking is one-time", topicOf("MI", "MD", "Human Trafficking").period === "lifetime");
+ok("MI opioid awareness is one-time", topicOf("MI", "DO", "Opioid Awareness").period === "lifetime");
+
+// LA: the largest over-demand in the file. A one-time 3-hr CDS course on a
+// 1-year cycle was being asked for every single year.
+const laCds = computeCompliance([cme("AMA PRA Category 1", 3, OLD, ["Controlled Substances"])], "LA", "MD")
+  .topicResults.find(t => t.topic === "Controlled Substances");
+ok("LA CDS course is one-time", laCds.period === "lifetime");
+ok("LA CDS met by a course taken years ago", laCds.met === true);
+eq("LA nutrition runs on a 4-year clock", topicOf("LA", "MD", "Nutrition / Metabolic Health").period, { years: 4 });
+eq("LA sickle cell runs on a 3-year clock", topicOf("LA", "MD", "Sickle Cell (Emergency Medicine)").period, { years: 3 });
+
+// IA: four topics with multi-year clocks were all being counted in the 2-year
+// cycle. An opioid course ~3.8y old satisfies the 5-year rule.
+eq("IA child abuse every 3 yrs", topicOf("IA", "MD", "Child Abuse Recognition").period, { years: 3 });
+eq("IA dependent adult abuse every 3 yrs", topicOf("IA", "MD", "Dependent Adult Abuse").period, { years: 3 });
+eq("IA opioid prescribing every 5 yrs", topicOf("IA", "MD", "Opioid Prescribing").period, { years: 5 });
+eq("IA end-of-life every 5 yrs", topicOf("IA", "MD", "End-of-Life Care").period, { years: 5 });
+ok("IA opioid met by a course inside the 5-year window",
+  computeCompliance([cme("AMA PRA Category 1", 2, YR4, ["Opioid Prescribing"])], "IA", "MD")
+    .topicResults.find(t => t.topic === "Opioid Prescribing").met === true);
+
+// TX: three rules the notes described correctly but the engine ignored.
+eq("TX human trafficking every 6 yrs", topicOf("TX", "MD", "Human Trafficking").period, { years: 6 });
+eq("TX opioid prescribing every 8 yrs", topicOf("TX", "MD", "Opioid Prescribing").period, { years: 8 });
+ok("TX Life of the Mother Act is one-time", topicOf("TX", "MD", "Life of the Mother Act").period === "lifetime");
+// The pain-clinic rule is stated annually by TMB 195.3(d); the encoding now
+// matches the note instead of contradicting it.
+eq("TX pain clinic hours run on a 1-year clock", topicOf("TX", "MD", "Pain Management").period, { years: 1 });
+eq("TX pain clinic row says annual", topicOf("TX", "MD", "Pain Management").periodLabel, "Every year");
+
+// PA: 49 Pa. Code 16.19 says the organ donation CE is a one-time requirement.
+ok("PA MD organ donation is one-time", topicOf("PA", "MD", "Organ and Tissue Donation").period === "lifetime");
+ok("PA DO organ donation is one-time", topicOf("PA", "DO", "Organ and Tissue Donation").period === "lifetime");
+
+// IL: two 6-year topics were demanded every 3-year cycle, and the mandated
+// reporter training had no row at all, so it was never checked.
+eq("IL cultural competency every 6 yrs", topicOf("IL", "MD", "Cultural Competency").period, { years: 6 });
+eq("IL dementia CE every 6 yrs", topicOf("IL", "MD", "Alzheimer's Disease and Other Dementias").period, { years: 6 });
+ok("IL mandated reporter training is now a checked row", !!topicOf("IL", "MD", "Mandated Reporter Training"));
+eq("IL mandated reporter every 6 yrs", topicOf("IL", "MD", "Mandated Reporter Training").period, { years: 6 });
+
+// NY: PHL 3309-a runs on 3 years; child abuse coursework is pre-licensure.
+eq("NY pain management every 3 yrs", topicOf("NY", "MD", "Pain Management").period, { years: 3 });
+ok("NY child abuse is one-time pre-licensure", topicOf("NY", "MD", "Child Abuse Recognition").period === "lifetime");
+eq("NY infection control every 4 yrs", topicOf("NY", "MD", "Infection Control").period, { years: 4 });
+
+// MD: implicit bias and structural racism are two separate one-time trainings.
+// Bundled, a physician who had done one showed compliant for both.
+ok("MD implicit bias is one-time", topicOf("MD", "MD", "Implicit Bias").period === "lifetime");
+ok("MD structural racism has its own row", !!topicOf("MD", "MD", "Structural Racism"));
+ok("MD structural racism is one-time", topicOf("MD", "MD", "Structural Racism").period === "lifetime");
+ok("MD controlled substance CE is one-time", topicOf("MD", "MD", "Controlled Substances").period === "lifetime");
+{
+  // Implicit bias done, structural racism not: the two must not cancel out.
+  const c = computeCompliance([cme("AMA PRA Category 1", 1, RECENT, ["Implicit Bias"])], "MD", "MD");
+  ok("MD implicit bias alone does not satisfy structural racism",
+    c.topicResults.find(t => t.topic === "Implicit Bias").met === true &&
+    c.topicResults.find(t => t.topic === "Structural Racism").met === false);
+}
+
+// MS: an 8-hour one-time federal training was demanded every 2-year cycle.
+ok("MS DEA training is one-time", topicOf("MS", "MD", "Controlled Substances").period === "lifetime");
+
+// MA: five one-time trainings the file already described as one-time.
+for (const t of ["End-of-Life Care", "Implicit Bias", "Child Abuse Recognition", "Domestic Violence", "Geriatric Medicine"]) {
+  ok(`MA ${t} is one-time`, topicOf("MA", "MD", t).period === "lifetime");
+}
+// EHR is left per-cycle on purpose: published summaries disagree and BORIM
+// Policy 17-05 could not be read. Counting it each cycle over-asks rather than
+// showing a physician compliant when the board may not agree.
+ok("MA EHR left on the cycle while its periodicity is unresolved", topicOf("MA", "MD", "Electronic Health Records").period === null);
+ok("MA EHR row says the periodicity is unresolved", topicOf("MA", "MD", "Electronic Health Records").cite.includes("unresolved"));
+
+// KY, RI, AL, WY, DE, NV: the rest of the periodicity fixes.
+ok("KY domestic violence is one-time", topicOf("KY", "MD", "Domestic Violence").period === "lifetime");
+ok("KY abusive head trauma is one-time", topicOf("KY", "MD", "Pediatric Abusive Head Trauma").period === "lifetime");
+ok("RI dementia CE is one-time", topicOf("RI", "MD", "Geriatric Medicine").period === "lifetime");
+eq("AL controlled substances every 2 yrs on a 1-yr cycle", topicOf("AL", "MD", "Controlled Substances").period, { years: 2 });
+eq("AL boundaries course is 2 hrs, not a bare checkbox", topicOf("AL", "MD", "Ethics").required, 2);
+ok("AL boundaries course is one-time", topicOf("AL", "MD", "Ethics").period === "lifetime");
+eq("WY controlled substances on its own 2-yr clock", topicOf("WY", "MD", "Controlled Substances").period, { years: 2 });
+ok("DE one-time state law course has its own row", !!topicOf("DE", "MD", "Delaware Controlled Substance Law"));
+ok("DE state law course is one-time", topicOf("DE", "MD", "Delaware Controlled Substance Law").period === "lifetime");
+eq("NV MD suicide prevention every 4 yrs", topicOf("NV", "MD", "Suicide Prevention").period, { years: 4 });
+ok("NV MD HIV stigma is one-time", topicOf("NV", "MD", "HIV Stigma").period === "lifetime");
+ok("NV MD SBIRT has its own row", !!topicOf("NV", "MD", "Substance Use Disorders"));
+eq("NV DO suicide prevention every 4 yrs on a 1-yr cycle", topicOf("NV", "DO", "Suicide Prevention").period, { years: 4 });
+eq("NV DO ethics/pain is every other year", topicOf("NV", "DO", "Pain Management").period, { years: 2 });
+eq("NV DO cultural competency is biennial", topicOf("NV", "DO", "Cultural Competency").period, { years: 2 });
+eq("OK MD opioid hour is checked on a 1-year clock", topicOf("OK", "MD", "Opioid Prescribing").period, { years: 1 });
+
+// ── Things a later pass must NOT "fix" ──
+
+// CA pain management was not repealed and is genuinely one-time. Both halves
+// matter: dropping it would under-state a live mandate, and making it
+// recurring would demand 12 hours a physician does not owe.
+ok("CA MD pain management still on the books", topicOf("CA", "MD", "Pain Management").required === 12);
+ok("CA DO pain management still on the books", topicOf("CA", "DO", "Pain Management").required === 12);
+ok("CA pain management stays one-time", topicOf("CA", "DO", "Pain Management").period === "lifetime");
+// The MD note was missing two facts the DO note already had.
+ok("CA MD note carries the pathology/radiology exemption", /pathology and radiology/i.test(topicOf("CA", "MD", "Pain Management").note));
+ok("CA MD note carries the 4-year prong", /4 yrs of initial licensure/i.test(topicOf("CA", "MD", "Pain Management").note));
+ok("CA note carries the 2190.6 buprenorphine alternative", /2190\.6/.test(topicOf("CA", "MD", "Pain Management").note));
+
+// AB 241 binds course providers, not physicians. It must never become an hour
+// requirement, on either board.
+eq("CA MD implicit bias demands no hours", topicOf("CA", "MD", "Implicit Bias").required, 0);
+eq("CA DO implicit bias demands no hours", topicOf("CA", "DO", "Implicit Bias").required, 0);
+// CA DO's 1-hr Schedule II hour is the one CA topic that IS every cycle.
+ok("CA DO Schedule II hour stays per cycle", topicOf("CA", "DO", "Substance Use Disorders").period === null);
+eq("CA DO Schedule II row says every cycle", topicOf("CA", "DO", "Substance Use Disorders").periodLabel, "Every renewal cycle (2 yrs)");
+
+// The OMBC PDF that a DO clicks through to must be the one that resolves; the
+// bare /licensees/cme path returned HTTP 300.
+ok("CA DO board link points at the CME document", STATE_REQS.CA.do.sourceUrl.endsWith(".pdf"));
+
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

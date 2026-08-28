@@ -9,6 +9,7 @@ export { default as Cat1Bucket } from "./Cat1Bucket";
 export { default as CreditEquivalenceNote } from "./CreditEquivalenceNote";
 export { default as SmallSpecialtyNote } from "./SmallSpecialtyNote";
 export { default as RuleProvenance } from "./RuleProvenance";
+export { default as TopicProvenance } from "./TopicProvenance";
 export { default as StatCard } from "./StatCard";
 export { default as SideNav } from "./SideNav";
 export * from "./Icons";
