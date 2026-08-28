@@ -50,7 +50,7 @@ export const DEFAULT_DATA = {
   malpracticeHistory: [],
   travelExpenses: [], // [{ id, date, category, description, amount, taxYear }]
   taxPayments: [],    // [{ id, date, quarter, taxYear, jurisdiction, amount, method, notes }]
-  scheduleDays: [],   // [{ id, contractId, date, shift, notes }]
+  scheduleDays: [],   // [{ id, contractId, date, kind, expected, note }] — kind "vacation" marks a day off (no contract/expected), note says why
   // Locum tier features
   rotations: [],     // [{ id, hospital, city, state, startDate, endDate, role, agency, notes }]
   deductibles: [],   // [{ id, date, category, description, amount, taxYear }]

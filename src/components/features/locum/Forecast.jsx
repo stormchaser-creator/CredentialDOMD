@@ -93,6 +93,7 @@ function Forecast() {
     const defKind = (contracts.find(c => c.id === cid)?.payModel === "daily") ? "day" : "call";
     return { date, contractId: cid, kind: defKind, expected: suggestFor(cid, defKind) || "" };
   };
+  const blankVacation = (date) => ({ date, kind: "vacation", note: "" });
   // A day can hold entries from more than one contract (overlapping coverage
   // periods do exactly that). Show them all: opening straight into the first
   // one hid the others and made them impossible to delete.
@@ -204,23 +205,27 @@ function Forecast() {
           {cells.map((date, i) => {
             if (!date) return <div key={`b${i}`} />;
             const entries = schedByDate[date] || [];
-            const est = entries.reduce((t, s) => t + (parseFloat(s.expected) || 0), 0);
+            const vacation = entries.find(s => s.kind === "vacation");
+            const workEntries = entries.filter(s => s.kind !== "vacation");
+            const est = workEntries.reduce((t, s) => t + (parseFloat(s.expected) || 0), 0);
             const act = actuals[date] || 0;
             const isPast = date < today;
             const isPastOrToday = date <= today;
             const isToday = date === today;
-            const hasActivity = entries.length > 0 || act > 0;
+            const hasActivity = workEntries.length > 0 || act > 0;
             return (
-              <div key={date} onClick={() => openDay(date)} style={{
+              <div key={date} onClick={() => openDay(date)} title={vacation?.note || undefined} style={{
                 minHeight: 46, minWidth: 0, overflow: "hidden", borderRadius: 8, padding: "3px 2px", cursor: "pointer", textAlign: "center",
-                border: `1px solid ${isToday ? T.accent : hasActivity ? (T.accentDim || "rgba(16,185,129,0.35)") : "transparent"}`,
-                backgroundColor: hasActivity ? (T.accentGlow || "rgba(16,185,129,0.08)") : T.input,
-                opacity: isPast && !hasActivity ? 0.55 : 1,
+                border: `1px solid ${isToday ? T.accent : vacation ? T.warning : hasActivity ? (T.accentDim || "rgba(16,185,129,0.35)") : "transparent"}`,
+                backgroundColor: vacation ? (T.warningDim || "rgba(251,191,36,0.12)") : hasActivity ? (T.accentGlow || "rgba(16,185,129,0.08)") : T.input,
+                opacity: isPast && !hasActivity && !vacation ? 0.55 : 1,
               }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: T.text }}>{parseInt(date.slice(8), 10)}</div>
-                {entries.length > 0 ? (
+                {vacation ? (
+                  <div style={{ fontSize: 10.5, fontWeight: 800, color: T.warning, lineHeight: 1.2 }}>V</div>
+                ) : workEntries.length > 0 ? (
                   <div style={{ fontSize: 9, fontWeight: 800, color: T.accent, lineHeight: 1.2 }}>
-                    {entries.length > 1 ? `${entries.length}\u00d7 ${facilityShort(entries[0].contractId)}` : facilityShort(entries[0].contractId)}<br />{short(est)}
+                    {workEntries.length > 1 ? `${workEntries.length}\u00d7 ${facilityShort(workEntries[0].contractId)}` : facilityShort(workEntries[0].contractId)}<br />{short(est)}
                   </div>
                 ) : act > 0 ? (
                   <div style={{ fontSize: 9, fontWeight: 800, color: "#22c55e", lineHeight: 1.2 }}>Logged<br />{short(act)}</div>
@@ -228,7 +233,7 @@ function Forecast() {
                 {/* The green billed figure only earns its row when it differs
                     from the estimate — past days seeded from actuals would
                     otherwise print the same number twice. */}
-                {isPastOrToday && act > 0 && entries.length > 0 && Math.round(act) !== Math.round(est) && (
+                {isPastOrToday && act > 0 && workEntries.length > 0 && Math.round(act) !== Math.round(est) && (
                   <div style={{ fontSize: 8.5, fontWeight: 700, color: "#22c55e" }}>{short(act)}</div>
                 )}
               </div>
@@ -291,6 +296,18 @@ function Forecast() {
                 </div>
               )}
               {entries.map(e => {
+                if (e.kind === "vacation") {
+                  return (
+                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>Vacation / day off</div>
+                        <div style={{ fontSize: 12.5, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || "No reason noted"}</div>
+                      </div>
+                      <button onClick={() => editEntry(e)} style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Edit</button>
+                      <button onClick={() => removeEntry(e.id)} style={{ padding: "7px 12px", borderRadius: 9, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Remove</button>
+                    </div>
+                  );
+                }
                 const c = contracts.find(x => x.id === e.contractId);
                 return (
                   <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
@@ -309,14 +326,24 @@ function Forecast() {
               {editDay && actuals[editDay] > 0 && (
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", marginTop: 10 }}>Actually billed this day: {money(actuals[editDay])}</div>
               )}
-              <button onClick={() => setForm(blankEntry(editDay))} style={{ width: "100%", marginTop: 14, padding: "12px 16px", borderRadius: 10, border: `1px solid ${T.accent}`, backgroundColor: "transparent", color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-                Add another entry
-              </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button onClick={() => setForm(blankEntry(editDay))} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: `1px solid ${T.accent}`, backgroundColor: "transparent", color: T.accent, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                  Add another entry
+                </button>
+                <button onClick={() => setForm(blankVacation(editDay))} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: `1px solid ${T.warning}`, backgroundColor: "transparent", color: T.warning, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                  Mark vacation
+                </button>
+              </div>
             </div>
           );
         })()}
 
         {form && (<>
+        {form.kind === "vacation" ? (
+          <Field label="Note (why you're off)">
+            <input type="text" value={form?.note || ""} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={iS} placeholder="e.g. family trip, CME conference, personal" />
+          </Field>
+        ) : (<>
         <Field label="Contract">
           <select value={form?.contractId || ""} onChange={e => {
             const cid = e.target.value;
@@ -363,6 +390,7 @@ function Forecast() {
             Actually billed this day: {money(actuals[editDay])}
           </div>
         )}
+        </>)}
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           {form?.id && sched.some(s => s.id === form.id) && (
             <button onClick={removeDay} style={{ padding: "12px 16px", borderRadius: 10, border: "none", backgroundColor: T.dangerDim, color: T.danger, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Remove</button>
