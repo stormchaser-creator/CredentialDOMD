@@ -1,0 +1,525 @@
+<title>Where Physicians Actually Are</title>
+<style>
+  :root {
+    --ink:        #10201F;
+    --ink-soft:   #33474A;
+    --muted:      #5E7370;
+    --paper:      #F7F9F8;
+    --surface:    #FFFFFF;
+    --surface-2:  #EFF3F1;
+    --rule:       #D8E2DE;
+    --rule-soft:  #E7EDEA;
+    --accent:     #0B6E4F;
+    --accent-dim: #E4F0EA;
+    --warn:       #9C4A1C;
+    --warn-dim:   #F7EAE2;
+    --shadow:     0 1px 2px rgba(16,32,31,.05), 0 8px 24px rgba(16,32,31,.05);
+
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Times New Roman', serif;
+    --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:        #E6EDEA;
+      --ink-soft:   #B7C6C2;
+      --muted:      #839793;
+      --paper:      #0C1517;
+      --surface:    #121D1F;
+      --surface-2:  #172427;
+      --rule:       #26383A;
+      --rule-soft:  #1D2C2E;
+      --accent:     #47B189;
+      --accent-dim: #17302A;
+      --warn:       #D08A5E;
+      --warn-dim:   #2C211A;
+      --shadow:     0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:        #E6EDEA;
+    --ink-soft:   #B7C6C2;
+    --muted:      #839793;
+    --paper:      #0C1517;
+    --surface:    #121D1F;
+    --surface-2:  #172427;
+    --rule:       #26383A;
+    --rule-soft:  #1D2C2E;
+    --accent:     #47B189;
+    --accent-dim: #17302A;
+    --warn:       #D08A5E;
+    --warn-dim:   #2C211A;
+    --shadow:     0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---- masthead ---- */
+  header.mast { padding: 64px 0 30px; border-bottom: 2px solid var(--ink); }
+  .kicker {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 400; font-size: clamp(38px, 6.2vw, 62px);
+    line-height: 1.04; letter-spacing: -.02em; margin: 0 0 20px; text-wrap: balance;
+  }
+  .standfirst {
+    font-family: var(--serif); font-size: clamp(18px, 2.3vw, 21px); line-height: 1.5;
+    color: var(--ink-soft); max-width: 62ch; margin: 0;
+  }
+  .byline {
+    margin-top: 26px; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+    letter-spacing: .04em; display: flex; flex-wrap: wrap; gap: 8px 20px;
+  }
+
+  /* ---- section scaffolding ---- */
+  section { padding-top: 56px; }
+  h2 {
+    font-family: var(--serif); font-weight: 400; font-size: clamp(26px, 3.4vw, 34px);
+    line-height: 1.15; letter-spacing: -.015em; margin: 0 0 6px; text-wrap: balance;
+  }
+  .sec-label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 10px;
+  }
+  .lede { max-width: 68ch; color: var(--ink-soft); margin: 0 0 26px; }
+  p { max-width: 68ch; }
+  h3 {
+    font-family: var(--sans); font-size: 17px; font-weight: 650; letter-spacing: -.005em;
+    margin: 0 0 6px;
+  }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+  /* ---- reality strip ---- */
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+    border-radius: 3px; overflow: hidden; margin: 30px 0 0;
+  }
+  .fact { background: var(--surface); padding: 18px 20px; }
+  .fact .n {
+    font-family: var(--serif); font-size: 30px; line-height: 1; display: block;
+    font-variant-numeric: tabular-nums; margin-bottom: 7px;
+  }
+  .fact .l { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+  /* ---- channel cards ---- */
+  .tier-head {
+    display: flex; align-items: baseline; gap: 14px; margin: 36px 0 4px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--rule);
+  }
+  .tier-tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--surface); background: var(--accent); padding: 3px 9px; border-radius: 2px; white-space: nowrap;
+  }
+  .tier-when { font-family: var(--mono); font-size: 11.5px; color: var(--muted); letter-spacing: .04em; }
+  .ch {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 22px 24px; margin-top: 16px; box-shadow: var(--shadow);
+  }
+  .ch-top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .ch-aud { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .rulebox {
+    background: var(--surface-2); border-left: 2px solid var(--accent);
+    padding: 11px 15px; margin: 12px 0 14px; font-size: 14.5px; color: var(--ink-soft);
+  }
+  .rulebox b { color: var(--ink); font-weight: 650; }
+  .rulebox.stop { border-left-color: var(--warn); background: var(--warn-dim); }
+  .acts { margin: 0; padding-left: 20px; font-size: 15px; }
+  .acts li { margin-bottom: 5px; }
+  .acts li::marker { color: var(--accent); }
+
+  /* ---- do-not list ---- */
+  .nope { display: grid; gap: 10px; margin-top: 22px; }
+  .nope div {
+    border: 1px solid var(--rule); border-left: 3px solid var(--warn);
+    background: var(--surface); border-radius: 3px; padding: 13px 17px; font-size: 15px;
+  }
+  .nope b { display: block; margin-bottom: 2px; }
+  .nope span { color: var(--ink-soft); }
+
+  /* ---- timeline ---- */
+  .weeks { display: grid; gap: 14px; margin-top: 26px; }
+  .wk {
+    display: grid; grid-template-columns: 132px 1fr; gap: 24px;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 20px 22px;
+  }
+  .wk-when { border-right: 1px solid var(--rule-soft); padding-right: 20px; }
+  .wk-n { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+  .wk-d { font-family: var(--serif); font-size: 19px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .wk ul { margin: 0; padding-left: 19px; font-size: 15px; }
+  .wk li { margin-bottom: 5px; }
+  .wk li::marker { color: var(--muted); }
+  .who {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 1px 6px; border-radius: 2px; margin-right: 7px; white-space: nowrap;
+  }
+  .who.e { background: var(--accent); color: var(--surface); }
+  .who.c { background: var(--surface-2); color: var(--muted); border: 1px solid var(--rule); }
+
+  /* ---- build table ---- */
+  .tbl-wrap { overflow-x: auto; margin-top: 22px; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 400; background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.eff { font-family: var(--mono); font-size: 13px; white-space: nowrap; color: var(--ink-soft); }
+  code {
+    font-family: var(--mono); font-size: .87em; background: var(--surface-2);
+    padding: 1px 5px; border-radius: 3px; color: var(--ink-soft); word-break: break-word;
+  }
+
+  /* ---- decisions ---- */
+  .dec { display: grid; gap: 0; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; margin-top: 22px; background: var(--surface); }
+  .dec > div { padding: 15px 20px; border-bottom: 1px solid var(--rule-soft); display: grid; grid-template-columns: 26px 1fr; gap: 14px; }
+  .dec > div:last-child { border-bottom: none; }
+  .dec .q { font-family: var(--mono); font-size: 13px; color: var(--accent); padding-top: 2px; }
+  .dec p { margin: 3px 0 0; font-size: 14.5px; color: var(--ink-soft); }
+
+  /* ---- inventory ---- */
+  .inv { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 24px; }
+  .inv-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 18px 20px; }
+  .inv-card h3 { margin-bottom: 4px; }
+  .inv-card .path { font-family: var(--mono); font-size: 11.5px; color: var(--muted); word-break: break-all; display: block; margin-bottom: 9px; }
+  .inv-card p { font-size: 14.5px; margin: 0; color: var(--ink-soft); }
+  .verdict { font-family: var(--mono); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); display: block; margin-top: 9px; }
+
+  .callout {
+    border: 1px solid var(--rule); border-top: 3px solid var(--accent); background: var(--surface);
+    padding: 22px 26px; margin-top: 30px; border-radius: 3px;
+  }
+  .callout h3 { font-family: var(--serif); font-weight: 400; font-size: 21px; margin-bottom: 8px; }
+
+  footer { margin-top: 66px; padding-top: 22px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+
+  @media (max-width: 620px) {
+    .wk { grid-template-columns: 1fr; gap: 14px; }
+    .wk-when { border-right: none; border-bottom: 1px solid var(--rule-soft); padding-right: 0; padding-bottom: 12px; }
+    header.mast { padding-top: 44px; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">CredentialDOMD / Growth</p>
+  <h1>Where physicians actually are</h1>
+  <p class="standfirst">A channel plan built on one uncomfortable finding: nearly every place physicians gather online will remove a founder who posts like a vendor. The venues that work are the ones with a built-in lane for a doctor who built something. This is the map of those lanes, and the order to walk them.</p>
+  <div class="byline">
+    <span>Eric Whitney, DO</span>
+    <span>Drafted 28 Aug 2026</span>
+    <span>Horizon: 4 weeks, reviewed weekly</span>
+  </div>
+</header>
+
+<section>
+  <p class="sec-label">Standing position</p>
+  <h2>The honest baseline</h2>
+  <p class="lede">Every number here is measured, not projected. The plan is calibrated to these, and judging it against anything else in the first 90 days will produce the wrong decision.</p>
+  <div class="facts">
+    <div class="fact"><span class="n">2</span><span class="l">Signups, all time</span></div>
+    <div class="fact"><span class="n">2</span><span class="l">Signup attempts ever</span></div>
+    <div class="fact"><span class="n">48</span><span class="l">Pages indexed</span></div>
+    <div class="fact"><span class="n">7</span><span class="l">Search clicks, all time</span></div>
+    <div class="fact"><span class="n">51</span><span class="l">State guides live</span></div>
+    <div class="fact"><span class="n">$199</span><span class="l">Per year, one plan</span></div>
+  </div>
+  <div class="callout">
+    <h3>The form is not the problem</h3>
+    <p>Two signups from two attempts means everyone who tried, succeeded. There is no leak to plug. The funnel was rebuilt this week and the analytics went in yesterday, so from here the question is entirely traffic: getting a physician in front of a page that already works.</p>
+    <p style="margin-bottom:0"><strong>Calibrate to this curve.</strong> Week 1 produces effectively zero organic traffic; Search Console shows impressions before clicks. Long-tail pages like the state guides typically start ranking in one to three months, with consistent movement at three to six. The compounding window in every comparable case study is months six to eighteen. Quitting the guides early is the one guaranteed way to lose that.</p>
+  </div>
+</section>
+
+<section>
+  <p class="sec-label">Inventory</p>
+  <h2>What you already built</h2>
+  <p class="lede">You asked me to look through your Projects folder before planning anything. You have more marketing machinery than the situation suggests, most of it built for other purposes and reusable here.</p>
+  <div class="inv">
+    <div class="inv-card">
+      <h3>moltbook-agent</h3>
+      <span class="path">~/Projects/moltbook-agent</span>
+      <p>A live autonomous posting agent: tick loop, SQLite rate ledger, persona system, pre-publish safety scan, hybrid local-and-cloud LLM routing. Currently 206 posts and 1,854 comments deep on a different network.</p>
+      <span class="verdict">Fork it. The engine is the hard part</span>
+    </div>
+    <div class="inv-card">
+      <h3>Decoded pipeline</h3>
+      <span class="path">~/Projects/Decoded</span>
+      <p>Content generation running on local Ollama at zero API cost, with review gates and an SEO publishing path. Its outreach module stays off and separate.</p>
+      <span class="verdict">Reuse the LLM client and cron pattern</span>
+    </div>
+    <div class="inv-card">
+      <h3>Social Media Agent spec</h3>
+      <span class="path">~/Projects/Social_Media_Agent_Spec_Sheet.md</span>
+      <p>A 37KB design for full autonomy across eight platforms, never built. Its engagement engine assumes automated posting under your identity.</p>
+      <span class="verdict">Harvest ideas, reject the autonomy model</span>
+    </div>
+    <div class="inv-card">
+      <h3>CredentialDOMD marketing</h3>
+      <span class="path">~/Projects/CredentialDOMD/marketing</span>
+      <p>Launch plan, competitive analysis, pain-point research, post drafts, email sequences, community playbook. Written before $199 flat pricing, before the all-physicians positioning, and under the wrong founder name.</p>
+      <span class="verdict">Refresh, do not reuse as-is</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="sec-label">Channels</p>
+  <h2>The lanes that are open</h2>
+  <p class="lede">Ranked by audience fit multiplied by whether a founder can actually participate without being removed. Each entry states the venue's own rule, because the rule determines the strategy.</p>
+
+  <div class="tier-head">
+    <span class="tier-tag">Tier A</span>
+    <span class="tier-when">Start this week. No gatekeepers, or verification starts now</span>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>LinkedIn, founder-led</h3><span class="ch-aud">8M+ US healthcare providers</span></div>
+    <div class="rulebox"><b>Rule:</b> no anti-promotion restrictions. The constraint here is credibility, not compliance. This is the one channel fully under your control.</div>
+    <ol class="acts">
+      <li>Founder arc: why a neurosurgeon built his own renewal tracker. Ends on one useful renewal fact so it stands alone.</li>
+      <li>The DEA-lapse pain point, written as recognition rather than fear.</li>
+      <li>A state guide as a native post, starting with a state you actually hold. The personal stake is the credibility.</li>
+    </ol>
+    <p style="font-size:14.5px;color:var(--muted);margin:12px 0 0"><span class="who c">Claude</span>drafts, safety-gates, queues, monitors comments &nbsp; <span class="who e">Eric</span>edits for voice, posts</p>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>Locums physician Facebook groups</h3><span class="ch-aud">Credential-verified, physician only</span></div>
+    <div class="rulebox stop"><b>Rule:</b> vendors and recruiters are exiled to companion Jobs groups. The existence of those groups proves promotion in the main group is policed. Assume no advertising by default.</div>
+    <ol class="acts">
+      <li>Join the Physicians Only Locum Tenens Interest Group, Locum Tenens Physicians Network, and Physician Side Gigs. Verification takes days, so start now.</li>
+      <li>Answer credentialing, invoicing, and tax threads with specifics. The product lives in your profile, never in a post.</li>
+      <li>Message admins: ask their promo policy, offer a founder AMA or the 51 guides as a pinned resource. A favor, not a pitch.</li>
+    </ol>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>r/whitecoatinvestor</h3><span class="ch-aud">134K members, growing ~22%/yr</span></div>
+    <div class="rulebox"><b>Rule:</b> the 90/10 norm. Undisclosed or repeated self-promotion gets removed. Disclosed, genuinely useful founder comments survive once real history exists.</div>
+    <ol class="acts">
+      <li>Answer locums tax, multi-state licensing, and credentialing threads. No links, no product.</li>
+      <li>Keep answering. Every real question becomes guide FAQ material.</li>
+      <li><strong>Gated to week 5 at the earliest:</strong> one disclosed founder post, only if four weeks of genuine comment history exists first.</li>
+    </ol>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>KevinMD essay and podcast</h3><span class="ch-aud">The physician op-ed platform</span></div>
+    <div class="rulebox"><b>Rule:</b> open to physician contributors, 500 to 1,000 jargon-free words. Original unpublished pieces get expedited review, and accepted authors get a shot at the daily podcast.</div>
+    <ol class="acts">
+      <li>Submit: the paperwork nobody bills for, on the credentialing and CME burden for locums and early-career physicians. The byline is the marketing; the body has no pitch.</li>
+      <li>Accept the podcast slot if offered.</li>
+      <li>Repurpose into LinkedIn posts and a post on your own site.</li>
+    </ol>
+  </div>
+
+  <div class="tier-head">
+    <span class="tier-tag">Tier B</span>
+    <span class="tier-when">Weeks 2 to 3. Editorial lead times</span>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>Doximity Op-Med</h3><span class="ch-aud">85% of US physicians on platform</span></div>
+    <div class="rulebox stop"><b>Rule:</b> 600 to 1,000 words, and it must be your own writing, explicitly not AI-drafted. A disclosure form is required when a product is referenced. This one channel inverts our division of labor: I supply a fact pack and outline only, you write it.</div>
+    <ol class="acts">
+      <li>Write the administrative tax of holding licenses in multiple states: what renewal season actually costs in hours.</li>
+      <li>Submit with the disclosure form filed and your profile current.</li>
+      <li>If accepted, it becomes the authority proof cited in every later pitch.</li>
+    </ol>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>Physician Side Gigs</h3><span class="ch-aud">Locums and 1099 physicians</span></div>
+    <div class="rulebox"><b>Rule:</b> member self-promotion is routed through official lanes, a member side-gig highlight and a partnership intake form. You qualify as a member, not a vendor, which is the whole advantage.</div>
+    <ol class="acts">
+      <li>Participate in locums and 1099 threads as a member.</li>
+      <li>Submit the member side-gig highlight request.</li>
+      <li>Offer a free educational webinar on multi-state renewal logistics through the partnership form. Not a demo.</li>
+    </ol>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>Podcast guesting</h3><span class="ch-aud">Physician founder and locums shows</span></div>
+    <div class="rulebox"><b>Rule:</b> guest slots are editorial and free. Hosts want a story, not an ad read. Founder disclosure is standard and welcomed.</div>
+    <ol class="acts">
+      <li>Pitch Startup Physicians, which exists to feature physician founders.</li>
+      <li>Pitch Andrew Wilner's locums ecosystem.</li>
+      <li>Then NonClinical Physicians and Physician's Guide to Doctoring.</li>
+    </ol>
+  </div>
+
+  <div class="tier-head">
+    <span class="tier-tag">Tier C</span>
+    <span class="tier-when">Weeks 3 to 4. Negotiated lanes</span>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>State osteopathic and county society newsletters</h3><span class="ch-aud">Pre-verified licensed physicians</span></div>
+    <div class="rulebox"><b>Rule:</b> openly commercial. Advertising is a published revenue line, and member-benefit partnerships are the deeper play. As a dues-paying DO you are an insider, and this front-runs Mocingbird's society playbook at state level.</div>
+    <ol class="acts">
+      <li>Approach your own state osteopathic association: a modest placement tied to a renewal-deadline article, plus a member-benefit conversation.</li>
+      <li>Same to one or two county societies, the low-cost entry point.</li>
+      <li>Build the press kit: refreshed one-pager, honest security answers, guide screenshots.</li>
+    </ol>
+  </div>
+
+  <div class="ch">
+    <div class="ch-top"><h3>X and Bluesky</h3><span class="ch-aud">Fractured since 2024</span></div>
+    <div class="rulebox"><b>Rule:</b> no promotion restrictions. The ceiling is attention, not policy.</div>
+    <p style="font-size:15px;margin:0">Maintenance lane only. Crosspost the LinkedIn guide facts to both. Treat as distribution for guides and essays, never a primary channel.</p>
+  </div>
+</section>
+
+<section>
+  <p class="sec-label">Contraindications</p>
+  <h2>Where a post gets you banned</h2>
+  <p class="lede">These are not cautions, they are the rules of specific venues. Each one has a compliant alternative, which is what makes the list useful rather than discouraging.</p>
+  <div class="nope">
+    <div><b>r/medicine, ever</b><span>566K members, and any direct advertising is removed and met with hostility. Instead: flair up, participate credibly, and mine threads for the exact pain-point language that belongs on the landing pages.</span></div>
+    <div><b>r/Residency and specialty subs</b><span>Overtly promotional posts are downvoted and removed; surveys are restricted. Instead: answer moonlighting and first-license questions as an attending. A disclosed one-line mention after mod permission is the absolute ceiling.</span></div>
+    <div><b>Anything undisclosed on Reddit</b><span>Violates both the 90/10 norm and subreddit rules, and sockpuppeting risks a sitewide ban. The existing Reddit comment templates in the marketing folder, where the founder poses as a customer, are dead.</span></div>
+    <div><b>Sermo</b><span>Organic vendor participation is not possible; access is sold through pharma-scale ad products. Skip entirely.</span></div>
+    <div><b>Student Doctor Network</b><span>Commercial posting is prohibited without a vendor badge, with ban risk, and the audience skews earlier than the buyer anyway.</span></div>
+    <div><b>The WCI Facebook group and forum</b><span>Promotion requires paid sponsorship. Organic promo is removed. The subreddit is the free lane, not the group.</span></div>
+    <div><b>Agency-owned media</b><span>Locumstory and the CompHealth or Weatherby blogs are closed editorial. Locumpedia is the vendor-open alternative, month two at the earliest.</span></div>
+    <div><b>Paid ads of any kind, for now</b><span>Every profitable case in the research had landing-page conversion data first. We have none. Revisit when the visitor-to-capture rate is known, month three at the earliest.</span></div>
+    <div><b>Autonomous posting anywhere</b><span>Undisclosed automation under a real physician identity is a reputational kill shot, and LinkedIn has no commenting API without partnership. Every loop I build terminates in a draft you approve. No exceptions.</span></div>
+  </div>
+</section>
+
+<section>
+  <p class="sec-label">Engine</p>
+  <h2>The machine behind the cadence</h2>
+  <p class="lede">Fork the moltbook loop into a drafting and listening engine that terminates in an approval queue, power it with the Decoded local model at zero cost, and give it a CredentialDOMD persona with a verified fact pack. Everything is copied into a new project at <code>~/Projects/credentialdomd-marketing</code>. Nothing live gets modified.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Build</th><th>What it does</th><th>Effort</th></tr></thead>
+      <tbody>
+        <tr><td>Fork skeleton</td><td>Tick loop, rate ledger, dedupe memory. Terminal action is always "write draft to queue", never publish. There is no publish code path.</td><td class="eff">0.5 d</td></tr>
+        <tr><td>LLM client</td><td>Local qwen for monitoring and scoring at $0; Claude for physician-facing drafts, cents at this volume.</td><td class="eff">hours</td></tr>
+        <tr><td>Safety gate</td><td>Keeps the existing secret and PHI scanners. Adds an em-dash detector, an invented-number heuristic, and a stale-fact blocklist: old prices, "Whit Whitney", "HIPAA compliant", "cheaper than Mocingbird".</td><td class="eff">0.5 d</td></tr>
+        <tr><td>Persona and fact pack</td><td>Your voice, plus every verified claim. Needs one gold-standard example approved by you; that step is what made the Decoded voice work.</td><td class="eff">1 d</td></tr>
+        <tr><td>Draft queue and morning digest</td><td>Drafts land as files with a macOS notification. Your daily 30 minutes lives here.</td><td class="eff">1 d</td></tr>
+        <tr><td>Listening loop</td><td>Daily keyword sweep across Reddit for credentialing, CME deadline, locum tax, DEA renewal. Produces answer-worthy threads with drafted briefs.</td><td class="eff">1 to 2 d</td></tr>
+        <tr><td>Editorial gate</td><td>A second model reviews every draft against the voice checklist before you ever see it. Fewer, better drafts.</td><td class="eff">1 d</td></tr>
+        <tr><td>Asset refresh</td><td>All existing marketing drafts rewritten to $199 flat, all-physicians positioning, Eric Whitney DO, fabricated evidence removed.</td><td class="eff">1 d</td></tr>
+        <tr><td>Guide nurture sequence</td><td>The guide-email capture gets a real follow-up sequence. Needs your beta-terms decision first.</td><td class="eff">0.5 d</td></tr>
+        <tr><td>Free renewal checker</td><td>A no-signup state renewal and CME checker plus a citable all-51-states table. Per the research, the personal answer drives traffic and the table earns links. This is the only thing you ever link in a community, because linking a free checker is a favor.</td><td class="eff">2 to 3 d</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:18px;font-size:15px;color:var(--ink-soft)">Posting does not wait for any of this. Weeks 1 and 2 run manually while the engine is built. Once live, the nightly job drafts three LinkedIn posts, the daily answer briefs, five peer outreach notes, and one guide FAQ update. Your side is 30 to 45 minutes a day: post answers, send notes, approve or kill.</p>
+</section>
+
+<section>
+  <p class="sec-label">Calendar</p>
+  <h2>The first four weeks</h2>
+  <p class="lede">Dated from today. Week 1 is short on purpose: the only things that matter are the ones with lead times.</p>
+  <div class="weeks">
+    <div class="wk">
+      <div class="wk-when"><div class="wk-n">Week 1</div><div class="wk-d">Aug 28<br>to Aug 30</div></div>
+      <ul>
+        <li><span class="who e">Eric</span>Join the two locums Facebook groups and Physician Side Gigs. Credential verification takes days, so this is the single most time-sensitive item.</li>
+        <li><span class="who e">Eric</span>Confirm LinkedIn and Doximity profiles both say founder of CredentialDOMD.</li>
+        <li><span class="who c">Claude</span>Run the stale-asset sweep and produce the refreshed post bank.</li>
+        <li><span class="who c">Claude</span>Draft LinkedIn post 1 and the KevinMD essay. You edit and post.</li>
+        <li><span class="who e">Eric</span>Answer the four open decisions below.</li>
+      </ul>
+    </div>
+    <div class="wk">
+      <div class="wk-when"><div class="wk-n">Week 2</div><div class="wk-d">Aug 31<br>to Sep 6</div></div>
+      <ul>
+        <li>LinkedIn cadence begins in earnest: posts 2 and 3, then hold two to three per week.</li>
+        <li>First r/whitecoatinvestor answers from the daily thread briefs.</li>
+        <li><span class="who e">Eric</span>Send the podcast pitches; message the Facebook group admins about promo policy.</li>
+        <li><span class="who e">Eric</span>Write and submit the Op-Med essay, in your own words.</li>
+        <li><span class="who c">Claude</span>Engine build: skeleton, LLM client, safety gate, persona. Runs dry.</li>
+        <li>First Monday metrics note, manual this week.</li>
+      </ul>
+    </div>
+    <div class="wk">
+      <div class="wk-when"><div class="wk-n">Week 3</div><div class="wk-d">Sep 7<br>to Sep 13</div></div>
+      <ul>
+        <li>Engine exits dry run. Morning digest and drafts flow through both gates.</li>
+        <li>Listening loop live; the daily Reddit digest replaces manual thread hunting.</li>
+        <li><span class="who e">Eric</span>Send the state osteopathic association note.</li>
+        <li>Nurture emails wired. Five peer outreach notes sent. Cadence holds.</li>
+      </ul>
+    </div>
+    <div class="wk">
+      <div class="wk-when"><div class="wk-n">Week 4</div><div class="wk-d">Sep 14<br>to Sep 20</div></div>
+      <ul>
+        <li>Ship the free renewal checker and the all-states table. Announce on LinkedIn, crosspost to X and Bluesky.</li>
+        <li>First monthly review, judged on impressions, captures, and reply rate. Not signups.</li>
+        <li>The disclosed WCI founder post is still not posted. It is gated on four full weeks of real history.</li>
+        <li>Kill review: anything with four weeks of zero signal gets cut.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="sec-label">Measurement</p>
+  <h2>What we watch, in order</h2>
+  <p class="lede">Signup totals are explicitly not the week-to-week success metric until month three. These are, in decision-value order.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Signal</th><th>Why it leads</th></tr></thead>
+      <tbody>
+        <tr><td>Search Console impressions and position, by guide page</td><td>The leading indicator for the entire SEO asset. Moves before clicks do.</td></tr>
+        <tr><td>Page views by path, with referrer</td><td>Community and social activity shows here as referrer and direct spikes long before it shows in signups.</td></tr>
+        <tr><td>Guide-email capture rate per page</td><td>The funnel's actual conversion number. This gates any future sponsorship spend.</td></tr>
+        <tr><td>Leads by source tag</td><td>Every link you post carries <code>?src=</code>. Where a venue bans links, attribution falls back to referrer and time-correlated spikes, logged honestly as estimates.</td></tr>
+        <tr><td>Peer outreach reply rate</td><td>Benchmark is 5 to 10% good, 15%+ excellent for focused campaigns.</td></tr>
+        <tr><td>Unprompted "what tool do you use" asks</td><td>Qualitative, and the most important one. That question is the trigger that permits a product mention.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:18px;font-size:15px;color:var(--ink-soft)">Monday review, 20 minutes. Each channel gets one of three verdicts: double down, hold, or kill. Kill rule is four consecutive weeks of zero signal.</p>
+</section>
+
+<section>
+  <p class="sec-label">Non-negotiable</p>
+  <h2>Rules of engagement</h2>
+  <div class="nope" style="margin-top:24px">
+    <div style="border-left-color:var(--accent)"><b>The disclosure line, every time</b><span>"I built this. Founder of CredentialDOMD." The FTC treats founder equity as a material connection requiring clear disclosure regardless of company size, and AMA ethics guidance says the same for physicians. No platform is exempt.</span></div>
+    <div style="border-left-color:var(--accent)"><b>No invented numbers, ever</b><span>With two users the honest line is "small invite-only beta". The $47,000 figure, the fabricated testimonials, and the "true story" privilege lapse in the old drafts are dead unless you personally confirm them real.</span></div>
+    <div style="border-left-color:var(--accent)"><b>No compliance claims</b><span>Not "HIPAA compliant", not "bank-level encryption". Only literal, verifiable design facts: no patient data enters the product, keys stay on your device. Henry Schein paid $250,000 and took a 20-year FTC consent order for exactly this category of claim.</span></div>
+    <div style="border-left-color:var(--accent)"><b>Price discipline</b><span>$199 a year, flat. Never "cheaper than Mocingbird", because it is exact price parity. The argument is always more product for the same price.</span></div>
+    <div style="border-left-color:var(--accent)"><b>Tax content is record-keeping, never advice</b><span>Framed as estimation and record-keeping, citing IRS publications. Never individualized.</span></div>
+  </div>
+</section>
+
+<section>
+  <p class="sec-label">Blocking</p>
+  <h2>Four decisions only you can make</h2>
+  <p class="lede">Everything else starts without you. These four gate specific pieces.</p>
+  <div class="dec">
+    <div><span class="q">01</span><div><h3>Beta terms under $199 flat</h3><p>What does a beta user get at conversion, if anything? This blocks the guide-email nurture sequence, which currently has an empty slot where the offer goes.</p></div></div>
+    <div><span class="q">02</span><div><h3>Free tier, trial, and resident terms</h3><p>Undefined since the move to one flat price. Three pricing answers in the FAQ stay unpublished until this lands.</p></div></div>
+    <div><span class="q">03</span><div><h3>Sender address</h3><p>Display name is already Eric Whitney, DO everywhere. The visible mailbox is still whit@credentialdomd.com. Keep it, or add eric@ and switch?</p></div></div>
+    <div><span class="q">04</span><div><h3>One approved voice example</h3><p>I draft one post, you edit it until it sounds like you, and that becomes the reference every future draft is measured against. This single step is what made the Decoded voice work.</p></div></div>
+  </div>
+</section>
+
+<footer>
+  Built from a seven-agent research pass across your Projects folder and current venue rules. Every venue rule traces to that research; every asset referenced exists on disk. Channel rules change, so anything older than a quarter gets re-verified before acting on it.
+</footer>
+
+</div>
