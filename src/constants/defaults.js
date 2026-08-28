@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS = {
   cvHighlights: "",
   theme: "dark",
   fontSize: "M",
+  showDashboardCredentials: true,
   apiKey: import.meta.env.VITE_GEMINI_API_KEY || "",
   notifyEmail: true,
   notifyText: true,

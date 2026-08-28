@@ -1001,7 +1001,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       })()}
 
       {/* Credentials List */}
-      {allCreds.length > 0 && (
+      {allCreds.length > 0 && data.settings.showDashboardCredentials !== false && (
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Credentials</h3>

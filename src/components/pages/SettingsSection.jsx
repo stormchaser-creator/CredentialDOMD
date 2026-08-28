@@ -381,6 +381,16 @@ function SettingsSection() {
         )}
       </div>
 
+      {/* Dashboard */}
+      <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>Dashboard</h3>
+        <ToggleRow label="Credentials list on Home"
+          sub="The card listing your licenses under CME Progress"
+          active={s.showDashboardCredentials !== false}
+          onToggle={() => update("showDashboardCredentials", s.showDashboardCredentials === false)}
+          color={T.accent} T={T} />
+      </div>
+
       {/* Notifications */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>Notifications</h3>
