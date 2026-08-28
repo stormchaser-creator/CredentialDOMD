@@ -145,10 +145,10 @@ function CVGenerator() {
               {cvContent.map((section, idx) => {
                 if (section.type === "header") {
                   return (
-                    <div key={idx} style={{ marginBottom: 16, paddingBottom: 12, borderBottom: `2px solid ${T.accent}` }}>
+                    <div key={idx} style={{ marginBottom: 16, paddingBottom: 12, borderBottom: `2px solid ${T.accent}`, textAlign: "center" }}>
                       <div style={{ fontSize: 20, fontWeight: 800, color: T.text }}>{section.name}</div>
                       {section.address && <div style={{ fontSize: 13, color: T.textMuted }}>{section.address}</div>}
-                      <div style={{ fontSize: 13, color: T.textMuted }}>{[section.email, section.website, section.phone].filter(Boolean).join(" \u00b7 ")}</div>
+                      <div style={{ fontSize: 13, color: T.textMuted, wordBreak: "break-word" }}>{[section.email, section.website, section.phone].filter(Boolean).join(" \u00b7 ")}</div>
                       {section.specialties.length > 0 && (
                         <div style={{ fontSize: 14, color: T.accent, fontWeight: 600, marginTop: 2 }}>
                           {`${section.fullDegree ? section.fullDegree + " — " : ""}${section.specialties.map(id => id.split(":").pop()).join(", ")}`}

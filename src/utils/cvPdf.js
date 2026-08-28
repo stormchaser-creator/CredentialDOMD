@@ -21,17 +21,21 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
   for (const section of sections) {
     if (section.type === "header") {
       doc.setFont("helvetica", "bold").setFontSize(19).setTextColor(20, 24, 33);
+      // The header block is centered: that is the convention for a physician
+      // CV, and it is what a medical staff office expects at the top of the
+      // page. Everything below the rule stays left aligned.
+      const CX = M + W / 2;
       // Name only — the degree rides on the specialty line, exactly as the
       // preview and clipboard export render it.
       for (const line of doc.splitTextToSize(section.name, W)) {
-        doc.text(line, M, y + 14);
+        doc.text(line, CX, y + 14, { align: "center" });
         y += 22;
       }
       y += 2;
       doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(90, 98, 110);
       const headerLine = (text, step) => {
         for (const line of doc.splitTextToSize(text, W)) {
-          doc.text(line, M, y + 10);
+          doc.text(line, CX, y + 10, { align: "center" });
           y += step;
         }
       };

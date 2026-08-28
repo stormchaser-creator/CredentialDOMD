@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, memo } from "react";
+import { formatPhone, emailProblem } from "../../utils/contactFormat";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Field from "../shared/Field";
@@ -298,8 +299,16 @@ function SettingsSection() {
         <Field label="Board Specialties" hint="Select all boards you are certified in. CME tracking is based on these.">
           <SpecialtyPicker selected={s.specialties || []} onChange={v => update("specialties", v)} degreeType={s.degreeType} iS={iS} T={T} />
         </Field>
-        <Field label="Email" hint="For share emails"><input type="email" name="email" autoComplete="email" value={s.email || ""} onChange={e => update("email", e.target.value)} style={iS} placeholder="your@email.com" /></Field>
-        <Field label="Phone" hint="For share texts"><input type="tel" name="tel" autoComplete="tel" value={s.phone || ""} onChange={e => update("phone", e.target.value)} style={iS} placeholder="(555) 123-4567" /></Field>
+        <Field label="Email" hint={emailProblem(s.email) || "For share emails and your CV header"}>
+          <input type="email" name="email" autoComplete="email" value={s.email || ""} onChange={e => update("email", e.target.value)}
+            style={{ ...iS, ...(emailProblem(s.email) ? { borderColor: "#ef4444" } : {}) }} placeholder="your@email.com" />
+        </Field>
+        <Field label="Phone" hint="For share texts and your CV header">
+          <input type="tel" name="tel" autoComplete="tel" value={s.phone || ""}
+            onChange={e => update("phone", e.target.value)}
+            onBlur={e => { const f = formatPhone(e.target.value); if (f !== e.target.value) update("phone", f); }}
+            style={iS} placeholder="(555) 123-4567" />
+        </Field>
         <Field label="Address" hint="Appears on your CV header"><input name="address" autoComplete="street-address" value={s.address || ""} onChange={e => update("address", e.target.value)} style={iS} placeholder="Street, City, ST ZIP" /></Field>
         <Field label="Website" hint="Personal or practice site — CV header"><input name="website" value={s.website || ""} onChange={e => update("website", e.target.value)} style={iS} placeholder="e.g. DrYourName.com" /></Field>
         <Field label="Languages" hint="e.g. Fluent in Spanish"><input value={s.languages || ""} onChange={e => update("languages", e.target.value)} style={iS} placeholder="Languages beyond English" /></Field>
