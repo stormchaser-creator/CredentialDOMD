@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
+import { edgeErrorMessage } from "../../utils/edgeError";
 import { supabase } from "../../lib/supabase";
 import { compressImage } from "../../utils/documentScanner";
 
@@ -135,7 +136,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     setThreadLoading(false);
     if (t.context_payload?.attachment_path) {
       const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
+      // A failure here used to leave the screenshot silently absent, which
+      // reads as "the upload was lost" when the file is fine and the link
+      // call is what broke. Say so instead.
       if (!res.error && res.data?.url) setAttachmentUrl(res.data.url);
+      else if (res.error) setReplyMsg(await edgeErrorMessage(res.error, "Could not open the attachment."));
     }
   };
 
@@ -165,7 +170,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       const res = await supabase.functions.invoke("reply-ticket", {
         body: { ticket_id: openTicket.id, body: text },
       });
-      if (res.error) throw new Error(res.error.message || "Failed to send");
+      if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not send the reply."));
       const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
       setThread(data || []);
       setReply("");
@@ -199,7 +204,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           ...(attachment ? { attachment: { data: attachment.data } } : {}),
         },
       });
-      if (res.error) throw new Error(res.error.message || "Failed to submit");
+      if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not file the ticket."));
       setDone(true);
       setTimeout(() => { onClose(); reset(); }, 2600);
     } catch (e) {

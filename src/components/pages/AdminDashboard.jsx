@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { isAdminUser } from "../../lib/admin";
@@ -92,7 +93,7 @@ export default function AdminDashboard() {
           ...(newAttachment ? { attachment: { data: newAttachment.data } } : {}),
         },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
       setNewOpen(false); setNewSubject(""); setNewBody(""); setNewAttachment(null); setNewAttachError("");
       await refreshTickets();
     } catch (e2) { setTicketMsg(e2.message); }
@@ -117,7 +118,7 @@ export default function AdminDashboard() {
       const res = await supabase.functions.invoke("reply-ticket", {
         body: { ticket_id: openTicket.id, body: body || "Status set to resolved.", status: "resolved" },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
       const { error: e2 } = await supabase.from("support_tickets")
         .update({ archived_at: new Date().toISOString() })
         .eq("id", openTicket.id);
@@ -141,7 +142,7 @@ export default function AdminDashboard() {
       const res = await supabase.functions.invoke("reply-ticket", {
         body: { ticket_id: openTicket.id, body: body || `Status set to ${newStatus}.`, ...(newStatus ? { status: newStatus } : {}) },
       });
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
       const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
       setThread(data || []);
       setReply("");
