@@ -41,7 +41,9 @@ import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements
  *     B&P 2190.5. Where a topic names its own statute the row links straight to
  *     it; where it does not, the row inherits the rule set's `source` and
  *     `sourceUrl` and says so, so a physician can always tell whether the link
- *     lands on the rule itself or on the board's general page.
+ *     lands on the rule itself or on the board's general page. A topic `url`
+ *     that merely repeats the rule set's `sourceUrl` counts as inherited: the
+ *     label tracks where the link actually lands, not which field held it.
  *
  * MATE Act: DEA registrants owe a ONE-TIME 8 hours of opioid or substance use
  * disorder training — checked against ALL entries (not windowed) tagged with a
@@ -223,8 +225,17 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     // URL. `citeInherited` / `sourceInherited` are what let the UI say "this
     // link is the board's general page" instead of implying it points at the
     // sentence that states this requirement.
+    //
+    // Inheritance is decided by the URL that comes out, not by whether anyone
+    // typed one in. Copying the rule set's own `sourceUrl` onto a topic used
+    // to flip the label to "Source", promising a link to the sentence that
+    // states the requirement while pointing at exactly the same board page an
+    // untouched topic would have got. A URL byte-identical to the rule set's
+    // carries no topic-specific provenance, so it is reported as inherited
+    // whichever field it was written in.
     const cite = t.cite || entry?.source || "";
-    const url = t.url || entry?.sourceUrl || "";
+    const entryUrl = entry?.sourceUrl || "";
+    const url = t.url || entryUrl;
     return {
       topic: t.topic,
       required: t.hours || 0,
@@ -237,7 +248,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       cite,
       url,
       citeInherited: !t.cite && !!cite,
-      sourceInherited: !t.url && !!url,
+      sourceInherited: !!url && url === entryUrl,
     };
   });
 

@@ -363,10 +363,9 @@ ok("IA opioid met by a course inside the 5-year window",
 eq("TX human trafficking every 6 yrs", topicOf("TX", "MD", "Human Trafficking").period, { years: 6 });
 eq("TX opioid prescribing every 8 yrs", topicOf("TX", "MD", "Opioid Prescribing").period, { years: 8 });
 ok("TX Life of the Mother Act is one-time", topicOf("TX", "MD", "Life of the Mother Act").period === "lifetime");
-// The pain-clinic rule is stated annually by TMB 195.3(d); the encoding now
-// matches the note instead of contradicting it.
-eq("TX pain clinic hours run on a 1-year clock", topicOf("TX", "MD", "Pain Management").period, { years: 1 });
-eq("TX pain clinic row says annual", topicOf("TX", "MD", "Pain Management").periodLabel, "Every year");
+// The pain-clinic rule was encoded annually from TMB 195.3(d). Chapter 195 has
+// been repealed; the surviving rule is 22 TAC 172.3 and TMB states it
+// biennially. Asserted with the rest of this pass's corrections further down.
 
 // PA: 49 Pa. Code 16.19 says the organ donation CE is a one-time requirement.
 ok("PA MD organ donation is one-time", topicOf("PA", "MD", "Organ and Tissue Donation").period === "lifetime");
@@ -453,6 +452,212 @@ eq("CA DO Schedule II row says every cycle", topicOf("CA", "DO", "Substance Use 
 // The OMBC PDF that a DO clicks through to must be the one that resolves; the
 // bare /licensees/cme path returned HTTP 300.
 ok("CA DO board link points at the CME document", STATE_REQS.CA.do.sourceUrl.endsWith(".pdf"));
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// Provenance invariants. Both of these are gaps an adversarial audit found:
+// the citation data was checked for PRESENCE but never for whether it pointed
+// at the right board, or at anything more specific than the rule set already
+// carried.
+// ══════════════════════════════════════════════════════════════════════════
+
+// A helper that walks every rule set with its degree label, including the
+// flat (combined-board) states, which have no degree of their own.
+function eachRuleSet(fn) {
+  for (const [st, v] of Object.entries(STATE_REQS)) {
+    const sets = (v.md || v.do) ? [["MD", v.md], ["DO", v.do]] : [[null, v]];
+    for (const [deg, e] of sets) if (e) fn(st, deg, e);
+  }
+}
+
+// ── Gap 1: a citation must belong to the board that governs the rule set ──
+//
+// This is what let "32 M.R.S. 2600-C" onto Maine's ALLOPATHIC rule set. That
+// section is Title 32 chapter 36, the Board of Osteopathic Licensure. The MD
+// analogue is 3300-F, chapter 48, the Board of Licensure in Medicine. Both
+// say "3 hours every 2 years", so no hour count was wrong and nothing else in
+// the suite could catch it: an MD taking the citation to a board audit would
+// have been quoting a statute that does not govern them.
+//
+// Each entry names authorities that are exclusive to ONE degree in that state.
+// A pattern under `doOnly` must never appear anywhere in an MD rule set, and
+// vice versa. Every rule below was read against the primary source named in
+// `why` before being added; do not add a pattern you have not read.
+const DEGREE_SCOPED = [
+  {
+    state: "ME",
+    doOnly: /\b2600-[A-Z]\b/,
+    mdOnly: /\b3300-[A-Z]\b/,
+    why: "32 M.R.S. ch. 36 (2571-2600-x) is the Board of Osteopathic Licensure; ch. 48 (3269-3300-x) is the Board of Licensure in Medicine",
+  },
+  {
+    state: "CA",
+    doOnly: /2454\.5/,
+    mdOnly: /1336/,
+    why: "B&P 2454.5 is the Osteopathic Medical Board's CME statute; 16 CCR 1336 is the Medical Board's 50-hour rule",
+  },
+  {
+    state: "MI",
+    doOnly: /338\.1[0-9]{2}\b/,
+    mdOnly: /338\.2[0-9]{2}\b/,
+    why: "Mich. Admin. Code R 338.111-338.143 are the osteopathic general rules; the MD board's CE rules sit in a different series",
+  },
+];
+
+{
+  const bad = [];
+  for (const rule of DEGREE_SCOPED) {
+    const v = STATE_REQS[rule.state];
+    if (!v || !(v.md || v.do)) { bad.push(`${rule.state}: no separate MD/DO rule sets to check`); continue; }
+    for (const [deg, e] of [["MD", v.md], ["DO", v.do]]) {
+      if (!e) continue;
+      // Every string a physician could be shown as authority for this rule set.
+      const authorities = [
+        ["source", e.source || ""],
+        ["sourceUrl", e.sourceUrl || ""],
+        ...(e.topics || []).flatMap(t => [
+          [`${t.topic} cite`, t.cite || ""],
+          [`${t.topic} url`, t.url || ""],
+        ]),
+      ];
+      const forbidden = deg === "MD" ? rule.doOnly : rule.mdOnly;
+      if (!forbidden) continue;
+      for (const [where, text] of authorities) {
+        if (text && forbidden.test(text)) {
+          bad.push(`${rule.state}/${deg} ${where}: "${text}" cites the other board (${rule.why})`);
+        }
+      }
+    }
+  }
+  ok("no rule set cites the other degree's board or chapter", bad.length === 0, bad.join("; "));
+}
+
+// Positive control: the patterns above actually match the citations they are
+// meant to police, so the test cannot pass by matching nothing at all.
+ok("ME MD cites the allopathic chapter", /\b3300-[A-Z]\b/.test(topicOf("ME", "MD", "Opioid Prescribing").cite));
+ok("ME DO cites the osteopathic chapter", /\b2600-[A-Z]\b/.test(topicOf("ME", "DO", "Opioid Prescribing").cite));
+
+// ── Gap 2: "Source" must mean a source the rule set did not already have ──
+//
+// TopicProvenance labels the link "Source" and promises "the primary source
+// for this requirement" whenever sourceInherited is false. 25 topics carried a
+// per-topic `url` byte-identical to their own rule set's `sourceUrl`, so the
+// label promised a specific citation while landing on exactly the board page
+// an untouched topic would have got. Two halves, because either alone leaves
+// the hole open: the DATA must not carry redundant URLs, and the ENGINE must
+// classify one as inherited if it ever appears again.
+{
+  const bad = [];
+  eachRuleSet((st, deg, e) => {
+    for (const t of (e.topics || [])) {
+      if (t.url && t.url === e.sourceUrl) {
+        bad.push(`${st}${deg ? "/" + deg : ""}/${t.topic}`);
+      }
+    }
+  });
+  ok("no per-topic URL is a copy of its own rule set's sourceUrl", bad.length === 0, bad.join("; "));
+}
+
+{
+  const bad = [];
+  for (const st of Object.keys(STATE_REQS)) {
+    for (const deg of ["MD", "DO"]) {
+      const res = computeCompliance([], st, deg);
+      for (const t of res.topicResults) {
+        // "Source" (not inherited) is a promise that the link is more specific
+        // than the rule set's own page. It must therefore differ from it.
+        if (!t.sourceInherited && t.url && t.url === res.sourceUrl) {
+          bad.push(`${st}/${deg}/${t.topic} claims a specific source but links the rule set's own URL`);
+        }
+        if (t.sourceInherited && t.url && t.url !== res.sourceUrl) {
+          bad.push(`${st}/${deg}/${t.topic} is marked inherited but links somewhere else`);
+        }
+      }
+    }
+  }
+  ok("a topic only claims its own source when the link actually differs", bad.length === 0, bad.slice(0, 5).join("; "));
+}
+
+// Pin the computation, not just the current data. The old flag was
+// `!t.url && !!url`, derived from whether a human typed a URL rather than
+// from where the link lands, so copying the rule set's URL onto a topic
+// flipped the label to "Source". Inject a rule set that does that and assert
+// the engine still calls it inherited.
+{
+  STATE_REQS.__PROVENANCE_TEST__ = {
+    total: 10, cycle: 1, cat1min: 0, cat1note: "", topics: [
+      { topic: "Ethics", hours: 1, note: "copied URL", cite: "Test cite", url: "https://example.gov/board" },
+      { topic: "Pain Management", hours: 1, note: "own URL", cite: "Test cite", url: "https://example.gov/the-rule" },
+      { topic: "Infection Control", hours: 1, note: "no URL" },
+    ],
+    notes: "", rollover: "No", moc: "", source: "Test source",
+    sourceUrl: "https://example.gov/board", upcoming: [],
+  };
+  const rows = computeCompliance([], "__PROVENANCE_TEST__", "MD").topicResults;
+  const byTopic = (n) => rows.find(r => r.topic === n);
+  ok("a topic URL equal to the rule set's is reported as inherited",
+    byTopic("Ethics").sourceInherited === true);
+  ok("a topic URL that differs is reported as its own source",
+    byTopic("Pain Management").sourceInherited === false);
+  ok("a topic with no URL of its own is reported as inherited",
+    byTopic("Infection Control").sourceInherited === true);
+  ok("an inherited topic still renders the rule set's link",
+    byTopic("Infection Control").url === "https://example.gov/board");
+  delete STATE_REQS.__PROVENANCE_TEST__;
+}
+
+// ── Corrections made in this pass, so a later one cannot silently undo them ──
+
+// TX: 22 TAC ch. 195 was repealed and reorganized into ch. 172 (172.3 eff.
+// 2025-01-09, 50 TexReg 352). TMB's own page states 10 hrs BIENNIALLY, and
+// Texas renews every 2 years, so it is once per cycle, not 10 hrs a year.
+{
+  const txPain = topicOf("TX", "MD", "Pain Management");
+  eq("TX pain clinic CME is 10 hrs", txPain.required, 10);
+  eq("TX pain clinic CME is per renewal cycle, not annual", txPain.period, null);
+  eq("TX pain clinic row says every 2 yrs", txPain.periodLabel, "Every renewal cycle (2 yrs)");
+  ok("TX pain clinic cites the surviving chapter 172 rule",
+    txPain.cite.includes("172.3") && !txPain.cite.includes("195.3"));
+}
+
+// WY: ch. 3 s. 7 of the Board's rules is the 60-hr/3-yr CME rule and says
+// nothing about controlled substances. The 1-hr/2-yr mandate is statutory.
+{
+  const wy = topicOf("WY", "MD", "Controlled Substances");
+  eq("WY controlled substance hour stays on its 2-yr clock", wy.period, { years: 2 });
+  ok("WY cites the statute that actually carries the mandate",
+    wy.cite.includes("33-26-202"));
+}
+
+// No rule anywhere may be sourced to a third-party mirror. A physician quoting
+// a commercial reprint at a board audit is quoting nothing the board published.
+// AZ, NH and NJ still carry Cornell LII URLs at the rule-set level and are
+// listed here so the gap is visible rather than silently tolerated.
+{
+  const MIRROR = /law\.cornell\.edu|casetext\.com|justia\.com|findlaw\.com|cebroker\.com|txrules\.elaws\.us/i;
+  // Known debt, not an allowance. A key stays here only while its mirror is
+  // still in the data; once fixed it MUST be removed from this list, and the
+  // assertion below fails if it is not. That makes the list a ratchet that can
+  // only shrink, instead of a whitelist that quietly blesses four violations
+  // forever. `source` is checked too: it renders to the physician as the
+  // authority, so a third-party URL sitting in it is the same defect.
+  const KNOWN_MIRROR_DEBT = new Set(["AZ/MD", "AZ/DO", "NH", "NJ"]);
+  const unexpected = [];
+  const stillMirrored = new Set();
+  eachRuleSet((st, deg, e) => {
+    const key = deg ? `${st}/${deg}` : st;
+    const hits = [e.sourceUrl || "", e.source || "", ...(e.topics || []).map(t => t.url || "")].filter(u => MIRROR.test(u));
+    if (hits.length) {
+      stillMirrored.add(key);
+      if (!KNOWN_MIRROR_DEBT.has(key)) unexpected.push(`${key}: ${hits[0]}`);
+    }
+  });
+  const fixedButStillListed = [...KNOWN_MIRROR_DEBT].filter(k => !stillMirrored.has(k));
+  ok("KNOWN_MIRROR_DEBT only shrinks (fixed entries removed from the list)",
+    fixedButStillListed.length === 0,
+    fixedButStillListed.length ? `stale entries: ${fixedButStillListed.join(", ")}` : "");
+  ok("no new third-party mirror is cited anywhere", unexpected.length === 0, unexpected.join("; "));
+}
 
 
 console.log(`${pass} passed, ${fail} failed`);
