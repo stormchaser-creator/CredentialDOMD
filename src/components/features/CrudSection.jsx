@@ -346,9 +346,29 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     const hit = filterTabs.find(t => t.match(item));
     return hit ? hit.key : "other";
   };
-  const shownItems = !filterTabs || catFilter === "all"
+  const filteredItems = !filterTabs || catFilter === "all"
     ? items
     : items.filter(i => categorize(i) === catFilter);
+
+  // Records that need a look (missing required fields, expired, or expiring
+  // soon) float to the top and stay grouped there — burying the one problem
+  // record at the bottom of an otherwise-fine list made it easy to miss.
+  const statusRank = (item) => {
+    const nonExpiring = isNonExpiring(item, sectionKey);
+    const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
+    const missingRequired = fields.filter(f => {
+      const req = typeof f.required === "function" ? f.required(item) : f.required;
+      return req && !item[f.key];
+    });
+    const needsReview = (item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0;
+    if (needsReview) return 0;
+    if (color === "red") return 1;
+    if (color === "orange") return 2;
+    if (color === "amber") return 3;
+    return 4;
+  };
+  const shownItems = [...filteredItems].sort((a, b) => statusRank(a) - statusRank(b));
+  const flaggedCount = shownItems.filter(i => statusRank(i) < 4).length;
 
   // Escape must close the lightbox, not the modal underneath it — capture
   // phase so this runs before Modal's own document-level Escape handler
@@ -825,7 +845,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         <EmptyState icon={emptyIcon} title={emptyTitle} subtitle={emptySub} onAction={openAdd} actionLabel="Add" />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {shownItems.map(item => {
+          {flaggedCount > 0 && (
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.danger, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: -2 }}>
+              Needs attention ({flaggedCount})
+            </div>
+          )}
+          {shownItems.map((item, idx) => {
             const nonExpiring = isNonExpiring(item, sectionKey);
             const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
             // A field required today (e.g. State on a license/DEA entry) can still be
@@ -837,8 +862,15 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               return req && !item[f.key];
             });
             const needsReview = (item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0;
+            const showAllDivider = idx === flaggedCount && flaggedCount > 0 && flaggedCount < shownItems.length;
             return (
-              <div key={item.id} onClick={() => setViewItem(item)} style={{
+              <div key={item.id}>
+              {showAllDivider && (
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.6, margin: "8px 0 -2px" }}>
+                  All records
+                </div>
+              )}
+              <div onClick={() => setViewItem(item)} style={{
                 backgroundColor: T.card, border: `1px solid ${needsReview ? T.danger : T.border}`,
                 borderRadius: 14, padding: "14px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
@@ -908,6 +940,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
                   <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                 </div>
+              </div>
               </div>
             );
           })}

@@ -30,6 +30,9 @@ import PeerNotify from "./components/features/PeerNotify";
 import HomeSearch, { SECTIONS } from "./components/features/HomeSearch";
 import RenewalInfo from "./components/features/RenewalInfo";
 import Onboarding from "./components/features/Onboarding";
+import RuleProvenance from "./components/shared/RuleProvenance";
+import { BOARD_REQS_META } from "./constants/boardRequirements";
+import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirements";
 import { useAiAvailable } from "./utils/aiClient";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
@@ -876,6 +879,15 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               {comp.notes && (
                 <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>{comp.notes}</div>
               )}
+              <RuleProvenance
+                reportKey={cmeDetail.st}
+                subject={`${cmeDetail.st}${hasSeparateBoards(cmeDetail.st) ? ` (${deg || "MD"})` : ""}`}
+                citation={comp.source}
+                meta={STATE_REQS_META}
+                verified={comp.verified}
+                sourceUrl={comp.sourceUrl}
+                upcoming={comp.upcoming}
+              />
             </>
           );
         })()}
@@ -947,6 +959,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>Also required: {b.assessment}</div>
               )}
               {b.notes && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{b.notes}</div>}
+              <RuleProvenance
+                reportKey={`board:${b.code}`}
+                subject={b.label}
+                citation={b.citation}
+                meta={BOARD_REQS_META}
+                verified={b.verified}
+                compact
+              />
             </>
           );
         })()}
