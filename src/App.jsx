@@ -1591,8 +1591,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     ]},
   ];
 
-  const renderCredentials = () => {
-    if (subPage === "licenses") {
+  const renderCredSection = (sub) => {
+    if (sub === "licenses") {
       const handleNpiImport = async () => {
         const npi = data.settings.npi;
         if (!npi) { setNpiImportMsg("Set your NPI in Settings first."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
@@ -1634,24 +1634,24 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
       </>);
     }
-    if (subPage === "cme") return <CMESection onShare={openShare} />;
-    if (subPage === "findCme") return <CMEResourcesSection />;
-    if (subPage === "matrix") return <MultiStateMatrix />;
-    if (subPage?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={subPage.split(":")[1]} />;
-    if (subPage === "privileges") {
+    if (sub === "cme") return <CMESection onShare={openShare} />;
+    if (sub === "findCme") return <CMEResourcesSection />;
+    if (sub === "matrix") return <MultiStateMatrix />;
+    if (sub?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={sub.split(":")[1]} />;
+    if (sub === "privileges") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;
       return <CrudSection title="Privileges" sectionKey="privileges" {...crudTarget("privileges")} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "portalUrl", label: "Credentialing / portal URL", type: "url", placeholder: "medstaff.hospital.org" }, { key: "loginUsername", label: "Portal username" }, { key: "loginSecret", label: "Portal password", type: "secret", hint: "Encrypted with your lock code before it syncs. Show it from the record's detail view." }, { key: "notes", label: "Notes", type: "textarea", placeholder: "Medical staff office contact, reappointment steps, badge, parking, dictation line..." }]} />;
     }
-    if (subPage === "insurance") {
+    if (sub === "insurance") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
       return <CrudSection title="Insurance" sectionKey="insurance" {...crudTarget("insurance")} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => !/health insurance|dental|vision|life insurance|disability/i.test(f.type || "") }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
-    if (subPage === "screenings") return <ScreeningsSection onShare={openShare} />;
-    if (subPage === "publications") return <CrudSection title="Publications" sectionKey="publications" {...crudTarget("publications")} items={data.publications || []} {...crud("publications")} onShare={openShare} emptyIcon={"\ud83d\udcda"} emptyTitle="No publications" emptySub="Papers, chapters, and case reports — they appear on your CV in the order you set." fields={[{ key: "name", label: "Short Label", placeholder: "e.g. Cureus 2026 — Composite Homeostatic Wave" }, { key: "citation", label: "Full Citation (as it should read on the CV)", type: "textarea" }, { key: "year", label: "Year" }, { key: "sortOrder", label: "Order on CV", type: "number", placeholder: "1 = first; blank = after the ordered ones" }, { key: "doi", label: "DOI" }, { key: "pmid", label: "PMID" }, { key: "url", label: "Link" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (subPage === "memberships") return <CrudSection title="Professional Organizations" sectionKey="memberships" {...crudTarget("memberships")} items={data.memberships || []} {...crud("memberships")} onShare={openShare} emptyIcon={"\ud83c\udfdb\ufe0f"} emptyTitle="No memberships" emptySub="AMA, ACS, CNS, AANS, AOA — society memberships appear on your CV under Professional Organizations. Track dues and renewal dates here too." fields={[{ key: "organization", label: "Organization", placeholder: "e.g. Congress of Neurological Surgeons" }, { key: "role", label: "Membership Type", placeholder: "e.g. Member, Fellow, Resident member" }, { key: "cost", label: "Annual Dues ($)", type: "currency", placeholder: "e.g. 310" }, { key: "startDate", label: "Member Since", type: "date" }, { key: "expirationDate", label: "Renewal Due", type: "date" }, { key: "endDate", label: "Ended (blank if current)", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (subPage === "professionalPhotos") return <CrudSection title="Professional Photo" sectionKey="professionalPhotos" {...crudTarget("professionalPhotos")} items={data.professionalPhotos || []} {...crud("professionalPhotos")} onShare={openShare} emptyIcon={"\ud83d\udcf8"} emptyTitle="No professional photo" emptySub="Agencies ask for a recent color photo — keep a dated headshot here and it rides along in packets." fields={[{ key: "name", label: "Label", placeholder: "e.g. Professional headshot" }, { key: "dateTaken", label: "Date Taken", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (subPage === "healthRecords") return <HealthRecordsSection onShare={openShare} {...crudTarget("healthRecords")} />;
-    if (subPage === "travelDocs") return <CrudSection title="Travel & IDs" sectionKey="travelDocs" {...crudTarget("travelDocs")} filterTabs={[
+    if (sub === "screenings") return <ScreeningsSection onShare={openShare} />;
+    if (sub === "publications") return <CrudSection title="Publications" sectionKey="publications" {...crudTarget("publications")} items={data.publications || []} {...crud("publications")} onShare={openShare} emptyIcon={"\ud83d\udcda"} emptyTitle="No publications" emptySub="Papers, chapters, and case reports — they appear on your CV in the order you set." fields={[{ key: "name", label: "Short Label", placeholder: "e.g. Cureus 2026 — Composite Homeostatic Wave" }, { key: "citation", label: "Full Citation (as it should read on the CV)", type: "textarea" }, { key: "year", label: "Year" }, { key: "sortOrder", label: "Order on CV", type: "number", placeholder: "1 = first; blank = after the ordered ones" }, { key: "doi", label: "DOI" }, { key: "pmid", label: "PMID" }, { key: "url", label: "Link" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "memberships") return <CrudSection title="Professional Organizations" sectionKey="memberships" {...crudTarget("memberships")} items={data.memberships || []} {...crud("memberships")} onShare={openShare} emptyIcon={"\ud83c\udfdb\ufe0f"} emptyTitle="No memberships" emptySub="AMA, ACS, CNS, AANS, AOA — society memberships appear on your CV under Professional Organizations. Track dues and renewal dates here too." fields={[{ key: "organization", label: "Organization", placeholder: "e.g. Congress of Neurological Surgeons" }, { key: "role", label: "Membership Type", placeholder: "e.g. Member, Fellow, Resident member" }, { key: "cost", label: "Annual Dues ($)", type: "currency", placeholder: "e.g. 310" }, { key: "startDate", label: "Member Since", type: "date" }, { key: "expirationDate", label: "Renewal Due", type: "date" }, { key: "endDate", label: "Ended (blank if current)", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "professionalPhotos") return <CrudSection title="Professional Photo" sectionKey="professionalPhotos" {...crudTarget("professionalPhotos")} items={data.professionalPhotos || []} {...crud("professionalPhotos")} onShare={openShare} emptyIcon={"\ud83d\udcf8"} emptyTitle="No professional photo" emptySub="Agencies ask for a recent color photo — keep a dated headshot here and it rides along in packets." fields={[{ key: "name", label: "Label", placeholder: "e.g. Professional headshot" }, { key: "dateTaken", label: "Date Taken", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "healthRecords") return <HealthRecordsSection onShare={openShare} {...crudTarget("healthRecords")} />;
+    if (sub === "travelDocs") return <CrudSection title="Travel & IDs" sectionKey="travelDocs" {...crudTarget("travelDocs")} filterTabs={[
       { key: "ids", label: "Personal IDs", match: i => /driver|passport|visa|global entry|known traveler|tsa/i.test(i.type || "") },
       { key: "programs", label: "Travel Programs", match: i => /loyalty|rental|credit/i.test(i.type || "") },
     ]} items={data.travelDocs || []} {...crud("travelDocs")} onShare={openShare} emptyIcon={"✈️"} emptyTitle="No travel records" emptySub="Passports, driver's licenses, Known Traveler Number, loyalty programs, rental memberships, airline credits. The numbers every new assignment asks for." fields={[
@@ -1662,8 +1662,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       { key: "expirationDate", label: "Expires (if it does)", type: "date" },
       { key: "notes", label: "Notes", type: "textarea" },
     ]} />;
-    if (subPage === "education") return <CrudSection title="Education" sectionKey="education" {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (subPage === "caseLogs") {
+    if (sub === "education") return <CrudSection title="Education" sectionKey="education" {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "caseLogs") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
       {
         const allCases = data.caseLogs || [];
@@ -1681,8 +1681,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         </>;
       }
     }
-    if (subPage === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" {...crudTarget("workHistory")} items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "select", options: ["No", "Yes"] }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (subPage === "peerReferences") {
+    if (sub === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" {...crudTarget("workHistory")} items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "select", options: ["No", "Yes"] }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "peerReferences") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Peer References" /></div>;
       const handleContactImport = async () => {
         if (!('contacts' in navigator && 'ContactsManager' in window)) { return; }
@@ -1713,11 +1713,60 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <CrudSection title="Peer References" sectionKey="peerReferences" {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
       </>);
     }
-    if (subPage === "malpracticeHistory") {
+    if (sub === "malpracticeHistory") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Malpractice History" /></div>;
       return <CrudSection title="Malpractice History" sectionKey="malpracticeHistory" {...crudTarget("malpracticeHistory")} items={data.malpracticeHistory || []} {...crud("malpracticeHistory")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No malpractice claims" emptySub="Track malpractice claims for consistent disclosure across applications." fields={[{ key: "dateOfIncident", label: "Date of Incident", type: "date" }, { key: "dateFiled", label: "Date Filed", type: "date" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "outcome", label: "Outcome", type: "select", options: MALPRACTICE_OUTCOMES }, { key: "settlementAmount", label: "Settlement Amount" }, { key: "description", label: "Description", type: "textarea" }, { key: "facility", label: "Facility" }, { key: "insuranceCarrier", label: "Insurance Carrier" }, { key: "dateResolved", label: "Date Resolved", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
 
+  };
+
+  // The grouped section menu: tap-through page on phone (exactly as before),
+  // a persistent 240px rail beside the selected section at desk width.
+  // Selecting a section is one click; Licenses is the default selection when
+  // the tab itself is the destination. Pro-gated sections keep their lock in
+  // the rail and their ProGate overlay in the pane.
+  const renderCredentials = () => {
+    const section = renderCredSection(subPage);
+    if (isDesktop) {
+      const deskSub = subPage || "licenses";
+      const activeRailId = deskSub.startsWith("findCme:") ? "findCme" : deskSub;
+      return (
+        <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+          <nav style={{ width: 240, flexShrink: 0, position: "sticky", top: 72, display: "flex", flexDirection: "column", gap: 14 }}>
+            {credGroups.map(group => (
+              <div key={group.title}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, paddingLeft: 10 }}>{group.title}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {group.items.map(p => {
+                    const hasUrgent = [...expired, ...soon].filter(i => i._sec === p.id).length;
+                    const locked = p.pro && !isPro;
+                    const selected = activeRailId === p.id;
+                    return (
+                      <button key={p.id} onClick={() => setSubPage(p.id)} style={{
+                        display: "flex", alignItems: "center", gap: 8, width: "100%",
+                        padding: "8px 10px", borderRadius: 10, border: "none", cursor: "pointer",
+                        backgroundColor: selected ? T.accentDim : "transparent",
+                        color: selected ? T.accent : T.textMuted,
+                        fontSize: 13.5, fontWeight: selected ? 700 : 500, textAlign: "left",
+                        fontFamily: "inherit", opacity: locked ? 0.75 : 1,
+                      }}>
+                        <span style={{ fontSize: 16, width: 22, textAlign: "center", flexShrink: 0 }}>{locked ? "\ud83d\udd12" : p.icon}</span>
+                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.label}</span>
+                        {locked && <span style={{ fontSize: 10, fontWeight: 800, color: "#10b981", textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>Pro</span>}
+                        {!locked && hasUrgent > 0 && <span style={{ backgroundColor: T.danger, color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 9, flexShrink: 0 }}>{hasUrgent}</span>}
+                        {!locked && hasUrgent === 0 && p.count !== undefined && p.count > 0 && <span style={{ fontSize: 11.5, color: selected ? T.accent : T.textDim, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{p.count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+          <div style={{ flex: 1, minWidth: 0 }}>{section || renderCredSection(deskSub)}</div>
+        </div>
+      );
+    }
+    if (section) return section;
     return (
       <div>
         <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Credentials</h2>
@@ -2119,7 +2168,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (tab === "more") return renderMore();
   };
 
-  const showBack = (tab === "credentials" && subPage) || (tab === "more" && subPage);
+  // Rail-reachable Credentials sections need no Back at desk width: the rail
+  // itself is the way around. Phone behavior is exactly as before.
+  const railIds = new Set(credGroups.flatMap(g => g.items.map(p => p.id)));
+  const railReachable = !!subPage && (railIds.has(subPage) || subPage.startsWith("findCme:"));
+  const showBack = (tab === "credentials" && subPage && !(isDesktop && railReachable)) || (tab === "more" && subPage);
 
   // Bottom-nav slot 4: Locum (for tier === "locum") OR Team (for practice/group) OR Team default.
   // Eric is a locum so this lights up for him.
