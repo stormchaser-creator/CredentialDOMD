@@ -1626,7 +1626,20 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           </div>
         )}
         {npiImportMsg && <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: npiImportMsg.includes("imported") ? T.success : T.warning, backgroundColor: npiImportMsg.includes("imported") ? T.successDim : T.warningDim }}>{npiImportMsg}</div>}
-        <CrudSection title="Licenses" sectionKey="licenses" {...crudTarget("licenses")} filterTabs={[
+        <CrudSection title="Licenses" sectionKey="licenses" {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={[
+          { key: "type", label: "Type" },
+          { key: "state", label: "State", width: "9%" },
+          { key: "licenseNumber", label: "Number" },
+          { key: "issuedDate", label: "Issued", type: "date", width: "12%", render: i => i.issuedDate ? formatDate(i.issuedDate) : "\u2014" },
+          // Expires carries the status in its color; expiration scanning is
+          // the job, so it is also the default sort.
+          { key: "expirationDate", label: "Expires", type: "date", width: "13%", render: i => i.expirationDate ? formatDate(i.expirationDate) : (isNonExpiring(i, "licenses") ? "Does not expire" : "\u2014"), color: i => {
+            if (!i.expirationDate) return T.textDim;
+            const c = getStatusColor(i.expirationDate);
+            return c === "red" ? T.danger : (c === "orange" || c === "amber") ? T.warning : T.success;
+          } },
+          { key: "renewalCost", label: "Cost", type: "number", width: "9%", align: "right", render: i => parseFloat(i.renewalCost) > 0 ? `$${parseFloat(i.renewalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "\u2014" },
+        ]} filterTabs={[
           { key: "medical", label: "Medical Licenses", match: i => /medical license|physician|osteopathic|training license/i.test(i.type || "") },
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },

@@ -5,6 +5,7 @@ import { CPT_BY_CODE } from "../../constants/cpt";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
+import DeskTable from "../shared/DeskTable";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
@@ -79,8 +80,8 @@ function isShown(f, form) {
   return typeof f.show === "function" ? !!f.show(form) : true;
 }
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport }) {
-  const { data, setData, addItem, theme: T , user } = useApp();
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
+  const { data, setData, addItem, theme: T , user, isDesktop } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -843,6 +844,35 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
       {shownItems.length === 0 ? (
         <EmptyState icon={emptyIcon} title={emptyTitle} subtitle={emptySub} onAction={openAdd} actionLabel="Add" />
+      ) : isDesktop && deskColumns ? (
+        /* Desk width: the same records as a sortable table. Row click opens
+           the existing view modal; the quick actions are the card buttons'
+           own handlers. Phone (the branch below) is untouched. */
+        <DeskTable
+          columns={deskColumns}
+          items={filteredItems}
+          defaultSort={deskDefaultSort}
+          onRowClick={(item) => setViewItem(item)}
+          status={(item) => {
+            const nonExpiring = isNonExpiring(item, sectionKey);
+            const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
+            const missingRequired = fields.filter(f => {
+              const req = typeof f.required === "function" ? f.required(item) : f.required;
+              return req && !item[f.key];
+            });
+            const needsReview = (item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0;
+            if (needsReview) return <StatusDot color="red" />;
+            if (item.expirationDate) return <StatusDot color={color} />;
+            return null;
+          }}
+          actions={(item) => (
+            <div style={{ display: "inline-flex", gap: 3 }}>
+              <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
+              <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
+              <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+            </div>
+          )}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {flaggedCount > 0 && (
