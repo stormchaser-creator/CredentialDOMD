@@ -668,7 +668,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               const isExpired = sc === "red";
               return (
                 <div key={item.id} onClick={() => { setTab("credentials"); setSubPage(item._sec); setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
-                  flex: "0 0 auto", width: 240, backgroundColor: T.card, borderRadius: 12,
+                  flex: urgent.length === 1 ? "1 1 auto" : "0 0 auto",
+                  width: urgent.length === 1 ? "100%" : 240,
+                  backgroundColor: T.card, borderRadius: 12,
                   padding: 16, cursor: "pointer", boxShadow: T.shadow1,
                   borderTop: `3px solid ${isExpired ? T.danger : T.warning}`,
                 }}>
