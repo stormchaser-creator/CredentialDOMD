@@ -85,6 +85,9 @@ function Forecast() {
   // Day editor
   const [editDay, setEditDay] = useState(null); // date string
   const [form, setForm] = useState({});
+  // Month detail — tapping the summary line or a reconciliation row shows
+  // the day-by-day est/billed entries feeding that month's totals.
+  const [detailMonth, setDetailMonth] = useState(null); // "YYYY-MM"
   const contractsForDay = (date) => contractsForDate(contracts, date);
   const termLabelFor = (c) => termLabel(c);
 
@@ -241,7 +244,12 @@ function Forecast() {
           })}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "8px 4px 4px", fontSize: 12, color: T.textDim }}>
-          <span>est {money(mRow.est)}{mRow.past ? ` · billed ${money(mRow.actual)}` : ""}</span>
+          <span
+            onClick={() => (mRow.est > 0 || mRow.actual > 0) && setDetailMonth(month)}
+            style={(mRow.est > 0 || mRow.actual > 0) ? { cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" } : undefined}
+          >
+            est {money(mRow.est)}{mRow.past ? ` · billed ${money(mRow.actual)}` : ""}
+          </span>
           <span style={{ fontSize: 10.5 }}>green = actually billed</span>
         </div>
       </div>
@@ -261,7 +269,7 @@ function Forecast() {
           const name = new Date(year, parseInt(x.key.slice(5), 10) - 1, 1).toLocaleDateString("en-US", { month: "short" });
           const over = x.delta < 0; // billed less than estimated = over-estimated
           return (
-            <div key={x.key} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.border}`, fontSize: 13 }}>
+            <div key={x.key} onClick={() => setDetailMonth(x.key)} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.border}`, fontSize: 13, cursor: "pointer" }}>
               <span style={{ fontWeight: 700, color: T.text, width: 34 }}>{name}</span>
               <span style={{ color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>est {money(x.est)}</span>
               <span style={{ color: T.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{x.past ? `billed ${money(x.actual)}` : "ahead"}</span>
@@ -401,6 +409,47 @@ function Forecast() {
           <button onClick={() => setForm(null)} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: T.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Back to all entries for this day</button>
         )}
         </>)}
+      </Modal>
+
+      {/* Month detail — every day that fed the tapped month's est/billed total. */}
+      <Modal open={!!detailMonth} onClose={() => setDetailMonth(null)} title={detailMonth ? new Date(`${detailMonth}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : ""}>
+        {detailMonth && (() => {
+          const [dy, dm] = detailMonth.split("-").map(Number);
+          const dim = new Date(dy, dm, 0).getDate();
+          const rows = [];
+          for (let d = 1; d <= dim; d++) {
+            const date = `${detailMonth}-${String(d).padStart(2, "0")}`;
+            const entries = (schedByDate[date] || []).filter(s => s.kind !== "vacation");
+            const est = entries.reduce((t, s) => t + (parseFloat(s.expected) || 0), 0);
+            const act = actuals[date] || 0;
+            if (est > 0 || act > 0) rows.push({ date, est, act, entries });
+          }
+          const totalEst = rows.reduce((t, r) => t + r.est, 0);
+          const totalAct = rows.reduce((t, r) => t + r.act, 0);
+          return (
+            <div>
+              {rows.length === 0 && (
+                <div style={{ fontSize: 13.5, color: T.textMuted }}>Nothing scheduled or billed this month.</div>
+              )}
+              {rows.map(r => (
+                <div key={r.date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.border}`, fontSize: 12.5 }}>
+                  <span style={{ color: T.textMuted, width: 44 }}>{new Date(`${r.date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  <span style={{ color: T.textDim, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {r.entries.map(e => facilityShort(e.contractId)).join(", ") || "—"}
+                  </span>
+                  <span style={{ color: T.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.est > 0 ? `est ${money(r.est)}` : ""}</span>
+                  <span style={{ color: "#22c55e", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.act > 0 ? `billed ${money(r.act)}` : ""}</span>
+                </div>
+              ))}
+              {rows.length > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", fontSize: 13, fontWeight: 800, color: T.text }}>
+                  <span>Total</span>
+                  <span>est {money(totalEst)} · billed {money(totalAct)}</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
