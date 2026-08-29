@@ -4,8 +4,8 @@ import { AsclepiusIcon, SunIcon, MoonIcon } from "./Icons";
 
 /**
  * Responsive navigation component:
- * - Desktop (>768px): Fixed left sidebar with icon + label
- * - Mobile (≤768px): Fixed bottom bar with icons only
+ * - Desktop (>=1024px, AppContext isDesktop): Fixed left sidebar with icon + label
+ * - Otherwise: Fixed bottom bar with icons only
  *
  * Props:
  *   items: [{ key, label, icon: ReactNode }]
@@ -14,19 +14,12 @@ import { AsclepiusIcon, SunIcon, MoonIcon } from "./Icons";
  *   fabItem: { key, label, icon } — center FAB button (optional)
  */
 export default function SideNav({ items, active, onChange, fabItem }) {
-  const { theme: T, toggleTheme, data, user } = useApp();
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
+  const { theme: T, toggleTheme, data, user, isDesktop } = useApp();
 
   const isDark = data.settings.theme === "dark";
   const initials = (data.settings.name || user?.email || "?").slice(0, 2).toUpperCase();
 
-  if (isMobile) {
+  if (!isDesktop) {
     return <BottomNav items={items} active={active} onChange={onChange} fabItem={fabItem} T={T} />;
   }
 

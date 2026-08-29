@@ -73,6 +73,20 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
 
+  // ─── Desktop breakpoint (>=1024px) ────────────────────────
+  // One flag for the whole app: components branch on layout here instead of
+  // each keeping its own resize listener. Below 1024 nothing branches and
+  // the phone renders exactly as before. SSR-safe: no window means phone.
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1024
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
   // ─── Auth: read from Clerk ────────────────────────────────
   const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
   const clerk = useClerk();
@@ -506,7 +520,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [onNavigate]);
 
   const value = useMemo(() => ({
-    data, setData, loaded, theme, toggleTheme,
+    data, setData, loaded, theme, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
     allTrackedStates, navigate, userIdRef,
     // Auth
@@ -514,7 +528,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
-  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [data, loaded, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

@@ -442,10 +442,14 @@ img, svg {
   transition: margin-left 0.25s ease;
 }
 .cmd-content-inner {
-  max-width: 840px;
+  max-width: 1140px;
   margin: 0 auto;
   padding: 24px 36px;
   padding-bottom: 40px;
+}
+/* Reading pages (Settings, FAQ, Legal, Vera, CV): narrower measure. */
+.cmd-content-inner--reading {
+  max-width: 840px;
 }
 
 /* ─── Bottom Nav (Mobile only) ─────────────────────────────── */
@@ -604,8 +608,8 @@ img, svg {
   min-width: 0;
 }
 
-/* ─── Mobile Responsive ────────────────────────────────────── */
-@media (max-width: 768px) {
+/* ─── Mobile Responsive (below the 1024px desk breakpoint) ─── */
+@media (max-width: 1023.98px) {
   .cmd-sidebar {
     display: none;
   }

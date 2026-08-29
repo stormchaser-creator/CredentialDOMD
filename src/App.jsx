@@ -4,8 +4,9 @@ import {
   HomeIcon, ScanIcon, CredsIcon, MoreIcon,
   SendIcon, BellIcon, SunIcon, MoonIcon,
   BackIcon, SearchIcon, CheckIcon, PlusIcon,
-  AsclepiusIcon,
+  AsclepiusIcon, DocsIcon,
 } from "./components/shared/Icons";
+import SideNav from "./components/shared/SideNav";
 import StatusDot from "./components/shared/StatusDot";
 import Modal from "./components/shared/Modal";
 import StatusBadge from "./components/shared/StatusBadge";
@@ -261,7 +262,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, offlineMode, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta, isLifetime } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, offlineMode, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta, isLifetime } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
@@ -2140,18 +2141,28 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const FONT_ZOOM = { S: 0.88, M: 1, L: 1.1, XL: 1.2, XXL: 1.35 };
   const fontZoom = FONT_ZOOM[data.settings.fontSize] || 1;
 
-  return (
-    <div style={{
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      backgroundColor: T.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative",
-    }}>
-      <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
-      {/* Billing is cloud-only; in offline mode the context's checkout/manage
-          already no-op with a message, and the modal itself stays closed. */}
-      <PricingModal open={showPricing && !offlineMode} onClose={() => setShowPricing(false)} />
-      <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); }} initialTab={supportTab} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
-      <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
+  // Desktop sidebar mirrors the five bottom-bar destinations; the center
+  // "Add" FAB becomes the Documents entry it already navigates to. Active
+  // state follows the same tab state the bottom bar uses (Share highlights
+  // Documents there too).
+  const sideItems = [
+    { key: "home", label: "Home", icon: <HomeIcon /> },
+    { key: "credentials", label: "Credentials", icon: <CredsIcon /> },
+    { key: "documents", label: "Documents", icon: <DocsIcon /> },
+    { key: slot4.id, label: slot4.label, icon: slot4.icon },
+    { key: "more", label: "More", icon: <MoreIcon /> },
+  ];
 
+  // Reading pages take the narrower 840px measure at desk width; working
+  // screens take the full 1140px. Phone ignores both.
+  const READING_PAGES = new Set(["settings", "faq", "assistant", "cv", "cancellation", "privacy", "terms", "data-rights"]);
+  const isReadingPage = tab === "more" && READING_PAGES.has(subPage);
+
+  // The top bar and content render identically at both widths; at desk they
+  // sit inside the sidebar-offset content area, on phone directly in the
+  // 480px column exactly as before (the fragment adds no DOM node).
+  const shellBody = (
+    <>
       {/* ─── TOP BAR (56px) ────────────────────────────── */}
       <div style={{
         position: "sticky", top: 0, zIndex: 50,
@@ -2229,14 +2240,42 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       </div>
 
       {/* ─── CONTENT ───────────────────────────────────── */}
-      <div style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
+      <div style={isDesktop ? { zoom: fontZoom } : { paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
         {tab === "home" && <NotificationBanner onOpenCenter={() => setNotifCenterOpen(true)} onGoSettings={() => { setTab("more"); setSubPage("settings"); }} />}
         {tab === "home" && <AdminMessageCard />}
-        <div style={{ padding: "16px 16px 0" }}>{renderContent()}</div>
+        <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}>{renderContent()}</div>
       </div>
+    </>
+  );
 
-      {/* ─── BOTTOM TAB BAR ────────────────────────────── */}
-      <div style={{
+  return (
+    <div style={isDesktop ? {
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      backgroundColor: T.bg, minHeight: "100vh", position: "relative",
+    } : {
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      backgroundColor: T.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative",
+    }}>
+      <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
+      {/* Billing is cloud-only; in offline mode the context's checkout/manage
+          already no-op with a message, and the modal itself stays closed. */}
+      <PricingModal open={showPricing && !offlineMode} onClose={() => setShowPricing(false)} />
+      <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); }} initialTab={supportTab} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
+      <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
+
+      {/* ─── SIDEBAR (desk width only) ─────────────────── */}
+      {isDesktop && (
+        <SideNav
+          items={sideItems}
+          active={tab === "share" ? "documents" : tab}
+          onChange={(key) => { setTab(key); setSubPage(null); }}
+        />
+      )}
+
+      {isDesktop ? <div className="cmd-content-area">{shellBody}</div> : shellBody}
+
+      {/* ─── BOTTOM TAB BAR (phone only) ───────────────── */}
+      {!isDesktop && <div style={{
         position: "fixed", bottom: 0, left: "50%",
         // translate3d (not translateX) promotes this to its own GPU
         // compositing layer — without it, iOS Safari repaints the "fixed"
@@ -2301,7 +2340,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </button>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }
