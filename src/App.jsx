@@ -42,7 +42,8 @@ import { isNonExpiring, mailtoHref } from "./utils/helpers";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
-import { SignedIn, SignedOut } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
+import { evaluateOfflineFallback, probeNetwork, CLERK_LOAD_TIMEOUT_MS } from "./utils/offlineSession";
 import {
   STATES, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
@@ -72,20 +73,149 @@ export default function App() {
   const [navRecord, setNavRecord] = useState(null); // { sec, id } from Vera / deep links
   const handleNavigate = useCallback((t, sub, record) => { setTab(t); setSubPage(sub); if (record) setNavRecord({ ...record, nonce: Date.now() }); }, []);
 
+  // ─── Offline fallback (src/utils/offlineSession.js) ────────
+  // Clerk gates the whole render, and offline it never reaches loaded
+  // state. When the network is genuinely down AND this device recorded a
+  // last signed-in identity AND that identity's own cache parses, render
+  // the real app in offline mode as that identity. A slow Clerk on a
+  // working network never activates this: the browser must say offline, or
+  // Clerk must time out AND a same-origin probe must fail.
+  const { isLoaded: clerkLoaded } = useUser();
+  const [offlineSession, setOfflineSession] = useState(null);
+  // The real auth verdict always wins the moment it arrives — including
+  // "signed out": the render below ignores offlineSession once clerkLoaded
+  // is true, so SignedIn/SignedOut take over without any state juggling.
+
+  useEffect(() => {
+    if (clerkLoaded || offlineSession) return;
+    let cancelled = false;
+    const evaluate = async (clerkTimedOut) => {
+      const sess = await evaluateOfflineFallback({ clerkLoaded: false, clerkTimedOut });
+      if (!cancelled && sess) setOfflineSession(sess);
+    };
+    // Browser says there is no network at all: no need to wait out Clerk.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) evaluate(false);
+    const timer = setTimeout(() => evaluate(true), CLERK_LOAD_TIMEOUT_MS);
+    const onOffline = () => evaluate(false);
+    window.addEventListener("offline", onOffline);
+    // Cleanup runs when Clerk loads: the pending timeout dies with it, so a
+    // Clerk that arrives late can never race an activation.
+    return () => { cancelled = true; clearTimeout(timer); window.removeEventListener("offline", onOffline); };
+  }, [clerkLoaded, offlineSession]);
+
   return (
     <>
-      <SignedOut>
-        <AuthPage />
-      </SignedOut>
-      <SignedIn>
-        <AppProvider onNavigate={handleNavigate}>
+      {offlineSession && !clerkLoaded ? (
+        <AppProvider onNavigate={handleNavigate} offlineSession={offlineSession}>
           <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
+          <OfflineBanner />
         </AppProvider>
-      </SignedIn>
+      ) : (
+        <>
+          <SignedOut>
+            <AuthPage />
+          </SignedOut>
+          <SignedIn>
+            <AppProvider onNavigate={handleNavigate}>
+              <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
+            </AppProvider>
+          </SignedIn>
+        </>
+      )}
       {/* Update check/refresh button — outside the auth gate so a stale
           bundle can be refreshed from the sign-in screen too. */}
       <UpdatePrompt />
     </>
+  );
+}
+
+/* ─── Offline banner ──────────────────────────────────────────── */
+// Persistent while the offline session is active. When connectivity comes
+// back (online event, periodic probe, or the Retry button) it flips to
+// "Back online" and does a full reload, so the real Clerk session resumes
+// and the pending-ops replay runs.
+function OfflineBanner() {
+  const [phase, setPhase] = useState("offline"); // offline | checking | back
+  const check = useCallback(async () => {
+    setPhase((p) => (p === "back" ? p : "checking"));
+    const ok = await probeNetwork();
+    if (ok) {
+      setPhase("back");
+      // A reload mid-keystroke destroys an unsubmitted form: typing in any
+      // input or an open dialog means the user is working. Hold the reload
+      // and let them tap through when they are ready.
+      const el = document.activeElement;
+      const busy = (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))
+        || !!document.querySelector('[role="dialog"]');
+      if (busy) return; // banner shows "Back online" with a tap-to-reload button
+      setTimeout(() => window.location.reload(), 1200);
+    } else {
+      setPhase("offline");
+    }
+  }, []);
+  useEffect(() => {
+    const onOnline = () => check();
+    window.addEventListener("online", onOnline);
+    const t = setInterval(() => { if (navigator.onLine !== false) check(); }, 45000);
+    return () => { window.removeEventListener("online", onOnline); clearInterval(t); };
+  }, [check]);
+
+  const back = phase === "back";
+  return (
+    <div role="status" style={{
+      position: "fixed", left: 12, right: 12, bottom: "calc(78px + env(safe-area-inset-bottom, 0px))",
+      zIndex: 9999, display: "flex", alignItems: "center", gap: 12,
+      padding: "10px 14px", borderRadius: 12,
+      backgroundColor: back ? "#065f46" : "#78350f",
+      border: `1px solid ${back ? "#10b981" : "#f59e0b"}`,
+      color: "#fff", fontSize: 13, lineHeight: 1.45,
+      boxShadow: "0 6px 24px rgba(0,0,0,0.35)",
+    }}>
+      <span style={{ flex: 1 }}>
+        {back
+          ? "Back online. Reloading to resume your session and sync your changes..."
+          : "Offline. Showing this device's copy of your records. Changes will sync when you reconnect."}
+      </span>
+      {back && (
+        <button
+          onClick={() => window.location.reload()}
+          style={{ border: "none", borderRadius: 8, padding: "6px 12px", backgroundColor: "#10b981", color: "#fff", fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+        >Reload now</button>
+      )}
+      {!back && (
+        <button
+          onClick={check}
+          disabled={phase === "checking"}
+          style={{
+            flexShrink: 0, padding: "7px 14px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.35)",
+            backgroundColor: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 13, fontWeight: 700,
+            cursor: phase === "checking" ? "default" : "pointer", opacity: phase === "checking" ? 0.7 : 1,
+          }}
+        >
+          {phase === "checking" ? "Checking..." : "Retry"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─── Offline: network-only surface placeholder ───────────────── */
+// Vera, Admin and other cloud-only surfaces render this in offline mode: a
+// clear statement instead of a spinner that can never resolve.
+function OfflineUnavailable({ T, feature, detail, onBack }) {
+  return (
+    <div style={{ padding: "48px 24px", textAlign: "center" }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: T.text }}>{feature} is unavailable offline</div>
+      <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5, maxWidth: 340, margin: "8px auto 0" }}>
+        {detail} Your records on this device are still available, and anything you change will sync when you reconnect.
+      </div>
+      {onBack && (
+        <button onClick={onBack} style={{
+          marginTop: 20, padding: "10px 18px", borderRadius: 10, border: "none",
+          backgroundColor: T.accent, color: "#fff", fontWeight: 700, cursor: "pointer",
+        }}>Back</button>
+      )}
+    </div>
   );
 }
 
@@ -131,7 +261,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta, isLifetime } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, offlineMode, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta, isLifetime } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
@@ -182,14 +312,18 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [access, setAccess] = useState(null);
   const recheckAccess = useCallback(async () => {
     if (!user) return;
+    // Offline session: the server can't be asked, so the cached answer from
+    // the last real load decides — same fallback the RPC failure path uses.
+    if (offlineMode) { setAccess(data.settings?.accessStatus === "active" ? "active" : "pending"); return; }
     if (isAdminUser(user)) { setAccess("active"); claimBetaAccess().catch(() => {}); return; }
     const r = await claimBetaAccess();
     if (r === "unknown") setAccess(data.settings?.accessStatus === "active" ? "active" : "pending");
     else setAccess(r);
-  }, [user, data.settings?.accessStatus]);
+  }, [user, offlineMode, data.settings?.accessStatus]);
   useEffect(() => {
     if (!loaded || !user) return;
     recheckAccess();
+    if (offlineMode) return; // presence pings can only fail offline
     touchLastSeen();
     const t = setInterval(touchLastSeen, 15 * 60 * 1000);
     return () => clearInterval(t);
@@ -228,7 +362,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     }
   }, [data, addItem]);
 
-  const openShare = useCallback((item, section) => { setShareItem(item); setShareSection(section); }, []);
+  const openShare = useCallback((item, section) => {
+    // Sharing sends email through the cloud; offline it cannot go anywhere.
+    if (offlineMode) { window.alert("You're offline. Sharing needs a connection. Try again once you're back online."); return; }
+    setShareItem(item); setShareSection(section);
+  }, [offlineMode]);
   const closeShare = useCallback(() => { setShareItem(null); setShareSection(null); }, []);
   const logShare = useCallback((entry) => addItem("shareLog", { ...entry, id: entry.id || crypto.randomUUID() }), [addItem]);
 
@@ -1633,13 +1771,17 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
     if (subPage === "requests") return <RequestsInbox onAskVera={askVera} />;
-    if (subPage === "assistant") return <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} />;
+    if (subPage === "assistant") return offlineMode
+      ? <OfflineUnavailable T={T} feature="Vera" detail="Vera answers through the cloud AI service." onBack={() => setSubPage(null)} />
+      : <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} />;
     if (subPage === "faq") return <FAQSection />;
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;
     if (subPage === "data-rights") return <LegalSection page="data-rights" />;
     if (subPage === "cancellation") return <CancellationPage />;
-    if (subPage === "admin") return <AdminDashboard />;
+    if (subPage === "admin") return offlineMode
+      ? <OfflineUnavailable T={T} feature="Admin" detail="The admin dashboard reads and writes live server data." onBack={() => setSubPage(null)} />
+      : <AdminDashboard />;
 
     return (
       <div>
@@ -2004,7 +2146,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       backgroundColor: T.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative",
     }}>
       <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
-      <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
+      {/* Billing is cloud-only; in offline mode the context's checkout/manage
+          already no-op with a message, and the modal itself stays closed. */}
+      <PricingModal open={showPricing && !offlineMode} onClose={() => setShowPricing(false)} />
       <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); }} initialTab={supportTab} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
       <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
 

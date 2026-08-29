@@ -18,7 +18,10 @@ export const DEFAULT_SETTINGS = {
   theme: "dark",
   fontSize: "M",
   showDashboardCredentials: false,
-  apiKey: import.meta.env.VITE_GEMINI_API_KEY || "",
+  // The typeof guard keeps this module importable by the pure-node test
+  // scripts (scripts/*.test.mjs), where import.meta.env does not exist.
+  // Vite still statically replaces the member expression at build time.
+  apiKey: (typeof import.meta.env !== "undefined" && import.meta.env.VITE_GEMINI_API_KEY) || "",
   notifyEmail: true,
   notifyText: true,
   notifyFreqDays: 7,

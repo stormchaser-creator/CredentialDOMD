@@ -5,6 +5,7 @@ import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
 import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage } from "../utils/storageScope";
+import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
 import { vaultCount } from "../utils/privateVault";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
@@ -52,7 +53,16 @@ function normalizeClerkUser(clerkUser) {
   };
 }
 
-export function AppProvider({ children, onNavigate }) {
+/**
+ * `offlineSession` ({ authUserId, name } or null) puts the provider in
+ * offline mode: Clerk never resolved (network down), so the app renders as
+ * the last identity that signed in on THIS device. Data comes only from
+ * that identity's own namespaced local cache; every write goes through the
+ * normal addItem/editItem/deleteItem paths, whose cloud calls queue into
+ * the per-account pending-ops replay slot. Nothing touches profiles, Clerk,
+ * or any other account's namespace. See src/utils/offlineSession.js.
+ */
+export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const [data, setData] = useState(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
   const userIdRef = useRef(null);
@@ -68,8 +78,32 @@ export function AppProvider({ children, onNavigate }) {
   const clerk = useClerk();
   const { signOut: clerkSignOut } = clerk;
 
-  const user = useMemo(() => normalizeClerkUser(isSignedIn ? clerkUser : null), [isSignedIn, clerkUser]);
-  const authChecked = clerkLoaded;
+  const offlineMode = !!offlineSession;
+  const user = useMemo(() => {
+    if (offlineSession) {
+      // The recorded last identity on this device. No email: the offline
+      // session never gains email-derived privileges (admin gate matches
+      // addresses, so it can never open offline).
+      return {
+        id: offlineSession.authUserId,
+        email: null,
+        emails: [],
+        fullName: offlineSession.name || null,
+        imageUrl: null,
+        offline: true,
+      };
+    }
+    return normalizeClerkUser(isSignedIn ? clerkUser : null);
+  }, [offlineSession, isSignedIn, clerkUser]);
+  const authChecked = offlineMode ? true : clerkLoaded;
+
+  // Remember who signed in on this device — the offline fallback identity.
+  // Real, Clerk-verified sessions only; the offline session must never
+  // re-record itself. Sign-out purges the slot with everything else.
+  useEffect(() => {
+    if (offlineMode || !user?.id) return;
+    try { recordLastIdentity(user); } catch { /* storage unavailable */ }
+  }, [offlineMode, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Every on-device key (file, vault, chat, timers) is namespaced by the
   // Clerk user id. Set synchronously during render so children mounting in
@@ -108,7 +142,7 @@ export function AppProvider({ children, onNavigate }) {
   // and a token timing out must not destroy them; the namespaced key is
   // unreadable to any other account. The Sign out button purges it too.
   useEffect(() => {
-    if (!clerkLoaded || !user?.id || typeof clerk?.addListener !== "function") return;
+    if (offlineMode || !clerkLoaded || !user?.id || typeof clerk?.addListener !== "function") return;
     const ownerId = user.id;
     const unsub = clerk.addListener((e) => {
       if ((e?.user?.id || null) !== ownerId) {
@@ -119,6 +153,10 @@ export function AppProvider({ children, onNavigate }) {
   }, [clerkLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadDataForUser(authUserId) {
+    // Offline session: straight to this identity's own local cache — the
+    // same read path the normal load falls back to when the cloud is
+    // unreachable. No profile fetch, no Clerk token, no cloud reads.
+    if (offlineMode) return loadLocalData(authUserId);
     try {
       // Ensure profile exists for this auth user
       const profile = await ensureProfile(authUserId);
@@ -323,6 +361,23 @@ export function AppProvider({ children, onNavigate }) {
     if (n > 0 && typeof window !== "undefined" && !window.confirm(
       `Signing out erases the ${n} private note${n === 1 ? "" : "s"} kept only on this device. Export them first under Data & Backup if you need them. Sign out anyway?`
     )) return;
+    if (offlineMode) {
+      // Offline, the purge also destroys the unsynced-edits queue, and those
+      // edits exist nowhere else yet. Signing out online first would sync
+      // them; say so before the point of no return.
+      let pending = 0;
+      try { pending = JSON.parse(localStorage.getItem(`credentialdomd-pending-ops:${ownerId}`) || "[]").length; } catch { /* unreadable = 0 */ }
+      if (pending > 0 && typeof window !== "undefined" && !window.confirm(
+        `You have ${pending} change${pending === 1 ? "" : "s"} made offline that have not synced yet. Signing out now discards them permanently. Reconnect first to keep them. Sign out anyway?`
+      )) return;
+      // No Clerk session to end. Purge this account's device copy (the
+      // lastIdentity slot goes with it, so the offline fallback can never
+      // reopen as this user) then reload into the normal boot path.
+      await clearLocalData(ownerId);
+      clearDeviceKeys(ownerId);
+      window.location.reload();
+      return;
+    }
     try {
       await clerkSignOut();
     } catch (err) {
@@ -339,7 +394,7 @@ export function AppProvider({ children, onNavigate }) {
     // password lock code) lives outside the namespaced set, so clear it too.
     await clearLocalData(ownerId);
     clearDeviceKeys(ownerId);
-  }, [clerkSignOut, user?.id]);
+  }, [clerkSignOut, user?.id, offlineMode]);
 
   // Persist to localStorage on change (debounced backup), under the key of
   // the account the data was loaded for.
@@ -355,7 +410,24 @@ export function AppProvider({ children, onNavigate }) {
   }, [data, loaded]);
 
   // ─── Subscription ─────────────────────────────────────────
-  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta } = useSubscription(user ?? null);
+  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta } = useSubscription(user ?? null);
+
+  // Billing is a network surface: offline it fails with a clear message
+  // instead of a spinner or a half-built Stripe redirect.
+  const checkout = useCallback((...args) => {
+    if (offlineMode) {
+      window.alert("You're offline. Billing needs a connection. Try again once you're back online.");
+      return Promise.resolve({ ok: false, error: "offline" });
+    }
+    return sbCheckout(...args);
+  }, [offlineMode, sbCheckout]);
+  const manage = useCallback((...args) => {
+    if (offlineMode) {
+      window.alert("You're offline. Billing needs a connection. Try again once you're back online.");
+      return Promise.resolve({ ok: false, error: "offline" });
+    }
+    return sbManage(...args);
+  }, [offlineMode, sbManage]);
 
   // Theme. An unknown stored theme (e.g. the recycled 'arctic' profile
   // default) falls back to the app's real default, dark — not light.
@@ -438,11 +510,11 @@ export function AppProvider({ children, onNavigate }) {
     updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
     allTrackedStates, navigate, userIdRef,
     // Auth
-    user, authChecked,
+    user, authChecked, offlineMode,
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
-  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [data, loaded, theme, toggleTheme, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

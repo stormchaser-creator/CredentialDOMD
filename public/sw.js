@@ -6,6 +6,11 @@ const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
 // any mount point (/app/ on gh-pages, / in local preview).
+// At build time the block between the markers is REPLACED with the real
+// emitted asset list (entry js chunks + css from the Vite build manifest,
+// plus the shell below); see stampBuildId in vite.config.js and
+// scripts/sw-precache.mjs. The list here is only the unstamped dev fallback.
+/* __PRECACHE_BEGIN__ */
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -13,6 +18,7 @@ const PRECACHE_URLS = [
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
 ];
+/* __PRECACHE_END__ */
 
 // Install: precache shell (bypass the HTTP cache so we never precache staleness).
 // skipWaiting → the new worker activates immediately (CallSync-style silent
@@ -42,6 +48,33 @@ self.addEventListener("message", (event) => {
   }
 });
 
+// Only same-origin URLs inside the SW's own scope, matching known static
+// shell paths, are ever cached. The cache never holds an API response, so
+// it can never replay one user's data to another account on this device;
+// user data lives solely in the per-Clerk-id localStorage namespace.
+const SCOPE_PATH = new URL("./", self.location).pathname;
+function isStaticAsset(rawUrl) {
+  const url = new URL(rawUrl);
+  if (url.origin !== self.location.origin) return false;
+  if (!url.pathname.startsWith(SCOPE_PATH)) return false;
+  const rel = url.pathname.slice(SCOPE_PATH.length);
+  return (
+    rel === "" ||
+    rel === "index.html" ||
+    rel === "manifest.json" ||
+    rel.startsWith("assets/") ||
+    rel.startsWith("icons/") ||
+    rel.startsWith("fonts/")
+  );
+}
+
+// Offline navigation fallback: the precached SPA shell from THIS build, so
+// the HTML always matches the hashed assets in the same cache.
+async function offlineShell() {
+  const shell = (await caches.match("./index.html")) || (await caches.match("./"));
+  return shell || new Response("Offline", { status: 503, statusText: "Offline" });
+}
+
 // Fetch: network-first for navigations, cache-first for hashed assets
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -61,19 +94,21 @@ self.addEventListener("fetch", (event) => {
 
   // Navigation requests: network-first, revalidating past the HTTP cache
   // (GitHub Pages serves HTML with max-age=600 — "no-cache" forces an
-  // ETag revalidation so a new deploy is picked up immediately).
+  // ETag revalidation so a new deploy is picked up immediately). Offline,
+  // fall back to the precached shell. Navigations are NOT written to the
+  // cache: the shell comes exclusively from the install-time precache, so
+  // URL variants (e.g. auth redirects with query tokens) never become
+  // cache keys.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request, { cache: "no-cache" })
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
-        })
-        .catch(() => caches.match(request).then((r) => r || caches.match("./")))
+      fetch(request, { cache: "no-cache" }).catch(offlineShell)
     );
     return;
   }
+
+  // Everything that is not a known static shell asset goes straight to the
+  // network, untouched and uncached.
+  if (!isStaticAsset(request.url)) return;
 
   // Static assets (content-hashed filenames): cache-first
   event.respondWith(

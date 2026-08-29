@@ -13,7 +13,7 @@
  * un-namespaced key any more; the pre-namespace keys are migrated once by
  * adoptLegacyStorage() and then removed.
  */
-import { STORAGE_KEY } from "../constants/defaults";
+import { STORAGE_KEY } from "../constants/defaults.js";
 
 export const BASE_KEYS = {
   data: STORAGE_KEY,                       // the whole file (mirror of the cloud)
@@ -23,6 +23,11 @@ export const BASE_KEYS = {
   timer: "credentialdomd-live-timer",
   lastContract: "credentialdomd-last-contract",
   pendingOps: "credentialdomd-pending-ops", // writes that failed to reach the cloud, replayed next load
+  // Who last completed a signed-in load on this device (offline fallback
+  // identity, src/utils/offlineSession.js). Listed here so purgeUserStorage
+  // removes it with everything else: a session that ended in sign-out leaves
+  // no identity behind, and the offline fallback can never activate.
+  lastIdentity: "credentialdomd-last-identity",
 };
 
 let activeUserId = null;

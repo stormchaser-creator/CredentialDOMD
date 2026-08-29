@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { STORAGE_KEY } from "../constants/defaults";
-import { BASE_KEYS } from "../utils/storageScope";
+import { BASE_KEYS, getActiveUserId } from "../utils/storageScope";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -255,7 +255,12 @@ const pendingOpsSlot = (authUserId) =>
 const PENDING_OPS_CAP = 500;
 
 function queuePendingOp(op, collectionKey, payload) {
-  const key = pendingOpsSlot(currentAuthUserId);
+  // currentAuthUserId is only set once loadFromSupabase has run — which it
+  // never has on a fully offline load. Fall back to the active user id the
+  // AppProvider sets synchronously during render: it names exactly the
+  // account whose UI produced this write (real or offline session), so the
+  // op lands in that account's own namespace instead of being dropped.
+  const key = pendingOpsSlot(currentAuthUserId || getActiveUserId());
   if (!key) return; // no account context yet — nothing safe to namespace under
   try {
     const cur = JSON.parse(localStorage.getItem(key) || "[]");
@@ -313,6 +318,16 @@ export async function replayPendingOps(profileId, authUserId) {
       } else if (op.op === "delete") {
         ok = await sbDeleteRow(profileId, op.collectionKey, op.payload);
         if (ok) await sbTombstoneRow(profileId, op.collectionKey, op.payload);
+      } else if (op.op === "settings") {
+        // Reapply the queued settings patch to the profile row. Later queued
+        // patches overwrite earlier ones in replay order, which is the same
+        // last-wins the live path has.
+        try {
+          const row = settingsToProfileRow(op.payload || {});
+          row.updated_at = new Date().toISOString();
+          const { error } = await supabase.from("profiles").update(row).eq("id", profileId);
+          ok = !error;
+        } catch { ok = false; }
       } else if (op.op === "tombstone") {
         ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload);
       } else {
@@ -447,7 +462,16 @@ export async function loadFromSupabase(userId) {
 // ─── Save settings to Supabase ───────────────────────────────
 export async function saveSettings(userId, settings, authUserId = currentAuthUserId) {
   if (authUserId) saveDeviceKeys(authUserId, settings);
-  if (!supabase || !userId) return null;
+  if (!supabase || !userId) {
+    // Offline (or before the profile loads) a settings edit has nowhere to
+    // go and used to vanish on the next cloud merge. Queue it like any other
+    // write; replay applies it once the session is back. Device-local keys
+    // are stripped the same way every cloud write strips them.
+    const clean = { ...settings };
+    for (const f of DEVICE_KEY_FIELDS) delete clean[f];
+    queuePendingOp("settings", "settings", clean);
+    return null;
+  }
   const row = settingsToProfileRow(settings);
   row.updated_at = new Date().toISOString();
   // Read the row back so a server-enforced value (e.g. the identity lock on
@@ -458,7 +482,13 @@ export async function saveSettings(userId, settings, authUserId = currentAuthUse
     .eq("id", userId)
     .select()
     .maybeSingle();
-  if (error) { console.warn("Failed to save settings:", error.message); return null; }
+  if (error) {
+    console.warn("Failed to save settings:", error.message);
+    const clean = { ...settings };
+    for (const f of DEVICE_KEY_FIELDS) delete clean[f];
+    queuePendingOp("settings", "settings", clean);
+    return null;
+  }
   if (data && "email" in row && data.email !== row.email) {
     console.warn("Settings email was not accepted by the server (identity lock?):", { sent: row.email, stored: data.email });
   }
