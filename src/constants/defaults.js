@@ -59,6 +59,7 @@ export const DEFAULT_DATA = {
   workLog: [],        // [{ id, contractId, type, date, startTime, endTime, durationMin, billedMin, description, invoiceId }]
   screenings: [],
   alertAcks: [],     // [{ id, itemId, until, note }] — acknowledged/snoozed expiration alerts
+  followUps: [],     // [{ id, itemId, itemName, recipient, note, emailed, createdAt }] — logged follow-up actions on an expiring item (e.g. "emailed Kyle about Penrose privileges")
   professionalPhotos: [], // [{ id, name, dateTaken, notes }] — headshots for credentialing packets    // [{ id, type, name, agency, requestedBy, assignment, fileNumber, orderDate, reportDate, result, expirationDate, components: [{name, scope, status, date, note}], notes }]
   encounters: [],     // [{ id, contractId, date, codes: [{code, units, desc, wRVU}], note, spokenText }]
   invoices: [],       // [{ id, number, contractId, periodStart, periodEnd, entryIds, totalMinutes, totalAmount, sentAt }]

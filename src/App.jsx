@@ -35,7 +35,7 @@ import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptP
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
-import { isNonExpiring } from "./utils/helpers";
+import { isNonExpiring, mailtoHref } from "./utils/helpers";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
@@ -295,6 +295,30 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     });
     setAckItem(null);
   }, [ackItem, ackNote, addItem]);
+
+  // Follow-up-on-an-alert modal: for "I emailed the credentialing office" style
+  // actions that aren't a snooze — a per-item log the user can look back at.
+  const [followUpItem, setFollowUpItem] = useState(null);
+  const [followUpRecipient, setFollowUpRecipient] = useState("");
+  const [followUpNote, setFollowUpNote] = useState("");
+  const openFollowUp = useCallback((item) => {
+    setFollowUpItem(item); setFollowUpRecipient(""); setFollowUpNote("");
+  }, []);
+  const saveFollowUp = useCallback((emailed) => {
+    if (!followUpItem) return;
+    const recipient = followUpRecipient.trim();
+    const note = followUpNote.trim();
+    if (emailed) {
+      const subject = `Following up: ${describeItem(followUpItem, data.settings.name)}`;
+      const body = `Hi${recipient ? " " + recipient : ""},\n\nFollowing up on ${describeItem(followUpItem, data.settings.name)}, which expires ${formatDate(followUpItem.expirationDate)}.${note ? "\n\n" + note : ""}`;
+      window.open(mailtoHref(recipient.includes("@") ? recipient : "", subject, body));
+    }
+    addItem("followUps", {
+      id: generateId(), itemId: followUpItem.id, itemName: describeItem(followUpItem, data.settings.name),
+      recipient, note, emailed, createdAt: new Date().toISOString(),
+    });
+    setFollowUpItem(null);
+  }, [followUpItem, followUpRecipient, followUpNote, addItem, data.settings.name]);
 
   // Board continuing-certification standing (cycle-windowed). Every DO sees
   // the AOA national cycle even before picking a specific board.
@@ -656,10 +680,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                     <div style={{ fontSize: 12, color: T.textMuted }}>
                       {item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : ""}
                     </div>
-                    <button onClick={(ev) => { ev.stopPropagation(); openAck(item); }} style={{
-                      padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
-                      backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-                    }}>Acknowledge</button>
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button onClick={(ev) => { ev.stopPropagation(); openFollowUp(item); }} style={{
+                        padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                        backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                      }}>Follow up</button>
+                      <button onClick={(ev) => { ev.stopPropagation(); openAck(item); }} style={{
+                        padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                        backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                      }}>Acknowledge</button>
+                    </div>
                   </div>
                 </div>
               );
@@ -964,6 +994,48 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   backgroundColor: ackUntil ? T.accent : T.border, color: "#fff", fontSize: 15, fontWeight: 600,
                   cursor: ackUntil ? "pointer" : "default",
                 }}>Acknowledge</button>
+              </div>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* Log a follow-up on an expiring alert — for actions taken outside the
+          app (an email, a call) that acknowledging alone doesn't capture */}
+      <Modal open={!!followUpItem} onClose={() => setFollowUpItem(null)} title="Log a follow-up">
+        {followUpItem && (() => {
+          const history = (data.followUps || [])
+            .filter(f => f.itemId === followUpItem.id)
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          return (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>{describeItem(followUpItem, data.settings.name)}</div>
+              <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
+                Expires {formatDate(followUpItem.expirationDate)}. Track what you did about it — an email, a call — so it doesn't get lost.
+              </div>
+              {history.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>History</div>
+                  {history.map(f => (
+                    <div key={f.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6 }}>
+                      <div style={{ fontSize: 12.5, color: T.text, fontWeight: 600 }}>
+                        {f.emailed ? "Emailed" : "Note"}{f.recipient ? ` · ${f.recipient}` : ""} · {formatDate(f.createdAt)}
+                      </div>
+                      {f.note && <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>{f.note}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>To (name or email, optional)</div>
+              <input value={followUpRecipient} onChange={e => setFollowUpRecipient(e.target.value)} placeholder="e.g. Kyle, credentialing office"
+                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15, marginBottom: 10 }} />
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>What happened (optional)</div>
+              <input value={followUpNote} onChange={e => setFollowUpNote(e.target.value)} placeholder="e.g. reminded him to update these privileges"
+                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                <button onClick={() => setFollowUpItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                <button onClick={() => saveFollowUp(false)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Log it</button>
+                <button onClick={() => saveFollowUp(true)} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Email &amp; log</button>
               </div>
             </>
           );
