@@ -92,6 +92,7 @@ const TABLE_MAP = {
   encounters: "encounters",
   screenings: "screenings",
   alertAcks: "alert_acks",
+  followUps: "follow_ups",
   professionalPhotos: "professional_photos",
   publications: "publications",
   travelDocs: "travel_docs",
