@@ -1,0 +1,94 @@
+{
+  "__vite-browser-external": {
+    "file": "assets/__vite-browser-external-BIHI7g3E.js",
+    "name": "__vite-browser-external",
+    "src": "__vite-browser-external",
+    "isDynamicEntry": true
+  },
+  "_mammoth.browser-Dk_1_YrU.js": {
+    "file": "assets/mammoth.browser-Dk_1_YrU.js",
+    "name": "mammoth.browser",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  },
+  "index.html": {
+    "file": "assets/index-CYYvin_U.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "dynamicImports": [
+      "_mammoth.browser-Dk_1_YrU.js",
+      "node_modules/html2canvas/dist/html2canvas.esm.js",
+      "node_modules/dompurify/dist/purify.es.mjs",
+      "node_modules/canvg/lib/index.es.js",
+      "node_modules/@anthropic-ai/sdk/index.mjs",
+      "node_modules/docx/dist/index.mjs"
+    ],
+    "css": [
+      "assets/index-BkK_LJlQ.css"
+    ]
+  },
+  "node_modules/@anthropic-ai/sdk/index.mjs": {
+    "file": "assets/index-D4R47z_X.js",
+    "name": "index",
+    "src": "node_modules/@anthropic-ai/sdk/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ],
+    "dynamicImports": [
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "__vite-browser-external",
+      "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs"
+    ]
+  },
+  "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs": {
+    "file": "assets/node.browser-BVuRquuA.js",
+    "name": "node.browser",
+    "src": "node_modules/@anthropic-ai/sdk/tools/agent-toolset/node.browser.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "node_modules/@anthropic-ai/sdk/index.mjs",
+      "index.html"
+    ]
+  },
+  "node_modules/canvg/lib/index.es.js": {
+    "file": "assets/index.es-W4roWNpB.js",
+    "name": "index.es",
+    "src": "node_modules/canvg/lib/index.es.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  },
+  "node_modules/docx/dist/index.mjs": {
+    "file": "assets/index-B0rGMM52.js",
+    "name": "index",
+    "src": "node_modules/docx/dist/index.mjs",
+    "isDynamicEntry": true
+  },
+  "node_modules/dompurify/dist/purify.es.mjs": {
+    "file": "assets/purify.es-VaSPOPhr.js",
+    "name": "purify.es",
+    "src": "node_modules/dompurify/dist/purify.es.mjs",
+    "isDynamicEntry": true
+  },
+  "node_modules/html2canvas/dist/html2canvas.esm.js": {
+    "file": "assets/html2canvas.esm-DXEQVQnt.js",
+    "name": "html2canvas.esm",
+    "src": "node_modules/html2canvas/dist/html2canvas.esm.js",
+    "isDynamicEntry": true
+  }
+}
