@@ -9,7 +9,7 @@ import DeskTable from "../shared/DeskTable";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
@@ -101,6 +101,33 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
   const openAdd = useCallback(() => { setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
+
+  // Follow-ups are logged from the Home dashboard's "Action Required" cards,
+  // but this is the item's own screen — wherever you land (view or edit),
+  // that history needs to be visible or it reads as untracked.
+  const followUpHistory = (item) => (data.followUps || [])
+    .filter(f => f.itemId === item?.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const renderFollowUps = (item) => {
+    const history = followUpHistory(item);
+    if (!history.length) return null;
+    return (
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+          Follow-up history
+        </div>
+        {history.map(f => (
+          <div key={f.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6 }}>
+            <div style={{ fontSize: 12.5, color: T.text, fontWeight: 600 }}>
+              {f.emailed ? "Emailed" : "Note"}{f.recipient ? ` · ${f.recipient}` : ""} · {formatDate(f.createdAt)}
+            </div>
+            {f.note && <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>{f.note}</div>}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   // Auto-open add form when triggered from outside (e.g., home page "Add Your License" card)
   // Deep-link: open a specific record's edit form (e.g. from the Home
@@ -489,6 +516,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             )}
           </div>
         )}
+        {editItem && renderFollowUps(editItem)}
         {fields.filter(f => isShown(f, form)).map(f => (
           <Field
             key={f.key}
@@ -678,6 +706,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       <Modal open={!!viewItem} onClose={() => { setViewItem(null); setRevealed({}); }} title={viewItem ? describeItem(viewItem, data.settings.name, sectionKey) : "Details"}>
         {viewItem && (
           <>
+            {renderFollowUps(viewItem)}
             {fields.filter(f => viewItem[f.key]).map(f => (
               <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
                 <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{resolveFieldProp(f, "label", viewItem)}</span>
