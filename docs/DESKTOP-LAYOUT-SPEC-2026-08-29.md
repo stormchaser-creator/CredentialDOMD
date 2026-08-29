@@ -181,7 +181,17 @@ Total: about 12 sessions. Increment 1 alone already converts the desktop from a 
 
 ---
 
-## 5. Open Questions for Eric
+## 5. Decisions (Eric, 2026-08-29)
+
+1. Breakpoint: 1024px. iPad portrait keeps the phone layout in v1.
+2. Content width: 1140px max, centered.
+3. Credentials rail: ship it (increment 2 stays in scope).
+4. Sidebar promotions: none. More stays the container.
+5. DutyLog day-rate contracts: keep cards in v1, convert in a later pass.
+
+The original questions are kept below for the record.
+
+## 5a. Open Questions as Originally Posed
 
 1. **Tablet band.** 768 to 1023px gets the phone layout in v1. iPad landscape (1024+) gets the desk shell. Acceptable, or does iPad portrait matter enough to pull the breakpoint down to 768?
 2. **Content width.** 1140px max for working screens, centered. Or do you want tables fluid to the full window on big monitors? 1140 is the recommendation; full-fluid rows get hard to scan.
