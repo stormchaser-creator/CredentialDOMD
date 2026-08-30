@@ -427,7 +427,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [ackUntil, setAckUntil] = useState("");
   const [showSnoozed, setShowSnoozed] = useState(false);
   const openAck = useCallback((item) => {
-    setAckItem(item); setAckNote(""); setAckUntil("");
+    setAckItem(item); setAckNote("");
+    // Default to "2 weeks" so the modal's Acknowledge button works right away —
+    // it's disabled until a quiet-until date is picked, and leaving it blank
+    // read as the button silently doing nothing.
+    setAckUntil(new Date(Date.now() + 14 * MS_PER_DAY).toISOString().slice(0, 10));
   }, []);
   const saveAck = useCallback((untilDate) => {
     if (!ackItem || !untilDate) return;
