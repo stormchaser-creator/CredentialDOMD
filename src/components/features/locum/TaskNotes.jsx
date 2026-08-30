@@ -4,6 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { generateId } from "../../../utils/helpers";
+import { selectableContracts } from "../../../utils/contractsForDate";
 
 /**
  * The interrupted-work list. A call comes in mid-case: capture it in one
@@ -247,7 +248,7 @@ function TaskNotes({ onBill }) {
               <Field label="Contract">
                 <select value={form.contractId || ""} onChange={e => setForm(f => ({ ...f, contractId: e.target.value || null }))} style={{ ...iS, appearance: "auto" }}>
                   <option value="">— none —</option>
-                  {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+                  {selectableContracts(contracts, form.contractId).map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
                 </select>
               </Field>
             )}

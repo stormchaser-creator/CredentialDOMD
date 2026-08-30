@@ -16,6 +16,7 @@ import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { parseWorkDictation } from "../../../utils/workDictation";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import DutyLog from "./DutyLog";
+import { selectableContracts } from "../../../utils/contractsForDate";
 
 /**
  * WorkLog — one-tap time capture for locum work, billed in the contract's
@@ -1220,7 +1221,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         Logging against
       </div>
       <select value={contract?.id || ""} onChange={e => rememberContract(e.target.value)} style={{ ...iS, appearance: "auto" }}>
-        {contracts.map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
+        {selectableContracts(contracts, contract?.id).map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
       </select>
     </div>
   );

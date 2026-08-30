@@ -4,7 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import EmptyState from "../../shared/EmptyState";
 import { TrashIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
-import { contractsForDate, contractIdForDate, termLabel, coversDate } from "../../../utils/contractsForDate";
+import { contractsForDate, contractIdForDate, termLabel, coversDate, selectableContracts } from "../../../utils/contractsForDate";
 import { codeFromText, parseDictatedDate } from "../../../utils/cptCoder";
 import { searchCPT } from "../../../utils/cptSearch";
 import { Modal, Field } from "../../shared";
@@ -385,7 +385,7 @@ function RVULog() {
               {contracts.length > 1 && (
                 <select value={contractId} onChange={e => setContractId(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
                   {(() => {
-                    const { covering, rest } = contractsForDate(contracts, date);
+                    const { covering, rest } = contractsForDate(selectableContracts(contracts, contractId), date);
                     const lbl = (c) => `${c.shortName || c.facility}${termLabel(c) ? ` · ${termLabel(c)}` : ""}`;
                     return (<>
                       {covering.map(c => <option key={c.id} value={c.id}>{lbl(c)}</option>)}
@@ -520,7 +520,7 @@ function RVULog() {
               <Field label="Facility / contract">
                 <select value={encDraft.contractId || ""} onChange={ev => setEncDraft(d => ({ ...d, contractId: ev.target.value || null }))} style={{ ...iS, appearance: "auto" }}>
                   <option value="">— none —</option>
-                  {contracts.map(c => <option key={c.id} value={c.id}>{c.shortName || c.facility}</option>)}
+                  {selectableContracts(contracts, encDraft.contractId).map(c => <option key={c.id} value={c.id}>{c.shortName || c.facility}</option>)}
                 </select>
               </Field>
             )}

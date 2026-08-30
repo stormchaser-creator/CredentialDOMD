@@ -11,6 +11,7 @@ import ContractSummary from "./ContractSummary";
 import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentScanner";
 import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils/taxConstants";
 import { STATE_NAMES } from "../../../constants/states";
+import { isArchived } from "../../../utils/contractsForDate";
 
 // Work-state hint reads from the tax engine's own list so it never promises a
 // state the estimator cannot model.
@@ -33,6 +34,16 @@ function Contracts() {
   const [formError, setFormError] = useState(null);
 
   const items = data.locumContracts || [];
+  const [showArchived, setShowArchived] = useState(false);
+  const activeItems = items.filter(i => !isArchived(i));
+  const archivedItems = items.filter(isArchived);
+  const shownItems = showArchived ? archivedItems : activeItems;
+  const toggleArchived = useCallback((item) => {
+    editCtx("locumContracts", {
+      ...item,
+      customFields: { ...(item.customFields || {}), archivedAt: isArchived(item) ? null : new Date().toISOString() },
+    });
+  }, [editCtx]);
 
   const openAdd = useCallback(() => {
     setForm({ incrementMinutes: 15, minCallMinutes: 15, coveragePeriods: [] });
@@ -123,11 +134,18 @@ function Contracts() {
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.text }}>Agreements</h3>
           <div style={{ fontSize: 12, color: T.textMuted }}>Rates set here drive the work log and invoices.</div>
         </div>
-        <button onClick={openAdd} style={{
-          display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px",
-          borderRadius: 12, border: "none", fontSize: 14, fontWeight: 600,
-          cursor: "pointer", backgroundColor: T.accent, color: "#fff",
-        }}><PlusIcon /> Add</button>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <button onClick={() => setShowArchived(a => !a)} style={{
+            padding: "8px 14px", borderRadius: 12, border: `1px solid ${T.border}`,
+            backgroundColor: showArchived ? T.card : "transparent", color: showArchived ? T.text : T.textMuted,
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>{showArchived ? "Back to active" : `Archived (${archivedItems.length})`}</button>
+          <button onClick={openAdd} style={{
+            display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px",
+            borderRadius: 12, border: "none", fontSize: 14, fontWeight: 600,
+            cursor: "pointer", backgroundColor: T.accent, color: "#fff",
+          }}><PlusIcon /> Add</button>
+        </div>
       </div>
 
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit Agreement" : "Add Agreement"}>
@@ -190,13 +208,17 @@ function Contracts() {
         </div>
       </Modal>
 
-      {items.length === 0 ? (
-        <EmptyState icon={"📝"} title="No agreements yet"
-          subtitle="Add your locum contract — facility, rates, and billing increment — and attach the signed agreement."
-          onAction={openAdd} actionLabel="Add Agreement" />
+      {shownItems.length === 0 ? (
+        showArchived ? (
+          <div style={{ fontSize: 13.5, color: T.textMuted, padding: "24px 0", textAlign: "center" }}>No archived agreements.</div>
+        ) : (
+          <EmptyState icon={"📝"} title="No agreements yet"
+            subtitle="Add your locum contract — facility, rates, and billing increment — and attach the signed agreement."
+            onAction={openAdd} actionLabel="Add Agreement" />
+        )
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {items.map(item => (
+          {shownItems.map(item => (
             <div key={item.id} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -218,6 +240,9 @@ function Contracts() {
                 </div>
                 <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
                   <button onClick={() => openEdit(item)} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
+                  <button onClick={() => toggleArchived(item)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                    {isArchived(item) ? "Unarchive" : "Archive"}
+                  </button>
                   <button onClick={() => { if (window.confirm("Delete this agreement? Work log entries keep their data.")) deleteItem("locumContracts", item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                 </div>
               </div>

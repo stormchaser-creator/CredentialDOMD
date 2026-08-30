@@ -47,6 +47,19 @@ export function contractIdForDate(contracts, date) {
   return contractsForDate(contracts, date).covering[0]?.id || "";
 }
 
+// No dedicated column for this yet — it rides in customFields like every
+// other extra property (see splitFields in utils/assistant.js), so
+// archiving a contract needs no schema change.
+export function isArchived(contract) {
+  return !!contract?.customFields?.archivedAt;
+}
+
+/** Contracts selectable for NEW logging — archived ones stay out of the
+ *  picker unless already selected, so an old entry doesn't lose its label. */
+export function selectableContracts(contracts, currentId) {
+  return (contracts || []).filter(c => !isArchived(c) || c.id === currentId);
+}
+
 /** "Jul 2026 to Jun 2029", for telling two agreements at one facility apart. */
 export function termLabel(contract) {
   const from = contract?.startDate || contract?.termStart;
