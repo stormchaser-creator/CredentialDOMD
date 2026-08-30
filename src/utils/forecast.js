@@ -68,6 +68,8 @@ export function yearOutlook(scheduleDays, actuals, year, todayIso) {
     const key = `${year}-${pad(m)}`;
     const sched = scheduleDays.filter(s => String(s.date || "").startsWith(key));
     const est = sched.reduce((t, s) => t + (parseFloat(s.expected) || 0), 0);
+    // Distinct dates, not entries — one date can carry multiple contracts/entries.
+    const days = new Set(sched.filter(s => s.kind !== "vacation").map(s => s.date)).size;
     const actual = Object.entries(actuals)
       .filter(([d]) => d.startsWith(key))
       .reduce((t, [, v]) => t + v, 0);
@@ -82,7 +84,7 @@ export function yearOutlook(scheduleDays, actuals, year, todayIso) {
         .reduce((t, s) => t + (parseFloat(s.expected) || 0), 0);
     } else projectedYear += est;
     months.push({
-      key, est, actual, past: past || current,
+      key, est, actual, days, past: past || current,
       delta: est > 0 || actual > 0 ? actual - est : 0,
       hasData: est > 0 || actual > 0,
     });

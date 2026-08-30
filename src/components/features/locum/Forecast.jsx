@@ -271,7 +271,7 @@ function Forecast() {
           return (
             <div key={x.key} onClick={() => setDetailMonth(x.key)} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.border}`, fontSize: 13, cursor: "pointer" }}>
               <span style={{ fontWeight: 700, color: T.text, width: 34 }}>{name}</span>
-              <span style={{ color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>est {money(x.est)}</span>
+              <span style={{ color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>{x.days}d · est {money(x.est)}</span>
               <span style={{ color: T.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{x.past ? `billed ${money(x.actual)}` : "ahead"}</span>
               <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", color: !x.past ? T.textDim : x.delta === 0 ? T.textDim : over ? "#f97316" : "#22c55e", textAlign: "right", minWidth: 70 }}>
                 {x.past && x.est > 0 ? `${x.delta >= 0 ? "+" : "−"}${money(Math.abs(x.delta))}` : ""}
