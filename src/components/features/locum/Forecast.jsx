@@ -5,7 +5,7 @@ import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import { generateId, formatDate } from "../../../utils/helpers";
 import { iso, actualByDate, contractDayAverage, contractDayKindAverages, yearOutlook } from "../../../utils/forecast";
-import { contractsForDate, termLabel } from "../../../utils/contractsForDate";
+import { contractsForDate, termLabel, selectableContracts } from "../../../utils/contractsForDate";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const short = (n) => {
@@ -88,11 +88,11 @@ function Forecast() {
   // Month detail — tapping the summary line or a reconciliation row shows
   // the day-by-day est/billed entries feeding that month's totals.
   const [detailMonth, setDetailMonth] = useState(null); // "YYYY-MM"
-  const contractsForDay = (date) => contractsForDate(contracts, date);
+  const contractsForDay = (date, currentId) => contractsForDate(selectableContracts(contracts, currentId), date);
   const termLabelFor = (c) => termLabel(c);
 
   const blankEntry = (date) => {
-    const cid = contractsForDay(date).ordered[0]?.id || contracts[0]?.id || "";
+    const cid = contractsForDay(date).ordered[0]?.id || selectableContracts(contracts)[0]?.id || "";
     const defKind = (contracts.find(c => c.id === cid)?.payModel === "daily") ? "day" : "call";
     return { date, contractId: cid, kind: defKind, expected: suggestFor(cid, defKind) || "" };
   };
@@ -136,7 +136,7 @@ function Forecast() {
   const loadContractDates = () => {
     const have = new Set(sched.map(s => `${s.contractId}|${s.date}`));
     let added = 0;
-    for (const c of contracts) {
+    for (const c of selectableContracts(contracts)) {
       const periods = c.coveragePeriods?.length
         ? c.coveragePeriods
         : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
@@ -358,7 +358,7 @@ function Forecast() {
             setForm(f => ({ ...f, contractId: cid, expected: suggestFor(cid, f.kind) || "" }));
           }} style={{ ...iS, appearance: "auto" }}>
             {(() => {
-              const { covering, rest } = contractsForDay(editDay);
+              const { covering, rest } = contractsForDay(editDay, form?.contractId);
               const label = (c) => `${c.facility}${termLabelFor(c) ? ` · ${termLabelFor(c)}` : ""}`;
               return (
                 <>
@@ -414,6 +414,18 @@ function Forecast() {
       {/* Month detail — every day that fed the tapped month's est/billed total. */}
       <Modal open={!!detailMonth} onClose={() => setDetailMonth(null)} title={detailMonth ? new Date(`${detailMonth}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : ""}>
         {detailMonth && (() => {
+          const shortDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          // Invoicing keys every entry by CALL day (7am–7am), so work logged
+          // before 7am on a calendar date bills under the PREVIOUS date —
+          // correct for the invoice, but it makes that calendar date look
+          // unbilled here even though the money is real. Surface it instead
+          // of hiding it: when a scheduled day shows zero of its own actual,
+          // check whether the prior date's billed total is the reason.
+          const prevDateOf = (d) => {
+            const x = new Date(`${d}T12:00:00`);
+            x.setDate(x.getDate() - 1);
+            return iso(x);
+          };
           const [dy, dm] = detailMonth.split("-").map(Number);
           const dim = new Date(dy, dm, 0).getDate();
           const rows = [];
@@ -422,7 +434,9 @@ function Forecast() {
             const entries = (schedByDate[date] || []).filter(s => s.kind !== "vacation");
             const est = entries.reduce((t, s) => t + (parseFloat(s.expected) || 0), 0);
             const act = actuals[date] || 0;
-            if (est > 0 || act > 0) rows.push({ date, est, act, entries });
+            const prevDate = prevDateOf(date);
+            const priorDayCoverage = (est > 0 && act === 0 && (actuals[prevDate] || 0) > 0) ? actuals[prevDate] : 0;
+            if (est > 0 || act > 0) rows.push({ date, est, act, entries, prevDate, priorDayCoverage });
           }
           const totalEst = rows.reduce((t, r) => t + r.est, 0);
           const totalAct = rows.reduce((t, r) => t + r.act, 0);
@@ -432,13 +446,20 @@ function Forecast() {
                 <div style={{ fontSize: 13.5, color: T.textMuted }}>Nothing scheduled or billed this month.</div>
               )}
               {rows.map(r => (
-                <div key={r.date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${T.border}`, fontSize: 12.5 }}>
-                  <span style={{ color: T.textMuted, width: 44 }}>{new Date(`${r.date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                  <span style={{ color: T.textDim, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {r.entries.map(e => facilityShort(e.contractId)).join(", ") || "—"}
-                  </span>
-                  <span style={{ color: T.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.est > 0 ? `est ${money(r.est)}` : ""}</span>
-                  <span style={{ color: "#22c55e", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.act > 0 ? `billed ${money(r.act)}` : ""}</span>
+                <div key={r.date} style={{ padding: "6px 0", borderBottom: `1px solid ${T.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                    <span style={{ color: T.textMuted, width: 44 }}>{shortDate(r.date)}</span>
+                    <span style={{ color: T.textDim, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {r.entries.map(e => facilityShort(e.contractId)).join(", ") || "—"}
+                    </span>
+                    <span style={{ color: T.text, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.est > 0 ? `est ${money(r.est)}` : ""}</span>
+                    <span style={{ color: "#22c55e", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r.act > 0 ? `billed ${money(r.act)}` : ""}</span>
+                  </div>
+                  {r.priorDayCoverage > 0 && (
+                    <div style={{ fontSize: 10.5, color: T.textDim, fontStyle: "italic", padding: "3px 0 0 44px" }}>
+                      Not logged separately here — {money(r.priorDayCoverage)} billed under {shortDate(r.prevDate)}'s call day (pre-7am hours roll to the prior day by design)
+                    </div>
+                  )}
                 </div>
               ))}
               {rows.length > 0 && (
