@@ -218,11 +218,13 @@ export default function AdminDashboard() {
   const unreadMessages = messages.filter(m =>
     m.last_physician_reply_at && (!messagesSeenAt || new Date(m.last_physician_reply_at) > new Date(messagesSeenAt))
   ).length;
+  const errorsSeenAt = data?.settings?.adminErrorsSeenAt;
+  const unattendedErrors = errors.filter(e => !errorsSeenAt || new Date(e.created_at) > new Date(errorsSeenAt)).length;
   const TABS = [
     { id: "tickets",   label: `Tickets (${activeTickets.length})` },
     { id: "messages",  label: unreadMessages > 0 ? `Messages (${unreadMessages})` : "Messages" },
     { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
-    { id: "errors",    label: `Errors (${errors.filter(e => Date.now() - new Date(e.created_at).getTime() < 7 * 86400000).length})` },
+    { id: "errors",    label: unattendedErrors > 0 ? `Errors (${unattendedErrors})` : "Errors" },
     { id: "signups",   label: "Signups" },
     { id: "waitlist",  label: `Waitlist (${openWaitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
@@ -246,6 +248,7 @@ export default function AdminDashboard() {
             onClick={() => {
               setTab(t.id);
               if (t.id === "messages") updateSettings({ adminInboxSeenAt: new Date().toISOString() });
+              if (t.id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
             }}
             style={{
               flex: 1, padding: "8px", borderRadius: 8, border: "none",
