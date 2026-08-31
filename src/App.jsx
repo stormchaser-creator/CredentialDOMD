@@ -1755,7 +1755,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, paddingLeft: 10 }}>{group.title}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {group.items.map(p => {
-                    const hasUrgent = [...expired, ...soon].filter(i => i._sec === p.id).length;
+                    // Acknowledging an alert only snoozes the Home nag — the category
+                    // badge should keep flagging it until the underlying date changes.
+                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => i._sec === p.id).length;
                     const locked = p.pro && !isPro;
                     const selected = activeRailId === p.id;
                     return (
@@ -1795,7 +1797,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, paddingLeft: 2 }}>{group.title}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {sorted.map(p => {
-                    const hasUrgent = [...expired, ...soon].filter(i => i._sec === p.id).length;
+                    // Same as the desktop rail: acknowledging snoozes the Home nag,
+                    // not the category badge — an acked item is still outstanding.
+                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => i._sec === p.id).length;
                     const locked = p.pro && !isPro;
                     return (
                       <button key={p.id} onClick={() => setSubPage(p.id)} className="cmd-card-hover" style={{
