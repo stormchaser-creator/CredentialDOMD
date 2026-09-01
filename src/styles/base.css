@@ -657,7 +657,10 @@ img, svg {
    impossible in a web app. Instead: in phone-sized landscape, cover the
    app with a rotate prompt. max-height keeps iPads/desktop unaffected. */
 #rotate-lock { display: none; }
-@media screen and (orientation: landscape) and (max-height: 500px) {
+/* Phone turned sideways only. A short desktop browser window is also
+   "landscape under 500px tall", and with the desktop shell live that locked
+   out real monitors. Touch pointer + sub-desktop width keep this to phones. */
+@media screen and (orientation: landscape) and (max-height: 500px) and (max-width: 1023.98px) and (pointer: coarse) {
   #rotate-lock {
     display: flex;
     position: fixed;
