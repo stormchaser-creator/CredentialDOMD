@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
 import { AsclepiusIcon } from "../shared/Icons";
@@ -34,8 +34,40 @@ const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
     }
   : {};
 
+// Clerk's prebuilt sign-in turns "Email me a sign-in code instead" into a
+// two-step trip: the link opens a "Sign in another way" list, and the code is
+// only sent after a second tap on "Email a code to ...". Physicians expect
+// one tap. So: when that link is tapped, arm a short window; when the list
+// renders inside it, press the email-code option for them. The list is
+// still reachable the normal way (a tap that did not come from that link
+// leaves it alone), so nothing is lost if Clerk adds other methods.
+const CODE_LINK_TEXT = "Email me a sign-in code instead";
+const CODE_OPTION_PREFIX = "Email a code to";
+function useOneTapEmailCode(containerRef, enabled) {
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !enabled) return undefined;
+    let armedUntil = 0;
+    const onClick = (e) => {
+      const el = e.target instanceof Element ? e.target.closest("button, a") : null;
+      if (el && (el.textContent || "").trim() === CODE_LINK_TEXT) armedUntil = Date.now() + 4000;
+    };
+    const tryAdvance = () => {
+      if (Date.now() > armedUntil) return;
+      const btn = Array.from(root.querySelectorAll("button")).find(b => (b.textContent || "").trim().startsWith(CODE_OPTION_PREFIX));
+      if (btn) { armedUntil = 0; btn.click(); }
+    };
+    const mo = new MutationObserver(tryAdvance);
+    mo.observe(root, { childList: true, subtree: true });
+    root.addEventListener("click", onClick, true);
+    return () => { mo.disconnect(); root.removeEventListener("click", onClick, true); };
+  }, [containerRef, enabled]);
+}
+
 function AuthPage() {
   const [mode, setMode] = useState(() =>
+  const widgetRef = useRef(null);
+  useOneTapEmailCode(widgetRef, mode === "signin");
     window.location.hash.includes("sign-up") ? "signup" : "signin"
   ); // "signin" | "signup"
   const T = THEMES.light;
@@ -129,7 +161,7 @@ function AuthPage() {
         </div>
 
         {/* Clerk widget */}
-        <div style={{ display: "flex", justifyContent: "center" }}>
+        <div ref={widgetRef} style={{ display: "flex", justifyContent: "center" }}>
           {mode === "signin" ? (
             <SignIn
               routing="hash"
