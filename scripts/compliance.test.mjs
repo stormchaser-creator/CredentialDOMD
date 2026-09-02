@@ -676,13 +676,14 @@ ok("ME DO cites the osteopathic chapter", /\b2600-[A-Z]\b/.test(topicOf("ME", "D
   ];
   const comps = [
     { st: "CO", comp: { fullyCompliant: true, daysLeft: 240 } },
-    { st: "CA", comp: { fullyCompliant: false, daysLeft: 393 } },
+    { st: "CA", comp: { fullyCompliant: false, daysLeft: 393 } },  // behind, but renewal far off: nothing to do yet
+    { st: "TX", comp: { fullyCompliant: false, daysLeft: 30 } },   // behind and due: counts against
   ];
   const r = standingScore({ items, missingRequired: [{ item: items[5] }], stateComps: comps, leadDays: 90, now });
-  ok("standingScore counts dated items + required-missing + CME states", r.total === 7, `total ${r.total}`);
-  ok("standingScore: only beyond-window item and compliant state are good", r.good === 2, `good ${r.good}`);
-  ok("standingScore percent = round(2/7)", r.percent === 29, `percent ${r.percent}`);
-  ok("standingScore lists what needs action, soonest first", r.needsAction.map(x => x.item.id).join(",") === "d,a,b,cme:CA,f", r.needsAction.map(x => x.item.id).join(","));
+  ok("standingScore counts dated items + required-missing + CME states", r.total === 8, `total ${r.total}`);
+  ok("standingScore: beyond-window item, compliant state, and a far-off shortfall are good", r.good === 3, `good ${r.good}`);
+  ok("standingScore percent = round(3/8)", r.percent === 38, `percent ${r.percent}`);
+  ok("standingScore lists what needs action, soonest first", r.needsAction.map(x => x.item.id).join(",") === "d,cme:TX,a,b,f", r.needsAction.map(x => x.item.id).join(","));
   ok("standingScore: expired item carries negative days", r.needsAction[0].days === -3, String(r.needsAction[0].days));
   ok("standingScore: required-missing item has days null", r.needsAction[4].days === null);
   const old = standingScore({ items: [items[0], items[1], items[2]], stateComps: [], leadDays: 90, now });

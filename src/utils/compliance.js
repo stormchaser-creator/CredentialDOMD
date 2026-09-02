@@ -426,7 +426,8 @@ const DAY_MS = 86400000;
  *   - a dated credential is good only while it expires AFTER the reminder
  *     window (default 90 days); inside the window or past it, it needs action
  *   - a credential that requires an expiration date but has none needs action
- *   - a CME state counts good only when fullyCompliant
+ *   - a CME state counts against only when it is not fullyCompliant AND its
+ *     renewal is inside the window (the 90-days-out rule); earlier it is good
  * Acknowledging an alert snoozes the reminder; it never raises the score.
  * Returns { percent, good, total, needsAction: [{ item, days }] }.
  */
@@ -446,7 +447,12 @@ export function standingScore({ items = [], missingRequired = [], stateComps = [
   }
   for (const x of stateComps) {
     total += 1;
-    if (x.comp?.fullyCompliant) good += 1; else needsAction.push({ item: { id: `cme:${x.st}`, _sec: "cme", _cat: "CME", state: x.st }, days: x.comp?.daysLeft ?? null });
+    // A CME shortfall counts against only once the renewal is inside the
+    // reminder window (the rule set on 2026-08-26: the countdown starts at
+    // 90 days out); before that there is nothing to do yet.
+    const due = x.comp?.daysLeft == null || x.comp.daysLeft <= leadDays;
+    if (x.comp?.fullyCompliant || !due) good += 1;
+    else needsAction.push({ item: { id: `cme:${x.st}`, _sec: "cme", _cat: "CME", state: x.st }, days: x.comp?.daysLeft ?? null });
   }
   needsAction.sort((a, b) => (a.days ?? 9e9) - (b.days ?? 9e9));
   const percent = total === 0 ? (items.length === 0 ? 0 : 100) : Math.round((good / total) * 100);
