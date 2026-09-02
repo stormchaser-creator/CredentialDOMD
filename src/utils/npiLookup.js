@@ -3,7 +3,15 @@
 //
 // CORS handling:
 // In dev: Vite proxy at /npi-api → npiregistry.cms.hhs.gov/api
-// In prod: Supabase Edge Function npi-proxy (deployed with --no-verify-jwt)
+// In prod: the NIH/NLM Clinical Tables mirror of the registry (CORS: *),
+// translated into NPPES shape below; it carries the same taxonomy/license rows.
+
+import { nameSearchParams, extractLicensesFromNPI } from "./npiImport.js";
+
+// The pure half (name splitting, query rules, license extraction and merge)
+// lives in npiImport.js so it can be tested in plain node; re-exported here
+// so existing imports keep working.
+export { extractLicensesFromNPI };
 
 const NPPES_BASE = "https://npiregistry.cms.hhs.gov/api/?version=2.1";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -31,7 +39,10 @@ async function fetchNPI(url) {
   if (number) {
     nlm.searchParams.set("terms", number);
   } else {
-    nlm.searchParams.set("terms", `${q.get("last_name") || ""} ${q.get("first_name") || ""}`.trim());
+    // The mirror prefix-matches every word on its own, so an NPPES trailing
+    // wildcard is redundant there and is stripped.
+    const word = (k) => (q.get(k) || "").replace(/\*/g, "").trim();
+    nlm.searchParams.set("terms", `${word("last_name")} ${word("first_name")}`.trim());
     if (q.get("state")) nlm.searchParams.set("q", `addr_practice.state:${q.get("state")}`);
   }
   nlm.searchParams.set("maxList", q.get("limit") || "20");
@@ -147,15 +158,14 @@ export async function lookupNPI(npi) {
 }
 
 /**
- * Search for providers by name.
- * Returns array of results (max 20).
+ * Search for individual providers by name, optionally within a state.
+ * `wildcard` turns the first name into a prefix match ("Eri*"), which NPPES
+ * allows after two characters. Returns an array of results (default max 20).
  */
-export async function searchNPI({ firstName, lastName, state, limit = 20 }) {
-  const params = new URLSearchParams({ version: "2.1", limit: String(limit) });
-  if (firstName) params.set("first_name", firstName.trim());
-  if (lastName) params.set("last_name", lastName.trim());
-  if (state) params.set("state", state);
-  params.set("enumeration_type", "NPI-1"); // Individual only
+export async function searchNPI({ firstName, lastName, state, limit = 20, wildcard = false }) {
+  const query = nameSearchParams({ firstName, lastName, state, limit, wildcard });
+  if (!query) return [];
+  const params = new URLSearchParams(query);
 
   const url = `${NPPES_BASE.replace("?version=2.1", "")}?${params}`;
   const data = await fetchNPI(url);
@@ -198,18 +208,25 @@ export async function searchNPI({ firstName, lastName, state, limit = 20 }) {
 }
 
 /**
- * Extract license records from an NPI result's taxonomies.
- * Returns array of { licenseNumber, state, taxonomyCode, description }.
- * Only includes entries that have both a license number and state.
+ * The "I do not know my NPI" path: find the physician by the name they
+ * already typed, widening only when a stricter search comes back empty.
+ * 1. exact name within the chosen state
+ * 2. exact name in every state
+ * 3. first-name prefix (NPPES wildcard; the production mirror already
+ *    prefix-matches, so this step only runs against NPPES itself)
+ * Returns { results, note } where note says how the search was widened.
  */
-export function extractLicensesFromNPI(result) {
-  if (!result?.allTaxonomies) return [];
-  return result.allTaxonomies
-    .filter(t => t.license && t.state)
-    .map(t => ({
-      licenseNumber: t.license,
-      state: t.state,
-      taxonomyCode: t.code,
-      description: t.description,
-    }));
+export async function findProvidersByName({ firstName, lastName, state, limit = 50 }) {
+  const st = (state || "").trim().toUpperCase();
+  if (st) {
+    const inState = await searchNPI({ firstName, lastName, state: st, limit });
+    if (inState.length) return { results: inState, note: "" };
+  }
+  const anywhere = await searchNPI({ firstName, lastName, limit });
+  if (anywhere.length) return { results: anywhere, note: st ? `No match in ${st}; showing every state.` : "" };
+  if (isDev && (firstName || "").trim().length >= 2) {
+    const prefix = await searchNPI({ firstName, lastName, limit, wildcard: true });
+    if (prefix.length) return { results: prefix, note: "No exact first-name match; showing similar first names." };
+  }
+  return { results: [], note: "" };
 }
