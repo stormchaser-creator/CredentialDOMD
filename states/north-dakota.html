@@ -279,10 +279,14 @@ a:hover { color: var(--emerald-light); }
 .guide-form button { background: var(--emerald); color: #0d0d1a; border: none; border-radius: 10px; padding: 12px 22px; font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; transition: background 0.2s; }
 .guide-form button:hover { background: var(--emerald-light); }
 .guide-form button:disabled { opacity: 0.6; cursor: default; }
-.guide-opt { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; color: var(--text-muted); font-size: 14px; line-height: 1.45; cursor: pointer; }
-.guide-opt input[type="checkbox"] { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--emerald); flex: 0 0 auto; }
-.guide-opt strong { color: var(--text); font-weight: 600; }
-.guide-bar .guide-opt { margin-top: 6px; font-size: 13px; }
+.guide-choice { border: 0; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--text-muted); font-size: 14px; line-height: 1.45; }
+.guide-choice legend { padding: 0; margin: 0 0 6px; width: 100%; color: var(--text); font-weight: 600; }
+.guide-choice-sub { display: block; color: var(--text-muted); font-weight: 400; font-size: 13.5px; margin-top: 2px; }
+.guide-choice label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text); }
+.guide-choice input[type="radio"] { width: 18px; height: 18px; margin: 0; accent-color: var(--emerald); flex: 0 0 auto; }
+.guide-choice.is-missing legend { color: var(--amber); }
+.guide-choice--compact { margin-top: 6px; font-size: 13px; gap: 6px 14px; }
+.guide-choice--compact legend { width: auto; margin: 0 6px 0 0; font-size: 13px; }
 .guide-hp { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
 .guide-msg { font-size: 14px; margin-top: 10px; min-height: 1em; }
 
@@ -403,7 +407,11 @@ a:hover { color: var(--emerald-light); }
       <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
       <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
       <button type="submit">Email me the guide</button>
-      <label class="guide-opt"><input type="checkbox" name="waitlist" value="1"><span><strong>Also add me to the CredentialDOMD waitlist.</strong> Early access to the app that tracks every license, CME cycle, and renewal for you. Leave it unchecked to get the guide only.</span></label>
+      <fieldset class="guide-choice">
+        <legend>Add me to the CredentialDOMD waitlist? <span class="guide-choice-sub">Early access to the app that tracks every license, CME cycle, and renewal for you.</span></legend>
+        <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
+        <label><input type="radio" name="waitlist" value="no"><span>No, just the guide</span></label>
+      </fieldset>
     </form>
     <p class="guide-msg" role="status" aria-live="polite"></p>
   </div>
@@ -588,7 +596,11 @@ a:hover { color: var(--emerald-light); }
       <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
       <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
       <button type="submit">Email me the guide</button>
-      <label class="guide-opt"><input type="checkbox" name="waitlist" value="1"><span><strong>Also add me to the CredentialDOMD waitlist.</strong> Early access to the app that tracks every license, CME cycle, and renewal for you. Leave it unchecked to get the guide only.</span></label>
+      <fieldset class="guide-choice">
+        <legend>Add me to the CredentialDOMD waitlist? <span class="guide-choice-sub">Early access to the app that tracks every license, CME cycle, and renewal for you.</span></legend>
+        <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
+        <label><input type="radio" name="waitlist" value="no"><span>No, just the guide</span></label>
+      </fieldset>
     </form>
     <p class="guide-msg" role="status" aria-live="polite"></p>
   </div>
@@ -621,7 +633,11 @@ a:hover { color: var(--emerald-light); }
     <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
     <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
     <button type="submit">Send</button>
-    <label class="guide-opt"><input type="checkbox" name="waitlist" value="1"><span>Also add me to the app waitlist</span></label>
+    <fieldset class="guide-choice guide-choice--compact">
+      <legend>Waitlist?</legend>
+      <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
+      <label><input type="radio" name="waitlist" value="no"><span>No, guide only</span></label>
+    </fieldset>
   </form>
   <p class="guide-msg" role="status" aria-live="polite"></p>
 </div>
@@ -630,7 +646,7 @@ a:hover { color: var(--emerald-light); }
      .wl-form binder. Contract: p_email, p_name=null, p_source = page path
      ("/states/texas"), p_note = "guide-email {ABBR} {placement} [flags]"
      (placement: inline | end | sticky; flags: honeypot,fast-submit),
-     p_stage = "guide", p_waitlist = the opt-in checkbox (false = guide only).
+     p_stage = "guide", p_waitlist = the required yes/no choice (no = guide only).
      Attempt trace fires first via waitlist_attempt. -->
 <script>
 (function() {
@@ -669,8 +685,15 @@ a:hover { color: var(--emerald-light); }
       if (hp && (hp.value || '').trim()) flags.push('honeypot');
       if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
       var placement = form.getAttribute('data-placement') || 'inline';
-      var optEl = form.querySelector('input[name="waitlist"]');
-      var wantsWaitlist = !!(optEl && optEl.checked);
+      var choiceBox = form.querySelector('.guide-choice');
+      var optEl = form.querySelector('input[name="waitlist"]:checked');
+      if (choiceBox && !optEl) {
+        choiceBox.classList.add('is-missing');
+        if (msg) { msg.style.color = 'var(--amber)'; msg.textContent = 'Choose yes or no on the waitlist question, then send.'; }
+        return;
+      }
+      if (choiceBox) choiceBox.classList.remove('is-missing');
+      var wantsWaitlist = !!(optEl && optEl.value === 'yes');
       var note = 'guide-email ' + ABBR + ' ' + placement + (flags.length ? ' ' + flags.join(',') : '');
       var payload = { p_email: email, p_name: null, p_source: location.pathname || '/', p_note: note, p_stage: 'guide', p_waitlist: wantsWaitlist };
       try { post('/api/waitlist-attempt', 'waitlist_attempt', { p_email: email, p_name: null, p_source: payload.p_source, p_stage: 'guide' }).catch(function() {}); } catch (err) {}
