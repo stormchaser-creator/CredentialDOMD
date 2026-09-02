@@ -772,7 +772,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <ComplianceRing percent={compliancePercent} size={136} stroke={10} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="cmd-responsive-grid-2" style={{ gap: 10, ...(hasActionColumn ? null : { gridTemplateColumns: "repeat(4, 1fr)" }) }}>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: hasActionColumn ? "repeat(auto-fit, minmax(120px, 1fr))" : "repeat(4, 1fr)" }}>
             {heroTiles.map(t => (
               <div key={t.key} style={{ backgroundColor: T.input, borderRadius: 12, padding: "10px 14px", minWidth: 0 }}>
                 <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, fontVariantNumeric: "tabular-nums", color: t.value > 0 ? t.num : T.textDim }}>{t.value}</div>
