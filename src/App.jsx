@@ -37,6 +37,7 @@ import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirement
 import { useAiAvailable } from "./utils/aiClient";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
+import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { isNonExpiring, mailtoHref } from "./utils/helpers";
@@ -343,6 +344,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   }, [navRecord?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useNotifications();
+  // ANMG on-call shifts from CallSync: checked once a day when the app
+  // opens, on the devices where the calendar link is saved (Sched. tab).
+  useCallSyncAutoRun();
 
   const alerts = useMemo(() => generateAlerts(data), [data]);
   const alertCount = alerts?.count || 0;

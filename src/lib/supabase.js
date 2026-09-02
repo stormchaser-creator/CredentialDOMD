@@ -191,7 +191,9 @@ function profileRowToSettings(row) {
 // Gemini / Anthropic keys are per device and per Clerk user. They ride in
 // settings state like before (every reader keeps working) but persist to a
 // per-user localStorage slot and are stripped from every cloud write.
-export const DEVICE_KEY_FIELDS = ["apiKey", "anthropicApiKey"];
+// The CallSync calendar link (a per-user token) and the agreement it syncs
+// onto ride the same slot: secrets stay on the device.
+export const DEVICE_KEY_FIELDS = ["apiKey", "anthropicApiKey", "callsyncFeedUrl", "callsyncContractId"];
 const deviceKeySlot = (authUserId) => `credentialdomd-keys:${authUserId}`;
 
 export function loadDeviceKeys(authUserId) {
