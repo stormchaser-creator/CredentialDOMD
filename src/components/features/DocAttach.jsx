@@ -22,7 +22,8 @@ import { docAttachedLabel, fmtBytes, docBytes } from "../../utils/docLabel";
  * A file that is already in Files is never stored twice, but it is still
  * read so the form fills. It is staged with `existingId`, and the parent
  * links the stored copy on save (attachExistingDoc) instead of inserting
- * another row.
+ * another row. A copy already linked to some other record is left where it
+ * is; only its fields are read.
  *
  * Props:
  *  - setForm(fn): form state setter — extracted fields are merged in
@@ -122,15 +123,18 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
       } else {
         setAttachedDocs((prev) => [...prev, { name: file.name, type: file.type, size: file.size, data: dataUrl }]);
       }
-      await readIntoForm(
-        { name: file.name, type: file.type, dataUrl, file },
-        dup ? " This file was already in Files, so it is linked here instead of uploaded again." : ""
-      );
+      // The parent links the stored copy on save only when it is unlinked
+      // (attachExistingDoc); a file already linked elsewhere stays put.
+      const dupNote = !dup ? ""
+        : dup.linkedTo ? " This file was already in Files and stays linked where it is; only its terms were read."
+        : " This file was already in Files, so it is linked here instead of uploaded again.";
+      await readIntoForm({ name: file.name, type: file.type, dataUrl, file }, dupNote);
     }
   }, [data.documents, setAttachedDocs, readIntoForm]);
 
-  // Pick a document that is already in Files: same read, same fill, and the
-  // stored file is linked to this record on save.
+  // Pick a document that is already in Files: same read, same fill, and an
+  // unlinked stored file is linked to this record on save. One that is
+  // already linked elsewhere (another agreement, a license) stays there.
   const pickExisting = useCallback(async ({ doc }) => {
     setShowExisting(false);
     if (!doc?.data) {
@@ -142,7 +146,10 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
     setAttachedDocs((prev) => prev.some((d) => d.existingId === doc.id)
       ? prev
       : [...prev, { name: doc.name, type: mime, size: docBytes(doc), data: doc.data, existingId: doc.id }]);
-    await readIntoForm({ name: doc.name, type: mime, dataUrl: doc.data }, " Linked from Files, nothing uploaded again.");
+    await readIntoForm(
+      { name: doc.name, type: mime, dataUrl: doc.data },
+      doc.linkedTo ? " Read from Files; it stays linked where it is." : " Linked from Files, nothing uploaded again."
+    );
   }, [setAttachedDocs, readIntoForm]);
 
   return (
