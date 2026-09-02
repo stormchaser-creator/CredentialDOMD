@@ -14,7 +14,7 @@ import {
 } from "../../constants/boardRequirements";
 import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, composeText } from "../../utils/notifications";
-import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, useAnthropicAvailable } from "../../utils/aiClient";
+import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, describeAiBudget, useAnthropicAvailable } from "../../utils/aiClient";
 import { CODER_MODELS } from "../../utils/cptCoder";
 
 function SettingsSection() {
@@ -35,6 +35,7 @@ function SettingsSection() {
   const sharedAi = useSharedAiStatus();
   const opusOn = useAnthropicAvailable(s);
   const opusLine = describeOpusStatus(s);
+  const budget = describeAiBudget(s); // { line, warning } from the proxy's monthly dollar budget, or null
   useEffect(() => { fetchSharedAiStatus({ force: true }); }, []);
 
   // Search for the user's NPI by name
@@ -317,6 +318,16 @@ function SettingsSection() {
           }}>
             <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, backgroundColor: opusOn ? T.success : T.warning }} />
             <span>{opusLine}</span>
+          </div>
+        )}
+        {budget && (
+          <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14, marginTop: -6, lineHeight: 1.5 }}>
+            {budget.line}
+            {budget.warning && (
+              <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, color: T.text, fontWeight: 600 }}>
+                {budget.warning}
+              </div>
+            )}
           </div>
         )}
         <Field label="Code RVUs with" hint={(s.coderModel || "opus") === "opus"

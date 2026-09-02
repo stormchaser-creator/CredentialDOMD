@@ -2,7 +2,9 @@
 
 import { geminiCall, proxyErrorMessage } from "./aiClient";
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+// gemini-2.0-flash was shut down 2026-06-01; every lookup on it failed and still
+// spent a cap unit. Same request shape on 2.5 Flash.
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 const SYSTEM_PROMPT = `You are a CPT code lookup assistant for physicians. Given a procedure description, return the most relevant CPT codes. Return ONLY valid JSON (no markdown, no backticks, no explanation outside the JSON).
 
