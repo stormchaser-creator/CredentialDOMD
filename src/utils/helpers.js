@@ -1,4 +1,6 @@
-import { CERTIFICATION_TYPE } from "../constants/credentialTypes";
+// Extension spelled out so pure-node test scripts can import this module
+// (Vite resolves either way; node's ESM loader needs the ".js").
+import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
 
 export const MS_PER_DAY = 86400000;
 

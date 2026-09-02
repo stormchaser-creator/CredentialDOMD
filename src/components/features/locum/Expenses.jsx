@@ -4,10 +4,9 @@ import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber } from "../../../utils/helpers";
-import { invoicePdfFile, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
+import { invoicePdfFile, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
+import { money } from "../../../utils/invoiceCover";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
-
-const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const CATEGORIES = ["Airfare", "Baggage", "Hotel", "Rental car", "Gas", "Rideshare / Taxi", "Parking", "Mileage", "Meals", "Other"];
 
@@ -112,7 +111,7 @@ function Expenses() {
       const number = nextInvoiceNumber(data.invoices).replace("INV-", "EXP-");
       const lines = [...sel].sort((a, b) => String(a.date).localeCompare(String(b.date))).map(e => ({
         date: e.date,
-        label: `${e.category || "Expense"}${e.vendor ? ` — ${e.vendor}` : ""}`,
+        label: `${e.category || "Expense"}${e.vendor ? `: ${e.vendor}` : ""}`,
         detail: [e.notes, receiptsOf(e).length ? `receipt${receiptsOf(e).length > 1 ? "s" : ""} attached` : "no receipt"].filter(Boolean).join(" · "),
         amount: e.amount,
       }));
@@ -124,7 +123,7 @@ function Expenses() {
         npi: s.npi, email: s.email,
         facility: invAgency || "Locums agency", // BILL TO: the agency itself
         periodStart: dates[0], periodEnd: dates[dates.length - 1],
-        terms: "Reimbursable travel expenses per agreement — receipts attached.",
+        terms: "Reimbursable travel expenses per agreement; receipts attached.",
         lines, totalMin: 0, total,
       };
       const pdf = invoicePdfFile(inv);
@@ -146,7 +145,7 @@ function Expenses() {
       try { await navigator.clipboard.writeText(invoiceCoverEmail(inv)); } catch { /* clipboard unavailable */ }
       let how = null;
       if (navigator.canShare && navigator.canShare({ files })) {
-        try { await navigator.share({ title: `Expense invoice ${number}`, text: invoiceCoverBlurb(inv), files }); how = "share"; }
+        try { await navigator.share({ title: invoiceSubject(inv), text: invoiceCoverBlurb(inv), files }); how = "share"; }
         catch (err) { if (err?.name === "AbortError") { setBusy(false); return; } }
       }
       if (!how) {
@@ -166,13 +165,13 @@ function Expenses() {
         lines, totalAmount: total, totalMinutes: 0,
         entryIds: sel.map(e => e.id),
         sentAt: new Date().toISOString(),
-        text: `Expense invoice ${number} — ${invAgency} — ${money(total)} (${sel.length} item${sel.length > 1 ? "s" : ""})`,
+        text: `Invoice ${number}: ${invAgency || "Locums agency"}, ${money(total)} (${sel.length} item${sel.length > 1 ? "s" : ""})`,
       });
       for (const e of sel) editItem("travelExpenses", { ...e, invoiceId });
       setInvOpen(false);
       showNotice(missing
-        ? `Sent — but ${missing} receipt file${missing > 1 ? "s weren't" : " wasn't"} downloaded on this device and didn't attach.`
-        : `Invoice ${number} sent with ${receiptFiles.length} receipt${receiptFiles.length === 1 ? "" : "s"} attached — tracked on the Invoices tab.`);
+        ? `Sent, but ${missing} receipt file${missing > 1 ? "s weren't" : " wasn't"} downloaded on this device and didn't attach.`
+        : `Invoice ${number} sent with ${receiptFiles.length} receipt${receiptFiles.length === 1 ? "" : "s"} attached. Tracked on the Invoices tab.`);
     } finally { setBusy(false); }
   };
 

@@ -1,6 +1,14 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatDate } from "./helpers.js";
+import { formatDate, mailtoHref } from "./helpers.js";
+import {
+  money, invoicePayment, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail,
+  normalizeInvoiceText, MAILTO_BODY_MAX,
+} from "./invoiceCover.js";
+
+// The wording lives in invoiceCover.js (pure, unit-tested); re-exported so
+// every send site keeps importing from here.
+export { invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail, invoicePayment, normalizeInvoiceText };
 
 /**
  * Professional PDF invoice — clean table, brand header, ready for a
@@ -9,7 +17,6 @@ import { formatDate } from "./helpers.js";
 
 const NAVY = [10, 37, 64];      // #0A2540
 const EMERALD = [16, 185, 129]; // #10b981
-const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**
  * Chronological line order, even for invoices saved before lines carried
@@ -134,13 +141,14 @@ export function buildInvoicePdf(inv) {
 
   // ── Totals ──
   let ty = doc.lastAutoTable.finalY + 6;
-  // A resend after a partial payment shows what's left, not the original total
-  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
-  if (hasPartialPayment) {
+  // A resend after a payment shows what's left (or that nothing is), not
+  // the original total as if nothing had happened.
+  const pay = invoicePayment(inv);
+  if (pay.hasPayment) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(90, 90, 90);
-    doc.text(`Invoice total ${money(inv.total)}  ·  Paid ${money(inv.paid)}`, W - M, ty, { align: "right" });
+    doc.text(`Invoice total ${money(pay.total)}  ·  Paid ${money(pay.paid)}`, W - M, ty, { align: "right" });
     ty += 6;
   }
   doc.setFillColor(...EMERALD);
@@ -148,9 +156,9 @@ export function buildInvoicePdf(inv) {
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(hasPartialPayment ? "BALANCE DUE" : "TOTAL DUE", W - M - 65, ty + 5.6);
+  doc.text(pay.partial ? "BALANCE DUE" : pay.settled ? "PAID IN FULL" : "TOTAL DUE", W - M - 65, ty + 5.6);
   doc.setFontSize(12);
-  doc.text(money(hasPartialPayment ? inv.balance : inv.total), W - M - 5, ty + 5.8, { align: "right" });
+  doc.text(money(pay.partial ? pay.balance : pay.total), W - M - 5, ty + 5.8, { align: "right" });
 
   // ── Terms + footer ──
   ty += 20;
@@ -181,46 +189,58 @@ export function invoicePdfFile(inv) {
 }
 
 /**
- * A professional cover email to accompany the invoice — sharing to Mail
- * uses this as the message body, so the recipient gets a real letter,
- * not a bare subject line with an attachment.
+ * A legacy invoice (saved before line items were stored) only has its text
+ * rendering. This types that text onto PDF pages so it can ride the same
+ * share sheet as every other invoice instead of a mailto: link that iOS
+ * Mail truncates.
  */
-/**
- * Share-sheet text: iOS Mail strips EVERY line break from text shared with a
- * file (CRLF included — verified), so the only body that survives is one
- * written as a single flowing paragraph. The full letter still rides the
- * clipboard for anyone who wants the long form.
- */
-export function invoiceCoverBlurb(inv) {
-  const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const period = inv.periodStart
-    ? `${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? ` through ${formatDate(inv.periodEnd)}` : ""}`
-    : null;
-  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
-  const totalLine = hasPartialPayment
-    ? `Total due: ${money(inv.total)}. ${money(inv.paid)} received to date — balance due: ${money(inv.balance)}.`
-    : `Total due: ${money(inv.total)}.`;
-  return `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. ${totalLine} The invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions. Thank you, ${inv.physician || ""}${inv.npi ? `, NPI ${inv.npi}` : ""}${inv.email ? ` (${inv.email})` : ""}.`;
+export function invoiceTextPdfFile(inv, text) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 16;
+  const lineH = 4.6;
+  doc.setFont("courier", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(30, 30, 30);
+  const rows = normalizeInvoiceText(text).split("\n")
+    .flatMap(l => (l.trim() === "" ? [""] : doc.splitTextToSize(l, W - 2 * M)));
+  let y = M + 4;
+  for (const row of rows) {
+    if (y > H - M) { doc.addPage(); y = M + 4; }
+    if (row) doc.text(row, M, y);
+    y += lineH;
+  }
+  const blob = doc.output("blob");
+  return new File([blob], `${inv.number || "invoice"}.pdf`, { type: "application/pdf" });
 }
 
-export function invoiceCoverEmail(inv) {
-  const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const period = inv.periodStart
-    ? `${formatDate(inv.periodStart)}${inv.periodEnd && inv.periodEnd !== inv.periodStart ? ` through ${formatDate(inv.periodEnd)}` : ""}`
-    : null;
-  // CRLF line endings — the iOS share sheet collapses bare \n when text
-  // rides along with a file, which turned the letter into a run-on.
-  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
-  const totalLine = hasPartialPayment
-    ? `The total is ${money(inv.total)}. We've received ${money(inv.paid)} to date — the balance due is ${money(inv.balance)}.`
-    : `The total due is ${money(inv.total)}.`;
-  const paras = [
-    "Hello,",
-    `Attached is invoice ${inv.number || ""} for physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}. ${totalLine}`,
-    "The attached invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions.",
-    `Thank you,\r\n${inv.physician || ""}${inv.npi ? `\r\nNPI ${inv.npi}` : ""}${inv.email ? `\r\n${inv.email}` : ""}`,
-  ];
-  return paras.join("\r\n\r\n");
+/**
+ * Send a text-only (legacy) invoice. A short body opens Mail as a formatted
+ * CRLF mailto: composer. A long one would be cut off by iOS Mail, so it goes
+ * out as a PDF page through the share sheet; when files can't be shared the
+ * composer opens with the cover letter and the full invoice waits on the
+ * clipboard. The text is always on the clipboard first.
+ */
+export async function shareInvoiceText(inv, subject, text) {
+  const body = normalizeInvoiceText(text);
+  const title = subject || invoiceSubject(inv);
+  try { await navigator.clipboard.writeText(body); } catch { /* clipboard unavailable */ }
+  if (body.length <= MAILTO_BODY_MAX) {
+    window.open(mailtoHref("", title, body), "_blank");
+    return "mailto";
+  }
+  const file = invoiceTextPdfFile(inv, body);
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ title, text: invoiceCoverBlurb(inv), files: [file] });
+      return "share";
+    } catch (err) {
+      if (err?.name === "AbortError") return null;
+    }
+  }
+  window.open(mailtoHref("", title, invoiceCoverEmail(inv, { attached: false })), "_blank");
+  return "mailto-cover";
 }
 
 /**
@@ -249,7 +269,10 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
     || window.matchMedia?.("(display-mode: standalone)")?.matches;
   if (standalone && navigator.share && fallbackText) {
     try {
-      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: `${invoiceCoverBlurb(inv)}\n\n${fallbackText}` });
+      await navigator.share({
+        title: subject || `Invoice ${inv.number}`,
+        text: `${invoiceCoverBlurb(inv, { attached: false })}\n\n${normalizeInvoiceText(fallbackText)}`,
+      });
       return coverCopied ? "share-text+cover" : "share-text";
     } catch (err) {
       if (err?.name === "AbortError") return null;
