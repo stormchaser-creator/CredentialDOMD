@@ -6,10 +6,11 @@
  * not a budget: it exists so one account cannot fill the bucket by accident
  * or on purpose. Every place that turns a picked file into a documents row
  * (the Files tab, the camera, DocAttach inside a credential form, the
- * CrudSection picker, onboarding, a Vera attachment being filed) runs this
- * first and refuses the whole batch with the message below. The server-side
- * per-folder check is on the plan's "next" list; until it ships, the bucket
- * cap of 15 MB per object is the only server-side line.
+ * CrudSection picker, onboarding, a Vera attachment being filed, receipts on
+ * a locum expense) runs this first and refuses the whole batch with the
+ * message below. The server-side per-folder check is on the plan's "next"
+ * list; until it ships, the bucket cap of 15 MB per object is the only
+ * server-side line.
  *
  * Pure: no React, no storage, no network, so scripts/storage-quota.test.mjs
  * imports it as is.

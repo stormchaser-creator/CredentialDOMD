@@ -84,6 +84,16 @@ eq("used of nothing is 0", usedStorageBytes(undefined), 0);
   ok("custom quota is honored", r.ok === false && r.message.includes("50 MB each account can store"), r.message);
 }
 
+{
+  // Receipts staged on a locum expense carry only a data URL (Expenses.jsx
+  // maps pendingFiles to { name, data }); they count alongside the new pick.
+  const staged = [{ name: "hotel.jpg", data: "data:image/jpeg;base64,AAAAAAAA" }]; // 6 bytes
+  const pick = [{ name: "taxi.pdf", size: 10 }];
+  const r = checkStorageQuota([{ size: 20 }], [...staged, ...pick], 35);
+  ok("expense receipts: staged data URL + new pick are summed", r.adding === 16 && r.total === 36 && r.ok === false);
+  ok("expense receipts: under the line is fine", checkStorageQuota([{ size: 20 }], [...staged, ...pick], 36).ok === true);
+}
+
 // ── Formatting ──────────────────────────────────────────────────────────
 eq("fmt bytes", fmtQuotaBytes(512), "512 bytes");
 eq("fmt KB", fmtQuotaBytes(2048), "2.0 KB");
