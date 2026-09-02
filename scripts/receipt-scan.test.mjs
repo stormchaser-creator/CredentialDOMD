@@ -138,5 +138,8 @@ eq("expense needs agency", receiptSaveIssues(alamoRaw, "expense", "  "), ["Pick 
 eq("needs date and total", receiptSaveIssues({ merchant: "X" }, "deduction", ""), ["Enter the receipt date.", "Enter the total paid."]);
 eq("zero total blocked", receiptSaveIssues({ ...alamoRaw, total: "0" }, "deduction", ""), ["Enter the total paid."]);
 
+// ── reclassify path: a blank category still offers the agency option ──
+eq("blank category still billable via guess", isBillableCategory(normalizeReceipt({ merchant: "Alamo toll", total: 5 }).category), true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

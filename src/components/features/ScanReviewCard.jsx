@@ -5,7 +5,7 @@ import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INS
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getStateEntry } from "../../constants/stateRequirements";
 import { STATES } from "../../constants/states";
-import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, receiptSaveIssues } from "../../utils/receiptScan";
+import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, normalizeReceipt, receiptSaveIssues } from "../../utils/receiptScan";
 
 const FIELD_DEFS = {
   license: [
@@ -141,7 +141,10 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
     () => [...new Set((data.locumContracts || []).map(c => c.agency).filter(Boolean))],
     [data.locumContracts]
   );
-  const billable = isReceipt && isBillableCategory(edited.category);
+  // A blank category (the reclassify path carries none over) must not hide
+  // the agency option: the save path keyword-guesses it from the merchant
+  // anyway. A ledger-only category still forces the deduction path.
+  const billable = isReceipt && (!edited.category || isBillableCategory(normalizeReceipt(edited).category));
   const [destChoice, setDestChoice] = useState(null);
   const [agency, setAgency] = useState(() => agencies[0] || "");
   const destination = billable ? (destChoice || (agencies.length ? "expense" : "deduction")) : "deduction";
