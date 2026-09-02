@@ -4,7 +4,7 @@ import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
-import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage } from "../utils/storageScope";
+import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage, lsGet, lsSet, WIPE_SEEN_KEY } from "../utils/storageScope";
 import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
 import { vaultCount } from "../utils/privateVault";
@@ -26,7 +26,6 @@ import {
   listTombstones,
   replayPendingOps,
   clearDeviceKeys,
-  clearProfileDeletedAt,
   COLLECTION_KEYS,
 } from "../lib/supabase";
 
@@ -178,14 +177,16 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       if (profile) {
         // The server wiped this account (Delete All My Data on another
         // device, or the deletion 7 days after a cancellation) and took the
-        // tombstone ledger with it. Whatever this device still holds predates
-        // the wipe: drop it BEFORE the pending-op replay and the self-heal
-        // push below can send it back up. The private vault stays; it exists
-        // nowhere else and never touched the server. Then the flag comes off:
-        // from here the account is simply in use again.
-        if (profile.deleted_at) {
+        // tombstone ledger with it. A device that has not yet purged for THIS
+        // wipe still holds a copy that predates it: drop it BEFORE the
+        // pending-op replay and the self-heal push below can send it back up.
+        // The stamp is per device, so a second device with a stale cache
+        // purges too, however many sign-ins the first one has done since.
+        // The private vault stays; it exists nowhere else and never touched
+        // the server.
+        if (profile.deleted_at && lsGet(WIPE_SEEN_KEY, authUserId) !== profile.deleted_at) {
           try { await purgeUserStorage(authUserId, { keepVault: true }); } catch { /* best effort */ }
-          clearProfileDeletedAt(profile.id).catch(() => {});
+          lsSet(WIPE_SEEN_KEY, profile.deleted_at, authUserId);
         }
         // Replay any writes that never reached the cloud (offline edits and
         // deletes, transient failures) BEFORE reading back, so the snapshot we

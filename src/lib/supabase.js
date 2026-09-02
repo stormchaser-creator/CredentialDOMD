@@ -742,13 +742,7 @@ export async function requestAccountDeletion() {
   }
   return res.data;
 }
-
-// A tombstoned profile (deleted_at set by delete-account) tells the next
-// sign-in to drop this device's cache first (AppContext). Once that is done
-// the account is in use again and the flag comes off, so offline edits made
-// from here on self-heal normally.
-export async function clearProfileDeletedAt(profileId) {
-  if (!supabase || !profileId) return;
-  const { error } = await supabase.from("profiles").update({ deleted_at: null }).eq("id", profileId);
-  if (error) console.warn("Could not clear the deletion flag:", error.message);
-}
+// The profile's deleted_at stamp then tells every device, on its next
+// sign-in, to drop the cache it holds from before the wipe (AppContext,
+// WIPE_SEEN_KEY). The stamp stays on the row; each device remembers which
+// one it has honored.

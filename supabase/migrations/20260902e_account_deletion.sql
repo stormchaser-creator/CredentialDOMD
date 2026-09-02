@@ -7,10 +7,11 @@
 -- profiles.data_deletion_date. The delete-account edge function (service
 -- role) now removes the whole footprint. This migration gives it:
 --
---   1. profiles.deleted_at          when the tombstoning ran; the app reads it
---                                   on the next sign-in to drop a device cache
---                                   that predates the wipe (else the self-heal
---                                   push would re-upload everything).
+--   1. profiles.deleted_at          when the tombstoning last ran. Never
+--                                   cleared: each device compares it with the
+--                                   stamp it last purged for and drops its own
+--                                   cache once (else the self-heal push would
+--                                   re-upload a stale copy from any device).
 --   2. public.account_deletions     one audit row per run, dry or real, with
 --                                   aggregate counts only. Admin-read.
 --   3. storage_objects_under()      names under a folder in a bucket, so the
@@ -20,9 +21,10 @@
 --   4. dispatch_account_deletions() + cron "delete-cancelled-accounts", daily
 --                                   13:40 UTC: one delete-account call per
 --                                   profile whose data_deletion_date has
---                                   passed and deleted_at is still null. This
---                                   is the 7-day promise on the Cancellation
---                                   page.
+--                                   passed and no wipe has run since it was
+--                                   set. This is the 7-day promise on the
+--                                   Cancellation page. Postgres and the
+--                                   service role only; pg_net waits 120 s.
 --
 -- Everything here is additive or nullable; the live frontend keeps working
 -- before and after. Same secret-preservation mechanism as
@@ -37,7 +39,7 @@ alter table public.profiles
   add column if not exists deleted_at timestamptz;
 
 comment on column public.profiles.deleted_at is
-  'Set by the delete-account edge function when the account''s data was removed and the row reduced to a tombstone. The app clears it on the next sign-in after purging that device''s stale cache. Null on a live account.';
+  'When the delete-account edge function last removed this account''s data and reduced the row to a tombstone. Never cleared: each device keeps the stamp it last purged its cache for and purges again only when this changes. Null if no wipe has ever run.';
 
 -- ── 2. The audit ledger ──────────────────────────────────────────────────────
 -- No foreign key on profile_id on purpose: the audit must outlive any future
@@ -125,13 +127,17 @@ begin
           from public.profiles p
          where p.data_deletion_date is not null
            and p.data_deletion_date < now()
-           and p.deleted_at is null
+           and (p.deleted_at is null or p.deleted_at < p.data_deletion_date)
          order by p.data_deletion_date
       loop
+        -- 120 s, not pg_net's 5 s default: the heaviest account takes about
+        -- 10 s and the response is what proves the run. The function finishes
+        -- either way.
         perform net.http_post(
           url     := 'https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/delete-account',
           headers := jsonb_build_object('Content-Type','application/json','x-hook-secret',%L),
-          body    := jsonb_build_object('profile_id', r.id, 'dry_run', false, 'requested_by', 'scheduled')
+          body    := jsonb_build_object('profile_id', r.id, 'dry_run', false, 'requested_by', 'scheduled'),
+          timeout_milliseconds := 120000
         );
         fired := fired + 1;
       end loop;
@@ -142,8 +148,13 @@ begin
 end
 $$;
 
+-- SECURITY DEFINER functions in public are callable through PostgREST by
+-- default; this one is for the cron job and the service role only.
+revoke all on function public.dispatch_account_deletions() from public, anon, authenticated;
+grant execute on function public.dispatch_account_deletions() to service_role;
+
 comment on function public.dispatch_account_deletions() is
-  'Fires one delete-account call (dry_run false) per profile whose data_deletion_date has passed and deleted_at is null. Called by the "delete-cancelled-accounts" cron job daily at 13:40 UTC. Carries the shared WELCOME_HOOK_SECRET in its body, like welcome_new_lead(); rotate them together.';
+  'Fires one delete-account call (dry_run false) per profile whose data_deletion_date has passed and no wipe has run since it was set (deleted_at null or older). Called by the "delete-cancelled-accounts" cron job daily at 13:40 UTC. Carries the shared WELCOME_HOOK_SECRET in its body, like welcome_new_lead(); rotate them together.';
 
 select cron.unschedule(jobid) from cron.job where jobname = 'delete-cancelled-accounts';
 select cron.schedule(

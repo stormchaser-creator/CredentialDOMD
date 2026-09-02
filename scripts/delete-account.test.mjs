@@ -12,7 +12,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const {
-  COLLECTION_TABLES, USER_TABLES, DOCUMENTS_BUCKET, BACKUPS_BUCKET,
+  COLLECTION_TABLES, USER_TABLES, DOCUMENTS_BUCKET, BACKUPS_BUCKET, TICKETS_FOLDER,
   PROFILE_TOMBSTONE_PATCH, PROFILE_KEEP_COLUMNS, HOOK_REQUESTER,
   isSafePrefix, storagePrefixes, chunk, tombstonePatch,
 } = await import("../supabase/functions/delete-account/lib.ts");
@@ -47,7 +47,8 @@ eq("no duplicate collection table", new Set(COLLECTION_TABLES).size, COLLECTION_
 // ── The operating-record tables the client cannot reach ─────────────────────
 const userTables = USER_TABLES.map((t) => t.table);
 for (const t of ["assistant_log", "support_tickets", "support_messages", "feedback", "document_requests",
-  "inbound_emails", "ai_usage", "client_errors", "backups", "deleted_items"]) {
+  "inbound_emails", "ai_usage", "client_errors", "backups", "deleted_items", "field_proposals", "user_events",
+  "admin_messages", "admin_message_replies"]) {
   ok(`USER_TABLES covers ${t}`, userTables.includes(t));
 }
 ok("no table is in both lists", !userTables.some((t) => COLLECTION_TABLES.includes(t)));
@@ -55,17 +56,25 @@ eq("no duplicate user table", new Set(userTables).size, userTables.length);
 eq("support_messages is matched by author_id", USER_TABLES.find((t) => t.table === "support_messages").column, "author_id");
 eq("inbound_emails is matched by profile_id", USER_TABLES.find((t) => t.table === "inbound_emails").column, "profile_id");
 eq("client_errors is matched by profile_id", USER_TABLES.find((t) => t.table === "client_errors").column, "profile_id");
+eq("admin_messages is matched by recipient_id (the physician the note went to)",
+  USER_TABLES.find((t) => t.table === "admin_messages").column, "recipient_id");
+eq("admin_message_replies is matched by user_id (the thread owner, not the reply author)",
+  USER_TABLES.find((t) => t.table === "admin_message_replies").column, "user_id");
 ok("every other user table is matched by user_id",
-  USER_TABLES.filter((t) => !["support_messages", "inbound_emails", "client_errors"].includes(t.table))
+  USER_TABLES.filter((t) => !["support_messages", "inbound_emails", "client_errors", "admin_messages"].includes(t.table))
     .every((t) => t.column === "user_id"));
 ok("profiles is never in a delete list (it is tombstoned, not deleted)",
   !userTables.includes("profiles") && !COLLECTION_TABLES.includes("profiles"));
 
 // ── Storage folders ─────────────────────────────────────────────────────────
 eq("bucket names", [DOCUMENTS_BUCKET, BACKUPS_BUCKET], ["documents", "backups"]);
+eq("ticket folder is a folder under documents", TICKETS_FOLDER, "tickets/");
 
 const PID = "11111111-2222-3333-4444-555555555555";
 const AUTH = "user_2abcDEF";
+ok("every ticket prefix starts with the ticket folder",
+  storagePrefixes(PID, AUTH, ["t1", "t2"]).filter((p) => p.prefix.includes("t1") || p.prefix.includes("t2"))
+    .every((p) => p.bucket === DOCUMENTS_BUCKET && p.prefix.startsWith(TICKETS_FOLDER)));
 eq("no tickets: the user's documents folder and both backup folders",
   storagePrefixes(PID, AUTH, []),
   [

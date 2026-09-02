@@ -51,6 +51,9 @@ export const COLLECTION_TABLES: string[] = [
  * (admin replies on the physician's tickets carry the admin's author_id),
  * and client_errors is also deleted by auth_user_id (the report-error
  * function only resolves profile_id when the Clerk id matched at the time).
+ * admin_messages are the operator's notes to the physician (recipient_id);
+ * admin_message_replies is the thread under each, keyed by the physician it
+ * belongs to whoever wrote the reply (user_id).
  */
 export interface UserTable { table: string; column: string }
 export const USER_TABLES: UserTable[] = [
@@ -59,6 +62,8 @@ export const USER_TABLES: UserTable[] = [
   { table: "support_messages", column: "author_id" },
   { table: "feedback", column: "user_id" },
   { table: "field_proposals", column: "user_id" },
+  { table: "admin_messages", column: "recipient_id" },
+  { table: "admin_message_replies", column: "user_id" },
   { table: "document_requests", column: "user_id" },
   { table: "inbound_emails", column: "profile_id" },
   { table: "ai_usage", column: "user_id" },
@@ -70,6 +75,8 @@ export const USER_TABLES: UserTable[] = [
 
 export const DOCUMENTS_BUCKET = "documents";
 export const BACKUPS_BUCKET = "backups";
+/** Ticket screenshots live under documents/tickets/<ticket_id>/ (_shared/ticketAttachment.ts). */
+export const TICKETS_FOLDER = "tickets/";
 
 export interface StoragePrefix { bucket: string; prefix: string }
 
@@ -101,7 +108,7 @@ export function storagePrefixes(
   const wanted: StoragePrefix[] = [];
   if (auth) wanted.push({ bucket: DOCUMENTS_BUCKET, prefix: `${auth}/` });
   for (const id of ticketIds) {
-    if (id) wanted.push({ bucket: DOCUMENTS_BUCKET, prefix: `tickets/${id}/` });
+    if (id) wanted.push({ bucket: DOCUMENTS_BUCKET, prefix: `${TICKETS_FOLDER}${id}/` });
   }
   if (auth) wanted.push({ bucket: BACKUPS_BUCKET, prefix: `${auth}/` });
   if (profileId) wanted.push({ bucket: BACKUPS_BUCKET, prefix: `${profileId}/` });

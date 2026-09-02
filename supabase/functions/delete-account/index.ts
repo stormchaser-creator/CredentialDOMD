@@ -23,9 +23,10 @@
  * What goes, for that profile (lib.ts holds the lists):
  *   rows    the 31 synced collections; assistant_log, support_tickets and
  *           support_messages (by author and by the user's tickets), feedback,
- *           field_proposals, document_requests, inbound_emails, ai_usage,
- *           client_errors (by profile id and by Clerk id), user_events,
- *           backups, deleted_items
+ *           field_proposals, admin_messages (to the physician) and
+ *           admin_message_replies, document_requests, inbound_emails,
+ *           ai_usage, client_errors (by profile id and by Clerk id),
+ *           user_events, backups, deleted_items
  *   objects documents/<clerkId>/, documents/tickets/<id>/ for each ticket,
  *           backups/<clerkId>/ and backups/<profileId>/, plus any object a
  *           backups row still points at
@@ -41,6 +42,13 @@
  * Response 200: { ok, dry_run, profile_id, requested_by, already_deleted,
  *                 tables: { <table>: n }, storage: { "<bucket>/<prefix>": n },
  *                 tombstoned }
+ *   Every ticket folder rolls up under one "documents/tickets/" key; the
+ *   ticket count itself is tables.support_tickets.
+ *
+ * Timing: the heaviest real account (about 2,700 rows, 70 tickets) takes
+ * about 10 s, most of it the 45 count queries, which run in batches of
+ * COUNT_BATCH. The daily job calls through pg_net with a 120 s timeout; the
+ * function keeps running to completion even if the caller hangs up first.
  *
  * Deploy with --no-verify-jwt: the gateway cannot check Clerk RS256 tokens.
  */
@@ -51,7 +59,9 @@ import { clerkProfile } from "../_shared/clerkAuth.ts";
 import {
   BACKUPS_BUCKET,
   COLLECTION_TABLES,
+  DOCUMENTS_BUCKET,
   HOOK_REQUESTER,
+  TICKETS_FOLDER,
   USER_TABLES,
   chunk,
   isSafePrefix,
@@ -64,6 +74,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PAGE = 1000;          // PostgREST response cap; id listings page past it
 const IN_BATCH = 200;       // ids per `in (...)` filter, keeps the URL short
 const REMOVE_BATCH = 100;   // objects per storage remove() call
+const COUNT_BATCH = 15;     // concurrent count queries; one at a time ran past pg_net's 5 s default
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -161,8 +172,11 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
 
   // 1. Count everything first, in both modes: the counts are the audit row.
   const tables: Record<string, number> = {};
-  for (const t of COLLECTION_TABLES) tables[t] = await countRows(db, t, "user_id", userId);
-  for (const { table, column } of USER_TABLES) tables[table] = await countRows(db, table, column, userId);
+  const toCount = [...COLLECTION_TABLES.map((table) => ({ table, column: "user_id" })), ...USER_TABLES];
+  for (const batch of chunk(toCount, COUNT_BATCH)) {
+    const counts = await Promise.all(batch.map(({ table, column }) => countRows(db, table, column, userId)));
+    batch.forEach(({ table }, i) => { tables[table] = counts[i]; });
+  }
   tables.support_messages += await ticketMessages(db, ticketIds, userId, false);
   tables.client_errors += await unresolvedErrors(db, authUserId, userId, false);
 
@@ -172,11 +186,14 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
     if (!byBucket.has(bucket)) byBucket.set(bucket, new Set());
     byBucket.get(bucket)!.add(name);
   };
+  let ticketObjects = 0;
   for (const p of storagePrefixes(userId, authUserId, ticketIds)) {
     const names = await objectsUnder(db, p.bucket, p.prefix);
-    storage[`${p.bucket}/${p.prefix}`] = names.length;
     for (const n of names) add(p.bucket, n);
+    if (p.bucket === DOCUMENTS_BUCKET && p.prefix.startsWith(TICKETS_FOLDER)) ticketObjects += names.length;
+    else storage[`${p.bucket}/${p.prefix}`] = names.length;
   }
+  if (ticketIds.length) storage[`${DOCUMENTS_BUCKET}/${TICKETS_FOLDER}`] = ticketObjects;
   // A backups row can point at an object outside the folders above only if
   // the layout changes; count it under its own key so nothing is silent.
   let strays = 0;
