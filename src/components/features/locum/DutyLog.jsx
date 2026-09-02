@@ -7,15 +7,12 @@ import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../.
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import { invoiceSubject } from "../../../utils/invoicePdf";
-import { TEXT_RULE } from "../../../utils/invoiceCover";
+import { TEXT_RULE, money } from "../../../utils/invoiceCover";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
   monthKey, monthLabel,
 } from "../../../utils/dutyPay";
-
-const money = (n) =>
-  "$" + (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
  * Day-rate logging, for a contract that pays per day worked and per accepted

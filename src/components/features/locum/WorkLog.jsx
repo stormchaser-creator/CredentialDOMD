@@ -341,10 +341,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       for (const k of Object.keys(byDate)) if (!dayFilter.has(k)) delete byDate[k];
     }
 
-    // Entries read exactly as logged: "Call — <billing note>" — the note is
+    // Entries read exactly as logged: "Call: <billing note>" — the note is
     // the facility-facing description Eric writes. (The private note never
     // appears anywhere.)
-    const lineLabel = (e) => `${e.type}${e.description ? " — " + e.description : ""}`;
+    const lineLabel = (e) => `${e.type}${e.description ? ": " + e.description : ""}`;
 
     // Invoiced times are the billed quarter-hour block: start snaps DOWN to
     // the increment, end = start + billed minutes (8:08–8:11 → 8:00–8:15).
@@ -373,7 +373,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         for (const e of day) {
           const container = containerOf(e);
           if (container) {
-            lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)} — no separate charge`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}` });
+            lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)}, no separate charge`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}` });
             continue;
           }
           const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
@@ -422,7 +422,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             lines.push({
               date: null,
               label: `· ${lineLabel(e)}`,
-              detail: `${invoiceSpan(e)}${e.billedMin || 0} min — during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)}, already covered`,
+              detail: `${invoiceSpan(e)}${e.billedMin || 0} min (during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)}, already covered)`,
               amount: null,
               flag: "no charge",
               _sort: `${date}~1~${e.startTime || "z"}`,
@@ -436,7 +436,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           const overAmtItem = over > 0 && rate > 0 ? (over / 60) * rate : 0;
           let flag = "included";
           if (over > 0) flag = rate > 0 ? `+${money(overAmtItem)}` : "no rate set";
-          const split = cov > 0 && over > 0 ? ` — ${cov}m included, ${over}m beyond` : "";
+          const split = cov > 0 && over > 0 ? ` (${cov}m included, ${over}m beyond)` : "";
           lines.push({
             date: null,
             label: `· ${lineLabel(e)}`,
@@ -457,16 +457,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         if (logged === 0) {
           detail = `on-call coverage · no calls required`;
         } else {
-          detail = `${fmtH(logged)} logged — first ${c.stipendHours || 0}h covered by the ${money(c.callStipend)} stipend`;
+          detail = `${fmtH(logged)} logged, first ${c.stipendHours || 0}h covered by the ${money(c.callStipend)} stipend`;
           if (overMin > 0) {
             detail += rate > 0
               ? `, ${fmtH(overMin)} beyond @ ${money(rate)}/hr (+${money(overAmt)})`
-              : `, ${fmtH(overMin)} beyond — NO after-stipend rate set on this contract`;
+              : `, ${fmtH(overMin)} beyond (NO after-stipend rate set on this contract)`;
           }
         }
         lines.push({
           date,
-          label: `On-call coverage — daily total`,
+          label: `On-call coverage (daily total)`,
           detail,
           amount: c.callStipend + overAmt,
           _sort: `${date}~0`,
@@ -479,14 +479,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         let detail = `stipend billed earlier · ${fmtH(dayMin)} more logged`;
         if (overMin > 0) {
           detail += rate > 0
-            ? ` — ${fmtH(overMin)} beyond stipend hours @ ${money(rate)}/hr`
-            : ` — ${fmtH(overMin)} beyond stipend hours, NO after-stipend rate set on this contract`;
+            ? `, ${fmtH(overMin)} beyond stipend hours @ ${money(rate)}/hr`
+            : `, ${fmtH(overMin)} beyond stipend hours (NO after-stipend rate set on this contract)`;
         } else {
-          detail += ` — within stipend hours`;
+          detail += `, within stipend hours`;
         }
         lines.push({
           date,
-          label: `Additional work — daily total`,
+          label: `Additional work (daily total)`,
           detail,
           amount: overAmt,
           _sort: `${date}~0`,
@@ -511,15 +511,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       if ((c.orientationHourlyRate || 0) > 0) {
         const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: oDay, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
+        lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
       } else if ((c.orientationFee || 0) > 0) {
         totalMin += e.billedMin || 0;
-        lines.push({ date: oDay, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min — covered by orientation fee`, amount: 0, _sort: `${oDay}~1~${e.startTime || "z"}` });
+        lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min (covered by orientation fee)`, amount: 0, _sort: `${oDay}~1~${e.startTime || "z"}` });
       } else {
         const rate = rateFor("Orientation", c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
         const amt = ((e.billedMin || 0) / 60) * rate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date: oDay, label: `Orientation${e.description ? " — " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
+        lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
       }
     }
 
@@ -1101,7 +1101,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     for (const l of billing.lines) {
       if (l.amount == null) {
         // Work item under a daily total — indented, flagged like the app
-        lines.push(`     ${l.label} ${l.detail}${l.flag ? ` — ${l.flag}` : ""}`);
+        lines.push(`     ${l.label} ${l.detail}${l.flag ? ` (${l.flag})` : ""}`);
         continue;
       }
       lines.push(`${l.date ? formatDate(l.date) + "  " : ""}${l.label}`);

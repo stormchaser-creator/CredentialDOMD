@@ -30,7 +30,7 @@ export function invoiceXlsxFile(inv) {
     ["FROM", "", "BILL TO"],
     [inv.physician || "Physician", "", inv.facility || "Facility"],
     [inv.npi ? `NPI ${inv.npi}` : "", "", inv.agency ? `via ${inv.agency}` : ""],
-    [inv.email || "", "", [inv.location, inv.billTo].filter(Boolean).join(" — ")],
+    [inv.email || "", "", [inv.location, inv.billTo].filter(Boolean).join(" · ")],
     [],
     ["Date", "Item", "Details", "Amount"],
     ...tableRows(inv),

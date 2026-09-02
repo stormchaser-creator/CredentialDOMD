@@ -239,7 +239,7 @@ export async function shareInvoiceText(inv, subject, text) {
       if (err?.name === "AbortError") return null;
     }
   }
-  window.open(mailtoHref("", title, invoiceCoverEmail(inv)), "_blank");
+  window.open(mailtoHref("", title, invoiceCoverEmail(inv, { attached: false })), "_blank");
   return "mailto-cover";
 }
 

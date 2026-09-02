@@ -7,8 +7,8 @@ import { SendIcon, TrashIcon } from "../../shared/Icons";
 import { sortInvoiceLines, invoiceSubject, shareInvoiceText } from "../../../utils/invoicePdf";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
+import { money } from "../../../utils/invoiceCover";
 
-const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
 
 // Same 7am call-day boundary as the Work tab

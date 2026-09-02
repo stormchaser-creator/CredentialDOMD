@@ -105,9 +105,11 @@ export function invoiceCoverBlurb(inv = {}, { attached = true } = {}) {
 /**
  * The long-form cover letter: pasted from the clipboard, or used as a
  * mailto: body (mailtoHref converts the "\n" breaks to CRLF). Money lands on
- * its own lines so a partial payment reads at a glance.
+ * its own lines so a partial payment reads at a glance. `attached` is false
+ * when the invoice text is pasted under the letter instead of riding as a
+ * file (the long legacy-text resend with no file share available).
  */
-export function invoiceCoverEmail(inv = {}) {
+export function invoiceCoverEmail(inv = {}, { attached = true } = {}) {
   const pay = invoicePayment(inv);
   const moneyLines = pay.partial
     ? [`Invoice total: ${money(pay.total)}`, `Paid to date: ${money(pay.paid)}`, `Balance due: ${money(pay.balance)}`]
@@ -116,7 +118,7 @@ export function invoiceCoverEmail(inv = {}) {
       : [`Total due: ${money(pay.total)}`];
   const paras = [
     "Hello,",
-    `Attached is invoice ${inv.number || ""} for ${whereLine(inv)}.`,
+    `${attached ? "Attached" : "Below"} is invoice ${inv.number || ""} for ${whereLine(inv)}.`,
     moneyLines.join("\n"),
     "The invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions.",
     ["Thank you,", ...signature(inv)].join("\n"),

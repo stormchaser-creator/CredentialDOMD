@@ -79,7 +79,7 @@ export function dutyDayPay(contract, duty) {
   for (const p of callPeriodsOf(duty)) {
     const role = p.role === "backup" ? "backup" : "primary";
     lines.push({
-      label: `On call — ${p.hospital} (${role})`,
+      label: `On call: ${p.hospital} (${role})`,
       amount: gridRate(contract, p.hospital, role),
     });
   }

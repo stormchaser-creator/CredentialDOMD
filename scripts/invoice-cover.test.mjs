@@ -9,6 +9,7 @@ import {
   normalizeInvoiceText, TEXT_RULE, MAILTO_BODY_MAX,
 } from "../src/utils/invoiceCover.js";
 import { mailtoHref } from "../src/utils/helpers.js";
+import { dutyDayPay } from "../src/utils/dutyPay.js";
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -138,6 +139,25 @@ for (const inv of [partial, unpaid, settled, { number: "X" }]) {
   for (const s of [invoiceSubject(inv), invoiceCoverBlurb(inv), invoiceCoverEmail(inv)]) {
     ok("no em dash anywhere in cover wording", !s.includes(EM_DASH), s);
   }
+}
+
+// ── Cover letter when the invoice is pasted under it (long legacy text, no file share) ──
+{
+  const below = invoiceCoverEmail(partial, { attached: false });
+  ok("letter says 'Below' when the invoice text is pasted under it", below.includes("Below is invoice INV-0012 for physician services"));
+  ok("'Below' letter never claims an attachment", !/attached/i.test(below));
+  eq("'Below' letter keeps the same paragraphs", below.split("\n\n").length, 5);
+  ok("default letter still says 'Attached'", letter.includes("Attached is invoice INV-0012"));
+}
+
+// ── Day-rate invoice lines (dutyPay): no em dash, still keyed as call lines ──
+{
+  const contract = { dayRate: 2060.09, callRateGrid: [{ hospital: "Arrowhead Regional Medical Center (ARMC)", primary: 500, backup: 250 }] };
+  const pay = dutyDayPay(contract, { date: "2026-08-03", workedDay: true, callPeriods: [{ hospital: "Arrowhead Regional Medical Center (ARMC)", role: "primary" }] });
+  eq("day-rate call line label", pay.lines[1].label, "On call: Arrowhead Regional Medical Center (ARMC) (primary)");
+  ok("day-rate call line still keys as a call line (summarizeDuties/DutyLog use startsWith)", pay.lines[1].label.startsWith("On call"));
+  for (const l of pay.lines) ok("no em dash in day-rate line labels", !l.label.includes(EM_DASH), l.label);
+  eq("day-rate day total", pay.total, 2560.09);
 }
 
 console.log(`${pass} passed, ${fail} failed`);
