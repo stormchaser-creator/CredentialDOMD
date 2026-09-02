@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, useMemo, memo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
@@ -9,9 +9,15 @@ import { generateId, formatDate } from "../../../utils/helpers";
 import DocAttach from "../DocAttach";
 import ContractSummary from "./ContractSummary";
 import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentScanner";
+import { agreementDocCandidates, attachExistingDoc, withAgreementFields } from "../../../utils/docPrefill";
 import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils/taxConstants";
 import { STATE_NAMES } from "../../../constants/states";
 import { isArchived } from "../../../utils/contractsForDate";
+
+// The analyzer JSON goes through one normalizer so dates, dollar figures, and
+// coverage blocks land in the exact shape the form and the Work Log expect.
+const agreementAnalyzer = async (dataUrl, apiKey) => withAgreementFields(await analyzeAgreement(dataUrl, apiKey));
+const agreementTextAnalyzer = async (text, apiKey) => withAgreementFields(await analyzeAgreementText(text, apiKey));
 
 // Work-state hint reads from the tax engine's own list so it never promises a
 // state the estimator cannot model.
@@ -46,7 +52,9 @@ function Contracts() {
   }, [editCtx]);
 
   const openAdd = useCallback(() => {
-    setForm({ incrementMinutes: 15, minCallMinutes: 15, coveragePeriods: [] });
+    // No increment defaults here: the inputs show 15 and save falls back to 15,
+    // and an increment the contract states must be able to fill in.
+    setForm({ coveragePeriods: [] });
     setEditItem(null); setAttachedDocs([]); setShowForm(true);
   }, []);
   const openEdit = useCallback((item) => {
@@ -65,7 +73,7 @@ function Contracts() {
     // Don't let an empty agreement slip through silently — that's how a
     // blocked upload turned into a blank contract.
     if (!form.facility && !parseFloat(form.callStipend) && !parseFloat(form.hourlyRate) && !parseFloat(form.dayRate)) {
-      setFormError("Nothing is filled in yet — upload the agreement (AI fills the form) or enter the facility and rates.");
+      setFormError("Nothing is filled in yet. Upload the agreement or pick one already in Files (AI fills the form), or enter the facility and rates.");
       return;
     }
     setFormError(null);
@@ -97,6 +105,12 @@ function Contracts() {
     else addItem("locumContracts", entry);
 
     for (const doc of attachedDocs) {
+      if (doc.existingId) {
+        // Already in Files: link the stored copy, never insert a second one.
+        const linked = attachExistingDoc((data.documents || []).find(d => d.id === doc.existingId), `locumContracts:${itemId}`);
+        if (linked) editCtx("documents", linked);
+        continue;
+      }
       // addItem → immediate cloud insert + file upload to Storage
       addItem("documents", {
         id: generateId(),
@@ -106,7 +120,13 @@ function Contracts() {
       });
     }
     closeForm();
-  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs]);
+  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs, data.documents]);
+
+  // Files that could be this agreement, for "Use a document already uploaded".
+  const existingDocs = useMemo(
+    () => agreementDocCandidates(data.documents, { contractId: editItem?.id }),
+    [data.documents, editItem]
+  );
 
   const linkedDocsFor = useCallback(
     (id) => (data.documents || []).filter(d => d.linkedTo === `locumContracts:${id}`),
@@ -198,7 +218,8 @@ function Contracts() {
           <Field label="Minimum per call (min)"><input type="number" inputMode="numeric" value={form.minCallMinutes ?? 15} onChange={e => setForm(f => ({ ...f, minCallMinutes: e.target.value }))} style={iS} /></Field>
         </div>
         <Field label="Key terms / notes" hint="Cancellation clause, guaranteed hours, travel, etc."><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 60, resize: "vertical" }} /></Field>
-        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} analyzer={analyzeAgreement} textAnalyzer={analyzeAgreementText} />
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs}
+          analyzer={agreementAnalyzer} textAnalyzer={agreementTextAnalyzer} existingDocs={existingDocs} />
         {formError && (
           <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginTop: 10 }}>{formError}</div>
         )}

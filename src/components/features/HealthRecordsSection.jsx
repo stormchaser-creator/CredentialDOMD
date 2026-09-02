@@ -9,6 +9,7 @@ import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
 import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, getHealthRecordResults, TB_RESULTS } from "../../constants/credentialTypes";
 import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
+import { attachExistingDoc } from "../../utils/docPrefill";
 
 function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId, onAutoViewDone }) {
   const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T } = useApp();
@@ -83,6 +84,12 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
     // Same behavior as every other credential form: attached files are
     // saved to Documents and linked to this record.
     for (const doc of attachedDocs) {
+      if (doc.existingId) {
+        // Already in Files: link the stored copy, never insert a second one.
+        const linked = attachExistingDoc((data.documents || []).find(d => d.id === doc.existingId), `healthRecords:${itemId}`);
+        if (linked) editItemCtx("documents", linked);
+        continue;
+      }
       addItem("documents", {
         id: generateId(),
         name: doc.name, type: doc.type, size: doc.size, data: doc.data,
@@ -91,7 +98,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
       });
     }
     closeForm();
-  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs]);
+  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs, data.documents]);
 
   const handleDelete = useCallback((id) => deleteItem("healthRecords", id), [deleteItem]);
 

@@ -9,6 +9,7 @@ import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon } from "../shared/Ico
 import { SCREENING_TYPES, SCREENING_RESULTS } from "../../constants/credentialTypes";
 import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
+import { attachExistingDoc } from "../../utils/docPrefill";
 
 /**
  * Screenings — background checks, exclusion/sanction searches, and the
@@ -46,13 +47,19 @@ function ScreeningsSection({ onShare }) {
     if (editItem) editCtx("screenings", entry);
     else addItem("screenings", entry);
     for (const doc of attachedDocs) {
+      if (doc.existingId) {
+        // Already in Files: link the stored copy, never insert a second one.
+        const linked = attachExistingDoc((data.documents || []).find(d => d.id === doc.existingId), `screenings:${itemId}`);
+        if (linked) editCtx("documents", linked);
+        continue;
+      }
       addItem("documents", {
         id: generateId(), name: doc.name, type: doc.type, size: doc.size, data: doc.data,
         uploadedAt: new Date().toISOString(), linkedTo: `screenings:${itemId}`,
       });
     }
     closeForm();
-  }, [form, editItem, editCtx, addItem, attachedDocs, closeForm]);
+  }, [form, editItem, editCtx, addItem, attachedDocs, closeForm, data.documents]);
 
   const setComp = (i, key, val) => setForm(f => ({
     ...f, components: f.components.map((c, j) => j === i ? { ...c, [key]: val } : c),
