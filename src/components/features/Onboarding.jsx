@@ -49,7 +49,10 @@ export default function Onboarding({ onFinish }) {
   const [npiMatches, setNpiMatches] = useState(null); // name-search candidates
   const [npiMsg, setNpiMsg] = useState("");   // problem, shown in red
   const [npiNote, setNpiNote] = useState(""); // context, shown muted
-  const [searchState, setSearchState] = useState(s.primaryState || "");
+  // Name search defaults to the primary state. Onboarding never remounts
+  // between steps, so saveYou re-syncs this after step 1 (a brand-new
+  // account has no saved primaryState at mount).
+  const [searchState, setSearchState] = useState(state);
   const [imported, setImported] = useState(0);
 
   // Step 4: document
@@ -68,6 +71,7 @@ export default function Onboarding({ onFinish }) {
 
   const saveYou = () => {
     updateSettings({ name: name.trim(), degreeType: degree, primaryState: state, email: s.email || user?.email || "" });
+    setSearchState(state);
     setStep(1);
   };
 
