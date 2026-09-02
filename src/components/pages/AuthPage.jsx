@@ -66,10 +66,10 @@ function useOneTapEmailCode(containerRef, enabled) {
 
 function AuthPage() {
   const [mode, setMode] = useState(() =>
-  const widgetRef = useRef(null);
-  useOneTapEmailCode(widgetRef, mode === "signin");
     window.location.hash.includes("sign-up") ? "signup" : "signin"
   ); // "signin" | "signup"
+  const widgetRef = useRef(null);
+  useOneTapEmailCode(widgetRef, mode === "signin");
   const T = THEMES.light;
 
   // Clerk's own footer links ("Don't have an account? Sign up" / "Already

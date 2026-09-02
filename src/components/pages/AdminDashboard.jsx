@@ -977,7 +977,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.name || "(no name)"}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{r.name || r.email}</span>
                   {r.note && <span style={{ fontSize: 10, fontWeight: 800, color: T.warning, textTransform: "uppercase" }}>{r.note}</span>}
                   {r.source === "admin-manual" && <span style={{ fontSize: 10, fontWeight: 800, color: T.accent, textTransform: "uppercase" }}>added by you</span>}
                   {r.waitlist === false && <span style={{ fontSize: 10, fontWeight: 800, color: T.textMuted, textTransform: "uppercase" }}>guide only, not on waitlist</span>}
@@ -985,7 +985,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
                     <span style={{ fontSize: 10, fontWeight: 800, color: "#10b981", textTransform: "uppercase" }}>already a user</span>
                   )}
                 </div>
-                <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>
+                {r.name && <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <button onClick={() => cycleStatus(r)} title="Tap to advance: waiting → invited → joined → paying" style={{
