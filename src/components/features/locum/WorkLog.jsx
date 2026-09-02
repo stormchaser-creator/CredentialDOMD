@@ -10,7 +10,8 @@ import Field from "../../shared/Field";
 import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
-import { shareInvoicePdf } from "../../../utils/invoicePdf";
+import { invoiceSubject } from "../../../utils/invoicePdf";
+import { TEXT_RULE } from "../../../utils/invoiceCover";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { parseWorkDictation } from "../../../utils/workDictation";
@@ -1069,7 +1070,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     }
     const s = data.settings || {};
     const physician = s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician";
-    const div = "─".repeat(40);
+    const div = TEXT_RULE;
     const num = nextInvoiceNumber(data.invoices);
     const billing = computeBilling(contract, selEntries, true, contractEntries, data.invoices, daySet);
     if (!billing.lines.length) {
@@ -1187,15 +1188,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
   const [fmtOpen, setFmtOpen] = useState(false);
   const sendInvoice = useCallback(async (format) => {
-    const subject = `Invoice ${invoicePreview.number} — ${data.settings?.name || "Locum"} — ${contract.facility}`;
+    const args = pdfArgsFor(invoicePreview);
     // PDF / Word / Excel, physician's choice — share sheet, download fallback
-    const how = await exportInvoice(pdfArgsFor(invoicePreview), format, subject, invoicePreview.text);
+    const how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
     if (how === null) return; // user cancelled the share sheet
     if (how.includes("+cover")) {
-      showNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard — paste it over the intro if you want the long form.");
+      showNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard: paste it over the intro if you want the long form.");
     }
     markBilledAndLog(`${how.startsWith("share") ? "share" : "download"}-${format}`);
-  }, [invoicePreview, contract, data.settings, markBilledAndLog, pdfArgsFor, showNotice]);
+  }, [invoicePreview, markBilledAndLog, pdfArgsFor, showNotice]);
 
   if (contracts.length === 0) {
     return (

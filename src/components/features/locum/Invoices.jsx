@@ -2,9 +2,9 @@ import { memo, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
-import { formatDate, mailtoHref } from "../../../utils/helpers";
+import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon } from "../../shared/Icons";
-import { sortInvoiceLines } from "../../../utils/invoicePdf";
+import { sortInvoiceLines, invoiceSubject, shareInvoiceText } from "../../../utils/invoicePdf";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 
@@ -132,33 +132,39 @@ function Invoices() {
   // Format chooser state: which invoice is about to be sent, in what shape
   const [sendFor, setSendFor] = useState(null);
   const resend = async (inv, format = "pdf") => {
+    const c = contracts.find(x => x.id === inv.contractId);
+    const s = data.settings || {};
+    const args = {
+      number: inv.number,
+      physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
+      npi: s.npi, email: s.email,
+      facility: c?.facility || billNameOf(inv), agency: c?.agency, location: c?.location, billTo: c?.billTo,
+      periodStart: inv.periodStart, periodEnd: inv.periodEnd,
+      terms: inv.terms, lines: inv.lines,
+      totalMin: inv.totalMinutes, total: inv.totalAmount,
+      // A resend can follow a payment — the document and cover must say so
+      paid: paidOf(inv), balance: balanceOf(inv),
+      issuedDate: inv.sentAt?.slice(0, 10),
+    };
+    const subject = invoiceSubject(args);
     // Rebuild the document from the stored line items when we have them
     if (inv.lines?.length) {
-      const c = contracts.find(x => x.id === inv.contractId);
-      const s = data.settings || {};
-      const how = await exportInvoice({
-        number: inv.number,
-        physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
-        npi: s.npi, email: s.email,
-        facility: c?.facility, agency: c?.agency, location: c?.location, billTo: c?.billTo,
-        periodStart: inv.periodStart, periodEnd: inv.periodEnd,
-        terms: inv.terms, lines: inv.lines,
-        totalMin: inv.totalMinutes, total: inv.totalAmount,
-        // A resend can follow a partial payment — the document should say so
-        paid: paidOf(inv), balance: balanceOf(inv),
-        issuedDate: inv.sentAt?.slice(0, 10),
-      }, format, `Invoice ${inv.number}`, inv.text);
+      const how = await exportInvoice(args, format, subject, inv.text);
       if (how && how.includes("+cover")) {
-        setNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard — paste it over the intro if you want the long form.");
+        setNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard: paste it over the intro if you want the long form.");
         setTimeout(() => setNotice(null), 9000);
       }
       return;
     }
-    const text = inv.text || `Invoice ${inv.number} — ${billNameOf(inv)} — ${money(inv.totalAmount)}`;
-    // No share sheet for text invoices: iOS Mail collapses shared text into
-    // one line. A CRLF mailto body opens the composer properly formatted.
-    try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ }
-    window.open(mailtoHref("", `Invoice ${inv.number}`, text), "_blank");
+    // Legacy text-only invoice: short ones open a formatted CRLF mailto
+    // composer; long ones (iOS Mail cuts a mailto body off) go out as a PDF
+    // page through the share sheet. Either way the text is on the clipboard.
+    const text = inv.text || `Invoice ${inv.number}: ${billNameOf(inv)}, ${money(inv.totalAmount)}`;
+    const how = await shareInvoiceText(args, subject, text);
+    if (how === "mailto-cover") {
+      setNotice("This invoice is longer than Mail accepts from a link, so the composer opened with the cover letter. The full invoice is on your clipboard: paste it in below the letter.");
+      setTimeout(() => setNotice(null), 12000);
+    }
   };
 
   const removeInvoice = (inv) => {

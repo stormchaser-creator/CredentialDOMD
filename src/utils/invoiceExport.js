@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { formatDate } from "./helpers.js";
-import { shareInvoicePdf, sortInvoiceLines, invoiceCoverEmail, invoiceCoverBlurb } from "./invoicePdf.js";
+import { shareInvoicePdf, sortInvoiceLines } from "./invoicePdf.js";
+import { money, invoicePayment, invoiceCoverEmail, invoiceCoverBlurb } from "./invoiceCover.js";
 
 /**
  * Invoice export in the physician's format of choice. All three formats
@@ -9,8 +10,6 @@ import { shareInvoicePdf, sortInvoiceLines, invoiceCoverEmail, invoiceCoverBlurb
  * AP-department artifact; Word and Excel exist so billing offices that
  * re-key or edit can work from a native document.
  */
-
-const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function tableRows(inv) {
   return sortInvoiceLines(inv.lines || []).map(l => [
@@ -22,6 +21,7 @@ function tableRows(inv) {
 }
 
 export function invoiceXlsxFile(inv) {
+  const pay = invoicePayment(inv);
   const head = [
     [`INVOICE ${inv.number || ""}`],
     [`Issued ${formatDate(inv.issuedDate || new Date().toISOString().slice(0, 10))}`],
@@ -35,9 +35,9 @@ export function invoiceXlsxFile(inv) {
     ["Date", "Item", "Details", "Amount"],
     ...tableRows(inv),
     [],
-    ["", "", "TOTAL", money(inv.total)],
-    ...(inv.paid > 0.005 && inv.balance > 0.005
-      ? [["", "", "Paid", money(inv.paid)], ["", "", "BALANCE DUE", money(inv.balance)]]
+    ["", "", "TOTAL", money(pay.total)],
+    ...(pay.hasPayment
+      ? [["", "", "Paid", money(pay.paid)], ["", "", pay.settled ? "PAID IN FULL" : "BALANCE DUE", money(pay.balance)]]
       : []),
     ...(inv.terms ? [[], [`Terms: ${inv.terms}`]] : []),
   ];
@@ -76,16 +76,16 @@ export async function invoiceDocxFile(inv) {
       children: [new TextRun({ text: String(text), bold: bold || header, color: header ? "FFFFFF" : undefined, size: 18 })],
     })],
   });
-  const hasPartialPayment = inv.paid > 0.005 && inv.balance > 0.005;
+  const pay = invoicePayment(inv);
   const rows = [
     new TableRow({ children: ["Date", "Item", "Details", "Amount"].map((h, i) => cell(h, { header: true, col: i })) }),
     ...tableRows(inv).map(r => new TableRow({
       children: [cell(r[0], { col: 0 }), cell(r[1], { bold: true, col: 1 }), cell(r[2], { col: 2 }), cell(r[3], { right: true, bold: true, col: 3 })],
     })),
-    new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("TOTAL", { bold: true, col: 2 }), cell(money(inv.total), { right: true, bold: true, col: 3 })] }),
-    ...(hasPartialPayment ? [
-      new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("Paid", { col: 2 }), cell(money(inv.paid), { right: true, col: 3 })] }),
-      new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("BALANCE DUE", { bold: true, col: 2 }), cell(money(inv.balance), { right: true, bold: true, col: 3 })] }),
+    new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("TOTAL", { bold: true, col: 2 }), cell(money(pay.total), { right: true, bold: true, col: 3 })] }),
+    ...(pay.hasPayment ? [
+      new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell("Paid", { col: 2 }), cell(money(pay.paid), { right: true, col: 3 })] }),
+      new TableRow({ children: [cell("", { col: 0 }), cell("", { col: 1 }), cell(pay.settled ? "PAID IN FULL" : "BALANCE DUE", { bold: true, col: 2 }), cell(money(pay.balance), { right: true, bold: true, col: 3 })] }),
     ] : []),
   ];
   const p = (text, opts = {}) => new Paragraph({ children: [new TextRun({ text, ...opts })] });

@@ -6,6 +6,8 @@ import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import { exportInvoice } from "../../../utils/invoiceExport";
+import { invoiceSubject } from "../../../utils/invoicePdf";
+import { TEXT_RULE } from "../../../utils/invoiceCover";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
@@ -123,7 +125,7 @@ function DutyLog({ contract }) {
       || (Number(contract.clinicalDayRate) || 0) + (Number(contract.scholarlyRate) || 0);
     const terms = `${money(dayRate)} all-in day rate per day worked; 24-hour call periods per the agreement's coverage-rate grid (per hospital and role)`;
     const dates = chosen.map(d => d.date);
-    const div = "─".repeat(40);
+    const div = TEXT_RULE;
     const textLines = [
       "INVOICE " + num, div,
       `From: ${physician}${s.npi ? " · NPI " + s.npi : ""}`,
@@ -175,8 +177,7 @@ function DutyLog({ contract }) {
   const [fmtOpen, setFmtOpen] = useState(false);
   const sendDutyInvoice = async (format) => {
     const s = data.settings || {};
-    const subject = `Invoice ${invoicePreview.number} — ${s.name || "Locum"} — ${contract.facility}`;
-    const how = await exportInvoice({
+    const args = {
       number: invoicePreview.number,
       physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
       npi: s.npi, email: s.email,
@@ -185,7 +186,8 @@ function DutyLog({ contract }) {
       periodStart: invoicePreview.periodStart, periodEnd: invoicePreview.periodEnd,
       terms: invoicePreview.terms, lines: invoicePreview.lines,
       totalMin: 0, total: invoicePreview.total,
-    }, format, subject, invoicePreview.text);
+    };
+    const how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
     if (how === null) return; // share sheet cancelled
     markDutyBilled(`${how.startsWith("share") ? "share" : "download"}-${format}`);
   };
