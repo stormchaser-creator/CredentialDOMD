@@ -1,7 +1,7 @@
 # CallSync sync (ANMG on-call schedule)
 
 Ticket 833c06e8. The physician's published ANMG on-call shifts, from the
-CallSync app, land on the Forecast calendar (Locum > Sched.) as call days on
+CallSync app, land on the Forecast calendar (Practice > Sched.) as call days on
 the ANMG agreement, checked once a day when the app opens.
 
 ## Where the schedule comes from

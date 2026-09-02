@@ -206,7 +206,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       <div style={{ padding: "14px 18px" }}>
         {docType === "unknown" ? (
           <div style={{ textAlign: "center", padding: "18px 0", color: T.textMuted, fontSize: 15 }}>
-            Couldn&rsquo;t identify this document — but the file itself is already saved in
+            Couldn&rsquo;t identify this document, but the file itself is already saved in
             Documents either way. Tap a category above to also file it as a credential,
             or keep it as a plain document.
           </div>
@@ -282,7 +282,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
             {docType === "cme" && (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>
-                  Topics — tap to toggle (state mandates count only when tagged)
+                  Topics: tap to toggle (state mandates count only when tagged)
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {cmeTopicOptions.map(t => {
@@ -321,7 +321,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
             {docType === "agreement" && (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>
-                  Coverage dates — every scheduled block
+                  Coverage dates: every scheduled block
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {(edited.coveragePeriods || []).map((p, i) => (
@@ -373,7 +373,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, color: T.textDim, marginTop: 8, lineHeight: 1.45 }}>
-                    Goes to More &gt; Finance &gt; Deductions as &ldquo;{LEDGER_CATEGORY[edited.category] || "Other deductible expense"}&rdquo;{taxYear ? ` for tax year ${taxYear}` : ""}.
+                    Goes to More &gt; Finance &gt; Deductions as &ldquo;{(LEDGER_CATEGORY[edited.category] || "Other deductible expense").replace(/\s*\u2014\s*/g, ": ")}&rdquo;{taxYear ? ` for tax year ${taxYear}` : ""}.
                     {/meals/i.test(edited.category || "") && " Meals count at 50% in the tax estimate."}
                     {!billable && edited.category && " This category is not billable to an agency; it is deductible only."}
                   </div>
@@ -390,12 +390,12 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
         <div style={{ padding: "0 18px 16px" }}>
           {expiryBlocked && (
             <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
-              This {SECTION_META[docType].label.toLowerCase()} expires — enter the expiration date above before saving so the app can warn you in time.
+              This {SECTION_META[docType].label.toLowerCase()} expires. Enter the expiration date above before saving so the app can warn you in time.
             </div>
           )}
           {stateBlocked && (
             <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
-              Select the issuing state above before saving — without it this won&rsquo;t show up in your state compliance tracking.
+              Select the issuing state above before saving. Without it this won&rsquo;t show up in your state compliance tracking.
             </div>
           )}
           {receiptBlocked && (
