@@ -5,7 +5,8 @@ import { useInputStyle } from "../shared/useInputStyle";
 import Field from "../shared/Field";
 import { EmailIcon, TextMsgIcon } from "../shared/Icons";
 import { STATES } from "../../constants/states";
-import { lookupNPI, searchNPI, extractLicensesFromNPI } from "../../utils/npiLookup";
+import { findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
+import { splitName, mergeNpiLicenses, additionalStatesAfterImport, degreeFromCredential } from "../../utils/npiImport";
 import { generateId, downscalePhoto } from "../../utils/helpers";
 import {
   MATE_ACT, AOA_NATIONAL, ABMS_MOC, AOA_OCC,
@@ -25,6 +26,7 @@ function SettingsSection() {
   const [addingState, setAddingState] = useState("");
   const [npiLoading, setNpiLoading] = useState(false);
   const [npiResults, setNpiResults] = useState(null); // array of search results
+  const [npiNote, setNpiNote] = useState(""); // how the search was widened
   const [npiError, setNpiError] = useState(null);
   const [licenseImportMsg, setLicenseImportMsg] = useState(null);
 
@@ -43,36 +45,21 @@ function SettingsSection() {
       setTimeout(() => setNpiError(null), 4000);
       return;
     }
-    // Split name into first/last
-    const parts = name.split(/\s+/);
-    let firstName, lastName;
-    if (parts.length === 1) {
-      lastName = parts[0];
-      firstName = "";
-    } else {
-      firstName = parts[0];
-      lastName = parts[parts.length - 1]; // handle middle names
-    }
+    // "First Middle Last", "Last, First" and trailing credentials all split
+    // the same way; the search then widens (state, then first-name prefix)
+    // only when the stricter query comes back empty.
+    const { firstName, lastName } = splitName(name);
 
-    setNpiLoading(true); setNpiError(null); setNpiResults(null);
+    setNpiLoading(true); setNpiError(null); setNpiResults(null); setNpiNote("");
     try {
-      const results = await searchNPI({
-        firstName,
-        lastName,
-        state: s.primaryState || undefined,
-      });
+      const { results, note } = await findProvidersByName({ firstName, lastName, state: s.primaryState || undefined });
       if (!results.length) {
-        // Try without state filter
-        const broader = await searchNPI({ firstName, lastName });
-        if (!broader.length) {
-          setNpiError("No providers found. Check your name spelling.");
-          setTimeout(() => setNpiError(null), 5000);
-          return;
-        }
-        setNpiResults(broader);
-      } else {
-        setNpiResults(results);
+        setNpiError("No providers found. Check your name spelling.");
+        setTimeout(() => setNpiError(null), 5000);
+        return;
       }
+      setNpiResults(results);
+      setNpiNote(note);
     } catch (err) {
       setNpiError(err.message || "Search failed");
       setTimeout(() => setNpiError(null), 4000);
@@ -87,14 +74,9 @@ function SettingsSection() {
     if (result.firstName && result.lastName) {
       settingsUpdates.name = `${result.firstName} ${result.lastName}`;
     }
-    if (result.credential) {
-      // NPPES returns "D.O.", "M.D.", "MD, PHD", "DO FACOS" and similar.
-      // Strip the dots, then match whole tokens so "MD" inside another word
-      // (or a stray "DO" substring) cannot flip the degree.
-      const cred = result.credential.toUpperCase().replace(/\./g, "");
-      if (/\bDO\b/.test(cred)) settingsUpdates.degreeType = "DO";
-      else if (/\bMD\b/.test(cred)) settingsUpdates.degreeType = "MD";
-    }
+    // NPPES returns "D.O.", "M.D.", "MD, PHD", "DO FACOS" and similar.
+    const degree = degreeFromCredential(result.credential);
+    if (degree) settingsUpdates.degreeType = degree;
     if (result.address?.state) {
       settingsUpdates.primaryState = result.address.state;
     }
@@ -102,34 +84,16 @@ function SettingsSection() {
       settingsUpdates.phone = result.address.phone;
     }
 
-    // Extract and import licenses from NPI taxonomies
+    // Every license the registry lists (one per state + number), minus any
+    // the physician already has on file.
     const npiLicenses = extractLicensesFromNPI(result);
-    const curLicenses = data.licenses || [];
-    const newLicenses = npiLicenses
-      .filter(nl => !curLicenses.some(
-        el => el.licenseNumber === nl.licenseNumber && el.state === nl.state
-      ))
-      .map(nl => ({
-        id: generateId(),
-        type: "Medical License",
-        name: `${nl.state} Medical License`,
-        licenseNumber: nl.licenseNumber,
-        state: nl.state,
-        issuedDate: "",
-        expirationDate: "",
-        notes: "Imported from NPPES NPI Registry",
-        npiImported: true,
-      }));
+    const newLicenses = mergeNpiLicenses(data.licenses, npiLicenses, {
+      degreeType: settingsUpdates.degreeType || data.settings.degreeType, makeId: generateId,
+    });
 
-    // Also set additionalStates from discovered license states
-    const licenseStates = npiLicenses.map(nl => nl.state);
+    // Also track every state the registry shows a license in
     const primary = settingsUpdates.primaryState || data.settings.primaryState;
-    const existingAdditional = data.settings.additionalStates || [];
-    const newAdditionalStates = [...new Set([
-      ...existingAdditional,
-      ...licenseStates.filter(st => st !== primary && !existingAdditional.includes(st)),
-    ])];
-    settingsUpdates.additionalStates = newAdditionalStates;
+    settingsUpdates.additionalStates = additionalStatesAfterImport(data.settings.additionalStates, primary, npiLicenses);
 
     // Add licenses via CRUD helper (syncs to Supabase)
     for (const lic of newLicenses) {
@@ -138,11 +102,15 @@ function SettingsSection() {
     // Update settings (syncs to Supabase)
     updateSettings(settingsUpdates);
 
+    const already = npiLicenses.length - newLicenses.length;
     if (newLicenses.length > 0) {
-      setLicenseImportMsg(`${newLicenses.length} license${newLicenses.length > 1 ? "s" : ""} imported from NPI registry`);
+      setLicenseImportMsg(`${newLicenses.length} license${newLicenses.length > 1 ? "s" : ""} imported from the NPI registry${already ? ` (${already} already on file)` : ""}`);
+      setTimeout(() => setLicenseImportMsg(null), 5000);
+    } else if (npiLicenses.length) {
+      setLicenseImportMsg(`All ${npiLicenses.length} registry license${npiLicenses.length > 1 ? "s are" : " is"} already on file`);
       setTimeout(() => setLicenseImportMsg(null), 5000);
     }
-    setNpiResults(null);
+    setNpiResults(null); setNpiNote("");
   };
 
   const addState = (st) => {
@@ -217,7 +185,7 @@ function SettingsSection() {
               {s.npi ? (
                 <span style={{ fontWeight: 700, letterSpacing: 0.5 }}>{s.npi}</span>
               ) : (
-                <span style={{ color: T.textDim, fontSize: 12 }}>Not set — use Find My NPI</span>
+                <span style={{ color: T.textDim, fontSize: 12 }}>Not set. Use Find My NPI</span>
               )}
             </div>
             <button onClick={handleNpiSearch} disabled={npiLoading} style={{
@@ -237,8 +205,9 @@ function SettingsSection() {
           {npiResults && npiResults.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                {npiResults.length} result{npiResults.length > 1 ? "s" : ""} found — select yours
+                {npiResults.length} result{npiResults.length > 1 ? "s" : ""} found. Select yours
               </div>
+              {npiNote && <div style={{ fontSize: 12, color: T.textDim, marginBottom: 6 }}>{npiNote}</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 260, overflowY: "auto" }}>
                 {npiResults.map(r => (
                   <button key={r.npi} onClick={() => applyNpiResult(r)} style={{
@@ -268,7 +237,7 @@ function SettingsSection() {
                   </button>
                 ))}
               </div>
-              <button onClick={() => setNpiResults(null)} style={{
+              <button onClick={() => { setNpiResults(null); setNpiNote(""); }} style={{
                 marginTop: 6, padding: "6px 0", width: "100%", border: "none",
                 backgroundColor: "transparent", color: T.textDim, fontSize: 12, cursor: "pointer",
               }}>Dismiss</button>

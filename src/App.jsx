@@ -56,6 +56,7 @@ import {
 import { complianceFor, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
 import { lookupNPI, extractLicensesFromNPI } from "./utils/npiLookup";
+import { mergeNpiLicenses } from "./utils/npiImport";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -1604,13 +1605,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         try {
           const result = await lookupNPI(npi);
           if (!result) { setNpiImportMsg("No provider found for this NPI."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
+          // Every license the registry lists (one per state + number), minus
+          // any already on file; the registry only carries what the physician
+          // reported to NPPES, so say so when it comes back empty.
           const npiLicenses = extractLicensesFromNPI(result);
-          if (npiLicenses.length === 0) { setNpiImportMsg("No license data found in NPI registry."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
-          const cur = data.licenses || [];
-          const newOnes = npiLicenses
-            .filter(nl => !cur.some(el => el.licenseNumber === nl.licenseNumber && el.state === nl.state))
-            .map(nl => ({ id: generateId(), type: "Medical License", name: `${nl.state} Medical License`, licenseNumber: nl.licenseNumber, state: nl.state, issuedDate: "", expirationDate: "", notes: "Imported from NPPES NPI Registry", npiImported: true }));
-          if (newOnes.length === 0) { setNpiImportMsg("All licenses already imported."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
+          if (npiLicenses.length === 0) { setNpiImportMsg("The registry lists no license numbers for this NPI. It only carries what was reported to NPPES; add the rest by hand or from a photo."); setTimeout(() => setNpiImportMsg(null), 6000); return; }
+          const newOnes = mergeNpiLicenses(data.licenses, npiLicenses, { degreeType: data.settings.degreeType, makeId: generateId });
+          if (newOnes.length === 0) { setNpiImportMsg(`All ${npiLicenses.length} registry license${npiLicenses.length > 1 ? "s are" : " is"} already on file.`); setTimeout(() => setNpiImportMsg(null), 4000); return; }
           for (const lic of newOnes) addItem("licenses", lic);
           setNpiImportMsg(`${newOnes.length} license${newOnes.length > 1 ? "s" : ""} imported!`);
           setTimeout(() => setNpiImportMsg(null), 5000);

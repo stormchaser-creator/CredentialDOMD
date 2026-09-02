@@ -3,7 +3,8 @@ import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId } from "../../utils/helpers";
-import { lookupNPI, extractLicensesFromNPI } from "../../utils/npiLookup";
+import { lookupNPI, findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
+import { splitName, mergeNpiLicenses } from "../../utils/npiImport";
 import { AsclepiusIcon } from "../shared/Icons";
 
 /**
@@ -39,11 +40,19 @@ export default function Onboarding({ onFinish }) {
   const [degree, setDegree] = useState(s.degreeType || "");
   const [state, setState] = useState(s.primaryState || "");
 
-  // Step 2: NPI
+  // Step 2: NPI. The number is optional: with the field blank, Look up
+  // searches the registry by the name from step 1 and the physician picks
+  // themselves from the matches (most people do not know their NPI offhand).
   const [npi, setNpi] = useState(s.npi || "");
   const [npiBusy, setNpiBusy] = useState(false);
   const [npiResult, setNpiResult] = useState(null);
-  const [npiMsg, setNpiMsg] = useState("");
+  const [npiMatches, setNpiMatches] = useState(null); // name-search candidates
+  const [npiMsg, setNpiMsg] = useState("");   // problem, shown in red
+  const [npiNote, setNpiNote] = useState(""); // context, shown muted
+  // Name search defaults to the primary state. Onboarding never remounts
+  // between steps, so saveYou re-syncs this after step 1 (a brand-new
+  // account has no saved primaryState at mount).
+  const [searchState, setSearchState] = useState(state);
   const [imported, setImported] = useState(0);
 
   // Step 4: document
@@ -62,36 +71,51 @@ export default function Onboarding({ onFinish }) {
 
   const saveYou = () => {
     updateSettings({ name: name.trim(), degreeType: degree, primaryState: state, email: s.email || user?.email || "" });
+    setSearchState(state);
     setStep(1);
+  };
+
+  // By number: the full registry record for one NPI (the existing import).
+  const lookupByNumber = async (clean) => {
+    const r = await lookupNPI(clean);
+    if (!r) { setNpiMsg("No provider found for that NPI. Check the digits, or clear the field to search by name."); return; }
+    setNpi(clean);
+    setNpiResult(r);
+    updateSettings({ npi: clean });
   };
 
   const lookup = async () => {
     const clean = npi.replace(/\D/g, "");
-    if (clean.length !== 10) { setNpiMsg("An NPI is 10 digits."); return; }
-    setNpiBusy(true); setNpiMsg(""); setNpiResult(null);
+    setNpiBusy(true); setNpiMsg(""); setNpiNote(""); setNpiResult(null); setNpiMatches(null);
     try {
-      const r = await lookupNPI(clean);
-      if (!r) { setNpiMsg("No provider found for that NPI. Check the digits, or skip and add licenses by hand."); return; }
-      setNpiResult(r);
-      updateSettings({ npi: clean });
+      if (clean.length === 10) { await lookupByNumber(clean); return; }
+      // No number, or not a whole one: find them by the name from step 1.
+      const { firstName, lastName } = splitName(name || s.name);
+      if (!firstName && !lastName) { setNpiMsg("Go back and enter your name, or type your 10-digit NPI."); return; }
+      const { results, note } = await findProvidersByName({ firstName, lastName, state: searchState || undefined });
+      const who = [firstName, lastName].filter(Boolean).join(" ");
+      if (!results.length) { setNpiMsg(`No provider named ${who} in the registry, in any state. Check the spelling on the previous step, or type your NPI.`); return; }
+      setNpiMatches(results);
+      const partial = clean.length ? `${clean.length} digits is not a whole NPI, so we searched by name instead. ` : "";
+      setNpiNote(`${partial}${note}`.trim());
     } catch (e) {
       setNpiMsg(e.message || "The NPI registry did not answer. Try again in a moment, or skip.");
     } finally { setNpiBusy(false); }
   };
 
+  // A match was tapped: that NPI goes into the field and runs the by-number import.
+  const pickMatch = async (m) => {
+    setNpiMatches(null); setNpiNote(""); setNpiMsg(""); setNpiBusy(true);
+    try { await lookupByNumber(m.npi); }
+    catch (e) { setNpiMsg(e.message || "The NPI registry did not answer. Try again in a moment, or skip."); }
+    finally { setNpiBusy(false); }
+  };
+
   const importLicenses = () => {
     if (!npiResult) return;
-    const found = extractLicensesFromNPI(npiResult);
-    const cur = data.licenses || [];
-    const fresh = found
-      .filter(nl => !cur.some(el => el.licenseNumber === nl.licenseNumber && el.state === nl.state))
-      .map(nl => ({
-        id: generateId(), type: `State Medical License (${degree || "MD"})`, name: `${nl.state} Medical License`,
-        licenseNumber: nl.licenseNumber, state: nl.state, issuedDate: "", expirationDate: "",
-        notes: `Imported from NPI registry${nl.description ? ` (${nl.description})` : ""}`, npiImported: true,
-      }));
+    const fresh = mergeNpiLicenses(data.licenses, extractLicensesFromNPI(npiResult), { degreeType: degree || s.degreeType, makeId: generateId });
     for (const lic of fresh) addItem("licenses", lic);
-    setImported(fresh.length + (found.length - fresh.length));
+    setImported(fresh.length);
     setStep(2);
   };
 
@@ -163,26 +187,54 @@ export default function Onboarding({ onFinish }) {
 
       {key === "npi" && (
         <div style={card}>
-          <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 14, lineHeight: 1.5 }}>Your NPI pulls your name, specialty and every state license number from the federal registry in one tap. This is the fastest way to fill the app.</div>
-          <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>NPI (10 digits)</label>
+          <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 14, lineHeight: 1.5 }}>Your NPI pulls your name, specialty and every state license number the federal registry lists, in one tap. Do not know the number? Leave it blank: we search the registry by your name and you pick yourself from the matches.</div>
+          <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>NPI (10 digits, optional)</label>
           <div style={{ display: "flex", gap: 8, margin: "4px 0 6px" }}>
-            <input value={npi} onChange={e => setNpi(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="1234567890" inputMode="numeric" maxLength={10} style={{ ...iS, flex: 1 }} />
-            <button onClick={lookup} disabled={npiBusy} style={{ padding: "0 16px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{npiBusy ? "Looking up..." : "Look up"}</button>
+            <input value={npi} onChange={e => { setNpi(e.target.value.replace(/\D/g, "").slice(0, 10)); setNpiMatches(null); }} placeholder="Blank searches by name" inputMode="numeric" maxLength={10} style={{ ...iS, flex: 1 }} />
+            <button onClick={lookup} disabled={npiBusy} style={{ padding: "0 16px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 800, cursor: npiBusy ? "wait" : "pointer", opacity: npiBusy ? 0.7 : 1, whiteSpace: "nowrap" }}>{npiBusy ? "Looking up..." : "Look up"}</button>
           </div>
-          {npi.length > 0 && npi.length < 10 && <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>{10 - npi.length} more digit{10 - npi.length === 1 ? "" : "s"} to enable lookup.</div>}
+          {npi.length !== 10 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.textMuted, marginBottom: 8 }}>
+              <span style={{ whiteSpace: "nowrap" }}>Search by name in</span>
+              <select value={searchState} onChange={e => setSearchState(e.target.value)} style={{ ...iS, flex: 1, padding: "6px 10px", fontSize: 13, appearance: "auto" }}>
+                <option value="">any state</option>
+                {STATES.map(st => <option key={st} value={st}>{STATE_NAMES?.[st] || st} ({st})</option>)}
+              </select>
+            </div>
+          )}
           {npiMsg && <div style={{ fontSize: 13, color: T.danger || "#ef4444", marginBottom: 8 }}>{npiMsg}</div>}
+          {npiNote && <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 8 }}>{npiNote}</div>}
+          {npiMatches && npiMatches.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{npiMatches.length} match{npiMatches.length === 1 ? "" : "es"}. Tap yourself.</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 300, overflowY: "auto" }}>
+                {npiMatches.map(m => (
+                  <button key={m.npi} onClick={() => pickMatch(m)} style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left", padding: "10px 12px", border: `1px solid ${T.border}`, borderRadius: 10, backgroundColor: T.input, color: T.text, cursor: "pointer" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}{m.credential ? `, ${m.credential}` : ""}</div>
+                      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 1 }}>{m.specialty || "No specialty listed"}</div>
+                      <div style={{ fontSize: 12, color: T.textDim, marginTop: 1 }}>{[m.city, m.state].filter(Boolean).join(", ") || "No location listed"}</div>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, backgroundColor: T.accentGlow, padding: "3px 8px", borderRadius: 8, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{m.npi}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: T.textDim, marginTop: 6 }}>Not here? Try another state above, or type the NPI if you have it.</div>
+            </div>
+          )}
           {npiResult && (
             <div style={{ border: `1px solid ${T.accent}`, backgroundColor: T.accentDim, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
               <div style={{ fontSize: 15, fontWeight: 800 }}>{npiResult.firstName} {npiResult.lastName}{npiResult.credential ? `, ${npiResult.credential}` : ""}</div>
-              <div style={{ fontSize: 13, color: T.textMuted }}>{npiResult.specialty?.description || "Specialty on file"}{npiResult.practiceAddress?.city ? ` · ${npiResult.practiceAddress.city}, ${npiResult.practiceAddress.state}` : ""}</div>
+              <div style={{ fontSize: 13, color: T.textMuted }}>{npiResult.specialty?.description || "Specialty on file"}{npiResult.address?.city ? ` · ${npiResult.address.city}, ${npiResult.address.state}` : ""} · NPI {npiResult.npi}</div>
               <div style={{ fontSize: 13, marginTop: 8, fontWeight: 700 }}>{npiLicenses.length} license{npiLicenses.length === 1 ? "" : "s"} on the registry{npiLicenses.length ? ":" : "."}</div>
               {npiLicenses.map((l, i) => <div key={i} style={{ fontSize: 13, color: T.text }}>{l.state} · {l.licenseNumber}{l.description ? ` · ${l.description}` : ""}</div>)}
+              {!npiLicenses.length && <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 4 }}>The registry only lists licenses you reported to NPPES. Add the rest under Credentials, by hand or from a photo of the card.</div>}
             </div>
           )}
           {npiResult
             ? primary(npiLicenses.length ? `Import ${npiLicenses.length} license${npiLicenses.length === 1 ? "" : "s"}` : "Continue", npiLicenses.length ? importLicenses : () => setStep(2))
-            : primary("Look up my NPI", lookup, npiBusy || npi.length !== 10)}
-          {ghost("I do not know my NPI right now, skip", () => setStep(2))}
+            : primary(npi.length === 10 ? "Look up my NPI" : "Look up my NPI by name", lookup, npiBusy)}
+          {ghost("Skip this for now", () => setStep(2))}
         </div>
       )}
 
