@@ -137,7 +137,7 @@ const WINDOW = syncWindow(new Date(2026, 8, 2));
 eq("feed window, pulled in by a couple of days", WINDOW, { start: "2026-06-03", end: "2027-09-28" });
 
 const priced = (shift) => expectedForShift(ANMG, shift);
-const base = { contractId: ANMG.id, expectedFor: priced, today: TODAY, window: WINDOW, makeId };
+const base = { contractId: ANMG.id, expectedFor: priced, dayRate: ANMG.dayRate, today: TODAY, window: WINDOW, makeId };
 
 const hand = { id: "hand-1", date: "2026-09-05", contractId: ANMG.id, kind: "day", expected: 2060 };
 const vacation = { id: "vac-1", date: "2026-09-12", kind: "vacation", note: "family" };
@@ -207,6 +207,47 @@ eq("original kept without an update", tenth.updates.length, 0);
 const legacy = { id: "legacy", date: "2026-10-01", contractId: ANMG.id, kind: "call", expected: 1, source: CALLSYNC_SOURCE };
 const eleventh = planSync({ ...base, shifts, scheduleDays: [...after, legacy] });
 ok("keyless synced row untouched", !eleventh.removals.some(e => e.id === "legacy") && !eleventh.updates.some(e => e.id === "legacy"));
+
+// ─── Day-rate contract: call cannot land without a work day ───
+// No hand entry at all for the date: the sync prices the whole day, day
+// rate plus the grid call amount, not call alone.
+const addedFuture = first.adds.find(e => e.sourceKey === "2026-09-12|armc|nsx|primary");
+eq("nothing logged for the date: day+call, the day rate plus the grid", addedFuture, {
+  id: addedFuture.id, date: "2026-09-12", contractId: "c-anmg", kind: "day+call", expected: 3310,
+  note: "ARMC NSx primary call (CallSync)", source: CALLSYNC_SOURCE, sourceKey: "2026-09-12|armc|nsx|primary",
+});
+
+// A hand-made day+call already covers the date (the physician logged the
+// whole day themselves): a sync must add nothing there, and a stale synced
+// entry from before they logged it by hand comes off — the double-count
+// this ticket reported (a $3060 hand entry plus a redundant synced call).
+const handDayCall = { id: "hdc-1", date: "2026-09-05", contractId: ANMG.id, kind: "day+call", expected: 3310 };
+const staleSynced = { id: "stale-1", date: "2026-09-05", contractId: ANMG.id, kind: "call", expected: 1250, source: CALLSYNC_SOURCE, sourceKey: "2026-09-05|armc|nsx|primary" };
+const twelfth = planSync({ ...base, shifts, scheduleDays: [handDayCall, staleSynced] });
+eq("hand day+call fully covers both shifts that date: nothing added there", twelfth.adds.map(e => e.sourceKey).sort(), [
+  "2026-06-01|emc|neuro icu|primary", "2026-09-12|armc|nsx|primary",
+]);
+eq("stale synced entry under a now hand-covered date is removed", twelfth.removals.map(e => e.id), ["stale-1"]);
+
+// The physician already logged the call by hand (the exact-duplicate case
+// this ticket reported, a $1000 hand call next to a $1000 synced call): the
+// sync must not add a second call, only the day that is still missing.
+const handCallOnly = { id: "hc-1", date: "2026-09-05", contractId: ANMG.id, kind: "call", expected: 1250 };
+const thirteenth = planSync({ ...base, shifts: [shifts[1]], scheduleDays: [handCallOnly] });
+const dayAdded = thirteenth.adds.find(e => e.sourceKey === "2026-09-05|armc|nsx|primary");
+eq("hand already has the call: sync fills only the missing day", dayAdded, {
+  id: dayAdded.id, date: "2026-09-05", contractId: "c-anmg", kind: "day", expected: 2060,
+  note: "ARMC NSx primary call (CallSync)", source: CALLSYNC_SOURCE, sourceKey: "2026-09-05|armc|nsx|primary",
+});
+
+// A stipend contract has no day rate to add; a hand-made call already
+// covers the date, so the sync adds nothing at all.
+const penroseHandCall = { id: "ph-1", date: "2026-09-05", contractId: PENROSE.id, kind: "call", expected: 3000 };
+const fourteenth = planSync({
+  contractId: PENROSE.id, expectedFor: (s) => expectedForShift(PENROSE, s), dayRate: 0,
+  shifts: [shifts[1]], scheduleDays: [penroseHandCall], today: TODAY, window: WINDOW, makeId,
+});
+eq("stipend contract, hand already logged the call: nothing added", fourteenth.adds.length, 0);
 
 // ─── Once-a-day gate ──────────────────────────────────────────
 const NOW = Date.parse("2026-09-02T16:00:00Z");

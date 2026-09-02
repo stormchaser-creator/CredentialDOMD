@@ -121,6 +121,7 @@ async function runSync({ data, addItem, editItem, deleteItem, trigger }) {
       scheduleDays: data.scheduleDays || [],
       contractId: contract.id,
       expectedFor: (shift) => expectedForShift(contract, shift),
+      dayRate: Number(contract.dayRate) || 0,
       today: iso(now),
       window: syncWindow(now),
       makeId: generateId,

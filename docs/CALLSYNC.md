@@ -39,11 +39,20 @@ entered once per device.
 
 ## Rules
 
-- One `scheduleDays` entry per shift: `kind: "call"`, `expected` = the
-  agreement's call-rate grid for that hospital and role (else the call
-  stipend), `note: "ARMC NSx primary call (CallSync)"`, `source: "callsync"`.
-- Re-syncs match on `sourceKey`; nothing duplicates. A dollar figure the
-  physician changed by hand is kept.
+- One `scheduleDays` entry per shift, `note: "ARMC NSx primary call
+  (CallSync)"`, `source: "callsync"`. A day-rate agreement cannot have call
+  without also being a day worked, so the `kind` and `expected` depend on
+  what the physician has already logged by hand for that date on the same
+  agreement: nothing hand-logged yet gets `kind: "day+call"` (day rate plus
+  the grid/stipend call amount); a day already logged by hand gets
+  `kind: "call"` (grid/stipend only); a date where the physician has
+  already logged the call themselves (by hand, or a stipend agreement with
+  no day rate) gets nothing added — a sync must not add a second call
+  charge on top of one already there.
+- Re-syncs match on `sourceKey`; nothing synced duplicates. A dollar figure
+  the physician changed by hand is kept, unless the `kind` it was priced
+  under no longer applies (the physician logged the missing half by hand
+  since the last sync), in which case it is repriced.
 - A future shift that leaves the feed (swap, unpublished month) is removed,
   inside the feed window only. Past entries are never removed. Entries with
   no `source` (hand-made days, vacations) are never touched.

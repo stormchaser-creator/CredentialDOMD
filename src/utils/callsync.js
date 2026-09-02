@@ -8,13 +8,19 @@
  * from PUBLISHED schedule periods only. The link carries a per-user token
  * and is copied from CallSync's Dashboard, under Calendar Subscription.
  *
- * Here each shift becomes one scheduleDays entry on the ANMG agreement:
- * kind "call", expected = that hospital's grid rate for the role (the
- * contract's Appendix A table), source "callsync", sourceKey =
- * date|hospital|coverage|role. A re-sync matches on the key, so nothing is
- * ever duplicated; a future shift that leaves the published schedule (a
- * swap, an unpublished month) comes off the calendar; a day the physician
- * entered by hand has no source and is never touched.
+ * Here each shift becomes one scheduleDays entry on the ANMG agreement,
+ * source "callsync", sourceKey = date|hospital|coverage|role. A day-rate
+ * contract cannot have call without also being a day worked, so a shift
+ * with no hand-made entry on its date prices as kind "day+call" (the day
+ * rate plus that hospital's grid rate for the role); if the physician has
+ * already logged the day by hand, only the call portion is added (kind
+ * "call"), and if they have already logged the call too (by hand, or a
+ * stipend contract with no day rate), nothing is added at all — a hand
+ * entry that already prices call is exactly the case a sync must not pile
+ * a second call charge onto. A re-sync matches on the key, so nothing
+ * synced is ever duplicated; a future shift that leaves the published
+ * schedule (a swap, an unpublished month) comes off the calendar; a day
+ * the physician entered by hand has no source and is never touched.
  *
  * Pure: no React, no storage, no network. Unit-tested by
  * scripts/callsync.test.mjs under plain node.
@@ -197,6 +203,24 @@ export function noteForShift(shift) {
   return `${shift.label} ${shift.role} call (CallSync)`;
 }
 
+/**
+ * What a synced shift should become, given what the physician has already
+ * logged by hand on that date (for this contract): { day, call } booleans.
+ * Returns null when hand entries already cover both, or cover the only
+ * portion this contract has (a stipend contract has no day rate to add) —
+ * a sync must add nothing there, not a second charge on top.
+ */
+export function priceShift(expectedFor, dayRate, shift, hand) {
+  const call = expectedFor(shift) || 0;
+  const day = dayRate || 0;
+  const needDay = day > 0 && !hand?.day;
+  const needCall = !hand?.call;
+  if (!needDay && !needCall) return null;
+  if (needDay && needCall) return { kind: "day+call", expected: Math.round(day + call) };
+  if (needCall) return { kind: "call", expected: Math.round(call) };
+  return { kind: "day", expected: Math.round(day) };
+}
+
 // ─── Planning ─────────────────────────────────────────────────
 
 /**
@@ -225,15 +249,17 @@ export function isDueForAutoSync(record, now = Date.now()) {
  * @param shifts       shiftsFromICS() output
  * @param scheduleDays every entry on the calendar (hand-made ones included)
  * @param contractId   the agreement synced shifts belong to
- * @param expectedFor  shift => expected dollars
+ * @param expectedFor  shift => expected call dollars (the grid or stipend)
+ * @param dayRate      that contract's day rate, or 0 for a stipend contract
  * @param today        YYYY-MM-DD
  * @param window       syncWindow() output
  * @param makeId       id generator for new entries
  * @returns { adds, updates, removals, unchanged }
  *   adds/updates are full entries; removals are the existing entries to delete.
  */
-export function planSync({ shifts, scheduleDays, contractId, expectedFor, today, window, makeId }) {
-  const existing = (scheduleDays || []).filter(e => e && e.source === CALLSYNC_SOURCE);
+export function planSync({ shifts, scheduleDays, contractId, expectedFor, dayRate, today, window, makeId }) {
+  const all = scheduleDays || [];
+  const existing = all.filter(e => e && e.source === CALLSYNC_SOURCE);
   const byKey = new Map();
   for (const e of existing) {
     if (!e.sourceKey) continue;
@@ -241,18 +267,45 @@ export function planSync({ shifts, scheduleDays, contractId, expectedFor, today,
     byKey.get(e.sourceKey).push(e);
   }
 
+  // What the physician has already logged by hand (no source), by date, for
+  // this same contract — a sync must add only what is still missing there.
+  // `day` also doubles as a claim flag: several call shifts can share one
+  // date (primary at one hospital, backup at another), but a date is worked
+  // once, so the first shift to need the day rate here claims it and every
+  // later shift on that date sees the day as already covered.
+  const handByDate = new Map();
+  for (const e of all) {
+    if (!e || !e.date || e.contractId !== contractId || e.source === CALLSYNC_SOURCE) continue;
+    const slot = handByDate.get(e.date) || { day: false, call: false };
+    if (e.kind === "day" || e.kind === "day+call") slot.day = true;
+    if (e.kind === "call" || e.kind === "day+call") slot.call = true;
+    handByDate.set(e.date, slot);
+  }
+
   const adds = [], updates = [], removals = [];
   let unchanged = 0;
   const seen = new Set();
-  for (const shift of shifts || []) {
+  const sortedShifts = [...(shifts || [])].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+  for (const shift of sortedShifts) {
     if (seen.has(shift.key)) continue;
     seen.add(shift.key);
-    const note = noteForShift(shift);
     const entries = byKey.get(shift.key) || [];
+    const hand = handByDate.get(shift.date) || { day: false, call: false };
+    const pricing = priceShift(expectedFor, dayRate, shift, hand);
+    if (pricing && (pricing.kind === "day" || pricing.kind === "day+call")) {
+      handByDate.set(shift.date, { ...hand, day: true });
+    }
+    if (!pricing) {
+      // The physician already has this date covered by hand: nothing to
+      // add, and a stale synced entry from before they logged it goes.
+      removals.push(...entries);
+      continue;
+    }
+    const note = noteForShift(shift);
     if (entries.length === 0) {
       adds.push({
-        id: makeId(), date: shift.date, contractId, kind: "call",
-        expected: expectedFor(shift) || 0, note,
+        id: makeId(), date: shift.date, contractId, kind: pricing.kind,
+        expected: pricing.expected || 0, note,
         source: CALLSYNC_SOURCE, sourceKey: shift.key,
       });
       continue;
@@ -261,9 +314,9 @@ export function planSync({ shifts, scheduleDays, contractId, expectedFor, today,
     const [keep, ...extra] = entries;
     removals.push(...extra);
     // A dollar figure the physician adjusted by hand stays; only an empty
-    // one is filled in from the contract.
-    const expected = parseFloat(keep.expected) > 0 ? keep.expected : (expectedFor(shift) || 0);
-    const next = { ...keep, date: shift.date, contractId, kind: "call", note, expected, source: CALLSYNC_SOURCE, sourceKey: shift.key };
+    // one, or one priced under a kind that no longer applies, is refilled.
+    const expected = (parseFloat(keep.expected) > 0 && keep.kind === pricing.kind) ? keep.expected : (pricing.expected || 0);
+    const next = { ...keep, date: shift.date, contractId, kind: pricing.kind, note, expected, source: CALLSYNC_SOURCE, sourceKey: shift.key };
     const changed = ["date", "contractId", "kind", "note", "expected"].some(f => String(keep[f] ?? "") !== String(next[f] ?? ""));
     if (changed) updates.push(next); else unchanged++;
   }
