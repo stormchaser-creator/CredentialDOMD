@@ -20,7 +20,9 @@ globalThis.localStorage = {
 };
 globalThis.window = globalThis.window || {};
 
-const { BASE_KEYS, scopedKey, purgeUserStorage, setActiveUserId } = await import("../src/utils/storageScope.js");
+const {
+  BASE_KEYS, DEVICE_KEYS_BASE, scopedKey, purgeUserStorage, purgeForSignOut, pendingOpCount, setActiveUserId,
+} = await import("../src/utils/storageScope.js");
 const {
   recordLastIdentity, readLastIdentity, offlineCacheKey, cachedDataParses,
   shouldActivateOfflineFallback,
@@ -164,6 +166,71 @@ localStorage.setItem(offlineCacheKey(B), JSON.stringify({ settings: {} }));
 await purgeUserStorage(A, { keepVault: false });
 eq("purge of A leaves B's identity", readLastIdentity()?.authUserId, B);
 ok("purge of A leaves B's cache", cachedDataParses(B) === true);
+
+// ── Explicit Sign out: purgeForSignOut ──────────────────────────────────
+// The Sign out button (src/context/AppContext.jsx handleSignOut) and Delete
+// All My Data go through purgeForSignOut: every namespaced key including the
+// vault, plus the device-key slot that purgeUserStorage deliberately leaves
+// alone. Nothing of the account survives on the device; another account on
+// the same device, and its offline fallback, are untouched.
+store.clear();
+setActiveUserId(A);
+recordLastIdentity({ id: A, fullName: "Dr. A" });
+localStorage.setItem(offlineCacheKey(A), JSON.stringify({ settings: {}, licenses: [{ id: "l1", number: "MD-12345" }] }));
+localStorage.setItem(scopedKey(BASE_KEYS.vault, A), JSON.stringify({ "workLog:x": "note" }));
+localStorage.setItem(scopedKey(BASE_KEYS.chat, A), "[]");
+localStorage.setItem(scopedKey(BASE_KEYS.archives, A), "[]");
+localStorage.setItem(scopedKey(BASE_KEYS.timer, A), "{}");
+localStorage.setItem(scopedKey(BASE_KEYS.lastContract, A), "c1");
+localStorage.setItem(scopedKey(BASE_KEYS.callsync, A), "{}");
+localStorage.setItem(scopedKey(BASE_KEYS.pendingOps, A), JSON.stringify([{ op: "upsert" }, { op: "delete" }]));
+localStorage.setItem(`${DEVICE_KEYS_BASE}:${A}`, JSON.stringify({ apiKey: "k", lockCode: "1234" }));
+// A second account on the same device, and an app-level (un-namespaced) key.
+recordLastIdentity({ id: B, fullName: "Dr. B" });
+localStorage.setItem(offlineCacheKey(B), JSON.stringify({ settings: {} }));
+localStorage.setItem(`${DEVICE_KEYS_BASE}:${B}`, JSON.stringify({ apiKey: "kb" }));
+localStorage.setItem("credentialdomd-shared-ai", "{}");
+
+eq("pendingOpCount reads the queue", pendingOpCount(A), 2);
+eq("pendingOpCount is 0 with no queue", pendingOpCount(B), 0);
+localStorage.setItem(scopedKey(BASE_KEYS.pendingOps, B), "{not json");
+eq("pendingOpCount is 0 on a corrupt queue", pendingOpCount(B), 0);
+localStorage.removeItem(scopedKey(BASE_KEYS.pendingOps, B));
+
+const before = store.size;
+await purgeForSignOut(null);
+eq("purgeForSignOut with no user is a no-op", store.size, before);
+
+await purgeForSignOut(A);
+{
+  const left = [...store.keys()].filter((k) => k.endsWith(`:${A}`));
+  ok("sign-out leaves no key of A on the device", left.length === 0, left.join(","));
+}
+ok("sign-out clears the cached file", cachedDataParses(A) === false);
+ok("sign-out clears the vault", store.get(scopedKey(BASE_KEYS.vault, A)) === undefined);
+ok("sign-out clears the device-key slot (AI keys, lock code)", store.get(`${DEVICE_KEYS_BASE}:${A}`) === undefined);
+ok("sign-out clears the unsynced-edits queue", pendingOpCount(A) === 0);
+ok("after sign-out A's offline fallback can never activate",
+  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity()?.authUserId === A ? readLastIdentity() : null, cacheOk: cachedDataParses(A) }) === false);
+// The still-signed-in account on the same device keeps everything,
+// including the offline fallback: a sign-out is one account's, not the device's.
+eq("sign-out of A leaves B's identity", readLastIdentity()?.authUserId, B);
+ok("sign-out of A leaves B's cache", cachedDataParses(B) === true);
+ok("sign-out of A leaves B's device keys", store.has(`${DEVICE_KEYS_BASE}:${B}`));
+ok("sign-out of A leaves app-level keys", store.has("credentialdomd-shared-ai"));
+ok("B, still signed in on this device, keeps the offline fallback",
+  shouldActivateOfflineFallback({ onLine: false, clerkLoaded: false, clerkTimedOut: true, probeFailed: true, identity: readLastIdentity(), cacheOk: cachedDataParses(B) }) === true);
+
+// The involuntary path stays as it was: keepVault keeps the vault AND the
+// device-key slot (the lock code must survive a token timing out).
+store.clear();
+recordLastIdentity({ id: A, fullName: "Dr. A" });
+localStorage.setItem(scopedKey(BASE_KEYS.vault, A), JSON.stringify({ "licenses:x": "note" }));
+localStorage.setItem(`${DEVICE_KEYS_BASE}:${A}`, JSON.stringify({ lockCode: "1234" }));
+await purgeUserStorage(A, { keepVault: true });
+ok("session expiry keeps the device-key slot", store.has(`${DEVICE_KEYS_BASE}:${A}`));
+ok("session expiry keeps the vault", store.has(scopedKey(BASE_KEYS.vault, A)));
+ok("session expiry still removes the identity slot", readLastIdentity() === null);
 
 setActiveUserId(null);
 console.log(`\n${pass} passed, ${fail} failed`);

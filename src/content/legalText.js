@@ -50,7 +50,7 @@ export const PRIVACY = {
         [
           "**On your device.** Browser storage holds a cache so the app opens and reads offline; it syncs when you are online. Sign out when you finish on a shared computer, because that cache belongs to whoever opens the app there next.",
           "**Supabase, US region.** A Postgres database holds your records, and a private Storage bucket holds uploaded document files in a folder per user. Row-level security ties every row and every file to your user id. Traffic is encrypted with TLS and Supabase encrypts data at rest.",
-          "**Monthly backups.** Unless you turn them off in More > Data & Backup, once a month the server builds a ZIP of your records and your uploaded documents, keeps it in a separate private bucket only you can reach, and emails you a signed download link that stops working after 35 days. The archive contains no private vault notes and no AI keys, because neither is ever on the server.",
+          "**Monthly backups.** Unless you turn them off in More > Data & Backup, once a month the server builds a ZIP of your records and your uploaded documents, keeps it in a separate private bucket only you can reach, and emails you when it is ready. The email carries no link to the file. You download it from More > Data & Backup while signed in, through a link that works for 15 minutes, and the server keeps the three most recent months. The archive contains no private vault notes and no AI keys, because neither is ever on the server.",
           "**The private vault.** On this device only, never synced. See section 5.",
         ],
       ],

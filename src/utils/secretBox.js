@@ -9,8 +9,10 @@
  * Format: "enc1:" + base64(salt[16] + iv[12] + ciphertext). AES-GCM 256,
  * key = PBKDF2-SHA256(lockCode + ":" + userId, salt, 150k iterations).
  */
+import { DEVICE_KEYS_BASE } from "./storageScope.js";
+
 const PREFIX = "enc1:";
-const slot = (uid) => `credentialdomd-keys:${uid}`;
+const slot = (uid) => `${DEVICE_KEYS_BASE}:${uid}`;
 let activeUid = null;
 
 export function setSecretUser(uid) { activeUid = uid || null; }

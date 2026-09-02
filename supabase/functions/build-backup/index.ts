@@ -2,8 +2,12 @@
  * build-backup: the complete monthly archive, built on the server.
  *
  * A user with 60 MB of scans cannot be emailed an attachment, so this function
- * writes a ZIP into the private "backups" bucket and emails a signed link that
- * lives 35 days. One email per user, however many parts the archive needs.
+ * writes a ZIP into the private "backups" bucket and emails a note that it is
+ * ready. The note carries no link to the file: the archive is every scan the
+ * physician ever uploaded, and an inbox is read by more people than its owner.
+ * Downloads come from the Data and Backup page through backup-link, which
+ * mints a 15-minute signed URL per tap. One email per user, however many
+ * parts the archive needs.
  *
  * Auth, either one:
  *   - header x-hook-secret = WELCOME_HOOK_SECRET. Body {} runs every opted-in
@@ -35,7 +39,6 @@ import { clerkProfile } from "../_shared/clerkAuth.ts";
 import {
   BACKUP_BUCKET,
   DOCUMENTS_BUCKET,
-  LINK_TTL_SECONDS,
   PART_CAP_BYTES,
   SECTIONS,
   backupStoragePath,
@@ -53,7 +56,6 @@ import {
   renderReadme,
   buildRecordIndex,
   type DocInput,
-  type EmailLink,
   type PreparedDoc,
   type Row,
   type SkippedDoc,
@@ -159,7 +161,6 @@ interface PartResult {
   bytes: number;
   documentCount: number;
   skipped: number;
-  url: string | null;
   path: string;
   error?: string;
 }
@@ -203,7 +204,9 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
   const totalDocumentCount = prepared.items.length;
 
   const results: PartResult[] = [];
-  const links: EmailLink[] = [];
+  // Parts that made it into the bucket. No link is minted here: the email
+  // points at the app, and backup-link signs a fresh 15-minute URL per tap.
+  const built: { part: number; bytes: number }[] = [];
   // Planning-level skips (a storage_path outside the user's own folder) are
   // reported in part 1; download failures are reported in the part they happen
   // in. Nothing is ever dropped without a name in a README and a count on a row.
@@ -285,12 +288,8 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
         .upload(path, zipped, { contentType: "application/zip", upsert: true });
       if (up.error) throw new Error(`upload failed: ${up.error.message}`);
 
-      const signed = await db.storage.from(BACKUP_BUCKET).createSignedUrl(path, LINK_TTL_SECONDS);
-      if (signed.error || !signed.data?.signedUrl) {
-        throw new Error(`signed url failed: ${signed.error?.message ?? "no url"}`);
-      }
-
-      const expiresAt = new Date(Date.now() + LINK_TTL_SECONDS * 1000).toISOString();
+      // expires_at stays null until backup-link signs the first URL; there
+      // is no link to expire yet.
       const rowFields = {
         user_id: userId,
         period,
@@ -302,7 +301,6 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
         document_count: included.length,
         skipped_documents: partSkipped().length,
         status: "ready",
-        expires_at: expiresAt,
       };
       const written = pendingId
         ? await db.from("backups").update(rowFields).eq("id", pendingId).select("id").single()
@@ -315,9 +313,9 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
       allSkipped.push(...failures);
       results.push({
         rowId: rowIns?.id ?? null, part: partNo, parts, bytes: zipped.byteLength,
-        documentCount: included.length, skipped: partSkipped().length, url: signed.data.signedUrl, path,
+        documentCount: included.length, skipped: partSkipped().length, path,
       });
-      links.push({ part: partNo, parts, url: signed.data.signedUrl, bytes: zipped.byteLength });
+      built.push({ part: partNo, bytes: zipped.byteLength });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error(`backup: part ${partNo} of ${parts} failed for ${userId}: ${message}`);
@@ -329,7 +327,7 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
       };
       if (pendingId) await db.from("backups").update(failFields).eq("id", pendingId);
       else await db.from("backups").insert(failFields);
-      results.push({ rowId: null, part: partNo, parts, bytes: 0, documentCount: 0, skipped: partSkipped().length, url: null, path, error: message });
+      results.push({ rowId: null, part: partNo, parts, bytes: 0, documentCount: 0, skipped: partSkipped().length, path, error: message });
     }
   }
 
@@ -341,7 +339,7 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
   };
 
   const rowIds = results.map((r) => r.rowId).filter((id): id is string => !!id);
-  if (!links.length) { out.note = "no part could be built"; return out; }
+  if (!built.length) { out.note = "no part could be built"; return out; }
 
   const email = String(profile.email ?? "").trim();
   if (!EMAIL_RE.test(email)) {
@@ -364,10 +362,10 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
     sectionCount: nonEmptySections,
     documentCount: includedDocuments,
     documentBytes: includedBytes,
-    links,
-    expiresAt: new Date(Date.now() + LINK_TTL_SECONDS * 1000).toISOString(),
+    builtParts: built.length,
+    archiveBytes: built.reduce((n, b) => n + b.bytes, 0),
     skippedCount: skippedTotal,
-    missingParts: parts - links.length,
+    missingParts: parts - built.length,
   });
 
   const emailId = await sendEmail({

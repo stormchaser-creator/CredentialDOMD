@@ -6,8 +6,11 @@ import { supabase } from "../../lib/supabase";
  * Monthly server-built backup.
  *
  * The server packages every synced record plus every uploaded document into a
- * ZIP, drops it in a private bucket, and emails a signed link. Nothing is
- * attached to the email, because one physician already has 60 MB of scans.
+ * ZIP, drops it in a private bucket, and emails a note that it is ready.
+ * Nothing is attached to the email, because one physician already has 60 MB
+ * of scans, and no link to the file is in it either: the archive is every
+ * scan they ever uploaded. Download below asks backup-link for a fresh
+ * 15-minute signed URL on every tap and never keeps one.
  *
  * The on-device private vault is structurally absent from all of this: it
  * lives in this browser's storage and never reaches a server, so no
@@ -49,6 +52,11 @@ function looksUndeployed(error) {
   if (error.code === "42P01" || error.code === "PGRST205" || error.code === "PGRST202") return true;
   return NOT_DEPLOYED.test(`${error.message || ""} ${error.details || ""} ${error.hint || ""}`);
 }
+
+// How long a link from backup-link lives (LINK_TTL_SECONDS in
+// supabase/functions/build-backup/lib.ts). The popup-blocked fallback anchor
+// is dropped after this so a dead link is never left on screen.
+const LINK_TTL_MS = 15 * 60 * 1000;
 
 const STATUS = {
   pending: { label: "Building", tone: "muted" },
@@ -129,7 +137,7 @@ function BackupPanel() {
       // The function returns 200 even when it built but could not email, so
       // only say "on its way" when it actually says it sent one.
       const where = out.emailed
-        ? `The download link is on its way to ${s.email}.`
+        ? `A note is on its way to ${s.email}. Download it from the list below.`
         : `It is in the list below. Nothing was emailed${out.note ? `: ${out.note}` : ""}.`;
       setBuildMsg(
         `Backup ready${bits.length ? `: ${bits.join(", ")}` : ""}${parts > 1 ? `, split into ${parts} files` : ""}. ${where}`
@@ -157,8 +165,12 @@ function BackupPanel() {
       const url = res.data?.url;
       if (!url) throw new Error("Could not create a download link.");
       const w = window.open(url, "_blank", "noopener,noreferrer");
-      // A blocked popup is not a failure: show the link and let them tap it.
-      if (!w) setLinks((m) => ({ ...m, [row.id]: url }));
+      // A blocked popup is not a failure: show the link and let them tap it,
+      // for as long as it lives.
+      if (!w) {
+        setLinks((m) => ({ ...m, [row.id]: url }));
+        setTimeout(() => setLinks((m) => (m[row.id] === url ? { ...m, [row.id]: "" } : m)), LINK_TTL_MS);
+      }
     } catch (e) {
       setRowErr((m) => ({ ...m, [row.id]: e.message || "Could not create a download link." }));
     } finally {
@@ -178,7 +190,8 @@ function BackupPanel() {
         Once a month the server packages your whole account into one ZIP file: every record,
         every document you uploaded, a CSV of each section for spreadsheets, and a JSON file
         this app can import back. The file is kept in private storage and you get an email
-        with a download link. Large accounts arrive as more than one file.
+        when it is ready. Download it from this screen; the email carries no link to the file.
+        Large accounts arrive as more than one file.
       </div>
       <div style={{ ...body, marginBottom: 14 }}>
         Your private notes are never in it. Patient names and MRNs stay in this browser and
@@ -195,10 +208,10 @@ function BackupPanel() {
           {/* Opt out */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 0", borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}` }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Email me a backup every month</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Build a backup every month</div>
               <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
                 {monthlyOn
-                  ? `Built on the 1st${s.email ? `, sent to ${s.email}` : ". Add your email in Settings to receive the link"}`
+                  ? `Built on the 1st${s.email ? `. ${s.email} gets a note when it is ready` : ". Add your email in Settings to be told when it is ready"}`
                   : "Off. Nothing is built and nothing is emailed"}
               </div>
             </div>
@@ -231,7 +244,7 @@ function BackupPanel() {
                 fontSize: 13.5, fontWeight: 800, cursor: building ? "default" : "pointer",
               }}
             >
-              {building ? "Building your backup..." : "Email me a backup now"}
+              {building ? "Building your backup..." : "Build a backup now"}
             </button>
             {buildMsg && (
               <div style={{ fontSize: 12.5, color: building ? T.textMuted : T.accent, fontWeight: 600, marginTop: 9, lineHeight: 1.6 }}>
@@ -324,6 +337,7 @@ function BackupPanel() {
                       <a href={links[r.id]} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, fontWeight: 700 }}>
                         Open the download
                       </a>
+                      {" "}(works for 15 minutes)
                     </div>
                   )}
                 </div>
@@ -332,8 +346,9 @@ function BackupPanel() {
 
             {state === "ready" && rows.length > 0 && (
               <div style={{ fontSize: 12, color: T.textDim, marginTop: 10, lineHeight: 1.6 }}>
-                Download creates a new link each time, good for 35 days. Old links stop working,
-                which is the point: a link that leaks does not stay open forever.
+                Download creates a new link each time, good for 15 minutes and only from this
+                signed-in screen. The monthly email says a backup is ready and carries no link to
+                the file, so a read or forwarded inbox never holds a way into the archive.
               </div>
             )}
           </div>

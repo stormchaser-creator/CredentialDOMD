@@ -17,6 +17,7 @@ import { isContactPickerSupported, pickContact, parseVCard } from "../../utils/c
 import { STATE_NAMES } from "../../constants/states";
 import CPTCodePicker from "./CPTCodePicker";
 import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
+import { checkStorageQuota } from "../../utils/storageQuota";
 
 // Every billed code, spelled out — number, what it entails, units, value.
 // Structured detail from the import wins; a hand-typed code string still
@@ -217,6 +218,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const handleUpload = useCallback(async (files) => {
     const apiKey = data.settings.apiKey; // own key, or undefined for the shared key
     const deg = data.settings.degreeType;
+    // The account's 2 GB line, counting files already staged on this form.
+    const quota = checkStorageQuota(data.documents, [...attachedDocs, ...Array.from(files)]);
+    if (!quota.ok) { setScanIsError(true); setScanMsg(quota.message); return; }
 
     for (const file of Array.from(files)) {
       const dataUrl = await new Promise((resolve, reject) => {
@@ -267,7 +271,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         setScanningDoc(false);
       }
     }
-  }, [aiOn, data.settings.apiKey, data.settings.degreeType, fields]);
+  }, [aiOn, data.settings.apiKey, data.settings.degreeType, fields, data.documents, attachedDocs]);
 
   const handleImportContact = useCallback(async () => {
     setContactMsg(null);

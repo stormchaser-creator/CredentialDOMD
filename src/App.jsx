@@ -276,13 +276,22 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const aiOn = useAiAvailable(data.settings);
   const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
   // Reply emails link to /app/#support: open the sheet on "Your tickets".
+  // Backup emails link to /app/#backups: open More > Data & Backup, the one
+  // place a link to the archive is minted (build-backup emails no link).
   useEffect(() => {
-    if (window.location.hash === "#support") {
+    const hash = window.location.hash;
+    if (hash === "#support") {
       setSupportTab("tickets");
       setShowSupport(true);
-      history.replaceState(null, "", window.location.pathname + window.location.search);
+    } else if (hash === "#backups") {
+      setTab("more");
+      setSubPage("export");
+    } else {
+      return;
     }
-  }, []);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    // setTab / setSubPage are App's useState setters handed down as props: stable.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");

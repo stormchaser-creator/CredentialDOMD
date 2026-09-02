@@ -61,8 +61,16 @@ export const PROFILE_SECRET_FIELDS = ["api_key", "anthropic_api_key"];
 // real build succeed.
 export const PART_CAP_BYTES = 48 * 1024 * 1024;
 
-/** Signed links live 35 days. The email and the backups row both say so. */
-export const LINK_TTL_SECONDS = 35 * 24 * 60 * 60;
+/**
+ * Signed links live 15 minutes. backup-link mints one for each Download tap on
+ * the Data and Backup page; the monthly email carries none, so a read or
+ * forwarded inbox never holds a way into the archive.
+ */
+export const LINK_TTL_SECONDS = 15 * 60;
+
+/** Where the email sends people: the app's Data and Backup page. */
+export const BACKUP_PAGE_URL = "https://credentialdomd.com/app/#backups";
+export const BACKUP_PAGE_PATH = "More > Data and Backup";
 
 export const BACKUP_BUCKET = "backups";
 export const DOCUMENTS_BUCKET = "documents";
@@ -575,13 +583,6 @@ ${skippedBlock}
 
 // ── The email ────────────────────────────────────────────────────────────────
 
-export interface EmailLink {
-  part: number;
-  parts: number;
-  url: string;
-  bytes: number;
-}
-
 export interface EmailInfo {
   greetingName: string;
   period: string;
@@ -589,10 +590,11 @@ export interface EmailInfo {
   sectionCount: number;
   documentCount: number;
   documentBytes: number;
-  links: EmailLink[];
-  expiresAt: string;
+  builtParts: number;     // ZIP parts that exist in the bucket
+  archiveBytes: number;   // those parts together
   skippedCount: number;
   missingParts?: number;  // parts that failed to build, so the email cannot claim to be whole
+  pageUrl?: string;       // defaults to BACKUP_PAGE_URL
 }
 
 export function backupSubject(period: string): string {
@@ -600,11 +602,17 @@ export function backupSubject(period: string): string {
 }
 
 /**
- * Plain text, no em dashes, no hedging. Says what is inside, where the link is,
- * when it dies, what is deliberately missing, and how to stop the emails.
+ * Plain text, no em dashes, no hedging. Says what is inside, where to get it,
+ * what is deliberately missing, and how to stop the emails.
+ *
+ * Deliberately NOT in here: a link to the file. The archive holds every scan
+ * the physician ever uploaded (passport, DEA, driver's license), and an inbox
+ * is read by more people than its owner. The only way to the ZIP is the Data
+ * and Backup page, signed in, through a link that lives 15 minutes.
  */
 export function renderEmailText(info: EmailInfo): string {
-  const multi = info.links.length > 1;
+  const multi = info.builtParts > 1;
+  const pageUrl = info.pageUrl || BACKUP_PAGE_URL;
   const inside = [
     `  ${formatCount(info.recordCount)} record${info.recordCount === 1 ? "" : "s"} across ${formatCount(info.sectionCount)} section${info.sectionCount === 1 ? "" : "s"}`,
     `  ${formatCount(info.documentCount)} document${info.documentCount === 1 ? "" : "s"}, ${formatBytes(info.documentBytes)}`,
@@ -613,10 +621,15 @@ export function renderEmailText(info: EmailInfo): string {
     "  One CSV per section, for Excel or Numbers",
   ].join("\n");
 
-  const download = multi
-    ? `Download (${info.links.length} files, all of them needed for the full archive)\n` +
-      info.links.map((l) => `  Part ${l.part} of ${l.parts} (${formatBytes(l.bytes)}): ${l.url}`).join("\n")
-    : `Download (${formatBytes(info.links[0] ? info.links[0].bytes : 0)})\n  ${info.links[0] ? info.links[0].url : ""}`;
+  const size = multi
+    ? `The archive is ${formatCount(info.builtParts)} files, ${formatBytes(info.archiveBytes)} together. Download all of them.`
+    : `The file is ${formatBytes(info.archiveBytes)}.`;
+  const where = [
+    "Where to get it:",
+    `  Open ${pageUrl}`,
+    `  In the app that is ${BACKUP_PAGE_PATH}. Tap Download next to ${monthLabel(info.period)}.`,
+    `  ${size}`,
+  ].join("\n");
 
   const skipped = info.skippedCount
     ? `\n${formatCount(info.skippedCount)} document${info.skippedCount === 1 ? "" : "s"} could not be read and ${info.skippedCount === 1 ? "is" : "are"} listed by name in the README.html inside the archive. Nothing was deleted.\n`
@@ -624,7 +637,7 @@ export function renderEmailText(info: EmailInfo): string {
 
   const missing = Number(info.missingParts) || 0;
   const opening = missing
-    ? `Your CredentialDOMD backup for ${monthLabel(info.period)} is ready, but ${formatCount(missing)} of its ${formatCount(missing + info.links.length)} parts did not finish building. What is below is real and complete as far as it goes. Build a new backup from More > Data and Backup, and write to us if it fails again.`
+    ? `Your CredentialDOMD backup for ${monthLabel(info.period)} is ready, but ${formatCount(missing)} of its ${formatCount(missing + info.builtParts)} parts did not finish building. What is there is real and complete as far as it goes. Build a new backup from ${BACKUP_PAGE_PATH}, and write to us if it fails again.`
     : `Your complete CredentialDOMD backup for ${monthLabel(info.period)} is ready.`;
 
   return `${info.greetingName},
@@ -634,13 +647,13 @@ ${opening}
 What is inside:
 ${inside}
 
-${download}
+${where}
 
-${multi ? "The links expire" : "The link expires"} on ${longDate(info.expiresAt)}. A fresh one is always waiting in the app under More > Data and Backup.
+This email has no link to the file. Downloads happen only from your signed-in account, and each link works for 15 minutes.
 
 ${VAULT_NOTE} ${KEYS_NOTE}
 ${skipped}
-To stop these monthly backups, open More > Data and Backup and turn Monthly backup off.
+To stop these monthly backups, open ${BACKUP_PAGE_PATH} and turn Monthly backup off.
 
 CredentialDOMD
 `;
