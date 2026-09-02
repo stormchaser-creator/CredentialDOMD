@@ -2,11 +2,13 @@
  * backup-link: the app's way back to an archive build-backup already made.
  *
  * GET  -> { backups: [...] }   the caller's own rows, newest 12
- * POST { backup_id } -> { url } a FRESH signed link, good for 35 days
+ * POST { backup_id } -> { url } a FRESH signed link, good for 15 minutes
  *
- * The link inside the monthly email dies after 35 days. Nothing is rebuilt
- * here: the ZIP is already in the private "backups" bucket, so a new link is
- * one signature away and costs nothing.
+ * This is the only way to the archive. The monthly email says a backup is
+ * ready and points at the Data and Backup page; it carries no link to the
+ * file. Nothing is rebuilt here: the ZIP is already in the private "backups"
+ * bucket, so a new link is one signature away and costs nothing, and the
+ * app asks for one on every Download tap rather than keeping any.
  *
  * Auth: Clerk JWT verified in _shared/clerkAuth.ts (deploy with
  * --no-verify-jwt; the gateway cannot check Clerk RS256 tokens). A user can

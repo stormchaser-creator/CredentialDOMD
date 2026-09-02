@@ -1,5 +1,5 @@
 import { DEFAULT_DATA } from "../constants/defaults";
-import { BASE_KEYS, scopedKey, purgeUserStorage } from "./storageScope";
+import { BASE_KEYS, scopedKey, purgeForSignOut } from "./storageScope";
 import { loadDeviceKeys, DEVICE_KEY_FIELDS } from "../lib/supabase";
 
 const ENV_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
@@ -115,9 +115,10 @@ export async function saveData(data, userId) {
 
 /**
  * Sign-out purge. Everything this user kept on the device (the file, the
- * private vault, the Assistant transcript and archives, the live timer)
- * goes, so the next person to sign in on a shared device inherits nothing.
+ * private vault, the Assistant transcript and archives, the live timer, the
+ * offline identity slot, the AI keys and lock code) goes, so the next person
+ * to sign in on a shared device inherits nothing.
  */
 export async function clearLocalData(userId) {
-  await purgeUserStorage(userId, { keepVault: false });
+  await purgeForSignOut(userId);
 }

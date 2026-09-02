@@ -12,6 +12,7 @@ import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import ScanReviewCard from "./ScanReviewCard";
 import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
+import { checkStorageQuota } from "../../utils/storageQuota";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -201,6 +202,10 @@ function DocumentsSection() {
     ]);
     const ALLOWED_EXT = /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp|pdf|docx?|xlsx?|csv|txt|rtf)$/i;
     const fileList = Array.from(files).slice(0, MAX_BATCH);
+    // The whole batch against the account's 2 GB line, before anything is
+    // read into memory or uploaded.
+    const quota = checkStorageQuota(data.documents, fileList);
+    if (!quota.ok) { setScanError(quota.message); return; }
     if (files.length > MAX_BATCH) {
       setScanError(`Only the first ${MAX_BATCH} files will be processed.`);
     }

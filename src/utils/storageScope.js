@@ -39,6 +39,16 @@ export const BASE_KEYS = {
 // sign-in after a wipe would purge again. It holds a timestamp, nothing else.
 export const WIPE_SEEN_KEY = "credentialdomd-wipe-seen";
 
+// AI keys and the portal-password lock code, one slot per user
+// (src/lib/supabase.js, src/utils/secretBox.js). Deliberately NOT in
+// BASE_KEYS: purgeUserStorage also runs on an involuntary sign-out (session
+// expiry, revocation from the Clerk dashboard), and a token timing out must
+// not take the physician's own AI key, or the lock code that is the only way
+// to read their encrypted portal passwords, with it. The explicit Sign out
+// button and Delete All My Data clear it, through purgeForSignOut() and
+// clearDeviceKeys().
+export const DEVICE_KEYS_BASE = "credentialdomd-keys";
+
 let activeUserId = null;
 
 export function setActiveUserId(id) { activeUserId = id || null; }
@@ -90,6 +100,30 @@ export async function purgeUserStorage(userId, { keepVault = false } = {}) {
     lsRemove(base, userId);
   }
   try { await window.storage?.remove?.(scopedKey(BASE_KEYS.data, userId)); } catch { /* unavailable */ }
+}
+
+/**
+ * The explicit Sign out purge. Everything purgeUserStorage covers, the vault
+ * included, plus the device-key slot. Nothing of this account stays on the
+ * device: the record set (license and DEA numbers included) is gone from
+ * localStorage, and the offline fallback, which needs the lastIdentity slot
+ * and the cached file, can never reopen as this user. Other accounts' keys
+ * on the same device are untouched. Same path as Delete All My Data.
+ */
+export async function purgeForSignOut(userId) {
+  if (!userId) return;
+  await purgeUserStorage(userId, { keepVault: false });
+  lsRemove(DEVICE_KEYS_BASE, userId);
+}
+
+/**
+ * Cloud writes queued on this device that have not landed yet
+ * (src/lib/supabase.js queuePendingOp). The sign-out purge destroys the
+ * queue, so the Sign out button warns when this is non-zero.
+ */
+export function pendingOpCount(userId) {
+  const ops = lsGetJSON(BASE_KEYS.pendingOps, userId);
+  return Array.isArray(ops) ? ops.length : 0;
 }
 
 // ─── One-time migration of the pre-namespace keys ─────────────

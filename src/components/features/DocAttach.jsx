@@ -8,6 +8,7 @@ import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import { mergeExtracted, findDuplicateDoc } from "../../utils/docPrefill";
 import { docMime } from "../../utils/inboxDocs";
 import { docAttachedLabel, fmtBytes, docBytes } from "../../utils/docLabel";
+import { checkStorageQuota } from "../../utils/storageQuota";
 
 /**
  * DocAttach — the ONE way to attach + scan documents from inside any
@@ -93,6 +94,11 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
   }, [aiOn, data.settings, setForm, analyzer, textAnalyzer]);
 
   const handleFiles = useCallback(async (files) => {
+    // The account's 2 GB line, counting files already staged on this form
+    // (a stored copy picked from Files is not new bytes).
+    const staged = (attachedDocs || []).filter((d) => !d.existingId);
+    const quota = checkStorageQuota(data.documents, [...staged, ...Array.from(files)]);
+    if (!quota.ok) { setIsError(true); setMsg(quota.message); return; }
     for (const file of Array.from(files)) {
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -130,7 +136,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
         : " This file was already in Files, so it is linked here instead of uploaded again.";
       await readIntoForm({ name: file.name, type: file.type, dataUrl, file }, dupNote);
     }
-  }, [data.documents, setAttachedDocs, readIntoForm]);
+  }, [data.documents, attachedDocs, setAttachedDocs, readIntoForm]);
 
   // Pick a document that is already in Files: same read, same fill, and an
   // unlinked stored file is linked to this record on save. One that is

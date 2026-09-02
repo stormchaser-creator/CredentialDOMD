@@ -4,7 +4,7 @@ import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
-import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage, lsGet, lsSet, WIPE_SEEN_KEY } from "../utils/storageScope";
+import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage, lsGet, lsSet, WIPE_SEEN_KEY, pendingOpCount } from "../utils/storageScope";
 import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
 import { vaultCount } from "../utils/privateVault";
@@ -25,7 +25,6 @@ import {
   recordTombstone,
   listTombstones,
   replayPendingOps,
-  clearDeviceKeys,
   COLLECTION_KEYS,
 } from "../lib/supabase";
 
@@ -388,20 +387,34 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (n > 0 && typeof window !== "undefined" && !window.confirm(
       `Signing out erases the ${n} private note${n === 1 ? "" : "s"} kept only on this device. Export them first under Data & Backup if you need them. Sign out anyway?`
     )) return;
+    // The purge also destroys the unsynced-edits queue, and those edits exist
+    // nowhere else yet. Offline, reconnecting first would sync them; online,
+    // they are writes the cloud refused and a reload retries them. Say so
+    // before the point of no return, on both paths.
+    const pending = pendingOpCount(ownerId);
+    if (pending > 0 && typeof window !== "undefined" && !window.confirm(
+      offlineMode
+        ? `You have ${pending} change${pending === 1 ? "" : "s"} made offline that have not synced yet. Signing out now discards them permanently. Reconnect first to keep them. Sign out anyway?`
+        : `You have ${pending} change${pending === 1 ? "" : "s"} that have not reached the cloud yet. Signing out now discards them permanently. Reload the app first to retry them. Sign out anyway?`
+    )) return;
+    // Past the point of no return. Drop the in-memory file and its owner
+    // BEFORE the purge, so the debounced cache write cannot put the record
+    // set back under this account's key, then purge everything this account
+    // kept on the device: the file (license and DEA numbers included), the
+    // private vault, the Assistant transcript and archives, the live timer,
+    // the offline identity slot, and the device-key slot (AI keys and the
+    // portal password lock code). The next person on this device inherits
+    // nothing, and the offline fallback can never reopen as this account.
+    // The purge runs before Clerk ends the session on purpose: afterSignOutUrl
+    // navigates the page away, and what happens after that await must not
+    // be what keeps a shared workstation clean.
+    userIdRef.current = null;
+    dataOwnerRef.current = null;
+    setData(DEFAULT_DATA);
+    setLoaded(false);
+    await clearLocalData(ownerId);
     if (offlineMode) {
-      // Offline, the purge also destroys the unsynced-edits queue, and those
-      // edits exist nowhere else yet. Signing out online first would sync
-      // them; say so before the point of no return.
-      let pending = 0;
-      try { pending = JSON.parse(localStorage.getItem(`credentialdomd-pending-ops:${ownerId}`) || "[]").length; } catch { /* unreadable = 0 */ }
-      if (pending > 0 && typeof window !== "undefined" && !window.confirm(
-        `You have ${pending} change${pending === 1 ? "" : "s"} made offline that have not synced yet. Signing out now discards them permanently. Reconnect first to keep them. Sign out anyway?`
-      )) return;
-      // No Clerk session to end. Purge this account's device copy (the
-      // lastIdentity slot goes with it, so the offline fallback can never
-      // reopen as this user) then reload into the normal boot path.
-      await clearLocalData(ownerId);
-      clearDeviceKeys(ownerId);
+      // No Clerk session to end; reload into the normal boot path.
       window.location.reload();
       return;
     }
@@ -410,17 +423,6 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     } catch (err) {
       console.warn("Sign out failed:", err.message);
     }
-    userIdRef.current = null;
-    dataOwnerRef.current = null;
-    setData(DEFAULT_DATA);
-    setLoaded(false);
-    // Purge everything this account kept on the device: the file (patient
-    // identifiers included), the private vault, the Assistant transcript
-    // and archives, the live timer. The next account on this device must
-    // never inherit any of it. The device-key slot (AI keys + the portal
-    // password lock code) lives outside the namespaced set, so clear it too.
-    await clearLocalData(ownerId);
-    clearDeviceKeys(ownerId);
   }, [clerkSignOut, user?.id, offlineMode]);
 
   // Persist to localStorage on change (debounced backup), under the key of

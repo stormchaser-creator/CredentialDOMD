@@ -24,7 +24,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const lib = await import(path.join(here, "..", "supabase", "functions", "build-backup", "lib.ts"));
 
 const {
-  SECTIONS, PART_CAP_BYTES, VAULT_NOTE,
+  SECTIONS, PART_CAP_BYTES, VAULT_NOTE, BACKUP_PAGE_URL, LINK_TTL_SECONDS,
   backupStoragePath, backupSubject, buildRecordIndex, countRecords,
   dataEntries, documentIndexCsv, firstName, planDocumentParts,
   prepareDocuments, renderEmailText, renderReadme,
@@ -241,21 +241,28 @@ check("part names say which part they are", () => {
   assert.equal(backupStoragePath(AUTH_USER_ID, PERIOD, 1, 1), `${AUTH_USER_ID}/${PERIOD}/CredentialDOMD-backup-${PERIOD}.zip`);
 });
 
-check("the email says what is inside, when the link dies, and what is missing", () => {
+check("the email says what is inside, where to get it, and what is missing, with no link to the file", () => {
   const text = renderEmailText({
     greetingName: firstName(profile.name, profile.email),
     period: PERIOD, recordCount, sectionCount: 3,
     documentCount: 3, documentBytes: 135 * 1024 * 1024,
-    links: built.map((b, i) => ({ part: i + 1, parts, url: `https://example.test/${i + 1}`, bytes: b.buf.length })),
-    expiresAt: "2026-09-21T13:00:00.000Z",
+    builtParts: built.length, archiveBytes: built.reduce((n, b) => n + b.buf.length, 0),
     skippedCount: 2,
   });
   assert.ok(text.startsWith("Test,"), `greeting is wrong: ${text.slice(0, 20)}`);
-  assert.ok(text.includes("September 21, 2026"), "no expiry date");
-  assert.ok(text.includes("More > Data and Backup"), "no path to a fresh link");
+  assert.ok(text.includes(BACKUP_PAGE_URL), "no link to the Data and Backup page");
+  assert.ok(text.includes("More > Data and Backup"), "no path to the page");
+  assert.ok(text.includes("15 minutes"), "does not say how long a download link lives");
+  // The archive holds every scan the physician uploaded. The only URL the
+  // email may carry is the app page; a signed storage link is the leak the
+  // 2026-09-02 plan closes (section 6, gap 2).
+  const urls = text.match(/https?:\/\/\S+/g) || [];
+  assert.ok(urls.length > 0 && urls.every((u) => u === BACKUP_PAGE_URL), `unexpected link in the email: ${urls.join(" ")}`);
+  assert.ok(!/token=|\/storage\/v1\/|\.zip/i.test(text), "the email points at the file");
   assert.ok(text.includes(VAULT_NOTE), "the vault sentence is missing");
   assert.ok(text.includes("turn Monthly backup off"), "no way to opt out");
-  assert.ok(/Part 1 of 2/.test(text) && /Part 2 of 2/.test(text), "the parts are not both linked");
+  assert.ok(text.includes(`${built.length} files`), "the file count is missing");
+  assert.equal(LINK_TTL_SECONDS, 15 * 60, "signed links must live 15 minutes");
   assert.equal(backupSubject(PERIOD), "Your CredentialDOMD backup for August 2026");
 });
 
@@ -263,14 +270,12 @@ check("a part that failed to build is not passed off as complete", () => {
   const whole = renderEmailText({
     greetingName: "Test", period: PERIOD, recordCount, sectionCount: 3,
     documentCount: 3, documentBytes: 1024,
-    links: [{ part: 1, parts: 2, url: "https://example.test/1", bytes: 10 }],
-    expiresAt: "2026-09-21T13:00:00.000Z", skippedCount: 0, missingParts: 0,
+    builtParts: 1, archiveBytes: 10, skippedCount: 0, missingParts: 0,
   });
   const partial = renderEmailText({
     greetingName: "Test", period: PERIOD, recordCount, sectionCount: 3,
     documentCount: 3, documentBytes: 1024,
-    links: [{ part: 1, parts: 2, url: "https://example.test/1", bytes: 10 }],
-    expiresAt: "2026-09-21T13:00:00.000Z", skippedCount: 0, missingParts: 1,
+    builtParts: 1, archiveBytes: 10, skippedCount: 0, missingParts: 1,
   });
   assert.ok(whole.includes("Your complete CredentialDOMD backup"), "the whole-archive wording changed");
   assert.ok(!partial.includes("Your complete CredentialDOMD backup"), "an incomplete archive is still called complete");
@@ -280,8 +285,7 @@ check("a part that failed to build is not passed off as complete", () => {
 check("no em dash in anything a physician reads", async () => {
   const emailText = renderEmailText({
     greetingName: "Test", period: PERIOD, recordCount, sectionCount: 3,
-    documentCount: 3, documentBytes: 1024, links: [{ part: 1, parts: 1, url: "https://example.test/1", bytes: 10 }],
-    expiresAt: "2026-09-21T13:00:00.000Z", skippedCount: 0,
+    documentCount: 3, documentBytes: 1024, builtParts: 1, archiveBytes: 10, skippedCount: 0,
   });
   const readme = await one.zip.file("README.html").async("string");
   for (const [what, text] of [["email", emailText], ["README.html", readme], ["subject", backupSubject(PERIOD)]]) {

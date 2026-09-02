@@ -10,6 +10,7 @@ import { supabase } from "../../lib/supabase";
 import Modal from "../shared/Modal";
 import EmailPacketModal from "./EmailPacketModal";
 import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../../utils/storageScope";
+import { checkStorageQuota } from "../../utils/storageQuota";
 
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
@@ -276,8 +277,12 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     const saveSourceDoc = (linkedTo) => {
       const att = msg.sourceAttach;
       if (!att?.dataUrl || msg.sourceAttachSaved || savedAttachRef.current.has(msgId)) return;
-      savedAttachRef.current.add(msgId);
       const b64 = att.dataUrl.split(",")[1] || "";
+      // The record is still created; only the file stays out of Documents
+      // when the account is at its 2 GB line.
+      const quota = checkStorageQuota(data.documents, [{ name: att.name || "attachment", size: Math.round(b64.length * 0.75) }]);
+      if (!quota.ok) { setErr(quota.message); return; }
+      savedAttachRef.current.add(msgId);
       addItem("documents", {
         id: generateId(), name: att.name || "attachment",
         type: att.dataUrl.slice(5, att.dataUrl.indexOf(";")),

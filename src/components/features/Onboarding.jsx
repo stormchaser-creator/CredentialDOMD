@@ -5,6 +5,7 @@ import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId } from "../../utils/helpers";
 import { lookupNPI, findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
 import { splitName, mergeNpiLicenses } from "../../utils/npiImport";
+import { checkStorageQuota } from "../../utils/storageQuota";
 import { AsclepiusIcon } from "../shared/Icons";
 
 /**
@@ -121,6 +122,8 @@ export default function Onboarding({ onFinish }) {
 
   const onFiles = async (files) => {
     let n = 0;
+    const quota = checkStorageQuota(data.documents, Array.from(files || []));
+    if (!quota.ok) { setDocMsg(quota.message); return; }
     for (const file of Array.from(files || [])) {
       try {
         const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });

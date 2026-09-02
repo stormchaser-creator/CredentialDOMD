@@ -6,6 +6,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber } from "../../../utils/helpers";
 import { invoicePdfFile, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
 import { money } from "../../../utils/invoiceCover";
+import { checkStorageQuota } from "../../../utils/storageQuota";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
 import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCategories";
 
@@ -48,6 +49,11 @@ function Expenses() {
   const openEdit = (exp) => { setEditing(exp.id); setPendingFiles([]); setForm({ ...exp }); };
 
   const stageFiles = async (files) => {
+    // The account's 2 GB line, counting receipts already staged on this
+    // expense (each carries only its data URL, which the helper measures).
+    const staged = pendingFiles.map((f) => ({ name: f.name, data: f.dataUrl }));
+    const quota = checkStorageQuota(data.documents, [...staged, ...Array.from(files)]);
+    if (!quota.ok) { showNotice(quota.message); return; }
     for (const f of Array.from(files)) {
       if (!f.type.startsWith("image/") && f.type !== "application/pdf") continue;
       const dataUrl = await new Promise((res, rej) => {
@@ -312,6 +318,12 @@ function Expenses() {
         </div>
         <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { stageFiles(e.target.files); e.target.value = ""; }} />
         <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={e => { stageFiles(e.target.files); e.target.value = ""; }} />
+
+        {/* The page-level notice sits behind this overlay, so a refusal from
+            the quota check or the save validation is shown here as well. */}
+        {notice && (
+          <div style={{ padding: "11px 14px", borderRadius: 12, marginTop: 12, backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`, fontSize: 13, color: T.text }}>{notice}</div>
+        )}
 
         <button onClick={saveExpense} style={{
           width: "100%", marginTop: 14, padding: "13px", borderRadius: 12, border: "none",

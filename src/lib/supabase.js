@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { STORAGE_KEY } from "../constants/defaults";
-import { BASE_KEYS, getActiveUserId } from "../utils/storageScope";
+import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId } from "../utils/storageScope";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -194,7 +194,7 @@ function profileRowToSettings(row) {
 // The CallSync calendar link (a per-user token) and the agreement it syncs
 // onto ride the same slot: secrets stay on the device.
 export const DEVICE_KEY_FIELDS = ["apiKey", "anthropicApiKey", "callsyncFeedUrl", "callsyncContractId"];
-const deviceKeySlot = (authUserId) => `credentialdomd-keys:${authUserId}`;
+const deviceKeySlot = (authUserId) => `${DEVICE_KEYS_BASE}:${authUserId}`;
 
 export function loadDeviceKeys(authUserId) {
   if (!authUserId) return {};
