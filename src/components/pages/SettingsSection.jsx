@@ -13,7 +13,8 @@ import {
 } from "../../constants/boardRequirements";
 import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, composeText } from "../../utils/notifications";
-import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus } from "../../utils/aiClient";
+import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, useAnthropicAvailable } from "../../utils/aiClient";
+import { CODER_MODELS } from "../../utils/cptCoder";
 
 function SettingsSection() {
   const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate, plan, setMockPlan, isDevMode } = useApp();
@@ -30,6 +31,8 @@ function SettingsSection() {
   // Shared AI (server-held Gemini key, metered per user). Re-checked when
   // Settings opens so the "N of 200 calls used today" line is current.
   const sharedAi = useSharedAiStatus();
+  const opusOn = useAnthropicAvailable(s);
+  const opusLine = describeOpusStatus(s);
   useEffect(() => { fetchSharedAiStatus({ force: true }); }, []);
 
   // Search for the user's NPI by name
@@ -336,14 +339,36 @@ function SettingsSection() {
           <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, backgroundColor: (s.apiKey || sharedAi.shared) ? T.success : T.warning }} />
           <span>{describeAiStatus(s)}</span>
         </div>
+        {opusLine && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, marginBottom: 14, marginTop: -6,
+            backgroundColor: opusOn ? T.successDim : T.warningDim,
+            border: `1px solid ${opusOn ? T.success : T.warning}`,
+            fontSize: 13, fontWeight: 600, color: T.text,
+          }}>
+            <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, backgroundColor: opusOn ? T.success : T.warning }} />
+            <span>{opusLine}</span>
+          </div>
+        )}
+        <Field label="Code RVUs with" hint={(s.coderModel || "gemini") === "opus"
+          ? (opusOn
+            ? "The RVU coder sends each dictation to Claude Opus with the same rulebook and catalog. Each dictation counts toward the Opus daily limit; if Opus is unavailable, Gemini codes it and the review says so."
+            : "Claude Opus is not enabled for this account yet, so Gemini codes each dictation until it is (the review says so). Vera and the coder both switch to Opus automatically once it is on.")
+          : "Gemini codes each dictation: fast, included, and the path that was proven on the harness. Pick Claude Opus for the strongest read of a complex operative note."}>
+          <select value={s.coderModel || "gemini"} onChange={e => update("coderModel", e.target.value)} style={{ ...iS, appearance: "auto" }}>
+            {CODER_MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </Field>
         <Field label="Your own Gemini key (optional)" hint={s.apiKey
           ? "Saved \u2713 on this device only. Your calls run on this key instead of the shared one, so the shared daily limit does not apply. Keys are not synced to your account; enter it again on any other device you use."
           : "AI is on without this. Add your own key (free at aistudio.google.com/apikey) to lift the shared daily limit; calls then bill to your key. Saves as you type, stored on this device only and never synced to your account."}>
           <input type="password" value={s.apiKey || ""} onChange={e => update("apiKey", e.target.value)} style={iS} placeholder="AIza... or AQ...." />
         </Field>
         <Field label="Your own Anthropic key (optional)" hint={s.anthropicApiKey
-          ? "Saved \u2713 on this device only. Vera now thinks on Claude Opus; document scanning still uses Gemini. Not synced, so enter it again on other devices."
-          : "Give Vera a stronger mind: with an Anthropic key (console.anthropic.com) she runs on Claude Opus, billed to your key. Stored on this device only, never synced to your account. Leave blank to keep the Gemini brain."}>
+          ? "Saved \u2713 on this device only. Vera and the Opus coder run on this key instead of the shared one, so the Opus daily limit does not apply; document scanning still uses Gemini. Not synced, so enter it again on other devices."
+          : opusOn
+            ? "Optional: a shared Opus key is available on this account, so Vera already thinks on Claude Opus with nothing pasted here. Add your own key (console.anthropic.com) to lift the Opus daily limit; calls then bill to your key. Stored on this device only, never synced to your account."
+            : "Optional. Paste your own key (console.anthropic.com) and Vera and the Opus coder run on Claude Opus billed to you. Stored on this device only, never synced to your account."}>
           <input type="password" value={s.anthropicApiKey || ""} onChange={e => update("anthropicApiKey", e.target.value)} style={iS} placeholder="sk-ant-..." />
         </Field>
       </div>

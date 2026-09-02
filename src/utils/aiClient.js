@@ -1,7 +1,8 @@
 /**
- * One door for every Gemini call the app makes.
+ * One door for every AI call the app makes: Gemini for every feature, and
+ * Claude Opus for Vera (and the RVU coder when the physician picks it).
  *
- * Two routes, chosen per call:
+ * Gemini, two routes chosen per call:
  *  1. The user's OWN key (settings.apiKey, device-local): straight to
  *     generativelanguage.googleapis.com exactly as before. Their key, their
  *     bill, no shared quota.
@@ -10,18 +11,28 @@
  *     per-user daily cap, then forwards the same JSON body and returns
  *     Gemini's status + JSON verbatim. From the user's side AI is simply on.
  *
+ * Opus, the same two routes:
+ *  1. The user's OWN Anthropic key (settings.anthropicApiKey, device-local):
+ *     the SDK talks to api.anthropic.com directly, as it always has.
+ *  2. No own key: the SDK is pointed at ai-proxy (baseURL), so it posts to
+ *     <PROXY_URL>/v1/messages with the Clerk JWT. The shared Anthropic key
+ *     stays on the server; the proxy meters Opus on its own daily cap.
+ *
  * geminiCall() returns a Response-like { ok, status, json() } so the call
  * sites keep their existing parsing. Proxy-side refusals (quota, key not
  * configured, beta gate, signed out) additionally carry `proxyError` and a
  * ready user-facing `message`, so a util can surface the real reason instead
- * of a generic "error 429".
+ * of a generic "error 429". anthropicErrorMessage() does the same job for a
+ * failed SDK call.
  *
- * Shared-AI status (is the shared key on? how many calls used today?) is
+ * Shared-AI status (are the shared keys on? how many calls used today?) is
  * fetched once per page load after sign-in and cached in module state plus
- * localStorage, so `aiAvailable(settings)` is synchronous for gating.
+ * localStorage, so `aiAvailable(settings)` / `anthropicAvailable(settings)`
+ * are synchronous for gating.
  *
  * Kept free of app-context/JSX imports: cmeImport.js pulls this in and is
- * unit-tested under plain node.
+ * unit-tested under plain node. The Anthropic SDK is imported on demand so
+ * Gemini-only users never download that chunk.
  */
 
 import { useSyncExternalStore } from "react";
@@ -38,13 +49,26 @@ export const SHARED_DAILY_LIMIT = 200;
 // User-facing text for the proxy's own refusals. Physicians read these;
 // keep them plain and tell them the one thing that fixes it.
 export const quotaMessage = (limit) => `Shared AI quota reached for today (${limit || SHARED_DAILY_LIMIT} calls). Add your own Gemini key in Settings to keep going.`;
+export const opusQuotaMessage = (limit) => `Shared Opus quota reached for today (${limit || sharedAiStatus?.anthropicLimit || SHARED_DAILY_LIMIT} calls). Add your own Anthropic key in Settings to keep going.`;
 export const AI_MESSAGES = {
   get quota() { return quotaMessage(sharedAiStatus?.limit); },
+  get opus_quota() { return opusQuotaMessage(sharedAiStatus?.anthropicLimit); },
   shared_key_not_configured: "AI is not switched on yet: the shared key is not configured.",
+  opus_not_enabled: "Opus is not enabled on this account yet.",
   forbidden: "AI is available once your beta access is active.",
   unauthorized: "Sign in to use AI features.",
   offline: "AI is not reachable right now. Check your connection and try again.",
 };
+
+/** Thrown by anthropicClientFor() when no Opus route exists before any request is made. */
+export class AiProxyError extends Error {
+  constructor(status, proxyError, message) {
+    super(message);
+    this.name = "AiProxyError";
+    this.status = status;
+    this.proxyError = proxyError;
+  }
+}
 
 // ─── Clerk token ────────────────────────────────────────────
 // Same "supabase" JWT template the data layer uses (src/lib/supabase.js keeps
@@ -74,6 +98,10 @@ function readCachedStatus() {
       used: Number(parsed.used) || 0,
       limit: Number(parsed.limit) || SHARED_DAILY_LIMIT,
       reason: parsed.reason || null,
+      anthropicShared: !!parsed.anthropicShared,
+      anthropicUsed: Number(parsed.anthropicUsed) || 0,
+      anthropicLimit: Number(parsed.anthropicLimit) || Number(parsed.limit) || SHARED_DAILY_LIMIT,
+      unlimited: !!parsed.unlimited,
       checkedAt: Number(parsed.checkedAt) || 0,
     };
   } catch {
@@ -81,17 +109,25 @@ function readCachedStatus() {
   }
 }
 
-// { shared, used, limit, reason, checkedAt }
-//   shared   — the shared key is configured AND this user may use it
-//   reason   — why not, when shared is false: "pending" (beta gate),
-//              "not_configured", "signed_out", "offline", or null
+// { shared, used, limit, reason, anthropicShared, anthropicUsed, anthropicLimit, unlimited, checkedAt }
+//   shared: the shared Gemini key is configured AND this user may use it
+//   reason: why not, when shared is false. "pending" (beta gate),
+//     "not_configured", "signed_out", "offline", or null
+//   anthropicShared: the shared Anthropic key is configured AND this user may
+//     use it (false on a proxy deploy that predates Opus)
+//   anthropicUsed / anthropicLimit: Opus calls today vs the Opus daily cap
+//   unlimited: admins, no daily cap on either provider
 export let sharedAiStatus = readCachedStatus() || {
-  shared: false, used: 0, limit: SHARED_DAILY_LIMIT, reason: null, checkedAt: 0,
+  shared: false, used: 0, limit: SHARED_DAILY_LIMIT, reason: null,
+  anthropicShared: false, anthropicUsed: 0, anthropicLimit: SHARED_DAILY_LIMIT, unlimited: false,
+  checkedAt: 0,
 };
+
+const STATUS_KEYS = ["shared", "used", "limit", "reason", "anthropicShared", "anthropicUsed", "anthropicLimit", "unlimited"];
 
 function setSharedAiStatus(next) {
   const merged = { ...sharedAiStatus, ...next };
-  const changed = ["shared", "used", "limit", "reason"].some(k => merged[k] !== sharedAiStatus[k]);
+  const changed = STATUS_KEYS.some(k => merged[k] !== sharedAiStatus[k]);
   if (!changed) { sharedAiStatus.checkedAt = merged.checkedAt; return; } // same snapshot reference for React
   sharedAiStatus = merged;
   try {
@@ -108,16 +144,19 @@ let statusRetryTimer = null;
 let statusRetries = 0;
 
 /**
- * GET ai-proxy → { shared, used_today, limit }. Runs once per page load (the
- * first caller after sign-in wins; later callers get the cache) unless
- * `force` is set. Safe to call from anywhere; never throws.
+ * GET ai-proxy → { shared, used_today, limit, unlimited, anthropic_shared,
+ * anthropic_used_today, anthropic_limit }. The anthropic_* fields arrived
+ * with the Opus relay; an older deploy omits them and Opus simply reads as
+ * off. Runs once per page load (the first caller after sign-in wins; later
+ * callers get the cache) unless `force` is set. Safe to call from anywhere;
+ * never throws.
  */
 export async function fetchSharedAiStatus({ force = false } = {}) {
   if (statusInflight) return statusInflight;
   if (statusFetchedThisLoad && !force) return sharedAiStatus;
   statusInflight = (async () => {
     if (!PROXY_URL) {
-      setSharedAiStatus({ shared: false, reason: "not_configured", checkedAt: Date.now() });
+      setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
       statusFetchedThisLoad = true;
       return sharedAiStatus;
     }
@@ -142,19 +181,24 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
     if (res.ok) {
       let body = null;
       try { body = await res.json(); } catch { body = null; }
+      const limit = Number(body?.limit) || SHARED_DAILY_LIMIT;
       setSharedAiStatus({
         shared: !!body?.shared,
         used: Number(body?.used_today ?? body?.used) || 0,
-        limit: Number(body?.limit) || SHARED_DAILY_LIMIT,
+        limit,
         reason: body?.shared ? null : body?.configured === false ? "not_configured" : body?.allowed === false ? "pending" : "not_configured",
+        anthropicShared: !!body?.anthropic_shared,
+        anthropicUsed: Number(body?.anthropic_used_today) || 0,
+        anthropicLimit: Number(body?.anthropic_limit) || limit,
+        unlimited: !!body?.unlimited,
         checkedAt: Date.now(),
       });
     } else if (res.status === 403) {
-      setSharedAiStatus({ shared: false, reason: "pending", checkedAt: Date.now() });
+      setSharedAiStatus({ shared: false, anthropicShared: false, reason: "pending", checkedAt: Date.now() });
     } else if (res.status === 401) {
-      setSharedAiStatus({ shared: false, reason: "signed_out", checkedAt: Date.now() });
+      setSharedAiStatus({ shared: false, anthropicShared: false, reason: "signed_out", checkedAt: Date.now() });
     } else if (res.status === 503) {
-      setSharedAiStatus({ shared: false, reason: "not_configured", checkedAt: Date.now() });
+      setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
     } else {
       // Unknown server trouble (404 = function not deployed yet): keep whatever
       // we last knew rather than flipping features off on a hiccup.
@@ -181,7 +225,7 @@ function scheduleStatusRetry(delay = 2500) {
 export function resetSharedAiStatus() {
   statusFetchedThisLoad = false;
   statusRetries = 0;
-  setSharedAiStatus({ shared: false, used: 0, reason: null, checkedAt: 0 });
+  setSharedAiStatus({ shared: false, used: 0, reason: null, anthropicShared: false, anthropicUsed: 0, unlimited: false, checkedAt: 0 });
   try { if (typeof localStorage !== "undefined") localStorage.removeItem(SHARED_AI_STORAGE_KEY); } catch { /* ignore */ }
 }
 
@@ -202,6 +246,31 @@ export function usesSharedAi(settings) {
   return !settings?.apiKey && !!sharedAiStatus.shared;
 }
 
+// The shared Opus door is open: key loaded, account allowed, and today's cap
+// not yet hit (a 429 from the proxy sets used = limit so the next call
+// routes to Gemini without a wasted round trip).
+function sharedOpusOpen(s = sharedAiStatus) {
+  if (!s.anthropicShared) return false;
+  if (s.unlimited) return true;
+  return !(s.anthropicLimit && s.anthropicUsed >= s.anthropicLimit);
+}
+
+/**
+ * Is Claude Opus on for this user right now? True with an own Anthropic key
+ * (device-local settings.anthropicApiKey) or when the shared Anthropic key
+ * is on for their account. Same synchronous contract as aiAvailable().
+ */
+export function anthropicAvailable(settings) {
+  if (settings?.anthropicApiKey) return true;
+  if (!statusFetchedThisLoad && !statusInflight) fetchSharedAiStatus();
+  return sharedOpusOpen();
+}
+
+/** True when an Opus call will ride the shared key (no own Anthropic key). */
+export function usesSharedOpus(settings) {
+  return !settings?.anthropicApiKey && sharedOpusOpen();
+}
+
 /**
  * Plain-language one-liner for the AI status area in Settings and gates.
  * "Shared AI: on, 12 of 200 calls used today" and friends.
@@ -215,6 +284,22 @@ export function describeAiStatus(settings) {
   if (s.reason === "signed_out") return "Shared AI: sign in to use it.";
   if (s.reason === "offline") return "Shared AI: could not be reached. Check your connection.";
   return "Shared AI: checking...";
+}
+
+/**
+ * The Opus counterpart: "Shared Opus: on, 3 of 50 calls used today". Null
+ * when the Gemini line already says why AI is off for this account.
+ */
+export function describeOpusStatus(settings) {
+  if (settings?.anthropicApiKey) return "Your own Anthropic key is in use on this device. The shared Opus daily limit does not apply.";
+  const s = sharedAiStatus;
+  if (s.anthropicShared) {
+    if (s.unlimited) return `Shared Opus: on, ${s.anthropicUsed} call${s.anthropicUsed === 1 ? "" : "s"} today (no cap on admin accounts)`;
+    if (s.anthropicLimit && s.anthropicUsed >= s.anthropicLimit) return `Shared Opus: daily limit reached (${s.anthropicLimit} calls). Vera answers on Gemini until tomorrow.`;
+    return `Shared Opus: on, ${s.anthropicUsed} of ${s.anthropicLimit} calls used today`;
+  }
+  if (s.shared) return "Shared Opus: not enabled on this account yet. Vera runs on Gemini.";
+  return null;
 }
 
 // ─── React hooks ────────────────────────────────────────────
@@ -239,7 +324,13 @@ export function useAiAvailable(settings) {
   return !!settings?.apiKey || !!status.shared;
 }
 
-// ─── The call ───────────────────────────────────────────────
+/** Live boolean: Claude Opus is on for this user (own Anthropic key or shared key). */
+export function useAnthropicAvailable(settings) {
+  const status = useSharedAiStatus();
+  return !!settings?.anthropicApiKey || sharedOpusOpen(status);
+}
+
+// ─── The Gemini call ────────────────────────────────────────
 function wrapResponse(res, { proxyError = null, message = null, parsed } = {}) {
   let cached = parsed !== undefined ? Promise.resolve(parsed) : null;
   return {
@@ -336,4 +427,105 @@ export async function geminiCall(path, body, apiKey, { signal } = {}) {
  */
 export function proxyErrorMessage(res) {
   return res?.proxyError ? (res.message || AI_MESSAGES[res.proxyError] || null) : null;
+}
+
+// ─── The Opus client ────────────────────────────────────────
+// Loaded on demand so Gemini-only users never download the Claude SDK chunk.
+let AnthropicSDK = null;
+export async function loadAnthropicSdk() {
+  if (!AnthropicSDK) AnthropicSDK = (await import("@anthropic-ai/sdk")).default;
+  return AnthropicSDK;
+}
+/** The SDK class once a client has been built (for instanceof checks); null before. */
+export const anthropicSdk = () => AnthropicSDK;
+
+// The proxy answers { error: "<string>" } for its own refusals; Anthropic's
+// forwarded errors carry { type: "error", error: {…} }. Same rule as Gemini.
+function proxyCodeOf(body) {
+  return typeof body?.error === "string" ? body.error : null;
+}
+
+// The proxy's own refusals, noted in the status cache as they happen so the
+// next call routes straight to Gemini and Settings reads true.
+function noteOpusRefusal(status, body) {
+  const code = proxyCodeOf(body);
+  if (!code) return;
+  if (status === 429 && code === "quota") {
+    setSharedAiStatus({
+      anthropicUsed: Number(body.used) || sharedAiStatus.anthropicLimit || SHARED_DAILY_LIMIT,
+      anthropicLimit: Number(body.limit) || sharedAiStatus.anthropicLimit,
+    });
+  } else if (status === 503) {
+    setSharedAiStatus({ anthropicShared: false });
+  } else if (status === 403) {
+    setSharedAiStatus({ shared: false, anthropicShared: false, reason: "pending" });
+  }
+}
+
+// fetch for the shared route: the SDK does the request; this keeps the local
+// Opus counter honest between status refreshes and records refusals.
+async function sharedOpusFetch(url, init) {
+  const res = await globalThis.fetch(url, init);
+  if (res.ok) {
+    if (sharedAiStatus.anthropicShared) setSharedAiStatus({ anthropicUsed: sharedAiStatus.anthropicUsed + 1 });
+  } else if (res.status === 429 || res.status === 503 || res.status === 403) {
+    let body = null;
+    try { body = await res.clone().json(); } catch { body = null; }
+    noteOpusRefusal(res.status, body);
+  }
+  return res;
+}
+
+/**
+ * A configured @anthropic-ai/sdk client for this user.
+ *   own key: direct to api.anthropic.com, exactly the construction Vera
+ *     has always used.
+ *   no key: baseURL = ai-proxy, so the SDK posts to <PROXY_URL>/v1/messages
+ *     with the Clerk JWT. The x-api-key placeholder is ignored by the
+ *     proxy; the shared key never reaches the browser.
+ * Throws AiProxyError (with a user-facing message) when neither route exists.
+ * The proxy is the judge of whether the shared key is on: the status cache
+ * only decides routing, never blocks a call.
+ */
+export async function anthropicClientFor(settings) {
+  const Anthropic = await loadAnthropicSdk();
+  const ownKey = settings?.anthropicApiKey;
+  if (ownKey) {
+    return new Anthropic({
+      apiKey: ownKey,
+      dangerouslyAllowBrowser: true, // the key is the user's own, entered by them
+      timeout: 120000,
+      maxRetries: 1,
+    });
+  }
+  if (!PROXY_URL) throw new AiProxyError(503, "opus_not_enabled", AI_MESSAGES.opus_not_enabled);
+  const token = await getClerkToken();
+  if (!token) throw new AiProxyError(401, "unauthorized", AI_MESSAGES.unauthorized);
+  return new Anthropic({
+    baseURL: PROXY_URL,
+    apiKey: "shared",
+    defaultHeaders: { Authorization: `Bearer ${token}` },
+    dangerouslyAllowBrowser: true, // nothing secret in the browser: the proxy holds the key
+    maxRetries: 1,
+    timeout: 120000,
+    fetch: sharedOpusFetch,
+  });
+}
+
+/**
+ * The message to show for a failed Opus call when the proxy (not Anthropic)
+ * refused it, or no route existed; null otherwise so the caller's own error
+ * handling applies. The SDK keeps the parsed response body on `err.error`.
+ */
+export function anthropicErrorMessage(err) {
+  if (err instanceof AiProxyError) return err.message;
+  const status = err?.status;
+  const body = err?.error;
+  const code = proxyCodeOf(body);
+  if (!code) return null;
+  if (status === 429 && code === "quota") return opusQuotaMessage(Number(body.limit) || sharedAiStatus.anthropicLimit);
+  if (status === 503) return AI_MESSAGES.opus_not_enabled;
+  if (status === 403) return AI_MESSAGES.forbidden;
+  if (status === 401) return AI_MESSAGES.unauthorized;
+  return null;
 }

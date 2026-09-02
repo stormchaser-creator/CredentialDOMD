@@ -475,10 +475,13 @@ export function postProcess(parsed, { text = "", catalog = CPT_BY_CODE } = {}) {
     return 0;
   });
 
-  for (const it of items) delete it.globalDays;
+  // Model prose reaches the physician through why and questions. House rule:
+  // no em dashes in anything a physician reads, whichever model wrote it.
+  const deDash = (s) => String(s || "").replace(/\s*[—–]\s*/g, ", ").replace(/, ,/g, ",");
+  for (const it of items) { delete it.globalDays; if (it.why) it.why = deDash(it.why); }
   return {
     items,
-    questions: [...new Set(questions)],
+    questions: [...new Set(questions.map(deDash))],
     confidence: parsed?.confidence || "medium",
     dropped,
   };

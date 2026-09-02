@@ -132,7 +132,10 @@ function RVULog() {
     setErr(null);
     setCoding(true);
     try {
-      const result = await codeFromText(text, data.settings.apiKey);
+      // The whole settings object, not just the Gemini key: the coder reads
+      // coderModel (Gemini or Opus) and anthropicApiKey from it. Passing only
+      // apiKey silently pinned every dictation to Gemini.
+      const result = await codeFromText(text, data.settings);
       // "for yesterday…" in the dictation sets the entry date
       const spoken = parseDictatedDate(text);
       if (spoken) setDate(spoken);
@@ -141,7 +144,7 @@ function RVULog() {
       setErr(e2.message);
     }
     setCoding(false);
-  }, [text, data.settings.apiKey]);
+  }, [text, data.settings]);
 
   const setUnits = (idx, delta) => setReview(r => ({
     ...r,

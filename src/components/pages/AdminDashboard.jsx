@@ -1089,14 +1089,21 @@ async function callFn(name, { method = "POST", body } = {}) {
   }
 }
 
+// Which shared key an ai_usage row rode: Gemini paths are models/<name>:...,
+// Opus rows are the relayed Anthropic path (v1/messages).
+const isOpusPath = (path) => !!path && !/^models\//.test(path);
+
 /**
- * AI: the shared Gemini key and who is using it. New accounts get AI with
- * zero setup because every call goes through ai-proxy with this key; a
- * user's own key (Settings > AI, device-local) still bypasses it.
+ * AI: the shared keys and who is using them. New accounts get AI with
+ * zero setup because every call goes through ai-proxy with these keys; a
+ * user's own key (Settings > AI, device-local) still bypasses them.
+ * The Gemini key is pasted here; the Anthropic key is loaded server-side
+ * by the operator (app_secrets.anthropic_shared_key), so this panel only
+ * reports it.
  */
 function AiPanel({ users, ownKey, T }) {
   const [status, setStatus] = useState(null);      // { configured, last4, updated_at }
-  const [quota, setQuota] = useState(null);        // { shared, used_today, limit } from ai-proxy GET
+  const [quota, setQuota] = useState(null);        // { shared, used_today, limit, anthropic_shared, anthropic_used_today, anthropic_limit } from ai-proxy GET
   const [usage, setUsage] = useState([]);          // today's ai_usage rows (UTC day)
   const [keyInput, setKeyInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1109,7 +1116,7 @@ function AiPanel({ users, ownKey, T }) {
     const [k, q, u] = await Promise.all([
       callFn("admin-shared-key", { method: "GET" }),
       callFn("ai-proxy", { method: "GET" }),
-      supabase.from("ai_usage").select("user_id, ok, status, prompt_chars, created_at").gte("created_at", dayStartIso()).order("created_at", { ascending: false }).limit(5000),
+      supabase.from("ai_usage").select("user_id, path, ok, status, prompt_chars, created_at").gte("created_at", dayStartIso()).order("created_at", { ascending: false }).limit(5000),
     ]);
     const errs = [];
     if (k.ok) setStatus(k.data); else errs.push(`Key status: ${k.data?.error || `HTTP ${k.status}`} (is admin-shared-key deployed?)`);
@@ -1144,21 +1151,28 @@ function AiPanel({ users, ownKey, T }) {
     else setMsg(`Could not remove: ${r.data?.error || `HTTP ${r.status}`}`);
   };
 
-  // Today's usage rolled up per account, joined to the profiles directory already loaded.
+  // Today's usage rolled up per account and per provider, joined to the
+  // profiles directory already loaded.
   const byUser = {};
   for (const r of usage) {
     const k = r.user_id || "unknown";
-    const b = byUser[k] || (byUser[k] = { user_id: r.user_id, calls: 0, ok: 0, failed: 0, chars: 0, last: null });
+    const b = byUser[k] || (byUser[k] = { user_id: r.user_id, calls: 0, gemini: 0, opus: 0, ok: 0, failed: 0, chars: 0, last: null });
     b.calls += 1;
+    if (isOpusPath(r.path)) b.opus += 1; else b.gemini += 1;
     if (r.ok) b.ok += 1; else b.failed += 1;
     b.chars += r.prompt_chars || 0;
     if (!b.last || r.created_at > b.last) b.last = r.created_at;
   }
   const rows = Object.values(byUser).sort((a, b) => b.calls - a.calls);
   const who = (id) => { const u = users.find(x => x.id === id); return u ? (u.name || u.email || "account") : (id ? "deleted account" : "unknown"); };
+  const geminiRows = usage.filter(r => !isOpusPath(r.path));
+  const opusRows = usage.filter(r => isOpusPath(r.path));
   const totalCalls = usage.length;
-  const totalFailed = usage.filter(r => !r.ok).length;
   const limit = quota?.limit ?? 200;
+  // An older proxy deploy has no anthropic_* fields: read as "not reported".
+  const opusReported = quota != null && "anthropic_shared" in quota;
+  const opusOn = !!(quota?.anthropic_configured ?? quota?.anthropic_shared);
+  const opusLimit = quota?.anthropic_limit ?? null;
 
   const card = { backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 10 };
   const btn = (label, onClick, { primary, danger, disabled } = {}) => (
@@ -1194,6 +1208,22 @@ function AiPanel({ users, ownKey, T }) {
         </div>
       </div>
 
+      <div style={{ ...card, border: `2px solid ${opusOn ? "#10b981" : T.border}` }}>
+        <div style={{ fontSize: 11, color: T.textMuted }}>Shared Anthropic key (Claude Opus)</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: opusOn ? "#10b981" : T.text }}>
+          {quota == null ? "Checking..." : !opusReported ? "Not reported" : opusOn ? "On" : "Not loaded"}
+        </div>
+        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2, lineHeight: 1.5 }}>
+          {quota == null
+            ? "Asking ai-proxy."
+            : !opusReported
+              ? "This ai-proxy deploy predates the Opus relay; redeploy it to see the Anthropic key here."
+              : opusOn
+                ? `Every active account has Vera on Claude Opus with nothing pasted; the RVU coder uses it when a user picks Opus in Settings > AI. Loaded server-side by the operator (app_secrets.anthropic_shared_key); it is never sent to a browser and there is no paste box for it here. ${opusLimit ? `Per-user limit ${opusLimit} Opus calls per UTC day` : "No per-user Opus limit reported"}; your account has used ${quota.anthropic_used_today ?? 0} today. Users with their own Anthropic key bypass it.`
+                : "Until the operator loads app_secrets.anthropic_shared_key on the server, Vera runs on Gemini for everyone without their own Anthropic key. There is no paste box for it here by design."}
+        </div>
+      </div>
+
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>{status?.configured ? "Replace the shared key" : "Set the shared key"}</div>
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
@@ -1217,11 +1247,14 @@ function AiPanel({ users, ownKey, T }) {
 
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Per-user daily limit</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: T.accent }}>{limit} <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted }}>calls / day</span></div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Per-user daily limits</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.accent }}>
+            {limit} <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted }}>Gemini / day</span>
+            {opusReported && <span style={{ marginLeft: 12 }}>{opusLimit ?? "no"} <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted }}>Opus / day</span></span>}
+          </div>
         </div>
         <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>
-          Counted per account per UTC day; admins are unlimited. Past the cap the app tells the user to try tomorrow or add their own key. To change it: set the <code>AI_DAILY_LIMIT</code> secret on the ai-proxy function (Supabase dashboard, Edge Functions, Secrets) or edit <code>DEFAULT_DAILY_LIMIT</code> in <code>supabase/functions/ai-proxy/index.ts</code> and redeploy.
+          Counted per account per provider per UTC day; admins are unlimited. Past the cap the app tells the user to try tomorrow or add their own key. To change it: set the <code>AI_DAILY_LIMIT</code> secret on the ai-proxy function (Supabase dashboard, Edge Functions, Secrets) or edit <code>DEFAULT_DAILY_LIMIT</code> in <code>supabase/functions/ai-proxy/index.ts</code> and redeploy.
         </div>
       </div>
 
@@ -1230,21 +1263,23 @@ function AiPanel({ users, ownKey, T }) {
         <button onClick={refresh} style={{ fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer", fontWeight: 700 }}>refresh</button>
       </div>
       <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
-        {totalCalls} call{totalCalls === 1 ? "" : "s"} through the shared key{totalFailed ? `, ${totalFailed} failed at Google` : ""}. Calls made with a user's own key do not appear here.
+        {totalCalls} call{totalCalls === 1 ? "" : "s"} through the shared keys: {geminiRows.length} Gemini{geminiRows.some(r => !r.ok) ? ` (${geminiRows.filter(r => !r.ok).length} failed at Google)` : ""}, {opusRows.length} Opus{opusRows.some(r => !r.ok) ? ` (${opusRows.filter(r => !r.ok).length} failed at Anthropic)` : ""}. Calls made with a user's own key do not appear here.
       </div>
       {rows.length === 0 ? (
         <Empty T={T} text="No shared-key calls yet today." />
       ) : (
         <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 800, color: T.textMuted, paddingBottom: 6, borderBottom: `1px solid ${T.border}` }}>
-            <span>Account</span><span>Calls</span><span>Failed</span><span>Text sent</span><span>Last call</span>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 800, color: T.textMuted, paddingBottom: 6, borderBottom: `1px solid ${T.border}` }}>
+            <span>Account</span><span>Gemini</span><span>Opus</span><span>Failed</span><span>Text sent</span><span>Last call</span>
           </div>
           {rows.map(r => {
-            const over = r.calls >= limit;
+            const over = r.gemini >= limit;
+            const overOpus = !!opusLimit && r.opus >= opusLimit;
             return (
-              <div key={r.user_id || "unknown"} style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 12.5, color: T.text, padding: "6px 0", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
+              <div key={r.user_id || "unknown"} style={{ display: "grid", gridTemplateColumns: "2fr 0.8fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 12.5, color: T.text, padding: "6px 0", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{who(r.user_id)}</span>
-                <span style={{ fontWeight: 800, color: over ? "#ef4444" : T.text }}>{r.calls}{over ? " (cap)" : ""}</span>
+                <span style={{ fontWeight: 800, color: over ? "#ef4444" : T.text }}>{r.gemini}{over ? " (cap)" : ""}</span>
+                <span style={{ fontWeight: 800, color: overOpus ? "#ef4444" : T.text }}>{r.opus}{overOpus ? " (cap)" : ""}</span>
                 <span style={{ color: r.failed ? "#f59e0b" : T.textDim }}>{r.failed}</span>
                 <span>{r.chars >= 1000 ? `${Math.round(r.chars / 1000)}k` : r.chars} chars</span>
                 <span style={{ color: T.textMuted }}>{timeAgo(r.last)}</span>

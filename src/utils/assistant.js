@@ -3,7 +3,7 @@ import { RENEWAL_INFO } from "../constants/renewalInfo";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
 import { CPT_DESCS } from "../constants/cptDescs";
 import { CME_PROVIDERS } from "../constants/cmeProviders";
-import { geminiCall, proxyErrorMessage } from "./aiClient";
+import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, anthropicErrorMessage, anthropicSdk } from "./aiClient";
 
 /**
  * The in-app AI assistant. Modeled on the CallSync helper (every question
@@ -381,22 +381,35 @@ function parseAssistantJson(raw) {
  * One assistant turn. history = [{role:"user"|"model", text}], newest last
  * (the last item is the pending user message). attachment (optional) =
  * { dataUrl } for images/PDFs or { text, name } for extracted office text.
- * With an Anthropic key, Vera thinks on Claude Opus. Otherwise she runs on
- * Gemini: the user's own key when they have one, else the shared key via
- * ai-proxy (so a new account has Vera on with zero setup).
+ * Vera thinks on Claude Opus whenever an Opus route exists: the user's own
+ * Anthropic key first, else the shared key via ai-proxy (so every active
+ * account gets Opus with nothing pasted). Otherwise she runs on Gemini: the
+ * user's own key when they have one, else the shared Gemini key.
+ * Pass `settings` (the whole settings object) or the loose apiKey /
+ * anthropicKey pair; both shapes route the same way.
  */
-export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, attachment }) {
-  if (anthropicKey && claudeCanRead(attachment)) {
+export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, attachment, settings }) {
+  const s = settings || { apiKey, anthropicApiKey: anthropicKey };
+  const ownOpusKey = !!s.anthropicApiKey;
+  if (anthropicAvailable(s) && claudeCanRead(attachment)) {
     try {
-      return await anthropicTurn({ history, snapshot, anthropicKey, attachment });
+      return await anthropicTurn({ history, snapshot, settings: s, attachment });
     } catch (e) {
-      const A = AnthropicSDK; // set by loadAnthropic() before any request ran
-      // A bad key must surface — silently answering on Gemini would hide it.
-      if (A && (e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError)) {
+      const A = anthropicSdk(); // set by anthropicClientFor() before any request ran
+      const refused = anthropicErrorMessage(e); // the proxy, not Anthropic, said no
+      if (refused) {
+        // The shared Opus door is shut for now (daily cap, key not loaded,
+        // beta gate, signed out): Gemini takes the turn so the chat never
+        // dead-ends. aiClient already flipped the status, so the next turn
+        // routes straight to Gemini and Settings reads the reason.
+      } else if (ownOpusKey && A && (e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError)) {
+        // A bad key must surface; silently answering on Gemini would hide it.
         throw new Error("Your Anthropic API key was rejected. Check it in Settings, or clear it to use Gemini.");
-      }
-      const transient = A && (e instanceof A.RateLimitError || e instanceof A.InternalServerError || e instanceof A.APIConnectionError);
-      if (transient) {
+      } else if (!ownOpusKey && A && (e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError)) {
+        // Anthropic rejected the SHARED key (forwarded verbatim by the proxy).
+        // Not this user's doing: Gemini takes the turn; the failed row shows
+        // in Admin > AI for the operator.
+      } else if (A && (e instanceof A.RateLimitError || e instanceof A.InternalServerError || e instanceof A.APIConnectionError)) {
         // Claude briefly unreachable — Gemini (own key or shared) takes the
         // turn so the chat never dead-ends.
       } else if (A && e instanceof A.APIConnectionError) {
@@ -410,9 +423,9 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
       }
     }
   }
-  // Anthropic key present but Claude can't read this attachment type (HEIC
+  // Opus route present but Claude can't read this attachment type (HEIC
   // and friends): Gemini takes the turn instead.
-  return geminiTurn({ history, snapshot, apiKey, attachment });
+  return geminiTurn({ history, snapshot, apiKey: s.apiKey, attachment });
 }
 
 // Claude accepts these attachment types; anything else (HEIC from the iPhone
@@ -420,22 +433,13 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
 const CLAUDE_MEDIA = new Set(["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp"]);
 const claudeCanRead = (att) => !att?.dataUrl || CLAUDE_MEDIA.has(mediaType(att.dataUrl));
 
-// Loaded on demand so Gemini-only users never download the Claude SDK chunk.
-let AnthropicSDK = null;
-async function loadAnthropic() {
-  if (!AnthropicSDK) AnthropicSDK = (await import("@anthropic-ai/sdk")).default;
-  return AnthropicSDK;
-}
-
-/** Claude path — claude-opus-5 via the user's own Anthropic key. */
-async function anthropicTurn({ history, snapshot, anthropicKey, attachment }) {
-  const Anthropic = await loadAnthropic();
-  const client = new Anthropic({
-    apiKey: anthropicKey,
-    dangerouslyAllowBrowser: true, // the key is the user's own, entered by them
-    timeout: 120000,
-    maxRetries: 1,
-  });
+/**
+ * Claude path, claude-opus-5. aiClient hands back the client: the user's
+ * own key straight to Anthropic, or the shared key through ai-proxy (the
+ * SDK is pointed at the proxy; the key itself never reaches the browser).
+ */
+async function anthropicTurn({ history, snapshot, settings, attachment }) {
+  const client = await anthropicClientFor(settings);
   const recent = history.slice(-14);
   const messages = recent.map((m, i) => {
     const blocks = [];
@@ -484,7 +488,7 @@ async function anthropicTurn({ history, snapshot, anthropicKey, attachment }) {
 const NETWORK_MSG = "Couldn't reach the AI service. That's usually a weak signal, or a guest Wi-Fi that blocks AI sites (hospital networks often do). Switch to cellular and tap Try again — your message is saved.";
 
 /**
- * Gemini path — the default brain with no Anthropic key. apiKey is the
+ * Gemini path: the brain when no Opus route exists. apiKey is the
  * user's own Gemini key (optional); without one geminiCall() rides the
  * shared key through ai-proxy.
  */
