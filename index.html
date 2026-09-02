@@ -2991,7 +2991,7 @@ footer {
         if (!msg) return;
         if (res.ok) {
           msg.style.color = 'var(--emerald)';
-          msg.textContent = "You're on the list. Check your email for your founding number.";
+          msg.textContent = "You're on the list. Your founding number is assigned when you sign up and activate your account.";
           form.reset();
         } else if (res.status === 409) {
           msg.style.color = 'var(--emerald)';
