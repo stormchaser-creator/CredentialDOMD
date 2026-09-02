@@ -2,10 +2,10 @@
 // Merges curated specialty codes with CMS base codes + RVU data
 // Curated codes take priority (they have richer synonyms/keywords)
 
-import { NEUROSURGERY_CODES } from "./neurosurgery";
-import { CMS_BASE_CODES } from "./cmsBase";
-import { ADDITIONAL_CODES } from "./additions";
-import { RVU_DATA } from "./rvuData";
+import { NEUROSURGERY_CODES } from "./neurosurgery.js";
+import { CMS_BASE_CODES } from "./cmsBase.js";
+import { ADDITIONAL_CODES } from "./additions.js";
+import { RVU_DATA } from "./rvuData.js";
 
 // Codes deleted from the CPT/PFS — never surface them
 const DELETED = new Set(["61440", "61470", "61480", "99241", "49585"]);

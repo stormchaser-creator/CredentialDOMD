@@ -23,6 +23,12 @@ const ASSIST_MODIFIERS = [
   { value: "80", label: "80 · Assistant surgeon" },
   { value: "81", label: "81 · Minimum assistant surgeon" },
   { value: "82", label: "82 · Assistant (no qualified resident available)" },
+  // NCCI routes the coder's bundling pass names: 59/XU on 69990 when navigation
+  // is on the same claim (NCCI Ch VIII Sec C.8); 59/XS on a cranioplasty that
+  // repairs a defect larger than the exposure (NCCI Ch VIII Sec C.4, C.5).
+  { value: "59", label: "59 · Distinct procedural service" },
+  { value: "XS", label: "XS · Separate structure" },
+  { value: "XU", label: "XU · Unusual non-overlapping service" },
 ];
 
 /**
@@ -350,7 +356,7 @@ function RVULog() {
                     <div style={{ fontSize: 13, fontWeight: 800, color: T.text }}>
                       {it.code} <span style={{ fontWeight: 500, color: T.textMuted }}>{it.desc}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: T.textDim }}>{(it.wRVU || 0).toFixed(2)} wRVU × {it.units} {it.why && `· ${it.why}`}</div>
+                    <div style={{ fontSize: 11, color: T.textDim }}>{(it.wRVU || 0).toFixed(2)} wRVU × {it.units} {it.why && `· ${it.why}`}{it.flag && <span style={{ color: T.warning, fontWeight: 700 }}> · {it.flag}</span>}</div>
                   </div>
                   <select value={it.modifier || ""} onChange={e => setModifier(i, e.target.value)}
                     style={{ ...iS, appearance: "auto", width: "auto", flexShrink: 0, padding: "4px 6px", fontSize: 11.5 }}

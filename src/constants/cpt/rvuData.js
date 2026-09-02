@@ -1,7 +1,7 @@
 /**
  * RVU data — GENERATED from the CMS Physician Fee Schedule.
  * Source: PPRRVU2026_Jul_nonQPP.csv (CY2026 July release, released 06/30/2026)
- * Generated 2026-08-13 by scripts/generate-rvu.mjs — DO NOT HAND-EDIT.
+ * Generated 2026-09-02 by scripts/generate-rvu.mjs — DO NOT HAND-EDIT.
  *
  * wRVU  = physician work RVU
  * totalRVU = fully implemented NON-FACILITY total
@@ -238,10 +238,13 @@ export const RVU_DATA = {
   "61120": { wRVU: 9.36, totalRVU: 23.16, totalFacilityRVU: 23.16, status: "A", global: "090", desc: "Burr hole for ventr puncture" },
   "61140": { wRVU: 16.8, totalRVU: 37.96, totalFacilityRVU: 37.96, status: "A", global: "090", desc: "Burr hole/treph bx brain/les" },
   "61150": { wRVU: 18.43, totalRVU: 40.01, totalFacilityRVU: 40.01, status: "A", global: "090", desc: "Bur hol/trph drg brn abs/cst" },
+  "61151": { wRVU: 13.15, totalRVU: 29.89, totalFacilityRVU: 29.89, status: "A", global: "090", desc: "Burr hole/treph sbsq tapping" },
   "61154": { wRVU: 16.64, totalRVU: 38.52, totalFacilityRVU: 38.52, status: "A", global: "090", desc: "Burr hole w/evac&/drg hmtma" },
   "61156": { wRVU: 17.01, totalRVU: 36.65, totalFacilityRVU: 36.65, status: "A", global: "090", desc: "Burr hol aspir hmtm/cst icer" },
   "61210": { wRVU: 5.68, totalRVU: 10.05, totalFacilityRVU: 10.05, status: "A", global: "000", desc: "Burr hole implt ventr cath" },
   "61215": { wRVU: 5.7, totalRVU: 16.69, totalFacilityRVU: 16.69, status: "A", global: "090", desc: "Ins subq rsvr pmp/nfs sys" },
+  "61250": { wRVU: 11.2, totalRVU: 26.44, totalFacilityRVU: 26.44, status: "A", global: "090", desc: "Burr hole/treph sttl expl" },
+  "61253": { wRVU: 13.15, totalRVU: 29.89, totalFacilityRVU: 29.89, status: "A", global: "090", desc: "Burr hole treph ittl uni/bi" },
   "61304": { wRVU: 22.82, totalRVU: 48.17, totalFacilityRVU: 48.17, status: "A", global: "090", desc: "Crnec/crnot expl supratntorl" },
   "61305": { wRVU: 27.92, totalRVU: 58.68, totalFacilityRVU: 58.68, status: "A", global: "090", desc: "Crnec/crnot expl infratntorl" },
   "61312": { wRVU: 29.42, totalRVU: 60.03, totalFacilityRVU: 60.03, status: "A", global: "090", desc: "Crnec/crnot sttl xdrl/sdrl" },
@@ -315,6 +318,7 @@ export const RVU_DATA = {
   "62010": { wRVU: 20.89, totalRVU: 45.44, totalFacilityRVU: 45.44, status: "A", global: "090", desc: "Treatment of head injury" },
   "62140": { wRVU: 14.19, totalRVU: 29.31, totalFacilityRVU: 29.31, status: "A", global: "090", desc: "Crnop skull defect<5 cm diam" },
   "62141": { wRVU: 15.67, totalRVU: 33.4, totalFacilityRVU: 33.4, status: "A", global: "090", desc: "Crnop skull defect>5 cm diam" },
+  "62142": { wRVU: 11.53, totalRVU: 26.98, totalFacilityRVU: 26.98, status: "A", global: "090", desc: "Rmvl b1 flp/prostc plate skl" },
   "62143": { wRVU: 13.8, totalRVU: 31.22, totalFacilityRVU: 31.22, status: "A", global: "090", desc: "Rpl b1 flp/prostc plate skl" },
   "62160": { wRVU: 2.93, totalRVU: 5.16, totalFacilityRVU: 5.16, status: "A", global: "ZZZ", desc: "Neuroendoscopy add-on" },
   "62161": { wRVU: 20.7, totalRVU: 44.99, totalFacilityRVU: 44.99, status: "A", global: "090", desc: "Dissect brain w/scope" },
