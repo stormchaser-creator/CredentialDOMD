@@ -261,6 +261,34 @@ eq("69990 global ZZZ status R", [CPT_BY_CODE["69990"].globalDays, CPT_BY_CODE["6
   ok("add-ons after the primary", r.items.slice(1).every(i => ["69990", "61781"].includes(i.code)));
 }
 
+// ── Cardiac: combined CABG + Cox-Maze + LAA clip + endoscopic vein harvest, ──
+// TEE, intraoperative cardioversion, modifier 22 (ticket 63cf43b7) ───────────
+{
+  const dictation = "Coronary Artery Bypass Grafting times 2 (left internal mammary artery to left anterior descending artery, reverse SV graft to obtuse marginal artery), external cardioversion for ventricular arrest, modified Cox 4 Maze procedure with the encompass clamp, with intraoperative transesophageal echocardiogram, left lower extremity endoscopic vein harvest, ligation of left atrial appendage with 40mm Atricure Clip, modifier 22";
+  const Card = run(
+    [
+      enc("33533", 1, "LIMA to LAD arterial graft"),
+      enc("33517", 1, "reverse SVG to OM, combined with the arterial graft"),
+      enc("33259", 1, "modified Cox-Maze IV with the Encompass clamp, extensive lesion set, on bypass, at time of CABG"),
+      enc("33267", 1, "LAA exclusion, open, 40mm AtriCure clip"),
+      enc("33508", 1, "left lower extremity endoscopic vein harvest"),
+    ],
+    dictation,
+  );
+  eq("Card: codes", codes(Card), ["33533", "33267", "33517", "33259", "33508"]);
+  eq("Card: wRVU total 68.56", total(Card), 68.56);
+  ok("Card: modifier 22 pre-selected on the highest-wRVU primary (33533)", Card.items.find(it => it.code === "33533")?.modifier === "22");
+  ok("Card: modifier 22 not applied elsewhere", Card.items.filter(it => it.modifier === "22").length === 1);
+  ok("Card: modifier-22 question cites CPT Appendix A", hasQ(Card, /Modifier 22 pre-selected on 33533/) && hasQ(Card, /CPT Appendix A/));
+  ok("Card: TEE gets no code and a question instead", !codes(Card).includes("93312") && hasQ(Card, /Intraoperative TEE: no code emitted/));
+  ok("Card: cardioversion gets no code and a question instead", !codes(Card).includes("92960") && hasQ(Card, /Intraoperative cardioversion or defibrillation/) && hasQ(Card, /Ch 12 Sec 40\.1/));
+  ok("Card: no em dashes in questions", Card.questions.every(q => !/—/.test(q)));
+
+  // Arterial-only two-graft CABG is untouched by the TEE/cardioversion/22 rules.
+  const plain = run([enc("33534", 1, "two arterial grafts")], "CABG x2, both arterial");
+  eq("plain two-arterial CABG: no modifier 22, no TEE/cardioversion questions", [plain.items[0].modifier, plain.questions.length], [undefined, 0]);
+}
+
 // ── The catalog line the model reads: word boundary, no orphaned "(" ─────────
 {
   const lines = buildCatalog().split("\n");

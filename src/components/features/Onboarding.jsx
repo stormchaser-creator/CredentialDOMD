@@ -165,10 +165,11 @@ export default function Onboarding({ onFinish }) {
         <div style={card}>
           <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 14, lineHeight: 1.5 }}>Your NPI pulls your name, specialty and every state license number from the federal registry in one tap. This is the fastest way to fill the app.</div>
           <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>NPI (10 digits)</label>
-          <div style={{ display: "flex", gap: 8, margin: "4px 0 10px" }}>
-            <input value={npi} onChange={e => setNpi(e.target.value)} placeholder="1234567890" inputMode="numeric" maxLength={12} style={{ ...iS, flex: 1 }} />
+          <div style={{ display: "flex", gap: 8, margin: "4px 0 6px" }}>
+            <input value={npi} onChange={e => setNpi(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="1234567890" inputMode="numeric" maxLength={10} style={{ ...iS, flex: 1 }} />
             <button onClick={lookup} disabled={npiBusy} style={{ padding: "0 16px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{npiBusy ? "Looking up..." : "Look up"}</button>
           </div>
+          {npi.length > 0 && npi.length < 10 && <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>{10 - npi.length} more digit{10 - npi.length === 1 ? "" : "s"} to enable lookup.</div>}
           {npiMsg && <div style={{ fontSize: 13, color: T.danger || "#ef4444", marginBottom: 8 }}>{npiMsg}</div>}
           {npiResult && (
             <div style={{ border: `1px solid ${T.accent}`, backgroundColor: T.accentDim, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
@@ -180,7 +181,7 @@ export default function Onboarding({ onFinish }) {
           )}
           {npiResult
             ? primary(npiLicenses.length ? `Import ${npiLicenses.length} license${npiLicenses.length === 1 ? "" : "s"}` : "Continue", npiLicenses.length ? importLicenses : () => setStep(2))
-            : primary("Look up my NPI", lookup, npiBusy || npi.replace(/\D/g, "").length !== 10)}
+            : primary("Look up my NPI", lookup, npiBusy || npi.length !== 10)}
           {ghost("I do not know my NPI right now, skip", () => setStep(2))}
         </div>
       )}

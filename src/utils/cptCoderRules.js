@@ -320,6 +320,12 @@ export const BUNDLED_PAIRS = [
 const QUESTION_ULTRASOUND =
   "Ultrasound, CUSA or Doppler: no code emitted. They are instruments within the resection. Intraoperative ultrasound guidance is reportable only with a permanently recorded image and a written description of the localization (CPT Diagnostic Ultrasound guidelines); that code (76998-26, 0.89 wRVU on the CY2026 PFS) is not in this catalog.";
 
+const QUESTION_TEE =
+  "Intraoperative TEE: no code emitted. It is separately billable (93312 real-time complete, 93313 placement/manipulation only, or 93314 interpretation only) only when the billing physician personally performed and interpreted it, with a retained image and a written report; a dictated case summary does not establish that, and in most cardiac cases anesthesia performs and bills the TEE. Code it yourself only if you performed and interpreted it and can document that.";
+
+const QUESTION_CARDIOVERSION =
+  "Intraoperative cardioversion or defibrillation for an arrhythmia or arrest during this operative session: no code emitted. Managing an intraoperative event is part of the global surgical package for the primary procedure it happened during (Medicare Claims Processing Manual, Pub 100-04, Ch 12 Sec 40.1). Cardioversion (92960) is reportable only as a separate encounter outside this operative session, for example an elective cardioversion days later.";
+
 function microscopeQuestion(items) {
   const primaries = items.filter(it => it.code !== "69990" && it.globalDays !== "ZZZ" && (it.wRVU || 0) > 0);
   if (primaries.length === 0) return null;
@@ -434,12 +440,19 @@ export function postProcess(parsed, { text = "", catalog = CPT_BY_CODE } = {}) {
     }
   }
 
-  // 5. Instruments that never carry a code: say so instead of staying silent.
-  if (/\bultrasound\b|\bultrasonic\b|\bcusa\b|\bdoppler\b/i.test(text) && items.some(it => it.globalDays !== "ZZZ" && (it.wRVU || 0) > 0)) {
+  // 5. Instruments/intraoperative events that never carry their own code: say
+  //    so instead of staying silent.
+  if (/\bultrasound\b|\bultrasonic\b|\bcusa\b|\bdoppler\b/i.test(text) && hasPrimary) {
     questions.push(QUESTION_ULTRASOUND);
   }
+  if (/\btee\b|\btransesophageal\b/i.test(text) && hasPrimary) {
+    questions.push(QUESTION_TEE);
+  }
+  if (/\bcardiovert(?:ed|ing)?\b|\bcardioversion\b|\bdefibrillat/i.test(text) && hasPrimary) {
+    questions.push(QUESTION_CARDIOVERSION);
+  }
 
-  // 6. Model questions, then assistant-surgeon modifier (unchanged behavior).
+  // 6. Model questions, then assistant-surgeon and modifier-22 modifiers.
   for (const q of parsed?.questions || []) if (q) questions.push(String(q));
   if (/\bassist/i.test(text)) {
     for (const it of items) {
@@ -450,6 +463,14 @@ export function postProcess(parsed, { text = "", catalog = CPT_BY_CODE } = {}) {
     }
     if (!questions.some(q2 => /assist/i.test(q2))) {
       questions.push("Assistant-surgeon case: Medicare pays 16% of the fee (modifier 80/82); how your wRVU credit counts depends on your comp agreement.");
+    }
+  }
+  if (/\bmodifier\s*22\b|\bmod\.?\s*22\b|\bincreased procedural services\b/i.test(text)) {
+    const primaries = items.filter(it => it.globalDays !== "ZZZ" && (it.wRVU || 0) > 0).sort((a, b) => b.wRVU - a.wRVU);
+    const top = primaries[0];
+    if (top) {
+      if (!top.modifier) top.modifier = "22";
+      questions.push(`Modifier 22 pre-selected on ${top.code}: Medicare requires the operative note to state in words why this case took substantially more work than ${top.code} typically requires (CPT Appendix A; Medicare Claims Processing Manual Ch 12 Sec 40). Payment is not automatic and is adjusted per payer review.`);
     }
   }
 

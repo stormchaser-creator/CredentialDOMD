@@ -111,6 +111,39 @@ CRANIAL ADJUNCTS (only when the words support them; never invent one):
   Duraplasty, dural graft, dural closure: included. ICP monitor/EVD placed at the same sitting
     → 61107/61210 separately only if through a separate incision.
 
+CARDIAC: CABG AND CONCOMITANT PROCEDURES (only when the words support them):
+  CABG graft count: arterial-only grafts pick the base code by arterial graft count (33533
+    single, 33534 two). Combining an arterial graft with a venous graft (eg, "LIMA to LAD,
+    reverse SV graft to the OM") adds the combined arterial-venous add-on by venous graft
+    count: 33517 for a single vein graft. "CABG x2 (LIMA to LAD, reverse SVG to OM)" =
+    33533 + 33517, never 33534 (33534 is TWO arterial grafts; here only one graft is
+    arterial, the other is venous).
+  Concomitant atrial ablation (Cox-Maze or similar clamp/catheter lesion set) performed at
+    the time of the CABG or another cardiac procedure is an add-on, selected by lesion set
+    extent and bypass use: limited, without bypass → 33257; limited, with bypass → 33258;
+    extensive (eg, a Cox-Maze IV or modified Cox-Maze) with bypass → 33259. A modified
+    Cox-Maze done on bypass alongside a CABG is 33259, regardless of which clamp made the
+    lesion set.
+  Concomitant left atrial appendage (LAA) exclusion or ligation (clip, eg AtriCure) by an
+    open technique at the time of another cardiac procedure → 33267 (add-on).
+  Endoscopic harvest of the leg vein used for a venous graft → 33508 (add-on), one unit
+    per graft harvested endoscopically; an open harvest carries no separate code.
+  Intraoperative transesophageal echocardiogram (TEE): emit NO code. It is separately
+    billable only when the billing physician personally performed and interpreted it, with
+    a retained image and a written report; a dictated case summary alone does not establish
+    that, and in most cardiac cases anesthesia performs and bills the TEE. Add a questions
+    entry instead of a code.
+  Intraoperative cardioversion or defibrillation for an arrhythmia or arrest arising during
+    this operative session: emit NO code. Managing an intraoperative event is part of the
+    global surgical package for the primary procedure it happened during (Medicare Claims
+    Processing Manual, Pub 100-04, Ch 12 Sec 40.1). An elective cardioversion is reportable
+    only as a separate encounter outside this operative session.
+  MODIFIER 22: if the physician says "modifier 22" or "increased procedural services", keep
+    every code, append modifier 22 to only the single highest-wRVU primary procedure in the
+    entry, and add a questions entry noting Medicare requires the operative note to state in
+    words why the work substantially exceeded what that code typically requires; payment is
+    not automatic and is adjusted per payer review.
+
 NEVER: E/M codes on operative cases; codes for things merely mentioned; a code family
 swap (posterolateral vs interbody, anterior vs posterior, supratentorial vs infratentorial)
 the surgeon didn't say.
