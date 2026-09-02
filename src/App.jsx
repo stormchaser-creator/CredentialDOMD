@@ -625,885 +625,1051 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     setTab("more"); setSubPage("assistant");
   };
 
-  const renderHome = () => (
-    <div className="cmd-fade-in">
-      <HomeSearch onOpen={openFromSearch} onAskVera={askVera} />
-      {newRequestCount > 0 && (
-        <div onClick={() => { setTab("more"); setSubPage("requests"); }} style={{ display: "flex", alignItems: "center", gap: 10, backgroundColor: T.accentDim, border: `1px solid ${T.accent}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14, cursor: "pointer" }}>
-          <span style={{ fontSize: 18 }}>{"\ud83d\udce8"}</span>
-          <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.text }}>{newRequestCount} document request{newRequestCount === 1 ? "" : "s"} waiting for a reply</div>
-          <span style={{ color: T.accent, fontWeight: 800 }}>{"\u203a"}</span>
-        </div>
-      )}
-      {/* First-run checklist — the road from empty app to protected
-          credentials, built around the NPI import wow moment. First thing a
-          new user sees; vanishes forever once complete or dismissed. */}
-      {(() => {
-        if (data.settings.onboardingDone) return null;
-        const steps = [
-          { key: "npi", label: "Enter your NPI", detail: "Your licenses import automatically from the NPI registry", done: !!data.settings.npi, go: () => { setTab("more"); setSubPage("settings"); } },
-          { key: "lic", label: "Confirm your licenses", detail: "Tap Import from NPI, then add DEA and board certs", done: (data.licenses || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
-          { key: "doc", label: "Upload one document", detail: "A license PDF or a photo — packets build themselves from these", done: (data.documents || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
-          { key: "alert", label: "Turn on expiration alerts", detail: "The whole point: never let anything lapse silently", done: !!(data.settings.notifyEmail || data.settings.notifyBrowser || data.settings.notifyText), go: () => { setTab("more"); setSubPage("settings"); } },
-          { key: "ai", label: "AI is on", detail: "Scanning, dictation, the RVU coder and Vera work with no setup on a shared key. Add your own free Gemini key in Settings to lift the daily limit", done: aiOn || !!data.settings.anthropicApiKey, go: () => { setTab("more"); setSubPage("settings"); } },
-        ];
-        const remaining = steps.filter(st => !st.done);
-        if (!remaining.length) return null;
-        const doneCount = steps.length - remaining.length;
-        return (
-          <div style={{ marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <h3 style={{ fontSize: 15, fontWeight: 800, color: T.text, margin: 0 }}>Get set up · {doneCount}/{steps.length}</h3>
-              <button onClick={() => updateSettings({ onboardingDone: true })} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>dismiss</button>
-            </div>
-            <div style={{ display: "flex", gap: 4, margin: "8px 0 10px" }}>
-              {steps.map(st => (
-                <div key={st.key} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: st.done ? T.accent : T.border }} />
-              ))}
-            </div>
+  // Home is one set of pieces arranged two ways. The phone stacks them in
+  // the order they have always had; the desk (spec 2.1) puts the hero and
+  // Action Required side by side, then the CME state cards three across,
+  // then the board cards with the Credentials preview beside them. Each
+  // piece is built once here and placed by both layouts, so a number on
+  // the desk can never differ from the one on the phone.
+  const renderHome = () => {
+    const hasActionColumn = isDesktop && (urgent.length > 0 || snoozed.length > 0);
+    const homeSearch = <HomeSearch onOpen={openFromSearch} onAskVera={askVera} />;
+    const requestBanner = newRequestCount > 0 && (
+      <div onClick={() => { setTab("more"); setSubPage("requests"); }} style={{ display: "flex", alignItems: "center", gap: 10, backgroundColor: T.accentDim, border: `1px solid ${T.accent}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14, cursor: "pointer" }}>
+        <span style={{ fontSize: 18 }}>{"\ud83d\udce8"}</span>
+        <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.text }}>{newRequestCount} document request{newRequestCount === 1 ? "" : "s"} waiting for a reply</div>
+        <span style={{ color: T.accent, fontWeight: 800 }}>{"\u203a"}</span>
+      </div>
+    );
+    // First-run checklist — the road from empty app to protected
+    // credentials, built around the NPI import wow moment. First thing a
+    // new user sees; vanishes forever once complete or dismissed.
+    const checklist = (() => {
+      if (data.settings.onboardingDone) return null;
+      const steps = [
+        { key: "npi", label: "Enter your NPI", detail: "Your licenses import automatically from the NPI registry", done: !!data.settings.npi, go: () => { setTab("more"); setSubPage("settings"); } },
+        { key: "lic", label: "Confirm your licenses", detail: "Tap Import from NPI, then add DEA and board certs", done: (data.licenses || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
+        { key: "doc", label: "Upload one document", detail: "A license PDF or a photo — packets build themselves from these", done: (data.documents || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
+        { key: "alert", label: "Turn on expiration alerts", detail: "The whole point: never let anything lapse silently", done: !!(data.settings.notifyEmail || data.settings.notifyBrowser || data.settings.notifyText), go: () => { setTab("more"); setSubPage("settings"); } },
+        { key: "ai", label: "AI is on", detail: "Scanning, dictation, the RVU coder and Vera work with no setup on a shared key. Add your own free Gemini key in Settings to lift the daily limit", done: aiOn || !!data.settings.anthropicApiKey, go: () => { setTab("more"); setSubPage("settings"); } },
+      ];
+      const remaining = steps.filter(st => !st.done);
+      if (!remaining.length) return null;
+      const doneCount = steps.length - remaining.length;
+      return (
+        <div style={{ marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, color: T.text, margin: 0 }}>Get set up · {doneCount}/{steps.length}</h3>
+            <button onClick={() => updateSettings({ onboardingDone: true })} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>dismiss</button>
+          </div>
+          <div style={{ display: "flex", gap: 4, margin: "8px 0 10px" }}>
             {steps.map(st => (
-              <div key={st.key} onClick={st.done ? undefined : st.go} style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "9px 0",
-                borderBottom: `1px solid ${T.border}`, cursor: st.done ? "default" : "pointer",
-                opacity: st.done ? 0.55 : 1,
-              }}>
-                <span style={{
-                  width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                  backgroundColor: st.done ? T.accent : "transparent", border: `2px solid ${st.done ? T.accent : T.border}`,
-                  color: "#fff", fontSize: 13, fontWeight: 800,
-                }}>{st.done ? "✓" : ""}</span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, textDecoration: st.done ? "line-through" : "none" }}>{st.label}</div>
-                  {!st.done && <div style={{ fontSize: 12, color: T.textMuted }}>{st.detail}</div>}
+              <div key={st.key} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: st.done ? T.accent : T.border }} />
+            ))}
+          </div>
+          {steps.map(st => (
+            <div key={st.key} onClick={st.done ? undefined : st.go} style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "9px 0",
+              borderBottom: `1px solid ${T.border}`, cursor: st.done ? "default" : "pointer",
+              opacity: st.done ? 0.55 : 1,
+            }}>
+              <span style={{
+                width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                backgroundColor: st.done ? T.accent : "transparent", border: `2px solid ${st.done ? T.accent : T.border}`,
+                color: "#fff", fontSize: 13, fontWeight: 800,
+              }}>{st.done ? "✓" : ""}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, textDecoration: st.done ? "line-through" : "none" }}>{st.label}</div>
+                {!st.done && <div style={{ fontSize: 12, color: T.textMuted }}>{st.detail}</div>}
+              </div>
+              {!st.done && <span style={{ marginLeft: "auto", color: T.accent, fontWeight: 800 }}>›</span>}
+            </div>
+          ))}
+        </div>
+      );
+    })();
+
+    // Hero: Compliance Ring + Stats. The ring's companion numbers are read
+    // by the phone's stat rows and the desk's stat tiles alike.
+    const cmeBehind = stateComps.filter(x => !x.comp.fullyCompliant).map(x => x.st);
+    const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0;
+    // Subtle gradient glow behind the ring, shared by both hero cards
+    const heroGlow = (
+      <div style={{
+        position: "absolute", top: -40, left: -40,
+        width: 200, height: 200,
+        background: "radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%)",
+        pointerEvents: "none",
+      }} />
+    );
+    const phoneHero = (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 20,
+        backgroundColor: T.card, borderRadius: 16, padding: "20px 24px",
+        marginBottom: 16, boxShadow: T.shadow1,
+        position: "relative", overflow: "hidden",
+      }}>
+        {heroGlow}
+        <div className="cmd-ring-animated">
+          <ComplianceRing percent={compliancePercent} size={120} stroke={9} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {credStats.active > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.success }} />
+                <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.active} Active</span>
+              </div>
+            )}
+            {credStats.expiring > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning }} />
+                <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.expiring} Expiring</span>
+              </div>
+            )}
+            {credStats.expired > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.danger }} />
+                <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.expired} Expired</span>
+              </div>
+            )}
+            {/* The ring counts CME cycles too — say so when they're the drag */}
+            {cmeBehind.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning }} />
+                <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>
+                  CME behind: {cmeBehind.join(", ")}
+                </span>
+              </div>
+            )}
+            {allCurrent && (
+              <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>All credentials current</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+    // Desk: four stat tiles beside the ring (two across next to the Action
+    // Required column, four across when the hero has the row to itself),
+    // the CME note and the all-current line beneath them. The four tiles
+    // partition every record on file: an alert in its window is either
+    // acknowledged or not, so the numbers always add up.
+    const heroTiles = [
+      { key: "active", value: credStats.active, label: "Active", dot: T.success, num: T.success },
+      { key: "expiring", value: credStats.expiring, label: "Expiring", dot: T.warning, num: T.warning },
+      { key: "expired", value: credStats.expired, label: "Expired", dot: T.danger, num: T.danger },
+      { key: "acknowledged", value: snoozed.length, label: "Acknowledged", dot: T.textMuted, num: T.text },
+    ];
+    const deskHero = (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 28,
+        backgroundColor: T.card, borderRadius: 16, padding: "22px 28px",
+        marginBottom: 16, boxShadow: T.shadow1,
+        position: "relative", overflow: "hidden",
+      }}>
+        {heroGlow}
+        <div className="cmd-ring-animated" style={{ flexShrink: 0 }}>
+          <ComplianceRing percent={compliancePercent} size={136} stroke={10} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="cmd-responsive-grid-2" style={{ gap: 10, ...(hasActionColumn ? null : { gridTemplateColumns: "repeat(4, 1fr)" }) }}>
+            {heroTiles.map(t => (
+              <div key={t.key} style={{ backgroundColor: T.input, borderRadius: 12, padding: "10px 14px", minWidth: 0 }}>
+                <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, fontVariantNumeric: "tabular-nums", color: t.value > 0 ? t.num : T.textDim }}>{t.value}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, fontSize: 12, fontWeight: 600, color: T.textMuted }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.dot, flexShrink: 0 }} />
+                  {t.label}
                 </div>
-                {!st.done && <span style={{ marginLeft: "auto", color: T.accent, fontWeight: 800 }}>›</span>}
               </div>
             ))}
           </div>
-        );
-      })()}
-
-      {/* Hero: Compliance Ring + Stats */}
-      {allCreds.length > 0 ? (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 20,
-          backgroundColor: T.card, borderRadius: 16, padding: "20px 24px",
-          marginBottom: 16, boxShadow: T.shadow1,
-          position: "relative", overflow: "hidden",
-        }}>
-          {/* Subtle gradient glow behind ring */}
-          <div style={{
-            position: "absolute", top: -40, left: -40,
-            width: 200, height: 200,
-            background: "radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%)",
-            pointerEvents: "none",
-          }} />
-          <div className="cmd-ring-animated">
-            <ComplianceRing percent={compliancePercent} size={120} stroke={9} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {credStats.active > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.success }} />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.active} Active</span>
-                </div>
-              )}
-              {credStats.expiring > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning }} />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.expiring} Expiring</span>
-                </div>
-              )}
-              {credStats.expired > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.danger }} />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.expired} Expired</span>
-                </div>
-              )}
-              {/* The ring counts CME cycles too — say so when they're the drag */}
-              {stateComps.some(x => !x.comp.fullyCompliant) && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning }} />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>
-                    CME behind: {stateComps.filter(x => !x.comp.fullyCompliant).map(x => x.st).join(", ")}
-                  </span>
-                </div>
-              )}
-              {credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && (
-                <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>All credentials current</div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div onClick={() => { setAutoAddLicense(true); setTab("credentials"); setSubPage("licenses"); }} style={{
-          backgroundColor: T.card, borderRadius: 16, padding: "32px 24px",
-          marginBottom: 16, cursor: "pointer", border: `2px dashed ${T.border}`,
-          textAlign: "center", boxShadow: T.shadow1,
-        }}>
-          <div style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: T.accentDim, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <AsclepiusIcon size={26} color={T.accent} />
-          </div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 4 }}>Get Started</div>
-          <div style={{ fontSize: 14, color: T.textMuted }}>Add your medical license to begin tracking credentials</div>
-        </div>
-      )}
-
-      {/* Incomplete profile — the app can only compute what it knows */}
-      {profileGaps.length > 0 && (
-        <div onClick={() => { setTab("more"); setSubPage("settings"); }} style={{
-          backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
-          borderRadius: 12, padding: "12px 16px", marginBottom: 14, cursor: "pointer",
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-            {"⚠️"} Finish your profile — {profileGaps.length} thing{profileGaps.length === 1 ? "" : "s"} missing
-          </div>
-          <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
-            Missing: {profileGaps.join(" · ")}. The app can only track what it knows — an empty specialty or degree hides CME requirements that apply to you. Tap to complete it in Settings.
-          </div>
-        </div>
-      )}
-
-      {/* Action Required — Horizontal Scroll Cards */}
-      {/* Records the app can't protect: no expiration date on file */}
-      {missingExpiration.length > 0 && (
-        <div style={{
-          backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
-          borderRadius: 12, padding: "12px 16px", marginBottom: 14,
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-            ⚠️ {missingExpiration.length} record{missingExpiration.length > 1 ? "s" : ""} missing an expiration date
-          </div>
-          <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
-            Tap a record below, then use its pencil to add the expiration date. Until then the app can't warn you before it lapses.
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {missingExpiration.slice(0, 5).map(({ item, sec, label }) => {
-              const secLabel = sec === "licenses" ? "License" : sec === "privileges" ? "Privilege" : sec === "insurance" ? "Insurance" : "Health record";
-              return (
-              <button key={item.id} onClick={() => { setTab("credentials"); setSubPage(sec); setAutoEditTarget({ sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "8px 10px", borderRadius: 8, border: "none",
-                backgroundColor: T.card, color: T.text, fontSize: 13, fontWeight: 600,
-                cursor: "pointer", textAlign: "left",
-              }}>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  <span style={{ color: T.textMuted, fontWeight: 700 }}>{secLabel}: </span>{label}
-                </span>
-                <span style={{ color: T.warning, flexShrink: 0, fontWeight: 700 }}>Add date →</span>
-              </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {(urgent.length > 0 || snoozed.length > 0) && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Action Required</h3>
-            {urgent.length > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: T.danger }}>{urgent.length} item{urgent.length !== 1 ? "s" : ""}</span>}
-          </div>
-          <div className="cmd-snap-scroll">
-            {urgent.slice(0, 6).map(item => {
-              const sc = getStatusColor(item.expirationDate);
-              const isExpired = sc === "red";
-              return (
-                <div key={item.id} onClick={() => { setTab("credentials"); setSubPage(item._sec); setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
-                  flex: urgent.length === 1 ? "1 1 auto" : "0 0 auto",
-                  width: urgent.length === 1 ? "100%" : 240,
-                  backgroundColor: T.card, borderRadius: 12,
-                  padding: 16, cursor: "pointer", boxShadow: T.shadow1,
-                  borderTop: `3px solid ${isExpired ? T.danger : T.warning}`,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.5 }}>{item._cat}</span>
-                    <StatusBadge status={isExpired ? "expired" : "expiring"} customLabel={getStatusLabel(item.expirationDate)} />
-                  </div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {describeItem(item, data.settings.name)}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{ fontSize: 12, color: T.textMuted }}>
-                      {item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : ""}
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                      <button onClick={(ev) => { ev.stopPropagation(); openFollowUp(item); }} style={{
-                        padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
-                        backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-                      }}>Follow up</button>
-                      <button onClick={(ev) => { ev.stopPropagation(); openAck(item); }} style={{
-                        padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
-                        backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-                      }}>Acknowledge</button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {snoozed.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <button onClick={() => setShowSnoozed(v => !v)} style={{
-                background: "none", border: "none", padding: "4px 2px", cursor: "pointer",
-                fontSize: 12.5, fontWeight: 600, color: T.textMuted,
-              }}>
-                {"🔕"} {snoozed.length} acknowledged {showSnoozed ? "▴" : "▾"}
-              </button>
-              {showSnoozed && snoozed.map(item => {
-                const ack = activeAckFor(data, item.id);
-                return (
-                  <div key={item.id} style={{
-                    display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
-                    backgroundColor: T.card, border: `1px dashed ${T.border}`, borderRadius: 10, marginTop: 6,
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {describeItem(item, data.settings.name)}
-                      </div>
-                      <div style={{ fontSize: 11.5, color: T.textDim }}>
-                        Exp {formatDate(item.expirationDate)} · quiet until {formatDate(ack?.until)}{ack?.note ? ` · ${ack.note}` : ""}
-                      </div>
-                    </div>
-                    <button onClick={() => ack && deleteItem("alertAcks", ack.id)} style={{
-                      padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
-                      backgroundColor: "transparent", color: T.accent, fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0,
-                    }}>Wake</button>
-                  </div>
-                );
-              })}
+          {cmeBehind.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning, flexShrink: 0 }} />
+              <span style={{ fontSize: 13.5, fontWeight: 500, color: T.text }}>CME behind: {cmeBehind.join(", ")}</span>
             </div>
           )}
+          {allCurrent && (
+            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 12 }}>All credentials current</div>
+          )}
         </div>
-      )}
+      </div>
+    );
+    const getStarted = (
+      <div onClick={() => { setAutoAddLicense(true); setTab("credentials"); setSubPage("licenses"); }} style={{
+        backgroundColor: T.card, borderRadius: 16, padding: "32px 24px",
+        marginBottom: 16, cursor: "pointer", border: `2px dashed ${T.border}`,
+        textAlign: "center", boxShadow: T.shadow1,
+      }}>
+        <div style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: T.accentDim, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+          <AsclepiusIcon size={26} color={T.accent} />
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 4 }}>Get Started</div>
+        <div style={{ fontSize: 14, color: T.textMuted }}>Add your medical license to begin tracking credentials</div>
+      </div>
+    );
+    const hero = allCreds.length > 0 ? (isDesktop ? deskHero : phoneHero) : getStarted;
 
-      {/* To do — the locum interrupted-work list, surfaced here so it's
-          visible without switching to the Locum tab */}
-      {plan === "locum" && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>To do</h3>
-            <button onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
-              background: "none", border: "none", fontSize: 13, fontWeight: 600,
-              color: T.accent, cursor: "pointer", padding: 0,
-            }}>View All</button>
-          </div>
-          {openTasks.length === 0 ? (
-            <div onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
-              backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
-              boxShadow: T.shadow1, fontSize: 13, color: T.textMuted, cursor: "pointer",
+    // Incomplete profile — the app can only compute what it knows
+    const profileGapBanner = profileGaps.length > 0 && (
+      <div onClick={() => { setTab("more"); setSubPage("settings"); }} style={{
+        backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
+        borderRadius: 12, padding: "12px 16px", marginBottom: 14, cursor: "pointer",
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+          {"⚠️"} Finish your profile — {profileGaps.length} thing{profileGaps.length === 1 ? "" : "s"} missing
+        </div>
+        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
+          Missing: {profileGaps.join(" · ")}. The app can only track what it knows — an empty specialty or degree hides CME requirements that apply to you. Tap to complete it in Settings.
+        </div>
+      </div>
+    );
+
+    // Records the app can't protect: no expiration date on file
+    const missingExpBanner = missingExpiration.length > 0 && (
+      <div style={{
+        backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
+        borderRadius: 12, padding: "12px 16px", marginBottom: 14,
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+          ⚠️ {missingExpiration.length} record{missingExpiration.length > 1 ? "s" : ""} missing an expiration date
+        </div>
+        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
+          Tap a record below, then use its pencil to add the expiration date. Until then the app can't warn you before it lapses.
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {missingExpiration.slice(0, 5).map(({ item, sec, label }) => {
+            const secLabel = sec === "licenses" ? "License" : sec === "privileges" ? "Privilege" : sec === "insurance" ? "Insurance" : "Health record";
+            return (
+            <button key={item.id} onClick={() => { setTab("credentials"); setSubPage(sec); setAutoEditTarget({ sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "8px 10px", borderRadius: 8, border: "none",
+              backgroundColor: T.card, color: T.text, fontSize: 13, fontWeight: 600,
+              cursor: "pointer", textAlign: "left",
             }}>
-              Nothing waiting — add a note when a call comes in and you can&rsquo;t deal with it yet.
-            </div>
-          ) : (
-            <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
-              {openTasks.slice(0, 5).map((t, idx) => (
-                <div key={t.id} onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "12px 16px", cursor: "pointer",
-                  borderBottom: idx < Math.min(openTasks.length, 5) - 1 ? `1px solid ${T.border}` : "none",
-                }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {t.text}
-                    </div>
-                    {t.startedAt && (
-                      <div style={{ fontSize: 12, color: T.accent, fontWeight: 700, marginTop: 1 }}>working</div>
-                    )}
-                  </div>
-                  <span style={{ color: T.textDim, fontSize: 16 }}>{"›"}</span>
-                </div>
-              ))}
-            </div>
-          )}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ color: T.textMuted, fontWeight: 700 }}>{secLabel}: </span>{label}
+              </span>
+              <span style={{ color: T.warning, flexShrink: 0, fontWeight: 700 }}>Add date →</span>
+            </button>
+            );
+          })}
         </div>
-      )}
+      </div>
+    );
 
-      {/* CME math — which entries counted, which didn't, and why */}
-      <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? `${cmeDetail.st} CME — the math` : "CME"}>
-        {cmeDetail && (() => {
-          const { comp } = cmeDetail;
-          const deg = data.settings.degreeType;
-          // The credit types the engine actually filtered on. This used to be
-          // recomputed here from the degree, which for a CA DO listed AMA PRA
-          // Category 1 as counting and green-tagged AMA entries "counts as
-          // Cat 1" while the engine excluded them. The modal exists to explain
-          // the math, so it has to read the math's own inputs.
-          const cat1Keys = comp.cat1Keywords || [];
-          const mandateTopics = comp.topicResults.map(t => t.topic);
-          const inWin = [], outWin = [];
-          for (const c of data.cme || []) {
-            const d = c.date ? new Date(c.date) : null;
-            if (d && d >= comp.windowStart && d <= comp.windowEnd) inWin.push(c);
-            else outWin.push(c);
-          }
+    // Action Required. One card renderer serves the phone's horizontal
+    // snap-scroll (240px cards; a lone card fills the row) and the desk's
+    // vertical list, where every card is visible without scrolling sideways.
+    const actionCard = (item, layout) => {
+      const sc = getStatusColor(item.expirationDate);
+      const isExpired = sc === "red";
+      return (
+        <div key={item.id} onClick={() => { setTab("credentials"); setSubPage(item._sec); setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
+          ...layout,
+          backgroundColor: T.card, borderRadius: 12,
+          padding: 16, cursor: "pointer", boxShadow: T.shadow1,
+          borderTop: `3px solid ${isExpired ? T.danger : T.warning}`,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.5 }}>{item._cat}</span>
+            <StatusBadge status={isExpired ? "expired" : "expiring"} customLabel={getStatusLabel(item.expirationDate)} />
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {describeItem(item, data.settings.name)}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontSize: 12, color: T.textMuted }}>
+              {item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : ""}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button onClick={(ev) => { ev.stopPropagation(); openFollowUp(item); }} style={{
+                padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+              }}>Follow up</button>
+              <button onClick={(ev) => { ev.stopPropagation(); openAck(item); }} style={{
+                padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+              }}>Acknowledge</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    const actionHeader = (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Action Required</h3>
+        {urgent.length > 0 && <span style={{ fontSize: 12, fontWeight: 600, color: T.danger }}>{urgent.length} item{urgent.length !== 1 ? "s" : ""}</span>}
+      </div>
+    );
+    const snoozedBlock = snoozed.length > 0 && (
+      <div style={{ marginTop: 8 }}>
+        <button onClick={() => setShowSnoozed(v => !v)} style={{
+          background: "none", border: "none", padding: "4px 2px", cursor: "pointer",
+          fontSize: 12.5, fontWeight: 600, color: T.textMuted,
+        }}>
+          {"🔕"} {snoozed.length} acknowledged {showSnoozed ? "▴" : "▾"}
+        </button>
+        {showSnoozed && snoozed.map(item => {
+          const ack = activeAckFor(data, item.id);
           return (
-            <>
-              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
-                <strong style={{ color: T.text }}>{comp.windowLabel}.</strong>
-                {comp.daysLeft != null && ` ${comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
-                {windowNotes(comp).map((n, i) => (
-                  <div key={i} style={{ marginTop: 4, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
-                ))}
+            <div key={item.id} style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
+              backgroundColor: T.card, border: `1px dashed ${T.border}`, borderRadius: 10, marginTop: 6,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {describeItem(item, data.settings.name)}
+                </div>
+                <div style={{ fontSize: 11.5, color: T.textDim }}>
+                  Exp {formatDate(item.expirationDate)} · quiet until {formatDate(ack?.until)}{ack?.note ? ` · ${ack.note}` : ""}
+                </div>
               </div>
+              <button onClick={() => ack && deleteItem("alertAcks", ack.id)} style={{
+                padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.accent, fontSize: 11.5, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+              }}>Wake</button>
+            </div>
+          );
+        })}
+      </div>
+    );
+    const actionSection = (urgent.length > 0 || snoozed.length > 0) && (
+      <div style={{ marginBottom: 20 }}>
+        {actionHeader}
+        {isDesktop ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {urgent.map(item => actionCard(item, null))}
+          </div>
+        ) : (
+          <div className="cmd-snap-scroll">
+            {urgent.slice(0, 6).map(item => actionCard(item, {
+              flex: urgent.length === 1 ? "1 1 auto" : "0 0 auto",
+              width: urgent.length === 1 ? "100%" : 240,
+            }))}
+          </div>
+        )}
+        {snoozedBlock}
+      </div>
+    );
 
-              {/* Requirement scoreboard */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                {!comp.noGeneralReq && (
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                    <span style={{ color: T.text, fontWeight: 600 }}>Total hours</span>
-                    <span style={{ fontWeight: 800, color: comp.totalMet ? T.success : T.warning }}>{comp.totalEarned} / {comp.totalRequired}</span>
+    // To do — the locum interrupted-work list, surfaced here so it's
+    // visible without switching to the Locum tab
+    const todoSection = plan === "locum" && (
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>To do</h3>
+          <button onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
+            background: "none", border: "none", fontSize: 13, fontWeight: 600,
+            color: T.accent, cursor: "pointer", padding: 0,
+          }}>View All</button>
+        </div>
+        {openTasks.length === 0 ? (
+          <div onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
+            backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
+            boxShadow: T.shadow1, fontSize: 13, color: T.textMuted, cursor: "pointer",
+          }}>
+            Nothing waiting — add a note when a call comes in and you can&rsquo;t deal with it yet.
+          </div>
+        ) : (
+          <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
+            {openTasks.slice(0, 5).map((t, idx) => (
+              <div key={t.id} onClick={() => { setTab("locum"); setSubPage("todo"); }} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "12px 16px", cursor: "pointer",
+                borderBottom: idx < Math.min(openTasks.length, 5) - 1 ? `1px solid ${T.border}` : "none",
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t.text}
                   </div>
-                )}
-                {comp.cat1Required > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                    <span style={{ color: T.text, fontWeight: 600 }}>{cat1BucketLabel(cat1Keys, deg)}
-                      <span style={{ display: "block", fontSize: 11, color: T.textDim, fontWeight: 500 }}>counts: {cat1Keys.join(", ")}</span>
-                    </span>
-                    <span style={{ fontWeight: 800, color: comp.cat1Met ? T.success : T.warning }}>{comp.cat1Earned} / {comp.cat1Required}</span>
-                  </div>
-                )}
-                {comp.topicResults.map(t => (
-                  <div key={t.topic} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                    <span style={{ color: T.text, fontWeight: 600 }}>{t.topic}{t.checklist ? " (required topic)" : ""}</span>
-                    <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.checklist ? (t.met ? "✓" : "missing") : `${t.earned} / ${t.required}`}</span>
+                  {t.startedAt && (
+                    <div style={{ fontSize: 12, color: T.accent, fontWeight: 700, marginTop: 1 }}>working</div>
+                  )}
+                </div>
+                <span style={{ color: T.textDim, fontSize: 16 }}>{"›"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+
+    // The math and alert modals. Overlays, so their place in the tree is
+    // immaterial; they render once in either layout.
+    const homeModals = (
+      <>
+        {/* CME math — which entries counted, which didn't, and why */}
+        <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? `${cmeDetail.st} CME — the math` : "CME"}>
+          {cmeDetail && (() => {
+            const { comp } = cmeDetail;
+            const deg = data.settings.degreeType;
+            // The credit types the engine actually filtered on. This used to be
+            // recomputed here from the degree, which for a CA DO listed AMA PRA
+            // Category 1 as counting and green-tagged AMA entries "counts as
+            // Cat 1" while the engine excluded them. The modal exists to explain
+            // the math, so it has to read the math's own inputs.
+            const cat1Keys = comp.cat1Keywords || [];
+            const mandateTopics = comp.topicResults.map(t => t.topic);
+            const inWin = [], outWin = [];
+            for (const c of data.cme || []) {
+              const d = c.date ? new Date(c.date) : null;
+              if (d && d >= comp.windowStart && d <= comp.windowEnd) inWin.push(c);
+              else outWin.push(c);
+            }
+            return (
+              <>
+                <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
+                  <strong style={{ color: T.text }}>{comp.windowLabel}.</strong>
+                  {comp.daysLeft != null && ` ${comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
+                  {windowNotes(comp).map((n, i) => (
+                    <div key={i} style={{ marginTop: 4, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
+                  ))}
+                </div>
+
+                {/* Requirement scoreboard */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                  {!comp.noGeneralReq && (
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                      <span style={{ color: T.text, fontWeight: 600 }}>Total hours</span>
+                      <span style={{ fontWeight: 800, color: comp.totalMet ? T.success : T.warning }}>{comp.totalEarned} / {comp.totalRequired}</span>
+                    </div>
+                  )}
+                  {comp.cat1Required > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                      <span style={{ color: T.text, fontWeight: 600 }}>{cat1BucketLabel(cat1Keys, deg)}
+                        <span style={{ display: "block", fontSize: 11, color: T.textDim, fontWeight: 500 }}>counts: {cat1Keys.join(", ")}</span>
+                      </span>
+                      <span style={{ fontWeight: 800, color: comp.cat1Met ? T.success : T.warning }}>{comp.cat1Earned} / {comp.cat1Required}</span>
+                    </div>
+                  )}
+                  {comp.topicResults.map(t => (
+                    <div key={t.topic} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                      <span style={{ color: T.text, fontWeight: 600 }}>{t.topic}{t.checklist ? " (required topic)" : ""}</span>
+                      <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.checklist ? (t.met ? "✓" : "missing") : `${t.earned} / ${t.required}`}</span>
+                    </div>
+                  ))}
+                  {comp.mate && (
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                      <span style={{ color: T.text, fontWeight: 600 }}>MATE Act (one-time, any date)</span>
+                      <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{comp.mate.earned} / {comp.mate.required}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* What counted */}
+                <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  Counted this cycle ({inWin.length})
+                </div>
+                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — every hour you log dated inside the window lands here.</div>}
+                {inWin.map(c => (
+                  <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+                      <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                      <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3, alignItems: "center" }}>
+                      <span style={{ fontSize: 11, color: T.textDim }}>{c.date}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: cat1Keys.includes(c.category) ? T.successDim : T.input, color: cat1Keys.includes(c.category) ? T.success : T.textMuted }}>
+                        {c.category || "no category"}{cat1Keys.includes(c.category) ? " · counts as Cat 1" : ""}
+                      </span>
+                      {(c.topics || []).filter(t => mandateTopics.includes(t)).map(t => (
+                        <span key={t} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: T.accentDim, color: T.accent }}>{t}</span>
+                      ))}
+                    </div>
                   </div>
                 ))}
-                {comp.mate && (
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                    <span style={{ color: T.text, fontWeight: 600 }}>MATE Act (one-time, any date)</span>
-                    <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{comp.mate.earned} / {comp.mate.required}</span>
-                  </div>
-                )}
-              </div>
 
-              {/* What counted */}
-              <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                Counted this cycle ({inWin.length})
-              </div>
-              {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — every hour you log dated inside the window lands here.</div>}
-              {inWin.map(c => (
-                <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
-                    <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                    <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
+                {/* What didn't count */}
+                {outWin.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
+                      Not counting toward this renewal ({outWin.length})
+                    </div>
+                    {outWin.map(c => (
+                      <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
+                          <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                          <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
+                          {c.date ? `${c.date} — outside the cycle window` : "no date on the entry — add one so it can count"}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {comp.notes && (
+                  <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>{comp.notes}</div>
+                )}
+                <RuleProvenance
+                  reportKey={cmeDetail.st}
+                  subject={`${cmeDetail.st}${hasSeparateBoards(cmeDetail.st) ? ` (${deg || "MD"})` : ""}`}
+                  citation={comp.source}
+                  meta={STATE_REQS_META}
+                  verified={comp.verified}
+                  sourceUrl={comp.sourceUrl}
+                  upcoming={comp.upcoming}
+                />
+              </>
+            );
+          })()}
+        </Modal>
+
+        {/* Board math — same transparency as the state cards */}
+        <Modal open={!!boardDetail} onClose={() => setBoardDetail(null)} title={boardDetail ? `${boardDetail.name} — the math` : "Board"}>
+          {boardDetail && (() => {
+            const b = boardDetail;
+            const counts = (c) => !b.countRule || (c.category || "").includes(b.countRule);
+            const inWin = [], excluded = [];
+            for (const c of data.cme || []) {
+              if (c.date && b.from && c.date >= b.from && c.date <= b.to) {
+                if (counts(c)) inWin.push(c);
+                else excluded.push({ c, why: `category doesn't count for this board — needs ${b.countRule}` });
+              } else {
+                excluded.push({ c, why: c.date ? "outside this cycle window" : "no date on the entry — add one so it can count" });
+              }
+            }
+            const fmtD = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+            return (
+              <>
+                <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
+                  {b.label}. Cycle window: <strong style={{ color: T.text }}>{b.from ? fmtD(b.from) : "—"} – {b.to ? fmtD(b.to) : "—"}</strong>
+                  {b.daysLeft != null && ` · ${b.daysLeft} days left`}. {b.countRule ? `Only ${b.countRule} credit counts for this board.` : "All CME categories count toward the total."}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                    <span style={{ color: T.text, fontWeight: 600 }}>Total hours ({b.unit})</span>
+                    <span style={{ fontWeight: 800, color: b.met ? T.success : T.warning }}>{b.earned} / {b.required}</span>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: T.textDim }}>{c.date}</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: cat1Keys.includes(c.category) ? T.successDim : T.input, color: cat1Keys.includes(c.category) ? T.success : T.textMuted }}>
-                      {c.category || "no category"}{cat1Keys.includes(c.category) ? " · counts as Cat 1" : ""}
-                    </span>
-                    {(c.topics || []).filter(t => mandateTopics.includes(t)).map(t => (
-                      <span key={t} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: T.accentDim, color: T.accent }}>{t}</span>
+                  {b.cat1aRequired > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                      <span style={{ color: T.text, fontWeight: 600 }}>AOA Category 1-A minimum</span>
+                      <span style={{ fontWeight: 800, color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning }}>{b.cat1aEarned} / {b.cat1aRequired}</span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  Counted this cycle ({inWin.length})
+                </div>
+                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — hours dated inside the window land here.</div>}
+                {inWin.map(c => (
+                  <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+                      <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                      <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date} · {c.category || "no category"}</div>
+                  </div>
+                ))}
+                {excluded.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
+                      Not counting ({excluded.length})
+                    </div>
+                    {excluded.map(({ c, why }) => (
+                      <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
+                          <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                          <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date ? `${c.date} — ${why}` : why}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {b.assessment && (
+                  <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>Also required: {b.assessment}</div>
+                )}
+                {b.notes && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{b.notes}</div>}
+                <RuleProvenance
+                  reportKey={`board:${b.code}`}
+                  subject={b.label}
+                  citation={b.citation}
+                  meta={BOARD_REQS_META}
+                  verified={b.verified}
+                  compact
+                />
+              </>
+            );
+          })()}
+        </Modal>
+
+        {/* Acknowledge an alert — "seen it, nothing to do yet" is a real state */}
+        <Modal open={!!ackItem} onClose={() => setAckItem(null)} title="Acknowledge this alert">
+          {ackItem && (() => {
+            const exp = ackItem.expirationDate;
+            const fmtISO = (d) => d.toISOString().slice(0, 10);
+            const plus = (days) => fmtISO(new Date(Date.now() + days * MS_PER_DAY));
+            const before30 = exp ? fmtISO(new Date(new Date(exp + "T12:00").getTime() - 30 * MS_PER_DAY)) : null;
+            const today = fmtISO(new Date());
+            const chips = [
+              { l: "2 weeks", v: plus(14) },
+              { l: "1 month", v: plus(30) },
+              ...(before30 && before30 > today ? [{ l: "Until 30 days before it expires", v: before30 }] : []),
+            ];
+            return (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>{describeItem(ackItem, data.settings.name)}</div>
+                <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
+                  Expires {formatDate(exp)}. Nothing to do right now? Silence this alert and the app will raise it again when the date you pick arrives.
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Quiet until</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                  {chips.map(c => (
+                    <button key={c.l} onClick={() => setAckUntil(c.v)} style={{
+                      padding: "9px 13px", borderRadius: 16, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      border: `1px solid ${ackUntil === c.v ? T.accent : T.border}`,
+                      backgroundColor: ackUntil === c.v ? T.accent : "transparent",
+                      color: ackUntil === c.v ? "#fff" : T.textMuted,
+                    }}>{c.l}</button>
+                  ))}
+                  <input type="date" value={ackUntil} min={today} onChange={e => setAckUntil(e.target.value)}
+                    style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Why (optional — shows with the acknowledged alert)</div>
+                <input value={ackNote} onChange={e => setAckNote(e.target.value)} placeholder="e.g. waiting on the board to extend"
+                  style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                  <button onClick={() => setAckItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                  <button onClick={() => saveAck(ackUntil)} disabled={!ackUntil} style={{
+                    padding: "12px 18px", borderRadius: 10, border: "none",
+                    backgroundColor: ackUntil ? T.accent : T.border, color: "#fff", fontSize: 15, fontWeight: 600,
+                    cursor: ackUntil ? "pointer" : "default",
+                  }}>Acknowledge</button>
+                </div>
+              </>
+            );
+          })()}
+        </Modal>
+
+        {/* Log a follow-up on an expiring alert — for actions taken outside the
+            app (an email, a call) that acknowledging alone doesn't capture */}
+        <Modal open={!!followUpItem} onClose={() => setFollowUpItem(null)} title="Log a follow-up">
+          {followUpItem && (() => {
+            const history = (data.followUps || [])
+              .filter(f => f.itemId === followUpItem.id)
+              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            return (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>{describeItem(followUpItem, data.settings.name)}</div>
+                <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
+                  Expires {formatDate(followUpItem.expirationDate)}. Track what you did about it — an email, a call — so it doesn't get lost.
+                </div>
+                {history.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>History</div>
+                    {history.map(f => (
+                      <div key={f.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6 }}>
+                        <div style={{ fontSize: 12.5, color: T.text, fontWeight: 600 }}>
+                          {f.emailed ? "Emailed" : "Note"}{f.recipient ? ` · ${f.recipient}` : ""} · {formatDate(f.createdAt)}
+                        </div>
+                        {f.note && <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>{f.note}</div>}
+                      </div>
                     ))}
                   </div>
-                </div>
-              ))}
-
-              {/* What didn't count */}
-              {outWin.length > 0 && (
-                <>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
-                    Not counting toward this renewal ({outWin.length})
-                  </div>
-                  {outWin.map(c => (
-                    <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
-                        <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                        <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
-                        {c.date ? `${c.date} — outside the cycle window` : "no date on the entry — add one so it can count"}
-                      </div>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {comp.notes && (
-                <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>{comp.notes}</div>
-              )}
-              <RuleProvenance
-                reportKey={cmeDetail.st}
-                subject={`${cmeDetail.st}${hasSeparateBoards(cmeDetail.st) ? ` (${deg || "MD"})` : ""}`}
-                citation={comp.source}
-                meta={STATE_REQS_META}
-                verified={comp.verified}
-                sourceUrl={comp.sourceUrl}
-                upcoming={comp.upcoming}
-              />
-            </>
-          );
-        })()}
-      </Modal>
-
-      {/* Board math — same transparency as the state cards */}
-      <Modal open={!!boardDetail} onClose={() => setBoardDetail(null)} title={boardDetail ? `${boardDetail.name} — the math` : "Board"}>
-        {boardDetail && (() => {
-          const b = boardDetail;
-          const counts = (c) => !b.countRule || (c.category || "").includes(b.countRule);
-          const inWin = [], excluded = [];
-          for (const c of data.cme || []) {
-            if (c.date && b.from && c.date >= b.from && c.date <= b.to) {
-              if (counts(c)) inWin.push(c);
-              else excluded.push({ c, why: `category doesn't count for this board — needs ${b.countRule}` });
-            } else {
-              excluded.push({ c, why: c.date ? "outside this cycle window" : "no date on the entry — add one so it can count" });
-            }
-          }
-          const fmtD = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-          return (
-            <>
-              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
-                {b.label}. Cycle window: <strong style={{ color: T.text }}>{b.from ? fmtD(b.from) : "—"} – {b.to ? fmtD(b.to) : "—"}</strong>
-                {b.daysLeft != null && ` · ${b.daysLeft} days left`}. {b.countRule ? `Only ${b.countRule} credit counts for this board.` : "All CME categories count toward the total."}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                  <span style={{ color: T.text, fontWeight: 600 }}>Total hours ({b.unit})</span>
-                  <span style={{ fontWeight: 800, color: b.met ? T.success : T.warning }}>{b.earned} / {b.required}</span>
-                </div>
-                {b.cat1aRequired > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                    <span style={{ color: T.text, fontWeight: 600 }}>AOA Category 1-A minimum</span>
-                    <span style={{ fontWeight: 800, color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning }}>{b.cat1aEarned} / {b.cat1aRequired}</span>
-                  </div>
                 )}
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                Counted this cycle ({inWin.length})
-              </div>
-              {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet — hours dated inside the window land here.</div>}
-              {inWin.map(c => (
-                <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
-                    <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                    <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date} · {c.category || "no category"}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>To (name or email, optional)</div>
+                <input value={followUpRecipient} onChange={e => setFollowUpRecipient(e.target.value)} placeholder="e.g. Kyle, credentialing office"
+                  style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15, marginBottom: 10 }} />
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>What happened (optional)</div>
+                <input value={followUpNote} onChange={e => setFollowUpNote(e.target.value)} placeholder="e.g. reminded him to update these privileges"
+                  style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                  <button onClick={() => setFollowUpItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                  <button onClick={() => saveFollowUp(false)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Log it</button>
+                  <button onClick={() => saveFollowUp(true)} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Email &amp; log</button>
                 </div>
-              ))}
-              {excluded.length > 0 && (
-                <>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
-                    Not counting ({excluded.length})
+              </>
+            );
+          })()}
+        </Modal>
+      </>
+    );
+
+    // Surgical cases captured by RVU logging that still need role/category
+    const casesSection = (() => {
+      const incomplete = (data.caseLogs || []).filter(c => !c.role || !c.category);
+      if (!incomplete.length) return null;
+      return (
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "0 0 10px" }}>
+            Cases to complete ({incomplete.length})
+          </h3>
+          <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
+            {incomplete.slice(0, 6).map((c, idx) => (
+              <div key={c.id} onClick={() => { setTab("credentials"); setSubPage("caseLogs"); setAutoEditTarget({ sec: "caseLogs", id: c.id, mode: "edit" }); }} style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer",
+                borderBottom: idx < Math.min(incomplete.length, 6) - 1 ? `1px solid ${T.border}` : "none",
+              }}>
+                <span style={{ fontSize: 18 }}>{"🔪"}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.cptCodes}</div>
+                  <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 1 }}>
+                    {formatDate(c.date)}{c.wRvu ? ` · ${c.wRvu} wRVU` : ""} · missing {[!c.role && "role", !c.category && "category"].filter(Boolean).join(" + ")}
                   </div>
-                  {excluded.map(({ c, why }) => (
-                    <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
-                        <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                        <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date ? `${c.date} — ${why}` : why}</div>
-                    </div>
-                  ))}
-                </>
-              )}
-              {b.assessment && (
-                <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>Also required: {b.assessment}</div>
-              )}
-              {b.notes && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{b.notes}</div>}
-              <RuleProvenance
-                reportKey={`board:${b.code}`}
-                subject={b.label}
-                citation={b.citation}
-                meta={BOARD_REQS_META}
-                verified={b.verified}
-                compact
-              />
-            </>
-          );
-        })()}
-      </Modal>
-
-      {/* Acknowledge an alert — "seen it, nothing to do yet" is a real state */}
-      <Modal open={!!ackItem} onClose={() => setAckItem(null)} title="Acknowledge this alert">
-        {ackItem && (() => {
-          const exp = ackItem.expirationDate;
-          const fmtISO = (d) => d.toISOString().slice(0, 10);
-          const plus = (days) => fmtISO(new Date(Date.now() + days * MS_PER_DAY));
-          const before30 = exp ? fmtISO(new Date(new Date(exp + "T12:00").getTime() - 30 * MS_PER_DAY)) : null;
-          const today = fmtISO(new Date());
-          const chips = [
-            { l: "2 weeks", v: plus(14) },
-            { l: "1 month", v: plus(30) },
-            ...(before30 && before30 > today ? [{ l: "Until 30 days before it expires", v: before30 }] : []),
-          ];
-          return (
-            <>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>{describeItem(ackItem, data.settings.name)}</div>
-              <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
-                Expires {formatDate(exp)}. Nothing to do right now? Silence this alert and the app will raise it again when the date you pick arrives.
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Quiet until</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                {chips.map(c => (
-                  <button key={c.l} onClick={() => setAckUntil(c.v)} style={{
-                    padding: "9px 13px", borderRadius: 16, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                    border: `1px solid ${ackUntil === c.v ? T.accent : T.border}`,
-                    backgroundColor: ackUntil === c.v ? T.accent : "transparent",
-                    color: ackUntil === c.v ? "#fff" : T.textMuted,
-                  }}>{c.l}</button>
-                ))}
-                <input type="date" value={ackUntil} min={today} onChange={e => setAckUntil(e.target.value)}
-                  style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>Why (optional — shows with the acknowledged alert)</div>
-              <input value={ackNote} onChange={e => setAckNote(e.target.value)} placeholder="e.g. waiting on the board to extend"
-                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-                <button onClick={() => setAckItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-                <button onClick={() => saveAck(ackUntil)} disabled={!ackUntil} style={{
-                  padding: "12px 18px", borderRadius: 10, border: "none",
-                  backgroundColor: ackUntil ? T.accent : T.border, color: "#fff", fontSize: 15, fontWeight: 600,
-                  cursor: ackUntil ? "pointer" : "default",
-                }}>Acknowledge</button>
-              </div>
-            </>
-          );
-        })()}
-      </Modal>
-
-      {/* Log a follow-up on an expiring alert — for actions taken outside the
-          app (an email, a call) that acknowledging alone doesn't capture */}
-      <Modal open={!!followUpItem} onClose={() => setFollowUpItem(null)} title="Log a follow-up">
-        {followUpItem && (() => {
-          const history = (data.followUps || [])
-            .filter(f => f.itemId === followUpItem.id)
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-          return (
-            <>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>{describeItem(followUpItem, data.settings.name)}</div>
-              <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12 }}>
-                Expires {formatDate(followUpItem.expirationDate)}. Track what you did about it — an email, a call — so it doesn't get lost.
-              </div>
-              {history.length > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>History</div>
-                  {history.map(f => (
-                    <div key={f.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6 }}>
-                      <div style={{ fontSize: 12.5, color: T.text, fontWeight: 600 }}>
-                        {f.emailed ? "Emailed" : "Note"}{f.recipient ? ` · ${f.recipient}` : ""} · {formatDate(f.createdAt)}
-                      </div>
-                      {f.note && <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>{f.note}</div>}
-                    </div>
-                  ))}
                 </div>
-              )}
-              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>To (name or email, optional)</div>
-              <input value={followUpRecipient} onChange={e => setFollowUpRecipient(e.target.value)} placeholder="e.g. Kyle, credentialing office"
-                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15, marginBottom: 10 }} />
-              <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>What happened (optional)</div>
-              <input value={followUpNote} onChange={e => setFollowUpNote(e.target.value)} placeholder="e.g. reminded him to update these privileges"
-                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 15 }} />
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-                <button onClick={() => setFollowUpItem(null)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-                <button onClick={() => saveFollowUp(false)} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Log it</button>
-                <button onClick={() => saveFollowUp(true)} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Email &amp; log</button>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#f97316", textTransform: "uppercase" }}>Complete</span>
               </div>
-            </>
-          );
-        })()}
-      </Modal>
+            ))}
+          </div>
+        </div>
+      );
+    })();
 
-      {/* Surgical cases captured by RVU logging that still need role/category */}
-      {(() => {
-        const incomplete = (data.caseLogs || []).filter(c => !c.role || !c.category);
-        if (!incomplete.length) return null;
-        return (
-          <div style={{ marginBottom: 20 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: "0 0 10px" }}>
-              Cases to complete ({incomplete.length})
-            </h3>
-            <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
-              {incomplete.slice(0, 6).map((c, idx) => (
-                <div key={c.id} onClick={() => { setTab("credentials"); setSubPage("caseLogs"); setAutoEditTarget({ sec: "caseLogs", id: c.id, mode: "edit" }); }} style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer",
-                  borderBottom: idx < Math.min(incomplete.length, 6) - 1 ? `1px solid ${T.border}` : "none",
-                }}>
-                  <span style={{ fontSize: 18 }}>{"🔪"}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.cptCodes}</div>
-                    <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 1 }}>
-                      {formatDate(c.date)}{c.wRvu ? ` · ${c.wRvu} wRVU` : ""} · missing {[!c.role && "role", !c.category && "category"].filter(Boolean).join(" + ")}
-                    </div>
+    // Credentials preview (Settings toggle, off by default): before the CME
+    // cards on the phone, beside the board cards at desk width.
+    const showCredsPreview = allCreds.length > 0 && data.settings.showDashboardCredentials === true;
+    const credentialsPreviewInner = (
+      <>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Credentials</h3>
+          <button onClick={() => { setTab("credentials"); setSubPage(null); }} style={{
+            background: "none", border: "none", fontSize: 13, fontWeight: 600,
+            color: T.accent, cursor: "pointer", padding: 0,
+          }}>View All</button>
+        </div>
+        <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
+          {data.licenses.slice(0, 5).map((item, idx) => {
+            // Course and device certifications have no expiration by nature;
+            // grading them by date made them read as an unfinished "Draft".
+            const nonExp = isNonExpiring(item, "licenses");
+            const sc = nonExp ? "green" : getStatusColor(item.expirationDate);
+            const d = item.expirationDate ? daysUntil(item.expirationDate) : null;
+            return (
+              <div key={item.id} onClick={() => { setTab("credentials"); setSubPage("licenses"); setAutoEditTarget({ sec: "licenses", id: item.id, mode: "view" }); }} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "12px 16px", cursor: "pointer",
+                borderBottom: idx < Math.min(data.licenses.length, 5) - 1 ? `1px solid ${T.border}` : "none",
+                transition: "background 0.15s",
+              }}>
+                <StatusDot color={sc} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {describeItem(item, data.settings.name)}
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: "#f97316", textTransform: "uppercase" }}>Complete</span>
+                  <div style={{ fontSize: 13, color: T.textMuted, marginTop: 1 }}>
+                    {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : nonExp ? "Does not expire" : null].filter(Boolean).join(" \u00b7 ")}
+                    {d !== null && Number.isFinite(d) && (
+                      <span style={{ fontWeight: 700, color: d <= 90 ? sc : T.textMuted }}>
+                        {" \u00b7 "}
+                        {d < 0 ? `expired ${Math.abs(d).toLocaleString()}d ago` : d === 0 ? "expires today" : `${d.toLocaleString()}d`}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ))}
+                <StatusBadge status={nonExp ? "active" : statusFromColor(sc)} customLabel={nonExp ? "On file" : undefined} />
+                <span style={{ color: T.textDim, fontSize: 16 }}>{"\u203a"}</span>
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+
+    // CME Compliance — shown for every tracked state even with zero CME
+    // logged; "30 hrs to go" is exactly what an empty cycle needs to say
+    const cmeHeader = (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>CME Progress</h3>
+        <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
+          background: "none", border: "none", fontSize: 13, fontWeight: 600,
+          color: T.accent, cursor: "pointer", padding: 0,
+        }}>Find CME</button>
+      </div>
+    );
+    const licenseWarnings = statesMissingLicense.map(st => (
+      <button key={`ml-${st}`} onClick={() => { setTab("credentials"); setSubPage("licenses"); }} style={{
+        textAlign: "left", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`,
+        borderRadius: 14, padding: "12px 14px", cursor: "pointer",
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>
+          {st}: no medical license on file
+        </div>
+        <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
+          You have a {st} credential (like a DEA registration) but the {st} medical
+          license itself isn't in the app — add it and {st} CME &amp; renewal tracking
+          turn on automatically. Tap to add it.
+        </div>
+      </button>
+    ));
+    const renderStateCard = ({ st, comp, lic }) => {
+      const unmetTopics = comp.topicResults.filter(t => !t.met);
+      const dl = comp.daysLeft;
+      const urgency = dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok";
+      return (
+        <div key={st} onClick={() => setCmeDetail({ st, comp })} style={{
+          backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
+          boxShadow: T.shadow1, cursor: "pointer",
+          borderLeft: `3px solid ${comp.fullyCompliant ? T.success : T.warning}`,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{st}</span>
+              {st === data.settings.primaryState && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, backgroundColor: T.accentDim, padding: "2px 6px", borderRadius: 4 }}>PRIMARY</span>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {comp.noGeneralReq
+                ? <span style={{ fontSize: 13, color: T.textDim }}>Topic-specific</span>
+                : <span style={{ fontSize: 14, fontWeight: 700, color: comp.totalMet ? T.success : T.text }}>
+                    {comp.totalMet ? `${comp.totalEarned}/${comp.totalRequired} hrs \u2713` : `${comp.hoursRemaining} hrs to go`}
+                  </span>
+              }
+              <div style={{
+                width: 22, height: 22, borderRadius: 11,
+                backgroundColor: comp.fullyCompliant ? T.successDim : T.warningDim,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: comp.fullyCompliant ? T.success : T.warning, fontSize: 13, fontWeight: 700,
+              }}>{comp.fullyCompliant ? "\u2713" : "!"}</div>
             </div>
           </div>
-        );
-      })()}
-
-      {/* Credentials List */}
-      {allCreds.length > 0 && data.settings.showDashboardCredentials === true && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Credentials</h3>
-            <button onClick={() => { setTab("credentials"); setSubPage(null); }} style={{
-              background: "none", border: "none", fontSize: 13, fontWeight: 600,
-              color: T.accent, cursor: "pointer", padding: 0,
-            }}>View All</button>
-          </div>
-          <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
-            {data.licenses.slice(0, 5).map((item, idx) => {
-              // Course and device certifications have no expiration by nature;
-              // grading them by date made them read as an unfinished "Draft".
-              const nonExp = isNonExpiring(item, "licenses");
-              const sc = nonExp ? "green" : getStatusColor(item.expirationDate);
-              const d = item.expirationDate ? daysUntil(item.expirationDate) : null;
-              return (
-                <div key={item.id} onClick={() => { setTab("credentials"); setSubPage("licenses"); setAutoEditTarget({ sec: "licenses", id: item.id, mode: "view" }); }} style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "12px 16px", cursor: "pointer",
-                  borderBottom: idx < Math.min(data.licenses.length, 5) - 1 ? `1px solid ${T.border}` : "none",
-                  transition: "background 0.15s",
-                }}>
-                  <StatusDot color={sc} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {describeItem(item, data.settings.name)}
-                    </div>
-                    <div style={{ fontSize: 13, color: T.textMuted, marginTop: 1 }}>
-                      {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : nonExp ? "Does not expire" : null].filter(Boolean).join(" \u00b7 ")}
-                      {d !== null && Number.isFinite(d) && (
-                        <span style={{ fontWeight: 700, color: d <= 90 ? sc : T.textMuted }}>
-                          {" \u00b7 "}
-                          {d < 0 ? `expired ${Math.abs(d).toLocaleString()}d ago` : d === 0 ? "expires today" : `${d.toLocaleString()}d`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <StatusBadge status={nonExp ? "active" : statusFromColor(sc)} customLabel={nonExp ? "On file" : undefined} />
-                  <span style={{ color: T.textDim, fontSize: 16 }}>{"\u203a"}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* CME Compliance — shown for every tracked state even with zero CME
-          logged; "30 hrs to go" is exactly what an empty cycle needs to say */}
-      {allTrackedStates.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>CME Progress</h3>
-            <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
-              background: "none", border: "none", fontSize: 13, fontWeight: 600,
-              color: T.accent, cursor: "pointer", padding: 0,
-            }}>Find CME</button>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {statesMissingLicense.map(st => (
-              <button key={`ml-${st}`} onClick={() => { setTab("credentials"); setSubPage("licenses"); }} style={{
-                textAlign: "left", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`,
-                borderRadius: 14, padding: "12px 14px", cursor: "pointer",
+          {/* Renewal deadline */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: T.textDim }}>
+              {comp.windowAnchored
+                ? `License renews ${formatDate(lic.expirationDate)}`
+                : `No ${st} license on file \u2014 tracking a rolling ${comp.cycle}-yr window`}
+            </span>
+            {dl != null && (
+              <span style={{
+                fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 8,
+                backgroundColor: urgency === "danger" ? T.dangerDim : urgency === "warning" ? T.warningDim : T.successDim,
+                color: urgency === "danger" ? T.danger : urgency === "warning" ? T.warning : T.success,
               }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>
-                  {st}: no medical license on file
-                </div>
-                <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
-                  You have a {st} credential (like a DEA registration) but the {st} medical
-                  license itself isn't in the app — add it and {st} CME &amp; renewal tracking
-                  turn on automatically. Tap to add it.
-                </div>
-              </button>
-            ))}
-            {stateComps.map(({ st, comp, lic }) => {
-              const unmetTopics = comp.topicResults.filter(t => !t.met);
-              const dl = comp.daysLeft;
-              const urgency = dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok";
-              return (
-                <div key={st} onClick={() => setCmeDetail({ st, comp })} style={{
-                  backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
-                  boxShadow: T.shadow1, cursor: "pointer",
-                  borderLeft: `3px solid ${comp.fullyCompliant ? T.success : T.warning}`,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{st}</span>
-                      {st === data.settings.primaryState && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, backgroundColor: T.accentDim, padding: "2px 6px", borderRadius: 4 }}>PRIMARY</span>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {comp.noGeneralReq
-                        ? <span style={{ fontSize: 13, color: T.textDim }}>Topic-specific</span>
-                        : <span style={{ fontSize: 14, fontWeight: 700, color: comp.totalMet ? T.success : T.text }}>
-                            {comp.totalMet ? `${comp.totalEarned}/${comp.totalRequired} hrs \u2713` : `${comp.hoursRemaining} hrs to go`}
-                          </span>
-                      }
-                      <div style={{
-                        width: 22, height: 22, borderRadius: 11,
-                        backgroundColor: comp.fullyCompliant ? T.successDim : T.warningDim,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: comp.fullyCompliant ? T.success : T.warning, fontSize: 13, fontWeight: 700,
-                      }}>{comp.fullyCompliant ? "\u2713" : "!"}</div>
-                    </div>
-                  </div>
-                  {/* Renewal deadline */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: T.textDim }}>
-                      {comp.windowAnchored
-                        ? `License renews ${formatDate(lic.expirationDate)}`
-                        : `No ${st} license on file \u2014 tracking a rolling ${comp.cycle}-yr window`}
-                    </span>
-                    {dl != null && (
-                      <span style={{
-                        fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 8,
-                        backgroundColor: urgency === "danger" ? T.dangerDim : urgency === "warning" ? T.warningDim : T.successDim,
-                        color: urgency === "danger" ? T.danger : urgency === "warning" ? T.warning : T.success,
-                      }}>
-                        {dl <= 0 ? "OVERDUE" : `${dl} days`}
-                      </span>
-                    )}
-                  </div>
+                {dl <= 0 ? "OVERDUE" : `${dl} days`}
+              </span>
+            )}
+          </div>
 
-                  {/* Which dates actually count. Tapping the card opens the
-                      full explanation; this line means it is never a guess. */}
-                  <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.4, marginBottom: 8 }}>
-                    {comp.windowLabel}.
-                    {comp.windowSource === "custom" && " Start set on this license."}
-                    {comp.cycleStartIgnored && (
-                      <span style={{ color: T.warning, fontWeight: 700 }}> CME cycle start on this license is on or after the renewal date, so it was not used.</span>
-                    )}
-                  </div>
+          {/* Which dates actually count. Tapping the card opens the
+              full explanation; this line means it is never a guess. */}
+          <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.4, marginBottom: 8 }}>
+            {comp.windowLabel}.
+            {comp.windowSource === "custom" && " Start set on this license."}
+            {comp.cycleStartIgnored && (
+              <span style={{ color: T.warning, fontWeight: 700 }}> CME cycle start on this license is on or after the renewal date, so it was not used.</span>
+            )}
+          </div>
 
-                  {/* Progress bar */}
-                  {!comp.noGeneralReq && comp.totalRequired > 0 && (
-                    <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginBottom: unmetTopics.length > 0 ? 8 : 0 }}>
-                      <div style={{
-                        height: "100%", borderRadius: 3,
-                        width: Math.min(100, (comp.totalEarned / comp.totalRequired) * 100) + "%",
-                        backgroundColor: comp.totalMet ? T.success : T.accent,
-                        transition: "width 0.5s ease",
-                      }} />
-                    </div>
-                  )}
-                  {unmetTopics.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-                      {unmetTopics.map(t => (
-                        <span key={t.topic} style={{
-                          padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
-                          backgroundColor: T.warningDim, color: T.warning,
-                        }}>{t.checklist ? `${t.topic}: required` : `${t.topic}: ${t.earned}/${t.required}h`}</span>
-                      ))}
-                      <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
-                        padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
-                        border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
-                      }}>Find CME &rarr;</button>
-                    </div>
-                  )}
-                  {!comp.cat1Met && comp.cat1Required > 0 && (
-                    <div style={{ marginTop: 6 }}>
-                      <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
-                        {(comp.cat1Keywords || []).every(k => k.startsWith("AOA Category")) ? "AOA Cat 1" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h needed
-                      </span>
-                    </div>
-                  )}
-                  {comp.mate && !comp.mate.met && (
-                    <div style={{ marginTop: 6 }}>
-                      <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
-                        MATE Act (one-time): {comp.mate.earned}/{comp.mate.required}h opioid/SUD training
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ marginTop: 8 }}>
-                    <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st); }} style={{
-                      padding: "6px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8,
-                      border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer",
-                    }}>
-                      {"\ud83d\udce4"} Renewal packet
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Progress bar */}
+          {!comp.noGeneralReq && comp.totalRequired > 0 && (
+            <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginBottom: unmetTopics.length > 0 ? 8 : 0 }}>
+              <div style={{
+                height: "100%", borderRadius: 3,
+                width: Math.min(100, (comp.totalEarned / comp.totalRequired) * 100) + "%",
+                backgroundColor: comp.totalMet ? T.success : T.accent,
+                transition: "width 0.5s ease",
+              }} />
+            </div>
+          )}
+          {unmetTopics.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+              {unmetTopics.map(t => (
+                <span key={t.topic} style={{
+                  padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
+                  backgroundColor: T.warningDim, color: T.warning,
+                }}>{t.checklist ? `${t.topic}: required` : `${t.topic}: ${t.earned}/${t.required}h`}</span>
+              ))}
+              <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
+                padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+                border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
+              }}>Find CME &rarr;</button>
+            </div>
+          )}
+          {!comp.cat1Met && comp.cat1Required > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
+                {(comp.cat1Keywords || []).every(k => k.startsWith("AOA Category")) ? "AOA Cat 1" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h needed
+              </span>
+            </div>
+          )}
+          {comp.mate && !comp.mate.met && (
+            <div style={{ marginTop: 6 }}>
+              <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
+                MATE Act (one-time): {comp.mate.earned}/{comp.mate.required}h opioid/SUD training
+              </span>
+            </div>
+          )}
+          <div style={{ marginTop: 8 }}>
+            <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st); }} style={{
+              padding: "6px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8,
+              border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer",
+            }}>
+              {"\ud83d\udce4"} Renewal packet
+            </button>
           </div>
         </div>
-      )}
+      );
+    };
+    const stateCards = stateComps.map(renderStateCard);
 
-      {/* Board certification standing \u2014 cycle-windowed, from Settings \u2192
-          Board Specialties. Replaces the old lifetime-sum AOA card. */}
-      {boardComps.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>Board Certification</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {boardComps.filter(b => !b.followsParent).map(b => (
-              <div key={b.id} onClick={() => setBoardDetail(b)} style={{
-                backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1, cursor: "pointer",
-                borderLeft: `3px solid ${b.met ? T.success : T.warning}`,
-              }}>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{b.label}</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: b.met ? T.success : T.warning, flexShrink: 0 }}>
-                    {b.earned}/{b.required} hrs
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
-                  {b.unit} \u00b7 {b.windowLabel}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
-                </div>
-                {b.required > 0 && (
-                  <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginTop: 8 }}>
-                    <div style={{
-                      height: "100%", borderRadius: 3,
-                      width: Math.min(100, (b.earned / b.required) * 100) + "%",
-                      backgroundColor: b.met ? T.success : T.accent,
-                    }} />
-                  </div>
-                )}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, alignItems: "center" }}>
-                  {b.cat1aRequired > 0 && (
-                    <span style={{
-                      padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
-                      backgroundColor: b.cat1aEarned >= b.cat1aRequired ? T.successDim : T.warningDim,
-                      color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning,
-                    }}>AOA Cat 1-A: {b.cat1aEarned}/{b.cat1aRequired}h</span>
-                  )}
-                  {!b.met && (
-                    <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
-                      padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
-                      border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
-                    }}>Find CME &rarr;</button>
-                  )}
-                </div>
-                {b.assessment && (
-                  <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>
-                    Also required: {b.assessment}
-                  </div>
-                )}
-                {b.notes && (
-                  <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>{b.notes}</div>
-                )}
-              </div>
-            ))}
-            {boardComps.filter(b => b.followsParent).map(b => (
-              <div key={b.id} style={{ fontSize: 12, color: T.textDim, padding: "0 4px" }}>
-                {b.label} \u2014 CME follows the primary board above
-              </div>
-            ))}
+    // Board certification standing \u2014 cycle-windowed, from Settings \u2192
+    // Board Specialties. Replaces the old lifetime-sum AOA card.
+    const boardHeading = (
+      <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>Board Certification</h3>
+    );
+    const boardCards = boardComps.filter(b => !b.followsParent).map(b => (
+      <div key={b.id} onClick={() => setBoardDetail(b)} style={{
+        backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1, cursor: "pointer",
+        borderLeft: `3px solid ${b.met ? T.success : T.warning}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{b.label}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: b.met ? T.success : T.warning, flexShrink: 0 }}>
+            {b.earned}/{b.required} hrs
           </div>
         </div>
-      )}
-
-      {/* All clear */}
-      {allCreds.length > 0 && urgent.length === 0 && (
-        <div style={{
-          textAlign: "center", padding: "24px 16px", backgroundColor: T.successDim,
-          borderRadius: 12, marginBottom: 16,
-        }}>
-          <div style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: T.success, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", color: "#fff" }}>
-            <CheckIcon />
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>All Clear</div>
-          <div style={{ fontSize: 14, color: T.textMuted, marginTop: 2 }}>No urgent items right now.</div>
+        <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
+          {b.unit} \u00b7 {b.windowLabel}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
         </div>
-      )}
-    </div>
-  );
+        {b.required > 0 && (
+          <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginTop: 8 }}>
+            <div style={{
+              height: "100%", borderRadius: 3,
+              width: Math.min(100, (b.earned / b.required) * 100) + "%",
+              backgroundColor: b.met ? T.success : T.accent,
+            }} />
+          </div>
+        )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, alignItems: "center" }}>
+          {b.cat1aRequired > 0 && (
+            <span style={{
+              padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
+              backgroundColor: b.cat1aEarned >= b.cat1aRequired ? T.successDim : T.warningDim,
+              color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning,
+            }}>AOA Cat 1-A: {b.cat1aEarned}/{b.cat1aRequired}h</span>
+          )}
+          {!b.met && (
+            <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
+              padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+              border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
+            }}>Find CME &rarr;</button>
+          )}
+        </div>
+        {b.assessment && (
+          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>
+            Also required: {b.assessment}
+          </div>
+        )}
+        {b.notes && (
+          <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>{b.notes}</div>
+        )}
+      </div>
+    ));
+    const boardFollowNotes = boardComps.filter(b => b.followsParent).map(b => (
+      <div key={b.id} style={{ fontSize: 12, color: T.textDim, padding: "0 4px" }}>
+        {b.label} \u2014 CME follows the primary board above
+      </div>
+    ));
+
+    // All clear
+    const allClear = allCreds.length > 0 && urgent.length === 0 && (
+      <div style={{
+        textAlign: "center", padding: "24px 16px", backgroundColor: T.successDim,
+        borderRadius: 12, marginBottom: 16,
+      }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: T.success, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", color: "#fff" }}>
+          <CheckIcon />
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>All Clear</div>
+        <div style={{ fontSize: 14, color: T.textMuted, marginTop: 2 }}>No urgent items right now.</div>
+      </div>
+    );
+
+    if (isDesktop) {
+      const leftStack = (
+        <>
+          {hero}
+          {profileGapBanner}
+          {missingExpBanner}
+          {todoSection}
+          {casesSection}
+        </>
+      );
+      return (
+        <div className="cmd-fade-in">
+          {homeSearch}
+          {requestBanner}
+          {checklist}
+          {hasActionColumn ? (
+            <div className="cmd-responsive-grid-2">
+              <div style={{ minWidth: 0 }}>{leftStack}</div>
+              <div style={{ minWidth: 0 }}>{actionSection}</div>
+            </div>
+          ) : leftStack}
+          {homeModals}
+          {allTrackedStates.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              {cmeHeader}
+              {licenseWarnings.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>{licenseWarnings}</div>
+              )}
+              <div className="cmd-responsive-grid-3">{stateCards}</div>
+            </div>
+          )}
+          {(boardComps.length > 0 || showCredsPreview) && (
+            <div className="cmd-responsive-grid-3" style={{ marginBottom: 20 }}>
+              {boardComps.length > 0 && (
+                <div style={{ minWidth: 0, gridColumn: showCredsPreview ? "span 2" : "1 / -1" }}>
+                  {boardHeading}
+                  <div className={showCredsPreview ? "cmd-responsive-grid-2" : "cmd-responsive-grid-3"} style={boardCards.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>{boardCards}</div>
+                  {boardFollowNotes.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>{boardFollowNotes}</div>
+                  )}
+                </div>
+              )}
+              {showCredsPreview && (
+                <div style={{ minWidth: 0, gridColumn: boardComps.length > 0 ? undefined : "1 / -1" }}>{credentialsPreviewInner}</div>
+              )}
+            </div>
+          )}
+          {allClear}
+        </div>
+      );
+    }
+
+    return (
+      <div className="cmd-fade-in">
+        {homeSearch}
+        {requestBanner}
+        {checklist}
+        {hero}
+        {profileGapBanner}
+        {missingExpBanner}
+        {actionSection}
+        {todoSection}
+        {homeModals}
+        {casesSection}
+        {showCredsPreview && (
+          <div style={{ marginBottom: 20 }}>
+            {credentialsPreviewInner}
+          </div>
+        )}
+        {allTrackedStates.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            {cmeHeader}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {licenseWarnings}
+              {stateCards}
+            </div>
+          </div>
+        )}
+        {boardComps.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            {boardHeading}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {boardCards}
+              {boardFollowNotes}
+            </div>
+          </div>
+        )}
+        {allClear}
+      </div>
+    );
+  };
 
   /* ─── SHARE PAGE ─────────────────────────────────────────── */
   const renderShare = () => {
