@@ -719,3 +719,36 @@ export async function deleteAllData(userId) {
     })
     .eq("id", userId);
 }
+
+// ─── Server-side account deletion ────────────────────────────
+// deleteAllData above reaches what RLS lets the browser see: the synced
+// tables, the documents folder, the profile fields. The delete-account edge
+// function, running as the service role, finishes the job: support tickets
+// and their screenshots, the assistant log, feedback, backup ZIPs and their
+// rows, usage and error rows, the tombstone ledger, and the profile row
+// itself reduced to an id. The client purge runs first so the account is
+// emptied even when this call cannot get through.
+export async function requestAccountDeletion() {
+  if (!supabase) throw new Error("No cloud connection");
+  // dry_run false is explicit on purpose: the function treats a missing flag
+  // as a dry run and deletes nothing.
+  const res = await supabase.functions.invoke("delete-account", { body: { dry_run: false } });
+  if (res.error) {
+    // invoke() reports every non-2xx as the same generic sentence; the
+    // useful text is in the response body.
+    let msg = "";
+    try { msg = (await res.error.context?.json())?.error || ""; } catch { /* not JSON */ }
+    throw new Error(msg || res.error.message || "The server-side deletion did not finish.");
+  }
+  return res.data;
+}
+
+// A tombstoned profile (deleted_at set by delete-account) tells the next
+// sign-in to drop this device's cache first (AppContext). Once that is done
+// the account is in use again and the flag comes off, so offline edits made
+// from here on self-heal normally.
+export async function clearProfileDeletedAt(profileId) {
+  if (!supabase || !profileId) return;
+  const { error } = await supabase.from("profiles").update({ deleted_at: null }).eq("id", profileId);
+  if (error) console.warn("Could not clear the deletion flag:", error.message);
+}

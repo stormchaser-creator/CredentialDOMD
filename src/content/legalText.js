@@ -13,13 +13,16 @@
  */
 
 export const LEGAL_UPDATED = "August 17, 2026";
+// The privacy policy moved on its own on September 2, 2026 (AI vendors,
+// retention periods, deletion); the terms did not change and keep their date.
+export const PRIVACY_UPDATED = "September 2, 2026";
 export const LEGAL_OPERATOR = "CredentialDOMD, operated by Eric Whitney, DO";
 export const LEGAL_CONTACT = "support@credentialdomd.com";
 
 export const PRIVACY = {
   slug: "privacy",
   title: "Privacy Policy",
-  updated: LEGAL_UPDATED,
+  updated: PRIVACY_UPDATED,
   intro: [
     `${LEGAL_OPERATOR}. This policy says what the app collects, where it lives, which companies touch it, and how you get it back or delete it. Questions go to ${LEGAL_CONTACT}.`,
     "CredentialDOMD is in free beta. Features, storage layout, and this policy will change as the product matures. The date above tells you which version you are reading.",
@@ -40,7 +43,7 @@ export const PRIVACY = {
           "**Locum and case data:** case logs, work and billing entries, invoices, and contract terms.",
           "**Documents you upload**, plus the fields the app extracts from them.",
           "**Support and feedback:** tickets and replies, field proposals, and a log of assistant questions with a one-line summary of each answer.",
-          "**Settings.** Any AI keys you enter yourself stay on your device and are not stored in the database (section 4). The server keeps a count of your AI calls per day for the shared key's daily limit.",
+          "**Settings.** Any AI keys you enter yourself stay on your device and are not stored in the database (section 4). The server keeps a count of your AI calls per day for the shared keys' daily limits.",
         ],
       ],
     },
@@ -58,9 +61,10 @@ export const PRIVACY = {
     {
       title: "4. AI features",
       blocks: [
-        "Document scanning, dictation, CPT coding, statement and row parsing, CME import, and the assistant (Vera) run on Google's Gemini API. By default they use a shared key that we hold on the server: your request goes from your browser to our server, which forwards it to Google under that key and returns the answer. The server records the time, the model called, the size of the text sent, and whether it succeeded, so it can apply a per-user daily limit; it does not keep the content of the request. Nothing goes to an AI company until you use one of these features.",
+        "Two AI companies receive data from the app, and only when you use an AI feature. Document scanning, CME import, work-log dictation, CPT lookup, and statement and row parsing send the document images, PDFs, and dictated text you give them to Google's Gemini API. The assistant (Vera), case dictation, and the CPT coder send your question or dictation to Anthropic's Claude API; for the assistant that also includes a summary of your records (the same fields you see in the app, including the license, DEA, and NPI numbers you entered) and any document you attach to the conversation. When Claude is unavailable (the daily limit is reached, or an attachment is a type Claude cannot read), those three fall back to Gemini.",
+        "By default both run under shared keys that CredentialDOMD holds on the server: your request goes from your browser to our server, which forwards it to Google or Anthropic under that key and returns the answer. The server records the time, the provider, the model called, the size of the text sent, and whether it succeeded, so it can apply a per-user daily limit; it does not keep the content of the request, and those usage rows are deleted after 90 days.",
         "You may add your own Google Gemini key, an Anthropic key, or both in Settings. Those keys stay on your device and are never stored in the database. With your own key the request goes straight from your browser to that provider under your key, the shared daily limit does not apply, and you are responsible for the key and any charges on it.",
-        "Either way, what you submit (document images and PDFs, dictation transcripts, statement rows, and assistant chat including attached documents) is handled under Google's or Anthropic's terms, not ours. Google's free Gemini tier permits human review and model training on submitted content; check the terms attached to the key in use. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.",
+        "Either way, what you submit is handled under Google's or Anthropic's terms, not ours. Anthropic deletes API inputs and outputs within 30 days and does not use them to train its models. Google's Gemini API terms govern what is sent to Gemini; if you use your own key, the terms attached to that key apply. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.",
         "AI output is a draft: review it before you rely on it.",
       ],
     },
@@ -82,7 +86,7 @@ export const PRIVACY = {
           "**Cloudflare**: proxy and CDN in front of credentialdomd.com, and Turnstile, the bot check Clerk shows at sign-in.",
           "**GitHub Pages**: static hosting for the site and the app files.",
           "**Resend**: transactional email, such as the early-access welcome note and account emails.",
-          "**Google** (Gemini API): when you use an AI feature, under the shared key or your own (section 4). **Anthropic** (Claude API): only under your own key.",
+          "**Google** (Gemini API) and **Anthropic** (Claude API): when you use an AI feature, under the shared keys or your own (section 4).",
           "**CMS NPPES registry** and **NLM Clinical Tables**: NPI lookup. Public government APIs that receive only the search terms (name, state, or NPI).",
           "**Telegram**: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram.",
         ],
@@ -104,18 +108,19 @@ export const PRIVACY = {
     {
       title: "8. Cookies and the marketing site",
       blocks: [
-        "Inside the app there are no third-party analytics, ad pixels, or trackers; the only cookies are Clerk's session cookies. On the marketing site at credentialdomd.com, a first-party beacon records the page path, referrer, and utm source of each visit, without cookies or identifiers, so we can see which pages are read. The site loads the Inter typeface from Google Fonts, which shows Google your IP address the way any hosted font does. If you join the early-access list, we keep the email address (and name, if you gave one) to send your invite.",
+        "Inside the app there are no third-party analytics, ad pixels, or trackers; the only cookies are Clerk's session cookies. On the marketing site at credentialdomd.com, a first-party beacon records the page path, referrer, and utm source of each visit, without cookies or identifiers, so we can see which pages are read; those visit counts are kept for 13 months. The site loads the Inter typeface from Google Fonts, which shows Google your IP address the way any hosted font does. If you join the early-access list, we keep the email address (and name, if you gave one) to send your invite.",
       ],
     },
     {
       title: "9. Retention and deletion",
       blocks: [
         [
-          "Your data stays as long as your account does.",
+          "Your records, documents, and backups stay as long as your account does.",
           "Deleting a record in the app removes it from the database and, for documents, removes the file from storage. A tombstone holding only the record id is kept so the deletion reaches your other devices.",
-          "**More > Data Rights > Delete All My Data** clears this device, deletes your records from the database, and removes your uploaded files. It cannot be undone; export first.",
-          "To close the account itself, or to have anything else removed, email " + LEGAL_CONTACT + " from the address on the account.",
-          "Support tickets and the assistant log are kept as operating records; ask and we will delete yours.",
+          "**More > Data Rights > Delete All My Data** clears this device and deletes everything held for your account on the server: your records, uploaded documents, monthly backups and their archives, support tickets and their screenshots, feedback, the assistant log, AI usage rows, and error reports. Your profile is reduced to an account id with no name, email, or other fields, so the sign-in still resolves. It cannot be undone; export first.",
+          "After a cancellation, the same deletion runs automatically 7 days later unless you reactivate before then; the Cancellation page shows the date.",
+          "Operating records have fixed lifetimes whether or not you delete: AI usage rows 90 days, marketing-site visit counts 13 months, the assistant question log 12 months, and error reports 7 days.",
+          "To close the sign-in account itself, or to have anything else removed, email " + LEGAL_CONTACT + " from the address on the account.",
         ],
       ],
     },

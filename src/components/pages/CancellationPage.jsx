@@ -132,7 +132,7 @@ function CancellationPage() {
           fontSize: 15, color: T.textMuted, lineHeight: 1.6,
           margin: 0,
         }}>
-          Your credentials will be available for export for the <strong style={{ color: T.text }}>next {daysLeft} day{daysLeft !== 1 ? "s" : ""}</strong>. After that, they'll be permanently wiped from our system.
+          Your credentials will be available for export for the <strong style={{ color: T.text }}>next {daysLeft} day{daysLeft !== 1 ? "s" : ""}</strong>. After that, a scheduled job deletes your records, uploaded documents, monthly backups, support tickets, and assistant log from our systems. Reactivate before then and nothing is deleted.
         </p>
       </div>
 

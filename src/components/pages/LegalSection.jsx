@@ -1,6 +1,6 @@
 import { useState, memo, Fragment } from "react";
 import { useApp } from "../../context/AppContext";
-import { deleteAllData, supabase, clearDeviceKeys } from "../../lib/supabase";
+import { deleteAllData, requestAccountDeletion, supabase, clearDeviceKeys } from "../../lib/supabase";
 import { purgeUserStorage } from "../../utils/storageScope";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "../../constants/defaults";
 import { PRIVACY, TERMS, LEGAL_CONTACT } from "../../content/legalText";
@@ -9,41 +9,54 @@ function LegalSection({ page }) {
   const { data, setData, userIdRef, user, theme: T } = useApp();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   // Permanently delete all user data
-  const handleDeleteAllData = () => {
-    if (deleteInput !== "DELETE") return;
+  const handleDeleteAllData = async () => {
+    if (deleteInput !== "DELETE" || deleting) return;
+    setDeleting(true);
     // Clear everything this account keeps on the device: the file, the private
     // vault, the Assistant transcript, timers (localStorage + Capacitor), and
     // the device-key slot (AI keys + the portal password lock code).
     purgeUserStorage(user?.id).catch(() => {});
     clearDeviceKeys(user?.id);
-    // Clear from Supabase: uploaded document files first (deleteAllData only
-    // covers the tables), then the rows.
     if (userIdRef?.current) {
+      // 1. The client-side purge, everything RLS lets this browser reach:
+      //    uploaded document files first (deleteAllData only covers the
+      //    tables), then the rows. Awaited so the server pass below sees an
+      //    account that is already mostly empty, and so this much is done
+      //    even if that pass cannot get through.
       const sub = window.Clerk?.user?.id;
-      if (supabase && sub) {
-        // Page through the folder: a single list() caps at 1,000 objects, so a
-        // document-heavy account would leave the overflow behind.
-        (async () => {
-          try {
-            for (let offset = 0; ; offset += 1000) {
-              const { data: objs } = await supabase.storage.from("documents").list(sub, { limit: 1000, offset });
-              if (!objs || objs.length === 0) break;
-              const paths = objs.map(o => `${sub}/${o.name}`);
-              if (paths.length) await supabase.storage.from("documents").remove(paths);
-              if (objs.length < 1000) break;
-            }
-          } catch { /* best effort */ }
-        })();
+      try {
+        if (supabase && sub) {
+          // Page through the folder: a single list() caps at 1,000 objects, so a
+          // document-heavy account would leave the overflow behind.
+          for (let offset = 0; ; offset += 1000) {
+            const { data: objs } = await supabase.storage.from("documents").list(sub, { limit: 1000, offset });
+            if (!objs || objs.length === 0) break;
+            const paths = objs.map(o => `${sub}/${o.name}`);
+            if (paths.length) await supabase.storage.from("documents").remove(paths);
+            if (objs.length < 1000) break;
+          }
+        }
+        await deleteAllData(userIdRef.current);
+      } catch { /* best effort; the server pass covers what this missed */ }
+      // 2. The server finishes what the browser cannot reach: tickets and
+      //    screenshots, the assistant log, feedback, backups, usage rows, the
+      //    tombstone ledger, and the profile row itself. If the function is
+      //    unreachable the client purge above stands.
+      try {
+        await requestAccountDeletion();
+      } catch (err) {
+        console.warn("CredentialDOMD: server-side deletion did not run; the on-device purge stands:", err.message);
       }
-      deleteAllData(userIdRef.current).catch(() => {});
     }
     // Reset from the canonical defaults so every collection key exists (the old
     // hand-built object dropped locum/tax/travel collections and crashed adds).
     setData({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme: data.settings.theme } });
     setShowDeleteConfirm(false);
     setDeleteInput("");
+    setDeleting(false);
   };
 
   if (page === "privacy") return <LegalDoc doc={PRIVACY} T={T} />;
@@ -56,6 +69,7 @@ function LegalSection({ page }) {
       deleteInput={deleteInput}
       setDeleteInput={setDeleteInput}
       handleDeleteAllData={handleDeleteAllData}
+      deleting={deleting}
     />
   );
   return null;
@@ -107,7 +121,7 @@ function LegalDoc({ doc, T }) {
   );
 }
 
-function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, setDeleteInput, handleDeleteAllData }) {
+function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, setDeleteInput, handleDeleteAllData, deleting }) {
   return (
     <div>
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Your Data Rights</h2>
@@ -131,8 +145,9 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
           Your data is cached on this device so the app opens offline, and synced under your account
           to a Supabase database (US region) with uploaded document files in a private storage bucket.
           All transfers are encrypted with TLS. The private note on a work entry stays on this device
-          only. Deleting your data below removes it from <strong>this device, the database, and
-          file storage</strong>. To close the account itself, email <strong>{LEGAL_CONTACT}</strong>.
+          only. Deleting your data below removes it from <strong>this device, the database, file
+          storage, your monthly backups, your support tickets, and the assistant log</strong>. To close
+          the sign-in account itself, email <strong>{LEGAL_CONTACT}</strong>.
         </p>
       </div>
 
@@ -174,12 +189,12 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
                 }}
                 autoFocus
               />
-              <button onClick={handleDeleteAllData} disabled={deleteInput !== "DELETE"} style={{
+              <button onClick={handleDeleteAllData} disabled={deleteInput !== "DELETE" || deleting} style={{
                 padding: "8px 16px", borderRadius: 10, border: "none",
-                backgroundColor: deleteInput === "DELETE" ? T.danger : T.border,
-                color: deleteInput === "DELETE" ? "#fff" : T.textDim,
-                fontSize: 14, fontWeight: 700, cursor: deleteInput === "DELETE" ? "pointer" : "default",
-              }}>Confirm Delete</button>
+                backgroundColor: deleteInput === "DELETE" && !deleting ? T.danger : T.border,
+                color: deleteInput === "DELETE" && !deleting ? "#fff" : T.textDim,
+                fontSize: 14, fontWeight: 700, cursor: deleteInput === "DELETE" && !deleting ? "pointer" : "default",
+              }}>{deleting ? "Deleting..." : "Confirm Delete"}</button>
             </div>
             <button onClick={() => { setShowDeleteConfirm(false); setDeleteInput(""); }} style={{
               marginTop: 8, padding: "6px 0", width: "100%", border: "none",

@@ -26,6 +26,7 @@ import {
   listTombstones,
   replayPendingOps,
   clearDeviceKeys,
+  clearProfileDeletedAt,
   COLLECTION_KEYS,
 } from "../lib/supabase";
 
@@ -175,6 +176,17 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       // Ensure profile exists for this auth user
       const profile = await ensureProfile(authUserId);
       if (profile) {
+        // The server wiped this account (Delete All My Data on another
+        // device, or the deletion 7 days after a cancellation) and took the
+        // tombstone ledger with it. Whatever this device still holds predates
+        // the wipe: drop it BEFORE the pending-op replay and the self-heal
+        // push below can send it back up. The private vault stays; it exists
+        // nowhere else and never touched the server. Then the flag comes off:
+        // from here the account is simply in use again.
+        if (profile.deleted_at) {
+          try { await purgeUserStorage(authUserId, { keepVault: true }); } catch { /* best effort */ }
+          clearProfileDeletedAt(profile.id).catch(() => {});
+        }
         // Replay any writes that never reached the cloud (offline edits and
         // deletes, transient failures) BEFORE reading back, so the snapshot we
         // merge already reflects them.
