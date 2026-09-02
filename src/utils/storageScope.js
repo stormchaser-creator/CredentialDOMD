@@ -33,6 +33,12 @@ export const BASE_KEYS = {
   callsync: "credentialdomd-callsync",
 };
 
+// The profiles.deleted_at stamp this device last purged its cache for
+// (AppContext, after a server-side account deletion). Deliberately NOT in
+// BASE_KEYS: purgeUserStorage and the sign-out purge must leave it, or every
+// sign-in after a wipe would purge again. It holds a timestamp, nothing else.
+export const WIPE_SEEN_KEY = "credentialdomd-wipe-seen";
+
 let activeUserId = null;
 
 export function setActiveUserId(id) { activeUserId = id || null; }
