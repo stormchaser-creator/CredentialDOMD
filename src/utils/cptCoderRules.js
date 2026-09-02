@@ -18,6 +18,8 @@ import { CONSTRUCT_RULES } from "../constants/cptConstructs.js";
  *   Pub 100-04 = Medicare Claims Processing Manual.
  *   PFS       = CMS CY2026 Physician Fee Schedule RVU file, July release
  *               (scripts/data/PPRRVU2026_Jul_nonQPP.csv, the source of rvuData.js).
+ *   CPT       = AMA CPT Professional codebook, descriptors and parentheticals
+ *               (2024 edition for the LAA exclusion family 33267-33269, new in 2022).
  */
 
 /**
@@ -193,6 +195,30 @@ const CRANIOPLASTY_PTP_VERIFIED = new Set(["61512", "61518", "61519"]);
 const NAV_CODES = new Set(["61781", "61782", "61783"]);
 const POSTERIOR_INTERBODY = new Set(["22630", "22632", "22633", "22634"]);
 
+// Left atrial appendage exclusion, the CPT 2022 family (AMA CPT 2024 descriptors):
+//   33267 "Exclusion of left atrial appendage, open, any method (eg, excision,
+//         isolation via stapling, oversewing, ligation, plication, clip)", 090 global,
+//         reported only when no concurrently performed procedure requires a
+//         sternotomy or thoracotomy.
+//   33268 "Exclusion of left atrial appendage, open, performed at the time of
+//         other sternotomy or thoracotomy procedure(s), any method (...) (List
+//         separately in addition to code for primary procedure)", ZZZ add-on.
+//   33269 "Exclusion of left atrial appendage, thoracoscopic, any method (...)", 090.
+// Parenthetical under the family: "Do not report 33267, 33268, 33269 in
+// conjunction with 33254, 33255, 33256, 33257, 33258, 33259, 33265, 33266,
+// 33420, 33422, 33425, 33426, 33427, 33430" (the maze codes and mitral valve
+// repair/replacement; CPT Assistant November 2021, "Exclusion of Left Atrial
+// Appendage (33267-33269)": appendage management is inherent to those).
+export const LAA_CODES = new Set(["33267", "33268", "33269"]);
+export const LAA_MAZE_CODES = new Set(["33254", "33255", "33256", "33257", "33258", "33259", "33265", "33266"]);
+export const LAA_MITRAL_CODES = new Set(["33420", "33422", "33425", "33426", "33427", "33430"]);
+// CPT "Heart and Pericardium" subsection. Any of these beside 33267 is the
+// "other sternotomy or thoracotomy procedure" that makes the exclusion +33268.
+const HEART_PERICARDIUM_RANGE = [[33016, 33999]];
+// Diagnostic TEE family a surgeon can report (93318, TEE for monitoring
+// purposes, is anesthesia's and is deliberately not in the catalog).
+const TEE_DIAGNOSTIC = new Set(["93312", "93313", "93314"]);
+
 /**
  * BUNDLED_PAIRS: when a `primary` and an `addon` are both in one result, do
  * `action`. Every entry cites its source in `why`. Keep this table small;
@@ -313,6 +339,43 @@ export const BUNDLED_PAIRS = [
     question: (primary, addon) =>
       `${addon} removed: ${primary} includes laminectomy and/or discectomy to prepare the interspace by its own descriptor. Nerve root decompression at the fused level is +63052 (+63053 per additional segment); ${addon} applies only at a different interspace, with modifier 59/XS.`,
   },
+  {
+    id: "laa-exclusion-inside-maze-or-mitral",
+    primary: (c) => LAA_MAZE_CODES.has(c) || LAA_MITRAL_CODES.has(c),
+    addon: (c) => LAA_CODES.has(c),
+    action: "remove",
+    // AMA CPT 2024, parenthetical following 33269 (family 33267-33269, new in
+    // CPT 2022): "Do not report 33267, 33268, 33269 in conjunction with 33254,
+    // 33255, 33256, 33257, 33258, 33259, 33265, 33266, 33420, 33422, 33425,
+    // 33426, 33427, 33430." CPT Assistant November 2021 explains the reason:
+    // appendage management is inherent to the maze procedures and to mitral
+    // valve repair/replacement. NCCI PM Ch I Sec R: an add-on reports
+    // significant supplemental work, never a component of the primary. The
+    // practitioner PTP table (33259 column 1 / 33268 column 2) sits behind the
+    // AMA license click-through and was not read for this rule; the CPT
+    // parenthetical settles it on its own.
+    question: (primary, addon, item) => {
+      const maze = LAA_MAZE_CODES.has(primary);
+      return `${addon} removed (${item.desc}): the CPT parenthetical under 33267-33269 says do not report ${addon} in conjunction with ${primary}${maze ? " or any maze code (33254-33259, 33265, 33266)" : " or any mitral valve repair or replacement code (33420-33430)"}. Left atrial appendage exclusion is inside the ${maze ? "maze lesion set" : "mitral valve procedure"} by CPT instruction (CPT Assistant, November 2021), so a clip, ligation, stapling or excision of the appendage in the same session carries no code of its own. Report 33268 only in a session with no maze and no mitral valve procedure.`;
+    },
+  },
+  {
+    id: "laa-standalone-code-with-other-open-cardiac-procedure",
+    primary: (c) => inRanges(c, HEART_PERICARDIUM_RANGE) && !LAA_CODES.has(c),
+    addon: (c) => c === "33267",
+    action: "replace",
+    replaceWith: { "33267": "33268" },
+    replaceNote: (from, to) => `${to} replaces ${from}: appendage exclusion at the time of another sternotomy or thoracotomy procedure`,
+    // AMA CPT 2024: 33267 (090 global, PFS 18.04) is "Exclusion of left atrial
+    // appendage, open, any method", reported only when no concurrently
+    // performed procedure requires a sternotomy or thoracotomy; +33268 (ZZZ,
+    // PFS 2.44) is the same work "performed at the time of other sternotomy or
+    // thoracotomy procedure(s)" and its parenthetical lists the open cardiac
+    // codes (33120-33983, the CABG codes 33533-33536 among them) as primaries.
+    // 33267 beside a CABG over-credits 15.60 wRVU.
+    question: (primary, from, item, to) =>
+      `${to} replaces ${from}: with ${primary} on the same claim the appendage exclusion was performed at the time of another sternotomy or thoracotomy procedure, which is the add-on 33268 (CPT descriptor: "open, performed at the time of other sternotomy or thoracotomy procedure(s)"); 33267 is reserved for a standalone open exclusion with no concurrent sternotomy or thoracotomy procedure (CPT parenthetical under 33267). Put 33267 back only if ${primary} was not done through the same sternotomy or thoracotomy.`,
+  },
 ];
 
 // ─── Post-model pass ────────────────────────────────────────────────────────
@@ -320,11 +383,52 @@ export const BUNDLED_PAIRS = [
 const QUESTION_ULTRASOUND =
   "Ultrasound, CUSA or Doppler: no code emitted. They are instruments within the resection. Intraoperative ultrasound guidance is reportable only with a permanently recorded image and a written description of the localization (CPT Diagnostic Ultrasound guidelines); that code (76998-26, 0.89 wRVU on the CY2026 PFS) is not in this catalog.";
 
-const QUESTION_TEE =
-  "Intraoperative TEE: no code emitted. It is separately billable (93312 real-time complete, 93313 placement/manipulation only, or 93314 interpretation only) only when the billing physician personally performed and interpreted it, with a retained image and a written report; a dictated case summary does not establish that, and in most cardiac cases anesthesia performs and bills the TEE. Code it yourself only if you performed and interpreted it and can document that.";
+/**
+ * Words that put the TEE in the surgeon's own hands: "I performed and
+ * interpreted the TEE", "I do the TEE", "TEE performed by me", "my own TEE".
+ * A bare "with intraoperative TEE" is a mention, and anesthesia's study. The
+ * verb must reach the TEE directly ("I did a CABG with TEE" is not a claim of
+ * performance).
+ */
+const TEE_WORD = String.raw`(?:tee\b|transesophageal)`;
+export const SURGEON_TEE_SIGNALS = [
+  new RegExp(String.raw`\bI\s+(?:personally\s+|also\s+|myself\s+)?(?:performed|perform|did|do|interpreted|interpret|read|acquired|placed)\s+(?:and\s+(?:interpreted|interpret|read|performed|perform|reported)\s+)?(?:the\s+|an?\s+|my\s+(?:own\s+)?)?(?:intra-?op(?:erative)?\s+|diagnostic\s+|complete\s+)*` + TEE_WORD, "i"),
+  new RegExp(TEE_WORD + String.raw`[^.;]{0,60}?\b(?:performed|interpreted|read|done|acquired|placed)\b(?:\s+and\s+\w+)?\s+by\s+(?:me|myself|the\s+(?:operating\s+)?surgeon)\b`, "i"),
+  new RegExp(String.raw`\bsurgeon[- ](?:performed|interpreted)\b[^.;]{0,30}` + TEE_WORD, "i"),
+  new RegExp(String.raw`\bmy\s+(?:own\s+)?(?:intra-?op(?:erative)?\s+)?` + TEE_WORD, "i"),
+  new RegExp(String.raw`\b(?:performed|interpreted|read)\b[^.;]{0,40}` + TEE_WORD + String.raw`[^.;]{0,20}\bmyself\b`, "i"),
+];
+export function surgeonPerformedTee(text) {
+  const t = String(text || "");
+  return SURGEON_TEE_SIGNALS.some(re => re.test(t));
+}
 
+// NCCI PM 2026 Ch II Sec B (services included in the anesthesia service):
+// "93312-93317 (Transesophageal echocardiography when used for monitoring
+// purposes) However, when performed for diagnostic purposes with documentation
+// including a formal report, this service may be considered a significant,
+// separately identifiable, and separately reportable service." and "93318
+// (Transesophageal echocardiography for monitoring purposes)" with no such
+// exception. Pub 100-04 Ch 12 Sec 40.1.B keeps diagnostic tests outside the
+// surgical global package. PFS: 93312 2.24 wRVU (identical on the -26 line),
+// 93314 1.80, 93318-26 2.10 (global line status C, 0.00).
+const QUESTION_TEE_MENTION =
+  "Intraoperative TEE: no code emitted. The dictation mentions the TEE without saying you performed and interpreted it, and in a cardiac case anesthesia usually does and bills it: NCCI Policy Manual Ch II Sec B lists TEE used for monitoring (93312-93317, and 93318) inside the anesthesia service and lets 93312-93317 stand apart only when performed for diagnostic purposes with documentation including a formal report. If you personally performed and interpreted a diagnostic TEE, dictate it in those words (\"I performed and interpreted the intraoperative TEE\") and the coder adds 93312-26 (2.24 wRVU on the CY2026 PFS); 93314-26 (1.80) if anesthesia placed the probe and you acquired the images, interpreted and reported.";
+
+const questionTeeSurgeon = (code, added) =>
+  `${code}${added ? " added" : " kept"} with modifier 26 pre-selected: you dictated that you performed and interpreted the intraoperative TEE. That is a diagnostic study, not the monitoring TEE that NCCI Policy Manual Ch II Sec B folds into the anesthesia service (93312-93317 are separately reportable when performed for diagnostic purposes with documentation including a formal report; 93318, TEE for monitoring purposes, never is), and Pub 100-04 Ch 12 Sec 40.1.B keeps diagnostic tests outside the surgical global package. The claim needs a separate TEE report in your name (indication, views, findings, impression) and retained images; modifier 26 because the hospital owns the probe and the machine (the PFS work RVU, ${code === "93314" ? "1.80" : "2.24"}, is the same with or without it). If anesthesia placed the probe and you only acquired, interpreted and reported, the code is 93314-26 (1.80). If it was monitoring without a formal report, remove the line: that is 93318 and it belongs to anesthesia.`;
+
+// NCCI PM 2026 Ch V Sec D.30: "Operative ablation procedures (e.g., CPT codes
+// 33250-33261 and 33265-33266) include cardioversion as an integral component
+// of the procedures. CPT codes 92960 or 92961 (Elective cardioversion) shall
+// not be reported separately with the operative ablation procedure codes unless
+// an elective cardioversion is performed at a separate patient encounter on
+// the same date of service." Ch XI Sec I.3: "There is no CPT code to report
+// emergency cardiac defibrillation ... Providers/suppliers shall not report CPT
+// code 92960 (Cardioversion, elective...; external) for emergency cardiac
+// defibrillation. CPT code 92960 describes a planned elective procedure."
 const QUESTION_CARDIOVERSION =
-  "Intraoperative cardioversion or defibrillation for an arrhythmia or arrest during this operative session: no code emitted. Managing an intraoperative event is part of the global surgical package for the primary procedure it happened during (Medicare Claims Processing Manual, Pub 100-04, Ch 12 Sec 40.1). Cardioversion (92960) is reportable only as a separate encounter outside this operative session, for example an elective cardioversion days later.";
+  "Cardioversion or defibrillation during this operative session: no code emitted. NCCI Policy Manual Ch V Sec D.30: operative ablation procedures (33250-33261, 33265, 33266, the maze family) include cardioversion as an integral component, and 92960/92961 are not reported with them unless an elective cardioversion is a separate patient encounter on the same date. NCCI Ch XI Sec I.3: there is no CPT code for emergency defibrillation, and 92960 (cardioversion, elective, external) is not reported for it; a shock for an intraoperative arrest is defibrillation. Managing an intraoperative event is also part of the global surgical package (Pub 100-04 Ch 12 Sec 40.1). An elective cardioversion is reportable only as a separate encounter, for example days later.";
 
 function microscopeQuestion(items) {
   const primaries = items.filter(it => it.code !== "69990" && it.globalDays !== "ZZZ" && (it.wRVU || 0) > 0);
@@ -407,12 +511,16 @@ export function postProcess(parsed, { text = "", catalog = CPT_BY_CODE } = {}) {
         const to = catalog[toCode];
         if (!to) continue;
         questions.push(rule.question(primary, it.code, it, toCode));
+        if (items.some(x => x.code === toCode)) { items.splice(i, 1); continue; } // already listed once
+        const note = typeof rule.replaceNote === "function"
+          ? rule.replaceNote(it.code, toCode)
+          : `${toCode} replaces ${it.code} at the fused interspace`;
         items[i] = {
           code: to.code,
           desc: to.shortDesc || to.cmsDesc || "",
           units: it.units,
           wRVU: to.wRVU || 0,
-          why: `${it.why ? it.why + "; " : ""}${toCode} replaces ${it.code} at the fused interspace`,
+          why: `${it.why ? it.why + "; " : ""}${note}`,
           globalDays: to.globalDays || "",
         };
       } else if (rule.action === "modifier") {
@@ -446,7 +554,41 @@ export function postProcess(parsed, { text = "", catalog = CPT_BY_CODE } = {}) {
     questions.push(QUESTION_ULTRASOUND);
   }
   if (/\btee\b|\btransesophageal\b/i.test(text) && hasPrimary) {
-    questions.push(QUESTION_TEE);
+    if (surgeonPerformedTee(text)) {
+      // The surgeon's own diagnostic TEE: 93312-26 unless the model already
+      // chose a line from the family (93314 when anesthesia placed the probe).
+      let line = items.find(it => TEE_DIAGNOSTIC.has(it.code));
+      let added = false;
+      if (!line) {
+        const known = catalog["93312"];
+        if (known) {
+          line = {
+            code: known.code,
+            desc: known.shortDesc || known.cmsDesc || "",
+            units: 1,
+            wRVU: known.wRVU || 0,
+            why: "intraoperative TEE personally performed and interpreted by the surgeon, as dictated; separate report required",
+            globalDays: known.globalDays || "",
+          };
+          items.push(line);
+          added = true;
+        }
+      }
+      if (line) {
+        line.modifier = line.modifier || "26";
+        questions.push(questionTeeSurgeon(line.code, added));
+      }
+    } else {
+      // A mention is not a claim of performance: a model-emitted TEE line
+      // comes out, and the question says what words would put it back.
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (TEE_DIAGNOSTIC.has(items[i].code)) {
+          questions.push(`${items[i].code} removed: the dictation mentions a TEE but does not say you performed and interpreted it.`);
+          items.splice(i, 1);
+        }
+      }
+      questions.push(QUESTION_TEE_MENTION);
+    }
   }
   if (/\bcardiovert(?:ed|ing)?\b|\bcardioversion\b|\bdefibrillat/i.test(text) && hasPrimary) {
     questions.push(QUESTION_CARDIOVERSION);

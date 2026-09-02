@@ -10,6 +10,12 @@
  * NCCI Policy Manual for Medicare Services 2026 Ch VIII Sec C.4 (cranioplasty),
  * Sec F.1 (operating microscope); Medicare Claims Processing Manual
  * (Pub 100-04) Ch 12 Sec 20.4.5; CPT Diagnostic Ultrasound guidelines.
+ * Sources for the cardiac section: AMA CPT 2024 descriptors and parentheticals
+ * for 33267-33269 (LAA exclusion) and 33254-33259 (maze); NCCI Policy Manual
+ * 2026 Ch V Sec D.2 (CABG code combinations) and D.30 (operative ablation
+ * includes cardioversion), Ch II Sec B (TEE inside the anesthesia service),
+ * Ch XI Sec I.3 (no code for emergency defibrillation); Pub 100-04 Ch 12
+ * Sec 40.1 (global surgical package).
  * The deterministic post-model pass in src/utils/cptCoderRules.js enforces
  * the bundling rules again regardless of what the model emits.
  */
@@ -124,20 +130,34 @@ CARDIAC: CABG AND CONCOMITANT PROCEDURES (only when the words support them):
     extensive (eg, a Cox-Maze IV or modified Cox-Maze) with bypass → 33259. A modified
     Cox-Maze done on bypass alongside a CABG is 33259, regardless of which clamp made the
     lesion set.
-  Concomitant left atrial appendage (LAA) exclusion or ligation (clip, eg AtriCure) by an
-    open technique at the time of another cardiac procedure → 33267 (add-on).
+  Left atrial appendage (LAA) exclusion, ligation or clip (eg AtriCure) is three codes by
+    approach and company (the CPT 2022 family): open and standalone, no other sternotomy or
+    thoracotomy procedure in the session → 33267; open at the time of another sternotomy or
+    thoracotomy procedure (a CABG, a valve, any open cardiac operation) → +33268 (add-on);
+    thoracoscopic or VATS → 33269. NEVER report 33267, 33268 or 33269 with a maze or atrial
+    ablation (33254-33259, 33265, 33266) or with a mitral valve repair or replacement (eg
+    33430): the CPT parenthetical under 33267-33269 bars it because the appendage is managed
+    inside those codes. So a CABG with a Cox-Maze and an AtriCure clip is 33533 (+33517 when a
+    vein graft is added) + 33259, and the clip carries no code; add a questions entry saying so.
   Endoscopic harvest of the leg vein used for a venous graft → 33508 (add-on), one unit
     per graft harvested endoscopically; an open harvest carries no separate code.
-  Intraoperative transesophageal echocardiogram (TEE): emit NO code. It is separately
-    billable only when the billing physician personally performed and interpreted it, with
-    a retained image and a written report; a dictated case summary alone does not establish
-    that, and in most cardiac cases anesthesia performs and bills the TEE. Add a questions
-    entry instead of a code.
+  Intraoperative transesophageal echocardiogram (TEE): emit 93312 (complete TEE: probe
+    placement, image acquisition, interpretation and report; billed with modifier 26 in the
+    hospital) ONLY when the physician says in words that they personally performed and
+    interpreted it ("I performed and interpreted the TEE", "I do the TEE"), and write
+    "surgeon-performed, separate report required" in why; 93314 instead when anesthesia
+    placed the probe and the surgeon acquired the images, interpreted and reported. A TEE
+    merely mentioned ("with intraoperative TEE") gets NO code: NCCI Policy Manual Ch II
+    Sec B places TEE used for monitoring inside the anesthesia service and lets the
+    diagnostic study stand apart only with a formal report; in most cardiac cases anesthesia
+    performs and bills it. Add a questions entry instead of a code.
   Intraoperative cardioversion or defibrillation for an arrhythmia or arrest arising during
-    this operative session: emit NO code. Managing an intraoperative event is part of the
-    global surgical package for the primary procedure it happened during (Medicare Claims
-    Processing Manual, Pub 100-04, Ch 12 Sec 40.1). An elective cardioversion is reportable
-    only as a separate encounter outside this operative session.
+    this operative session: emit NO code. NCCI Policy Manual Ch V Sec D.30: operative
+    ablation procedures (the maze family) include cardioversion as an integral component;
+    Ch XI Sec I.3: there is no CPT code for emergency defibrillation and the elective
+    external cardioversion code is not reported for it; managing an intraoperative event is
+    part of the global surgical package (Pub 100-04 Ch 12 Sec 40.1). An elective
+    cardioversion is reportable only as a separate encounter outside this operative session.
   MODIFIER 22: if the physician says "modifier 22" or "increased procedural services", keep
     every code, append modifier 22 to only the single highest-wRVU primary procedure in the
     entry, and add a questions entry noting Medicare requires the operative note to state in

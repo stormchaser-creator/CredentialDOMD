@@ -4,7 +4,7 @@
 // Run: node scripts/cpt-coder.test.mjs   (pure node, no test runner)
 import {
   normalizeDictation, normalizeCode, postProcess, BUNDLED_PAIRS, CODER_RULES, cranioplastyLooksSeparate, buildCatalog, catalogDesc, CATALOG_DESC_MAX,
-  MICROSCOPE_MEDICARE_PAYABLE, MICROSCOPE_CPT_EXCLUDED,
+  MICROSCOPE_MEDICARE_PAYABLE, MICROSCOPE_CPT_EXCLUDED, surgeonPerformedTee, LAA_CODES, LAA_MAZE_CODES, LAA_MITRAL_CODES,
 } from "../src/utils/cptCoderRules.js";
 import { CONSTRUCT_RULES } from "../src/constants/cptConstructs.js";
 import { CPT_CODES, CPT_BY_CODE } from "../src/constants/cpt/index.js";
@@ -263,31 +263,125 @@ eq("69990 global ZZZ status R", [CPT_BY_CODE["69990"].globalDays, CPT_BY_CODE["6
 
 // ── Cardiac: combined CABG + Cox-Maze + LAA clip + endoscopic vein harvest, ──
 // TEE, intraoperative cardioversion, modifier 22 (ticket 63cf43b7) ───────────
+// Ground truth from the CY2026 PFS (scripts/data/PPRRVU2026_Jul_nonQPP.csv):
+// 33533 32.91 + 33517 3.52 + 33259 13.79 + 33508 0.30 = 50.52. The AtriCure
+// clip carries no code beside a maze (CPT parenthetical under 33267-33269),
+// the cardioversion for an arrest is defibrillation (NCCI Ch XI Sec I.3, Ch V
+// Sec D.30), and a TEE merely mentioned is anesthesia's (NCCI Ch II Sec B).
+// With "I performed and interpreted the intraoperative TEE": + 93312-26 2.24 = 52.76.
 {
   const dictation = "Coronary Artery Bypass Grafting times 2 (left internal mammary artery to left anterior descending artery, reverse SV graft to obtuse marginal artery), external cardioversion for ventricular arrest, modified Cox 4 Maze procedure with the encompass clamp, with intraoperative transesophageal echocardiogram, left lower extremity endoscopic vein harvest, ligation of left atrial appendage with 40mm Atricure Clip, modifier 22";
-  const Card = run(
-    [
-      enc("33533", 1, "LIMA to LAD arterial graft"),
-      enc("33517", 1, "reverse SVG to OM, combined with the arterial graft"),
-      enc("33259", 1, "modified Cox-Maze IV with the Encompass clamp, extensive lesion set, on bypass, at time of CABG"),
-      enc("33267", 1, "LAA exclusion, open, 40mm AtriCure clip"),
-      enc("33508", 1, "left lower extremity endoscopic vein harvest"),
-    ],
-    dictation,
-  );
-  eq("Card: codes", codes(Card), ["33533", "33267", "33517", "33259", "33508"]);
-  eq("Card: wRVU total 68.56", total(Card), 68.56);
+  const proposal = (laa) => [
+    enc("33533", 1, "LIMA to LAD arterial graft"),
+    enc("33517", 1, "reverse SVG to OM, combined with the arterial graft"),
+    enc("33259", 1, "modified Cox-Maze IV with the Encompass clamp, extensive lesion set, on bypass, at time of CABG"),
+    enc(laa, 1, "LAA exclusion, open, 40mm AtriCure clip"),
+    enc("33508", 1, "left lower extremity endoscopic vein harvest"),
+  ];
+  const Card = run(proposal("33267"), dictation);
+  eq("Card: codes (LAA clip dropped beside the maze)", codes(Card), ["33533", "33517", "33259", "33508"]);
+  eq("Card: wRVU total 50.52", total(Card), 50.52);
+  ok("Card: LAA question cites the CPT parenthetical and names 33259", hasQ(Card, /33267 removed/) && hasQ(Card, /CPT parenthetical under 33267-33269/) && hasQ(Card, /in conjunction with 33259/));
   ok("Card: modifier 22 pre-selected on the highest-wRVU primary (33533)", Card.items.find(it => it.code === "33533")?.modifier === "22");
   ok("Card: modifier 22 not applied elsewhere", Card.items.filter(it => it.modifier === "22").length === 1);
   ok("Card: modifier-22 question cites CPT Appendix A", hasQ(Card, /Modifier 22 pre-selected on 33533/) && hasQ(Card, /CPT Appendix A/));
-  ok("Card: TEE gets no code and a question instead", !codes(Card).includes("93312") && hasQ(Card, /Intraoperative TEE: no code emitted/));
-  ok("Card: cardioversion gets no code and a question instead", !codes(Card).includes("92960") && hasQ(Card, /Intraoperative cardioversion or defibrillation/) && hasQ(Card, /Ch 12 Sec 40\.1/));
+  ok("Card: TEE mentioned only: no code, a question that cites NCCI Ch II Sec B", !codes(Card).includes("93312") && hasQ(Card, /Intraoperative TEE: no code emitted/) && hasQ(Card, /Ch II Sec B/));
+  ok("Card: cardioversion gets no code and a question citing Ch V D.30, Ch XI I.3, Pub 100-04", !codes(Card).includes("92960") && hasQ(Card, /Cardioversion or defibrillation during this operative session/) && hasQ(Card, /Ch V Sec D\.30/) && hasQ(Card, /Ch XI Sec I\.3/) && hasQ(Card, /Ch 12 Sec 40\.1/));
   ok("Card: no em dashes in questions", Card.questions.every(q => !/—/.test(q)));
+
+  // The model proposing the add-on 33268 instead lands in the same place.
+  const Card2 = run(proposal("33268"), dictation);
+  eq("Card (33268 proposed): same codes", codes(Card2), ["33533", "33517", "33259", "33508"]);
+  eq("Card (33268 proposed): same total", total(Card2), 50.52);
+  ok("Card (33268 proposed): removal question names 33268", hasQ(Card2, /33268 removed/));
+
+  // Variant: the surgeon performed and interpreted the TEE.
+  const CardTee = run(proposal("33267"), dictation + " I performed and interpreted the intraoperative TEE.");
+  eq("CardTee: codes", codes(CardTee), ["33533", "93312", "33517", "33259", "33508"]);
+  eq("CardTee: wRVU total 52.76", total(CardTee), 52.76);
+  eq("CardTee: 93312 carries modifier 26", CardTee.items.find(it => it.code === "93312")?.modifier, "26");
+  ok("CardTee: modifier 22 still on 33533 only", CardTee.items.find(it => it.code === "33533")?.modifier === "22" && CardTee.items.filter(it => it.modifier === "22").length === 1);
+  ok("CardTee: TEE question names the report and NCCI Ch II Sec B and Pub 100-04 40.1.B", hasQ(CardTee, /93312 added with modifier 26/) && hasQ(CardTee, /Ch II Sec B/) && hasQ(CardTee, /Sec 40\.1\.B/) && hasQ(CardTee, /separate TEE report/));
+  ok("CardTee: no mention-only TEE question", !hasQ(CardTee, /Intraoperative TEE: no code emitted/));
+  ok("CardTee: no em dashes", CardTee.questions.every(q => !/—/.test(q)));
+
+  // Eric's own phrasing.
+  const CardDo = run(proposal("33267"), "CABG x2 LIMA to LAD, SVG to OM, with TEE. I do the tee.");
+  ok("'I do the tee' adds 93312-26", codes(CardDo).includes("93312") && CardDo.items.find(it => it.code === "93312").modifier === "26");
+
+  // The model already chose 93314 (anesthesia placed the probe): kept, -26, no second line.
+  const Card14 = run([...proposal("33267"), enc("93314", 1, "TEE interpretation")], dictation + " I interpreted the intraoperative TEE myself.");
+  ok("surgeon TEE with model 93314: kept once with 26, no 93312 added", codes(Card14).filter(c => c === "93314").length === 1 && !codes(Card14).includes("93312") && Card14.items.find(it => it.code === "93314").modifier === "26");
+  ok("surgeon TEE with 93314: question says kept and 1.80", hasQ(Card14, /93314 kept with modifier 26/) && hasQ(Card14, /1\.80, is the same/));
+
+  // A TEE line on a mere mention is removed, not silently kept.
+  const CardMention = run([...proposal("33267"), enc("93312", 1, "intraop TEE")], dictation);
+  ok("mention-only TEE: model's 93312 removed with a question", !codes(CardMention).includes("93312") && hasQ(CardMention, /93312 removed: the dictation mentions a TEE/));
 
   // Arterial-only two-graft CABG is untouched by the TEE/cardioversion/22 rules.
   const plain = run([enc("33534", 1, "two arterial grafts")], "CABG x2, both arterial");
   eq("plain two-arterial CABG: no modifier 22, no TEE/cardioversion questions", [plain.items[0].modifier, plain.questions.length], [undefined, 0]);
 }
+
+// ── LAA exclusion family: 33267 standalone, +33268 concomitant, 33269 VATS ───
+{
+  // CABG + clip, no maze: the standalone code becomes the add-on.
+  const L = run([enc("33533"), enc("33517"), enc("33267", 1, "AtriCure clip"), enc("33508")], "CABG x2 LIMA-LAD, SVG-OM, endoscopic vein harvest, LAA clip");
+  eq("CABG + 33267 → 33268", codes(L), ["33533", "33517", "33268", "33508"]);
+  eq("CABG + LAA add-on total 39.17", total(L), 39.17);
+  ok("33268 swap question cites the CPT descriptor", hasQ(L, /33268 replaces 33267/) && hasQ(L, /performed at the time of other sternotomy or thoracotomy procedure/));
+  ok("33268 why is not the spine wording", /appendage exclusion at the time of another sternotomy/.test(L.items.find(it => it.code === "33268").why) && !/fused interspace/.test(L.items.find(it => it.code === "33268").why));
+  // Both listed: one 33268 line.
+  const L2 = run([enc("33533"), enc("33267"), enc("33268")], "CABG with LAA clip");
+  eq("33267 and 33268 both proposed with a CABG: one 33268", codes(L2).filter(c => LAA_CODES.has(c)), ["33268"]);
+  // Standalone stays standalone.
+  eq("33267 alone untouched", codes(run([enc("33267")], "isolated open LAA exclusion")), ["33267"]);
+  eq("33267 alone wRVU 18.04", total(run([enc("33267")])), 18.04);
+  eq("33269 alone untouched", codes(run([enc("33269")], "thoracoscopic LAA clip")), ["33269"]);
+  eq("33269 alone wRVU 13.95", total(run([enc("33269")])), 13.95);
+  // Maze and mitral exclusions.
+  const M1 = run([enc("33533"), enc("33259"), enc("33268")], "CABG, maze, clip");
+  eq("33268 beside 33259 removed", codes(M1), ["33533", "33259"]);
+  ok("maze removal question names the maze range", hasQ(M1, /33268 removed/) && hasQ(M1, /33254-33259, 33265, 33266/) && hasQ(M1, /CPT Assistant, November 2021/));
+  const M2 = run([enc("33430"), enc("33268")], "mitral valve replacement with LAA clip");
+  eq("33268 beside 33430 (mitral) removed", codes(M2), ["33430"]);
+  ok("mitral removal question names 33420-33430", hasQ(M2, /33420-33430/) && hasQ(M2, /mitral valve procedure/));
+  const M3 = run([enc("33259"), enc("33269")], "maze and thoracoscopic clip");
+  eq("33269 beside 33259 removed", codes(M3), ["33259"]);
+  ok("lone 33259 after removal is flagged add-on without primary", M3.items[0].flag === "add-on without a primary");
+  ok("LAA sets are the CPT parenthetical lists", LAA_MAZE_CODES.size === 8 && LAA_MITRAL_CODES.size === 6 && [...LAA_MITRAL_CODES].every(c => /^334[23]\d$/.test(c)));
+}
+
+// ── surgeonPerformedTee: the words that make the TEE the surgeon's ──────────
+{
+  for (const t of [
+    "I do the tee",
+    "I performed and interpreted the intraoperative TEE",
+    "I personally performed the TEE",
+    "I also read the transesophageal echo",
+    "TEE performed and interpreted by me",
+    "transesophageal echocardiogram performed by the operating surgeon",
+    "surgeon-performed TEE",
+    "my own intraoperative TEE",
+    "I interpreted the intraoperative TEE myself",
+  ]) ok(`surgeon TEE signal: "${t}"`, surgeonPerformedTee(t));
+  for (const t of [
+    "with intraoperative transesophageal echocardiogram",
+    "I did a CABG times 2 with intraoperative TEE",
+    "anesthesia performed the TEE",
+    "TEE by anesthesia showed good function",
+    "I performed a CABG; TEE was done",
+  ]) ok(`no surgeon TEE signal: "${t}"`, !surgeonPerformedTee(t));
+}
+
+// ── Catalog: the cardiac codes trace to the CY2026 PFS ──────────────────────
+eq("wRVU 33267/33268/33269", ["33267", "33268", "33269"].map(c => [CPT_BY_CODE[c].wRVU, CPT_BY_CODE[c].globalDays]), [[18.04, "090"], [2.44, "ZZZ"], [13.95, "090"]]);
+eq("wRVU 33533/33517/33259/33508", ["33533", "33517", "33259", "33508"].map(c => CPT_BY_CODE[c].wRVU), [32.91, 3.52, 13.79, 0.3]);
+eq("wRVU 93312/93313/93314 (status A, XXX)", ["93312", "93313", "93314"].map(c => [CPT_BY_CODE[c].wRVU, CPT_BY_CODE[c].status, CPT_BY_CODE[c].globalDays]), [[2.24, "A", "XXX"], [0.25, "A", "XXX"], [1.8, "A", "XXX"]]);
+ok("93318 (TEE for monitoring, anesthesia's, PFS global line status C) deliberately absent", !CPT_BY_CODE["93318"]);
+ok("92960 (elective cardioversion) deliberately absent", !CPT_BY_CODE["92960"]);
+ok("33267 shortDesc says standalone, 33268 says add-on", /standalone/i.test(CPT_BY_CODE["33267"].shortDesc) && /add-on/i.test(CPT_BY_CODE["33268"].shortDesc));
+ok("construct rules name 33268/33269/93312/93314 and bar the clip beside a maze", ["33268", "33269", "93312", "93314"].every(c => CONSTRUCT_RULES.includes(c)) && /NEVER report 33267, 33268 or 33269 with a maze/.test(CONSTRUCT_RULES));
 
 // ── The catalog line the model reads: word boundary, no orphaned "(" ─────────
 {
