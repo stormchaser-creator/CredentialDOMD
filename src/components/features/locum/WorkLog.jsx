@@ -1008,13 +1008,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   }, [contractEntries, contract, entries, isStipendDay, amountForEntry, todayKey]);
 
   // The line under a day's date: what was logged and how the stipend covers
-  // it. One string for the phone day header and the desk subtotal row.
-  const dayNote = (g) => (
+  // it. One string for the phone day header and the desk subtotal row; the
+  // verb names the minutes it reports (g.loggedMin is billed minutes), so
+  // the desk row, which sits beside a raw Logged min column, says "billed".
+  const dayNote = (g, verb = "logged") => (
     g.stipDay
       ? (g.loggedMin > 0
-        ? `${fmtHM(g.loggedMin)} logged · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond ${(contract?.overageHourlyRate || 0) > 0 ? `@ ${money(contract.overageHourlyRate)}/hr` : "— no after-stipend rate set"}` : ""}`
+        ? `${fmtHM(g.loggedMin)} ${verb} · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond ${(contract?.overageHourlyRate || 0) > 0 ? `@ ${money(contract.overageHourlyRate)}/hr` : "· no after-stipend rate set"}` : ""}`
         : `on call · nothing logged yet`)
-      : `${fmtHM(g.loggedMin)} logged`
+      : `${fmtHM(g.loggedMin)} ${verb}`
   );
 
   // Desk table inputs: the same day groups flattened to rows, plus the
@@ -1029,13 +1031,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     for (const g of dayGroups) {
       const dayAll = contractEntries.filter(e => e.type !== "CallDay" && callDayOf(e) === g.key);
       const sibs = overlapSiblings(contractEntries, contract.id, g.key);
-      let loggedRaw = 0, billedRaw = 0, billedEff = 0;
+      let loggedRaw = 0, billedRaw = 0, billedEff = 0, orientMin = 0;
       for (const e of dayAll) {
         loggedRaw += e.durationMin || 0;
         billedRaw += e.billedMin || 0;
-        if (!findContainer(e, sibs)) billedEff += e.billedMin || 0;
+        if (findContainer(e, sibs)) continue;
+        billedEff += e.billedMin || 0;
+        if (e.type === "Orientation") orientMin += e.billedMin || 0;
       }
-      by.set(g.key, { ...g, loggedRaw, billedRaw, billedEff });
+      by.set(g.key, { ...g, loggedRaw, billedRaw, billedEff, orientMin });
     }
     return by;
   }, [isDesktop, contract, dayGroups, contractEntries]);
@@ -1809,12 +1813,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             const d = deskDays?.get(key);
             if (!d) return null;
             const inside = d.billedRaw - d.billedEff;
+            // A stipend day's note counts only the work the stipend covers;
+            // orientation bills on its own terms, so the label names it
+            // separately and the two figures add up to the Billed min cell.
+            const note = dayNote(d, "billed") + (d.stipDay && d.orientMin > 0 ? ` · ${fmtHM(d.orientMin)} orientation outside the stipend` : "");
             return {
               label: (
-                <span title={dayNote(d)}>
+                <span title={note}>
                   {formatDate(key)}
                   {d.stipDay && <span style={{ fontSize: 10.5, color: T.accent, marginLeft: 6, letterSpacing: 0.4 }}>STIPEND DAY</span>}
-                  <span style={{ fontWeight: 500, color: T.textDim }}>{" · "}{dayNote(d)}</span>
+                  <span style={{ fontWeight: 500, color: T.textDim }}>{" · "}{note}</span>
                 </span>
               ),
               cells: {
