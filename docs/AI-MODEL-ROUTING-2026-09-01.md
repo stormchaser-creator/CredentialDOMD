@@ -24,6 +24,10 @@ so no feature dead-ends on the Opus key.
   `ai-proxy` edge function (Clerk-authenticated, per-provider daily cap, hardened envelope).
 - Opus calls run with thinking disabled and a JSON-only contract. Opus 5 rejects
   `temperature`, so thinking off is the determinism knob.
+- Vera is the exception: adaptive thinking stays on at effort `low`, and her system prompt is
+  three cached blocks (rulebook, renewal reference for the physician's states, record snapshot),
+  so a turn re-bills only the conversation itself. Case-log dictation caches its rules and
+  template the same way; its Gemini prompt is byte-identical to what shipped.
 - The RVU coder tells the physician in the review when Gemini coded a case and why Opus did
   not. Case-log dictation falls through silently: the draft opens prefilled for review either
   way and is never saved without the surgeon's confirmation.
@@ -37,3 +41,16 @@ so no feature dead-ends on the Opus key.
 
 A physician who adds their own key for either provider in Settings is billed on that key
 and skips the shared cap for that provider.
+
+## Monthly dollar budget (per user, UTC calendar month, admins unlimited)
+
+Since 2026-09-02 every proxied call carries the model, the vendor's token counts and a
+`cost_usd` at list price (docs/AI-PROXY.md, Metering). Both providers sum into one figure.
+
+| Line | Setting | Default | Effect |
+|---|---|---|---|
+| Soft | `AI_BUDGET_SOFT_USD` on ai-proxy | $8 | Settings > AI shows a warning |
+| Hard | `AI_BUDGET_HARD_USD` on ai-proxy | $15 | Anthropic path answers 429 `budget`; Vera, the RVU coder and case-log dictation run on Gemini until the 1st. Gemini is never blocked by the budget. |
+
+The daily call caps above stay as a backstop under the dollars. The RVU coder's review note
+and Vera's reply both say "The monthly AI budget is used up, so Gemini answered." on that 429.

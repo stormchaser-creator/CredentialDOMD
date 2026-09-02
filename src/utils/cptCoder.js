@@ -1,5 +1,5 @@
 import { CPT_BY_CODE } from "../constants/cpt/index.js";
-import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, anthropicErrorMessage, anthropicSdk, AI_MESSAGES } from "./aiClient";
+import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, anthropicErrorMessage, anthropicSdk, AI_MESSAGES, opusUnavailableReason } from "./aiClient";
 import { CODER_RULES, buildCatalog, normalizeDictation, postProcess } from "./cptCoderRules.js";
 
 export { normalizeDictation, parseDictatedDate, normalizeCode, postProcess, BUNDLED_PAIRS } from "./cptCoderRules.js";
@@ -77,7 +77,7 @@ export async function codeFromText(text, apiKeyOrSettings) {
   // an unavailable Opus falls back to Gemini with a note, never a dead end.
   if ((settings.coderModel || "opus") === "opus") {
     if (!anthropicAvailable(settings)) {
-      note = fallbackNote(AI_MESSAGES.opus_not_enabled);
+      note = fallbackNote(opusUnavailableReason());
     } else {
       try {
         return finish(await codeWithOpus(text, settings), text);
@@ -94,7 +94,11 @@ export async function codeFromText(text, apiKeyOrSettings) {
   return result;
 }
 
-const fallbackNote = (why) => `Claude Opus was not available for this one (${String(why).replace(/\.\s*$/, "")}), so Gemini coded it.`;
+// The monthly budget line is the same sentence Vera uses; every other reason
+// is wrapped so the physician reads who coded the case and why.
+const fallbackNote = (why) => why === AI_MESSAGES.budget
+  ? AI_MESSAGES.budget
+  : `Claude Opus was not available for this one (${String(why).replace(/\.\s*$/, "")}), so Gemini coded it.`;
 
 // Why Opus did not code this one, in the physician's terms.
 function opusFailureReason(e, settings) {

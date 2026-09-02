@@ -58,7 +58,13 @@ export const AI_MESSAGES = {
   forbidden: "AI is available once your beta access is active.",
   unauthorized: "Sign in to use AI features.",
   offline: "AI is not reachable right now. Check your connection and try again.",
+  // The proxy's monthly hard budget (429 { error: "budget" }): Opus is done
+  // until the 1st and Gemini takes the turn. Vera's reply and the coder's
+  // review note both say exactly this.
+  budget: "The monthly AI budget is used up, so Gemini answered.",
 };
+
+const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
 
 /** Thrown by anthropicClientFor() when no Opus route exists before any request is made. */
 export class AiProxyError extends Error {
@@ -102,6 +108,11 @@ function readCachedStatus() {
       anthropicUsed: Number(parsed.anthropicUsed) || 0,
       anthropicLimit: Number(parsed.anthropicLimit) || Number(parsed.limit) || SHARED_DAILY_LIMIT,
       unlimited: !!parsed.unlimited,
+      monthSpentUsd: Number(parsed.monthSpentUsd) || 0,
+      budgetSoftUsd: Number(parsed.budgetSoftUsd) || 0,
+      budgetHardUsd: Number(parsed.budgetHardUsd) || 0,
+      overSoft: !!parsed.overSoft,
+      overHard: !!parsed.overHard,
       checkedAt: Number(parsed.checkedAt) || 0,
     };
   } catch {
@@ -109,21 +120,30 @@ function readCachedStatus() {
   }
 }
 
-// { shared, used, limit, reason, anthropicShared, anthropicUsed, anthropicLimit, unlimited, checkedAt }
+// { shared, used, limit, reason, anthropicShared, anthropicUsed, anthropicLimit, unlimited,
+//   monthSpentUsd, budgetSoftUsd, budgetHardUsd, overSoft, overHard, checkedAt }
 //   shared: the shared Gemini key is configured AND this user may use it
 //   reason: why not, when shared is false. "pending" (beta gate),
 //     "not_configured", "signed_out", "offline", or null
 //   anthropicShared: the shared Anthropic key is configured AND this user may
 //     use it (false on a proxy deploy that predates Opus)
 //   anthropicUsed / anthropicLimit: Opus calls today vs the Opus daily cap
-//   unlimited: admins, no daily cap on either provider
+//   unlimited: admins, no daily cap and no dollar budget on either provider
+//   monthSpentUsd: dollars spent on the shared keys this UTC month, both
+//     providers; budgetSoftUsd warns, budgetHardUsd stops Opus (Gemini goes
+//     on). 0 when the proxy deploy predates budgets.
+//   overSoft / overHard: the proxy's own verdict on those lines
 export let sharedAiStatus = readCachedStatus() || {
   shared: false, used: 0, limit: SHARED_DAILY_LIMIT, reason: null,
   anthropicShared: false, anthropicUsed: 0, anthropicLimit: SHARED_DAILY_LIMIT, unlimited: false,
+  monthSpentUsd: 0, budgetSoftUsd: 0, budgetHardUsd: 0, overSoft: false, overHard: false,
   checkedAt: 0,
 };
 
-const STATUS_KEYS = ["shared", "used", "limit", "reason", "anthropicShared", "anthropicUsed", "anthropicLimit", "unlimited"];
+const STATUS_KEYS = [
+  "shared", "used", "limit", "reason", "anthropicShared", "anthropicUsed", "anthropicLimit", "unlimited",
+  "monthSpentUsd", "budgetSoftUsd", "budgetHardUsd", "overSoft", "overHard",
+];
 
 function setSharedAiStatus(next) {
   const merged = { ...sharedAiStatus, ...next };
@@ -145,11 +165,12 @@ let statusRetries = 0;
 
 /**
  * GET ai-proxy → { shared, used_today, limit, unlimited, anthropic_shared,
- * anthropic_used_today, anthropic_limit }. The anthropic_* fields arrived
- * with the Opus relay; an older deploy omits them and Opus simply reads as
- * off. Runs once per page load (the first caller after sign-in wins; later
- * callers get the cache) unless `force` is set. Safe to call from anywhere;
- * never throws.
+ * anthropic_used_today, anthropic_limit, month_spent_usd, budget_soft_usd,
+ * budget_hard_usd, over_soft, over_hard }. The anthropic_* fields arrived
+ * with the Opus relay and the budget fields with metering; an older deploy
+ * omits them and Opus simply reads as off, the budget as unknown. Runs once
+ * per page load (the first caller after sign-in wins; later callers get the
+ * cache) unless `force` is set. Safe to call from anywhere; never throws.
  */
 export async function fetchSharedAiStatus({ force = false } = {}) {
   if (statusInflight) return statusInflight;
@@ -191,6 +212,11 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
         anthropicUsed: Number(body?.anthropic_used_today) || 0,
         anthropicLimit: Number(body?.anthropic_limit) || limit,
         unlimited: !!body?.unlimited,
+        monthSpentUsd: Number(body?.month_spent_usd) || 0,
+        budgetSoftUsd: Number(body?.budget_soft_usd) || 0,
+        budgetHardUsd: Number(body?.budget_hard_usd) || 0,
+        overSoft: !!body?.over_soft,
+        overHard: !!body?.over_hard,
         checkedAt: Date.now(),
       });
     } else if (res.status === 403) {
@@ -225,7 +251,10 @@ function scheduleStatusRetry(delay = 2500) {
 export function resetSharedAiStatus() {
   statusFetchedThisLoad = false;
   statusRetries = 0;
-  setSharedAiStatus({ shared: false, used: 0, reason: null, anthropicShared: false, anthropicUsed: 0, unlimited: false, checkedAt: 0 });
+  setSharedAiStatus({
+    shared: false, used: 0, reason: null, anthropicShared: false, anthropicUsed: 0, unlimited: false,
+    monthSpentUsd: 0, budgetSoftUsd: 0, budgetHardUsd: 0, overSoft: false, overHard: false, checkedAt: 0,
+  });
   try { if (typeof localStorage !== "undefined") localStorage.removeItem(SHARED_AI_STORAGE_KEY); } catch { /* ignore */ }
 }
 
@@ -246,12 +275,14 @@ export function usesSharedAi(settings) {
   return !settings?.apiKey && !!sharedAiStatus.shared;
 }
 
-// The shared Opus door is open: key loaded, account allowed, and today's cap
-// not yet hit (a 429 from the proxy sets used = limit so the next call
-// routes to Gemini without a wasted round trip).
+// The shared Opus door is open: key loaded, account allowed, today's cap
+// not yet hit and the month's hard budget not yet spent (a 429 from the
+// proxy sets used = limit or overHard so the next call routes to Gemini
+// without a wasted round trip).
 function sharedOpusOpen(s = sharedAiStatus) {
   if (!s.anthropicShared) return false;
   if (s.unlimited) return true;
+  if (s.overHard) return false;
   return !(s.anthropicLimit && s.anthropicUsed >= s.anthropicLimit);
 }
 
@@ -295,11 +326,50 @@ export function describeOpusStatus(settings) {
   const s = sharedAiStatus;
   if (s.anthropicShared) {
     if (s.unlimited) return `Shared Opus: on, ${s.anthropicUsed} call${s.anthropicUsed === 1 ? "" : "s"} today (no cap on admin accounts)`;
+    if (s.overHard) return `Shared Opus: the monthly AI budget (${usd(s.budgetHardUsd)}) is used up. Vera answers on Gemini until the first of next month.`;
     if (s.anthropicLimit && s.anthropicUsed >= s.anthropicLimit) return `Shared Opus: daily limit reached (${s.anthropicLimit} calls). Vera answers on Gemini until tomorrow.`;
     return `Shared Opus: on, ${s.anthropicUsed} of ${s.anthropicLimit} calls used today`;
   }
   if (s.shared) return "Shared Opus: not enabled on this account yet. Vera runs on Gemini.";
   return null;
+}
+
+/**
+ * The month's shared-key spend for Settings > AI: { line, warning } or null
+ * when there is nothing to say (own keys for everything, the proxy has not
+ * reported a budget, or the shared keys are off for this account). The line
+ * is informational; the warning appears past the soft line and hardens past
+ * the hard line.
+ */
+export function describeAiBudget(settings) {
+  const s = sharedAiStatus;
+  if (!s.budgetHardUsd) return null;
+  if (!s.shared && !s.anthropicShared) return null;
+  if (settings?.apiKey && settings?.anthropicApiKey) return null;
+  if (s.unlimited) {
+    return { line: `About ${usd(s.monthSpentUsd)} this month on the shared keys (no budget on admin accounts).`, warning: null };
+  }
+  const line = `About ${usd(s.monthSpentUsd)} of ${usd(s.budgetHardUsd)} this month on the shared keys.`;
+  let warning = null;
+  if (s.overHard) {
+    warning = "The monthly AI budget is used up. Vera, the RVU coder and case dictation answer on Gemini until the first of next month; document scanning, CME import and work-log dictation keep working.";
+  } else if (s.overSoft) {
+    warning = `Past the ${usd(s.budgetSoftUsd)} soft line for this month. At ${usd(s.budgetHardUsd)}, Vera, the RVU coder and case dictation switch to Gemini until the first of next month.`;
+  }
+  return { line, warning };
+}
+
+/**
+ * Why an Opus call is not being attempted right now (anthropicAvailable()
+ * read false), in the physician's terms, for the coder's review note.
+ */
+export function opusUnavailableReason() {
+  const s = sharedAiStatus;
+  if (s.anthropicShared && !s.unlimited) {
+    if (s.overHard) return AI_MESSAGES.budget;
+    if (s.anthropicLimit && s.anthropicUsed >= s.anthropicLimit) return opusQuotaMessage(s.anthropicLimit);
+  }
+  return AI_MESSAGES.opus_not_enabled;
 }
 
 // ─── React hooks ────────────────────────────────────────────
@@ -455,6 +525,13 @@ function noteOpusRefusal(status, body) {
       anthropicUsed: Number(body.used) || sharedAiStatus.anthropicLimit || SHARED_DAILY_LIMIT,
       anthropicLimit: Number(body.limit) || sharedAiStatus.anthropicLimit,
     });
+  } else if (status === 429 && code === "budget") {
+    setSharedAiStatus({
+      overSoft: true,
+      overHard: true,
+      monthSpentUsd: Number(body.spent_usd) || sharedAiStatus.monthSpentUsd,
+      budgetHardUsd: Number(body.budget_usd) || sharedAiStatus.budgetHardUsd,
+    });
   } else if (status === 503) {
     setSharedAiStatus({ anthropicShared: false });
   } else if (status === 403) {
@@ -524,6 +601,7 @@ export function anthropicErrorMessage(err) {
   const code = proxyCodeOf(body);
   if (!code) return null;
   if (status === 429 && code === "quota") return opusQuotaMessage(Number(body.limit) || sharedAiStatus.anthropicLimit);
+  if (status === 429 && code === "budget") return AI_MESSAGES.budget;
   if (status === 503) return AI_MESSAGES.opus_not_enabled;
   if (status === 403) return AI_MESSAGES.forbidden;
   if (status === 401) return AI_MESSAGES.unauthorized;

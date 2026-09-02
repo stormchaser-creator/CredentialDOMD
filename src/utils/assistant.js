@@ -3,7 +3,7 @@ import { RENEWAL_INFO } from "../constants/renewalInfo";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
 import { CPT_DESCS } from "../constants/cptDescs";
 import { CME_PROVIDERS } from "../constants/cmeProviders";
-import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, anthropicErrorMessage, anthropicSdk } from "./aiClient";
+import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, anthropicErrorMessage, anthropicSdk, AI_MESSAGES } from "./aiClient";
 
 /**
  * The in-app AI assistant. Modeled on the CallSync helper (every question
@@ -352,12 +352,26 @@ ${PROVIDER_DIGEST}
 KNOWN SECTION FIELDS:
 ${JSON.stringify(SECTION_FIELDS)}`;
 
-const snapshotBlock = (snapshot) => `USER DATA SNAPSHOT:
+// The system prompt in three blocks so the Opus path can cache each on its
+// own (docs/SCALE-AND-COST-PLAN-2026-09-02.md, section 4):
+//   1. SYSTEM_STATIC, which never changes.
+//   2. renewalInfo, pulled out of the snapshot: reference text for the
+//      physician's states that only changes when their states change, and
+//      the largest single part of a big snapshot.
+//   3. The snapshot itself, which changes when a record changes.
+const renewalBlock = (renewalInfo) => `RENEWAL INFO (renewalInfo) for this physician's states, from the app's researched state guides:
+${JSON.stringify(renewalInfo || {})}`;
+
+const snapshotBlock = (snapshot) => `USER DATA SNAPSHOT (renewalInfo is in the block above):
 ${JSON.stringify(snapshot)}`;
 
-const SYSTEM = (snapshot) => `${SYSTEM_STATIC}
+/** [static, renewal, snapshot] texts; both model paths read the same words. */
+export function systemBlocks(snapshot) {
+  const { renewalInfo, ...rest } = snapshot || {};
+  return [SYSTEM_STATIC, renewalBlock(renewalInfo), snapshotBlock(rest)];
+}
 
-${snapshotBlock(snapshot)}`;
+const SYSTEM = (snapshot) => systemBlocks(snapshot).join("\n\n");
 
 function extractBase64(dataUrl) { return dataUrl.split(",")[1]; }
 function mediaType(dataUrl) { return dataUrl.slice(5, dataUrl.indexOf(";")); }
@@ -391,6 +405,7 @@ function parseAssistantJson(raw) {
 export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, attachment, settings }) {
   const s = settings || { apiKey, anthropicApiKey: anthropicKey };
   const ownOpusKey = !!s.anthropicApiKey;
+  let note = null; // one line atop the reply when Gemini took a turn meant for Opus
   if (anthropicAvailable(s) && claudeCanRead(attachment)) {
     try {
       return await anthropicTurn({ history, snapshot, settings: s, attachment });
@@ -398,10 +413,13 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
       const A = anthropicSdk(); // set by anthropicClientFor() before any request ran
       const refused = anthropicErrorMessage(e); // the proxy, not Anthropic, said no
       if (refused) {
-        // The shared Opus door is shut for now (daily cap, key not loaded,
-        // beta gate, signed out): Gemini takes the turn so the chat never
-        // dead-ends. aiClient already flipped the status, so the next turn
-        // routes straight to Gemini and Settings reads the reason.
+        // The shared Opus door is shut for now (daily cap, monthly budget,
+        // key not loaded, beta gate, signed out): Gemini takes the turn so
+        // the chat never dead-ends. aiClient already flipped the status, so
+        // the next turn routes straight to Gemini and Settings reads the
+        // reason. The monthly budget is the one refusal the physician hears
+        // about in the reply itself: it changes who answers for weeks.
+        if (refused === AI_MESSAGES.budget) note = refused;
       } else if (ownOpusKey && A && (e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError)) {
         // A bad key must surface; silently answering on Gemini would hide it.
         throw new Error("Your Anthropic API key was rejected. Check it in Settings, or clear it to use Gemini.");
@@ -423,9 +441,11 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
       }
     }
   }
-  // Opus route present but Claude can't read this attachment type (HEIC
-  // and friends): Gemini takes the turn instead.
-  return geminiTurn({ history, snapshot, apiKey: s.apiKey, attachment });
+  // No Opus route, Opus refused or failed, or Claude can't read this
+  // attachment type (HEIC and friends): Gemini takes the turn instead.
+  const result = await geminiTurn({ history, snapshot, apiKey: s.apiKey, attachment });
+  if (note) result.reply = `${note}\n\n${result.reply || ""}`.trim();
+  return result;
 }
 
 // Claude accepts these attachment types; anything else (HEIC from the iPhone
@@ -464,15 +484,25 @@ async function anthropicTurn({ history, snapshot, settings, attachment }) {
   // can start mid-conversation on an assistant reply.
   while (messages.length && messages[0].role !== "user") messages.shift();
 
+  const [staticText, renewalText, snapshotText] = systemBlocks(snapshot);
   const response = await client.messages.create({
     model: "claude-opus-5",
     // Opus thinks before answering and the cap covers thinking + reply
     // together — 16k leaves the reply room even on a hard extraction turn.
     max_tokens: 16000,
-    // The big static rulebook caches across turns; only the snapshot re-bills.
+    // Adaptive thinking stays on; a conversational turn is a lookup over
+    // the snapshot, not a proof, so it runs at low effort. Output tokens
+    // are the priciest line on a Vera turn.
+    thinking: { type: "adaptive" },
+    output_config: { effort: "low" },
+    // Three breakpoints (four are allowed): the rulebook caches across
+    // every session, the renewal block across turns until the physician's
+    // states change, the snapshot across turns until a record changes.
+    // Only the conversation itself re-bills at the full input price.
     system: [
-      { type: "text", text: SYSTEM_STATIC, cache_control: { type: "ephemeral" } },
-      { type: "text", text: snapshotBlock(snapshot) },
+      { type: "text", text: staticText, cache_control: { type: "ephemeral" } },
+      { type: "text", text: renewalText, cache_control: { type: "ephemeral" } },
+      { type: "text", text: snapshotText, cache_control: { type: "ephemeral" } },
     ],
     messages,
   });

@@ -18,6 +18,8 @@
  *     503  { error: "shared_key_not_configured" }
  *     429  { error: "quota", used, limit }   past the per-user daily cap
  *     else Gemini's own status + JSON body, verbatim
+ *     The monthly dollar budget never blocks Gemini: it is cheap, and it is
+ *     where the app lands once Opus is over budget. Calls are still costed.
  *
  *   POST /functions/v1/ai-proxy/v1/messages   Authorization: Bearer <Clerk JWT>
  *     Body: the Anthropic Messages request JSON, forwarded verbatim to
@@ -27,22 +29,31 @@
  *     401 / 403 as above
  *     400  { error: "Bad JSON" } | { error: "stream_not_supported" } (body.stream === true)
  *     503  { error: "shared_key_not_configured", provider: "anthropic" }
- *     429  { error: "quota", used, limit, provider: "anthropic" }
+ *     429  { error: "quota", used, limit, provider: "anthropic" }     past the daily cap
+ *     429  { error: "budget", spent_usd, budget_usd, provider: "anthropic" }
+ *          past this month's hard dollar budget (the app answers on Gemini)
  *     else Anthropic's own status + body, verbatim
  *
  *   GET  /functions/v1/ai-proxy      Authorization: Bearer <Clerk JWT>
  *     -> { shared: boolean, used_today, limit, unlimited: boolean (admins),
- *          anthropic_shared: boolean, anthropic_used_today, anthropic_limit }
+ *          anthropic_shared: boolean, anthropic_used_today, anthropic_limit,
+ *          month_spent_usd, budget_soft_usd, budget_hard_usd, over_soft, over_hard }
  *        shared = key configured AND this account may use it
  *
  * The shared keys are app_secrets.gemini_shared_key and
  * app_secrets.anthropic_shared_key (service role only). Every forwarded call
- * writes one public.ai_usage row (admin-read) tagged with its provider.
+ * writes one public.ai_usage row (admin-read) tagged with its provider, the
+ * model that answered, the vendor's token counts, and cost_usd at list price
+ * (_shared/aiPricing.ts; null for a model that is not in the table).
  *
  * Daily caps are per provider, per user, per UTC calendar day:
  *   Gemini     AI_DAILY_LIMIT secret,        default DEFAULT_DAILY_LIMIT
  *   Anthropic  ANTHROPIC_DAILY_LIMIT secret, default DEFAULT_ANTHROPIC_DAILY_LIMIT
- * Admins are unlimited on both.
+ * Dollar budgets are per user, per UTC calendar month, both providers summed:
+ *   AI_BUDGET_SOFT_USD secret, default DEFAULT_BUDGET_SOFT_USD (warn in Settings)
+ *   AI_BUDGET_HARD_USD secret, default DEFAULT_BUDGET_HARD_USD (Anthropic refused)
+ * Admins are unlimited on all of them. The counts stay as a backstop under
+ * the dollars.
  *
  * Neither key is ever logged or returned. There is deliberately no
  * console.log in this file.
@@ -50,6 +61,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { meterUsage } from "../_shared/aiPricing.ts";
 
 const DEFAULT_DAILY_LIMIT = 200; // calls per user per UTC day. Override with the AI_DAILY_LIMIT secret.
 const DAILY_LIMIT = (() => {
@@ -64,6 +76,20 @@ const ANTHROPIC_DAILY_LIMIT = (() => {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_ANTHROPIC_DAILY_LIMIT;
 })();
 
+// Dollars per user per UTC calendar month across both providers. The soft
+// line only warns (Settings > AI); past the hard line Opus is refused with
+// 429 { error: "budget" } and the app answers on Gemini for the rest of the
+// month. Defaults per docs/SCALE-AND-COST-PLAN-2026-09-02.md; override with
+// the AI_BUDGET_SOFT_USD / AI_BUDGET_HARD_USD secrets.
+const DEFAULT_BUDGET_SOFT_USD = 8;
+const DEFAULT_BUDGET_HARD_USD = 15;
+const budgetSecret = (name: string, fallback: number): number => {
+  const n = parseFloat(Deno.env.get(name) || "");
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const BUDGET_SOFT_USD = budgetSecret("AI_BUDGET_SOFT_USD", DEFAULT_BUDGET_SOFT_USD);
+const BUDGET_HARD_USD = budgetSecret("AI_BUDGET_HARD_USD", DEFAULT_BUDGET_HARD_USD);
+
 const SECRET_NAME = "gemini_shared_key";
 const ANTHROPIC_SECRET_NAME = "anthropic_shared_key";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/";
@@ -72,6 +98,8 @@ const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 // claude-opus-5; sonnet-5 is allowed as a cheaper fallback. Anything else
 // (a bigger model, fast mode, unbounded output) is refused before the key
 // is ever attached. Anthropic beta headers are limited to prompt caching.
+// output_config (effort, structured output) is deliberately not on the
+// forbidden list: Vera runs conversational turns at effort "low".
 const ANTHROPIC_MODEL_ALLOWLIST = new Set(["claude-opus-5", "claude-sonnet-5"]);
 const ANTHROPIC_MAX_TOKENS_CEILING = 16000;
 const ANTHROPIC_FORBIDDEN_FIELDS = ["speed", "service_tier", "tools", "mcp_servers", "container", "betas"];
@@ -102,17 +130,28 @@ const anthropicCors = (req: Request) => ({
   "Access-Control-Allow-Headers": req.headers.get("Access-Control-Request-Headers") || ANTHROPIC_ALLOW_HEADERS,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 });
-const json = (status: number, body: unknown, cors: Record<string, string> = corsHeaders) =>
+const json = (status: number, body: unknown, cors: Record<string, string> = corsHeaders, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store", ...extra },
   });
+// The proxy's own 429s are final for the day or the month: tell the SDK not
+// to retry them (it honors x-should-retry) so a refusal costs one round trip.
+const NO_RETRY = { "x-should-retry": "false", "Access-Control-Expose-Headers": "x-should-retry" };
 
 function startOfTodayUtc(): string {
   const d = new Date();
   d.setUTCHours(0, 0, 0, 0);
   return d.toISOString();
 }
+
+function startOfMonthUtc(): string {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
+}
+
+// The model named in a Gemini path, "models/gemini-2.5-flash:generateContent".
+const modelFromPath = (path: string): string | null => path.match(/^models\/([^:]+):/)?.[1] || null;
 
 // Text characters in the request (contents[].parts[].text + systemInstruction).
 // Inline images/PDFs are base64 blobs and are not counted.
@@ -154,6 +193,12 @@ function anthropicPromptChars(body: unknown): number {
   return Math.min(n, 2_000_000_000);
 }
 
+// The vendor's JSON, parsed for metering; null when the body is not JSON.
+function parseUpstream(text: string, contentType: string): unknown {
+  if (!/json/i.test(contentType)) return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 serve(async (req) => {
   const isAnthropic = new URL(req.url).pathname.endsWith("/v1/messages");
 
@@ -192,6 +237,25 @@ serve(async (req) => {
     return count || 0;
   };
 
+  // Dollars this user has spent through the proxy this UTC month, both
+  // providers. A missing function or a query error reads as 0: the budget
+  // fails open and the daily caps still hold.
+  const monthSpentUsd = async (): Promise<number> => {
+    try {
+      const { data } = await db.rpc("ai_usage_spend_usd", { p_user: user.profileId, p_since: startOfMonthUtc() });
+      const n = Number(data);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // One ai_usage row per forwarded call. Never let a logging hiccup break
+  // the user's request.
+  const logUsage = async (row: Record<string, unknown>) => {
+    try { await db.from("ai_usage").insert({ user_id: user.profileId, ...row }); } catch { /* ignore */ }
+  };
+
   // ---- POST /v1/messages: forward one Anthropic Messages call ----
   if (isAnthropic) {
     const cors = anthropicCors(req);
@@ -228,7 +292,13 @@ serve(async (req) => {
     if (!user.isAdmin) {
       const used = await usedToday("anthropic");
       if (used >= ANTHROPIC_DAILY_LIMIT) {
-        return json(429, { error: "quota", used, limit: ANTHROPIC_DAILY_LIMIT, provider: "anthropic" }, cors);
+        return json(429, { error: "quota", used, limit: ANTHROPIC_DAILY_LIMIT, provider: "anthropic" }, cors, NO_RETRY);
+      }
+      // The month's dollars: past the hard line Opus is done until the 1st;
+      // the app answers on Gemini, which this proxy keeps serving.
+      const spent = await monthSpentUsd();
+      if (spent >= BUDGET_HARD_USD) {
+        return json(429, { error: "budget", spent_usd: spent, budget_usd: BUDGET_HARD_USD, provider: "anthropic" }, cors, NO_RETRY);
       }
     }
 
@@ -255,20 +325,17 @@ serve(async (req) => {
       upstreamText = await up.text();
       upstreamType = up.headers.get("content-type") || "application/json";
     } catch {
-      try {
-        await db.from("ai_usage").insert({
-          user_id: user.profileId, path: ANTHROPIC_USAGE_PATH, ok: false, status: null, prompt_chars: chars, provider: "anthropic",
-        });
-      } catch { /* ignore */ }
+      await logUsage({ path: ANTHROPIC_USAGE_PATH, ok: false, status: null, prompt_chars: chars, provider: "anthropic", model: body.model });
       // Never echo the fetch error text.
       return json(502, { error: "upstream_unreachable" }, cors);
     }
 
-    try {
-      await db.from("ai_usage").insert({
-        user_id: user.profileId, path: ANTHROPIC_USAGE_PATH, ok: upstreamOk, status: upstreamStatus, prompt_chars: chars, provider: "anthropic",
-      });
-    } catch { /* ignore */ }
+    // The row carries Anthropic's status plus what the call cost: usage
+    // comes from the buffered response (streaming is refused above).
+    await logUsage({
+      path: ANTHROPIC_USAGE_PATH, ok: upstreamOk, status: upstreamStatus, prompt_chars: chars, provider: "anthropic",
+      ...meterUsage("anthropic", body.model, parseUpstream(upstreamText, upstreamType)),
+    });
 
     // Anthropic's own status and body, verbatim (the shared key never appears in either).
     return new Response(upstreamText, {
@@ -278,7 +345,7 @@ serve(async (req) => {
   }
 
   if (req.method === "GET") {
-    const [used, anthropicUsed] = await Promise.all([usedToday("gemini"), usedToday("anthropic")]);
+    const [used, anthropicUsed, spent] = await Promise.all([usedToday("gemini"), usedToday("anthropic"), monthSpentUsd()]);
     return json(200, {
       shared: allowed && !!sharedKey,
       allowed,
@@ -290,6 +357,11 @@ serve(async (req) => {
       anthropic_configured: !!anthropicKey,
       anthropic_used_today: anthropicUsed,
       anthropic_limit: ANTHROPIC_DAILY_LIMIT,
+      month_spent_usd: spent,
+      budget_soft_usd: BUDGET_SOFT_USD,
+      budget_hard_usd: BUDGET_HARD_USD,
+      over_soft: !user.isAdmin && spent >= BUDGET_SOFT_USD,
+      over_hard: !user.isAdmin && spent >= BUDGET_HARD_USD,
     });
   }
 
@@ -310,6 +382,7 @@ serve(async (req) => {
   }
 
   const chars = promptChars(payload.body);
+  const requestModel = modelFromPath(path);
   let upstreamStatus: number | null = null;
   let upstreamOk = false;
   let upstreamText = "";
@@ -324,17 +397,18 @@ serve(async (req) => {
     upstreamOk = up.ok;
     upstreamText = await up.text();
     upstreamType = up.headers.get("content-type") || "application/json";
-  } catch (e) {
-    await db.from("ai_usage").insert({ user_id: user.profileId, path, ok: false, status: null, prompt_chars: chars, provider: "gemini" });
+  } catch {
+    await logUsage({ path, ok: false, status: null, prompt_chars: chars, provider: "gemini", model: requestModel });
     // Never echo the fetch error text: Deno embeds the request URL (and the key) in it.
     return json(502, { error: "upstream_unreachable" });
   }
 
-  // Log after the call so the row carries Gemini's status. Never let a
-  // logging hiccup break the user's request.
-  try {
-    await db.from("ai_usage").insert({ user_id: user.profileId, path, ok: upstreamOk, status: upstreamStatus, prompt_chars: chars, provider: "gemini" });
-  } catch { /* ignore */ }
+  // Log after the call so the row carries Gemini's status and its
+  // usageMetadata (a countTokens reply has none: tokens and cost stay null).
+  await logUsage({
+    path, ok: upstreamOk, status: upstreamStatus, prompt_chars: chars, provider: "gemini",
+    ...meterUsage("gemini", requestModel, parseUpstream(upstreamText, upstreamType)),
+  });
 
   // Google's own status and body, verbatim (the shared key never appears in either).
   return new Response(upstreamText, {
