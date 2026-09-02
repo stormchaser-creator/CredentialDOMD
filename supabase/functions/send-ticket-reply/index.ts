@@ -5,6 +5,12 @@
 // Deploy with --no-verify-jwt (the caller is pg_net, not a user). Auth is the
 // x-hook-secret header, compared against WELCOME_HOOK_SECRET, the same secret and
 // mechanism as send-welcome / trg_welcome_lead.
+//
+// The record is the whole support_messages row (to_jsonb(new)), so a reply that
+// carries a screenshot arrives with attachment_path set. The email says so and
+// points at the app rather than embedding the image: the bucket is private and
+// its signed links expire, while the thread in the app signs a fresh one each
+// time it opens.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
@@ -16,16 +22,13 @@ const supabase = createClient(
 
 const APP_URL = "https://credentialdomd.com/app/";
 
-const replyText = (reply: string) => `${reply}
-
-Reply here: ${APP_URL}#support (More > Support > Your tickets)
-
-Eric
-
---
-Eric Whitney, DO
-CredentialDOMD: credential tracking for physicians, by a physician
-https://credentialdomd.com`;
+const replyText = (reply: string, screenshot: boolean) => [
+  reply,
+  screenshot ? "A screenshot is attached to this reply. Open the ticket in the app to see it." : "",
+  `Reply here: ${APP_URL}#support (More > Support > Your tickets)`,
+  "Eric",
+  "--\nEric Whitney, DO\nCredentialDOMD: credential tracking for physicians, by a physician\nhttps://credentialdomd.com",
+].filter(Boolean).join("\n\n");
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -70,7 +73,7 @@ Deno.serve(async (req) => {
       to: [email],
       reply_to: "stormchaser@elryx.com",
       subject,
-      text: replyText(reply),
+      text: replyText(reply, !!record.attachment_path),
     }),
   });
   const body = await r.text();
