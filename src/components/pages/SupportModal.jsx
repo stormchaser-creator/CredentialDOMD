@@ -62,7 +62,6 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("other");
   const [priority, setPriority] = useState("normal");
-  const [rating, setRating] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -197,7 +196,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       const res = await supabase.functions.invoke("create-ticket", {
         body: {
           subject: subj,
-          body: (rating ? `Rating: ${rating}/5\n\n` : "") + body.trim(),
+          body: body.trim(),
           category: category === "feedback" ? "other" : category,
           priority,
           context_page: contextPage || window.location.pathname,
@@ -216,7 +215,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
 
   const reset = () => {
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
-    setRating(0); setDone(false); setError("");
+    setDone(false); setError("");
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
     setAttachment(null); setAttachError(""); setAttachmentUrl(null);
   };
@@ -247,22 +246,6 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         Bug, question, or just a thought. It goes to Eric Whitney, DO, and he answers personally.
         Replies arrive by email at {user?.email || "your account address"} and here under Your tickets.
       </p>
-
-      {/* Optional rating */}
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>How's the app? (optional)</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} onClick={() => setRating(rating === n ? 0 : n)} style={{
-              flex: 1, padding: "8px", borderRadius: 8,
-              border: `1px solid ${rating >= n ? T.accent : T.border}`,
-              backgroundColor: rating >= n ? (T.accentDim || "rgba(59,130,246,0.12)") : "transparent",
-              color: rating >= n ? T.accent : T.textMuted,
-              fontSize: 17, fontWeight: 700, cursor: "pointer",
-            }}>{"★"}</button>
-          ))}
-        </div>
-      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Category</label>
