@@ -319,6 +319,13 @@ nav {
   font-size: 13px !important;
 }
 
+/* The header CTA is an <a> inside .nav-links, so `.nav-links a` (0,1,1)
+   out-specified `.btn-primary` (0,1,0) and repainted the button text grey on
+   green: 1.19:1, unreadable. These give the button back its own color in both
+   states. The state pages already do the same with their own .nav-cta color. */
+.nav-links a.nav-cta,
+.nav-links a.nav-cta:hover { color: #0d0d1a; }
+
 .mobile-menu-btn {
   display: none;
   background: none;
