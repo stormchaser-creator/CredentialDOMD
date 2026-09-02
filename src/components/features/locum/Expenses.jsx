@@ -7,8 +7,8 @@ import { generateId, formatDate, nextInvoiceNumber } from "../../../utils/helper
 import { invoicePdfFile, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
 import { money } from "../../../utils/invoiceCover";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
+import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCategories";
 
-const CATEGORIES = ["Airfare", "Baggage", "Hotel", "Rental car", "Gas", "Rideshare / Taxi", "Parking", "Mileage", "Meals", "Other"];
 
 /**
  * Travel expenses — billed to the LOCUMS AGENCY, not the hospital. Each

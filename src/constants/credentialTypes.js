@@ -274,5 +274,8 @@ export const SECTION_META = {
   education: { label: "Education / Training", icon: "\ud83c\udf93", color: "#8b5cf6", section: "education" },
   agreement: { label: "Contract", icon: "\ud83d\udcdd", color: "#0ea5e9", section: "locumContracts" },
   travel: { label: "ID / Travel Document", icon: "\ud83e\udeaa", color: "#0891b2", section: "travelDocs" },
+  // A receipt has two possible homes (Work > Expenses to bill an agency, or
+  // the deduction ledger); the scan card picks, so no fixed section here.
+  receipt: { label: "Expense Receipt", icon: "\ud83e\uddfe", color: "#d97706", section: null },
   unknown: { label: "Unrecognized Document", icon: "\u2753", color: "#6b7280", section: null },
 };

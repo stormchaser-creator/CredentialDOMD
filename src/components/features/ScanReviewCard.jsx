@@ -5,6 +5,7 @@ import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INS
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getStateEntry } from "../../constants/stateRequirements";
 import { STATES } from "../../constants/states";
+import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, normalizeReceipt, receiptSaveIssues } from "../../utils/receiptScan";
 
 const FIELD_DEFS = {
   license: [
@@ -44,6 +45,13 @@ const FIELD_DEFS = {
     { key: "provider", label: "Issuer / Company" }, { key: "number", label: "Number" },
     { key: "expirationDate", label: "Expires", type: "date" }, { key: "notes", label: "Notes" },
   ],
+  receipt: [
+    { key: "merchant", label: "Merchant" }, { key: "date", label: "Date", type: "date" },
+    { key: "total", label: "Total paid", type: "number" }, { key: "currency", label: "Currency" },
+    { key: "category", label: "Category" },
+    { key: "paymentMethod", label: "Paid with" }, { key: "last4", label: "Card last 4" },
+    { key: "description", label: "What it was for" },
+  ],
   agreement: [
     { key: "facility", label: "Hospital / Facility" }, { key: "location", label: "Location (city, state)" },
     { key: "agency", label: "Agency" },
@@ -81,6 +89,7 @@ const FIELD_ALIASES = {
   healthRecord: { name: "name", primaryDate: "dateAdministered", provider: "facility" },
   education: { name: "name", primaryDate: "graduationDate", provider: "institution" },
   travel: { name: "name", primaryDate: null, provider: "provider" },
+  receipt: { name: "merchant", primaryDate: "date", provider: null },
 };
 const DIRECT_CARRY_KEYS = ["state", "expirationDate", "notes"];
 
@@ -122,6 +131,35 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
   const licenseExpiryRequired = docType === "license" && edited.type !== CERTIFICATION_TYPE;
   const expiryBlocked = (["privilege", "insurance"].includes(docType) || licenseExpiryRequired) && !edited.expirationDate;
   const stateBlocked = docType === "license" && /license|dea/i.test(edited.type || "") && !edited.state;
+
+  // Receipts: where the money row goes. Billing an agency (Work > Expenses)
+  // and deducting are exclusive, the same rule the statement importer
+  // applies: a reimbursed expense is not also a deduction, and the ledger
+  // picks up the unreimbursed share on its own once the invoice settles.
+  const isReceipt = docType === RECEIPT_DOC_TYPE;
+  const agencies = useMemo(
+    () => [...new Set((data.locumContracts || []).map(c => c.agency).filter(Boolean))],
+    [data.locumContracts]
+  );
+  // A blank category (the reclassify path carries none over) must not hide
+  // the agency option: the save path keyword-guesses it from the merchant
+  // anyway. A ledger-only category still forces the deduction path.
+  const billable = isReceipt && (!edited.category || isBillableCategory(normalizeReceipt(edited).category));
+  const [destChoice, setDestChoice] = useState(null);
+  const [agency, setAgency] = useState(() => agencies[0] || "");
+  const destination = billable ? (destChoice || (agencies.length ? "expense" : "deduction")) : "deduction";
+  const receiptIssues = isReceipt ? receiptSaveIssues(edited, destination, agency) : [];
+  const receiptBlocked = receiptIssues.length > 0;
+  const taxYear = String(edited.date || "").slice(0, 4);
+  const saveLabel = isReceipt
+    ? (destination === "expense" ? "Save to Expenses" : "Save to Deductions")
+    : `Save to ${meta.label.split("/")[0].trim()}`;
+  const chip = (on) => ({
+    padding: "8px 12px", borderRadius: 14, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+    border: `1px solid ${on ? T.accent : T.border}`,
+    backgroundColor: on ? T.accent : "transparent",
+    color: on ? "#fff" : T.textMuted,
+  });
 
   return (
     <div style={{ backgroundColor: T.card, border: `2px solid ${meta.color}`, borderRadius: 16, overflow: "hidden", marginBottom: 12, boxShadow: T.shadow1 }}>
@@ -194,6 +232,15 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                   >
                     <option value="">Select category...</option>
                     {HEALTH_RECORD_CATEGORIES.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : f.key === "category" && isReceipt ? (
+                  <select
+                    value={edited[f.key] || ""}
+                    onChange={e => setEdited(p => ({ ...p, [f.key]: e.target.value }))}
+                    style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
+                  >
+                    <option value="">Select category...</option>
+                    {RECEIPT_CATEGORIES.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : f.key === "result" && docType === "healthRecord" ? (
                   <select
@@ -292,6 +339,47 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                 </div>
               </div>
             )}
+            {isReceipt && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>
+                  Where it goes
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {billable && (
+                    <button onClick={() => setDestChoice("expense")} style={chip(destination === "expense")}>
+                      Bill to agency (Work &gt; Expenses)
+                    </button>
+                  )}
+                  <button onClick={() => setDestChoice("deduction")} style={chip(destination === "deduction")}>
+                    Tax deduction (ledger)
+                  </button>
+                </div>
+                {destination === "expense" ? (
+                  <div style={{ marginTop: 8 }}>
+                    {agencies.length > 0 && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                        {agencies.map(a => (
+                          <button key={a} onClick={() => setAgency(a)} style={{ ...chip(agency === a), padding: "7px 11px", fontSize: 12 }}>{a}</button>
+                        ))}
+                      </div>
+                    )}
+                    <input placeholder="Bill to agency (e.g. MPLT Healthcare)" value={agency}
+                      onChange={e => setAgency(e.target.value)}
+                      style={{ ...iS, borderColor: agency ? T.success + "60" : T.inputBorder }} />
+                    <div style={{ fontSize: 12, color: T.textDim, marginTop: 6, lineHeight: 1.45 }}>
+                      Recorded as a reimbursable expense to invoice, with this receipt attached to the invoice.
+                      Not deducted: a reimbursed expense is not also a deduction. Any share the agency does not pay back reaches the ledger on its own once the invoice settles.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: T.textDim, marginTop: 8, lineHeight: 1.45 }}>
+                    Goes to More &gt; Finance &gt; Deductions as &ldquo;{LEDGER_CATEGORY[edited.category] || "Other deductible expense"}&rdquo;{taxYear ? ` for tax year ${taxYear}` : ""}.
+                    {/meals/i.test(edited.category || "") && " Meals count at 50% in the tax estimate."}
+                    {!billable && edited.category && " This category is not billable to an agency; it is deductible only."}
+                  </div>
+                )}
+              </div>
+            )}
             {result.notes && <div style={{ fontSize: 13, color: T.textDim, fontStyle: "italic", marginTop: 6 }}>{result.notes}</div>}
           </div>
         )}
@@ -310,15 +398,20 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
               Select the issuing state above before saving — without it this won&rsquo;t show up in your state compliance tracking.
             </div>
           )}
+          {receiptBlocked && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
+              {receiptIssues.join(" ")}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 10 }}>
           <button
-            disabled={expiryBlocked || stateBlocked}
-            onClick={() => onSave(docType, edited, imageData, fileName)} style={{
-            opacity: (expiryBlocked || stateBlocked) ? 0.5 : 1,
+            disabled={expiryBlocked || stateBlocked || receiptBlocked}
+            onClick={() => onSave(docType, isReceipt ? { ...edited, destination, agency } : edited, imageData, fileName)} style={{
+            opacity: (expiryBlocked || stateBlocked || receiptBlocked) ? 0.5 : 1,
             flex: 1, padding: "12px", borderRadius: 12, border: "none", backgroundColor: meta.color, color: "#fff",
             fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}>
-            Save to {meta.label.split("/")[0].trim()}
+            {saveLabel}
           </button>
           <button onClick={onDiscard} style={{
             padding: "12px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent",
