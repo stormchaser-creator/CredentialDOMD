@@ -128,7 +128,7 @@ console.log(`
 -- storage-orphans.mjs ${new Date().toISOString().slice(0, 10)}: ${orphans.length} object(s), ${fmt(orphanBytes)}.
 -- Review the list above, then run this as the service role (SQL editor or the
 -- management API). Not run by this script.
-delete from storage.objects
+select set_config('storage.allow_delete_query', 'true', false);\ndelete from storage.objects
  where bucket_id = 'documents'
    and name in (
 ${orphans.map((o) => `     ${quote(o.name)}`).join(",\n")}
