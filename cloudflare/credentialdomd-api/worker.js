@@ -28,7 +28,7 @@ const ROUTES = {
   "/api/waitlist": {
     rpc: "waitlist_signup",
     limit: 5,
-    args: { name: "p_name", email: "p_email", source: "p_source", note: "p_note", stage: "p_stage" },
+    args: { name: "p_name", email: "p_email", source: "p_source", note: "p_note", stage: "p_stage", waitlist: "p_waitlist" },
   },
   "/api/waitlist-attempt": {
     rpc: "waitlist_attempt",
@@ -75,7 +75,9 @@ function toRpcArgs(body, argMap) {
   for (const [plain, rpcName] of Object.entries(argMap)) {
     const v = body[rpcName] !== undefined ? body[rpcName] : body[plain];
     if (v === undefined) continue;
-    out[rpcName] = v === null ? null : String(v).slice(0, 300);
+    // Booleans stay booleans (p_waitlist is the guide-page opt-in checkbox:
+    // false must reach the RPC as false, not as the string "false").
+    out[rpcName] = v === null ? null : typeof v === "boolean" ? v : String(v).slice(0, 300);
   }
   return out;
 }

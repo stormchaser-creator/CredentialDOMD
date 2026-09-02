@@ -166,7 +166,7 @@ export default function AdminDashboard() {
       supabase.from("admin_feedback_recent").select("*").limit(50),
       supabase.from("admin_signups_daily").select("*").limit(30),
       supabase.from("admin_visits_daily").select("*").limit(30),
-      supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at").order("created_at", { ascending: false }).limit(500),
+      supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at,waitlist").order("created_at", { ascending: false }).limit(500),
       supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi").order("created_at", { ascending: false }).limit(500),
@@ -213,7 +213,9 @@ export default function AdminDashboard() {
   const activeUserEmails = new Set(
     users.filter(u => u.access_status === "active" && u.email).map(u => u.email.toLowerCase())
   );
-  const openWaitlist = waitlist.filter(r => !activeUserEmails.has((r.email || "").toLowerCase()));
+  // waitlist === false is a state-guide request whose sender left the "add me
+  // to the waitlist" box unchecked: a lead for the record, not a signup.
+  const openWaitlist = waitlist.filter(r => r.waitlist !== false && !activeUserEmails.has((r.email || "").toLowerCase()));
   const messagesSeenAt = data?.settings?.adminInboxSeenAt;
   const unreadMessages = messages.filter(m =>
     m.last_physician_reply_at && (!messagesSeenAt || new Date(m.last_physician_reply_at) > new Date(messagesSeenAt))
@@ -905,8 +907,16 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
     (users || []).filter(u => u.access_status === "active" && u.email).map(u => u.email.toLowerCase())
   );
   const [showJoined, setShowJoined] = useState(false);
+  const [showGuideOnly, setShowGuideOnly] = useState(false);
   const alreadyJoined = rows.filter(r => activeEmails.has((r.email || "").toLowerCase()));
-  const visibleRows = showJoined ? rows : rows.filter(r => !activeEmails.has((r.email || "").toLowerCase()));
+  // Guide-only requests (waitlist === false) asked for a state renewal guide
+  // and chose not to join the waitlist; they stay out of the count and the
+  // default list, and never get invited from here.
+  const guideOnly = rows.filter(r => r.waitlist === false);
+  const visibleRows = rows.filter(r =>
+    (showJoined || !activeEmails.has((r.email || "").toLowerCase())) &&
+    (showGuideOnly || r.waitlist !== false)
+  );
   const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
   const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
   const copyAll = () => {
@@ -933,11 +943,21 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
         }}>Copy all emails</button>
       </div>
 
-      {alreadyJoined.length > 0 && (
-        <button onClick={() => setShowJoined(s => !s)} style={{
-          display: "block", marginBottom: 12, padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
-          backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-        }}>{showJoined ? "Hide" : "Show"} already-joined leads ({alreadyJoined.length})</button>
+      {(alreadyJoined.length > 0 || guideOnly.length > 0) && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          {alreadyJoined.length > 0 && (
+            <button onClick={() => setShowJoined(s => !s)} style={{
+              padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+            }}>{showJoined ? "Hide" : "Show"} already-joined leads ({alreadyJoined.length})</button>
+          )}
+          {guideOnly.length > 0 && (
+            <button onClick={() => setShowGuideOnly(s => !s)} style={{
+              padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+            }}>{showGuideOnly ? "Hide" : "Show"} guide-only requests ({guideOnly.length})</button>
+          )}
+        </div>
       )}
 
       {/* Manual add — for signups that arrive by text, call, or hallway */}
@@ -965,6 +985,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
                   <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.name || "(no name)"}</span>
                   {r.note && <span style={{ fontSize: 10, fontWeight: 800, color: T.warning, textTransform: "uppercase" }}>{r.note}</span>}
                   {r.source === "admin-manual" && <span style={{ fontSize: 10, fontWeight: 800, color: T.accent, textTransform: "uppercase" }}>added by you</span>}
+                  {r.waitlist === false && <span style={{ fontSize: 10, fontWeight: 800, color: T.textMuted, textTransform: "uppercase" }}>guide only, not on waitlist</span>}
                   {activeEmails.has((r.email || "").toLowerCase()) && (
                     <span style={{ fontSize: 10, fontWeight: 800, color: "#10b981", textTransform: "uppercase" }}>already a user</span>
                   )}
