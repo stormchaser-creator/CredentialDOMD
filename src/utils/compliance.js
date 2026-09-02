@@ -68,9 +68,28 @@ function parseLocalDate(value) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Which side of a renewal window an entry falls on, by the same local-midnight
+ * parse the engine counts with:
+ *   "in"       counted toward the cycle (both boundary days included)
+ *   "before"   dated before the window opened
+ *   "after"    dated after the window closed
+ *   "undated"  no usable date; never counted anywhere
+ * The engine's own in-window test, the transcript PDF's entry list and the
+ * desk-width CME table all route through this, so the hours a compliance card
+ * shows, the rows a transcript prints and the in-window subtotal on the CME
+ * page are one number from one predicate.
+ */
+export function cycleBucket(entry, start, end) {
+  const d = parseLocalDate(entry?.date);
+  if (!d) return "undated";
+  if (d < start) return "before";
+  if (d > end) return "after";
+  return "in";
+}
+
 function inWindow(entry, start, end) {
-  const d = parseLocalDate(entry.date);
-  return !!d && d >= start && d <= end;
+  return cycleBucket(entry, start, end) === "in";
 }
 
 // Whole months from `a` to `b`. Used only for state first-cycle rules, whose
