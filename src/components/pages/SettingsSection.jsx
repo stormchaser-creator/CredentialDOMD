@@ -350,12 +350,12 @@ function SettingsSection() {
             <span>{opusLine}</span>
           </div>
         )}
-        <Field label="Code RVUs with" hint={(s.coderModel || "gemini") === "opus"
+        <Field label="Code RVUs with" hint={(s.coderModel || "opus") === "opus"
           ? (opusOn
             ? "The RVU coder sends each dictation to Claude Opus with the same rulebook and catalog. Each dictation counts toward the Opus daily limit; if Opus is unavailable, Gemini codes it and the review says so."
             : "Claude Opus is not enabled for this account yet, so Gemini codes each dictation until it is (the review says so). Vera and the coder both switch to Opus automatically once it is on.")
           : "Gemini codes each dictation: fast, included, and the path that was proven on the harness. Pick Claude Opus for the strongest read of a complex operative note."}>
-          <select value={s.coderModel || "gemini"} onChange={e => update("coderModel", e.target.value)} style={{ ...iS, appearance: "auto" }}>
+          <select value={s.coderModel || "opus"} onChange={e => update("coderModel", e.target.value)} style={{ ...iS, appearance: "auto" }}>
             {CODER_MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </Field>

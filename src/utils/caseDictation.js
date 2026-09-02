@@ -6,9 +6,11 @@
  */
 
 import { CONSTRUCT_RULES } from "../constants/cptConstructs";
-import { geminiCall, proxyErrorMessage } from "./aiClient";
+import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor } from "./aiClient";
 
 const GEMINI_MODEL = "gemini-2.5-flash";
+const OPUS_MODEL = "claude-opus-5";
+const OPUS_JSON_ONLY = "Reply with the JSON object only: no prose before or after it, no markdown fences, no internal or system XML tags. The first character of your reply is { and the last is }.";
 
 const PROMPT = (transcript, todayISO, categories) => `You convert a NEUROSURGEON's spoken
 description of an operative case into ONE JSON object for their surgical case log.
@@ -52,21 +54,24 @@ Patient identifiers NEVER go in any field.
 
 SPOKEN: ${transcript}`;
 
-// apiKey = the user's own Gemini key (optional). Without one the call rides
-// the shared key through the ai-proxy edge function.
-export async function parseCaseDictation(transcript, apiKey, categories) {
+// settings = { apiKey, anthropicApiKey, coderModel } (the older string form
+// means "Gemini, this key"). Routing policy: a case-log draft reasons over the
+// construct rules and assigns CPT, so it rides the same model as the RVU coder
+// ("Code RVUs with" in Settings: Opus unless the physician picks Gemini). Any
+// Opus failure falls through to Gemini so the words are never lost.
+export async function parseCaseDictation(transcript, apiKeyOrSettings, categories) {
+  const settings = apiKeyOrSettings && typeof apiKeyOrSettings === "object"
+    ? apiKeyOrSettings
+    : { apiKey: apiKeyOrSettings || "" };
   const todayISO = new Date().toISOString().slice(0, 10);
-  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
-    contents: [{ role: "user", parts: [{ text: PROMPT(transcript, todayISO, categories) }] }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
-  }, apiKey);
-  if (!response.ok) {
-    const why = proxyErrorMessage(response);
-    if (why) throw new Error(`${why} The words were kept.`);
-    throw new Error(`Couldn't reach the AI (error ${response.status}) — the words were kept, try again.`);
+  const prompt = PROMPT(transcript, todayISO, categories);
+
+  let raw = null;
+  if ((settings.coderModel || "opus") === "opus" && anthropicAvailable(settings)) {
+    try { raw = await withOpus(prompt, settings); } catch { raw = null; }
   }
-  const json = await response.json();
-  let raw = json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
+  if (raw == null) raw = await withGemini(prompt, settings.apiKey);
+
   raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
   const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
   return {
@@ -80,4 +85,35 @@ export async function parseCaseDictation(transcript, apiKey, categories) {
     complication: parsed.complication || "",
     notes: parsed.notes || "",
   };
+}
+
+// The Gemini request, unchanged from the day it shipped.
+async function withGemini(prompt, apiKey) {
+  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+  }, apiKey);
+  if (!response.ok) {
+    const why = proxyErrorMessage(response);
+    if (why) throw new Error(`${why} The words were kept.`);
+    throw new Error(`Couldn't reach the AI (error ${response.status}). The words were kept, try again.`);
+  }
+  const json = await response.json();
+  return json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
+}
+
+// Same prompt on Claude Opus (own key or the shared key via ai-proxy).
+// Thinking off, as on the RVU coder: Opus 5 rejects `temperature`, and a
+// hidden chain is what varies between runs.
+async function withOpus(prompt, settings) {
+  const client = await anthropicClientFor(settings);
+  const response = await client.messages.create({
+    model: OPUS_MODEL,
+    max_tokens: 4096,
+    thinking: { type: "disabled" },
+    system: OPUS_JSON_ONLY,
+    messages: [{ role: "user", content: prompt }],
+  });
+  if (response.stop_reason !== "end_turn") throw new Error(`Claude stopped: ${response.stop_reason}`);
+  return response.content.filter(b => b.type === "text").map(b => b.text).join("");
 }

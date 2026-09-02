@@ -14,12 +14,12 @@ export { normalizeDictation, parseDictatedDate, normalizeCode, postProcess, BUND
  * cptCoderRules.js so it can be unit-tested without the network.
  *
  * Two models, chosen in Settings > AI ("Code RVUs with"):
- *   gemini (default): the path that shipped; fast, included, byte-for-byte
- *     the same request as before.
- *   opus: Claude Opus with the identical system prompt and user message;
- *     counts toward the Opus daily limit. When it is picked but not
- *     reachable (not enabled, quota, key rejected, network), Gemini codes
- *     the case and a question line says so.
+ *   opus (default since 2026-09-01): Claude Opus with the rulebook and the
+ *     catalog as a cached system block; counts toward the Opus daily limit.
+ *     When it is not reachable (not enabled, quota, key rejected, network),
+ *     Gemini codes the case and a question line says so.
+ *   gemini: the path that shipped first; fast, included, byte-for-byte the
+ *     same request as before. Also the fallback for every Opus failure.
  * Both feed the SAME postProcess(), so the bundling and the questions are
  * model-agnostic.
  */
@@ -70,7 +70,12 @@ export async function codeFromText(text, apiKeyOrSettings) {
     : { apiKey: apiKeyOrSettings || "" };
 
   let note = null;
-  if (settings.coderModel === "opus") {
+  // Routing policy: Opus for work that reasons over rules with money on it
+  // (this coder, Vera, case dictation); Gemini for extraction and basics
+  // (document scans, CME transcript import, work-log dictation). Unset means
+  // Opus; the Settings picker lets a physician choose Gemini explicitly, and
+  // an unavailable Opus falls back to Gemini with a note, never a dead end.
+  if ((settings.coderModel || "opus") === "opus") {
     if (!anthropicAvailable(settings)) {
       note = fallbackNote(AI_MESSAGES.opus_not_enabled);
     } else {

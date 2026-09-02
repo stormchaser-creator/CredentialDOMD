@@ -21,7 +21,7 @@ function CaseDictate({ categories, onDraft }) {
 
   const begin = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setErr("Dictation isn't available in this browser — use the mic key on your keyboard in the form instead."); return; }
+    if (!SR) { setErr("Dictation isn't available in this browser. Use the mic key on your keyboard in the form instead."); return; }
     setErr(null); textRef.current = ""; setTranscript("");
     const rec = new SR();
     rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
@@ -45,14 +45,14 @@ function CaseDictate({ categories, onDraft }) {
     try { recRef.current?.stop(); } catch { /* stopped */ }
     setListening(false);
     const words = (textRef.current || transcript || "").trim();
-    if (!words) { setErr("Didn't catch anything — try again."); return; }
+    if (!words) { setErr("Didn't catch anything. Try again."); return; }
     setBusy(true); setErr(null);
     try {
-      const draft = await parseCaseDictation(words, data.settings.apiKey, categories);
+      const draft = await parseCaseDictation(words, data.settings, categories);
       setTranscript("");
       onDraft(draft);
     } catch (e2) {
-      // The words survive a parse failure — they become the title as-is
+      // The words survive a parse failure: they become the title as-is
       setErr(e2.message);
       onDraft({ title: words, date: new Date().toISOString().slice(0, 10), role: "Primary Surgeon" });
       setTranscript("");
@@ -72,12 +72,12 @@ function CaseDictate({ categories, onDraft }) {
       {listening && (
         <div style={{ backgroundColor: T.card, border: `1px solid #ef4444`, borderRadius: 12, padding: "12px 14px" }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: "#ef4444", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Listening…</div>
-          <div style={{ fontSize: 14, color: T.text, minHeight: 20, lineHeight: 1.5 }}>{transcript || "Say the case — procedure, side, date, hospital, who with, any complication."}</div>
+          <div style={{ fontSize: 14, color: T.text, minHeight: 20, lineHeight: 1.5 }}>{transcript || "Say the case: procedure, side, date, hospital, who with, any complication."}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button onClick={finish} style={{
               flex: 1, padding: "11px", borderRadius: 10, border: "none",
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer",
-            }}>Done — build the case</button>
+            }}>Done, build the case</button>
             <button onClick={() => { try { recRef.current?.stop(); } catch { /* stopped */ } setListening(false); setTranscript(""); }} style={{
               padding: "11px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
               backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
