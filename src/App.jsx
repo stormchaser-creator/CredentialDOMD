@@ -1749,7 +1749,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       const activeRailId = deskSub.startsWith("findCme:") ? "findCme" : deskSub;
       return (
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-          <nav style={{ width: 240, flexShrink: 0, position: "sticky", top: 72, display: "flex", flexDirection: "column", gap: 14 }}>
+          <nav style={{ width: 240, flexShrink: 0, position: "sticky", top: "calc(var(--desk-sticky-top, 56px) + 16px)", display: "flex", flexDirection: "column", gap: 14 }}>
             {credGroups.map(group => (
               <div key={group.title}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, paddingLeft: 10 }}>{group.title}</div>
@@ -1771,7 +1771,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                       }}>
                         <span style={{ fontSize: 16, width: 22, textAlign: "center", flexShrink: 0 }}>{locked ? "\ud83d\udd12" : p.icon}</span>
                         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.label}</span>
-                        {locked && <span style={{ fontSize: 10, fontWeight: 800, color: "#10b981", textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>Pro</span>}
+                        {locked && <span style={{ fontSize: 10, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>Pro</span>}
                         {!locked && hasUrgent > 0 && <span style={{ backgroundColor: T.danger, color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 9, flexShrink: 0 }}>{hasUrgent}</span>}
                         {!locked && hasUrgent === 0 && p.count !== undefined && p.count > 0 && <span style={{ fontSize: 11.5, color: selected ? T.accent : T.textDim, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{p.count}</span>}
                       </button>
@@ -2214,6 +2214,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
   const FONT_ZOOM = { S: 0.88, M: 1, L: 1.1, XL: 1.2, XXL: 1.35 };
   const fontZoom = FONT_ZOOM[data.settings.fontSize] || 1;
+  // The top bar's height, published to the zoomed content as the offset that
+  // sticky headers (DeskTable, the Credentials rail) hang below. A length
+  // inside a zoomed subtree scales with the zoom, so the bar's real height
+  // is divided out here: 56px of bar is 56 / 1.2 = 46.67 zoomed px at XL.
+  const TOP_BAR_H = 56;
+  const deskStickyVars = { "--desk-sticky-top": `${(TOP_BAR_H / fontZoom).toFixed(2)}px` };
 
   // Desktop sidebar mirrors the five bottom-bar destinations; the center
   // "Add" FAB becomes the Documents entry it already navigates to. Active
@@ -2245,7 +2251,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}>
         <div style={{
-          height: 56, display: "flex", alignItems: "center", justifyContent: "space-between",
+          height: TOP_BAR_H, display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "0 16px",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -2314,7 +2320,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       </div>
 
       {/* ─── CONTENT ───────────────────────────────────── */}
-      <div style={isDesktop ? { zoom: fontZoom } : { paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
+      <div style={isDesktop ? { zoom: fontZoom, ...deskStickyVars } : { paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
         {tab === "home" && <NotificationBanner onOpenCenter={() => setNotifCenterOpen(true)} onGoSettings={() => { setTab("more"); setSubPage("settings"); }} />}
         {tab === "home" && <AdminMessageCard />}
         <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}>{renderContent()}</div>
