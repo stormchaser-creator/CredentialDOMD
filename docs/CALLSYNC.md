@@ -30,7 +30,7 @@ Clerk) publishes each provider's shifts as a calendar subscription:
 | `supabase/migrations/20260902_schedule_days_source.sql` | `schedule_days.source` + `source_key` (idempotency key `date\|hospital\|coverage\|role`). |
 | `src/utils/callsync.js` | Pure: link validation, iCal parsing, shift extraction, ANMG contract detection, grid pricing, sync plan, once-a-day gate. Tested by `scripts/callsync.test.mjs`. |
 | `src/hooks/useCallSync.js` | Fetch through the relay, apply the plan through addItem/editItem/deleteItem, bookkeeping in the per-user `credentialdomd-callsync` slot, `useCallSyncAutoRun()` mounted in App.jsx. |
-| `src/components/features/locum/CallSyncPanel.jsx` | Sched. tab card: link field, agreement picker, Sync now, status, next shifts. |
+| `src/components/features/locum/CallSyncPanel.jsx` | Sched. tab card: link field, agreement picker, Sync now, status, next shifts. Shown when an ANMG agreement is detected by name, any agreement has a call-rate grid, a link or agreement pick is saved, or synced shifts exist. |
 
 The link and the agreement pick are device-local settings
 (`settings.callsyncFeedUrl`, `settings.callsyncContractId`, in

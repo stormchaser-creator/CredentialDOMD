@@ -38,8 +38,12 @@ function CallSyncPanel() {
   );
 
   // Only a physician with an ANMG agreement (or a link already saved, or
-  // shifts already synced) has any use for this card.
-  if (!detected && !s.callsyncFeedUrl && !s.callsyncContractId && synced.length === 0) return null;
+  // shifts already synced) has any use for this card. An agreement with a
+  // call-rate grid counts too, so an ANMG contract named differently on the
+  // Contracts tab still surfaces the card; the "Lands on" picker takes it
+  // from there.
+  const hasCallGrid = contracts.some(c => Array.isArray(c?.callRateGrid) && c.callRateGrid.length > 0);
+  if (!detected && !hasCallGrid && !s.callsyncFeedUrl && !s.callsyncContractId && synced.length === 0) return null;
 
   const status = (() => {
     if (running) return { text: "Checking CallSync...", color: T.textMuted };
