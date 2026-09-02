@@ -4,7 +4,7 @@
 // mandates, MATE Act topic scope, the cycle-window boundary, and intake
 // tagging of state-only topics.
 // Run: node scripts/compliance.test.mjs   (pure node, no test runner)
-import { computeCompliance, windowNotes, topicPeriodLabel } from "../src/utils/compliance.js";
+import { computeCompliance, windowNotes, topicPeriodLabel, standingScore } from "../src/utils/compliance.js";
 import { safeHttpUrl } from "../src/utils/safeUrl.js";
 import { STATE_REQS } from "../src/constants/stateRequirements.js";
 import { guessTopics } from "../src/utils/cmeImport.js";
@@ -657,6 +657,40 @@ ok("ME DO cites the osteopathic chapter", /\b2600-[A-Z]\b/.test(topicOf("ME", "D
     fixedButStillListed.length === 0,
     fixedButStillListed.length ? `stale entries: ${fixedButStillListed.join(", ")}` : "");
   ok("no new third-party mirror is cited anywhere", unexpected.length === 0, unexpected.join("; "));
+}
+
+
+// ---------------------------------------------------------------------------
+// standingScore: the Home ring. Expiring-soon, expired, missing-required-date
+// and a CME state behind all count AGAINST; acknowledging never raises it.
+{
+  const now = new Date("2026-09-02T12:00:00Z");
+  const d = (n) => new Date(now.getTime() + n * 86400000).toISOString().slice(0, 10);
+  const items = [
+    { id: "a", _sec: "insurance", expirationDate: d(36) },   // inside the 90-day window
+    { id: "b", _sec: "privileges", expirationDate: d(55) },  // inside
+    { id: "c", _sec: "licenses", expirationDate: d(240) },   // good
+    { id: "d", _sec: "licenses", expirationDate: d(-3) },    // expired
+    { id: "e", _sec: "licenses" },                           // no date, not required (certification)
+    { id: "f", _sec: "privileges" },                         // no date, REQUIRED
+  ];
+  const comps = [
+    { st: "CO", comp: { fullyCompliant: true, daysLeft: 240 } },
+    { st: "CA", comp: { fullyCompliant: false, daysLeft: 393 } },
+  ];
+  const r = standingScore({ items, missingRequired: [{ item: items[5] }], stateComps: comps, leadDays: 90, now });
+  ok("standingScore counts dated items + required-missing + CME states", r.total === 7, `total ${r.total}`);
+  ok("standingScore: only beyond-window item and compliant state are good", r.good === 2, `good ${r.good}`);
+  ok("standingScore percent = round(2/7)", r.percent === 29, `percent ${r.percent}`);
+  ok("standingScore lists what needs action, soonest first", r.needsAction.map(x => x.item.id).join(",") === "d,a,b,cme:CA,f", r.needsAction.map(x => x.item.id).join(","));
+  ok("standingScore: expired item carries negative days", r.needsAction[0].days === -3, String(r.needsAction[0].days));
+  ok("standingScore: required-missing item has days null", r.needsAction[4].days === null);
+  const old = standingScore({ items: [items[0], items[1], items[2]], stateComps: [], leadDays: 90, now });
+  ok("an item expiring in 36 days is NOT in good standing (was the 88 bug)", old.percent === 33, `percent ${old.percent}`);
+  const beyond = standingScore({ items: [{ id: "x", expirationDate: d(91) }], stateComps: [], leadDays: 90, now });
+  ok("an item expiring the day after the window is good", beyond.percent === 100);
+  ok("no items at all reads 0", standingScore({ items: [], stateComps: [] }).percent === 0);
+  ok("items without dates and nothing required reads 100", standingScore({ items: [{ id: "y" }], stateComps: [] }).percent === 100);
 }
 
 

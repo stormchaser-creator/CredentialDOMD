@@ -416,3 +416,39 @@ export function complianceFor(data, state) {
     hasDEA: hasDEARegistration(data.licenses),
   });
 }
+
+
+const DAY_MS = 86400000;
+
+/**
+ * Standing score for the Home ring. Every tracked item is either in good
+ * standing or needs action; the ring is the share in good standing.
+ *   - a dated credential is good only while it expires AFTER the reminder
+ *     window (default 90 days); inside the window or past it, it needs action
+ *   - a credential that requires an expiration date but has none needs action
+ *   - a CME state counts good only when fullyCompliant
+ * Acknowledging an alert snoozes the reminder; it never raises the score.
+ * Returns { percent, good, total, needsAction: [{ item, days }] }.
+ */
+export function standingScore({ items = [], missingRequired = [], stateComps = [], leadDays = 90, now = new Date() } = {}) {
+  const missingIds = new Set(missingRequired.map(m => m.item?.id ?? m.id));
+  const needsAction = [];
+  let good = 0, total = 0;
+  for (const it of items) {
+    if (it.expirationDate) {
+      total += 1;
+      const days = Math.ceil((new Date(it.expirationDate) - now) / DAY_MS);
+      if (days > leadDays) good += 1; else needsAction.push({ item: it, days });
+    } else if (missingIds.has(it.id)) {
+      total += 1;
+      needsAction.push({ item: it, days: null });
+    }
+  }
+  for (const x of stateComps) {
+    total += 1;
+    if (x.comp?.fullyCompliant) good += 1; else needsAction.push({ item: { id: `cme:${x.st}`, _sec: "cme", _cat: "CME", state: x.st }, days: x.comp?.daysLeft ?? null });
+  }
+  needsAction.sort((a, b) => (a.days ?? 9e9) - (b.days ?? 9e9));
+  const percent = total === 0 ? (items.length === 0 ? 0 : 100) : Math.round((good / total) * 100);
+  return { percent, good, total, needsAction };
+}

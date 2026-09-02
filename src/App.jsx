@@ -54,7 +54,7 @@ import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardComplianc
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
-import { complianceFor, findStateLicense, windowNotes } from "./utils/compliance";
+import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
 import { lookupNPI, extractLicensesFromNPI } from "./utils/npiLookup";
 import { mergeNpiLicenses } from "./utils/npiImport";
@@ -536,16 +536,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     })).sort((a, b) => (a.comp.daysLeft ?? 9e9) - (b.comp.daysLeft ?? 9e9)),
   [allTrackedStates, data]);
 
-  // Compliance percentage for ring — credentials current AND CME on track.
-  const compliancePercent = useMemo(() => {
-    const credItems = allCreds.filter(c => c.expirationDate);
-    const activeCreds = credItems.filter(c => new Date(c.expirationDate) >= new Date()).length;
-    const cmeItems = stateComps.length;
-    const cmeOk = stateComps.filter(x => x.comp.fullyCompliant).length;
-    const total = credItems.length + cmeItems;
-    if (total === 0) return allCreds.length === 0 ? 0 : 100;
-    return Math.round(((activeCreds + cmeOk) / total) * 100);
-  }, [allCreds, stateComps]);
+  // Standing score for the ring: an item is good only while it expires beyond
+  // the reminder window; inside the window, past it, missing a required date,
+  // or a CME state behind all count against. Acknowledging never raises it.
+  const standing = useMemo(() => standingScore({
+    items: allCreds, missingRequired: missingExpiration, stateComps,
+    leadDays: data.settings.reminderLeadDays || 90,
+  }), [allCreds, missingExpiration, stateComps, data.settings.reminderLeadDays]);
+  const compliancePercent = standing.percent;
 
   // Credential counts for ring stats
   const credStats = useMemo(() => {
@@ -704,7 +702,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             pointerEvents: "none",
           }} />
           <div className="cmd-ring-animated">
-            <ComplianceRing percent={compliancePercent} size={120} stroke={9} />
+            <ComplianceRing percent={compliancePercent} size={120} stroke={9} label="In good standing" />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -737,6 +735,37 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               )}
               {credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && (
                 <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>All credentials current</div>
+              )}
+              {/* What is pulling the score down, right here, tap to fix */}
+              {standing.needsAction.length > 0 && (
+                <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {standing.needsAction.slice(0, 4).map(({ item, days }) => {
+                    const isCme = item._sec === "cme" && String(item.id).startsWith("cme:");
+                    const label = isCme ? `${item.state} CME` : describeItem(item, data.settings.name, item._sec);
+                    const when = days == null ? (isCme ? "behind" : "no expiration date")
+                      : days < 0 ? `expired ${-days} day${-days === 1 ? "" : "s"} ago`
+                      : days === 0 ? "expires today" : `${days} day${days === 1 ? "" : "s"} left`;
+                    const color = days != null && days < 0 ? T.danger : T.warning;
+                    const go = () => {
+                      if (isCme) { setTab("credentials"); setSubPage("cme"); return; }
+                      setTab("credentials"); setSubPage(item._sec);
+                      setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" });
+                    };
+                    return (
+                      <button key={item.id} onClick={go} style={{
+                        display: "flex", alignItems: "baseline", gap: 8, textAlign: "left", width: "100%",
+                        background: "transparent", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit",
+                      }}>
+                        <span style={{ fontSize: 13, color: T.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color, whiteSpace: "nowrap" }}>{when}</span>
+                      </button>
+                    );
+                  })}
+                  {standing.needsAction.length > 4 && (
+                    <div style={{ fontSize: 12, color: T.textMuted }}>and {standing.needsAction.length - 4} more below</div>
+                  )}
+                  <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>{standing.good} of {standing.total} tracked items need nothing from you</div>
+                </div>
               )}
             </div>
           </div>
