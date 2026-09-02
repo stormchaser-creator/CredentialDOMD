@@ -1,14 +1,22 @@
 import { memo } from "react";
+import { FOUNDING_EMOJI, foundingLabel } from "../../utils/founding";
 
-function FoundingMemberBadge({ size = "default" }) {
+/**
+ * The founding member badge: one emoji plus "Founding member #N". The number
+ * comes from profiles.founding_number, assigned by Postgres when the
+ * physician signs up and is activated (never from an invitation). Shown on
+ * Home, under the name in Settings > Physician Profile, and in Admin > Users.
+ */
+function FoundingMemberBadge({ size = "default", number = null }) {
   const isSmall = size === "small";
   const badgeH = isSmall ? 24 : 32;
-  const iconSize = isSmall ? 14 : 18;
   const fontSize = isSmall ? 10 : 12;
+  const label = foundingLabel(number);
 
   return (
     <div
-      title="You believed in us before anyone else did."
+      title={`${label}. You believed in us before anyone else did.`}
+      aria-label={label}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -23,36 +31,7 @@ function FoundingMemberBadge({ size = "default" }) {
         flexShrink: 0,
       }}
     >
-      <svg
-        width={iconSize}
-        height={iconSize}
-        viewBox="0 0 24 24"
-        fill="none"
-        style={{ flexShrink: 0 }}
-      >
-        {/* Shield shape */}
-        <path
-          d="M12 2L4 6v5c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"
-          fill="#10b981"
-          opacity={0.3}
-        />
-        <path
-          d="M12 2L4 6v5c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"
-          stroke="#34d399"
-          strokeWidth={1.5}
-          fill="none"
-        />
-        {/* Gem/diamond in center */}
-        <path
-          d="M12 7l3 3.5L12 17l-3-6.5L12 7z"
-          fill="#34d399"
-        />
-        <path
-          d="M12 7l3 3.5h-6L12 7z"
-          fill="#6ee7b7"
-          opacity={0.7}
-        />
-      </svg>
+      <span aria-hidden="true" style={{ fontSize: isSmall ? 13 : 16, lineHeight: 1, flexShrink: 0 }}>{FOUNDING_EMOJI}</span>
       <span
         style={{
           fontSize,
@@ -63,7 +42,7 @@ function FoundingMemberBadge({ size = "default" }) {
           lineHeight: 1,
         }}
       >
-        Founding Member
+        {label}
       </span>
     </div>
   );

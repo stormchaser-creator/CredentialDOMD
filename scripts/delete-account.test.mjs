@@ -124,8 +124,8 @@ ok("every patch value is null or false", Object.values(PROFILE_TOMBSTONE_PATCH).
 for (const col of PROFILE_KEEP_COLUMNS) {
   ok(`tombstone never touches ${col}`, !(col in PROFILE_TOMBSTONE_PATCH));
 }
-eq("kept columns are exactly the identity, the gate, and the billing fact",
-  PROFILE_KEEP_COLUMNS, ["id", "auth_user_id", "created_at", "access_status", "is_founding_member"]);
+eq("kept columns are exactly the identity, the gate, and the billing facts",
+  PROFILE_KEEP_COLUMNS, ["id", "auth_user_id", "created_at", "access_status", "is_founding_member", "founding_number"]);
 
 const NOW = "2026-09-02T13:40:00.000Z";
 const patch = tombstonePatch(NOW);

@@ -2314,7 +2314,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ fontSize: 17, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>{pageTitle}</div>
-                    {tab === "home" && data.settings.isFoundingMember && <FoundingMemberBadge size="small" />}
+                    {tab === "home" && (data.settings.isFoundingMember || data.settings.foundingNumber) && <FoundingMemberBadge size="small" number={data.settings.foundingNumber} />}
                   </div>
                   {tab === "home" && data.settings.name && (
                     <div style={{ fontSize: 12, color: T.textMuted }}>{data.settings.name}{data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}</div>

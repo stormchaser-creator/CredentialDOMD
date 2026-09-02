@@ -4,6 +4,8 @@ import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { isAdminUser } from "../../lib/admin";
 import { Modal, ScreenshotAttach } from "../shared";
+import { FOUNDING_COHORT_CAP } from "../../utils/pricingConstants";
+import { foundingText } from "../../utils/founding";
 
 /**
  * AdminDashboard — gated to admin emails only.
@@ -171,7 +173,7 @@ export default function AdminDashboard() {
       supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at,waitlist").order("created_at", { ascending: false }).limit(500),
       supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi").order("created_at", { ascending: false }).limit(500),
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("client_errors").select("id, created_at, kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra").order("created_at", { ascending: false }).limit(50),
       supabase.from("admin_messages_overview").select("*").limit(200),
@@ -727,7 +729,7 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
 
   const refresh = async () => {
     const [pr, ba] = await Promise.all([
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi").order("created_at", { ascending: false }).limit(500),
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
     ]);
     if (pr.data) setUsers(pr.data);
@@ -778,6 +780,9 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
 
   const isTest = (u) => !u.email && !u.name && !u.npi && !u.last_seen_at;
   const shown = users.filter(u => showTest || !isTest(u));
+  // Founding members: numbered by Postgres when a physician signs up and
+  // is activated (profiles.founding_number). An invitation alone never counts.
+  const foundingCount = users.filter(u => u.founding_number != null && u.access_status === "active").length;
   const hiddenCount = users.length - shown.length;
   const inviteByEmail = Object.fromEntries(invites.map(i => [i.email.toLowerCase(), i]));
   const accountEmails = new Set(users.map(u => (u.email || "").toLowerCase()).filter(Boolean));
@@ -832,7 +837,10 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
         </div>
       ))}
 
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "14px 0 6px" }}>
+      <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
+        Founding members: {foundingCount} of {FOUNDING_COHORT_CAP} (signed up and activated)
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
         Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty test account{hiddenCount === 1 ? "" : "s"}</button>}
       </div>
       {shown.map(u => {
@@ -845,7 +853,12 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
                 <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name && u.email ? u.email : ""}{u.degree_type ? ` · ${u.degree_type}` : ""}{u.primary_state ? ` · ${u.primary_state}` : ""}</div>
                 <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>joined {timeAgo(u.created_at)} · last seen {timeAgo(u.last_seen_at)}{inv ? " · invited " + timeAgo(inv.invited_at) : u.access_status === "active" ? "" : " · not on invite list"}</div>
               </div>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status), flexShrink: 0 }}>{u.access_status}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                {u.founding_number != null && (
+                  <span title="Signed up and activated" style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#6ee7b7", backgroundColor: "#065f46", border: "1px solid #10b981", whiteSpace: "nowrap" }}>{foundingText(u.founding_number)}</span>
+                )}
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status) }}>{u.access_status}</span>
+              </div>
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               {u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}

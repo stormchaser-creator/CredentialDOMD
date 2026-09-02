@@ -1,6 +1,10 @@
 // send-welcome — fires from a DB trigger on every new waitlist signup and
 // sends the founding-list welcome via Resend. The physician's first touch
 // after "Join the list" arrives in their inbox within seconds.
+//
+// No number is promised here. Founding numbers are assigned by Postgres when
+// the physician signs up and is activated (migration
+// 20260902g_founding_members.sql), not from the order of the waitlist.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
@@ -10,9 +14,9 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const welcomeText = (first: string, position: number | null) => `Hi ${first},
+const welcomeText = (first: string) => `Hi ${first},
 
-You're on the list.${position ? ` You're number ${position}, and order matters here: founding spots come with founding terms when the doors open.` : ' Order matters here: founding spots come with founding terms when the doors open.'}
+You're on the list. Order matters here: founding spots come with founding terms when the doors open. Your founding number is assigned when you sign up and activate your account.
 
 Quick background so you know what you joined. I'm a neurosurgeon working locums, and I built this because I was tracking licenses in a spreadsheet, chasing CME totals across four states, and finding out the hard way that an agency's remittance didn't match my own numbers. Now the app runs my actual practice every day: my licenses, my call schedules, my invoices, my case log.
 
@@ -37,14 +41,9 @@ Deno.serve(async (req) => {
   if (!email) return new Response("no email", { status: 400 });
   if (record.welcomed_at) return new Response("already welcomed", { status: 200 });
 
-  const { count } = await supabase
-    .from("early_access_leads")
-    .select("*", { count: "exact", head: true })
-    .lte("created_at", record.created_at as string);
   const tokens = String(record.name || "").trim().split(/\s+/)
     .filter((t, i) => !(i === 0 && /^(dr\.?|mr\.?|ms\.?|mrs\.?)$/i.test(t)));
   const first = tokens[0] || "Doctor";
-  const position = count || null;
 
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -53,8 +52,8 @@ Deno.serve(async (req) => {
       from: "Eric Whitney, DO <whit@credentialdomd.com>",
       to: [email],
       reply_to: "stormchaser@elryx.com",
-      subject: position ? `You're #${position} on the CredentialDOMD founding list` : "You're on the CredentialDOMD founding list",
-      text: welcomeText(first, position),
+      subject: "You're on the CredentialDOMD founding list",
+      text: welcomeText(first),
     }),
   });
   const body = await r.text();

@@ -140,7 +140,7 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
  * to false: an emptied account must not get an empty archive built and
  * emailed to nobody every month. Kept as they are: id, auth_user_id,
  * created_at, access_status (the beta gate is the operator's, not the
- * physician's data) and is_founding_member (a billing fact).
+ * physician's data), is_founding_member and founding_number (billing facts).
  */
 export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
   // identity and contact
@@ -193,7 +193,7 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
 };
 
 /** Columns the tombstone must never touch. */
-export const PROFILE_KEEP_COLUMNS = ["id", "auth_user_id", "created_at", "access_status", "is_founding_member"];
+export const PROFILE_KEEP_COLUMNS = ["id", "auth_user_id", "created_at", "access_status", "is_founding_member", "founding_number"];
 
 /**
  * The full UPDATE for the profiles row at `now`. The cancellation schedule is

@@ -20,19 +20,20 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Count active founding-cohort subscriptions. Mirrors the
-    // founding_cohort_count view in supabase-architecture-d-migration.sql.
-    const { count, error } = await supabase
-      .from("subscriptions")
-      .select("*", { count: "exact", head: true })
-      .eq("tier", "founding")
-      .not("status", "in", '("canceled","free")')
-      .eq("app", "credentialdomd");
+    // Founding members are physicians who signed up and were activated:
+    // profiles with a founding_number (assigned in activation order by
+    // migration 20260902g_founding_members.sql) and access_status active.
+    // The founding_cohort_count view is that count; an invitation alone
+    // never counts. Response shape is unchanged: { claimed, total }.
+    const { data, error } = await supabase
+      .from("founding_cohort_count")
+      .select("claimed")
+      .maybeSingle();
 
     if (error) throw error;
 
     return new Response(
-      JSON.stringify({ claimed: count ?? 0, total: FOUNDING_CAP }),
+      JSON.stringify({ claimed: data?.claimed ?? 0, total: FOUNDING_CAP }),
       {
         headers: {
           "Content-Type": "application/json",

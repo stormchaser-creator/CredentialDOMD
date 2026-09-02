@@ -16,6 +16,7 @@ import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/s
 import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, composeText } from "../../utils/notifications";
 import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, describeAiBudget, useAnthropicAvailable } from "../../utils/aiClient";
 import { CODER_MODELS } from "../../utils/cptCoder";
+import FoundingMemberBadge from "../shared/FoundingMemberBadge";
 
 function SettingsSection() {
   const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate, plan, setMockPlan, isDevMode } = useApp();
@@ -180,6 +181,11 @@ function SettingsSection() {
           </div>
         </div>
         <Field label="Full Name"><input name="name" autoComplete="name" value={s.name} onChange={e => update("name", e.target.value)} style={iS} placeholder="Your full name" /></Field>
+        {(s.isFoundingMember || s.foundingNumber) && (
+          <div style={{ margin: "-6px 0 14px" }}>
+            <FoundingMemberBadge number={s.foundingNumber} />
+          </div>
+        )}
         <Field label="NPI" hint="We'll find your NPI from the NPPES registry using your name">
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <div style={{ ...iS, flex: 1, display: "flex", alignItems: "center", minHeight: 38, opacity: s.npi ? 1 : 0.5 }}>

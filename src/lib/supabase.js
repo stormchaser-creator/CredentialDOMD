@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { STORAGE_KEY } from "../constants/defaults";
 import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId } from "../utils/storageScope";
+import { foundingFromProfile } from "../utils/founding";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -184,6 +185,10 @@ function profileRowToSettings(row) {
   }
   // Read-only, server-owned: the beta gate. Never written back (not in the map).
   if (row.access_status) settings.accessStatus = row.access_status;
+  // Read-only, server-owned: founding member number and flag, assigned by
+  // Postgres when the physician signs up and is activated (migration
+  // 20260902g_founding_members.sql). Never written back (not in the map).
+  Object.assign(settings, foundingFromProfile(row));
   return settings;
 }
 
