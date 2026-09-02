@@ -11,6 +11,15 @@ import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/offi
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import ScanReviewCard from "./ScanReviewCard";
 import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
+import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
+
+// Section a linked document belongs to -> the scan category that styles its
+// "Linked" badge. Receipts link to the money row they became.
+const LINKED_META_KEY = {
+  licenses: "license", cme: "cme", privileges: "privilege", insurance: "insurance",
+  healthRecords: "healthRecord", education: "education", locumContracts: "agreement",
+  travelDocs: "travel", travelExpenses: RECEIPT_DOC_TYPE, deductibles: RECEIPT_DOC_TYPE,
+};
 
 function DocumentsSection() {
   const { data, setData, addItem, editItem, deleteItem: deleteItemCtx, updateSettings, theme: T, navigate } = useApp();
@@ -28,6 +37,9 @@ function DocumentsSection() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [bundleMsg, setBundleMsg] = useState(null);
+  // "Saved to Work > Expenses" style confirmation with a button to open the
+  // destination: a receipt files somewhere other than the Credentials tab.
+  const [filed, setFiled] = useState(null);
 
   const toggleSelected = useCallback((id) => {
     setSelectedIds(prev => {
@@ -162,6 +174,8 @@ function DocumentsSection() {
     ...(data.healthRecords || []).map(h => ({ value: `healthRecords:${h.id}`, label: `Health: ${h.name || h.type || h.category}` })),
     ...(data.education || []).map(e => ({ value: `education:${e.id}`, label: `Education: ${e.name || e.type || e.institution}` })),
     ...(data.locumContracts || []).map(c => ({ value: `locumContracts:${c.id}`, label: `Agreement: ${c.facility || "Contract"}` })),
+    ...(data.travelExpenses || []).map(e => ({ value: `travelExpenses:${e.id}`, label: `Expense: ${e.category || "Expense"}${e.vendor ? ` - ${e.vendor}` : ""}${e.date ? ` (${e.date})` : ""}` })),
+    ...(data.deductibles || []).map(d => ({ value: `deductibles:${d.id}`, label: `Deduction: ${d.merchant || d.description || d.category || "Deduction"}${d.date ? ` (${d.date})` : ""}` })),
   ];
 
   const handleFiles = useCallback(async (files) => {
@@ -286,6 +300,24 @@ function DocumentsSection() {
 
   const handleSave = (docType, fields, _imageData, _fileName, docId) => {
     const id = generateId();
+    if (docType === RECEIPT_DOC_TYPE) {
+      // Same rows the Expenses form and the statement importer write; the
+      // receipt file links to the row so it rides along on the expense invoice.
+      const { destination, agency, ...rest } = fields;
+      const receipt = normalizeReceipt(rest);
+      const toExpense = destination === "expense";
+      const section = toExpense ? "travelExpenses" : "deductibles";
+      const entry = toExpense ? receiptToExpense(receipt, { id, agency }) : receiptToDeduction(receipt, { id });
+      addItem(section, entry);
+      const doc = data.documents.find(d => d.id === docId);
+      if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });
+      const money = `$${entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      setFiled(toExpense
+        ? { text: `Saved ${entry.category}${entry.vendor ? `, ${entry.vendor}` : ""}, ${money} to Work > Expenses, billable to ${entry.agency}. The receipt is attached and goes out with the expense invoice.`, label: "Open Expenses", tab: "locum", sub: "expenses" }
+        : { text: `Saved ${money} to the deduction ledger as ${entry.category}${entry.taxYear ? ` for ${entry.taxYear}` : ""}. It is in the tax estimate now.`, label: "Open Deductions", tab: "more", sub: "finance" });
+      setScanQueue(q => q.filter(item => item.docId !== docId));
+      return;
+    }
     const section = SECTION_META[docType]?.section;
     if (!section) {
       setScanError(`Cannot file "${docType}" — this app version doesn't know that category. Update the app (reload) and re-scan.`);
@@ -361,8 +393,7 @@ function DocumentsSection() {
   // One document card. Shared by the inbox group and the stored list.
   const renderDoc = (doc) => {
     const sectionKey = doc.linkedTo?.split(":")[0];
-    const metaKey = sectionKey === "licenses" ? "license" : sectionKey === "cme" ? "cme" : sectionKey === "privileges" ? "privilege" : sectionKey === "insurance" ? "insurance" : sectionKey === "healthRecords" ? "healthRecord" : sectionKey === "education" ? "education" : sectionKey === "locumContracts" ? "agreement" : "unknown";
-    const linkedMeta = doc.linkedTo ? SECTION_META[metaKey] : null;
+    const linkedMeta = doc.linkedTo ? SECTION_META[LINKED_META_KEY[sectionKey] || "unknown"] : null;
 
     const isSelected = selectedIds.has(doc.id);
     const mime = docMime(doc);
@@ -445,7 +476,7 @@ function DocumentsSection() {
     <div>
       <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Smart Scan</h2>
       <div style={{ fontSize: 14, color: T.textDim, marginBottom: 16, lineHeight: 1.5 }}>
-        Upload, scan, or photograph any credential document. AI will identify the document type, extract all fields, and file it to the correct section.
+        Upload, scan, or photograph any credential document or expense receipt. AI identifies what it is, extracts the fields, and files it where it belongs: credentials to their section, receipts (tolls, rental car, rideshare, airfare, lodging, parking, meals, fuel) to Work &gt; Expenses to bill an agency or to the deduction ledger.
       </div>
 
       {!aiOn && (
@@ -502,7 +533,18 @@ function DocumentsSection() {
       {scanning && (
         <div style={{ padding: "18px", borderRadius: 14, backgroundColor: T.accentGlow, border: `1px solid ${T.accent}`, marginBottom: 14, textAlign: "center" }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.accent }}>Analyzing document...</div>
-          <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>AI is reading and classifying your credential</div>
+          <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>AI is reading and classifying your document</div>
+        </div>
+      )}
+
+      {filed && (
+        <div style={{ padding: "12px 16px", borderRadius: 12, backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`, marginBottom: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200, fontSize: 14, color: T.text, lineHeight: 1.45 }}>{filed.text}</div>
+          <button onClick={() => { const { tab, sub } = filed; setFiled(null); navigate(tab, sub); }} style={{
+            padding: "8px 14px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff",
+            fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+          }}>{filed.label}</button>
+          <button onClick={() => setFiled(null)} style={{ border: "none", background: "none", color: T.textMuted, fontWeight: 700, cursor: "pointer", fontSize: 16 }}>&times;</button>
         </div>
       )}
 
@@ -546,7 +588,7 @@ function DocumentsSection() {
       )}
 
       {data.documents.length === 0 && scanQueue.length === 0 ? (
-        <EmptyState icon={"\ud83d\udcc1"} title="No documents" subtitle={`Upload, scan, or photograph your credentials. AI will read and file them automatically. CME certificates can also be forwarded to ${CME_INBOX_ADDRESS}.`} />
+        <EmptyState icon={"\ud83d\udcc1"} title="No documents" subtitle={`Upload, scan, or photograph your credentials and expense receipts. AI will read and file them automatically. CME certificates can also be forwarded to ${CME_INBOX_ADDRESS}.`} />
       ) : storedDocs.length > 0 && (
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>

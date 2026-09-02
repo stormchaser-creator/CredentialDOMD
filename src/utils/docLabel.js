@@ -23,6 +23,8 @@ const SECTION_LABELS = {
   memberships: "Membership",
   travelDocs: "Travel",
   caseLogs: "Case",
+  travelExpenses: "Expense",
+  deductibles: "Deduction",
 };
 
 /** "License: DEA Registration, FL" style label for a doc linked to licenses:<id>; null when unlinked. */

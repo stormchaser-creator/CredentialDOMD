@@ -6,10 +6,9 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber } from "../../../utils/helpers";
 import { invoicePdfFile, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
+import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCategories";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const CATEGORIES = ["Airfare", "Baggage", "Hotel", "Rental car", "Gas", "Rideshare / Taxi", "Parking", "Mileage", "Meals", "Other"];
 
 /**
  * Travel expenses — billed to the LOCUMS AGENCY, not the hospital. Each

@@ -267,6 +267,11 @@ export function describeItem(item, physicianName, sectionKey) {
       return join(t(item.name) || "Reference", t(item.degree));
     case "travelDocs":
       return join(t(item.type) || "Travel", t(item.provider) || notMe(item.name));
+    case "travelExpenses":
+      // A scanned receipt links here: category, then vendor
+      return join(t(item.category) || "Expense", t(item.vendor));
+    case "deductibles":
+      return join(t(item.category) || "Deduction", t(item.merchant) || t(item.description));
     case "publications":
       return notMe(item.name)
         || (item.citation ? String(item.citation).split(".").slice(0, 2).join(".").slice(0, 90) : "Publication");

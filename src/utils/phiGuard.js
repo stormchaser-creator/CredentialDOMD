@@ -47,6 +47,10 @@ const CREDENTIAL_MARKERS = [
   /\b(immunization|vaccination|titer|tuberculosis|ppd|drug\s+screen)\b/i,
   /\bbackground\s+(check|screening)\b/i,
   /\bcurriculum\s+vitae\b|\bresume\b/i,
+  // Expense receipts are filed here too (Work > Expenses, the deduction
+  // ledger). A rental car or toll invoice prints "Account #", which alone
+  // read as chart language.
+  /\breceipts?\b|\bsubtotal\b|\btolls?\b|\brental\s+(car|agreement)\b/i,
 ];
 
 /**

@@ -4,6 +4,7 @@
 // through the ai-proxy edge function, metered per user.
 
 import { geminiCall, proxyErrorMessage } from "./aiClient";
+import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, normalizeReceipt } from "./receiptScan";
 
 const MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5 MB
 const MAX_DIMENSION = 2048;
@@ -24,7 +25,7 @@ function extractBase64(dataUrl) {
   return dataUrl.split(",")[1];
 }
 
-const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "travel", "unknown"];
+const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "travel", RECEIPT_DOC_TYPE, "unknown"];
 
 function validateResponse(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
@@ -33,6 +34,10 @@ function validateResponse(parsed) {
   if (parsed.confidence && !["high", "medium", "low"].includes(parsed.confidence)) {
     parsed.confidence = "low";
   }
+  // A receipt's fields feed money rows, so they are cleaned here once
+  // (amount, ISO date, currency code, card last-4, a category from our list)
+  // rather than trusting the model's formatting.
+  if (parsed.documentType === RECEIPT_DOC_TYPE) parsed.extracted = normalizeReceipt(parsed.extracted);
   return parsed;
 }
 
@@ -92,7 +97,7 @@ function handleApiError(response) {
   throw new Error("Document analysis failed. Please try again.");
 }
 
-const SYSTEM_PROMPT = (degreeType) => `You are a medical credential document analyzer. Given an image of a medical document, you must:
+const SYSTEM_PROMPT = (degreeType) => `You are a medical credential document analyzer. Given an image of a document a physician uploaded (a credential, or an expense receipt from their work travel), you must:
 1. Classify the document type
 2. Extract all relevant fields
 3. Return ONLY valid JSON (no markdown, no backticks, no explanation)
@@ -122,6 +127,8 @@ ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical Licens
   Fields: facility (hospital/practice the physician works AT), location (facility city and state, e.g. "Lafayette, CO"), agency (staffing agency if any), billTo (billing/AP email if listed), startDate (YYYY-MM-DD, earliest coverage start), endDate (YYYY-MM-DD, latest coverage end), coveragePeriods (array — one {"start":"YYYY-MM-DD","end":"YYYY-MM-DD"} object for EVERY separate scheduled coverage block or date range in the agreement, e.g. [{"start":"2026-07-28","end":"2026-08-10"},{"start":"2026-09-14","end":"2026-09-21"}]; a single continuous assignment is one entry), hourlyRate (number, $/hr for regular non-call work), callStipend (number — flat amount per on-call day, e.g. "$3000 for the first 4 hours" -> 3000), stipendHours (number of hours the stipend covers, e.g. 4), overageHourlyRate (number, $/hr for call time BEYOND the stipend hours), callHourlyRate (number, only if flat hourly call pay with no stipend), orientationFee (number, one-time orientation payment — CHECK CAREFULLY: orientation/onboarding/EMR-training compensation is often buried in a rate schedule, fee table, exhibit, or addendum near the END of the agreement; phrases include "orientation", "onboarding", "EMR training", "credentialing day". If orientation is a flat amount, put it here. If orientation is paid HOURLY, put the hourly dollar rate in orientationHourlyRate instead), orientationHourlyRate (number, $/hr for orientation/onboarding time when paid hourly), incrementMinutes (billing increment if stated, e.g. 15), minCallMinutes (minimum billable minutes per call if stated), notes (1-2 sentence summary of other key terms, INCLUDING any orientation pay arrangement not captured above). Numbers must be plain numbers without $ or commas. Read ALL pages including exhibits and rate schedules before answering.
 - "travel": Government ID or travel document — driver's license (INCLUDING a notarized copy of one), passport, Global Entry or Known Traveler card, TSA PreCheck, REAL ID, visa, or an airline/hotel/rental membership card. Credentialing packets often include notarized ID copies — a notary stamp on a driver's license or passport copy still means "travel", never "unknown".
   Fields: type (MUST be one of: "Driver's License", "Passport", "Known Traveler (TSA PreCheck)", "Global Entry", "Visa", "Airline loyalty", "Hotel loyalty", "Rental car membership", "Other"), name (display label, e.g. "CA Driver's License — notarized copy"), provider (issuing state, country, or company), number (document or membership number), expirationDate (YYYY-MM-DD), notes (e.g. "notarized copy, notarized 2026-07-30")
+- "receipt": An expense receipt, invoice, folio, or charge slip for money the physician paid: tolls (INCLUDING toll, PlatePass, TollPass or e-Toll charges billed by a rental car company such as Alamo, Hertz, Avis, Enterprise, National or Budget), rental car, fuel, rideshare or taxi, airfare or baggage fees, hotel or lodging, parking, meals; also licensing or registration fees, CME or conference registration, society dues, supplies, or software the physician paid for. A printed or emailed receipt, a phone screenshot of one, and a rental "toll administration" statement are all "receipt". A receipt is NEVER "license", "agreement", or "cme" even when it names the physician or a course.
+  Fields: merchant (the business paid, cleaned: "Alamo Rent A Car", not a card-processor prefix), date (YYYY-MM-DD transaction date; for a multi-day rental or hotel stay use the return / checkout date), total (number, the grand total actually paid including tax, fees and tip; plain number, no $ or commas), currency (ISO 4217 code such as "USD"; assume USD when only a $ sign is shown), category (MUST be exactly one of: ${RECEIPT_CATEGORIES.map(c => `"${c}"`).join(", ")}; toll charges on a rental car invoice are "Tolls", not "Rental car"), last4 (the last four digits of the card if printed, e.g. "4321"), paymentMethod (card brand or method if printed: "Visa", "Mastercard", "Amex", "Discover", "Debit", "Cash"), description (short: what was bought, e.g. "Toll charges, Denver rental Aug 12-15"), notes
 - "unknown": Cannot determine document type
 
 The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : degreeType === "MD" ? "an MD" : "an MD or DO (degree not yet specified in their profile; classify from the document itself)"}.
@@ -146,7 +153,7 @@ export async function analyzeDocument(imageData, degreeType, apiKey) {
             data: extractBase64(compressed),
           },
         },
-        { text: "Analyze this medical credential document. Return only JSON." },
+        { text: "Analyze this document (a medical credential or an expense receipt). Return only JSON." },
       ],
     }],
     generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
@@ -178,7 +185,7 @@ export async function analyzePDF(pdfData, degreeType, apiKey) {
             data: extractBase64(pdfData),
           },
         },
-        { text: `Analyze this medical credential document${degreeType ? ` for a ${degreeType}` : ""}. Return ONLY JSON.` },
+        { text: `Analyze this document (a medical credential or an expense receipt)${degreeType ? ` for a ${degreeType}` : ""}. Return ONLY JSON.` },
       ],
     }],
     generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
@@ -209,7 +216,7 @@ export async function analyzeDocText(text, degreeType, apiKey) {
     contents: [{
       parts: [
         { text: `DOCUMENT CONTENT (text extracted from an uploaded Word/Excel file):\n\n${text}` },
-        { text: "Analyze this medical credential document. Return only JSON." },
+        { text: "Analyze this document (a medical credential or an expense receipt). Return only JSON." },
       ],
     }],
     generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
