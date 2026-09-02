@@ -29,6 +29,12 @@ const ASSIST_MODIFIERS = [
   { value: "59", label: "59 · Distinct procedural service" },
   { value: "XS", label: "XS · Separate structure" },
   { value: "XU", label: "XU · Unusual non-overlapping service" },
+  // Pre-selected by the coder's pass: 22 when the physician dictates it on the
+  // highest-wRVU primary; 26 on a surgeon-performed diagnostic TEE (93312/93314),
+  // because the hospital owns the equipment. Without these two options a
+  // pre-selected value rendered as "No modifier" while the saved code carried it.
+  { value: "22", label: "22 · Increased procedural services" },
+  { value: "26", label: "26 · Professional component" },
 ];
 
 /**
