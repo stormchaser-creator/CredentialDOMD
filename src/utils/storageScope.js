@@ -28,6 +28,9 @@ export const BASE_KEYS = {
   // removes it with everything else: a session that ended in sign-out leaves
   // no identity behind, and the offline fallback can never activate.
   lastIdentity: "credentialdomd-last-identity",
+  // CallSync sync bookkeeping (last check, last result); the feed link
+  // itself lives in the device-key slot with the AI keys.
+  callsync: "credentialdomd-callsync",
 };
 
 let activeUserId = null;
