@@ -2,8 +2,9 @@ import { memo, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
+import DeskTable from "../../shared/DeskTable";
 import { formatDate, mailtoHref } from "../../../utils/helpers";
-import { SendIcon, TrashIcon } from "../../shared/Icons";
+import { SendIcon, TrashIcon, ExternalLinkIcon, DollarIcon, UndoIcon } from "../../shared/Icons";
 import { sortInvoiceLines } from "../../../utils/invoicePdf";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
@@ -20,13 +21,78 @@ const callDayOf = (e) => {
   return e.date;
 };
 
+// Payments are a ledger, not a flag — agencies sometimes pay an invoice in
+// pieces. Legacy invoices marked paid before the ledger existed count as
+// paid in full.
+const paidOf = (inv) => {
+  const fromLedger = (inv.payments || []).reduce((s2, p) => s2 + (parseFloat(p.amount) || 0), 0);
+  if (fromLedger > 0) return fromLedger;
+  return inv.paidAt ? (parseFloat(inv.totalAmount) || 0) : 0;
+};
+// Written off = closed out without counting as money received, so tax
+// estimates (which read paidOf/payments) never see a write-off as income.
+const balanceOf = (inv) => inv.writeOffAt ? 0 : Math.max(0, (parseFloat(inv.totalAmount) || 0) - paidOf(inv));
+
+/**
+ * One invoice's standing, worked out in one place so the phone card and the
+ * desk table read the same numbers and can never disagree. writtenOffAmt is
+ * the remainder, not the amount collected (the Aug 26 headline fix).
+ */
+const standingOf = (inv) => {
+  const total = parseFloat(inv.totalAmount) || 0;
+  const paid = paidOf(inv);
+  const writtenOff = !!inv.writeOffAt;
+  const balance = balanceOf(inv);
+  const isPaid = !writtenOff && balance <= 0.005;
+  const isPartial = !writtenOff && !isPaid && paid > 0;
+  const age = inv.sentAt ? daysSince(inv.sentAt) : 0;
+  const overdue = !isPaid && !writtenOff && age > 30;
+  return { total, paid, writtenOff, balance, isPaid, isPartial, age, overdue, writtenOffAmt: total - paid };
+};
+
+// Badge text and status tokens for a standing: the card's headline color and
+// its badge share one tone, and the table's Status and Balance cells reuse it.
+const toneOf = (st, T) => ({
+  label: st.isPaid ? "paid" : st.writtenOff ? "written off" : st.isPartial ? "partial" : `owed · ${st.age}d`,
+  color: st.isPaid ? T.success : st.writtenOff ? T.textMuted : st.overdue ? T.danger : T.warning,
+  bg: st.isPaid ? T.successDim : st.writtenOff ? T.border + "55" : st.overdue ? T.dangerDim : T.warningDim,
+});
+
+// Compact service period for a table cell: "May 25–31, 2026", "May 25–Jun 3,
+// 2026", or the full two-date form across a year boundary. Bad input falls
+// back to formatDate's own handling.
+const periodLabel = (start, end) => {
+  if (!start) return "";
+  if (!end || end === start) return formatDate(start);
+  const a = new Date(`${start}T00:00:00`);
+  const b = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || a.getFullYear() !== b.getFullYear()) {
+    return `${formatDate(start)}–${formatDate(end)}`;
+  }
+  const mo = (d) => d.toLocaleDateString("en-US", { month: "short" });
+  const tail = `${b.getDate()}, ${b.getFullYear()}`;
+  return a.getMonth() === b.getMonth()
+    ? `${mo(a)} ${a.getDate()}–${tail}`
+    : `${mo(a)} ${a.getDate()}–${mo(b)} ${tail}`;
+};
+
+function StandingBadge({ tone, style }) {
+  return (
+    <span style={{
+      padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800,
+      textTransform: "uppercase", letterSpacing: 0.5,
+      backgroundColor: tone.bg, color: tone.color, ...style,
+    }}>{tone.label}</span>
+  );
+}
+
 /**
  * Invoices — every invoice sent from the Work tab, tracked sent → paid.
  * Mark paid when the money lands; unpaid invoices age visibly so nothing
  * slips. Deleting an invoice releases its work entries back to unbilled.
  */
 function Invoices() {
-  const { data, editItem, deleteItem, theme: T } = useApp();
+  const { data, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const [viewInv, setViewInv] = useState(null);
   const [notice, setNotice] = useState(null);
   const contracts = data.locumContracts || [];
@@ -40,17 +106,6 @@ function Invoices() {
     () => [...(data.invoices || [])].sort((a, b) => periodKey(b).localeCompare(periodKey(a))),
     [data.invoices]
   );
-  // Payments are a ledger, not a flag — agencies sometimes pay an invoice in
-  // pieces. Legacy invoices marked paid before the ledger existed count as
-  // paid in full.
-  const paidOf = (inv) => {
-    const fromLedger = (inv.payments || []).reduce((s2, p) => s2 + (parseFloat(p.amount) || 0), 0);
-    if (fromLedger > 0) return fromLedger;
-    return inv.paidAt ? (parseFloat(inv.totalAmount) || 0) : 0;
-  };
-  // Written off = closed out without counting as money received, so tax
-  // estimates (which read paidOf/payments) never see a write-off as income.
-  const balanceOf = (inv) => inv.writeOffAt ? 0 : Math.max(0, (parseFloat(inv.totalAmount) || 0) - paidOf(inv));
 
   const outstanding = invoices.filter(i => balanceOf(i) > 0.005);
   // Written-off invoices have a zero balance but weren't actually paid —
@@ -195,6 +250,67 @@ function Invoices() {
     );
   }
 
+  // The three money tiles. Phone stacks Total billed above the heading and
+  // the pair below it (Eric's placement); desk lines all three up as one
+  // stat strip in the same spot. Same elements and handlers either way; the
+  // desk flag only harmonizes their size so the strip reads as one row.
+  const tileLabel = (desk) => desk
+    ? { fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }
+    : { fontSize: 11, color: T.textMuted };
+  const totalTile = (desk) => (
+    <div role="button" tabIndex={0}
+      onClick={() => setShowMonths(true)}
+      onKeyDown={(e) => { if (e.key === "Enter") setShowMonths(true); }}
+      style={{
+        backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14,
+        padding: "14px 16px", marginBottom: desk ? 0 : 12, cursor: "pointer", boxShadow: T.shadow1,
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+      }}>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Total billed
+        </div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums" }}>
+          {money(sumBilled)}
+        </div>
+        <div style={{ fontSize: 11.5, color: T.textDim }}>
+          paid {money(sumPaid)} · awaiting {money(sumOut)}
+        </div>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, flexShrink: 0 }}>by month ›</div>
+    </div>
+  );
+  const outstandingTile = (desk) => (
+    <div role="button" tabIndex={0}
+      onClick={() => setShowList("outstanding")}
+      onKeyDown={(e) => { if (e.key === "Enter") setShowList("outstanding"); }}
+      style={{ backgroundColor: T.card, border: `2px solid ${outstanding.length ? T.warning : T.border}`, borderRadius: desk ? 14 : 12, padding: desk ? "14px 16px" : "12px 14px", cursor: "pointer", boxShadow: desk ? T.shadow1 : undefined }}>
+      <div style={tileLabel(desk)}>Awaiting payment</div>
+      <div style={{ fontSize: desk ? 26 : 20, fontWeight: 800, color: outstanding.length ? T.warning : T.text, fontVariantNumeric: desk ? "tabular-nums" : undefined }}>{money(sumOut)}</div>
+      <div style={{ fontSize: 11, color: T.textDim }}>{outstanding.length} invoice{outstanding.length === 1 ? "" : "s"} ›</div>
+    </div>
+  );
+  const paidTile = (desk) => (
+    <div role="button" tabIndex={0}
+      onClick={() => setShowList("paid")}
+      onKeyDown={(e) => { if (e.key === "Enter") setShowList("paid"); }}
+      style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: desk ? 14 : 12, padding: desk ? "14px 16px" : "12px 14px", cursor: "pointer", boxShadow: desk ? T.shadow1 : undefined }}>
+      <div style={tileLabel(desk)}>Paid</div>
+      <div style={{ fontSize: desk ? 26 : 20, fontWeight: 800, color: T.success || "#22c55e", fontVariantNumeric: desk ? "tabular-nums" : undefined }}>{money(sumPaid)}</div>
+      <div style={{ fontSize: 11, color: T.textDim }}>{paidList.length} invoice{paidList.length === 1 ? "" : "s"} ›</div>
+    </div>
+  );
+
+  // Desk table cells: a main line and an optional muted sub-line, each
+  // ellipsizing on its own inside the fixed-layout cell.
+  const deskMain = { overflow: "hidden", textOverflow: "ellipsis" };
+  const deskSub = { fontSize: 11, color: T.textDim, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis" };
+  const deskBtn = {
+    width: 26, height: 26, padding: 0, borderRadius: 8, border: "none", cursor: "pointer",
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+  };
+  const deskGhostBtn = { ...deskBtn, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted };
+
   return (
     <div>
       {notice && (
@@ -205,28 +321,15 @@ function Invoices() {
         }}>{notice}</div>
       )}
       {/* Total earnings bubble — tap for the month-by-month. Sits above the
-          heading per Eric; every information bubble in this app pops up. */}
-      <div role="button" tabIndex={0}
-        onClick={() => setShowMonths(true)}
-        onKeyDown={(e) => { if (e.key === "Enter") setShowMonths(true); }}
-        style={{
-          backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14,
-          padding: "14px 16px", marginBottom: 12, cursor: "pointer", boxShadow: T.shadow1,
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-        }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>
-            Total billed
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums" }}>
-            {money(sumBilled)}
-          </div>
-          <div style={{ fontSize: 11.5, color: T.textDim }}>
-            paid {money(sumPaid)} · awaiting {money(sumOut)}
-          </div>
+          heading per Eric; every information bubble in this app pops up.
+          At desk width it leads the three-tile stat strip in that same spot. */}
+      {isDesktop ? (
+        <div className="cmd-responsive-grid-3" style={{ marginBottom: 16 }}>
+          {totalTile(true)}
+          {outstandingTile(true)}
+          {paidTile(true)}
         </div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, flexShrink: 0 }}>by month ›</div>
-      </div>
+      ) : totalTile(false)}
 
       <Modal open={showMonths} onClose={() => setShowMonths(false)} title="Billed by month">
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>
@@ -255,24 +358,12 @@ function Invoices() {
       </div>
 
       {/* Outstanding vs paid — tappable, like every bubble in this app */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-        <div role="button" tabIndex={0}
-          onClick={() => setShowList("outstanding")}
-          onKeyDown={(e) => { if (e.key === "Enter") setShowList("outstanding"); }}
-          style={{ backgroundColor: T.card, border: `2px solid ${outstanding.length ? T.warning : T.border}`, borderRadius: 12, padding: "12px 14px", cursor: "pointer" }}>
-          <div style={{ fontSize: 11, color: T.textMuted }}>Awaiting payment</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: outstanding.length ? T.warning : T.text }}>{money(sumOut)}</div>
-          <div style={{ fontSize: 11, color: T.textDim }}>{outstanding.length} invoice{outstanding.length === 1 ? "" : "s"} ›</div>
+      {!isDesktop && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+          {outstandingTile(false)}
+          {paidTile(false)}
         </div>
-        <div role="button" tabIndex={0}
-          onClick={() => setShowList("paid")}
-          onKeyDown={(e) => { if (e.key === "Enter") setShowList("paid"); }}
-          style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", cursor: "pointer" }}>
-          <div style={{ fontSize: 11, color: T.textMuted }}>Paid</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: T.success || "#22c55e" }}>{money(sumPaid)}</div>
-          <div style={{ fontSize: 11, color: T.textDim }}>{paidList.length} invoice{paidList.length === 1 ? "" : "s"} ›</div>
-        </div>
-      </div>
+      )}
 
       <Modal open={!!showList} onClose={() => setShowList(null)}
         title={showList === "outstanding" ? "Awaiting payment" : "Paid"}>
@@ -449,15 +540,93 @@ function Invoices() {
         )}
       </Modal>
 
+      {isDesktop ? (
+        /* Desk width: the same invoices as an AR table. Row click opens the
+           existing detail modal (payment history + record-payment form); the
+           quick actions are the card buttons' own handlers. Unpaid invoices
+           lead, oldest first: a settled invoice has no receivable age, and a
+           null sort value sinks it below every open one in either direction.
+           Phone (the branch below) is untouched. */
+        <DeskTable
+          items={invoices}
+          defaultSort={{ key: "age", dir: "desc" }}
+          onRowClick={(inv) => setViewInv(inv)}
+          actionsWidth={134}
+          columns={[
+            // Widths are percentages on purpose: pixel minimums would push the
+            // Actions cell out of the clipped wrapper in a 1024px window.
+            // Calibrated so every fixed-content column fits at a 1280px window
+            // (966px table); Bill to takes the remainder and ellipsizes.
+            { key: "number", label: "Number", width: "13.5%", render: inv => (
+              <>
+                <div style={{ ...deskMain, fontWeight: 700 }}>{inv.number}</div>
+                {/* Total invoiced rides under the number, as it rides beside it on the card */}
+                <div style={{ ...deskSub, fontVariantNumeric: "tabular-nums" }}>{money(inv.totalAmount)}</div>
+              </>
+            ) },
+            { key: "billTo", label: "Bill to", value: inv => billNameOf(inv), render: inv => (
+              <>
+                <div style={deskMain} title={billNameOf(inv)}>{billNameOf(inv)}</div>
+                {inv.periodStart && (
+                  <div style={deskSub}>work {periodLabel(inv.periodStart, inv.periodEnd)}</div>
+                )}
+              </>
+            ) },
+            { key: "sentAt", label: "Sent", type: "date", width: "12%", render: inv => inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "\u2014" },
+            { key: "age", label: "Age (days)", type: "number", width: "11.5%", align: "right",
+              value: inv => { const st = standingOf(inv); return st.isPaid || st.writtenOff ? null : st.age; },
+              render: inv => { const st = standingOf(inv); return st.isPaid || st.writtenOff ? "\u2014" : st.age; },
+              color: inv => { const st = standingOf(inv); return st.overdue ? T.danger : (st.isPaid || st.writtenOff) ? T.textDim : T.text; } },
+            { key: "paidAt", label: "Paid date", type: "date", width: "12%",
+              value: inv => inv.paidAt || inv.writeOffAt || null,
+              render: inv => inv.paidAt ? formatDate(inv.paidAt.slice(0, 10)) : inv.writeOffAt ? (
+                <>
+                  <div style={deskMain}>{formatDate(inv.writeOffAt.slice(0, 10))}</div>
+                  <div style={deskSub}>written off</div>
+                </>
+              ) : "\u2014" },
+            { key: "balance", label: "Balance", type: "number", width: "14%", align: "right",
+              value: inv => balanceOf(inv),
+              render: inv => {
+                const st = standingOf(inv);
+                const tone = toneOf(st, T);
+                return (
+                  <>
+                    <div style={{ ...deskMain, fontWeight: 800, color: st.balance > 0.005 ? tone.color : T.textDim }}>{money(st.balance)}</div>
+                    {(st.isPartial || (st.writtenOff && st.paid > 0.005)) && <div style={deskSub}>{money(st.paid)} received</div>}
+                    {st.writtenOff && <div style={deskSub}>{money(st.writtenOffAmt)} written off</div>}
+                  </>
+                );
+              } },
+            { key: "status", label: "Status", type: "number", width: "12%",
+              // Sorts by urgency rather than alphabet: overdue, owed, partial, paid, written off.
+              value: inv => { const st = standingOf(inv); return st.isPaid ? 3 : st.writtenOff ? 4 : st.overdue ? 0 : st.isPartial ? 2 : 1; },
+              render: inv => <StandingBadge tone={toneOf(standingOf(inv), T)} /> },
+          ]}
+          actions={(inv) => {
+            const st = standingOf(inv);
+            return (
+              <div style={{ display: "inline-flex", gap: 2 }}>
+                {st.writtenOff ? (
+                  <button title="Undo write-off" aria-label="Undo write-off" onClick={(e) => { e.stopPropagation(); undoWriteOff(inv); }} style={deskGhostBtn}><UndoIcon /></button>
+                ) : st.isPaid ? (
+                  <button title="Reopen" aria-label="Reopen invoice" onClick={(e) => { e.stopPropagation(); markUnpaid(inv); }} style={deskGhostBtn}><UndoIcon /></button>
+                ) : (
+                  <button title={st.isPartial ? "Record another payment" : "Record payment"} aria-label="Record payment" onClick={(e) => { e.stopPropagation(); openPayment(inv); }} style={{ ...deskBtn, backgroundColor: T.successDim, color: T.success }}><DollarIcon /></button>
+                )}
+                <button title="Open" aria-label="Open invoice" onClick={(e) => { e.stopPropagation(); setViewInv(inv); }} style={deskGhostBtn}><ExternalLinkIcon /></button>
+                <button title="Resend" aria-label="Resend invoice" onClick={(e) => { e.stopPropagation(); if (inv.lines?.length) setSendFor(inv); else resend(inv); }} style={{ ...deskBtn, backgroundColor: T.shareGlow, color: T.share }}><SendIcon /></button>
+                <button title="Delete" aria-label="Delete invoice" onClick={(e) => { e.stopPropagation(); removeInvoice(inv); }} style={{ ...deskBtn, backgroundColor: T.dangerDim, color: T.danger }}><TrashIcon /></button>
+              </div>
+            );
+          }}
+        />
+      ) : (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {invoices.map(inv => {
-          const paid = paidOf(inv);
-          const writtenOff = !!inv.writeOffAt;
-          const balance = balanceOf(inv);
-          const isPaid = !writtenOff && balance <= 0.005;
-          const isPartial = !writtenOff && !isPaid && paid > 0;
-          const age = inv.sentAt ? daysSince(inv.sentAt) : 0;
-          const overdue = !isPaid && !writtenOff && age > 30;
+          const st = standingOf(inv);
+          const { paid, writtenOff, balance, isPaid, isPartial, overdue } = st;
+          const tone = toneOf(st, T);
           return (
             <div key={inv.id} onClick={() => setViewInv(inv)} style={{
               backgroundColor: T.card, borderRadius: 14, padding: "13px 15px", boxShadow: T.shadow1,
@@ -474,14 +643,7 @@ function Invoices() {
                     <span style={{ marginLeft: 8, fontSize: 12.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
                       {money(inv.totalAmount)}
                     </span>
-                    <span style={{
-                      marginLeft: 8, padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800,
-                      textTransform: "uppercase", letterSpacing: 0.5,
-                      backgroundColor: isPaid ? (T.successDim || "rgba(34,197,94,0.15)") : writtenOff ? T.border + "55" : overdue ? T.dangerDim : T.warningDim,
-                      color: isPaid ? (T.success || "#22c55e") : writtenOff ? T.textMuted : overdue ? T.danger : T.warning,
-                    }}>
-                      {isPaid ? "paid" : writtenOff ? "written off" : isPartial ? "partial" : `owed · ${age}d`}
-                    </span>
+                    <StandingBadge tone={tone} style={{ marginLeft: 8 }} />
                   </div>
                   <div style={{ fontSize: 13, color: T.textDim, marginTop: 2 }}>
                     {billNameOf(inv)}
@@ -499,16 +661,13 @@ function Invoices() {
                   )}
                   {writtenOff && paid > 0.005 && (
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginTop: 2 }}>
-                      {money(paid)} received · {money((parseFloat(inv.totalAmount) || 0) - paid)} written off
+                      {money(paid)} received · {money(st.writtenOffAmt)} written off
                     </div>
                   )}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
-                  <div style={{
-                    fontSize: 17, fontWeight: 800, fontVariantNumeric: "tabular-nums",
-                    color: isPaid ? (T.success || "#22c55e") : writtenOff ? T.textMuted : overdue ? T.danger : T.warning,
-                  }}>
-                    {isPaid ? money(inv.totalAmount) : writtenOff ? money((parseFloat(inv.totalAmount) || 0) - paid) : money(balance)}
+                  <div style={{ fontSize: 17, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: tone.color }}>
+                    {isPaid ? money(inv.totalAmount) : writtenOff ? money(st.writtenOffAmt) : money(balance)}
                   </div>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.4 }}>
                     {isPaid ? "collected" : writtenOff ? "written off" : "owed to you"}
@@ -546,6 +705,7 @@ function Invoices() {
           );
         })}
       </div>
+      )}
 
       <InvoiceFormatChooser open={!!sendFor} onClose={() => setSendFor(null)}
         onPick={(f) => { const inv = sendFor; setSendFor(null); resend(inv, f); }} />

@@ -30,6 +30,8 @@ import { useApp } from "../../context/AppContext";
  *   defaultSort    { key, dir: "asc" | "desc" }
  *   status?(item)  leading status cell content (e.g. <StatusDot />)
  *   actions?(item) trailing quick-actions cell content
+ *   actionsWidth?  width of that cell (default 122, room for three icon
+ *                  buttons; a fourth needs about 154)
  *   onRowClick?(item)
  *
  * Layout notes: tableLayout "fixed" + width 100% means the table can never
@@ -38,7 +40,7 @@ import { useApp } from "../../context/AppContext";
  * the sticky header's scroll container and kill its stickiness against the
  * page. The header sticks below the 56px top bar.
  */
-export default function DeskTable({ columns, items, defaultSort, status, actions, onRowClick }) {
+export default function DeskTable({ columns, items, defaultSort, status, actions, onRowClick, actionsWidth = 122 }) {
   const { theme: T } = useApp();
   const [sort, setSort] = useState(defaultSort || null);
 
@@ -126,7 +128,7 @@ export default function DeskTable({ columns, items, defaultSort, status, actions
                 )}
               </th>
             ))}
-            {actions && <th style={{ ...thStyle, width: 122, textAlign: "right", cursor: "default", borderTopRightRadius: 14 }}>Actions</th>}
+            {actions && <th style={{ ...thStyle, width: actionsWidth, textAlign: "right", cursor: "default", borderTopRightRadius: 14 }}>Actions</th>}
           </tr>
         </thead>
         <tbody>
