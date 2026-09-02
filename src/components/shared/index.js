@@ -1,4 +1,5 @@
 export { default as Modal } from "./Modal";
+export { default as ScreenshotAttach } from "./ScreenshotAttach";
 export { default as Field } from "./Field";
 export { default as EmptyState } from "./EmptyState";
 export { default as StatusDot } from "./StatusDot";

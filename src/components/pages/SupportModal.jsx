@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { edgeErrorMessage } from "../../utils/edgeError";
 import { supabase } from "../../lib/supabase";
-import { compressImage } from "../../utils/documentScanner";
+import { ScreenshotAttach } from "../shared";
 
 const CATEGORIES = [
   { id: "bug",             label: "Bug / something broken" },
@@ -54,6 +54,8 @@ function timeAgo(iso) {
  *                   to owner-or-admin), reply box -> reply-ticket edge function
  *                   (owner-or-admin, verified in the function).
  * Admin replies also go out by email (trg_notify_ticket_reply -> send-ticket-reply).
+ * Either side can attach one screenshot to a ticket or to a reply; the thread
+ * renders them through signed links from ticket-attachment-url.
  */
 export default function SupportModal({ open, onClose, contextPage, initialTab = "new" }) {
   const { theme: T, user } = useApp();
@@ -66,11 +68,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [attachment, setAttachment] = useState(null); // { data: dataURL, name }
-  const [attachError, setAttachError] = useState("");
-  const fileRef = useRef(null);
 
-  // Owner-or-admin-only signed link to a ticket's screenshot (ticket-attachment-url).
+  // Owner-or-admin-only signed links from ticket-attachment-url: the ticket's
+  // own screenshot, and one per reply keyed by message id.
   const [attachmentUrl, setAttachmentUrl] = useState(null);
+  const [replyUrls, setReplyUrls] = useState({});
 
   // Your tickets
   const [tickets, setTickets] = useState([]);
@@ -80,6 +82,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [thread, setThread] = useState([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [reply, setReply] = useState("");
+  const [replyAttachment, setReplyAttachment] = useState(null); // { data: dataURL, name }
   const [replying, setReplying] = useState(false);
   const [replyMsg, setReplyMsg] = useState("");
 
@@ -127,54 +130,47 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     if (open && tab === "tickets") loadTickets();
   }, [open, tab, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Signed links for every screenshot on the thread (the ticket's own plus one
+  // per reply), one round trip through ticket-attachment-url. A failure here
+  // used to leave the screenshot silently absent, which reads as "the upload
+  // was lost" when the file is fine and the link call is what broke. Say so
+  // instead.
+  const loadAttachmentUrls = async (t, msgs) => {
+    if (!t.context_payload?.attachment_path && !msgs.some((m) => m.attachment_path)) return;
+    const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
+    if (res.error) { setReplyMsg(await edgeErrorMessage(res.error, "Could not open the attachment.")); return; }
+    setAttachmentUrl(res.data?.url || null);
+    setReplyUrls(res.data?.replies || {});
+  };
+
   const openThread = async (t) => {
-    setOpenTicket(t); setThread([]); setReply(""); setReplyMsg(""); setAttachmentUrl(null);
+    setOpenTicket(t); setThread([]); setReply(""); setReplyAttachment(null); setReplyMsg("");
+    setAttachmentUrl(null); setReplyUrls({});
     setThreadLoading(true);
     const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
     setThread(data || []);
     setThreadLoading(false);
-    if (t.context_payload?.attachment_path) {
-      const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
-      // A failure here used to leave the screenshot silently absent, which
-      // reads as "the upload was lost" when the file is fine and the link
-      // call is what broke. Say so instead.
-      if (!res.error && res.data?.url) setAttachmentUrl(res.data.url);
-      else if (res.error) setReplyMsg(await edgeErrorMessage(res.error, "Could not open the attachment."));
-    }
-  };
-
-  const pickAttachment = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setAttachError("");
-    if (!file.type.startsWith("image/")) { setAttachError("Attach an image (screenshot)."); return; }
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const compressed = await compressImage(ev.target.result);
-        setAttachment({ data: compressed, name: file.name });
-      } catch {
-        setAttachError("Could not read that image.");
-      }
-    };
-    reader.readAsDataURL(file);
+    await loadAttachmentUrls(t, data || []);
   };
 
   const sendReply = async () => {
     const text = reply.trim();
-    if (!openTicket || text.length < 1) return;
+    if (!openTicket || (text.length < 1 && !replyAttachment)) return;
     setReplying(true); setReplyMsg("");
     try {
       const res = await supabase.functions.invoke("reply-ticket", {
-        body: { ticket_id: openTicket.id, body: text },
+        body: {
+          ticket_id: openTicket.id, body: text,
+          ...(replyAttachment ? { attachment: { data: replyAttachment.data } } : {}),
+        },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not send the reply."));
       const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
       setThread(data || []);
-      setReply("");
+      setReply(""); setReplyAttachment(null);
       setReplyMsg("Sent.");
       loadTickets();
+      await loadAttachmentUrls(openTicket, data || []);
     } catch (e) {
       setReplyMsg(e.message || "Failed to send");
     } finally {
@@ -217,7 +213,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
     setDone(false); setError("");
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
-    setAttachment(null); setAttachError(""); setAttachmentUrl(null);
+    setAttachment(null); setReplyAttachment(null); setAttachmentUrl(null); setReplyUrls({});
   };
 
   const close = () => { onClose(); reset(); };
@@ -276,22 +272,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         />
 
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Screenshot (optional)</label>
-        <input ref={fileRef} type="file" accept="image/*" onChange={pickAttachment} style={{ display: "none" }} />
-        {attachment ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src={attachment.data} alt="Attached screenshot" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: `1px solid ${T.border}` }} />
-            <button onClick={() => setAttachment(null)} style={{
-              padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
-              backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-            }}>Remove</button>
-          </div>
-        ) : (
-          <button onClick={() => fileRef.current?.click()} style={{
-            padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`,
-            backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer", textAlign: "left",
-          }}>{"📎"} Attach a screenshot</button>
-        )}
-        {attachError && <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{attachError}</div>}
+        <ScreenshotAttach value={attachment} onChange={setAttachment} />
       </div>
 
       {error && (
@@ -374,6 +355,9 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     </>
   );
 
+  // A reply can be text, a screenshot, or both.
+  const canSend = !replying && (reply.trim().length > 0 || !!replyAttachment);
+
   const renderThread = () => (
     <>
       <button onClick={() => setOpenTicket(null)} style={{
@@ -415,6 +399,13 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               {m.is_admin_reply ? "Eric" : "You"} {"·"} {new Date(m.created_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
+            {m.attachment_path && (replyUrls[m.id] ? (
+              <a href={replyUrls[m.id]} target="_blank" rel="noreferrer">
+                <img src={replyUrls[m.id]} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}` }} />
+              </a>
+            ) : (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>Screenshot attached</div>
+            ))}
           </div>
         ))}
         {!threadLoading && thread.length === 0 && (
@@ -430,13 +421,14 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         placeholder="Add to this ticket"
         style={{ ...inputStyle, minHeight: 80, marginTop: 12, resize: "vertical", fontFamily: "inherit" }}
       />
+      <ScreenshotAttach value={replyAttachment} onChange={setReplyAttachment} style={{ marginTop: 8 }} />
       {replyMsg && <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: replyMsg === "Sent." ? T.accent : "#ef4444" }}>{replyMsg}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button onClick={sendReply} disabled={replying || reply.trim().length < 1} style={{
+        <button onClick={sendReply} disabled={!canSend} style={{
           flex: 1, padding: "12px", borderRadius: 10, border: "none",
-          backgroundColor: replying || reply.trim().length < 1 ? T.textDim : T.accent,
+          backgroundColor: canSend ? T.accent : T.textDim,
           color: "#fff", fontSize: 14, fontWeight: 700,
-          cursor: replying || reply.trim().length < 1 ? "not-allowed" : "pointer",
+          cursor: canSend ? "pointer" : "not-allowed",
         }}>{replying ? "Sending..." : "Send reply"}</button>
         <button onClick={close} style={{
           padding: "12px 18px", borderRadius: 10,

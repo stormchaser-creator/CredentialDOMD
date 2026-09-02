@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { isAdminUser } from "../../lib/admin";
-import { Modal } from "../shared";
-import { compressImage } from "../../utils/documentScanner";
+import { Modal, ScreenshotAttach } from "../shared";
 
 /**
  * AdminDashboard — gated to admin emails only.
@@ -32,7 +31,12 @@ export default function AdminDashboard() {
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [ticketMsg, setTicketMsg] = useState("");
+  // Signed links from ticket-attachment-url: the ticket's own screenshot, and
+  // one per reply keyed by message id. replyAttachment is the one going out
+  // with the next reply.
   const [attachmentUrl, setAttachmentUrl] = useState(null);
+  const [replyUrls, setReplyUrls] = useState({});
+  const [replyAttachment, setReplyAttachment] = useState(null); // { data: dataURL, name }
   // Manual ticket controls — the assistant sometimes fails to raise a card,
   // and resolved tickets pile up; both get first-class buttons here.
   const [showArchived, setShowArchived] = useState(false);
@@ -42,8 +46,6 @@ export default function AdminDashboard() {
   const [newCategory, setNewCategory] = useState("feature_request");
   const [creating, setCreating] = useState(false);
   const [newAttachment, setNewAttachment] = useState(null); // { data: dataURL, name }
-  const [newAttachError, setNewAttachError] = useState("");
-  const newFileRef = useRef(null);
 
   const isAdmin = isAdminUser(user);
 
@@ -52,33 +54,23 @@ export default function AdminDashboard() {
     setTickets(data || []);
   };
 
-  // Tap a ticket → read it, see the whole thread, answer it, change its state.
-  const openTicketDetail = async (t) => {
-    setOpenTicket(t); setReply(""); setTicketMsg(""); setAttachmentUrl(null);
-    const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
-    setThread(data || []);
-    if (t.context_payload?.attachment_path) {
-      const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
-      if (!res.error && res.data?.url) setAttachmentUrl(res.data.url);
-    }
+  // Signed links for every screenshot on the thread (the ticket's own plus one
+  // per reply), one round trip through ticket-attachment-url.
+  const loadAttachmentUrls = async (t, msgs) => {
+    if (!t.context_payload?.attachment_path && !msgs.some((m) => m.attachment_path)) return;
+    const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
+    if (res.error) { setTicketMsg(await edgeErrorMessage(res.error, "Could not open the screenshot.")); return; }
+    setAttachmentUrl(res.data?.url || null);
+    setReplyUrls(res.data?.replies || {});
   };
 
-  const pickNewAttachment = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setNewAttachError("");
-    if (!file.type.startsWith("image/")) { setNewAttachError("Attach an image (screenshot)."); return; }
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const compressed = await compressImage(ev.target.result);
-        setNewAttachment({ data: compressed, name: file.name });
-      } catch {
-        setNewAttachError("Could not read that image.");
-      }
-    };
-    reader.readAsDataURL(file);
+  // Tap a ticket → read it, see the whole thread, answer it, change its state.
+  const openTicketDetail = async (t) => {
+    setOpenTicket(t); setReply(""); setReplyAttachment(null); setTicketMsg("");
+    setAttachmentUrl(null); setReplyUrls({});
+    const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
+    setThread(data || []);
+    await loadAttachmentUrls(t, data || []);
   };
 
   const createTicket = async () => {
@@ -94,7 +86,7 @@ export default function AdminDashboard() {
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
-      setNewOpen(false); setNewSubject(""); setNewBody(""); setNewAttachment(null); setNewAttachError("");
+      setNewOpen(false); setNewSubject(""); setNewBody(""); setNewAttachment(null);
       await refreshTickets();
     } catch (e2) { setTicketMsg(e2.message); }
     setCreating(false);
@@ -116,14 +108,17 @@ export default function AdminDashboard() {
     setBusy(true); setTicketMsg("");
     try {
       const res = await supabase.functions.invoke("reply-ticket", {
-        body: { ticket_id: openTicket.id, body: body || "Status set to resolved.", status: "resolved" },
+        body: {
+          ticket_id: openTicket.id, body: body || "Status set to resolved.", status: "resolved",
+          ...(replyAttachment ? { attachment: { data: replyAttachment.data } } : {}),
+        },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
       const { error: e2 } = await supabase.from("support_tickets")
         .update({ archived_at: new Date().toISOString() })
         .eq("id", openTicket.id);
       if (e2) throw new Error(e2.message);
-      setReply("");
+      setReply(""); setReplyAttachment(null);
       setTicketMsg("Resolved and archived.");
       await refreshTickets();
       setTimeout(() => setOpenTicket(null), 900);
@@ -136,18 +131,25 @@ export default function AdminDashboard() {
   const sendReply = async (newStatus) => {
     if (!openTicket) return;
     const body = reply.trim();
-    if (!body && !newStatus) { setTicketMsg("Write a reply first."); return; }
+    if (!body && !newStatus && !replyAttachment) { setTicketMsg("Write a reply first."); return; }
     setBusy(true); setTicketMsg("");
     try {
+      // A screenshot alone is a valid reply; reply-ticket gives it a stock body.
       const res = await supabase.functions.invoke("reply-ticket", {
-        body: { ticket_id: openTicket.id, body: body || `Status set to ${newStatus}.`, ...(newStatus ? { status: newStatus } : {}) },
+        body: {
+          ticket_id: openTicket.id,
+          body: body || (newStatus ? `Status set to ${newStatus}.` : ""),
+          ...(newStatus ? { status: newStatus } : {}),
+          ...(replyAttachment ? { attachment: { data: replyAttachment.data } } : {}),
+        },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
       const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
       setThread(data || []);
-      setReply("");
+      setReply(""); setReplyAttachment(null);
       setTicketMsg(newStatus ? `Marked ${newStatus.replace("_", " ")}.` : "Reply sent.");
       await refreshTickets();
+      await loadAttachmentUrls(openTicket, data || []);
       if (newStatus === "resolved" || newStatus === "closed") setTimeout(() => setOpenTicket(null), 900);
     } catch (e2) {
       setTicketMsg(e2.message);
@@ -384,6 +386,13 @@ export default function AdminDashboard() {
                       {m.is_admin_reply ? "You" : m.author_email || "User"} · {new Date(m.created_at).toLocaleString()}
                     </div>
                     <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
+                    {m.attachment_path && (replyUrls[m.id] ? (
+                      <a href={replyUrls[m.id]} target="_blank" rel="noreferrer">
+                        <img src={replyUrls[m.id]} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 200, maxHeight: 200, borderRadius: 8, border: `1px solid ${T.border}` }} />
+                      </a>
+                    ) : (
+                      <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>Screenshot attached</div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -396,6 +405,7 @@ export default function AdminDashboard() {
                 backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
                 fontSize: 16, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box",
               }} />
+            <ScreenshotAttach value={replyAttachment} onChange={setReplyAttachment} style={{ marginTop: 8 }} />
 
             {ticketMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{ticketMsg}</div>}
 
@@ -429,7 +439,7 @@ export default function AdminDashboard() {
       </Modal>
 
       {/* Manual ticket entry — the direct road when the assistant fumbles */}
-      <Modal open={newOpen} onClose={() => { setNewOpen(false); setNewAttachment(null); setNewAttachError(""); }} title="New ticket">
+      <Modal open={newOpen} onClose={() => { setNewOpen(false); setNewAttachment(null); }} title="New ticket">
         <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
           placeholder="One-line summary"
           style={{
@@ -453,22 +463,7 @@ export default function AdminDashboard() {
             backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
             fontSize: 16, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box",
           }} />
-        <input ref={newFileRef} type="file" accept="image/*" onChange={pickNewAttachment} style={{ display: "none" }} />
-        {newAttachment ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-            <img src={newAttachment.data} alt="Attached screenshot" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: `1px solid ${T.border}` }} />
-            <button onClick={() => setNewAttachment(null)} style={{
-              padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
-              backgroundColor: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
-            }}>Remove</button>
-          </div>
-        ) : (
-          <button onClick={() => newFileRef.current?.click()} style={{
-            marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px dashed ${T.border}`,
-            backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer", textAlign: "left",
-          }}>{"📎"} Attach a screenshot</button>
-        )}
-        {newAttachError && <div style={{ marginTop: 6, fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{newAttachError}</div>}
+        <ScreenshotAttach value={newAttachment} onChange={setNewAttachment} style={{ marginTop: 10 }} />
         {ticketMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{ticketMsg}</div>}
         <button onClick={createTicket} disabled={creating} style={{
           width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",

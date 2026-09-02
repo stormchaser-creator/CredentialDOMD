@@ -1,14 +1,27 @@
 /**
  * POST /functions/v1/reply-ticket
  *
- * Body: { ticket_id, body, status? (admin only) }
+ * Body: { ticket_id, body, status? (admin only),
+ *         attachment?: { data: "data:<mime>;base64,...." } }
  * Auth: Required. Allowed if user is the ticket owner OR is_admin().
  * Side effect: Telegram ping if reply is from non-admin (i.e., customer).
+ *
+ * One screenshot per reply, same type and size rules as create-ticket
+ * (_shared/ticketAttachment.ts). It is uploaded to the private "documents"
+ * bucket under tickets/<ticket_id>/replies/<message_id>.<ext> BEFORE the row
+ * is inserted, so support_messages.attachment_path is already set when
+ * trg_notify_ticket_reply fires and send-ticket-reply can tell the physician
+ * a screenshot came with the email. The service-role client bypasses the
+ * bucket's owner-prefix storage RLS; readers get a signed link from
+ * ticket-attachment-url, which re-checks owner-or-admin. A reply that is
+ * only a screenshot gets a stock body, since the column is NOT NULL and the
+ * email and Telegram paths both quote it.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { ATTACHMENT_BUCKET, parseAttachment, replyScreenshotPath } from "../_shared/ticketAttachment.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +30,7 @@ const corsHeaders = {
 };
 
 const VALID_STATUSES = ["open", "in_progress", "waiting_user", "resolved", "closed"];
+const SCREENSHOT_ONLY_BODY = "Screenshot attached.";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -36,7 +50,7 @@ serve(async (req) => {
 
     const body = await req.json();
     const ticketId = body.ticket_id;
-    const replyBody = (body.body || "").trim();
+    let replyBody = (body.body || "").trim();
     const newStatus = body.status;
 
     if (!ticketId) {
@@ -44,6 +58,15 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const attachment = parseAttachment(body.attachment);
+    if (attachment && "error" in attachment) {
+      return new Response(JSON.stringify({ error: attachment.error }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!replyBody && attachment) replyBody = SCREENSHOT_ONLY_BODY;
+
     if (!replyBody || replyBody.length < 1) {
       return new Response(JSON.stringify({ error: "body is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -64,18 +87,42 @@ serve(async (req) => {
       });
     }
 
+    // The message id is minted here so the screenshot can be stored under it
+    // before the row exists (see header).
+    const messageId = crypto.randomUUID();
+    let attachmentPath: string | null = null;
+    if (attachment) {
+      attachmentPath = replyScreenshotPath(ticketId, messageId, attachment.ext);
+      const { error: upErr } = await user.db.storage.from(ATTACHMENT_BUCKET)
+        .upload(attachmentPath, attachment.bytes, { contentType: attachment.mime, upsert: true });
+      if (upErr) {
+        console.error(`reply-ticket: attachment upload failed for ${ticketId}: ${upErr.message}`);
+        return new Response(JSON.stringify({ error: "Could not upload the screenshot. Try again." }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const { data: msg, error: msgErr } = await user.db
       .from("support_messages")
       .insert({
+        id: messageId,
         ticket_id: ticketId,
         author_id: user.profileId,
         body: replyBody.slice(0, 10000),
         is_admin_reply: isAdmin,
+        ...(attachmentPath ? { attachment_path: attachmentPath } : {}),
       })
       .select()
       .single();
 
-    if (msgErr) throw msgErr;
+    if (msgErr) {
+      // Do not leave an orphan in the bucket for a reply that never landed.
+      if (attachmentPath) {
+        try { await user.db.storage.from(ATTACHMENT_BUCKET).remove([attachmentPath]); } catch { /* best effort */ }
+      }
+      throw msgErr;
+    }
 
     // Optional status update (admin-only)
     if (newStatus && isAdmin && VALID_STATUSES.includes(newStatus)) {
@@ -89,13 +136,14 @@ serve(async (req) => {
     // Notify operator only on customer replies (not admin's own replies)
     if (!isAdmin) {
       notifyOperator(
-        `💬 *Customer reply* on "${ticketRow.subject || "(unknown)"}"\n` +
+        `💬 *Customer reply* on "${ticketRow.subject || "(unknown)"}"` +
+        (attachmentPath ? " (screenshot attached)" : "") + "\n" +
         `From: ${user.email}\n\n` +
         replyBody.slice(0, 500)
       );
     }
 
-    return new Response(JSON.stringify({ id: msg.id, ok: true }), {
+    return new Response(JSON.stringify({ id: msg.id, ok: true, attachment_path: attachmentPath }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

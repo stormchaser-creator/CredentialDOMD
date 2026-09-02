@@ -16,6 +16,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { ATTACHMENT_BUCKET, parseAttachment, ticketScreenshotPath } from "../_shared/ticketAttachment.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,25 +26,6 @@ const corsHeaders = {
 
 const VALID_CATEGORIES = ["bug", "billing", "feature_request", "data_issue", "compliance", "other"];
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
-const ATTACHMENT_BUCKET = "documents";
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB decoded
-
-const MIME_EXT: Record<string, string> = {
-  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
-};
-
-function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; mime: string } | null {
-  const match = /^data:([^;,]+)(?:;charset=[^;,]+)?;base64,(.+)$/.exec(dataUrl);
-  if (!match) return null;
-  const mime = match[1];
-  if (!MIME_EXT[mime]) return null;
-  try {
-    const bin = atob(match[2]);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return { bytes, mime };
-  } catch { return null; }
-}
 
 const PRIORITY_EMOJI: Record<string, string> = {
   urgent: "🚨",
@@ -95,22 +77,12 @@ serve(async (req) => {
       });
     }
 
-    let attachmentBytes: Uint8Array | null = null;
-    let attachmentMime = "";
-    if (body.attachment?.data) {
-      const decoded = decodeDataUrl(String(body.attachment.data));
-      if (!decoded) {
-        return new Response(JSON.stringify({ error: "Attachment must be a JPEG, PNG, WEBP, or GIF image." }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (decoded.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-        return new Response(JSON.stringify({ error: "Attachment is too large (5 MB max)." }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      attachmentBytes = decoded.bytes;
-      attachmentMime = decoded.mime;
+    // Same type and size rules as reply-ticket (_shared/ticketAttachment.ts).
+    const attachment = parseAttachment(body.attachment);
+    if (attachment && "error" in attachment) {
+      return new Response(JSON.stringify({ error: attachment.error }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const contextPayload = { ...(body.context_payload || {}) };
@@ -131,10 +103,10 @@ serve(async (req) => {
 
     if (error) throw error;
 
-    if (attachmentBytes) {
-      const path = `tickets/${data.id}/screenshot.${MIME_EXT[attachmentMime]}`;
+    if (attachment) {
+      const path = ticketScreenshotPath(data.id, attachment.ext);
       const { error: upErr } = await user.db.storage.from(ATTACHMENT_BUCKET)
-        .upload(path, attachmentBytes, { contentType: attachmentMime, upsert: true });
+        .upload(path, attachment.bytes, { contentType: attachment.mime, upsert: true });
       if (upErr) {
         console.error(`create-ticket: attachment upload failed for ${data.id}: ${upErr.message}`);
       } else {
