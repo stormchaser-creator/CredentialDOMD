@@ -296,7 +296,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [searchQ, setSearchQ] = useState("");
   const [shareFilter, setShareFilter] = useState("all");
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
-  const [autoAddLicense, setAutoAddLicense] = useState(false);
+  // "Add one of these" from setup: open that section's add form, and
+  // remember where the physician came from so the close comes back.
+  const [autoAdd, setAutoAdd] = useState(null); // { sec, returnTo }
   // {sec, id} — opens that record's edit form after navigating (Home → fix-it links)
   const [autoEditTarget, setAutoEditTarget] = useState(null);
 
@@ -329,7 +331,20 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const onAutoEditClosed = autoEditReturn?.sec === sec
       ? () => { const back = autoEditReturn.back; setAutoEditReturn(null); goBackTo(back); }
       : undefined;
-    if (autoEditTarget?.sec !== sec) return onAutoEditClosed ? { onAutoEditClosed } : {};
+    // An "add one" deep link takes the same return trip as an edit: the add
+    // form parks its returnTo on open and CrudSection fires the close.
+    const adding = autoAdd?.sec === sec
+      ? {
+          autoOpen: true,
+          onAutoOpenDone: () => {
+            setAutoEditReturn(autoAdd.returnTo ? { sec, back: autoAdd.returnTo } : null);
+            setAutoAdd(null);
+          },
+        }
+      : null;
+    if (autoEditTarget?.sec !== sec) {
+      return { ...(onAutoEditClosed ? { onAutoEditClosed } : {}), ...(adding || {}) };
+    }
     const edit = autoEditTarget.mode === "edit";
     return {
       autoEditId: edit ? autoEditTarget.id : null,
@@ -343,8 +358,17 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       onAutoEditClosed,
       autoViewId: edit ? null : autoEditTarget.id,
       onAutoViewDone: () => setAutoEditTarget(null),
+      ...(adding || {}),
     };
-  }, [autoEditTarget, autoEditReturn, goBackTo]);
+  }, [autoEditTarget, autoEditReturn, autoAdd, goBackTo]);
+
+  /** Setup's "add one of these" links: navigate, open the add form, come back. */
+  // No taskId means no return trip: the Home empty-state card sends the
+  // physician to Licenses to stay there, the way it always has.
+  const openAddIn = useCallback((sec, taskId = null) => {
+    setAutoAdd({ sec, returnTo: taskId ? { tab: "more", subPage: "setup", taskId } : null });
+    setTab("credentials"); setSubPage(sec);
+  }, [setTab, setSubPage]);
 
   // Beta gate: invite-only. Admins are always in; everyone else must be
   // 'active' in profiles.access_status (activated by the Clerk webhook, the
@@ -525,7 +549,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // setup owns the "your file is not watched yet" conversation and the older
   // banners that say the same thing stand down: three surfaces nagging about
   // one license date is exactly the noise being complained about.
-  const setupBoard = useMemo(() => buildSetup(data, { isPro }), [data, isPro]);
+  const setupBoard = useMemo(() => buildSetup(data, { isPro, isFreeBeta, hasSubscription }), [data, isPro, isFreeBeta, hasSubscription]);
   const setupCounts = setupBoard.counts.tier1;
   const setupTier1Done = !!setupBoard.state.tier1DoneAt;
 
@@ -784,7 +808,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           </div>
         </div>
       ) : (
-        <div onClick={() => { setAutoAddLicense(true); setTab("credentials"); setSubPage("licenses"); }} style={{
+        <div onClick={() => openAddIn("licenses")} style={{
           backgroundColor: T.card, borderRadius: 16, padding: "32px 24px",
           marginBottom: 16, cursor: "pointer", border: `2px dashed ${T.border}`,
           textAlign: "center", boxShadow: T.shadow1,
@@ -1673,7 +1697,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
+        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
       </>);
     }
     if (sub === "cme") return <CMESection onShare={openShare} />;
@@ -1892,7 +1916,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <SetupPage
         initialTask={setupTask}
         onOpenCredentials={() => { setTab("credentials"); setSubPage(null); }}
-        onAddLicenseByHand={() => { setAutoAddLicense(true); setTab("credentials"); setSubPage("licenses"); }}
+        onAddLicenseByHand={() => openAddIn("licenses", "licenses")}
+        onOpenSection={openAddIn}
+        onUpgrade={() => { setSubPage(null); setShowPricing(true); }}
         onOpenRecord={(sec, id, taskId) => {
           setAutoEditTarget({ sec, id, focus: "expirationDate", mode: "edit", returnTo: { tab: "more", subPage: "setup", taskId } });
           setTab("credentials"); setSubPage(sec);

@@ -1,20 +1,26 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useSetupState } from "./setup/useSetupState";
-import { homeCardForm, CARD_FORM } from "../../utils/setupTasks";
+import { homeCardForm, ladderState, CARD_FORM, LADDER } from "../../utils/setupTasks";
 
 /**
- * The Home card. Four forms, and the physician only ever sees one of them.
+ * The Home card. Five forms, and the physician only ever sees one of them.
  *
  *  A — Tier 1 unfinished: one sentence naming the highest-priority
  *      exposure, one button carrying that task's verb, and a snooze.
  *      Exactly two tap targets plus "Not now", never a list of five things.
+ *      What the sentence SAYS depends on how long they have been away: the
+ *      ladder in setupTasks moves from the exposure itself, to continuity
+ *      with what they last finished, to the cost quantified out of their own
+ *      records, to a single cheapest thing after a month. No statistic in it
+ *      is invented, and no rung of it is an email.
  *  B — the Protected moment: real numbers from their own file, rendered
  *      once, then tier1DoneAt is stamped and it never replays.
- *  D — Tier 1 finished: a single line of navigation, never a nag. This is
- *      the whole point of gating on tier1DoneAt: an active physician who
- *      adds a dateless record months later gets one line, not a setup
- *      prompt, and the bordered card can never come back.
+ *  C — Tier 1 done, packet unfinished: one quiet row above the ring.
+ *  D — everything resolved, or a regression: a single line of navigation,
+ *      never a nag. This is the whole point of gating on tier1DoneAt: an
+ *      active physician who adds a dateless record months later gets one
+ *      line, not a setup prompt, and the bordered card can never come back.
  */
 
 export default function SetupCard({ onOpenSetup }) {
@@ -23,6 +29,7 @@ export default function SetupCard({ onOpenSetup }) {
   const s = data.settings || {};
   const form = homeCardForm(setup);
   const t1 = setup.counts.tier1;
+  const t2 = setup.counts.tier2;
 
   // The moment is held on screen until the physician leaves it, but the
   // stamp lands in the same pass, so a reload can never replay it. That is
@@ -64,6 +71,23 @@ export default function SetupCard({ onOpenSetup }) {
 
   if (form === CARD_FORM.NONE) return null;
 
+  // Form C: Tier 1 is done, so nothing here is urgent. No border, no bar,
+  // one row.
+  if (form === CARD_FORM.C) {
+    return (
+      <button onClick={() => onOpenSetup?.(setup.next?.id || null)} style={{
+        display: "flex", alignItems: "center", gap: 8, width: "100%",
+        border: "none", background: "transparent", padding: "10px 0", marginBottom: 6,
+        cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+      }}>
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
+          Packet setup · {t2.done} of {t2.total}
+        </span>
+        <span style={{ color: T.accent, fontWeight: 700, fontSize: 13.5 }}>Continue {"›"}</span>
+      </button>
+    );
+  }
+
   if (form === CARD_FORM.D) {
     const regression = setup.next?.regressionLine;
     return (
@@ -81,7 +105,26 @@ export default function SetupCard({ onOpenSetup }) {
   }
 
   // Form A
-  const next = setup.next;
+  const ladder = ladderState(setup);
+
+  // A month of being ignored is an answer. The card shrinks to one line
+  // offering the cheapest thing left, rather than repeating itself louder.
+  if (ladder?.bucket === LADDER.ONE_THING) {
+    return (
+      <div style={{
+        marginBottom: 16, display: "flex", alignItems: "center", gap: 10,
+        padding: "10px 12px", borderRadius: 12, backgroundColor: T.card,
+        border: `1px solid ${T.border}`,
+      }}>
+        <span style={{ flex: 1, fontSize: 13, color: T.textMuted, lineHeight: 1.45 }}>{ladder.text}</span>
+        <button onClick={() => onOpenSetup?.(ladder.taskId)} style={{
+          flexShrink: 0, padding: "8px 14px", borderRadius: 10, border: "none",
+          backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
+        }}>{ladder.verb}</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`,
@@ -111,20 +154,20 @@ export default function SetupCard({ onOpenSetup }) {
         })}
       </div>
 
-      {next && (
+      {ladder && (
         <>
-          <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.5, marginBottom: 12 }}>{next.cardLine}</div>
-          <button onClick={() => onOpenSetup?.(next.id)} style={{
+          <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.5, marginBottom: 12 }}>{ladder.text}</div>
+          <button onClick={() => onOpenSetup?.(ladder.taskId)} style={{
             width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
             backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer",
-          }}>{next.verb}</button>
+          }}>{ladder.verb}</button>
         </>
       )}
 
       {/* Everything left is set aside, so there is no next task to name. The
           card still has to say something: a header, a bar and a link with no
           sentence between them reads as a rendering fault. */}
-      {!next && (
+      {!ladder && (
         <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 4 }}>
           {t1.total - t1.done} {t1.total - t1.done === 1 ? "task is" : "tasks are"} set aside. They are still on the list.
         </div>

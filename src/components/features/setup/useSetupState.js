@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "r
 import { useApp } from "../../../context/AppContext";
 import {
   buildSetup, firstRenderPatch, normalizeSetupState,
-  withTask, withDeclared, withSnooze, withStarted, withTier1Done,
+  withTask, withDeclared, withSnooze, withStarted, withTier1Done, withProSnapshot,
+  denominatorNarration, proSnapshot, proSnapshotMatches,
 } from "../../../utils/setupTasks";
 
 /**
@@ -61,7 +62,7 @@ const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); }
 const snapshot = () => pending;
 
 export function useSetupState() {
-  const { data, updateSettings, isPro, loaded, user } = useApp();
+  const { data, updateSettings, isPro, isFreeBeta, hasSubscription, loaded, user } = useApp();
   const userId = user?.id || null;
   // The optimistic overlay: a tap must move the board now, not in a second.
   const queued = useSyncExternalStore(subscribe, snapshot, snapshot);
@@ -75,10 +76,14 @@ export function useSetupState() {
   const setup = useMemo(
     () => buildSetup(
       { ...data, settings: { ...settings, setupState: effective } },
-      { isPro }
+      { isPro, isFreeBeta, hasSubscription }
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data.licenses, data.documents, settings, effective, isPro]
+    [
+      data.licenses, data.documents, data.cme, data.education, data.workHistory,
+      data.travelDocs, data.professionalPhotos, data.privileges, data.insurance,
+      data.peerReferences, settings, effective, isPro, isFreeBeta, hasSubscription,
+    ]
   );
 
   const pruneArgs = useMemo(() => ({
@@ -126,9 +131,32 @@ export function useSetupState() {
     // record deleted) must not stamp progress.
     if (prev === null) return;
     const had = new Set(prev ? prev.split(",") : []);
-    if (!doneKey.split(",").some((id) => id && !had.has(id))) return;
-    commit((st) => ({ ...st, lastTouched: new Date().toISOString() }));
+    const closed = doneKey.split(",").filter((id) => id && !had.has(id));
+    if (!closed.length) return;
+    // Which one closed is stored too: the ladder's continuity line names it
+    // back to the physician a few days later.
+    commit((st) => ({ ...st, lastTouched: new Date().toISOString(), lastDone: closed[0] }));
   }, [loaded, doneKey, commit]);
+
+  /* ─── The Pro denominator ─────────────────────────────────────────
+   * The total is the one number on the board a physician is asked to trust,
+   * so it never moves silently. When it has not moved, the current shape is
+   * recorded quietly; when it has, the sentence is handed to the page and
+   * only recorded once the physician has seen it.
+   */
+  const narration = useMemo(
+    () => denominatorNarration(setup, { isFreeBeta }),
+    [setup, isFreeBeta]
+  );
+  const matches = proSnapshotMatches(setup, { isFreeBeta });
+  const ackNarration = useCallback(
+    () => commit((st) => withProSnapshot(st, proSnapshot(setup, { isFreeBeta }), pruneArgs)),
+    [commit, setup, isFreeBeta, pruneArgs]
+  );
+  useEffect(() => {
+    if (!loaded || narration || matches) return;
+    ackNarration();
+  }, [loaded, narration, matches, ackNarration]);
 
   // Flush on unmount and whenever the app is backgrounded: a skip tapped on
   // the way out of the app must still be a skip when it comes back.
@@ -153,5 +181,8 @@ export function useSetupState() {
     };
   }, []);
 
-  return { setup, skip, markNa, restore, declare, snooze, stampTier1Done, flush: flushSetupWrites };
+  return {
+    setup, skip, markNa, restore, declare, snooze, stampTier1Done,
+    narration, ackNarration, flush: flushSetupWrites,
+  };
 }

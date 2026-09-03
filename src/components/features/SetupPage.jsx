@@ -3,10 +3,12 @@ import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId } from "../../utils/helpers";
-import { isDea } from "../../utils/setupTasks";
+import { isDea, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
 import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
 import DateFixList, { DateRow, SHARED_KEY_NOTE } from "./setup/DateFixList";
+import CaptureRun from "./setup/CaptureRun";
+import CMEImport from "./CMEImport";
 
 /**
  * Setup — the board.
@@ -61,8 +63,14 @@ function EvidenceDots({ task, T }) {
   );
 }
 
-function estimateLabel(secs) {
-  if (!secs) return "";
+/**
+ * No estimate at all on a row whose length depends on the physician's filing
+ * cabinet rather than on the form. Eight licenses is not "about a minute",
+ * and any number we printed for it would be invented.
+ */
+function estimateLabel(task) {
+  const secs = task.secs;
+  if (!secs || task.variable) return "";
   if (secs <= 30) return `about ${Math.round(secs / 5) * 5} seconds`;
   if (secs <= 90) return "about a minute";
   return "";
@@ -270,12 +278,138 @@ function RemindersDrawer() {
   );
 }
 
+/* ─── Packet drawers ───────────────────────────────────────────────
+ * Tier 2 is where the records get their proof. Every drawer offers the same
+ * two things in the same order: the run that photographs what is already on
+ * file, then the form that adds what is not. Rows that are big forms deep
+ * link out, and the trip comes back.
+ */
+
+const RUN_NOUNS = {
+  licenses: ["licenses", "license"],
+  privileges: ["privileges", "privilege"],
+  insurance: ["policies", "policy"],
+  education: ["records", "record"],
+  travelDocs: ["documents", "document"],
+};
+
+function PacketDrawer({ task, onOpenSection }) {
+  const { data, theme: T } = useApp();
+  const [running, setRunning] = useState(false);
+  const queue = evidenceQueue(data, task.id);
+  const [plural, singular] = RUN_NOUNS[queue.section] || ["records", "record"];
+
+  if (running) {
+    return (
+      <CaptureRun
+        section={queue.section}
+        records={queue.records}
+        intro={runIntro(queue.records.length, plural, singular)}
+        onExit={() => setRunning(false)}
+      />
+    );
+  }
+
+  return (
+    <div>
+      {queue.records.length > 0 && (
+        <>
+          <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.55, marginBottom: 10 }}>
+            {runIntro(queue.records.length, plural, singular)}
+          </div>
+          <button onClick={() => setRunning(true)} style={{
+            width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
+            backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 800,
+            cursor: "pointer", fontFamily: "inherit",
+          }}>Start the run</button>
+        </>
+      )}
+      {task.section && (
+        <button onClick={() => onOpenSection?.(task.section, task.id)} style={{
+          marginTop: queue.records.length ? 10 : 0, width: "100%", padding: "11px 16px", borderRadius: 12,
+          border: `1px solid ${T.border}`, backgroundColor: "transparent",
+          color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>{task.verb}</button>
+      )}
+      {task.id === "boards" && !(data.settings?.specialties || []).length && (
+        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginTop: 10 }}>
+          Your specialty is still blank. It sets which board rules apply to you, and it lives in Settings under your profile.
+        </div>
+      )}
+      {task.id === "idPhoto" && (
+        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginTop: 10 }}>
+          The headshot lives under Professional Photo, and the ID under Travel and IDs.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CmeDrawer({ onOpenSection }) {
+  const { theme: T } = useApp();
+  const [importing, setImporting] = useState(false);
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.55, marginBottom: 10 }}>
+        Upload the transcript from CE Broker or your state board and the app reads every line.
+      </div>
+      <button onClick={() => setImporting(true)} style={{
+        width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
+        backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 800,
+        cursor: "pointer", fontFamily: "inherit",
+      }}>Import my transcript</button>
+      <button onClick={() => onOpenSection?.("cme", "cme")} style={{
+        marginTop: 10, width: "100%", padding: "11px 16px", borderRadius: 12,
+        border: `1px solid ${T.border}`, backgroundColor: "transparent",
+        color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+      }}>Add one by hand</button>
+      <CMEImport open={importing} onClose={() => setImporting(false)} />
+    </div>
+  );
+}
+
+/**
+ * A Pro row on an account that cannot reach it. It is out of the fraction and
+ * out of the Next rotation, and it never implies the physician has it.
+ */
+function LockedRow({ task, T, onUpgrade }) {
+  return (
+    <button onClick={onUpgrade} style={{
+      display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 52,
+      border: "none", borderBottom: `1px solid ${T.border}`, background: "transparent",
+      padding: "8px 0", textAlign: "left", cursor: "pointer", fontFamily: "inherit",
+    }}>
+      <span style={{ width: GLYPH, height: GLYPH, borderRadius: GLYPH / 2, border: `2px dashed ${T.border}`, flexShrink: 0, boxSizing: "border-box" }} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: T.textMuted }}>{task.label}</span>
+        <span style={{ display: "block", fontSize: 12.5, color: T.textDim }}>Available on Pro</span>
+      </span>
+      <span style={{ color: T.textDim, fontWeight: 800, flexShrink: 0 }}>{"›"}</span>
+    </button>
+  );
+}
+
+/** Two 6px dots, once, so "twelve records, four copies" needs no arithmetic. */
+function Legend({ T }) {
+  const dot = (filled) => ({
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: filled ? T.accent : "transparent",
+    border: `1px solid ${filled ? T.accent : T.textDim}`,
+  });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: T.textDim, marginTop: 8 }}>
+      <span style={dot(true)} /><span style={dot(false)} />
+      <span>{TIER2_COPY.legend}</span>
+    </div>
+  );
+}
+
 /* ─── Rows ─────────────────────────────────────────────────────── */
 
 function TaskRow({ task, open, onToggle, onSkip, onNa, onRestore, T, asRail }) {
   const [menu, setMenu] = useState(false);
   const resolved = task.status === "done" || task.status === "documented" || task.status === "na";
-  const est = task.status === "pending" ? estimateLabel(task.secs) : "";
+  const est = task.status === "pending" ? estimateLabel(task) : "";
 
   return (
     <div style={{ borderBottom: asRail ? "none" : `1px solid ${T.border}` }}>
@@ -360,12 +494,26 @@ function CollapsedGroup({ title, tasks, T, onRestore }) {
 
 /* ─── The page ─────────────────────────────────────────────────── */
 
-export default function SetupPage({ initialTask = null, onOpenCredentials, onAddLicenseByHand, onOpenRecord }) {
+export default function SetupPage({
+  initialTask = null,
+  onOpenCredentials,
+  onAddLicenseByHand,
+  onOpenRecord,
+  onOpenSection,
+  onUpgrade,
+}) {
   const { theme: T, isDesktop } = useApp();
-  const { setup, skip, markNa, restore, declare } = useSetupState();
+  const { setup, skip, markNa, restore, declare, narration, ackNarration } = useSetupState();
   const [open, setOpen] = useState(initialTask);
-  const [unfolded, setUnfolded] = useState(false);
+  const [unfoldedT1, setUnfoldedT1] = useState(false);
+  const [unfoldedT2, setUnfoldedT2] = useState(false);
+  // null = follow Tier 1 (folded until it completes). Once tapped either
+  // way, the physician's choice wins: the packet is folded, never locked.
+  const [packetOpen, setPacketOpen] = useState(null);
   const [seeded, setSeeded] = useState(initialTask);
+
+  const t1 = setup.counts.tier1;
+  const t2 = setup.counts.tier2;
 
   // A deep link from the Home card opens straight into that task's drawer.
   // Adjusted during render rather than in an effect, so the page never
@@ -373,22 +521,33 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
   if (initialTask && initialTask !== seeded) {
     setSeeded(initialTask);
     setOpen(initialTask);
-    setUnfolded(true);
+    setUnfoldedT1(true);
+    setUnfoldedT2(true);
+    setPacketOpen(true);
   }
 
-  const t1 = setup.counts.tier1;
-  const rows = useMemo(() => setup.tier1.filter((t) => t.status !== "skipped" && t.status !== "na"), [setup.tier1]);
-  const skipped = setup.tier1.filter((t) => t.status === "skipped");
-  const na = setup.tier1.filter((t) => t.status === "na");
-  const next = setup.next;
-  const sectionComplete = t1.complete;
+  const shown = (t) => t.status !== "skipped" && t.status !== "na";
+  const t1Rows = useMemo(() => setup.tier1.filter(shown), [setup.tier1]);
+  const t2Rows = useMemo(() => setup.tier2.filter((t) => shown(t) && !t.locked), [setup.tier2]);
+  const t2Locked = useMemo(() => setup.tier2.filter((t) => t.locked), [setup.tier2]);
+  const skipped = setup.skipped.filter((t) => !t.locked);
+  const na = setup.notApplicable.filter((t) => !t.locked);
+  const ladder = ladderState(setup);
 
-  const drawerFor = (id) => {
+  // While Tier 1 is unfinished the strip is Tier 1. After it, the same
+  // countdown carries on over the packet, so the page never stops shrinking.
+  const stripTasks = t1.complete ? t2Rows : setup.tier1;
+  const stripCounts = t1.complete ? t2 : t1;
+
+  const drawerFor = (task) => {
+    const id = task.id;
     if (id === "identity") return <IdentityDrawer />;
     if (id === "licenses") return <LicensesDrawer onAddByHand={onAddLicenseByHand} />;
     if (id === "dates") return <DateFixList onOpenRecord={(recId) => onOpenRecord?.("licenses", recId, "dates")} />;
     if (id === "dea") return <DeaDrawer onDeclareNone={() => { declare("noDea", true); setOpen(null); }} />;
     if (id === "reminders") return <RemindersDrawer />;
+    if (id === "cme") return <CmeDrawer onOpenSection={onOpenSection} />;
+    if (task.tier === 2) return <PacketDrawer task={task} onOpenSection={onOpenSection} />;
     return null;
   };
 
@@ -410,7 +569,7 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
   const progressStrip = (
     <div>
       <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-        {setup.tier1.map((t) => {
+        {stripTasks.map((t) => {
           const done = t.status === "done" || t.status === "documented";
           return (
             <div key={t.id} style={{
@@ -424,24 +583,45 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
         })}
       </div>
       <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text, fontVariantNumeric: "tabular-nums" }}>
-        {t1.done} of {t1.total} done{t1.skipped ? ` · ${t1.skipped} skipped` : ""}
+        {stripCounts.done} of {stripCounts.total} done{stripCounts.skipped ? ` · ${stripCounts.skipped} skipped` : ""}
       </div>
       <div style={{ fontSize: 13, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
-        {t1.left === 0 ? "Nothing left." : `${t1.left} left`}
+        {stripCounts.left === 0 ? "Nothing left." : `${stripCounts.left} left`}
       </div>
     </div>
   );
 
-  const nextCard = next ? (
+  // The total is the one number here a physician is asked to trust, so it is
+  // never allowed to renumber without a sentence saying why.
+  const narrationRow = narration ? (
+    <div style={{
+      marginTop: 12, padding: "10px 12px", borderRadius: 10,
+      backgroundColor: T.input, border: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", gap: 10,
+    }}>
+      <span style={{ flex: 1, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 }}>{narration}</span>
+      <button onClick={ackNarration} style={{
+        border: "none", background: "transparent", padding: 0, color: T.accent,
+        fontSize: 12.5, fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "inherit",
+      }}>Got it</button>
+    </div>
+  ) : null;
+
+  const openTask = (id) => {
+    setOpen(id);
+    if (setup.byId[id]?.tier === 2) setPacketOpen(true);
+  };
+
+  const nextCard = ladder ? (
     <div style={{
       marginTop: 14, backgroundColor: T.card, border: `2px solid ${T.accent}`,
       borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1,
     }}>
-      <div style={{ fontSize: 14, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>{next.cardLine}</div>
-      <button onClick={() => setOpen(next.id)} style={{
+      <div style={{ fontSize: 14, color: T.text, lineHeight: 1.5, marginBottom: 10 }}>{ladder.text}</div>
+      <button onClick={() => openTask(ladder.taskId)} style={{
         width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
         backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer",
-      }}>{next.verb}</button>
+      }}>{ladder.verb}</button>
     </div>
   ) : null;
 
@@ -454,35 +634,98 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
     </div>
   );
 
-  const sectionBody = (
+  /** One task row plus its drawer, in the accordion. */
+  const renderRow = (task) => (
+    <div key={task.id}>
+      <TaskRow
+        task={task}
+        open={open === task.id}
+        onToggle={(force) => setOpen((cur) => (force === true ? task.id : cur === task.id ? null : task.id))}
+        onSkip={() => skip(task.id)}
+        onNa={() => markNa(task.id)}
+        onRestore={() => restore(task.id)}
+        T={T}
+      />
+      {open === task.id && (
+        <div style={{ padding: "4px 0 16px" }}>
+          <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>{task.why}</div>
+          {drawerFor(task)}
+          {drawerFooter(task)}
+        </div>
+      )}
+    </div>
+  );
+
+  /** A finished section folds to one line. The page gets shorter every
+   *  session, which is the only progress animation worth having. */
+  const foldedSection = (label, count, onOpen) => (
+    <button onClick={onOpen} style={{
+      display: "flex", alignItems: "center", gap: 10, width: "100%",
+      border: `1px solid ${T.border}`, borderRadius: 12, backgroundColor: T.card,
+      padding: "14px 16px", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+    }}>
+      <StatusGlyph status="done" T={T} />
+      <span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: T.text }}>{label} · complete · {count} items</span>
+      <span style={{ color: T.textDim, fontWeight: 800 }}>{"›"}</span>
+    </button>
+  );
+
+  const tier1Body = (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 2 }}>
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: T.text }}>Protected</h3>
         <span style={{ fontSize: 12, color: T.textDim, fontVariantNumeric: "tabular-nums" }}>{t1.done} of {t1.total}</span>
       </div>
-      {rows.map((task) => (
-        <div key={task.id}>
-          <TaskRow
-            task={task}
-            open={open === task.id}
-            onToggle={(force) => setOpen((cur) => (force === true ? task.id : cur === task.id ? null : task.id))}
-            onSkip={() => skip(task.id)}
-            onNa={() => markNa(task.id)}
-            onRestore={() => restore(task.id)}
-            T={T}
-          />
-          {open === task.id && (
-            <div style={{ padding: "4px 0 16px" }}>
-              <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>{task.why}</div>
-              {drawerFor(task.id)}
-              {drawerFooter(task)}
+      {t1Rows.map(renderRow)}
+    </div>
+  );
+
+  // Folded until Tier 1 completes, and never locked: one tap opens it at any
+  // time, because a physician who wants to see the whole job should be able
+  // to see the whole job.
+  const packetCollapsed = packetOpen === null ? !t1.complete : !packetOpen;
+  const packetHeader = (
+    <button onClick={() => setPacketOpen(packetCollapsed)} style={{
+      display: "flex", alignItems: "baseline", gap: 8, width: "100%",
+      border: "none", background: "transparent", padding: 0, marginBottom: 2,
+      cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+    }}>
+      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: T.text }}>{TIER2_COPY.header}</h3>
+      <span style={{ flex: 1 }} />
+      <span style={{ fontSize: 12, color: T.textDim, fontVariantNumeric: "tabular-nums" }}>
+        {t2.total} items · {t2.done} done
+      </span>
+      <span style={{ color: T.textDim, fontWeight: 800 }}>{packetCollapsed ? "›" : "⌄"}</span>
+    </button>
+  );
+
+  const packetBody = (
+    <div>
+      {packetHeader}
+      {!packetCollapsed && (
+        <>
+          <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.55, marginTop: 6 }}>{TIER2_COPY.intro}</div>
+          <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginTop: 4 }}>{TIER2_COPY.second}</div>
+          <div style={{ fontSize: 12.5, color: T.textDim, lineHeight: 1.5, marginTop: 8 }}>{TIER2_COPY.proof}</div>
+          <Legend T={T} />
+          <div style={{ marginTop: 10 }}>{t2Rows.map(renderRow)}</div>
+          {t2Locked.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{TIER2_COPY.proHeader}</div>
+              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, margin: "2px 0 6px" }}>{TIER2_COPY.proBlurb}</div>
+              {t2Locked.map((task) => <LockedRow key={task.id} task={task} T={T} onUpgrade={onUpgrade} />)}
             </div>
           )}
-        </div>
-      ))}
+        </>
+      )}
+    </div>
+  );
+
+  const bottomGroups = (
+    <>
       {skipped.length > 0 && <CollapsedGroup title="Skipped" tasks={skipped} T={T} onRestore={restore} />}
       {na.length > 0 && <CollapsedGroup title="Does not apply" tasks={na} T={T} onRestore={restore} />}
-    </div>
+    </>
   );
 
   const footer = (
@@ -496,30 +739,18 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
     </button>
   );
 
-  // A completed section folds to one line: the page gets shorter every
-  // session, which is the only progress animation worth having.
-  const foldedSection = (
-    <button onClick={() => setUnfolded(true)} style={{
-      display: "flex", alignItems: "center", gap: 10, width: "100%",
-      border: `1px solid ${T.border}`, borderRadius: 12, backgroundColor: T.card,
-      padding: "14px 16px", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
-    }}>
-      <StatusGlyph status="done" T={T} />
-      <span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: T.text }}>Protected · complete · {t1.total} items</span>
-      <span style={{ color: T.textDim, fontWeight: 800 }}>{"›"}</span>
-    </button>
-  );
-
   if (isDesktop) {
+    const railRows = [...t1Rows, ...t2Rows];
     return (
       <div>
         {header}
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
           <div style={{ width: 300, flexShrink: 0, position: "sticky", top: 72 }}>
             {progressStrip}
+            {narrationRow}
             {nextCard}
             <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 2 }}>
-              {rows.map((task) => (
+              {railRows.map((task) => (
                 <TaskRow
                   key={task.id}
                   task={task}
@@ -533,19 +764,32 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
                 />
               ))}
             </div>
-            {skipped.length > 0 && <CollapsedGroup title="Skipped" tasks={skipped} T={T} onRestore={restore} />}
-            {na.length > 0 && <CollapsedGroup title="Does not apply" tasks={na} T={T} onRestore={restore} />}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{TIER2_COPY.intro}</div>
+              <Legend T={T} />
+            </div>
+            {t2Locked.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text }}>{TIER2_COPY.proHeader}</div>
+                <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5, margin: "2px 0 4px" }}>{TIER2_COPY.proBlurb}</div>
+                {t2Locked.map((task) => <LockedRow key={task.id} task={task} T={T} onUpgrade={onUpgrade} />)}
+              </div>
+            )}
+            {bottomGroups}
             {footer}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             {(() => {
-              const task = setup.byId[open] || rows[0] || setup.tier1[0];
+              const task = setup.byId[open] || railRows[0] || setup.tier1[0];
               if (!task) return null;
               return (
                 <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "18px 20px", boxShadow: T.shadow1 }}>
                   <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800, color: T.text }}>{task.label}</h3>
                   <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginBottom: 14 }}>{task.why}</div>
-                  {drawerFor(task.id)}
+                  {task.tier === 2 && (
+                    <div style={{ fontSize: 12.5, color: T.textDim, lineHeight: 1.5, marginBottom: 12 }}>{TIER2_COPY.proof}</div>
+                  )}
+                  {drawerFor(task)}
                   {drawerFooter(task)}
                 </div>
               );
@@ -560,10 +804,19 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
     <div className="cmd-fade-in">
       {header}
       {progressStrip}
+      {narrationRow}
       {nextCard}
       <div style={{ marginTop: 18 }}>
-        {sectionComplete && !unfolded ? foldedSection : sectionBody}
+        {t1.complete && !unfoldedT1
+          ? foldedSection("Protected", t1.total, () => setUnfoldedT1(true))
+          : tier1Body}
       </div>
+      <div style={{ marginTop: 18 }}>
+        {t2.complete && !unfoldedT2
+          ? foldedSection(TIER2_COPY.header, t2.total, () => setUnfoldedT2(true))
+          : packetBody}
+      </div>
+      {bottomGroups}
       {footer}
     </div>
   );

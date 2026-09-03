@@ -24,6 +24,7 @@
 // compared on read, which is more machinery than the problem deserves.
 
 import { isNonExpiring } from "./helpers.js";
+import { STATE_NAMES } from "../constants/states.js";
 
 export const SETUP_STATE_VERSION = 1;
 const MS_PER_DAY = 86400000;
@@ -39,6 +40,17 @@ export const isDea = (l) => /dea registration/i.test(l?.type || "");
 export const isCsr = (l) => /controlled substance/i.test(l?.type || "");
 export const isBoard = (l) => /board certification/i.test(l?.type || "");
 export const isLifeSupport = (l) => /\b(bls|acls|atls|pals|nrp)\b/i.test(`${l?.type || ""} ${l?.name || ""}`);
+
+/**
+ * Licenses a date is expected on at all. This is the denominator behind
+ * "3 of your 4 licenses have no expiration date", so it has to be the same
+ * set dateless() filters, minus the date test.
+ */
+export function datable(data) {
+  return (data?.licenses || []).filter((l) =>
+    l && !isNonExpiring(l, "licenses") && (isMedicalLicense(l) || isDea(l) || isCsr(l))
+  );
+}
 
 /**
  * Licenses that owe an expiration date. Scoped to licenses on purpose: the
@@ -63,6 +75,35 @@ const linkedDocs = (data, section, id) =>
 
 const hasDoc = (data, section, id) => linkedDocs(data, section, id).length > 0;
 
+/* ─── Tier 2 record sets ───────────────────────────────────────────
+ * Each one names the records a packet row is about, so the row's rule, its
+ * count, its sentence and its capture queue all read the same list.
+ */
+
+/** The two records every credentialing office asks for a copy of. */
+const proofRecords = (ctx) => ctx.licenses.filter((l) => isMedicalLicense(l) || isDea(l));
+const proofMissing = (ctx) => proofRecords(ctx).filter((l) => !hasDoc(ctx.data, "licenses", l.id));
+
+const boardRecords = (ctx) => ctx.licenses.filter(isBoard);
+const lifeSupportRecords = (ctx) => ctx.licenses.filter((l) => isLifeSupport(l) && !!l.expirationDate);
+
+/** A government photo ID with its number on file. Loyalty cards are not IDs. */
+const idRecords = (ctx) =>
+  (ctx.data.travelDocs || []).filter((t) => t && /passport|driver|identification/i.test(t.type || "") && !!t.number);
+const hasHeadshot = (ctx) => (ctx.data.professionalPhotos || []).length > 0 || !!ctx.s.profilePhoto;
+
+const privilegeRecords = (ctx) => (ctx.data.privileges || []).filter(Boolean);
+const malpracticeRecords = (ctx) =>
+  (ctx.data.insurance || []).filter((i) => i && /malpractice|tail/i.test(i.type || "") && !!i.expirationDate);
+const reachableReferences = (ctx) =>
+  (ctx.data.peerReferences || []).filter((r) => r && r.name && (r.email || r.phone));
+
+// EDUCATION_TYPES spells the degree two ways and the training three, so both
+// halves are substring tests rather than a list membership.
+const isDegreeRecord = (e) => /doctor of (osteopathic )?medicine|\(md\)|\(do\)/i.test(e?.type || "");
+const isTrainingRecord = (e) => /residency|internship|fellowship/i.test(e?.type || "");
+const educationRecords = (ctx) => (ctx.data.education || []).filter(Boolean);
+
 /* ─── Stored state ─────────────────────────────────────────────── */
 
 export const EMPTY_SETUP_STATE = Object.freeze({
@@ -71,7 +112,10 @@ export const EMPTY_SETUP_STATE = Object.freeze({
   tier1DoneAt: null,
   tier2DoneAt: null,
   lastTouched: null,
+  lastDone: null,
   hiddenUntil: null,
+  proCounted: null,
+  betaCounted: null,
   declared: {},
   tasks: {},
 });
@@ -87,7 +131,14 @@ export function normalizeSetupState(raw) {
     tier1DoneAt: r.tier1DoneAt || null,
     tier2DoneAt: r.tier2DoneAt || null,
     lastTouched: r.lastTouched || null,
+    lastDone: r.lastDone || null,
     hiddenUntil: r.hiddenUntil || null,
+    // How many Pro rows were in the denominator the last time the board was
+    // read, and whether the free beta was what put them there. Both are null
+    // until the first read, and a null never narrates: the fraction is only
+    // explained when it actually changes under someone.
+    proCounted: typeof r.proCounted === "number" ? r.proCounted : null,
+    betaCounted: typeof r.betaCounted === "boolean" ? r.betaCounted : null,
     declared: { ...declared },
     tasks: { ...tasks },
   };
@@ -110,6 +161,9 @@ export function shortDate(value) {
 
 const plural = (n, one, many) => (n === 1 ? one : many);
 
+/** "Texas", falling back to the code the record actually carries. */
+const stateName = (code) => (code ? STATE_NAMES[code] || code : "");
+
 export const TASK_DEFS = [
   {
     id: "identity",
@@ -122,6 +176,8 @@ export const TASK_DEFS = [
     doneWhen: ({ s }) => !!s.name && (s.degreeType === "MD" || s.degreeType === "DO") && !!s.primaryState,
     evidenceWhen: null,
     cardLine: () => "Your degree and primary state decide which CME rules apply to you.",
+    nextPhrase: () => "your degree and primary state",
+    doneClause: "your details",
     pendingDetail: ({ s }) => {
       const missing = [];
       if (!s.name) missing.push("your name");
@@ -141,6 +197,8 @@ export const TASK_DEFS = [
     doneWhen: ({ licenses }) => licenses.some(isMedicalLicense),
     evidenceWhen: null,
     cardLine: () => "No licenses on file yet. The federal registry probably already has yours.",
+    nextPhrase: () => "the registry lookup that fills in your licenses",
+    doneClause: "your licenses",
     pendingDetail: () => "No medical license on file yet.",
   },
   {
@@ -162,6 +220,22 @@ export const TASK_DEFS = [
       if (!n) return "No licenses on file yet. The federal registry probably already has yours.";
       return `${n} ${plural(n, "license", "licenses")} on file with no expiration date. Nothing will warn you about ${plural(n, "it", "them")}.`;
     },
+    nextPhrase: (ctx) => {
+      const missing = dateless(ctx.data);
+      if (missing.length === 1 && missing[0].state) return `the expiration date on your ${stateName(missing[0].state)} license`;
+      if (missing.length === 1) return "the expiration date on your remaining license";
+      return `${missing.length} licenses still without an expiration date`;
+    },
+    // Quantified out of their own file. There is no statistic about
+    // physicians in general here because we do not have one.
+    costLine: (ctx) => {
+      const total = datable(ctx.data).length;
+      const missing = dateless(ctx.data).length;
+      if (!total || !missing) return null;
+      // The verb agrees with the count that leads the sentence, not the total.
+      return `${missing} of your ${total} ${plural(total, "license", "licenses")} ${plural(missing, "has", "have")} no expiration date on file. No reminder can fire for ${plural(missing, "it", "those")} until ${plural(missing, "it does", "they do")}.`;
+    },
+    doneClause: "your expiration dates",
     pendingDetail: (ctx) => {
       const n = dateless(ctx.data).length;
       if (!ctx.licenses.some(isMedicalLicense)) return "Add a license first, then the dates land here.";
@@ -189,9 +263,12 @@ export const TASK_DEFS = [
     // prove the absence of a DEA registration.
     declaredNa: "noDea",
     naDetail: "Not applicable. You told us you do not hold a DEA registration.",
+    documentedDetail: "Dated. Proof attached.",
     doneWhen: ({ licenses }) => licenses.some((l) => isDea(l) && !!l.expirationDate),
     evidenceWhen: ({ data, licenses }) => licenses.some((l) => isDea(l) && !!l.expirationDate && hasDoc(data, "licenses", l.id)),
     cardLine: () => "No DEA registration on file. If you hold one, the app cannot warn you about it yet.",
+    nextPhrase: () => "your DEA registration",
+    doneClause: "your DEA registration",
     pendingDetail: ({ licenses }) =>
       licenses.some(isDea) ? "On file, but with no expiration date." : "Nothing on file yet.",
     regressionLine: () => "your DEA registration has no expiration date",
@@ -208,10 +285,322 @@ export const TASK_DEFS = [
       !!(s.notifyEmail || s.notifyBrowser || s.notifyText) && !!s.email && Number(s.reminderLeadDays) > 0,
     evidenceWhen: null,
     cardLine: () => "Reminders are off. Everything you have entered is sitting here silently.",
+    nextPhrase: () => "turning reminders on",
+    costLine: (ctx) => {
+      const dated = datable(ctx.data).filter((l) => !!l.expirationDate).length;
+      if (!dated) return null;
+      return `You have ${dated} dated ${plural(dated, "record", "records")} on file and nothing switched on to warn you about ${plural(dated, "it", "any of them")}.`;
+    },
+    doneClause: "your reminders",
     pendingDetail: ({ s }) => (s.email ? "No channel is on." : "No address on file to warn."),
     regressionLine: () => "reminders are off",
   },
+
+  /* ─── TIER 2 ─ "Packet ready" ────────────────────────────────────
+   * A credentialing office asks for the same list every time, and this is
+   * that list. Nothing here changes whether the app warns you, so nothing
+   * here is allowed to read as urgent.
+   *
+   * `variable: true` marks a row whose length depends on the physician's
+   * filing cabinet rather than on the form: those rows print no time
+   * estimate, because any number we printed would be invented.
+   *
+   * Three rows are Pro. They are never dropped from the board, only marked
+   * locked when the account cannot reach them, so a free physician sees what
+   * a full packet contains without being told they already have it.
+   */
+  {
+    id: "proof",
+    tier: 2,
+    secs: 60,
+    pro: false,
+    variable: true,
+    section: "licenses",
+    label: "Copies of your license and DEA",
+    why: "A credentialing office asks for the document, not the number you typed into it.",
+    verb: "Photograph them",
+    doneWhen: (ctx) => proofRecords(ctx).length > 0 && proofMissing(ctx).length === 0,
+    // The proof IS the task here, so the record dot and the proof dot move
+    // together. Both are filled or neither is.
+    evidenceWhen: (ctx) => proofRecords(ctx).length > 0 && proofMissing(ctx).length === 0,
+    blockedBy: (ctx) => (proofRecords(ctx).length ? null : "licenses"),
+    nextPhrase: (ctx) => {
+      const first = proofMissing(ctx)[0];
+      return first?.state ? `a copy of your ${first.state} license` : "a copy of your license";
+    },
+    costLine: (ctx) => {
+      const total = proofRecords(ctx).length;
+      const missing = proofMissing(ctx).length;
+      if (!total || !missing) return null;
+      return `${missing} of your ${total} license ${plural(total, "record", "records")} ${plural(missing, "has", "have")} no copy attached. The number on its own is not what a credentialing office asks for.`;
+    },
+    doneClause: "the copies of your licenses",
+    cardLine: (ctx) => {
+      const missing = proofMissing(ctx).length;
+      if (!missing) return "Attach a copy of each license and DEA record.";
+      return `${missing} license ${plural(missing, "record has", "records have")} no copy attached.`;
+    },
+    pendingDetail: (ctx) => {
+      const total = proofRecords(ctx).length;
+      if (!total) return "Add a license first, then the copies land here.";
+      return `${total - proofMissing(ctx).length} of ${total} have a copy attached.`;
+    },
+  },
+  {
+    id: "boards",
+    tier: 2,
+    secs: 45,
+    pro: false,
+    section: "licenses",
+    label: "Board certification",
+    // No expiration date is required here, ever. isNonExpiring reads
+    // item.noExpiration and nothing in the app sets that field yet, so a
+    // lifetime diplomate asked for a date would be stranded on this row.
+    why: "Your specialty drives which board rules apply, and the certificate is the first thing an application asks for.",
+    verb: "Add my board certification",
+    doneWhen: (ctx) => (ctx.s.specialties || []).length > 0 && boardRecords(ctx).length > 0,
+    evidenceWhen: (ctx) => boardRecords(ctx).some((l) => hasDoc(ctx.data, "licenses", l.id)),
+    nextPhrase: () => "your board certification",
+    costLine: null,
+    doneClause: "your board certification",
+    cardLine: () => "No board certification on file.",
+    pendingDetail: (ctx) => {
+      if (!boardRecords(ctx).length) return "Nothing on file yet.";
+      return (ctx.s.specialties || []).length ? "" : "On file. Your specialty is still blank.";
+    },
+  },
+  {
+    id: "lifeSupport",
+    tier: 2,
+    secs: 45,
+    pro: false,
+    section: "licenses",
+    label: "BLS, ACLS or ATLS",
+    why: "Every hospital application asks for a current card, and they lapse on a two-year clock.",
+    verb: "Add my card",
+    doneWhen: (ctx) => lifeSupportRecords(ctx).length > 0,
+    evidenceWhen: (ctx) => lifeSupportRecords(ctx).some((l) => hasDoc(ctx.data, "licenses", l.id)),
+    nextPhrase: () => "your BLS or ACLS card",
+    costLine: null,
+    doneClause: "your life support card",
+    cardLine: () => "No dated BLS, ACLS or ATLS card on file.",
+    pendingDetail: () => "Nothing dated on file yet.",
+  },
+  {
+    id: "cme",
+    tier: 2,
+    secs: 60,
+    pro: false,
+    variable: true,
+    section: "cme",
+    label: "CME for the current cycle",
+    why: "The transcript from CE Broker or your state board imports every line at once.",
+    verb: "Import my transcript",
+    doneWhen: (ctx) => (ctx.data.cme || []).length > 0,
+    evidenceWhen: null,
+    nextPhrase: () => "this cycle's CME",
+    costLine: null,
+    doneClause: "your CME",
+    cardLine: () => "No CME on file for this cycle.",
+    pendingDetail: () => "Nothing logged yet.",
+  },
+  {
+    id: "education",
+    tier: 2,
+    secs: 60,
+    pro: false,
+    variable: true,
+    section: "education",
+    label: "Medical school and postgraduate training",
+    why: "Every application asks for both, and the dates have to match the certificates.",
+    verb: "Add my training",
+    doneWhen: (ctx) => {
+      const list = educationRecords(ctx);
+      return list.some(isDegreeRecord) && list.some(isTrainingRecord);
+    },
+    evidenceWhen: (ctx) => educationRecords(ctx).some((e) => hasDoc(ctx.data, "education", e.id)),
+    nextPhrase: (ctx) => (educationRecords(ctx).some(isDegreeRecord) ? "your residency or fellowship" : "your medical school"),
+    costLine: null,
+    doneClause: "your training history",
+    cardLine: () => "Medical school or postgraduate training is missing.",
+    pendingDetail: (ctx) => {
+      const list = educationRecords(ctx);
+      if (!list.length) return "Nothing on file yet.";
+      if (!list.some(isDegreeRecord)) return "No medical school on file.";
+      return "No residency, internship or fellowship on file.";
+    },
+  },
+  {
+    id: "work",
+    tier: 2,
+    secs: 45,
+    pro: false,
+    section: "workHistory",
+    label: "Your current position",
+    // A physician between assignments has no open-ended row, so any entry
+    // closes this. The open row is what a packet wants, not what we require.
+    why: "A packet leads with where you work now, and an unexplained gap is what an office asks about.",
+    verb: "Add my position",
+    doneWhen: (ctx) => (ctx.data.workHistory || []).length >= 1,
+    evidenceWhen: null,
+    nextPhrase: () => "your current position",
+    costLine: null,
+    doneClause: "your work history",
+    cardLine: () => "No work history on file.",
+    pendingDetail: () => "Nothing on file yet.",
+  },
+  {
+    id: "idPhoto",
+    tier: 2,
+    secs: 60,
+    pro: false,
+    variable: true,
+    section: "travelDocs",
+    label: "Photo ID and a headshot",
+    why: "Two separate asks on nearly every application, and neither one changes.",
+    verb: "Add my ID",
+    doneWhen: (ctx) => idRecords(ctx).length > 0 && hasHeadshot(ctx),
+    evidenceWhen: (ctx) => idRecords(ctx).some((t) => hasDoc(ctx.data, "travelDocs", t.id)),
+    nextPhrase: (ctx) => (idRecords(ctx).length ? "a headshot" : "your passport or driver's license"),
+    costLine: null,
+    doneClause: "your photo ID",
+    cardLine: () => "No photo ID or no headshot on file.",
+    pendingDetail: (ctx) => {
+      if (!idRecords(ctx).length && !hasHeadshot(ctx)) return "Neither one on file yet.";
+      if (!idRecords(ctx).length) return "Headshot on file. No photo ID yet.";
+      return "Photo ID on file. No headshot yet.";
+    },
+  },
+  {
+    id: "privileges",
+    tier: 2,
+    secs: 90,
+    pro: true,
+    variable: true,
+    section: "privileges",
+    label: "Hospital privileges",
+    why: "Privileges lapse on their own clock, and the reappointment letter is what proves them.",
+    verb: "Add my privileges",
+    doneWhen: (ctx) => privilegeRecords(ctx).length > 0 && privilegeRecords(ctx).every((p) => !!p.expirationDate),
+    evidenceWhen: (ctx) => privilegeRecords(ctx).length > 0 && privilegeRecords(ctx).every((p) => hasDoc(ctx.data, "privileges", p.id)),
+    nextPhrase: () => "your hospital privileges",
+    costLine: (ctx) => {
+      const total = privilegeRecords(ctx).length;
+      const undated = privilegeRecords(ctx).filter((p) => !p.expirationDate).length;
+      if (!total || !undated) return null;
+      return `${undated} of your ${total} privilege ${plural(total, "record", "records")} ${plural(undated, "has", "have")} no expiration date on file.`;
+    },
+    doneClause: "your hospital privileges",
+    cardLine: () => "Hospital privileges are missing or undated.",
+    pendingDetail: (ctx) => {
+      const total = privilegeRecords(ctx).length;
+      if (!total) return "Nothing on file yet.";
+      return `${privilegeRecords(ctx).filter((p) => !!p.expirationDate).length} of ${total} carry a date.`;
+    },
+  },
+  {
+    id: "malpractice",
+    tier: 2,
+    secs: 60,
+    pro: true,
+    section: "insurance",
+    label: "Malpractice certificate of insurance",
+    why: "The certificate of insurance is asked for by name, and its dates have to be current.",
+    verb: "Add my coverage",
+    doneWhen: (ctx) => malpracticeRecords(ctx).length > 0,
+    evidenceWhen: (ctx) => malpracticeRecords(ctx).some((i) => hasDoc(ctx.data, "insurance", i.id)),
+    nextPhrase: () => "your malpractice certificate",
+    costLine: null,
+    doneClause: "your malpractice coverage",
+    cardLine: () => "No dated malpractice policy on file.",
+    pendingDetail: (ctx) =>
+      (ctx.data.insurance || []).some((i) => /malpractice|tail/i.test(i?.type || ""))
+        ? "On file, but with no expiration date."
+        : "Nothing on file yet.",
+  },
+  {
+    id: "references",
+    tier: 2,
+    secs: 90,
+    pro: true,
+    section: "peerReferences",
+    label: "Three peer references",
+    // A reference is a contact, not a certificate, so this row takes no
+    // evidence and shows no proof dot.
+    why: "Three is the number nearly every application asks for, each with a way to reach them.",
+    verb: "Add my references",
+    doneWhen: (ctx) => reachableReferences(ctx).length >= 3,
+    evidenceWhen: null,
+    nextPhrase: () => "three peer references",
+    costLine: (ctx) => {
+      const n = reachableReferences(ctx).length;
+      return n > 0 && n < 3 ? `${n} of the three peer references an application asks for ${plural(n, "is", "are")} on file with a way to reach them.` : null;
+    },
+    doneClause: "your peer references",
+    cardLine: (ctx) => {
+      const n = reachableReferences(ctx).length;
+      return n === 0 ? "No peer references on file." : `${n} of three peer references on file.`;
+    },
+    pendingDetail: (ctx) => {
+      const n = reachableReferences(ctx).length;
+      const total = (ctx.data.peerReferences || []).length;
+      if (!total) return "Nothing on file yet.";
+      return `${n} of 3 have a name and a way to reach them.`;
+    },
+  },
 ];
+
+/* ─── Capture queues ───────────────────────────────────────────────
+ * Which records a packet row is still missing its proof for, in the order the
+ * run will walk them. Kept beside the rules above so the queue can never
+ * disagree with the checkbox it is supposed to close.
+ */
+
+const queueCtx = (data) => {
+  const d = data || {};
+  return { data: d, s: d.settings || {}, licenses: Array.isArray(d.licenses) ? d.licenses.filter(Boolean) : [] };
+};
+const undocumented = (ctx, section, list) => list.filter((r) => r && !hasDoc(ctx.data, section, r.id));
+
+export function evidenceQueue(data, taskId) {
+  const ctx = queueCtx(data);
+  const q = (section, list) => ({ section, records: undocumented(ctx, section, list) });
+  switch (taskId) {
+    case "proof": return q("licenses", proofRecords(ctx));
+    case "boards": return q("licenses", boardRecords(ctx));
+    case "lifeSupport": return q("licenses", lifeSupportRecords(ctx));
+    case "dea": return q("licenses", ctx.licenses.filter(isDea));
+    case "education": return q("education", educationRecords(ctx));
+    case "idPhoto": return q("travelDocs", idRecords(ctx));
+    case "privileges": return q("privileges", privilegeRecords(ctx));
+    case "malpractice": return q("insurance", malpracticeRecords(ctx));
+    default: return { section: null, records: [] };
+  }
+}
+
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+/** Words up to twelve, digits after: this opens a sentence. */
+export const numberWord = (n) => (NUMBER_WORDS[n] != null ? NUMBER_WORDS[n] : String(n));
+const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+/** The line a run opens with, counted from the queue it is about to walk. */
+export function runIntro(count, noun = "licenses", singular = "license") {
+  if (count === 1) {
+    return `One ${singular} needs two things: the date it expires and a copy of the certificate. Photograph it and the app reads both off the page.`;
+  }
+  return `${capitalize(numberWord(count))} ${noun} need two things: the date they expire and a copy of the certificate. Photograph them one after another and the app reads both off the page.`;
+}
+
+/** How the section heading and the Pro group are worded, in one place. */
+export const TIER2_COPY = {
+  header: "Packet ready",
+  intro: "A credentialing office asks for the same list every time. This is that list.",
+  second: "Nothing here changes whether the app warns you. It changes how fast you can answer a request.",
+  proof: "Proof means the document is on file and linked to the record it belongs to. CredentialDOMD does not contact boards or primary sources on your behalf.",
+  legend: "record · proof",
+  proHeader: "Also in a full packet.",
+  proBlurb: "Hospital privileges, malpractice coverage and peer references are part of Pro. They are not counted in your total above.",
+};
 
 /**
  * The Next card's ranking: exposure order, not page order. Dates come first
@@ -230,7 +619,7 @@ const REOFFER_UNTIL_DAYS = 14;
 /* ─── Resolution ───────────────────────────────────────────────── */
 
 function detailFor(def, status, stored, ctx) {
-  if (status === "documented") return "Dated. Proof attached.";
+  if (status === "documented") return def.documentedDetail || "On file. Proof attached.";
   if (status === "done") return def.evidenceWhen ? "On file. No copy attached yet." : "On file.";
   if (status === "na") return def.naDetail || "Not applicable.";
   if (status === "skipped") {
@@ -239,6 +628,8 @@ function detailFor(def, status, stored, ctx) {
   }
   return def.pendingDetail ? def.pendingDetail(ctx) : "";
 }
+
+const call = (fn, ctx) => (typeof fn === "function" ? fn(ctx) : fn || null);
 
 function resolveTask(def, ctx, state) {
   const stored = state.tasks?.[def.id] || null;
@@ -260,6 +651,13 @@ function resolveTask(def, ctx, state) {
     why: def.why,
     verb: def.verb,
     pro: !!def.pro,
+    // Locked is not a status: the row still resolves normally, it is simply
+    // out of the denominator and out of the Next rotation while the account
+    // cannot reach it. A locked row never claims the physician has it.
+    locked: !!def.pro && !ctx.isPro,
+    betaTag: !!def.pro && ctx.isFreeBeta && !ctx.hasSubscription,
+    section: def.section || null,
+    variable: !!def.variable,
     secs: def.estimateSecs ? def.estimateSecs(ctx) : def.secs,
     status,
     detail: detailFor(def, status, stored, ctx),
@@ -270,6 +668,12 @@ function resolveTask(def, ctx, state) {
     naWhy: status === "na" && stored?.s === "na" ? stored.why || "" : "",
     cardLine: def.cardLine ? def.cardLine(ctx) : def.why,
     regressionLine: def.regressionLine ? def.regressionLine(ctx) : null,
+    // The re-engagement ladder's three vocabularies: a noun phrase for what
+    // is next, a quantified sentence built only from their own records, and
+    // a past-tense clause for the task that last closed.
+    nextPhrase: call(def.nextPhrase, ctx),
+    costLine: call(def.costLine, ctx),
+    doneClause: def.doneClause || null,
   };
 }
 
@@ -279,34 +683,45 @@ function resolveTask(def, ctx, state) {
  * deliberate claim, and the number has to be able to reach zero.
  */
 function countTier(list) {
-  const na = list.filter((t) => t.status === "na").length;
-  const done = list.filter((t) => t.status === "done" || t.status === "documented").length;
-  const skipped = list.filter((t) => t.status === "skipped").length;
-  const total = list.length - na;
-  return { total, done, skipped, na, left: Math.max(0, total - done), complete: total > 0 && total === done };
+  // A locked Pro row is not in the fraction at all. Counting it would tell a
+  // free physician they are behind on something they cannot open.
+  const live = list.filter((t) => !t.locked);
+  const na = live.filter((t) => t.status === "na").length;
+  const done = live.filter((t) => t.status === "done" || t.status === "documented").length;
+  const skipped = live.filter((t) => t.status === "skipped").length;
+  const total = live.length - na;
+  return {
+    total, done, skipped, na,
+    left: Math.max(0, total - done),
+    complete: total > 0 && total === done,
+    locked: list.length - live.length,
+  };
 }
 
-function pickNext(tasks, state, nowMs) {
-  const open = tasks.filter((t) => {
+/** Everything still asking to be done: pending, or a skip inside its one-week re-offer window. */
+function openTasks(tasks, nowMs) {
+  return tasks.filter((t) => {
+    if (t.locked) return false;
     if (t.status === "pending") return true;
     if (t.status !== "skipped" || !t.skippedAt) return false;
     const age = nowMs - new Date(t.skippedAt).getTime();
     return age >= REOFFER_FROM_DAYS * MS_PER_DAY && age < REOFFER_UNTIL_DAYS * MS_PER_DAY;
   });
-  if (!open.length) return null;
+}
+
+function rankOpen(open, tasks) {
   const prio = (t) => {
     const i = CARD_PRIORITY.indexOf(t.id);
     return i === -1 ? CARD_PRIORITY.length : i;
   };
   const order = tasks.map((t) => t.id);
-  const sorted = [...open].sort((a, b) =>
+  return [...open].sort((a, b) =>
     a.tier - b.tier ||
     (a.blockedBy ? 1 : 0) - (b.blockedBy ? 1 : 0) ||
     prio(a) - prio(b) ||
     a.secs - b.secs ||
     order.indexOf(a.id) - order.indexOf(b.id)
   );
-  return sorted[0];
 }
 
 /**
@@ -314,7 +729,7 @@ function pickNext(tasks, state, nowMs) {
  * Pure: the same arguments always give the same answer, so it memoizes on
  * the dependency lists Home already keeps.
  */
-export function buildSetup(data, { isPro = false, now = new Date() } = {}) {
+export function buildSetup(data, { isPro = false, isFreeBeta = false, hasSubscription = false, now = new Date() } = {}) {
   const d = data || {};
   const s = d.settings || {};
   const state = normalizeSetupState(s.setupState);
@@ -324,9 +739,14 @@ export function buildSetup(data, { isPro = false, now = new Date() } = {}) {
     s,
     licenses: Array.isArray(d.licenses) ? d.licenses.filter(Boolean) : [],
     isPro,
+    isFreeBeta,
+    hasSubscription,
   };
 
-  const tasks = TASK_DEFS.filter((def) => !def.pro || isPro).map((def) => resolveTask(def, ctx, state));
+  // Pro rows are never dropped from the board, only locked: a free physician
+  // should be able to see what a full packet contains. countTier and the
+  // ranker both skip them, so a paywall can never be the page's next action.
+  const tasks = TASK_DEFS.map((def) => resolveTask(def, ctx, state));
   const tier1 = tasks.filter((t) => t.tier === 1);
   const tier2 = tasks.filter((t) => t.tier === 2);
 
@@ -334,6 +754,8 @@ export function buildSetup(data, { isPro = false, now = new Date() } = {}) {
   // offers About you and nothing else until it is answered.
   const degreeUnset = s.degreeType !== "MD" && s.degreeType !== "DO";
   const candidates = degreeUnset ? tasks.filter((t) => t.id === "identity") : tasks;
+  const open = openTasks(candidates, nowMs);
+  const ranked = rankOpen(open, tasks);
 
   return {
     tasks,
@@ -341,10 +763,15 @@ export function buildSetup(data, { isPro = false, now = new Date() } = {}) {
     tier2,
     byId: Object.fromEntries(tasks.map((t) => [t.id, t])),
     counts: { tier1: countTier(tier1), tier2: countTier(tier2) },
-    next: pickNext(candidates, state, nowMs),
+    open: ranked,
+    next: ranked[0] || null,
+    // The day-30 form offers the cheapest thing left, which is rarely the
+    // most important thing left. That is the point of it.
+    cheapest: open.length ? [...open].sort((a, b) => a.secs - b.secs || ranked.indexOf(a) - ranked.indexOf(b))[0] : null,
     state,
     skipped: tasks.filter((t) => t.status === "skipped"),
     notApplicable: tasks.filter((t) => t.status === "na"),
+    proLive: tier2.filter((t) => t.pro && !t.locked).length,
   };
 }
 
@@ -391,9 +818,23 @@ export function withSnooze(state, untilIso, prune) {
   return write(state, { hiddenUntil: untilIso }, prune);
 }
 
-/** Stamped whenever a task transitions to done; the card reads it. */
-export function withTouched(state, nowIso, prune) {
-  return write(state, { lastTouched: nowIso }, prune);
+/**
+ * Stamped whenever a task transitions to done, along with WHICH task closed.
+ * The re-engagement ladder reads both, so it can say "You finished your
+ * licenses on Monday" out of the physician's own history rather than out of
+ * a generic nag.
+ */
+export function withTouched(state, nowIso, taskId, prune) {
+  return write(state, { lastTouched: nowIso, lastDone: taskId || null }, prune);
+}
+
+/**
+ * Record how many Pro rows are in the denominator now. Written silently when
+ * nothing changed, and only after the change has been narrated when it did:
+ * the fraction is never allowed to renumber without a sentence.
+ */
+export function withProSnapshot(state, { proCounted, betaCounted }, prune) {
+  return write(state, { proCounted, betaCounted }, prune);
 }
 
 /**
@@ -421,13 +862,14 @@ export function withDeclared(state, key, value, prune) {
 
 /* ─── Home card ────────────────────────────────────────────────── */
 
-export const CARD_FORM = { NONE: "none", A: "A", B: "B", D: "D" };
+export const CARD_FORM = { NONE: "none", A: "A", B: "B", C: "C", D: "D" };
 
 /**
  * Which form the Home card takes. Form A is the bordered setup card; it can
  * NEVER return once tier1DoneAt is stamped, so an active physician who adds
  * a dateless record months later gets the one-line Form D, not a setup
- * prompt. Form B is the Protected moment, which renders once.
+ * prompt. Form B is the Protected moment, which renders once. Form C is the
+ * quiet packet line, and Form D is navigation.
  */
 export function homeCardForm(setup, { now = new Date() } = {}) {
   const st = setup.state;
@@ -441,7 +883,136 @@ export function homeCardForm(setup, { now = new Date() } = {}) {
     const hidden = st.hiddenUntil && new Date(st.hiddenUntil).getTime() > new Date(now).getTime();
     return hidden ? CARD_FORM.NONE : CARD_FORM.A;
   }
-  return CARD_FORM.D;
+  // Tier 1 has regressed since it was stamped: name what regressed, in one
+  // line, and never reopen the bordered card for it.
+  if (!complete) return CARD_FORM.D;
+  const t2 = setup.counts.tier2;
+  return t2.total > 0 && !t2.complete ? CARD_FORM.C : CARD_FORM.D;
+}
+
+/* ─── The re-engagement ladder ─────────────────────────────────────
+ * What the card says depends on how long the physician has been away from
+ * it, and every rung is built out of their own records. There is no email
+ * anywhere in this, and no streak: a streak measures return visits on a
+ * board that is supposed to end.
+ */
+
+export const LADDER = { FRESH: "fresh", CONTINUITY: "continuity", COST: "cost", ONE_THING: "oneThing" };
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** "Monday". Only ever used inside a six-day window, where it is unambiguous. */
+export function weekdayName(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : WEEKDAYS[d.getDay()];
+}
+
+/**
+ * Words, not digits, because this appears mid-sentence in the day-30 line.
+ * Every value is one the task table actually carries, so nothing here is a
+ * guess about how long a physician will take.
+ */
+export function secsPhrase(secs) {
+  const n = Number(secs) || 0;
+  if (n <= 10) return "about ten seconds";
+  if (n <= 15) return "about fifteen seconds";
+  if (n <= 20) return "about twenty seconds";
+  if (n <= 30) return "about half a minute";
+  if (n <= 45) return "under a minute";
+  if (n <= 60) return "about a minute";
+  return "a minute or two";
+}
+
+/** Whole days between two instants, floored. */
+const daysBetween = (from, to) => {
+  const a = new Date(from).getTime();
+  const b = new Date(to).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.floor((b - a) / MS_PER_DAY);
+};
+
+/**
+ * The sentence and the button the card should carry right now.
+ *
+ * Day 0 to 1  the exposure itself.
+ * Day 2 to 6  continuity: what they finished, and what comes next.
+ * Day 7 to 29 the cost, quantified out of their own file. Never a statistic
+ *             about physicians in general, because we do not have one.
+ * Day 30+     one line offering the cheapest thing left. Shrinking after a
+ *             month of being ignored is what keeps the card credible.
+ *
+ * Any rung that cannot say something true and specific falls back to day 0.
+ */
+export function ladderState(setup, { now = new Date() } = {}) {
+  const next = setup.next;
+  if (!next) return null;
+  const fresh = { bucket: LADDER.FRESH, taskId: next.id, text: next.cardLine, verb: next.verb };
+
+  const lastTouched = setup.state.lastTouched;
+  if (!lastTouched) return fresh;
+  const days = daysBetween(lastTouched, now);
+  if (days == null || days <= 1) return fresh;
+
+  if (days <= 6) {
+    const closed = setup.byId[setup.state.lastDone];
+    const when = weekdayName(lastTouched);
+    if (!closed?.doneClause || !when || !next.nextPhrase) return fresh;
+    return {
+      bucket: LADDER.CONTINUITY,
+      taskId: next.id,
+      verb: next.verb,
+      text: `You finished ${closed.doneClause} on ${when}. Next: ${next.nextPhrase}.`,
+    };
+  }
+
+  if (days <= 29) {
+    return next.costLine
+      ? { bucket: LADDER.COST, taskId: next.id, verb: next.verb, text: next.costLine }
+      : fresh;
+  }
+
+  const cheapest = setup.cheapest || next;
+  if (!cheapest.nextPhrase) return fresh;
+  return {
+    bucket: LADDER.ONE_THING,
+    taskId: cheapest.id,
+    verb: "Add it",
+    text: `One thing, ${secsPhrase(cheapest.secs)}: ${cheapest.nextPhrase}.`,
+  };
+}
+
+/* ─── The denominator, narrated ────────────────────────────────── */
+
+/** What to record once the current Pro state has been shown to the physician. */
+export function proSnapshot(setup, { isFreeBeta = false } = {}) {
+  return { proCounted: setup.proLive, betaCounted: !!isFreeBeta };
+}
+
+/** True when what is on file already matches what is on screen. */
+export function proSnapshotMatches(setup, { isFreeBeta = false } = {}) {
+  const st = setup.state;
+  return st.proCounted === setup.proLive && st.betaCounted === !!isFreeBeta;
+}
+
+/**
+ * The sentence explaining why the total moved, or null when it did not.
+ * The fraction is the one number on the page a physician is asked to trust,
+ * so it never renumbers in either direction without saying why.
+ */
+export function denominatorNarration(setup, { isFreeBeta = false } = {}) {
+  const st = setup.state;
+  const prev = st.proCounted;
+  const now = setup.proLive;
+  if (prev == null || prev === now) return null;
+  if (now > prev) {
+    const n = now - prev;
+    return `Pro added ${n} ${plural(n, "item", "items")} to your board.`;
+  }
+  const n = prev - now;
+  if (st.betaCounted && !isFreeBeta) {
+    return `The free beta has ended, so ${n} Pro ${plural(n, "item", "items")} left your total. Nothing you entered was removed.`;
+  }
+  return `${n} Pro ${plural(n, "item", "items")} left your total. Nothing you entered was removed.`;
 }
 
 /**

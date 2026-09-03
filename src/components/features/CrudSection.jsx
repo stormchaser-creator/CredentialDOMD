@@ -162,6 +162,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       onPrefillDone?.();
     }
     if (autoOpen) {
+      // Same flag the edit deep link sets: a form opened from somewhere else
+      // owes the physician a trip back when it closes.
+      arrivedByLink.current = true;
       openAdd();
       onAutoOpenDone?.();
     }

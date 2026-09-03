@@ -6,10 +6,12 @@
 // takes. Run: node scripts/setup-tasks.test.mjs
 // Pure node, no test runner. Exit code 1 on any failure.
 import {
-  buildSetup, dateless, normalizeSetupState, pruneSetupState, shortDate,
-  withTask, withDeclared, withSnooze, withStarted, withTier1Done,
+  buildSetup, dateless, datable, normalizeSetupState, pruneSetupState, shortDate,
+  withTask, withDeclared, withSnooze, withStarted, withTier1Done, withProSnapshot,
   homeCardForm, setupOwns, firstRenderPatch, CARD_FORM, CARD_PRIORITY, TASK_DEFS,
   isMedicalLicense, isDea, isCsr, isBoard, isLifeSupport,
+  ladderState, LADDER, denominatorNarration, proSnapshot, proSnapshotMatches,
+  evidenceQueue, runIntro, numberWord, secsPhrase, weekdayName,
 } from "../src/utils/setupTasks.js";
 
 let pass = 0, fail = 0;
@@ -34,6 +36,37 @@ const deaLicense = { id: "d1", type: "DEA Registration", state: "CA", licenseNum
 const settled = () => ({ settings: { ...settledSettings }, licenses: [{ ...doLicense }, { ...deaLicense }], documents: [] });
 const build = (data, opts = {}) => buildSetup(data, { now: NOW, ...opts });
 const statusOf = (setup, id) => setup.byId[id].status;
+// Tier 2 always has open rows, so "nothing next" now means nothing in Tier 1.
+const t1next = (setup) => (setup.next && setup.next.tier === 1 ? setup.next : null);
+
+// The same physician with the packet assembled as well: every free Tier 2
+// row closed, every proof linked with the exact linkedTo CrudSection writes.
+const packedSettings = { ...settledSettings, specialties: ["Neurological Surgery"], profilePhoto: "data:image/png;base64,AA" };
+const packed = () => ({
+  settings: { ...packedSettings },
+  licenses: [
+    { ...doLicense },
+    { ...deaLicense },
+    { id: "b1", type: "Board Certification (AOA)", name: "Neurological Surgery" },
+    { id: "a1", type: "ACLS Certification", expirationDate: "2027-03-01" },
+  ],
+  documents: [
+    { id: "g1", linkedTo: "licenses:l1" },
+    { id: "g2", linkedTo: "licenses:d1" },
+    { id: "g3", linkedTo: "licenses:b1" },
+    { id: "g4", linkedTo: "licenses:a1" },
+    { id: "g5", linkedTo: "education:e1" },
+    { id: "g6", linkedTo: "travelDocs:t1" },
+  ],
+  cme: [{ id: "c1", hours: 20 }],
+  education: [
+    { id: "e1", type: "Doctor of Osteopathic Medicine (DO)" },
+    { id: "e2", type: "Residency Certificate" },
+  ],
+  workHistory: [{ id: "w1", startDate: "2020-07-01" }],
+  travelDocs: [{ id: "t1", type: "Passport", number: "X1234" }],
+  professionalPhotos: [{ id: "ph1" }],
+});
 
 // ── Type matching: MD and DO vocabularies both, or a DO never completes ──
 ok("MD medical license matches", isMedicalLicense({ type: "State Medical License" }));
@@ -133,7 +166,9 @@ eq("dateless never walks privileges or insurance", dateless({
   const notDone = { settings: { ...settledSettings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } }, licenses: [doLicense] };
   eq("na wins over skipped for the same task", statusOf(build({ ...notDone, settings: { ...notDone.settings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } } }), "dea"), "na");
   eq("a skip shows its date", build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: new Date(2026, 8, 4, 12).toISOString() } } } }, licenses: [doLicense] }).byId.dea.detail, "Skipped 4 Sep. Still on the list.");
-  eq("every task carries the escape", TASK_DEFS.length, 5);
+  eq("the board is five protected rows and ten packet rows",
+    [TASK_DEFS.filter((d) => d.tier === 1).length, TASK_DEFS.filter((d) => d.tier === 2).length], [5, 10]);
+  ok("every task has a derived rule, so no checkbox can lie", TASK_DEFS.every((d) => typeof d.doneWhen === "function"));
 }
 
 // ── The denominator ──
@@ -170,13 +205,14 @@ eq("dateless never walks privileges or insurance", dateless({
   eq("two undated licenses read as plural", build({ settings: settledSettings, licenses: [{ id: "a", type: "State Medical License (DO)", state: "CA" }, { id: "n", type: "State Medical License (DO)", state: "TX" }] }).next.cardLine,
     "2 licenses on file with no expiration date. Nothing will warn you about them.");
   eq("the button carries the task's verb", noLicenses.next.verb, "Import my licenses");
-  eq("a settled account has nothing next", build(settled()).next, null);
+  eq("a settled account has nothing left in Tier 1", t1next(build(settled())), null);
+  eq("and falls through to the packet", build(settled()).next.tier, 2);
   const skippedNow = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(1) } } } }, licenses: [doLicense] });
-  eq("a fresh skip leaves the Next rotation", skippedNow.next, null);
+  eq("a fresh skip leaves the Next rotation", t1next(skippedNow), null);
   const skippedOld = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(8) } } } }, licenses: [doLicense] });
   eq("a week-old skip is offered once more", skippedOld.next.id, "dea");
   const skippedAncient = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(30) } } } }, licenses: [doLicense] });
-  eq("an old skip stops fighting the physician every morning", skippedAncient.next, null);
+  eq("an old skip stops fighting the physician every morning", t1next(skippedAncient), null);
 }
 
 // ── Writers and prune-on-write ──
@@ -215,8 +251,10 @@ eq("dateless never walks privileges or insurance", dateless({
   eq("the snooze runs out", homeCardForm(expired, { now: NOW }), CARD_FORM.A);
   const protectedNow = build({ ...settled(), settings: { ...settledSettings, setupState: { startedAt: day(3) } } });
   eq("finishing Tier 1 shows the Protected moment", homeCardForm(protectedNow, { now: NOW }), CARD_FORM.B);
-  const stamped = build({ ...settled(), settings: { ...settledSettings, setupState: { startedAt: day(3), tier1DoneAt: day(1) } } });
+  const stamped = build({ ...packed(), settings: { ...packedSettings, setupState: { startedAt: day(3), tier1DoneAt: day(1) } } });
   eq("the Protected moment never replays", homeCardForm(stamped, { now: NOW }), CARD_FORM.D);
+  const stampedWithPacketLeft = build({ ...settled(), settings: { ...settledSettings, setupState: { startedAt: day(3), tier1DoneAt: day(1) } } });
+  eq("a stamped board with packet work left is the quiet packet line", homeCardForm(stampedWithPacketLeft, { now: NOW }), CARD_FORM.C);
   const neverSeen = build(settled());
   eq("an account that was already set up is never congratulated on first render", homeCardForm(neverSeen, { now: NOW }), CARD_FORM.NONE);
   eq("...and is stamped complete in the same pass instead", firstRenderPatch(neverSeen, { now: NOW }).tier1DoneAt, NOW.toISOString());
@@ -250,10 +288,10 @@ eq("dateless never walks privileges or insurance", dateless({
     licenses: [{ ...doLicense }, { ...deaLicense }, { ...undatedTx }],
     settings: { ...settledSettings, setupState: { startedAt: day(30), tasks: { dates: { s: "skipped", at: day(30) } } } },
   });
-  eq("a skip leaves the task in the denominator", skipped.counts.tier1, { total: 5, done: 4, skipped: 1, na: 0, left: 1, complete: false });
+  eq("a skip leaves the task in the denominator", skipped.counts.tier1, { total: 5, done: 4, skipped: 1, na: 0, left: 1, complete: false, locked: 0 });
   ok("a skip never stamps Tier 1 done", !skipped.state.tier1DoneAt);
   eq("the card stays on Form A", homeCardForm(skipped, { now: NOW }), CARD_FORM.A);
-  eq("but it has nothing left to offer", skipped.next, null);
+  eq("but it has nothing left to offer in Tier 1", t1next(skipped), null);
   eq("the task reads as skipped, not pending", statusOf(skipped, "dates"), "skipped");
   ok("so setup no longer owns the date sentence and the banner comes back", !setupOwns(skipped, "dates", { now: NOW }));
 
@@ -291,7 +329,7 @@ eq("dateless never walks privileges or insurance", dateless({
   ok("a skipped About you hands the profile banner back", !setupOwns(profileSkipped, "identity", { now: NOW }));
 
   // Once Tier 1 is stamped the card is Form D, which owns nothing either.
-  const done = build({ ...settled(), settings: { ...settledSettings, setupState: { startedAt: day(30), tier1DoneAt: day(20) } } });
+  const done = build({ ...packed(), settings: { ...packedSettings, setupState: { startedAt: day(30), tier1DoneAt: day(20) } } });
   eq("a finished board is Form D", homeCardForm(done, { now: NOW }), CARD_FORM.D);
   ok("and Form D owns nothing", !setupOwns(done, "dates", { now: NOW }));
 }
@@ -311,6 +349,255 @@ eq("dateless never walks privileges or insurance", dateless({
 eq("shortDate", shortDate(new Date(2026, 8, 4, 12).toISOString()), "4 Sep");
 eq("shortDate of nothing", shortDate(null), "");
 eq("shortDate of garbage", shortDate("not a date"), "");
+
+
+/* ══ TIER 2 ══════════════════════════════════════════════════════════
+ * The packet rows: their completion rules, their evidence rules, the Pro
+ * denominator in both directions, and the ladder that decides what the card
+ * says after a physician has been away.
+ */
+
+// ── Completion rules, one row at a time ──
+{
+  const t2 = (patch, opts) => build({ ...packed(), ...patch }, opts);
+  const st = (setup, id) => setup.byId[id].status;
+
+  // proof: every medical licence and DEA record needs its copy, and an empty
+  // account is not vacuously finished.
+  eq("proof is documented when every licence and DEA carries a copy", st(build(packed()), "proof"), "documented");
+  eq("one licence without a copy reopens proof",
+    st(t2({ documents: packed().documents.filter((d) => d.linkedTo !== "licenses:d1") }), "proof"), "pending");
+  eq("an account with no licences is not vacuously proved",
+    st(build({ settings: { ...packedSettings }, licenses: [], documents: [] }), "proof"), "pending");
+  eq("proof is blocked by licences, so it never outranks them",
+    build({ settings: { ...packedSettings }, licenses: [], documents: [] }).byId.proof.blockedBy, "licenses");
+  eq("a board certificate is not a licence copy",
+    build({ settings: { ...packedSettings }, licenses: [{ id: "b1", type: "Board Certification (AOA)" }], documents: [] }).byId.proof.status, "pending");
+
+  // boards: the record AND the specialty, never a date.
+  eq("boards needs a specialty as well as the certificate",
+    st(t2({ settings: { ...packedSettings, specialties: [] } }), "boards"), "pending");
+  eq("an AOA certificate closes boards for a DO", st(build(packed()), "boards"), "documented");
+  eq("an ABMS certificate closes boards for an MD", st(build({
+    ...packed(), settings: { ...packedSettings, degreeType: "MD" },
+    licenses: [{ id: "b1", type: "Board Certification (ABMS)" }],
+    documents: [{ id: "g", linkedTo: "licenses:b1" }],
+  }), "boards"), "documented");
+  ok("a lifetime diplomate is never asked for a board expiration date",
+    build({ ...packed(), licenses: [{ id: "b1", type: "Board Certification (AOA)" }] }).byId.boards.status !== "pending");
+
+  // lifeSupport: dated card, by type or by name.
+  eq("an ACLS card with a date closes life support", st(build(packed()), "lifeSupport"), "documented");
+  eq("an undated card does not",
+    st(t2({ licenses: packed().licenses.map((l) => (l.id === "a1" ? { ...l, expirationDate: "" } : l)) }), "lifeSupport"), "pending");
+  eq("BLS named on a generic certification counts", st(build({
+    ...packed(), licenses: [{ id: "x", type: "Certification", name: "BLS renewal", expirationDate: "2027-01-01" }],
+  }), "lifeSupport"), "done");
+
+  // cme, work: presence is the whole rule.
+  eq("one CME entry closes the CME row", st(build(packed()), "cme"), "done");
+  eq("no CME leaves it open", st(t2({ cme: [] }), "cme"), "pending");
+  ok("the CME row takes no evidence", !build(packed()).byId.cme.hasEvidence);
+  eq("one position closes work history", st(build(packed()), "work"), "done");
+  eq("an empty work history does not", st(t2({ workHistory: [] }), "work"), "pending");
+
+  // education: both halves, in either vocabulary.
+  eq("school and training together close education", st(build(packed()), "education"), "documented");
+  eq("school alone does not", st(t2({ education: [{ id: "e1", type: "Doctor of Medicine (MD)" }] }), "education"), "pending");
+  eq("training alone does not", st(t2({ education: [{ id: "e2", type: "Fellowship Certificate" }] }), "education"), "pending");
+  eq("an MD degree closes the school half", st(build({
+    ...packed(), education: [{ id: "e1", type: "Doctor of Medicine (MD)" }, { id: "e2", type: "Internship Certificate" }], documents: [],
+  }), "education"), "done");
+
+  // idPhoto: an ID with a number, plus a headshot from either place.
+  eq("a passport with a number and a headshot close it", st(build(packed()), "idPhoto"), "documented");
+  eq("a passport with no number is not an ID on file",
+    st(t2({ travelDocs: [{ id: "t1", type: "Passport" }] }), "idPhoto"), "pending");
+  eq("a loyalty card is not a photo ID",
+    st(t2({ travelDocs: [{ id: "t1", type: "Airline loyalty", number: "99" }] }), "idPhoto"), "pending");
+  eq("the profile photo counts as the headshot", st(build({
+    ...packed(), professionalPhotos: [], settings: { ...packedSettings, profilePhoto: "data:image/png;base64,AA" },
+  }), "idPhoto"), "documented");
+  eq("neither photo anywhere leaves it open", st(build({
+    ...packed(), professionalPhotos: [], settings: { ...packedSettings, profilePhoto: "" },
+  }), "idPhoto"), "pending");
+}
+
+// ── The three Pro rows ──
+{
+  const pro = (patch) => build({ ...packed(), ...patch }, { isPro: true });
+  const privileged = { privileges: [{ id: "p1", expirationDate: "2027-01-01" }] };
+
+  eq("dated privileges close the row", pro(privileged).byId.privileges.status, "done");
+  eq("one undated privilege reopens it",
+    pro({ privileges: [{ id: "p1", expirationDate: "2027-01-01" }, { id: "p2" }] }).byId.privileges.status, "pending");
+  eq("a linked reappointment letter lights the proof dot", pro({
+    ...privileged, documents: [...packed().documents, { id: "d", linkedTo: "privileges:p1" }],
+  }).byId.privileges.status, "documented");
+
+  eq("a dated malpractice policy closes the row",
+    pro({ insurance: [{ id: "i1", type: "Medical Malpractice (Claims-Made)", expirationDate: "2027-01-01" }] }).byId.malpractice.status, "done");
+  eq("tail coverage counts as malpractice",
+    pro({ insurance: [{ id: "i1", type: "Tail Coverage", expirationDate: "2027-01-01" }] }).byId.malpractice.status, "done");
+  eq("health insurance does not",
+    pro({ insurance: [{ id: "i1", type: "Health Insurance (personal)", expirationDate: "2027-01-01" }] }).byId.malpractice.status, "pending");
+  eq("an undated policy does not",
+    pro({ insurance: [{ id: "i1", type: "Tail Coverage" }] }).byId.malpractice.status, "pending");
+
+  const refs = (n) => Array.from({ length: n }, (_, i) => ({ id: `r${i}`, name: `Ref ${i}`, email: `r${i}@x.com` }));
+  eq("three reachable references close the row", pro({ peerReferences: refs(3) }).byId.references.status, "done");
+  eq("two do not", pro({ peerReferences: refs(2) }).byId.references.status, "pending");
+  eq("a reference with no way to reach them does not count",
+    pro({ peerReferences: [...refs(2), { id: "r9", name: "Ref 9" }] }).byId.references.status, "pending");
+  ok("a reference is a contact, not a certificate, so it takes no proof",
+    !pro({ peerReferences: refs(3) }).byId.references.hasEvidence);
+}
+
+// ── The Pro denominator, and the beta ──
+{
+  const free = build(packed());
+  eq("a free account counts seven packet rows", [free.counts.tier2.total, free.counts.tier2.done], [7, 7]);
+  eq("and its packet is complete with the three Pro rows still locked", free.counts.tier2.complete, true);
+  eq("the Pro rows are still on the board, just locked", free.counts.tier2.locked, 3);
+  ok("every locked row is a Pro row", free.tier2.filter((t) => t.locked).every((t) => t.pro));
+  ok("a locked row never becomes the next action", !free.open.some((t) => t.locked));
+
+  const pro = build(packed(), { isPro: true });
+  eq("Pro counts ten", pro.counts.tier2.total, 10);
+  eq("and reopens the board", pro.counts.tier2.complete, false);
+  eq("the ranker offers a Pro row once the account can reach it", pro.next.pro, true);
+
+  // While the free beta runs, the Pro rows are live and counted for
+  // everyone, tagged rather than sold: PricingModal CTAs are hidden, so an
+  // upgrade link would lead nowhere.
+  const beta = build(packed(), { isPro: true, isFreeBeta: true, hasSubscription: false });
+  ok("beta rows are unlocked", !beta.tier2.some((t) => t.locked));
+  eq("beta rows carry the tag", beta.tier2.filter((t) => t.betaTag).length, 3);
+  const subscriber = build(packed(), { isPro: true, isFreeBeta: true, hasSubscription: true });
+  ok("a real subscriber is never tagged Free beta", !subscriber.tier2.some((t) => t.betaTag));
+
+  // na leaves the denominator; a skip stays in it. Same rule as Tier 1.
+  const naCme = build({ ...packed(), settings: { ...packedSettings, setupState: { tasks: { cme: { s: "na", at: day(1) } } } }, cme: [] });
+  eq("a packet row marked inapplicable leaves the total", naCme.counts.tier2.total, 6);
+  const skippedCme = build({ ...packed(), settings: { ...packedSettings, setupState: { tasks: { cme: { s: "skipped", at: day(1) } } } }, cme: [] });
+  eq("a skipped packet row stays in the total", [skippedCme.counts.tier2.total, skippedCme.counts.tier2.done], [7, 6]);
+}
+
+// ── The denominator, narrated ──
+{
+  const withPro = (n, betaCounted) => build({
+    ...packed(),
+    settings: { ...packedSettings, setupState: { startedAt: day(9), proCounted: n, betaCounted } },
+  }, { isPro: true });
+
+  eq("a board that has never been recorded says nothing", denominatorNarration(build(packed())), null);
+  eq("an unchanged board says nothing", denominatorNarration(withPro(3, false), { isFreeBeta: false }), null);
+  eq("Pro arriving is narrated", denominatorNarration(withPro(0, false), { isFreeBeta: false }),
+    "Pro added 3 items to your board.");
+
+  const betaEnded = build({
+    ...packed(),
+    settings: { ...packedSettings, setupState: { startedAt: day(9), proCounted: 3, betaCounted: true } },
+  }, { isPro: false, isFreeBeta: false });
+  eq("the beta ending is narrated in its own words", denominatorNarration(betaEnded, { isFreeBeta: false }),
+    "The free beta has ended, so 3 Pro items left your total. Nothing you entered was removed.");
+
+  const lapsed = build({
+    ...packed(),
+    settings: { ...packedSettings, setupState: { startedAt: day(9), proCounted: 3, betaCounted: false } },
+  }, { isPro: false, isFreeBeta: false });
+  eq("a plain drop does not blame the beta", denominatorNarration(lapsed, { isFreeBeta: false }),
+    "3 Pro items left your total. Nothing you entered was removed.");
+
+  const snap = proSnapshot(build(packed(), { isPro: true, isFreeBeta: true }), { isFreeBeta: true });
+  eq("the snapshot records the count and why", snap, { proCounted: 3, betaCounted: true });
+  ok("a fresh board does not match a null record", !proSnapshotMatches(build(packed()), { isFreeBeta: false }));
+  const recorded = withProSnapshot({ startedAt: day(1) }, { proCounted: 0, betaCounted: false });
+  eq("recording it survives normalization", [recorded.proCounted, recorded.betaCounted], [0, false]);
+  ok("recorded, it matches", proSnapshotMatches(build({
+    ...packed(), settings: { ...packedSettings, setupState: recorded },
+  }), { isFreeBeta: false }));
+}
+
+// ── The re-engagement ladder ──
+{
+  // A physician mid-setup: licences imported, none of them dated.
+  const stalled = (lastTouched, lastDone) => build({
+    settings: {
+      ...settledSettings,
+      setupState: { startedAt: day(40), lastTouched, lastDone },
+    },
+    licenses: [
+      { id: "a", type: "State Medical License (DO)", state: "CA", expirationDate: "2027-01-01" },
+      { id: "b", type: "State Medical License (DO)", state: "TX" },
+    ],
+    documents: [],
+  });
+
+  eq("with nothing touched yet the card names the exposure", ladderState(stalled(null), { now: NOW }).bucket, LADDER.FRESH);
+  eq("and that sentence is the task's own", ladderState(stalled(null), { now: NOW }).text,
+    "1 license on file with no expiration date. Nothing will warn you about it.");
+  eq("yesterday is still day zero", ladderState(stalled(day(1), "licenses"), { now: NOW }).bucket, LADDER.FRESH);
+
+  const cont = ladderState(stalled(day(3), "licenses"), { now: NOW });
+  eq("three days out leads with continuity", cont.bucket, LADDER.CONTINUITY);
+  eq("naming what they finished and what is next", cont.text,
+    `You finished your licenses on ${weekdayName(day(3))}. Next: the expiration date on your Texas license.`);
+  eq("continuity with no record of what closed falls back", ladderState(stalled(day(3), null), { now: NOW }).bucket, LADDER.FRESH);
+
+  const cost = ladderState(stalled(day(10), "licenses"), { now: NOW });
+  eq("a week out states the cost", cost.bucket, LADDER.COST);
+  eq("counted out of their own file, never a statistic about physicians", cost.text,
+    "1 of your 2 licenses has no expiration date on file. No reminder can fire for it until it does.");
+
+  // Nothing true and specific to say at this rung: fall back to day zero.
+  const noCost = build({
+    settings: { ...settledSettings, setupState: { startedAt: day(40), lastTouched: day(10), lastDone: "identity" } },
+    licenses: [],
+  });
+  eq("with nothing quantifiable the cost rung falls back", ladderState(noCost, { now: NOW }).bucket, LADDER.FRESH);
+
+  const one = ladderState(stalled(day(40), "licenses"), { now: NOW });
+  eq("a month out shrinks to one line", one.bucket, LADDER.ONE_THING);
+  eq("offering the cheapest thing left", one.text, "One thing, about ten seconds: the expiration date on your Texas license.");
+  eq("with a button that just does it", one.verb, "Add it");
+  eq("and it is the cheapest, not the most important", stalled(day(40), "licenses").cheapest.id, "dates");
+
+  eq("a board with nothing open has no ladder at all", ladderState(build({
+    ...packed(),
+    settings: { ...packedSettings, setupState: { startedAt: day(40), lastTouched: day(40), lastDone: "cme" } },
+  }), { now: NOW }), null);
+}
+
+// ── The phrase builders the ladder and the run depend on ──
+{
+  eq("numbers are words up to twelve", [numberWord(1), numberWord(8), numberWord(12), numberWord(13)], ["one", "eight", "twelve", "13"]);
+  eq("the run intro counts in words", runIntro(8),
+    "Eight licenses need two things: the date they expire and a copy of the certificate. Photograph them one after another and the app reads both off the page.");
+  eq("one record reads as one record", runIntro(1),
+    "One license needs two things: the date it expires and a copy of the certificate. Photograph it and the app reads both off the page.");
+  eq("the run intro takes the section's own noun", runIntro(2, "privileges", "privilege").slice(0, 14), "Two privileges");
+  eq("estimates are words, mid-sentence", [secsPhrase(10), secsPhrase(20), secsPhrase(45), secsPhrase(90)],
+    ["about ten seconds", "about twenty seconds", "under a minute", "a minute or two"]);
+  eq("a weekday reads as a weekday", weekdayName("2026-09-07T12:00:00.000Z").length > 0, true);
+  eq("garbage has no weekday", weekdayName("not a date"), "");
+  eq("datable is dateless plus the ones already dated", datable(packed()).length, 2);
+}
+
+// ── The capture queues ──
+{
+  const q = evidenceQueue(packed(), "proof");
+  eq("a fully proved account has an empty proof queue", [q.section, q.records.length], ["licenses", 0]);
+  const missing = evidenceQueue({ ...packed(), documents: [] }, "proof");
+  eq("the queue is exactly the records still missing their copy",
+    [missing.section, missing.records.map((r) => r.id)], ["licenses", ["l1", "d1"]]);
+  eq("the privileges queue walks privileges",
+    evidenceQueue({ ...packed(), privileges: [{ id: "p1" }] }, "privileges").records.map((r) => r.id), ["p1"]);
+  eq("the ID queue walks travel documents",
+    evidenceQueue({ ...packed(), documents: [] }, "idPhoto").records.map((r) => r.id), ["t1"]);
+  eq("a row that takes no proof has no queue", evidenceQueue(packed(), "cme"), { section: null, records: [] });
+  eq("an empty file gives an empty queue, never a crash", evidenceQueue(null, "proof").records.length, 0);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
