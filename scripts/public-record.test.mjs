@@ -106,6 +106,21 @@ eq("one license per state and number", twoRows.filter(f => f.section === "licens
 eq("primary taxonomy wins the description", twoRows.filter(f => f.section === "licenses")[0].fields.notes,
   "Imported from NPPES NPI Registry (Neurological Surgery)");
 eq("a taxonomy with no number is skipped", twoRows.filter(f => f.fields.state === "NV").length, 0);
+// A credential the registry files as "--" names no degree, and the DO license
+// list has no plain "State Medical License", so no type is guessed at.
+const noDegree = normalizeNppes({
+  results: [{
+    number: "1518456078",
+    basic: { first_name: "ERIC", last_name: "WHITNEY", credential: "--" },
+    taxonomies: [{ code: "207T00000X", desc: "Neurological Surgery", license: "20A17841", primary: true, state: "CA" }],
+  }],
+}, CTX);
+const noDegreeLicense = noDegree.filter(f => f.section === "licenses")[0];
+eq("no degree means no license type is guessed", noDegreeLicense.fields.type, undefined);
+eq("no degree asks for the type", noDegreeLicense.needs, ["type", "expirationDate"]);
+eq("no degree still carries the number", noDegreeLicense.fields.licenseNumber, "20A17841");
+eq("no degree proposes no degree", noDegree.filter(f => f.kind === "profileDegree").length, 0);
+
 eq("nppes with no results", normalizeNppes({ results: [] }, CTX), []);
 eq("nppes with nothing at all", normalizeNppes(null, CTX), []);
 
@@ -179,7 +194,7 @@ eq("author term needs a surname", pubmedAuthorTerm({ firstName: "Eric" }), "");
 eq("author term from a shouting register", pubmedAuthorTerm({ firstName: "ERIC", lastName: "WHITNEY" }), '"Whitney E"[Author]');
 
 const pubs = normalizePubmed(PM_SUMMARY, CTX, '"Whitney E"[Author]');
-eq("four papers in the fixture", pubs.length, 4);
+eq("five records in the fixture", pubs.length, 5);
 eq("every paper is a lead", [...new Set(pubs.map(f => f.confidence))], ["lead"]);
 eq("every paper lands in publications", [...new Set(pubs.map(f => f.section))], ["publications"]);
 ok("every paper says the match is by name",
@@ -198,9 +213,31 @@ ok("the note names the search term", volcano.fields.notes.includes('"Whitney E"[
 // The fixture is a seismology paper by a different Whitney E, which is exactly
 // why nothing here may be presented as the physician's own work.
 ok("a name match returns other people's papers", /volcano/i.test(volcano.fields.citation));
+
+// A StatPearls chapter: PubMed leaves source and fulljournalname empty and
+// carries the venue in booktitle. Reading only the journal fields dropped the
+// venue out of the citation, which is the line that goes on the CV.
+const chapter = byId(pubs, "pubmed:publication:31424740");
+eq("a book record has no journal at all", [PM_SUMMARY.result["31424740"].source, PM_SUMMARY.result["31424740"].fulljournalname], ["", ""]);
+ok("a chapter citation names the book", chapter.fields.citation.includes("StatPearls"),
+  chapter.fields.citation);
+eq("the chapter citation reads as a citation", chapter.fields.citation,
+  "Whitney E, Munakomi S. Hoffmann Sign. StatPearls. 2026.");
+ok("the chapter short name leads with the book", chapter.fields.name.startsWith("StatPearls "), chapter.fields.name);
+ok("the chapter detail names the book before the year", chapter.detail.startsWith("StatPearls, 2026"), chapter.detail);
+ok("the chapter detail never opens on a bare year", !/^\d{4}/.test(chapter.detail), chapter.detail);
+eq("a chapter is still only a lead", chapter.confidence, "lead");
+
+// Nothing to name the venue with leaves the title standing on its own rather
+// than a name that opens on a colon.
+const venueless = normalizePubmed({
+  result: { uids: ["9"], "9": { uid: "9", title: "A note.", authors: [{ name: "Whitney E" }] } },
+}, CTX);
+eq("no venue and no year still reads", venueless[0].fields.name, "A note");
+
 eq("pubmed with nothing", normalizePubmed(null, CTX), []);
-eq("the search fixture is the one these summaries came from",
-  PM_SEARCH.esearchresult.idlist.slice(0, 4).sort(), PM_SUMMARY.result.uids.slice().sort());
+ok("every summary came from the search fixture",
+  PM_SUMMARY.result.uids.every(id => PM_SEARCH.esearchresult.idlist.includes(id)));
 
 // ── Dedupe against what is already on file ──────────────────────────────────
 eq("license key ignores typing", dedupeKey("licenses", { state: "CA", licenseNumber: "20A-17841" }),
@@ -226,6 +263,26 @@ eq("a paper already saved is flagged", byId(marked, "pubmed:publication:42350380
 eq("a profile value already set is flagged", byId(marked, "nppes:profile:name").alreadyOnFile, true);
 eq("a profile value not set is proposed", byId(marked, "nppes:profile:practiceAddress").alreadyOnFile, false);
 eq("nothing is dropped by the dedupe", marked.length, nppes.length + cms.length + affs.length + pubs.length);
+
+// Medicare files the school as "OTHER", so the education finding has a degree
+// and no school. Without a second key it would be proposed again forever.
+eq("education keys on the degree when there is no school",
+  dedupeKey("education", { type: "Doctor of Osteopathic Medicine (DO)" }),
+  "education:type:DOCTOROFOSTEOPATHICMEDICINEDO");
+eq("education still keys on the school when there is one",
+  dedupeKey("education", { type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }), "education:PCOM");
+const withSchool = markAlreadyOnFile(cms, {
+  education: [{ type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }],
+});
+eq("a degree already on file is flagged even when Medicare has no school",
+  byId(withSchool, "cms:education:medicalSchool").alreadyOnFile, true);
+const otherDegree = markAlreadyOnFile(cms, {
+  education: [{ type: "Doctor of Medicine (MD)", institution: "PCOM" }],
+});
+eq("a different degree on file is not a match",
+  byId(otherDegree, "cms:education:medicalSchool").alreadyOnFile, false);
+eq("nothing else was flagged by the education key",
+  withSchool.filter(f => f.alreadyOnFile).map(f => f.id), ["cms:education:medicalSchool"]);
 
 // ── The whole envelope ──────────────────────────────────────────────────────
 const env = buildEnvelope({

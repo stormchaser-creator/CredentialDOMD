@@ -248,6 +248,10 @@ export function normalizeNppes(raw: any, ctx: NormalizeContext): Finding[] {
     const key = licenseKey(state, licenseNumber);
     if (seen.has(key)) continue;
     const desc = clean(t?.desc);
+    // With no MD or DO in the credential there is no license type this app
+    // offers for certain: the DO list has no plain "State Medical License",
+    // so the type is left for the physician to pick rather than guessed.
+    const type = degree ? licenseTypeFor(degree) : "";
     seen.set(key, {
       id: `nppes:license:${key}`,
       section: "licenses",
@@ -255,13 +259,13 @@ export function normalizeNppes(raw: any, ctx: NormalizeContext): Finding[] {
       label: `${state} medical license ${licenseNumber}`,
       detail: "The NPI registry carries this license number under your taxonomy record. It does not carry the issue or expiration date, so add the expiration date from your license before you save it.",
       fields: {
-        type: licenseTypeFor(degree),
+        ...(type ? { type } : {}),
         name: `${state} Medical License`,
         licenseNumber,
         state,
         notes: `Imported from NPPES NPI Registry${desc ? ` (${desc})` : ""}`,
       },
-      needs: ["expirationDate"],
+      needs: type ? ["expirationDate"] : ["type", "expirationDate"],
       source,
       confidence: "record",
     });
@@ -444,6 +448,10 @@ export function normalizePubmed(esummary: any, ctx: NormalizeContext, term = "")
     const title = clean(item.title).replace(/\.$/, "");
     const journal = clean(item.source);
     const journalFull = clean(item.fulljournalname);
+    // Book chapters (StatPearls and the like) carry no journal at all: the
+    // venue lives in booktitle, and a citation without it is an unusable CV line.
+    const book = clean(item.booktitle);
+    const venue = journal || book;
     const year = (clean(item.pubdate).match(/\d{4}/) || [""])[0];
     const authors = authorList(arr(item.authors));
     const volume = clean(item.volume);
@@ -454,7 +462,7 @@ export function normalizePubmed(esummary: any, ctx: NormalizeContext, term = "")
     let cite = "";
     if (authors) cite += `${authors.replace(/\.$/, "")}. `;
     if (title) cite += `${title}. `;
-    if (journal) cite += `${journal}. `;
+    if (venue) cite += `${venue}. `;
     if (year) {
       cite += year;
       if (volume) cite += `;${volume}`;
@@ -470,7 +478,10 @@ export function normalizePubmed(esummary: any, ctx: NormalizeContext, term = "")
     if (cite) fields.citation = cite;
     if (year) fields.year = year;
     if (doi) fields.doi = doi;
-    fields.name = [journal, year].filter(Boolean).join(" ") + (shortTitle ? `: ${shortTitle}` : "");
+    const stem = [venue, year].filter(Boolean).join(" ");
+    fields.name = stem
+      ? stem + (shortTitle ? `: ${shortTitle}` : "")
+      : (shortTitle || `PMID ${pmid}`);
     fields.notes = `Found on PubMed by author name${term ? ` (${term})` : ""}. Confirm this is your paper.`;
 
     out.push({
@@ -479,7 +490,7 @@ export function normalizePubmed(esummary: any, ctx: NormalizeContext, term = "")
       kind: "publication",
       label: shortTitle || `PMID ${pmid}`,
       detail: [
-        [journalFull || journal, year].filter(Boolean).join(", "),
+        [journalFull || journal || book, year].filter(Boolean).join(", "),
         authors ? `Authors: ${authors}` : "",
         "Matched by author name only. PubMed cannot tell two authors with the same name apart, so check the title, journal and co-authors before you accept it.",
       ].filter(Boolean).join(". ").replace(/\.\./g, "."),
@@ -527,9 +538,28 @@ export function dedupeKey(section: string, item: any): string {
   }
   if (section === "education") {
     const i = norm(item?.institution);
-    return i ? `education:${i}` : "";
+    if (i) return `education:${i}`;
+    // Medicare files the school as "OTHER", so the medical school finding
+    // carries a degree type and no institution. A physician holds one MD or
+    // one DO, so the degree alone identifies the row already on file.
+    const t = norm(item?.type);
+    return t ? `education:type:${t}` : "";
   }
   return "";
+}
+
+/**
+ * Every key a record already on file answers to. An education row typed with
+ * a school also answers to its degree, so a finding that has the degree and
+ * no school still recognizes it.
+ */
+function dedupeKeysOnFile(section: string, item: any): string[] {
+  const keys = [dedupeKey(section, item)];
+  if (section === "education") {
+    const t = clean(item?.type).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (t) keys.push(`education:type:${t}`);
+  }
+  return keys.filter(Boolean);
 }
 
 /**
@@ -546,8 +576,7 @@ export function markAlreadyOnFile(
   const have = new Set<string>();
   for (const [section, items] of Object.entries(existing || {})) {
     for (const item of arr(items)) {
-      const k = dedupeKey(section, item);
-      if (k) have.add(k);
+      for (const k of dedupeKeysOnFile(section, item)) have.add(k);
     }
   }
   return findings.map((f) => {
