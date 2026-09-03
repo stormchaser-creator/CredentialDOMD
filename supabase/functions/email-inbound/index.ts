@@ -210,9 +210,16 @@ function pickOurAddress(ev: NonNullable<ReceivedEvent["data"]>): string {
   return ours ?? candidates[0] ?? "";
 }
 
-/** ilike pattern with % and _ escaped so an address is matched literally. */
+/**
+ * ilike pattern with every wildcard escaped, so an address is matched literally.
+ *
+ * Three characters, not two. % and _ are SQL's; * is PostgREST's, which
+ * rewrites it to % on the way to the ilike operator. Leaving * unescaped made
+ * every lookup below a prefix search over addresses. Kept identical to
+ * ilikeLiteral in supabase/functions/forwarding-address/lib.ts.
+ */
 function ilikeLiteral(s: string): string {
-  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+  return s.replace(/[\\%_*]/g, (c) => `\\${c}`);
 }
 
 function isAutomatedSender(from: string, headers: Record<string, string>): boolean {
@@ -395,40 +402,35 @@ async function countSince(minutes: number, apply: (q: AnyQuery) => AnyQuery = (q
 // ─── Shared by the physician routes (cme@, docs@) ─────────────────────────────
 
 /**
- * Sender -> profile, in two passes.
+ * Sender -> profile, in two passes. This function decides whose account
+ * receives a forwarded credentialing document, attachments and all, so the
+ * order of the passes is the whole security question.
  *
- * First profiles.email, the address the physician typed in Settings. Then
- * forwarding_addresses: an extra address they registered and CONFIRMED by
- * clicking a link sent to that mailbox (the forwarding-address function owns
- * that flow). Credentialing mail arrives at a work address, so the common case
- * is a physician who signed up as name@gmail.com forwarding from
- * name@hospital.org; without the second pass that message is refused.
+ * PROVEN FIRST. forwarding_addresses is checked before profiles.email, because
+ * the two claims are not equally good. A forwarding address is usable only
+ * after somebody opened a link sent to that mailbox and pressed Confirm, so it
+ * is evidence of control. profiles.email is a text box in Settings: a physician
+ * types it, nobody checks it, and migration 20260819_lock_access_status
+ * deliberately left the column editable by its owner (the identity lock freezes
+ * auth_user_id and access_status, not email).
  *
- * Only verified_at rows count, and a verified address is unique across
- * accounts (partial unique index), so this pass can match at most one account.
+ * While the typed address won, that asymmetry was a takeover: an account that
+ * typed name@hospital.org into its own profile outranked the account that had
+ * confirmed name@hospital.org by reading the mailbox, and the forwarded mail
+ * went to the one that typed it. Confirmed now wins, and profiles.email is a
+ * fallback for the ordinary case where nobody registered anything.
  *
- * What the second pass does NOT do is make this whole matcher proof-of-mailbox.
- * A forwarding address is usable only after the mailbox owner clicks a link
- * sent to it; profiles.email, checked first and outranking it, is self-asserted
- * and is not verified by that flow. Any signed-in account can type any address
- * into profiles.email (the identity lock freezes auth_user_id and
- * access_status, not email) and this function will route mail forwarded from
- * that address to them. Closing that means re-locking the column, which
- * migration 20260819_lock_access_status unlocked on purpose, naming inbound
- * matching as one of the flows that needed it. Owner's call, not this file's.
+ * The other half of that fix lives in the database: profiles.email carries a
+ * unique index on lower(email) (migration 20260903e), so a second account
+ * cannot even hold a copy of an address the first one typed.
+ *
+ * Only verified_at rows count in pass 1, and a verified address is unique
+ * across accounts (partial unique index), so pass 1 matches at most one
+ * account. Both passes filter ilike results down to an exact lowercased match:
+ * ilike folds more than case, and this decides where a document lands.
  */
 async function matchProfile(from: string): Promise<MatchedProfile | null> {
-  const direct = await profilesByIds(async () => {
-    const { data: rows, error } = await db.from("profiles")
-      .select("id, auth_user_id, email, access_status")
-      .ilike("email", ilikeLiteral(from))
-      .limit(5);
-    if (error) throw new Error(`profile lookup: ${error.message}`);
-    return ((rows ?? []) as ProfileLookupRow[]).filter((p) => (p.email ?? "").trim().toLowerCase() === from);
-  });
-  if (direct) return direct;
-
-  return await profilesByIds(async () => {
+  const confirmed = await profilesByIds(async () => {
     const { data: addrs, error } = await db.from("forwarding_addresses")
       .select("user_id, email, verified_at")
       .ilike("email", ilikeLiteral(from))
@@ -443,6 +445,16 @@ async function matchProfile(from: string): Promise<MatchedProfile | null> {
       .select("id, auth_user_id, email, access_status").in("id", owners).limit(5);
     if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
     return (rows ?? []) as ProfileLookupRow[];
+  });
+  if (confirmed) return confirmed;
+
+  return await profilesByIds(async () => {
+    const { data: rows, error } = await db.from("profiles")
+      .select("id, auth_user_id, email, access_status")
+      .ilike("email", ilikeLiteral(from))
+      .limit(5);
+    if (error) throw new Error(`profile lookup: ${error.message}`);
+    return ((rows ?? []) as ProfileLookupRow[]).filter((p) => (p.email ?? "").trim().toLowerCase() === from);
   });
 }
 

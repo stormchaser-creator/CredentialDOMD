@@ -23,9 +23,12 @@ export const REQUESTS_INBOX = `docs@${INBOX_DOMAIN}`;
 export const CME_INBOX = `cme@${INBOX_DOMAIN}`;
 
 // Mirrors of the server's caps (lib.ts). Used to disable a control and say
-// why, never to authorize one.
+// why, never to authorize one. LINK_TTL_HOURS is here so the hint under the
+// field cannot quote a lifetime the server stopped using; the test asserts it
+// against the server's TOKEN_TTL_HOURS.
 export const MAX_PENDING_PER_ACCOUNT = 5;
 export const SEND_COOLDOWN_MINUTES = 10;
+export const LINK_TTL_HOURS = 2;
 
 /** "Name <A@B.com>" | " A@B.com " -> "a@b.com". Same shape the matcher compares. */
 export function normalizeAddress(raw) {
@@ -34,8 +37,11 @@ export function normalizeAddress(raw) {
   return (m ? m[1] : s).trim().toLowerCase();
 }
 
+// `*` is excluded for the same reason the server excludes it: PostgREST maps
+// it to % inside an ilike pattern, so an address carrying one is a search
+// pattern rather than an address.
 const EMAIL_RE =
-  /^[^\s@,;:<>"()[\]\\]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+  /^[^\s@,;:<>"()[\]\\*]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 
 /** One address, no display name, no list. Same narrow check as the server. */
 export function isAddressShaped(email) {
@@ -146,11 +152,16 @@ export function sentAgoLabel(iso, nowMs = Date.now()) {
  * The state line under a waiting address. The badge beside it already says
  * "Waiting", so this line spends its words on the two things the badge cannot
  * say: when the link went out, and that the address is inert until someone
- * opens it from that mailbox.
+ * opens it from that mailbox and presses the button on the page.
+ *
+ * That last clause is load-bearing, not padding. Opening the link confirms
+ * nothing now: it renders a page with one Confirm button, so a hospital link
+ * scanner fetching the URL cannot attach the address. A physician watching this
+ * row needs to know that a colleague who merely clicked has not finished.
  */
 export function pendingLine(row, nowMs = Date.now()) {
   const ago = sentAgoLabel(row?.last_sent_at, nowMs);
-  const tail = "Nothing is routed here until the link is opened from that mailbox.";
+  const tail = "Nothing is routed here until someone opens the link from that mailbox and presses Confirm.";
   return ago ? `Link sent ${ago}. ${tail}` : tail;
 }
 

@@ -10,7 +10,7 @@ const {
   INBOX_DOMAIN, REQUESTS_INBOX, CME_INBOX, MAX_PENDING_PER_ACCOUNT, SEND_COOLDOWN_MINUTES,
   normalizeAddress, isAddressShaped, domainOf, addProblem, pendingCount,
   sortAddresses, forwardingSenders, joinAddresses,
-  cooldownRemainingMs, sentAgoLabel, pendingLine, resendBlockedReason,
+  cooldownRemainingMs, sentAgoLabel, pendingLine, resendBlockedReason, LINK_TTL_HOURS,
 } = await import("../src/utils/forwardingAddresses.js");
 
 const server = await import("../supabase/functions/forwarding-address/lib.ts");
@@ -117,13 +117,34 @@ eq("cooldown matches the server", cooldownRemainingMs(at(3), t0), server.cooldow
 eq("cooldown is over after ten minutes", cooldownRemainingMs(at(10), t0), 0);
 eq("no send yet, no cooldown", cooldownRemainingMs(null, t0), 0);
 
-const inert = "Nothing is routed here until the link is opened from that mailbox.";
+// Opening the link no longer confirms anything: it renders a page with one
+// Confirm button, so a hospital link scanner fetching the URL cannot attach the
+// address. A physician watching a waiting row has to know that a colleague who
+// merely clicked has not finished, which is why the line says "and presses
+// Confirm" rather than stopping at "opens the link".
+const inert = "Nothing is routed here until someone opens the link from that mailbox and presses Confirm.";
 eq("the waiting line names when the link went out",
   pendingLine({ last_sent_at: at(4) }, t0), `Link sent 4 minutes ago. ${inert}`);
 eq("the waiting line without a send time still says the address is inert",
   pendingLine({ last_sent_at: null }, t0), inert);
 ok("the waiting line never implies a waiting address already routes mail",
-  pendingLine({ last_sent_at: at(4) }, t0).includes("until the link is opened"));
+  pendingLine({ last_sent_at: at(4) }, t0).includes("Nothing is routed here until"));
+ok("the waiting line says opening the link is not the finish",
+  pendingLine({ last_sent_at: at(4) }, t0).includes("presses Confirm"));
+
+// ── The client mirrors the server's link lifetime ───────────────────────────
+// The hint under the Add field quotes this number. It has to be the server's,
+// or the field promises a lifetime the token does not have.
+eq("the client quotes the server's link lifetime", LINK_TTL_HOURS, server.TOKEN_TTL_HOURS);
+eq("that lifetime is two hours", LINK_TTL_HOURS, 2);
+
+// ── The ilike wildcard the server refuses, the client refuses too ───────────
+ok("an address carrying a * is refused here as well", !isAddressShaped("chief*@hospital.org"));
+eq("the client and the server agree about *",
+  isAddressShaped("chief*@hospital.org"), server.isEmailShaped("chief*@hospital.org"));
+eq("a * address gets the malformed message, not a round trip",
+  addProblem({ email: "chief*@hospital.org", accountEmail: "me@gmail.com", rows: [] }),
+  "That does not look like an email address.");
 
 eq("resend is blocked inside the ten minutes",
   resendBlockedReason({ verified_at: null, last_sent_at: at(3) }, t0),

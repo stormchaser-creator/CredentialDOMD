@@ -337,7 +337,11 @@ export async function replayPendingOps(profileId, authUserId) {
           const row = settingsToProfileRow(op.payload || {});
           row.updated_at = new Date().toISOString();
           const { error } = await supabase.from("profiles").update(row).eq("id", profileId);
-          ok = !error;
+          // A duplicate email (profiles_email_unique_key, 20260903e) is the one
+          // failure retrying cannot fix: another account holds that address, and
+          // it will still hold it on the next replay. Drop the op instead of
+          // carrying it forever.
+          ok = !error || error.code === "23505";
         } catch { ok = false; }
       } else if (op.op === "tombstone") {
         ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload);
@@ -494,6 +498,12 @@ export async function saveSettings(userId, settings, authUserId = currentAuthUse
     .select()
     .maybeSingle();
   if (error) {
+    // Same exception as the replay path: a taken email address is a decision,
+    // not an outage, so it is not queued for retry.
+    if (error.code === "23505") {
+      console.warn("Settings email is already on another CredentialDOMD account; not saved:", error.message);
+      return null;
+    }
     console.warn("Failed to save settings:", error.message);
     const clean = { ...settings };
     for (const f of DEVICE_KEY_FIELDS) delete clean[f];

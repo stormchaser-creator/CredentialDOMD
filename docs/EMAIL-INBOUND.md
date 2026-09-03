@@ -13,17 +13,24 @@ webhook, the migration and the function deploy are all owner steps below.
 
 ## Sender matching, both physician routes (2026-09-03)
 
-`matchProfile()` looks in two places, in order:
+`matchProfile()` looks in two places, **proven first**:
 
-1. `profiles.email`, the address typed in Settings.
-2. `public.forwarding_addresses` where `verified_at is not null`: an extra
-   address the physician registered and confirmed by clicking a link sent to
-   that mailbox.
+1. `public.forwarding_addresses` where `verified_at is not null`: an extra
+   address the physician registered and confirmed by opening a link sent to that
+   mailbox and pressing Confirm.
+2. `profiles.email`, the address typed in Settings.
 
-The second pass exists because credentialing mail arrives at a work address. A
-physician who signed up as `name@gmail.com` and forwards from
-`name@hospital.org` used to get the "not registered" reply; now the hospital
-address routes to their account once they have confirmed it.
+Pass 1 exists because credentialing mail arrives at a work address. A physician
+who signed up as `name@gmail.com` and forwards from `name@hospital.org` used to
+get the "not registered" reply; now the hospital address routes to their account
+once they have confirmed it.
+
+**The order was the other way round until 2026-09-03, and that was a takeover.**
+A confirmed address is evidence somebody read that mailbox. `profiles.email` is
+a text box nobody checks. While the text box won, an account that simply typed
+`name@hospital.org` into its own profile outranked the account that had
+confirmed `name@hospital.org` by reading the mailbox, and the forwarded document
+went to the one that typed it. Proven now beats asserted.
 
 A physician manages these under **More > Settings > Email**
 (`src/components/pages/SettingsSection.jsx`). That panel lists the account
@@ -40,39 +47,77 @@ the frontend carrying the panel is live, so `email-inbound` and
 of it they promise a screen nobody can open, which is the exact fault the
 pointers were pulled for in the first place.
 
-One thing to be honest about.
+Two things to be honest about.
 
-* **Pass 1 is self-asserted.** A forwarding address is usable only after the
-  mailbox owner clicks a link sent to it. `profiles.email` is not: any
-  signed-in account may type any address into it (the profiles identity lock
-  reverts `auth_user_id` and `access_status`, not `email`), and pass 1 returns
-  first, so it outranks even a legitimately verified forwarding address.
-  Closing this means re-locking the column, which
-  `supabase/migrations/20260819_lock_access_status.sql` unlocked on purpose.
-  The Settings panel now gives a physician another way to fix sender matching,
-  so the argument for leaving the column open is weaker than it was, but
-  `profiles.email` is also the CV header address and the reply-to on share
-  emails, so a lock stops a physician editing all three. Owner's decision, not
-  this feature's. Note also that `authenticated` holds table-level UPDATE on
-  `public.profiles`, so a column-level `revoke update (email)` is a no-op; the
-  lock has to be the trigger.
+* **Pass 2 is still self-asserted, it just no longer outranks proof.** Any
+  signed-in account may type any address into `profiles.email` (the identity
+  lock freezes `auth_user_id` and `access_status`, not `email`, and
+  `20260819_lock_access_status.sql` removed the trigger that used to revert
+  it). What stops two accounts claiming the same address is a unique index on
+  `lower(email)` (`supabase/migrations/20260903e_profiles_email_unique.sql`).
+  It is an index and not a column lock because `authenticated` holds
+  **table-level** UPDATE on `public.profiles`, which makes a column-level
+  `revoke update (email)` a no-op, and because `profiles.email` is also the CV
+  header address and the reply-to on share emails, so a trigger lock would stop
+  a physician editing all three. A duplicate now surfaces as a 23505 that
+  `saveSettings` reports rather than queueing for retry.
+
+* **Addresses are compared as written**, after case folding and trimming only.
+  Gmail dots and `+tags` are not canonicalized, so `first.last@gmail.com`,
+  `firstlast@gmail.com` and `first.last+cme@gmail.com` are three addresses and
+  each has to be confirmed on its own. Deciding per provider which mailboxes are
+  the same mailbox, and being wrong, hands one account another account's
+  credentialing mail; the cost of not deciding is one extra confirmation.
 
 A verified forwarding address routes another person's forwarded mail and its
 attachments into whichever account holds it, so the flow that creates one is
-deliberately strict: `supabase/functions/forwarding-address/index.ts` refuses
-an address that is any other account's `profiles.email` or is already verified
-elsewhere, emails a single-use token that expires in 24 hours, stores only its
-SHA-256 hash, and a partial unique index on `lower(email) where verified_at is
-not null` makes one-account-per-verified-address a database fact rather than a
-code path. Two accounts may hold the same address pending; the first to click
-wins and the other's pending row is deleted. Migration:
-`supabase/migrations/20260903c_forwarding_addresses.sql`.
+deliberately strict. `supabase/functions/forwarding-address/index.ts` refuses an
+address that is any other account's `profiles.email` or is already verified
+elsewhere, emails a single-use token that expires in **2 hours**, and stores
+only its SHA-256 hash. A partial unique index on `lower(email) where verified_at
+is not null` makes one-account-per-verified-address a database fact rather than
+a code path. Two accounts may hold the same address pending; the first to
+confirm wins and the other's pending row is deleted.
+
+Rows are created **only** by that function, with the service role: migration
+`20260903d_forwarding_addresses_no_client_insert.sql` revoked the client INSERT
+grant `20260903c` had handed to `authenticated`. With the grant, a signed-in
+caller could write a row straight through PostgREST with any address in it,
+skipping every rule in `refuseAdd`, and then call the function's `resend` action
+on the row they now owned, which mailed a confirmation link to that address from
+our sending domain. `resend` now also re-runs the address rules against the
+address stored on the row, so neither half depends on the other holding.
+
+The daily cap (10 confirmation emails per account) is claimed through
+`public.forwarding_address_claim_send`
+(`supabase/migrations/20260903f_forwarding_send_claim.sql`), which counts and
+records the send under one advisory lock. The old read-count / send / record
+sequence let two simultaneous requests both read the same count and both send.
+The slot is claimed before Resend is called and deleted if the send fails.
+
+Migrations: `supabase/migrations/20260903c_forwarding_addresses.sql`, then
+`20260903d_forwarding_addresses_no_client_insert.sql`,
+`20260903e_profiles_email_unique.sql` and `20260903f_forwarding_send_claim.sql`.
 
 The confirmation link is `https://credentialdomd.com/api/confirm-forwarding?token=...`,
 the Worker relay (`cloudflare/credentialdomd-api/worker.js`) in front of the
-function's GET. It is not the function URL because the Supabase functions
-gateway rewrites HTML responses to `text/plain` under a sandbox CSP, and
-because a first-party link survives hospital content filters.
+function. It is not the function URL because the Supabase functions gateway
+rewrites HTML responses to `text/plain` under a sandbox CSP, and because a
+first-party link survives hospital content filters.
+
+**Opening the link confirms nothing.** The GET renders a page whose only control
+is a Confirm button that POSTs the token back to the same path; the POST is what
+writes. That split exists because the audience is hospital mailboxes, and those
+sit behind link rewriters (Microsoft Safe Links, Proofpoint URL Defense,
+Mimecast, Barracuda) that fetch a link to judge it, often at delivery and before
+a human has read the message. While confirming was a GET, that fetch was the
+confirmation: the address got attached to the requesting account with the
+mailbox owner doing nothing, which is the feature's whole property defeated by
+the feature's own audience. Scanners GET and HEAD; they do not submit forms. The
+relay therefore forwards both methods on that path.
+
+Unknown, expired and already-used tokens render one byte-identical "no longer
+valid" page, from the GET and the POST alike.
 
 Every message is recorded once in `public.inbound_emails` (unique `message_id`), which is
 also the idempotency claim for Svix retries. Admin-only read. `route` is one of

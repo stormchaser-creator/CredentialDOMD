@@ -57,9 +57,15 @@ export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
     .maybeSingle();
   if (!data) return null;
 
-  // The verified JWT claim wins over profiles.email, which is a field the
-  // user edits. (A DB trigger also reverts user email changes; this is the
-  // second lock.)
+  // The verified JWT claim wins over profiles.email, which is a field the user
+  // edits and which nothing reverts: migration 20260819_lock_access_status
+  // removed the trigger that used to put a user's email back, on purpose, and
+  // the identity lock it left behind freezes auth_user_id and access_status
+  // only. So this is not a second lock, it is the only one. What the column
+  // does have, since 20260903e, is a unique index on lower(email), which stops
+  // two accounts holding the same address; it does not stop an account holding
+  // an address it never proved it can read, which is why the sender matcher in
+  // email-inbound puts confirmed forwarding addresses ahead of this column.
   const email = (claimEmail || data.email || "").toLowerCase();
   return { profileId: data.id, email, isAdmin: ADMIN_EMAILS.has(email), db };
 }

@@ -23,7 +23,7 @@ import FoundingMemberBadge from "../shared/FoundingMemberBadge";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
 import {
   addProblem, normalizeAddress, pendingLine, resendBlockedReason,
-  REQUESTS_INBOX, CME_INBOX,
+  REQUESTS_INBOX, CME_INBOX, LINK_TTL_HOURS,
 } from "../../utils/forwardingAddresses";
 
 function SettingsSection({ onUpgrade }) {
@@ -1166,7 +1166,7 @@ function EmailBlock({ accountEmail, T, iS }) {
 
       <div style={{ marginTop: 10 }}>
         <Field label="Add an address you forward from"
-          hint="We email a confirmation link to it. The link works once and lasts 24 hours, and the address does nothing until someone opens it from that mailbox.">
+          hint={`We email a confirmation link to it. The link works once and lasts ${LINK_TTL_HOURS} hours, and the address does nothing until someone opens it from that mailbox and presses Confirm.`}>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input type="email" value={draft} inputMode="email" autoComplete="off"
               onChange={(e) => { setDraft(e.target.value); setNote(null); }}

@@ -9,9 +9,9 @@
 const {
   TOKEN_TTL_HOURS, TOKEN_BYTES, MAX_PENDING_PER_ACCOUNT, MAX_SENDS_PER_DAY, SEND_COOLDOWN_MINUTES,
   normalizeEmail, isEmailShaped, domainOf, ilikeLiteral,
-  refuseAdd, refuseResend, refuseUniqueViolation, cooldownRemainingMs, since24hIso,
+  refuseAddressClaim, refuseAdd, refuseResend, refuseUniqueViolation, cooldownRemainingMs, since24hIso,
   base64url, mintToken, isTokenShaped, hashToken, expiryFrom, isExpired,
-  confirmLink, confirmationEmail, escapeHtml, resultPage, publicRow,
+  confirmLink, confirmationEmail, escapeHtml, confirmPage, resultPage, publicRow,
 } = await import("../supabase/functions/forwarding-address/lib.ts");
 
 let pass = 0, fail = 0;
@@ -25,7 +25,9 @@ const eq = (name, got, want) => {
 };
 
 // ── The limits are the ones the design fixed ────────────────────────────────
-eq("token lives 24 hours", TOKEN_TTL_HOURS, 24);
+// Two hours, not twenty-four. The link is the whole proof of mailbox control
+// and it rides a query string through Resend, Cloudflare and browser history.
+eq("token lives 2 hours", TOKEN_TTL_HOURS, 2);
 eq("token is 32 bytes", TOKEN_BYTES, 32);
 eq("5 pending addresses per account", MAX_PENDING_PER_ACCOUNT, 5);
 eq("10 sends per account per day", MAX_SENDS_PER_DAY, 10);
@@ -40,12 +42,30 @@ eq("angle brackets only", normalizeEmail("<a@b.co>"), "a@b.co");
 for (const good of ["name@hospital.org", "first.last+cme@sub.hospital.co.uk", "a_b-c@x-y.io"]) {
   ok(`valid: ${good}`, isEmailShaped(good));
 }
+// A column can be null, and a resend now runs this on what the column holds.
+for (const notAString of [null, undefined, 12345, {}, ["a@b.co"]]) {
+  ok(`a non-string is not an address: ${JSON.stringify(notAString) ?? "undefined"}`, !isEmailShaped(notAString));
+}
 for (const bad of ["", "nope", "a@b", "a@b.", "@hospital.org", "a b@hospital.org",
   "a@hospital.org, b@hospital.org", "a@hospital.org;b@x.org", "a@-hospital.org", "x".repeat(250) + "@hospital.org"]) {
   ok(`refused as malformed: ${JSON.stringify(bad)}`, !isEmailShaped(bad));
 }
 eq("domainOf", domainOf("a@hospital.org"), "hospital.org");
+
+// ── The ilike wildcard oracle ───────────────────────────────────────────────
+// PostgREST rewrites * to % on its way to ilike, so an unescaped * turned every
+// address lookup into a prefix search: a caller could ask whether any verified
+// forwarding address starts with "chief" and read the answer off the refusal.
+// Two defences, and the test wants both: the pattern escapes it, and the shape
+// check refuses an address carrying one before it ever reaches a query.
 eq("ilike wildcards are escaped", ilikeLiteral("a_b%c@x.org"), "a\\_b\\%c@x.org");
+eq("the PostgREST wildcard is escaped too", ilikeLiteral("chief*@x.org"), "chief\\*@x.org");
+eq("a backslash is escaped before anything else", ilikeLiteral("a\\b@x.org"), "a\\\\b@x.org");
+eq("all three wildcards at once", ilikeLiteral("a*b%c_d@x.org"), "a\\*b\\%c\\_d@x.org");
+eq("an ordinary address is left alone", ilikeLiteral("first.last+cme@x.org"), "first.last+cme@x.org");
+ok("an address carrying a * is refused outright", !isEmailShaped("chief*@hospital.org"));
+ok("a bare * is refused", !isEmailShaped("*@hospital.org"));
+
 
 // ── refuseAdd: every refusal, in order ──────────────────────────────────────
 const base = {
@@ -72,6 +92,7 @@ eq("this account already has it pending", code({ ownRowVerified: false }), "alre
 eq("a sixth pending address is refused", code({ pendingCount: MAX_PENDING_PER_ACCOUNT }), "too_many_pending");
 eq("five pending is still fine", refuseAdd({ ...base, pendingCount: MAX_PENDING_PER_ACCOUNT - 1 }), null);
 eq("the eleventh send today is refused", code({ sendsLast24h: MAX_SENDS_PER_DAY }), "daily_limit");
+eq("a * address never reaches a query, it is refused as malformed", code({ email: "chief*@hospital.org" }), "invalid");
 eq("rate limits answer 429", [status({ pendingCount: 9 }), status({ sendsLast24h: 99 })], [429, 429]);
 
 // Ownership beats convenience: someone else's address is refused even when
@@ -81,6 +102,24 @@ eq("ownership is checked before any limit",
 // And a refusal never says WHICH kind of account holds it.
 ok("the other-account message does not distinguish profile email from verified address",
   refuseAdd({ ...base, usedByAnotherAccount: true }).message === "That address is already in use by another CredentialDOMD account.");
+
+// ── The four address rules, on their own ────────────────────────────────────
+// refuseAdd and refuseResend both run these. They are exported separately
+// because resend has to apply them to an address it did not receive: the one
+// already stored on the row.
+const claim = (over) => (refuseAddressClaim({
+  email: "name@hospital.org", ownProfileEmail: "name@gmail.com", usedByAnotherAccount: false, ...over,
+}) || { code: null }).code;
+eq("a work address passes the claim rules", claim({}), null);
+eq("malformed fails them", claim({ email: "not-an-address" }), "invalid");
+eq("our own inbox domain fails them", claim({ email: "docs@credentialdomd.com" }), "own_domain");
+eq("the account's own email fails them", claim({ email: "name@gmail.com" }), "own_profile_email");
+eq("an address another account holds fails them", claim({ usedByAnotherAccount: true }), "other_account");
+// refuseAdd is these four and then the rest, so they must answer identically.
+for (const over of [{}, { email: "not-an-address" }, { email: "docs@credentialdomd.com" },
+  { email: "name@gmail.com" }, { usedByAnotherAccount: true }]) {
+  eq(`refuseAdd defers to the claim rules for ${JSON.stringify(over)}`, code(over), claim(over));
+}
 
 // ── Which unique index refused the insert ───────────────────────────────────
 // Both indexes raise 23505 on the same insert. The caller's own duplicate must
@@ -104,15 +143,49 @@ eq("the other-account message matches the one refuseAdd already uses",
 
 // ── refuseResend ────────────────────────────────────────────────────────────
 const NOW = Date.parse("2026-09-03T12:00:00.000Z");
-const rcode = (over) => (refuseResend({ found: true, verified: false, lastSentAt: null, sendsLast24h: 0, nowMs: NOW, ...over }) || { code: null }).code;
+const rfacts = {
+  found: true, verified: false, lastSentAt: null, sendsLast24h: 0, nowMs: NOW,
+  email: "name@hospital.org", ownProfileEmail: "name@gmail.com", usedByAnotherAccount: false,
+};
+const rcode = (over) => (refuseResend({ ...rfacts, ...over }) || { code: null }).code;
 eq("a resend with no prior send is allowed", rcode({}), null);
 eq("someone else's row is not found", rcode({ found: false }), "not_found");
 eq("a confirmed address is not resent", rcode({ verified: true }), "already_verified");
 eq("a send two minutes ago is on cooldown", rcode({ lastSentAt: new Date(NOW - 2 * 60_000).toISOString() }), "cooldown");
 eq("a send eleven minutes ago is not", rcode({ lastSentAt: new Date(NOW - 11 * 60_000).toISOString() }), null);
 eq("the daily cap applies to resends too", rcode({ sendsLast24h: MAX_SENDS_PER_DAY }), "daily_limit");
+// A resend mints a token and mails a link to the address ON THE ROW, so it is
+// only ever as safe as the row. Until 2026-09-03 the table carried an INSERT
+// grant for authenticated, so a caller could write a row directly through
+// PostgREST with any address in it, skipping refuseAdd, and then call resend on
+// it: an authenticated open mail relay wearing our From: address. The grant is
+// revoked (migration 20260903d) AND resend re-checks the stored address, so
+// neither half depends on the other holding.
+eq("a resend refuses a malformed stored address", rcode({ email: "not-an-address" }), "invalid");
+eq("a resend refuses a stored address with an ilike wildcard", rcode({ email: "chief*@hospital.org" }), "invalid");
+eq("a resend refuses a stored address on our own inbox domain", rcode({ email: "docs@credentialdomd.com" }), "own_domain");
+eq("a resend refuses a stored address on a subdomain of our inbox domain", rcode({ email: "x@mail.credentialdomd.com" }), "own_domain");
+eq("a resend refuses a stored address that is the account's own email", rcode({ email: "name@gmail.com" }), "own_profile_email");
+eq("a resend refuses a stored address another account verified", rcode({ usedByAnotherAccount: true }), "other_account");
+// Order: a row that is not the caller's is refused before the address is looked
+// at, so resend cannot be used to ask questions about somebody else's row.
+eq("not-yours outranks every address rule",
+  rcode({ found: false, email: "docs@credentialdomd.com", usedByAnotherAccount: true }), "not_found");
+eq("already-confirmed outranks every address rule",
+  rcode({ verified: true, email: "docs@credentialdomd.com", usedByAnotherAccount: true }), "already_verified");
+// And an unvettable address is refused BEFORE any rate limit, so a caller
+// cannot tell the two apart by burning the cooldown.
+eq("the address rules run before the cooldown",
+  rcode({ email: "docs@credentialdomd.com", lastSentAt: new Date(NOW - 60_000).toISOString() }), "own_domain");
+eq("the address rules run before the daily cap",
+  rcode({ usedByAnotherAccount: true, sendsLast24h: MAX_SENDS_PER_DAY }), "other_account");
+// The wording is the same whichever entry point produced it.
+eq("a resend refusal reads exactly like the add refusal",
+  refuseResend({ ...rfacts, usedByAnotherAccount: true }).message,
+  refuseAdd({ ...base, usedByAnotherAccount: true }).message);
+
 ok("the cooldown message counts the minutes left",
-  refuseResend({ found: true, verified: false, lastSentAt: new Date(NOW - 60_000).toISOString(), sendsLast24h: 0, nowMs: NOW })
+  refuseResend({ ...rfacts, lastSentAt: new Date(NOW - 60_000).toISOString() })
     .message.includes("9 minutes"));
 
 eq("cooldown remaining, never negative", cooldownRemainingMs(new Date(NOW - 60 * 60_000).toISOString(), NOW), 0);
@@ -138,9 +211,12 @@ ok("the hash is not the token", h1 !== t1 && !h1.includes(t1));
 ok("the same token hashes the same way twice", (await hashToken(t1)) === h1);
 ok("a different token hashes differently", (await hashToken(t2)) !== h1);
 
-eq("expiry is 24 hours out", expiryFrom(NOW), "2026-09-04T12:00:00.000Z");
+eq("expiry is 2 hours out", expiryFrom(NOW), "2026-09-03T14:00:00.000Z");
 ok("a fresh link is live", !isExpired(expiryFrom(NOW), NOW + 60_000));
-ok("a link is dead one millisecond past 24 hours", isExpired(expiryFrom(NOW), NOW + TOKEN_TTL_HOURS * 3600_000 + 1));
+ok("a link is dead one millisecond past its life", isExpired(expiryFrom(NOW), NOW + TOKEN_TTL_HOURS * 3600_000 + 1));
+ok("a link is still live one millisecond before", !isExpired(expiryFrom(NOW), NOW + TOKEN_TTL_HOURS * 3600_000 - 1));
+ok("a link that would still be live under the old 24 hour window is dead",
+  isExpired(expiryFrom(NOW), NOW + 3 * 3600_000));
 ok("a link with no expiry is treated as expired", isExpired(null, NOW));
 ok("a link with a junk expiry is treated as expired", isExpired("soon", NOW));
 eq("the confirm link carries the token in the query",
@@ -152,7 +228,15 @@ const mail = confirmationEmail({ address: "name@hospital.org", accountEmail: "na
 ok("the email names the account that asked", mail.text.includes("name@gmail.com"));
 ok("the email names the address being added", mail.text.includes("name@hospital.org"));
 ok("the email says what confirming allows", /lets email forwarded from this address reach that account/.test(mail.text));
-ok("the email says the link expires in 24 hours", mail.text.includes("expires in 24 hours"));
+ok("the email says how long the link lasts, in the server's own number",
+  mail.text.includes(`expires in ${TOKEN_TTL_HOURS} hours`));
+ok("the email no longer promises a day", !mail.text.includes("24 hours"));
+// The link is not the confirmation any more, and the email has to say so: a
+// physician whose mail passed a link scanner needs to know the scan did not
+// spend it, and one who opened it by accident needs to know nothing happened.
+ok("the email says opening the link is not confirming",
+  /Nothing changes until you press Confirm/.test(mail.text));
+ok("the email says the link shows a page with a button", /page with one button/.test(mail.text));
 ok("the email says an ignored link does nothing", /ignore this email/.test(mail.text));
 ok("the email carries the link once", mail.text.split("https://x/confirm?token=abc").length === 2);
 ok("the subject says what it is", /Confirm this address/.test(mail.subject));
@@ -180,9 +264,48 @@ ok("the expired page says where to send a fresh link",
   /More\s*&gt;\s*Settings\s*&gt;\s*Email/.test(bad));
 ok("neither page carries a raw unescaped angle bracket in that pointer",
   !/More\s*>\s*Settings/.test(good) && !/More\s*>\s*Settings/.test(bad));
-ok("the failure page still says how long a link lives", /work once and last 24 hours/.test(bad));
+ok("the failure page still says how long a link lives",
+  bad.includes(`work once and last ${TOKEN_TTL_HOURS} hours`));
+ok("the failure page no longer promises a day", !bad.includes("24 hours"));
 ok("an address with markup in it cannot inject",
   !resultPage({ ok: true, address: '<img src=x onerror=alert(1)>@x.org', accountEmail: "a@b.co" }).includes("<img"));
+
+// ── The page the link lands on: it must not confirm anything ────────────────
+// Hospital mailboxes sit behind Microsoft Safe Links, Proofpoint, Mimecast and
+// Barracuda, which FETCH a link to judge it, often at delivery and before a
+// human reads the message. While confirming was a GET that fetch was the
+// confirmation, which handed the address to the requesting account with the
+// mailbox owner doing nothing. So the page the GET renders acts only when a
+// form is submitted, and scanners do not submit forms.
+const CONFIRM_ACTION = "https://credentialdomd.com/api/confirm-forwarding";
+const cpage = confirmPage({
+  address: "name@hospital.org", accountEmail: "name@gmail.com", token: t1, action: CONFIRM_ACTION,
+});
+ok("the confirm page is complete html", cpage.startsWith("<!doctype html>"));
+ok("the confirm page names the address being confirmed", cpage.includes("name@hospital.org"));
+ok("the confirm page names the account that asked", cpage.includes("name@gmail.com"));
+ok("the confirm page posts, it does not get", /<form method="post"/.test(cpage));
+ok("the confirm page posts to the first-party relay",
+  cpage.includes(`action="${CONFIRM_ACTION}"`));
+ok("the token rides the form body, not a link", cpage.includes(`name="token" value="${t1}"`));
+ok("the only control on the page is the confirm button",
+  (cpage.match(/<button/g) || []).length === 1 && /Confirm this address<\/button>/.test(cpage));
+ok("nothing on the confirm page is a link that carries the token",
+  !/<a [^>]*token=/.test(cpage));
+ok("the confirm page says pressing the button is what acts",
+  /Nothing is confirmed until you press the button/.test(cpage));
+ok("the confirm page runs no script", !/<script/i.test(cpage));
+ok("no em dash on the confirm page", !cpage.includes("\u2014"));
+ok("no compliance claims on the confirm page", !/HIPAA|SOC 2|bank-level|military-grade/i.test(cpage));
+// A hostile address cannot break out of either the visible text or the field.
+const injected = confirmPage({
+  address: '"><script>alert(1)</script>@x.org', accountEmail: 'a"b@c.co',
+  token: '"><script>alert(2)</script>', action: '"><script>alert(3)</script>',
+});
+ok("an address with markup in it cannot inject", !injected.includes("<script>"));
+ok("a token with markup in it cannot escape the value attribute",
+  !/value="">/.test(injected) && !injected.includes("alert(2)</script>"));
+ok("an action with markup in it cannot escape the attribute", !injected.includes("alert(3)</script>"));
 
 // ── What comes back to the client ───────────────────────────────────────────
 const row = {
