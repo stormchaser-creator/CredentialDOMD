@@ -654,15 +654,35 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const compliancePercent = standing.percent;
 
   // Credential counts for ring stats
+  // The tiles beside the ring count the things that EXPIRE, on exactly the
+  // rule the ring uses, so the two can never disagree.
+  //
+  // They used to count allCreds, where anything without an expiration date
+  // was "Active": every case log, publication and membership. That is how a
+  // physician with 1,538 logged cases saw "1617 Active". And "Expiring" read
+  // `soon`, which drops an item once its alert is acknowledged, so the same
+  // card could say none expiring while the ring listed three. Acknowledging
+  // silences a reminder; it does not renew anything.
   const credStats = useMemo(() => {
     const now = new Date();
     const lead = data.settings.reminderLeadDays || 90;
-    const activeCount = allCreds.filter(c => {
-      if (!c.expirationDate) return true;
-      return Math.ceil((new Date(c.expirationDate) - now) / MS_PER_DAY) > lead;
-    }).length;
-    return { active: activeCount, expiring: soon.length, expired: expired.length, total: allCreds.length };
-  }, [allCreds, soon, expired, data.settings.reminderLeadDays]);
+    const needsDate = new Set(missingExpiration.map(m => m.item.id));
+    let active = 0, expiring = 0, expired = 0, undated = 0;
+    for (const c of allCreds) {
+      if (c.expirationDate) {
+        const days = Math.ceil((new Date(c.expirationDate) - now) / MS_PER_DAY);
+        if (days < 0) expired += 1;
+        else if (days <= lead) expiring += 1;
+        else active += 1;
+      } else if (needsDate.has(c.id)) {
+        // A record that is supposed to carry a date and does not. It cannot
+        // be called active: the app cannot see it lapse.
+        undated += 1;
+      }
+      // Anything that never expires (a case, a publication) is not a count.
+    }
+    return { active, expiring, expired, undated, total: active + expiring + expired + undated };
+  }, [allCreds, missingExpiration, data.settings.reminderLeadDays]);
 
   // Open locum To-do notes, newest capture first — feeds the Home widget.
   const openTasks = useMemo(() =>
@@ -752,7 +772,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
     const cmeBehind = stateComps.filter(x => !x.comp.fullyCompliant).map(x => x.st);
-    const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0;
+    const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && credStats.undated === 0;
     // What is holding the ring below 100, listed where the number is, each
     // line a tap to the record that fixes it. One renderer for both heroes.
     const needsActionList = (max) => standing.needsAction.length > 0 && (
@@ -825,6 +845,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.expired} Expired</span>
               </div>
             )}
+            {credStats.undated > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning }} />
+                <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.undated} with no expiration date</span>
+              </div>
+            )}
             {/* The ring counts CME cycles too — say so when they're the drag */}
             {cmeBehind.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -851,7 +877,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       { key: "active", value: credStats.active, label: "Active", dot: T.success, num: T.success },
       { key: "expiring", value: credStats.expiring, label: "Expiring", dot: T.warning, num: T.warning },
       { key: "expired", value: credStats.expired, label: "Expired", dot: T.danger, num: T.danger },
-      { key: "acknowledged", value: snoozed.length, label: "Acknowledged", dot: T.textMuted, num: T.text },
+      { key: "undated", value: credStats.undated, label: "No date", dot: T.warning, num: T.text },
+      { key: "acknowledged", value: snoozed.length, label: "Snoozed", dot: T.textMuted, num: T.text },
     ];
     const deskHero = (
       <div style={{

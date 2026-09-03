@@ -248,6 +248,15 @@ eq("dateless never walks privileges or insurance", dateless({
   eq("an unfinished board shows the bordered card", homeCardForm(open, { now: NOW }), CARD_FORM.A);
   const snoozed = build({ settings: { ...settledSettings, setupState: { startedAt: day(3), hiddenUntil: new Date(NOW.getTime() + 86400000).toISOString() } }, licenses: [] });
   eq("Not now hides it for the snooze", homeCardForm(snoozed, { now: NOW }), CARD_FORM.NONE);
+// A finished board leaves the dashboard. homeCardForm still returns D (the
+// state is "done"), and SetupCard renders nothing for it when nothing has
+// regressed and the whole board is complete. Eric: "once the setup is
+// complete it does not need to be on the dashboard."
+ok("a complete board is form D, which SetupCard renders as nothing",
+  homeCardForm({ ...open, state: { ...open.state, tier1DoneAt: "2026-09-01T00:00:00Z" },
+    counts: { tier1: { ...open.counts.tier1, complete: true },
+              tier2: { ...open.counts.tier2, total: 0, complete: true } } },
+    { now: NOW }) === CARD_FORM.D);
   const expired = build({ settings: { ...settledSettings, setupState: { startedAt: day(30), hiddenUntil: day(1) } }, licenses: [] });
   eq("the snooze runs out", homeCardForm(expired, { now: NOW }), CARD_FORM.A);
   const protectedNow = build({ ...settled(), settings: { ...settledSettings, setupState: { startedAt: day(3) } } });

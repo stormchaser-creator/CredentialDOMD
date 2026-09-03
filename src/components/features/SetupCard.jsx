@@ -100,6 +100,11 @@ export default function SetupCard({ onOpenSetup }) {
   if (form === CARD_FORM.D) {
     const regressed = tier1Regressed(setup);
     const all = boardCounts(setup);
+    // Finished means gone. A completed list has nothing to say on a dashboard
+    // a physician opens every day, and Setup is still one tap away under More
+    // and at the top of the Credentials rail. The line stays only while
+    // something is genuinely unfinished or has come undone.
+    if (!regressed && all.done >= all.total) return null;
     return (
       <button onClick={() => onOpenSetup?.(regressed?.id || null)} style={{
         display: "flex", alignItems: "center", gap: 8, width: "100%",
