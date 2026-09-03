@@ -10,13 +10,12 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { fetchNppes } from "../_shared/nppes.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const NPPES_BASE = "https://npiregistry.cms.hhs.gov/api/?version=2.1";
 
 serve(async (req) => {
   // Preflight
@@ -25,17 +24,11 @@ serve(async (req) => {
   }
 
   try {
-    // Forward all query params to NPPES
+    // Forward all query params to NPPES. The registry call itself (base URL,
+    // User-Agent, timeout) lives in _shared/nppes.ts so public-record makes
+    // the identical call.
     const url = new URL(req.url);
-    const params = url.searchParams.toString();
-    const upstreamUrl = params ? `${NPPES_BASE}&${params}` : NPPES_BASE;
-
-    const upstream = await fetch(upstreamUrl, {
-      headers: {
-        "User-Agent": "CredentialDOMD/1.0 (+https://credentialdomd.com)",
-        "Accept": "application/json",
-      },
-    });
+    const upstream = await fetchNppes(url.searchParams.toString());
 
     if (!upstream.ok) {
       return new Response(
@@ -44,8 +37,7 @@ serve(async (req) => {
       );
     }
 
-    const data = await upstream.json();
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify(upstream.data), {
       headers: { ...CORS, "Content-Type": "application/json" },
     });
 

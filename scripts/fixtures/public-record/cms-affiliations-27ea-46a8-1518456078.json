@@ -1,0 +1,38 @@
+{
+ "results": [
+  {
+   "npi": "1518456078",
+   "ind_pac_id": "8426558917",
+   "provider_last_name": "WHITNEY",
+   "provider_first_name": "ERIC",
+   "provider_middle_name": "E",
+   "suff": "",
+   "facility_type": "Hospital",
+   "facility_affiliations_certification_number": "050573",
+   "facility_type_certification_number": ""
+  },
+  {
+   "npi": "1518456078",
+   "ind_pac_id": "8426558917",
+   "provider_last_name": "WHITNEY",
+   "provider_first_name": "ERIC",
+   "provider_middle_name": "E",
+   "suff": "",
+   "facility_type": "Hospital",
+   "facility_affiliations_certification_number": "050245",
+   "facility_type_certification_number": ""
+  },
+  {
+   "npi": "1518456078",
+   "ind_pac_id": "8426558917",
+   "provider_last_name": "WHITNEY",
+   "provider_first_name": "ERIC",
+   "provider_middle_name": "E",
+   "suff": "",
+   "facility_type": "Hospital",
+   "facility_affiliations_certification_number": "050292",
+   "facility_type_certification_number": ""
+  }
+ ],
+ "count": 3
+}
