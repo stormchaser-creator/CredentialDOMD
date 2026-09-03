@@ -4,7 +4,9 @@
  * Three routes, decided by the local part of the address the message was sent to:
  *
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
- *     Sender must match a profile (lower(profiles.email) = lower(from)). Every
+ *     Sender must match a profile: lower(profiles.email) = lower(from), or a
+ *     CONFIRMED row in forwarding_addresses (the physician added the address in
+ *     More > Settings > Email and clicked the link sent to it). Every
  *     PDF / image attachment is copied into the `documents` Storage bucket at
  *     <auth_user_id>/<doc id> and a `documents` row is written with
  *     type = "cme-certificate-inbox" and no linked_to, so the app shows it under
@@ -15,8 +17,9 @@
  *
  *   docs@ | requests@ | packets@credentialdomd.com   Document requests.
  *     A credentialer asked the physician for documents; the physician forwards
- *     that email here from the address on their profile. Same sender matching
- *     and authentication as cme@. The ORIGINAL requester (From:), subject and
+ *     that email here from the address on their profile, or from any address
+ *     they have confirmed as a forwarding address. Same sender matching and
+ *     authentication as cme@. The ORIGINAL requester (From:), subject and
  *     body are parsed out of the forwarded text (Gmail / Outlook / Apple Mail
  *     header blocks) and a `document_requests` row is written; PDF / image
  *     attachments (the requester's checklist) are stored as documents with
@@ -391,15 +394,53 @@ async function countSince(minutes: number, apply: (q: AnyQuery) => AnyQuery = (q
 
 // ─── Shared by the physician routes (cme@, docs@) ─────────────────────────────
 
-/** Sender -> profile. profiles.email is what the physician typed in Settings. */
+/**
+ * Sender -> profile, in two passes.
+ *
+ * First profiles.email, the address the physician typed in Settings. Then
+ * forwarding_addresses: an extra address they registered and CONFIRMED by
+ * clicking a link sent to that mailbox (the forwarding-address function owns
+ * that flow). Credentialing mail arrives at a work address, so the common case
+ * is a physician who signed up as name@gmail.com forwarding from
+ * name@hospital.org; without the second pass that message is refused.
+ *
+ * Only verified_at rows count, and a verified address is unique across
+ * accounts (partial unique index), so this pass can match at most one account.
+ */
 async function matchProfile(from: string): Promise<MatchedProfile | null> {
-  const { data: rows, error: pErr } = await db.from("profiles")
-    .select("id, auth_user_id, email, access_status")
-    .ilike("email", ilikeLiteral(from))
-    .limit(5);
-  if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
-  const profiles = ((rows ?? []) as { id: string; auth_user_id: string | null; email: string | null; access_status: string | null }[])
-    .filter((p) => (p.email ?? "").trim().toLowerCase() === from && p.auth_user_id) as MatchedProfile[];
+  const direct = await profilesByIds(async () => {
+    const { data: rows, error } = await db.from("profiles")
+      .select("id, auth_user_id, email, access_status")
+      .ilike("email", ilikeLiteral(from))
+      .limit(5);
+    if (error) throw new Error(`profile lookup: ${error.message}`);
+    return ((rows ?? []) as ProfileLookupRow[]).filter((p) => (p.email ?? "").trim().toLowerCase() === from);
+  });
+  if (direct) return direct;
+
+  return await profilesByIds(async () => {
+    const { data: addrs, error } = await db.from("forwarding_addresses")
+      .select("user_id, email, verified_at")
+      .ilike("email", ilikeLiteral(from))
+      .not("verified_at", "is", null)
+      .limit(5);
+    if (error) throw new Error(`forwarding address lookup: ${error.message}`);
+    const owners = ((addrs ?? []) as { user_id: string; email: string | null; verified_at: string | null }[])
+      .filter((a) => (a.email ?? "").trim().toLowerCase() === from && a.verified_at)
+      .map((a) => a.user_id);
+    if (owners.length === 0) return [];
+    const { data: rows, error: pErr } = await db.from("profiles")
+      .select("id, auth_user_id, email, access_status").in("id", owners).limit(5);
+    if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
+    return (rows ?? []) as ProfileLookupRow[];
+  });
+}
+
+type ProfileLookupRow = { id: string; auth_user_id: string | null; email: string | null; access_status: string | null };
+
+/** An account with access wins over one without, same rule for both passes. */
+async function profilesByIds(load: () => Promise<ProfileLookupRow[]>): Promise<MatchedProfile | null> {
+  const profiles = (await load()).filter((p) => p.auth_user_id) as MatchedProfile[];
   profiles.sort((a, b) => (a.access_status === "active" ? 0 : 1) - (b.access_status === "active" ? 0 : 1));
   return profiles[0] ?? null;
 }
@@ -535,7 +576,7 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account; forward from the email on your account or add it in Settings.
+      `This address is not registered to a CredentialDOMD account. Forward from the email on your account, or add this address in Settings and click the link we send here to confirm it.
 
 Open the app: ${APP_URL} (More > Settings > Email)
 
@@ -698,7 +739,7 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account; forward the request from the email on your account, or add it in Settings (More > Settings > Email).
+      `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account, or add this address in Settings (More > Settings > Email) and click the link we send here to confirm it.
 
 Open the app: ${APP_URL}
 

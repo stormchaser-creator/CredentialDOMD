@@ -13,12 +13,22 @@
 // signups (20 / 10 min, which is the cap on Resend welcome emails) and
 // attempts (60 / 10 min). This Worker adds a per-IP layer in front of that.
 //
+// 2026-09-03: also carries GET /api/confirm-forwarding, the link in the
+// forwarding-address confirmation email. Two reasons it is here and not on
+// the function URL: the Supabase functions gateway rewrites any HTML response
+// to text/plain under a sandbox CSP (a page served from *.supabase.co cannot
+// render), and a link a physician opens from a hospital mailbox has to
+// survive the same content filters the waitlist relay exists for. The Worker
+// forwards the token, returns the function's page as first-party HTML, and
+// keeps no copy of either.
+//
 // Per-IP limit is an in-memory Map per isolate: best-effort only. Cloudflare
 // runs many isolates across many POPs and recycles them, so a determined
 // client can exceed it; the DB caps are the real ceiling. Good enough to
 // stop one browser tab from looping.
 
 const SUPA = "https://hkpnnsjcwprrwobmpqyy.supabase.co/rest/v1";
+const FUNCTIONS = "https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1";
 // Supabase anon key: public by design (it ships in the landing page too).
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U";
 
@@ -82,9 +92,38 @@ function toRpcArgs(body, argMap) {
   return out;
 }
 
+/** The forwarding-address confirmation page, proxied so it renders as HTML. */
+async function confirmForwarding(request, url) {
+  const token = url.searchParams.get("token") || "";
+  if (token.length > 100) return new Response("bad request", { status: 400 });
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  // A confirmation link is opened once. This only stops a loop from guessing.
+  if (rateLimited(`/api/confirm-forwarding|${ip}`, 20, Date.now())) {
+    return new Response("rate limited", { status: 429, headers: { "Retry-After": "600" } });
+  }
+  const r = await fetch(`${FUNCTIONS}/forwarding-address?token=${encodeURIComponent(token)}`, {
+    headers: { Accept: "text/html" },
+  });
+  const body = await r.text();
+  return new Response(body, {
+    status: r.status,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Robots-Tag": "noindex",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 export default {
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/confirm-forwarding") {
+      if (request.method !== "GET" && request.method !== "HEAD") return new Response("not found", { status: 404 });
+      return await confirmForwarding(request, url);
+    }
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     const route = ROUTES[url.pathname];
     if (!route || request.method !== "POST") return new Response("not found", { status: 404, headers: CORS });

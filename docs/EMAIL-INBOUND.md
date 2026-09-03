@@ -7,9 +7,40 @@ webhook, the migration and the function deploy are all owner steps below.
 
 | Address | Route | Result |
 | --- | --- | --- |
-| cme@credentialdomd.com | certificate intake | Sender must match `profiles.email` (case-insensitive). PDF and image attachments are copied to Storage bucket `documents` at `<auth_user_id>/<doc id>` and a `documents` row is written with `type = 'cme-certificate-inbox'`, `mime_type` = real MIME, no `linked_to`. The app lists these first under "From your inbox, not filed yet" (Documents) with File with AI and Link actions. Sender gets a confirmation. Unknown sender gets one "not registered" reply per day, never for bounces or list mail. |
-| docs@, requests@, packets@credentialdomd.com | document requests | Sender must match `profiles.email` (same check and same sender authentication as cme@). The forwarded credentialer email is parsed for the original From/Subject/body and written to `public.document_requests`; PDF and image attachments become `documents` rows with `type = 'request-attachment-inbox'`. Physician gets a "Got it" reply from docs@ pointing at More > Requests. Details below. |
+| cme@credentialdomd.com | certificate intake | Sender must match the account: `profiles.email` (case-insensitive), or a confirmed row in `public.forwarding_addresses` (see below). PDF and image attachments are copied to Storage bucket `documents` at `<auth_user_id>/<doc id>` and a `documents` row is written with `type = 'cme-certificate-inbox'`, `mime_type` = real MIME, no `linked_to`. The app lists these first under "From your inbox, not filed yet" (Documents) with File with AI and Link actions. Sender gets a confirmation. Unknown sender gets one "not registered" reply per day, never for bounces or list mail. |
+| docs@, requests@, packets@credentialdomd.com | document requests | Sender must match the account (same two-pass check and same sender authentication as cme@). The forwarded credentialer email is parsed for the original From/Subject/body and written to `public.document_requests`; PDF and image attachments become `documents` rows with `type = 'request-attachment-inbox'`. Physician gets a "Got it" reply from docs@ pointing at More > Requests. Details below. |
 | anything else (support@, hello@, whit@, privacy@, ...) | relay | Whole message forwarded to stormchaser@elryx.com from whit@credentialdomd.com, subject prefixed `[credentialdomd.com <local>] `, original From/To/Date/Message-ID at the top of the body, attachments re-attached (10 per email, 10 MB per file, 20 MB per email), `reply_to` = original sender so a plain reply answers the physician. |
+
+## Sender matching, both physician routes (2026-09-03)
+
+`matchProfile()` looks in two places, in order:
+
+1. `profiles.email`, the address typed in Settings.
+2. `public.forwarding_addresses` where `verified_at is not null`: an extra
+   address the physician registered and confirmed by clicking a link sent to
+   that mailbox.
+
+The second pass exists because credentialing mail arrives at a work address. A
+physician who signed up as `name@gmail.com` and forwards from
+`name@hospital.org` used to get the "not registered" reply; now the hospital
+address routes to their account once they have confirmed it.
+
+A verified forwarding address routes another person's forwarded mail and its
+attachments into whichever account holds it, so the flow that creates one is
+deliberately strict: `supabase/functions/forwarding-address/index.ts` refuses
+an address that is any other account's `profiles.email` or is already verified
+elsewhere, emails a single-use token that expires in 24 hours, stores only its
+SHA-256 hash, and a partial unique index on `lower(email) where verified_at is
+not null` makes one-account-per-verified-address a database fact rather than a
+code path. Two accounts may hold the same address pending; the first to click
+wins and the other's pending row is deleted. Migration:
+`supabase/migrations/20260903c_forwarding_addresses.sql`.
+
+The confirmation link is `https://credentialdomd.com/api/confirm-forwarding?token=...`,
+the Worker relay (`cloudflare/credentialdomd-api/worker.js`) in front of the
+function's GET. It is not the function URL because the Supabase functions
+gateway rewrites HTML responses to `text/plain` under a sandbox CSP, and
+because a first-party link survives hospital content filters.
 
 Every message is recorded once in `public.inbound_emails` (unique `message_id`), which is
 also the idempotency claim for Svix retries. Admin-only read. `route` is one of

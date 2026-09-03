@@ -71,6 +71,8 @@ export const USER_TABLES: UserTable[] = [
   { table: "user_events", column: "user_id" },
   { table: "backups", column: "user_id" },
   { table: "deleted_items", column: "user_id" },
+  { table: "forwarding_addresses", column: "user_id" },
+  { table: "forwarding_address_sends", column: "user_id" },
 ];
 
 export const DOCUMENTS_BUCKET = "documents";
