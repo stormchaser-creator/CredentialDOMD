@@ -3,6 +3,7 @@ export { default as CrudSection } from "./CrudSection";
 export { default as CMESection } from "./CMESection";
 export { default as DocumentsSection } from "./DocumentsSection";
 export { default as ScanReviewCard } from "./ScanReviewCard";
+export { default as PublicRecordReview } from "./PublicRecordReview";
 export { default as HealthRecordsSection } from "./HealthRecordsSection";
 export { default as ScreeningsSection } from "./ScreeningsSection";
 export { default as AssistantSection } from "./AssistantSection";

@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import {
   clean, titleCase, formatPhone, formatZip, oneLineAddress, degreeFromCredential,
-  licenseTypeFor, licenseKey, pubmedAuthorTerm, dedupeKey, markAlreadyOnFile,
+  licenseTypeFor, licenseKey, pubmedAuthorTerm,
   normalizeNppes, normalizeCmsClinician, normalizeAffiliations, normalizePubmed,
   buildEnvelope,
 } from "../supabase/functions/public-record/normalize.ts";
@@ -238,51 +238,6 @@ eq("no venue and no year still reads", venueless[0].fields.name, "A note");
 eq("pubmed with nothing", normalizePubmed(null, CTX), []);
 ok("every summary came from the search fixture",
   PM_SUMMARY.result.uids.every(id => PM_SEARCH.esearchresult.idlist.includes(id)));
-
-// ── Dedupe against what is already on file ──────────────────────────────────
-eq("license key ignores typing", dedupeKey("licenses", { state: "CA", licenseNumber: "20A-17841" }),
-  dedupeKey("licenses", { state: "ca", licenseNumber: "20a17841" }));
-eq("a license with no number has no key", dedupeKey("licenses", {}), "");
-eq("publication keys on the pmid", dedupeKey("publications", { pmid: "42350380" }), "publications:pmid:42350380");
-
-const marked = markAlreadyOnFile(
-  [...nppes, ...cms, ...affs, ...pubs],
-  {
-    licenses: [{ state: "CA", licenseNumber: "20A-17841", type: "State Medical License (DO)" }],
-    privileges: [{ facility: "Eisenhower Medical Center" }],
-    publications: [{ pmid: "42350380" }],
-    workHistory: [],
-  },
-  { name: "Eric Whitney", degreeType: "DO" },
-);
-eq("a license already typed is flagged, not proposed again",
-  byId(marked, "nppes:license:CA|20A17841").alreadyOnFile, true);
-eq("a privilege already on file is flagged", byId(marked, "cms:privilege:050573").alreadyOnFile, true);
-eq("a hospital not on file is still proposed", byId(marked, "cms:privilege:050245").alreadyOnFile, false);
-eq("a paper already saved is flagged", byId(marked, "pubmed:publication:42350380").alreadyOnFile, true);
-eq("a profile value already set is flagged", byId(marked, "nppes:profile:name").alreadyOnFile, true);
-eq("a profile value not set is proposed", byId(marked, "nppes:profile:practiceAddress").alreadyOnFile, false);
-eq("nothing is dropped by the dedupe", marked.length, nppes.length + cms.length + affs.length + pubs.length);
-
-// Medicare files the school as "OTHER", so the education finding has a degree
-// and no school. Without a second key it would be proposed again forever.
-eq("education keys on the degree when there is no school",
-  dedupeKey("education", { type: "Doctor of Osteopathic Medicine (DO)" }),
-  "education:type:DOCTOROFOSTEOPATHICMEDICINEDO");
-eq("education still keys on the school when there is one",
-  dedupeKey("education", { type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }), "education:PCOM");
-const withSchool = markAlreadyOnFile(cms, {
-  education: [{ type: "Doctor of Osteopathic Medicine (DO)", institution: "PCOM" }],
-});
-eq("a degree already on file is flagged even when Medicare has no school",
-  byId(withSchool, "cms:education:medicalSchool").alreadyOnFile, true);
-const otherDegree = markAlreadyOnFile(cms, {
-  education: [{ type: "Doctor of Medicine (MD)", institution: "PCOM" }],
-});
-eq("a different degree on file is not a match",
-  byId(otherDegree, "cms:education:medicalSchool").alreadyOnFile, false);
-eq("nothing else was flagged by the education key",
-  withSchool.filter(f => f.alreadyOnFile).map(f => f.id), ["cms:education:medicalSchool"]);
 
 // ── The whole envelope ──────────────────────────────────────────────────────
 const env = buildEnvelope({

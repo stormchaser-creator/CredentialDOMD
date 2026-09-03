@@ -503,95 +503,12 @@ export function normalizePubmed(esummary: any, ctx: NormalizeContext, term = "")
   return out;
 }
 
-// ── Dedupe against what the physician already has ───────────────────────────
-
-/**
- * The identity of a finding against the records already on file. Two findings
- * with the same key are the same thing however it was typed. Sections whose
- * records have no natural key return "" and are never auto-matched.
- */
-export function dedupeKey(section: string, item: any): string {
-  const norm = (v: unknown) => clean(v).toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (section === "licenses") {
-    const k = licenseKey(item?.state, item?.licenseNumber);
-    return k === "|" ? "" : `licenses:${k}`;
-  }
-  if (section === "privileges") {
-    const f = norm(item?.facility || item?.name);
-    return f ? `privileges:${f}` : "";
-  }
-  if (section === "workHistory") {
-    const e = norm(item?.employer);
-    return e ? `workHistory:${e}` : "";
-  }
-  if (section === "publications") {
-    const pmid = norm(item?.pmid);
-    if (pmid) return `publications:pmid:${pmid}`;
-    const doi = norm(item?.doi);
-    if (doi) return `publications:doi:${doi}`;
-    const cite = norm(item?.citation || item?.name).slice(0, 60);
-    return cite ? `publications:cite:${cite}` : "";
-  }
-  if (section === "memberships") {
-    const o = norm(item?.organization);
-    return o ? `memberships:${o}` : "";
-  }
-  if (section === "education") {
-    const i = norm(item?.institution);
-    if (i) return `education:${i}`;
-    // Medicare files the school as "OTHER", so the medical school finding
-    // carries a degree type and no institution. A physician holds one MD or
-    // one DO, so the degree alone identifies the row already on file.
-    const t = norm(item?.type);
-    return t ? `education:type:${t}` : "";
-  }
-  return "";
-}
-
-/**
- * Every key a record already on file answers to. An education row typed with
- * a school also answers to its degree, so a finding that has the degree and
- * no school still recognizes it.
- */
-function dedupeKeysOnFile(section: string, item: any): string[] {
-  const keys = [dedupeKey(section, item)];
-  if (section === "education") {
-    const t = clean(item?.type).toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (t) keys.push(`education:type:${t}`);
-  }
-  return keys.filter(Boolean);
-}
-
-/**
- * Flag findings the physician already has, and drop nothing: an item on file
- * is shown as already on file rather than proposed a second time.
- * `existing` is { section: items[] } straight out of the app's data object.
- * A settings finding whose values already match is flagged the same way.
- */
-export function markAlreadyOnFile(
-  findings: Finding[],
-  existing: Record<string, any[]> = {},
-  settings: Record<string, any> = {},
-): Array<Finding & { alreadyOnFile: boolean }> {
-  const have = new Set<string>();
-  for (const [section, items] of Object.entries(existing || {})) {
-    for (const item of arr(items)) {
-      for (const k of dedupeKeysOnFile(section, item)) have.add(k);
-    }
-  }
-  return findings.map((f) => {
-    let already = false;
-    if (f.section === "settings") {
-      const keys = Object.keys(f.fields);
-      already = keys.length > 0 && keys.every((k) =>
-        clean(settings?.[k]).toUpperCase() === clean(f.fields[k]).toUpperCase());
-    } else {
-      const k = dedupeKey(f.section, f.fields);
-      already = !!k && have.has(k);
-    }
-    return { ...f, alreadyOnFile: already };
-  });
-}
+// ── Matching against what is already on file ────────────────────────────────
+//
+// It is not here. This function is never given the physician's records and
+// must not be: matching a finding against what is already on file is the
+// client's job, and lives in src/utils/publicRecord.js (dedupeKey,
+// markAlreadyOnFile), tested by scripts/public-record-review.test.mjs.
 
 // ── Envelope ────────────────────────────────────────────────────────────────
 
