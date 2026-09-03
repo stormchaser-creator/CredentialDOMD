@@ -268,17 +268,20 @@ export type PageResult = { ok: true; address: string; accountEmail: string } | {
  * expired, and one already used all render the SAME page: the person holding
  * the link learns nothing about which it was.
  *
- * Neither page sends the reader anywhere to manage the address: there is no
- * Settings > Email panel in the app yet. When that panel ships, the two
- * pointers this text used to carry go back in.
+ * Both pages now name where the address is managed. More > Settings > Email
+ * is a real panel (src/components/pages/SettingsSection.jsx), so the pointers
+ * slice 1 removed are back: one to remove a confirmed address, one to send a
+ * fresh link after this one expired. Neither page is a place to act, and
+ * neither creates a session; the reader has to open the app and sign in.
  */
 export function resultPage(r: PageResult): string {
   const title = r.ok ? "Address confirmed" : "This link is no longer valid";
   const body = r.ok
     ? `<p class="lead"><strong>${escapeHtml(r.address)}</strong> is confirmed for <strong>${escapeHtml(r.accountEmail)}</strong>.</p>
-      <p>Credentialing email forwarded from that address to docs@credentialdomd.com now reaches this account, and CME certificates forwarded to cme@credentialdomd.com are filed there too.</p>`
+      <p>Credentialing email forwarded from that address to docs@credentialdomd.com now reaches this account, and CME certificates forwarded to cme@credentialdomd.com are filed there too.</p>
+      <p>You can remove it any time in the app under More &gt; Settings &gt; Email.</p>`
     : `<p class="lead">This confirmation link has expired or has already been used.</p>
-      <p>Confirmation links work once and last 24 hours.</p>`;
+      <p>Confirmation links work once and last 24 hours. To try again, open CredentialDOMD, go to More &gt; Settings &gt; Email, and send the link again.</p>`;
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">

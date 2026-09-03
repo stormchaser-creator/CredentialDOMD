@@ -5,9 +5,8 @@
  *
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
  *     Sender must match a profile: lower(profiles.email) = lower(from), or a
- *     CONFIRMED row in forwarding_addresses (an address registered through the
- *     forwarding-address function and confirmed from that mailbox; no Settings
- *     panel drives it yet, so the unregistered reply does not offer it). Every
+ *     CONFIRMED row in forwarding_addresses (the physician added the address in
+ *     More > Settings > Email and opened the link sent to it). Every
  *     PDF / image attachment is copied into the `documents` Storage bucket at
  *     <auth_user_id>/<doc id> and a `documents` row is written with
  *     type = "cme-certificate-inbox" and no linked_to, so the app shows it under
@@ -587,9 +586,9 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account. Forward from the email on your account.
+      `This address is not registered to a CredentialDOMD account. Forward from the email on your account, or add this address in Settings and open the link we send here to confirm it.
 
-Open the app: ${APP_URL}
+Open the app: ${APP_URL} (More > Settings > Email)
 
 CredentialDOMD
 https://credentialdomd.com`);
@@ -750,7 +749,7 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account.
+      `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account, or add this address in Settings (More > Settings > Email) and open the link we send here to confirm it.
 
 Open the app: ${APP_URL}
 

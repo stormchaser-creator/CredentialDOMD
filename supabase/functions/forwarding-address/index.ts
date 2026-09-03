@@ -5,8 +5,8 @@
  * now that was profiles.email alone, so a physician who signed up as
  * name@gmail.com and forwards a credentialing request from name@hospital.org
  * got the "not registered" reply. This function is how that second address
- * gets registered, and the reason it is a whole function rather than a table
- * write: a verified forwarding address routes someone's credentialing mail,
+ * gets registered, from More > Settings > Email, and the reason it is a whole
+ * function rather than a table write: a verified forwarding address routes someone's credentialing mail,
  * attachments and all, into the account that owns it. Nobody may claim a
  * FORWARDING address they cannot read.
  *

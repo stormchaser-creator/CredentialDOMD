@@ -170,10 +170,16 @@ ok("the failure page never says whether the token existed", !/not found|unknown|
 ok("neither page carries a token", !good.includes("token=") && !bad.includes("token="));
 ok("both pages are complete html", good.startsWith("<!doctype html>") && bad.startsWith("<!doctype html>"));
 ok("no em dash on either page", !good.includes("—") && !bad.includes("—"));
-// Until the Settings > Email panel exists, neither page may send the reader to
-// it. A page that names a screen nobody can open is a promise, not guidance.
-ok("neither page points at a Settings panel that does not exist",
-  !/Settings\s*(&gt;|>)\s*Email/.test(good) && !/Settings\s*(&gt;|>)\s*Email/.test(bad));
+// The panel exists now (More > Settings > Email in SettingsSection.jsx), so
+// both pages say where the address is managed: one to remove it, one to send
+// a fresh link. A page that names a screen nobody can open would be a promise,
+// not guidance, which is why these two assertions move together with the UI.
+ok("the confirmed page says where to remove the address",
+  /More\s*&gt;\s*Settings\s*&gt;\s*Email/.test(good));
+ok("the expired page says where to send a fresh link",
+  /More\s*&gt;\s*Settings\s*&gt;\s*Email/.test(bad));
+ok("neither page carries a raw unescaped angle bracket in that pointer",
+  !/More\s*>\s*Settings/.test(good) && !/More\s*>\s*Settings/.test(bad));
 ok("the failure page still says how long a link lives", /work once and last 24 hours/.test(bad));
 ok("an address with markup in it cannot inject",
   !resultPage({ ok: true, address: '<img src=x onerror=alert(1)>@x.org', accountEmail: "a@b.co" }).includes("<img"));

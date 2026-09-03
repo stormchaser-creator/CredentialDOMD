@@ -25,7 +25,22 @@ physician who signed up as `name@gmail.com` and forwards from
 `name@hospital.org` used to get the "not registered" reply; now the hospital
 address routes to their account once they have confirmed it.
 
-Two things to be honest about while this is half built.
+A physician manages these under **More > Settings > Email**
+(`src/components/pages/SettingsSection.jsx`). That panel lists the account
+address as the primary, lists every registered forwarding address with its
+state, and adds, resends and removes through the forwarding-address function.
+The unregistered replies and the confirmation page name it, because it now
+exists. The Requests header names every confirmed address, not just the
+account one (`src/components/features/RequestsInbox.jsx`).
+
+**Deploy order matters here.** The two unregistered replies and the
+confirmation page name More > Settings > Email. That pointer is only true once
+the frontend carrying the panel is live, so `email-inbound` and
+`forwarding-address` must be deployed WITH that frontend, not before it. Ahead
+of it they promise a screen nobody can open, which is the exact fault the
+pointers were pulled for in the first place.
+
+One thing to be honest about.
 
 * **Pass 1 is self-asserted.** A forwarding address is usable only after the
   mailbox owner clicks a link sent to it. `profiles.email` is not: any
@@ -33,16 +48,14 @@ Two things to be honest about while this is half built.
   reverts `auth_user_id` and `access_status`, not `email`), and pass 1 returns
   first, so it outranks even a legitimately verified forwarding address.
   Closing this means re-locking the column, which
-  `supabase/migrations/20260819_lock_access_status.sql` unlocked on purpose and
-  which nothing should do before the Settings panel below exists. Note also
-  that `authenticated` holds table-level UPDATE on `public.profiles`, so a
-  column-level `revoke update (email)` is a no-op; the lock has to be the
-  trigger.
-* **There is no Settings > Email panel yet.** Nothing in the app calls the
-  forwarding-address function, so no physician can add an address today. The
-  unregistered replies and the confirmation page therefore point at nothing:
-  they say only "forward from the email on your account". Those pointers go
-  back in with the UI.
+  `supabase/migrations/20260819_lock_access_status.sql` unlocked on purpose.
+  The Settings panel now gives a physician another way to fix sender matching,
+  so the argument for leaving the column open is weaker than it was, but
+  `profiles.email` is also the CV header address and the reply-to on share
+  emails, so a lock stops a physician editing all three. Owner's decision, not
+  this feature's. Note also that `authenticated` holds table-level UPDATE on
+  `public.profiles`, so a column-level `revoke update (email)` is a no-op; the
+  lock has to be the trigger.
 
 A verified forwarding address routes another person's forwarded mail and its
 attachments into whichever account holds it, so the flow that creates one is
