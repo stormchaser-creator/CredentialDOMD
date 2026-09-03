@@ -20,6 +20,7 @@ import {
   clean, dedupeKey, markAlreadyOnFile,
   GROUP_ORDER, groupFindings, sortFindings,
   isSelectable, defaultSelectedIds, leadNote, needsLabel, evidenceLine, replacesLine, joinWords, countSelected,
+  PREVIEW_ROWS, countPreviewHidden,
   markPlanLocks, planLockNote, PLAN_LOCKED_SECTIONS,
   FOCUS_COPY, focusSectionKey, canFillFromPublicRecord, splitGroups, countPickable,
   defaultSelectedIdsForFocus,
@@ -428,6 +429,41 @@ eq("focused on privileges, a free plan seeds nothing at all",
 eq("focused on publications, nothing is seeded either: every paper is a lead",
   defaultSelectedIdsForFocus(free, "publications"), []);
 eq("an unknown focus is no focus", defaultSelectedIdsForFocus(free, "nonsense"), wholeScreen);
+
+// ── Ticks below a group's own fold ──────────────────────────────────────────
+// Seeding is per section and the screen draws PREVIEW_ROWS per group, so a
+// physician licensed in eight states arrives with more ticks than rows. That
+// gap is the one way Save could stand for a record the screen never drew, and
+// it is the number the footer has to print.
+const EIGHT = Array.from({ length: 8 }, (_, i) => ({
+  id: `nppes:license:S${i}|L${i}`,
+  section: "licenses",
+  kind: "stateLicense",
+  label: `S${i} medical license L${i}`,
+  fields: { name: `S${i} Medical License`, licenseNumber: `L${i}`, state: `S${i}` },
+  needs: ["expirationDate"],
+  confidence: "record",
+}));
+const eightMarked = markPlanLocks(markAlreadyOnFile(EIGHT, {}, {}), { isPro: false });
+const eightGroups = groupFindings(eightMarked);
+const eightSeeded = defaultSelectedIds(eightMarked);
+eq("a state license is a record, so all eight are seeded", eightSeeded.length, 8);
+eq("and the screen draws six of them", eightGroups[0].findings.slice(0, PREVIEW_ROWS).length, 6);
+eq("so two seeded ticks sit past the fold",
+  countSelected(eightMarked.slice(PREVIEW_ROWS), eightSeeded), 2);
+eq("which is the number the footer is given to print",
+  countPreviewHidden(eightGroups, eightSeeded, {}), 2);
+eq("opening the group hides nothing any more",
+  countPreviewHidden(eightGroups, eightSeeded, { licenses: true }), 0);
+eq("a group shorter than the fold hides nothing either",
+  countPreviewHidden(groupFindings(eightMarked.slice(0, PREVIEW_ROWS)), eightSeeded, {}), 0);
+eq("a row on file below the fold is not a hidden tick",
+  countPreviewHidden(
+    groupFindings(markPlanLocks(
+      markAlreadyOnFile(EIGHT, { licenses: [{ state: "S7", licenseNumber: "L7" }] }, {}), { isPro: false })),
+    eightSeeded, {}), 1);
+eq("and the real envelope's groups all fit inside the fold",
+  countPreviewHidden(groupFindings(free), defaultSelectedIds(free), {}), 0);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

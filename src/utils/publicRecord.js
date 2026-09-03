@@ -410,6 +410,35 @@ export function countSelected(findings, selectedIds) {
   return arr(findings).filter((f) => isSelectable(f) && sel.has(f.id)).length;
 }
 
+/**
+ * How many rows a group draws before it folds the remainder behind a button.
+ *
+ * It lives here rather than in the component so the count of ticks sitting
+ * past the fold is measured against the same number the screen truncates at.
+ * The two drifting apart is exactly how Save comes to stand for a row nobody
+ * saw.
+ */
+export const PREVIEW_ROWS = 6;
+
+/**
+ * Ticks sitting past a group's "Show the other" button.
+ *
+ * defaultSelectedIds seeds every record row in a section, and a physician
+ * licensed in eight states gets eight seeded ticks in a group that draws six.
+ * The footer counts all eight, so without this number the Save button would
+ * stand for two rows the screen never drew. The screen says so instead.
+ *
+ * `expanded` is the component's section map: a section the physician opened
+ * is hiding nothing and contributes nothing.
+ */
+export function countPreviewHidden(groups, selectedIds, expanded = {}) {
+  return arr(groups).reduce((n, g) => {
+    const rows = arr(g.findings);
+    if (rows.length <= PREVIEW_ROWS || (expanded && expanded[g.section])) return n;
+    return n + countSelected(rows.slice(PREVIEW_ROWS), selectedIds);
+  }, 0);
+}
+
 // ── Retrying one register ───────────────────────────────────────────────────
 
 /** SourceReport id (what the function reports) → the `sources` value the

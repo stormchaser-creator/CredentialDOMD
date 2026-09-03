@@ -7,7 +7,7 @@ import {
   markAlreadyOnFile, markPlanLocks, planLockNote,
   groupFindings, defaultSelectedIdsForFocus, isSelectable,
   leadNote, needsLabel, evidenceLine, replacesLine, joinWords,
-  countSelected, buildSavePlan, savedSummary,
+  countSelected, countPreviewHidden, PREVIEW_ROWS, buildSavePlan, savedSummary,
   retrySources, failedSourceNames, mergeEnvelopes,
   FOCUS_COPY, focusSectionKey, splitGroups, countPickable,
 } from "../../utils/publicRecord";
@@ -32,6 +32,10 @@ import {
  *    otherwise.
  *  - A profile row that would overwrite an answer the physician already gave
  *    starts unticked, says so, and names the values it would replace.
+ *  - A long group draws its first PREVIEW_ROWS rows and folds the rest. A
+ *    tick sitting past the fold is counted on the fold's own button and again
+ *    in the footer, so Save never quietly stands for a row the screen did not
+ *    draw.
  *  - Saving goes through updateSettings and addItem, so every accepted row
  *    syncs exactly the way a hand-typed one does.
  *
@@ -87,6 +91,14 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
     ? countSelected(restGroups.flatMap((g) => g.findings), selected)
     : 0;
   const selectedCount = countSelected(findings, selected);
+  // Ticks sitting past a group's own "Show the other" button. A section is
+  // seeded whole, so a physician licensed in eight states arrives with eight
+  // ticks in a group that draws six. The footer says so rather than letting
+  // Save stand for two rows the screen never drew.
+  const previewHidden = countPreviewHidden(
+    (focus ? focusGroups : groups).concat(focus && showRest ? restGroups : []),
+    selected, expanded,
+  );
   const failed = envelope ? failedSourceNames(envelope) : [];
 
   const run = useCallback(async (sources) => {
@@ -263,12 +275,15 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
     );
   };
 
-  // Publications run long on a common surname, so a group past this many
+  // Publications run long on a common surname, and a license list runs long
+  // on a physician working several states, so a group past PREVIEW_ROWS
   // collapses until the physician asks for the rest.
-  const PREVIEW = 6;
   const groupBlock = (g) => {
-    const showAll = expanded[g.section] || g.findings.length <= PREVIEW;
-    const shown = showAll ? g.findings : g.findings.slice(0, PREVIEW);
+    const showAll = expanded[g.section] || g.findings.length <= PREVIEW_ROWS;
+    const shown = showAll ? g.findings : g.findings.slice(0, PREVIEW_ROWS);
+    // Rows already ticked on the far side of the fold. The button names them,
+    // so the count in the footer is never a surprise.
+    const hiddenInGroup = showAll ? 0 : countSelected(g.findings.slice(PREVIEW_ROWS), selected);
     const pickable = g.findings.filter(isSelectable).length;
     const onFile = g.findings.filter((f) => f.alreadyOnFile).length;
     const shut = g.findings.filter((f) => f.planLocked).length;
@@ -290,7 +305,8 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
         {!showAll && (
           <button onClick={() => setExpanded((e) => ({ ...e, [g.section]: true }))}
             style={{ ...secondaryBtn, width: "100%", marginTop: 8 }}>
-            Show the other {g.findings.length - PREVIEW}
+            Show the other {g.findings.length - PREVIEW_ROWS}
+            {hiddenInGroup ? ` (${hiddenInGroup} already ticked)` : ""}
           </button>
         )}
       </div>
@@ -422,9 +438,16 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
         </div>
         <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>
           {headShown.length === 0
-            ? (failed.length
-              ? "The registers that answered had nothing on file for this NPI."
-              : "The registers answered and had nothing on file for this NPI beyond what you already have. That is common early on, and it is not a problem with your record.")
+            ? (focus
+              // Opened on one section, the sentence is about that section.
+              // The whole-NPI claim would contradict the fold below, which is
+              // announcing what the same search found everywhere else.
+              ? (failed.length
+                ? `The registers that answered had nothing to add for ${headNoun}.`
+                : `The registers answered and had nothing to add for ${headNoun}.`)
+              : (failed.length
+                ? "The registers that answered had nothing on file for this NPI."
+                : "The registers answered and had nothing on file for this NPI beyond what you already have. That is common early on, and it is not a problem with your record."))
             : <>Tick what is yours. Nothing is saved until you press Save at the bottom.{headOnFile > 0 && ` ${headOnFile} of these ${headOnFile === 1 ? "is" : "are"} already on file and shown greyed.`}</>}
         </div>
         {envelope?.message && (
@@ -461,7 +484,12 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
           <button onClick={() => setShowRest((r) => !r)} style={secondaryBtn}>
             {showRest
               ? "Hide the rest of what was found"
-              : `The same search found ${restPickable} other ${restPickable === 1 ? "thing" : "things"} for your record`}
+              : (restPickable
+                ? `The same search found ${restPickable} other ${restPickable === 1 ? "thing" : "things"} for your record`
+                // Everything else the search found is already on file or shut
+                // on this plan. There is still something to look at, and none
+                // of it is a decision, so the button does not count it.
+                : "See the rest of what the search found")}
           </button>
           {showRest && <div style={gridStyle}>{restGroups.map(groupBlock)}</div>}
         </>
@@ -485,6 +513,11 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
           {hiddenTicked > 0 && (
             <div style={{ fontSize: 12, color: T.warning, fontWeight: 700 }}>
               {hiddenTicked} {hiddenTicked === 1 ? "is" : "are"} in the part you have hidden.
+            </div>
+          )}
+          {previewHidden > 0 && (
+            <div style={{ fontSize: 12, color: T.warning, fontWeight: 700 }}>
+              {previewHidden} {previewHidden === 1 ? "is" : "are"} below a "Show the other" button.
             </div>
           )}
         </div>
