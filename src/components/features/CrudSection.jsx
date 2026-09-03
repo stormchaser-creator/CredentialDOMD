@@ -84,7 +84,7 @@ function isShown(f, form) {
   return typeof f.show === "function" ? !!f.show(form) : true;
 }
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
   const { data, setData, addItem, theme: T , user, isDesktop } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -102,6 +102,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const modalVideoRef = useRef(null);
   const modalCanvasRef = useRef(null);
   const modalStreamRef = useRef(null);
+  // True while an edit form that a deep link opened is still on screen.
+  const arrivedByLink = useRef(false);
 
   const openAdd = useCallback(() => { setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
@@ -142,6 +144,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     if (!autoEditId) return;
     const it = items.find(x => x.id === autoEditId);
     if (it) {
+      arrivedByLink.current = true;
       openEdit(it);
       onAutoEditDone?.();
       // "Add the expiration date" cards land the user INSIDE a long form —
@@ -164,6 +167,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       onPrefillDone?.();
     }
     if (autoOpen) {
+      // Same flag the edit deep link sets: a form opened from somewhere else
+      // owes the physician a trip back when it closes.
+      arrivedByLink.current = true;
       openAdd();
       onAutoOpenDone?.();
     }
@@ -172,7 +178,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     setRequiredError(null);
     if (modalStreamRef.current) { modalStreamRef.current.getTracks().forEach(t => t.stop()); modalStreamRef.current = null; }
     setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null);
-  }, []);
+    // A deep link that opened this form is finished only now. onAutoEditDone
+    // fires the moment the form OPENS (it has to, or the effect reopens it),
+    // so anything that wants the physician taken back where they came from
+    // has to hang off the close instead.
+    if (arrivedByLink.current) { arrivedByLink.current = false; onAutoEditClosed?.(); }
+  }, [onAutoEditClosed]);
 
   // Cleanup camera stream on unmount
   useEffect(() => {
@@ -576,6 +587,25 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   {(f.options || []).map(o => <option key={o} value={o} />)}
                 </datalist>
               </>
+            ) : f.type === "checkbox" ? (
+              // A boolean the record carries, e.g. "this certificate does not
+              // expire". isNonExpiring has read item.noExpiration since it was
+              // written; until now nothing in the app could set it, so a
+              // lifetime diplomate had no way to say so anywhere.
+              <label style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
+                borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, cursor: "pointer",
+              }}>
+                <input
+                  type="checkbox"
+                  checked={form[f.key] === true}
+                  onChange={e => setField(f.key, e.target.checked)}
+                  style={{ width: 18, height: 18, flexShrink: 0 }}
+                />
+                <span style={{ fontSize: 14, color: T.text, lineHeight: 1.4 }}>
+                  {resolveFieldProp(f, "checkboxLabel", form) || resolveFieldProp(f, "label", form)}
+                </span>
+              </label>
             ) : f.type === "cptPicker" ? (
               <CPTCodePicker
                 value={form[f.key] || ""}
@@ -741,6 +771,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {(() => {
                     const v = viewItem[f.key];
+                    // Only a ticked box reaches here at all (the filter above
+                    // drops falsy values), so it reads as the claim it is.
+                    if (f.type === "checkbox") return resolveFieldProp(f, "checkboxLabel", viewItem) || "Yes";
                     if (f.type === "secret") {
                       const open = revealed[f.key];
                       return (

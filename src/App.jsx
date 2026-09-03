@@ -31,17 +31,19 @@ import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
 import HomeSearch, { SECTIONS } from "./components/features/HomeSearch";
 import RenewalInfo from "./components/features/RenewalInfo";
-import Onboarding from "./components/features/Onboarding";
+import SetupCard from "./components/features/SetupCard";
+import SetupPage from "./components/features/SetupPage";
+import NpiPanel from "./components/features/setup/NpiPanel";
 import RuleProvenance from "./components/shared/RuleProvenance";
 import { BOARD_REQS_META } from "./constants/boardRequirements";
 import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirements";
-import { useAiAvailable } from "./utils/aiClient";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { isNonExpiring, mailtoHref } from "./utils/helpers";
+import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
@@ -57,8 +59,6 @@ import {
 } from "./utils/helpers";
 import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
-import { lookupNPI, extractLicensesFromNPI } from "./utils/npiLookup";
-import { mergeNpiLicenses } from "./utils/npiImport";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -277,7 +277,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   useDeskKeyboard({ onSearchFallback: () => { setTab("home"); setSubPage(null); } });
 
 
-  const aiOn = useAiAvailable(data.settings);
   const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
   // Reply emails link to /app/#support: open the sheet on "Your tickets".
   // Backup emails link to /app/#backups: open More > Data & Backup, the one
@@ -301,26 +300,79 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [searchQ, setSearchQ] = useState("");
   const [shareFilter, setShareFilter] = useState("all");
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
-  const [autoAddLicense, setAutoAddLicense] = useState(false);
+  // "Add one of these" from setup: open that section's add form, and
+  // remember where the physician came from so the close comes back.
+  const [autoAdd, setAutoAdd] = useState(null); // { sec, returnTo }
   // {sec, id} — opens that record's edit form after navigating (Home → fix-it links)
   const [autoEditTarget, setAutoEditTarget] = useState(null);
+
+  // The return trip has to outlive autoEditTarget, which is cleared the
+  // moment the form OPENS. Held separately so the close can still find it.
+  const [autoEditReturn, setAutoEditReturn] = useState(null); // {sec, back}
+
+  // Which setup task's drawer to open when the Setup page mounts.
+  const [setupTask, setSetupTask] = useState(null);
+  const openSetup = useCallback((taskId = null) => {
+    setSetupTask(taskId);
+    setTab("more"); setSubPage("setup");
+  }, [setTab, setSubPage]);
+
+  // A deep link out of setup has to come back, or the page leaks physicians
+  // into Credentials the way every fix-it link in the app used to.
+  const goBackTo = useCallback((back) => {
+    if (!back) return;
+    if (back.subPage === "setup") setSetupTask(back.taskId || null);
+    setTab(back.tab); setSubPage(back.subPage || null);
+  }, [setTab, setSubPage]);
 
   // Target props for a section: "view" opens the record's details (a tap from
   // the dashboard, search, or Vera), "edit" opens the form on a specific
   // field (the fix-this-expiration cards).
   const crudTarget = useCallback((sec) => {
-    if (autoEditTarget?.sec !== sec) return {};
+    // Deep links out of setup come back. The trip is read from autoEditReturn,
+    // not autoEditTarget, because the target is already gone by the time the
+    // form closes: CrudSection fires onAutoEditDone on the tick it OPENS.
+    const onAutoEditClosed = autoEditReturn?.sec === sec
+      ? () => { const back = autoEditReturn.back; setAutoEditReturn(null); goBackTo(back); }
+      : undefined;
+    // An "add one" deep link takes the same return trip as an edit: the add
+    // form parks its returnTo on open and CrudSection fires the close.
+    const adding = autoAdd?.sec === sec
+      ? {
+          autoOpen: true,
+          onAutoOpenDone: () => {
+            setAutoEditReturn(autoAdd.returnTo ? { sec, back: autoAdd.returnTo } : null);
+            setAutoAdd(null);
+          },
+        }
+      : null;
+    if (autoEditTarget?.sec !== sec) {
+      return { ...(onAutoEditClosed ? { onAutoEditClosed } : {}), ...(adding || {}) };
+    }
     const edit = autoEditTarget.mode === "edit";
     return {
       autoEditId: edit ? autoEditTarget.id : null,
       autoFocusField: edit ? (autoEditTarget.focus || null) : null,
-      onAutoEditDone: () => setAutoEditTarget(null),
+      // Fired on OPEN. Park the return trip here; always overwrite, so a
+      // later deep link with no returnTo cannot inherit a stale one.
+      onAutoEditDone: () => {
+        setAutoEditReturn(edit && autoEditTarget.returnTo ? { sec, back: autoEditTarget.returnTo } : null);
+        setAutoEditTarget(null);
+      },
+      onAutoEditClosed,
       autoViewId: edit ? null : autoEditTarget.id,
       onAutoViewDone: () => setAutoEditTarget(null),
+      ...(adding || {}),
     };
-  }, [autoEditTarget]);
-  const [npiImporting, setNpiImporting] = useState(false);
-  const [npiImportMsg, setNpiImportMsg] = useState(null);
+  }, [autoEditTarget, autoEditReturn, autoAdd, goBackTo]);
+
+  /** Setup's "add one of these" links: navigate, open the add form, come back. */
+  // No taskId means no return trip: the Home empty-state card sends the
+  // physician to Licenses to stay there, the way it always has.
+  const openAddIn = useCallback((sec, taskId = null) => {
+    setAutoAdd({ sec, returnTo: taskId ? { tab: "more", subPage: "setup", taskId } : null });
+    setTab("credentials"); setSubPage(sec);
+  }, [setTab, setSubPage]);
 
   // Beta gate: invite-only. Admins are always in; everyone else must be
   // 'active' in profiles.access_status (activated by the Clerk webhook, the
@@ -494,6 +546,22 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     return list;
   }, [data]);
 
+  // The setup board, derived from the records themselves. Memoized the way
+  // the other Home cards are, because buildSetup walks most collections.
+  //
+  // setupTier1Done is the stamp in settings.setupState. While it is unset,
+  // setup owns the "your file is not watched yet" conversation and the older
+  // banners that say the same thing stand down: three surfaces nagging about
+  // one license date is exactly the noise being complained about.
+  const setupBoard = useMemo(() => buildSetup(data, { isPro, isFreeBeta, hasSubscription }), [data, isPro, isFreeBeta, hasSubscription]);
+  const setupTier1Done = !!setupBoard.state.tier1DoneAt;
+  // The tile counts what the page is currently about: Tier 1 while it is
+  // unfinished, the packet after it. A tile stuck at "5 of 5" would say the
+  // board is finished while the packet section is still half empty.
+  const setupCounts = setupBoard.counts.tier1.complete && setupBoard.counts.tier2.total > 0
+    ? setupBoard.counts.tier2
+    : setupBoard.counts.tier1;
+
   // An incomplete profile silently degrades everything downstream — degree
   // type drives MD-vs-DO CME rules, specialty drives board requirements,
   // NPI/email feed credentialing paperwork. Flag gaps loudly on Home.
@@ -513,8 +581,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // can't protect what it can't see. Surfaced on Home until fixed.
   const missingExpiration = useMemo(() => {
     const out = [];
-    // Course/device certifications legitimately never expire — don't nag for a date
-    for (const l of data.licenses || []) if (!l.expirationDate && l.type !== CERTIFICATION_TYPE) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
+    // Course/device certifications legitimately never expire, and so does a
+    // lifetime board certificate once the physician ticks "does not expire"
+    // on it. isNonExpiring reads both, so the banner stops nagging about a
+    // record that has been answered rather than only about a record type.
+    for (const l of data.licenses || []) if (!l.expirationDate && !isNonExpiring(l, "licenses")) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
     for (const pv of data.privileges || []) if (!pv.expirationDate) out.push({ item: pv, sec: "privileges", label: describeItem(pv, data.settings.name, "privileges") });
     // Personal coverage (health/dental/vision/disability/life) has no
     // credentialing expiration to chase — only professional policies nag.
@@ -526,6 +597,30 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     }
     return out;
   }, [data.licenses, data.privileges, data.insurance, data.healthRecords, data.settings.name]);
+
+  // Setup owns these two conversations only while it is actually having
+  // them: while the bordered card is on screen AND the task that would say
+  // the same thing is still open. A skip or a snooze hands the sentence
+  // back to the older banner rather than silencing both, so a physician who
+  // sets a license aside is still warned it has no date.
+  //
+  // The standing ring keeps counting every undated record either way, and
+  // the banner always keeps privileges, insurance and health records, which
+  // setup does not own.
+  const setupOwnsDates = setupOwns(setupBoard, "dates");
+  const setupOwnsProfile = setupOwns(setupBoard, "identity");
+  // Suppress exactly the records the setup drawer lists, by id. Filtering by
+  // section instead hid every dateless license from BOTH surfaces: dateless()
+  // covers medical, DEA and CSR only, so a fluoroscopy permit or an ECFMG
+  // certificate fell through the gap and nothing asked for its date.
+  const setupOwnedDateIds = useMemo(
+    () => new Set(setupOwnsDates ? dateless(data).map(l => l.id) : []),
+    [setupOwnsDates, data]
+  );
+  const missingExpirationBanner = useMemo(
+    () => missingExpiration.filter(m => !setupOwnedDateIds.has(m.item.id)),
+    [missingExpiration, setupOwnedDateIds]
+  );
 
   // States where a DEA registration (or other state credential) exists but no
   // medical license record does — CME/renewal tracking can't cover that state
@@ -621,13 +716,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     </div>
   );
 
-  // Brand-new account: the setup wizard owns the screen until it is finished
-  // or explicitly skipped. Existing accounts (any records on file) never see it.
-  const brandNew = !data.settings?.onboardingDone
-    && (data.licenses || []).length === 0 && (data.documents || []).length === 0
-    && (data.cme || []).length === 0 && (data.privileges || []).length === 0;
-  if (brandNew) return <Onboarding onFinish={() => { setTab("home"); setSubPage(null); }} />;
-
   /* ─── HOME PAGE ──────────────────────────────────────────── */
   const openFromSearch = (sec, id) => {
     if (sec.tab === "credentials") { setTab("credentials"); setSubPage(sec.sub); setAutoEditTarget({ sec: sec.key, id }); return; }
@@ -657,53 +745,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <span style={{ color: T.accent, fontWeight: 800 }}>{"\u203a"}</span>
       </div>
     );
-    // First-run checklist — the road from empty app to protected
-    // credentials, built around the NPI import wow moment. First thing a
-    // new user sees; vanishes forever once complete or dismissed.
-    const checklist = (() => {
-      if (data.settings.onboardingDone) return null;
-      const steps = [
-        { key: "npi", label: "Enter your NPI", detail: "Your licenses import automatically from the NPI registry", done: !!data.settings.npi, go: () => { setTab("more"); setSubPage("settings"); } },
-        { key: "lic", label: "Confirm your licenses", detail: "Tap Import from NPI, then add DEA and board certs", done: (data.licenses || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
-        { key: "doc", label: "Upload one document", detail: "A license PDF or a photo — packets build themselves from these", done: (data.documents || []).length >= 1, go: () => { setTab("credentials"); setSubPage("licenses"); } },
-        { key: "alert", label: "Turn on expiration alerts", detail: "The whole point: never let anything lapse silently", done: !!(data.settings.notifyEmail || data.settings.notifyBrowser || data.settings.notifyText), go: () => { setTab("more"); setSubPage("settings"); } },
-        { key: "ai", label: "AI is on", detail: "Scanning, dictation, the RVU coder and Vera work with no setup on a shared key. Add your own free Gemini key in Settings to lift the daily limit", done: aiOn || !!data.settings.anthropicApiKey, go: () => { setTab("more"); setSubPage("settings"); } },
-      ];
-      const remaining = steps.filter(st => !st.done);
-      if (!remaining.length) return null;
-      const doneCount = steps.length - remaining.length;
-      return (
-        <div style={{ marginBottom: 20, backgroundColor: T.card, border: `2px solid ${T.accent}`, borderRadius: 14, padding: "14px 16px", boxShadow: T.shadow1 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h3 style={{ fontSize: 15, fontWeight: 800, color: T.text, margin: 0 }}>Get set up · {doneCount}/{steps.length}</h3>
-            <button onClick={() => updateSettings({ onboardingDone: true })} style={{ border: "none", background: "transparent", color: T.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>dismiss</button>
-          </div>
-          <div style={{ display: "flex", gap: 4, margin: "8px 0 10px" }}>
-            {steps.map(st => (
-              <div key={st.key} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: st.done ? T.accent : T.border }} />
-            ))}
-          </div>
-          {steps.map(st => (
-            <div key={st.key} onClick={st.done ? undefined : st.go} style={{
-              display: "flex", alignItems: "center", gap: 10, padding: "9px 0",
-              borderBottom: `1px solid ${T.border}`, cursor: st.done ? "default" : "pointer",
-              opacity: st.done ? 0.55 : 1,
-            }}>
-              <span style={{
-                width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                backgroundColor: st.done ? T.accent : "transparent", border: `2px solid ${st.done ? T.accent : T.border}`,
-                color: "#fff", fontSize: 13, fontWeight: 800,
-              }}>{st.done ? "✓" : ""}</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, textDecoration: st.done ? "line-through" : "none" }}>{st.label}</div>
-                {!st.done && <div style={{ fontSize: 12, color: T.textMuted }}>{st.detail}</div>}
-              </div>
-              {!st.done && <span style={{ marginLeft: "auto", color: T.accent, fontWeight: 800 }}>›</span>}
-            </div>
-          ))}
-        </div>
-      );
-    })();
+    // Setup lives on its own page now; this card is the way in and the
+    // only thing Home says about it. Both layouts place {checklist}.
+    const checklist = <SetupCard onOpenSetup={openSetup} />;
 
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
@@ -846,7 +890,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       </div>
     );
     const getStarted = (
-      <div onClick={() => { setAutoAddLicense(true); setTab("credentials"); setSubPage("licenses"); }} style={{
+      <div onClick={() => openAddIn("licenses")} style={{
         backgroundColor: T.card, borderRadius: 16, padding: "32px 24px",
         marginBottom: 16, cursor: "pointer", border: `2px dashed ${T.border}`,
         textAlign: "center", boxShadow: T.shadow1,
@@ -861,7 +905,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const hero = allCreds.length > 0 ? (isDesktop ? deskHero : phoneHero) : getStarted;
 
     // Incomplete profile — the app can only compute what it knows
-    const profileGapBanner = profileGaps.length > 0 && (
+    // Setup owns the 'finish your profile' conversation until Tier 1 is
+    // done; two surfaces asking for the same degree field is the noise.
+    const profileGapBanner = !setupOwnsProfile && profileGaps.length > 0 && (
       <div onClick={() => { setTab("more"); setSubPage("settings"); }} style={{
         backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
         borderRadius: 12, padding: "12px 16px", marginBottom: 14, cursor: "pointer",
@@ -876,19 +922,19 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     );
 
     // Records the app can't protect: no expiration date on file
-    const missingExpBanner = missingExpiration.length > 0 && (
+    const missingExpBanner = missingExpirationBanner.length > 0 && (
       <div style={{
         backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
         borderRadius: 12, padding: "12px 16px", marginBottom: 14,
       }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
-          ⚠️ {missingExpiration.length} record{missingExpiration.length > 1 ? "s" : ""} missing an expiration date
+          ⚠️ {missingExpirationBanner.length} record{missingExpirationBanner.length > 1 ? "s" : ""} missing an expiration date
         </div>
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
           Tap a record below, then use its pencil to add the expiration date. Until then the app can't warn you before it lapses.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {missingExpiration.slice(0, 5).map(({ item, sec, label }) => {
+          {missingExpirationBanner.slice(0, 5).map(({ item, sec, label }) => {
             const secLabel = sec === "licenses" ? "License" : sec === "privileges" ? "Privilege" : sec === "insurance" ? "Insurance" : "Health record";
             return (
             <button key={item.id} onClick={() => { setTab("credentials"); setSubPage(sec); setAutoEditTarget({ sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
@@ -1815,39 +1861,15 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
   const renderCredSection = (sub) => {
     if (sub === "licenses") {
-      const handleNpiImport = async () => {
-        const npi = data.settings.npi;
-        if (!npi) { setNpiImportMsg("Set your NPI in Settings first."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
-        setNpiImporting(true); setNpiImportMsg(null);
-        try {
-          const result = await lookupNPI(npi);
-          if (!result) { setNpiImportMsg("No provider found for this NPI."); setTimeout(() => setNpiImportMsg(null), 4000); return; }
-          // Every license the registry lists (one per state + number), minus
-          // any already on file; the registry only carries what the physician
-          // reported to NPPES, so say so when it comes back empty.
-          const npiLicenses = extractLicensesFromNPI(result);
-          if (npiLicenses.length === 0) { setNpiImportMsg("The registry lists no license numbers for this NPI. It only carries what was reported to NPPES; add the rest by hand or from a photo."); setTimeout(() => setNpiImportMsg(null), 6000); return; }
-          const newOnes = mergeNpiLicenses(data.licenses, npiLicenses, { degreeType: data.settings.degreeType, makeId: generateId });
-          if (newOnes.length === 0) { setNpiImportMsg(`All ${npiLicenses.length} registry license${npiLicenses.length > 1 ? "s are" : " is"} already on file.`); setTimeout(() => setNpiImportMsg(null), 4000); return; }
-          for (const lic of newOnes) addItem("licenses", lic);
-          setNpiImportMsg(`${newOnes.length} license${newOnes.length > 1 ? "s" : ""} imported!`);
-          setTimeout(() => setNpiImportMsg(null), 5000);
-        } catch (err) { setNpiImportMsg(err.message || "Import failed"); setTimeout(() => setNpiImportMsg(null), 4000); }
-        finally { setNpiImporting(false); }
-      };
       return (<>
-        {data.settings.npi && (
-          <div style={{ marginBottom: 12, padding: "14px 16px", borderRadius: 14, backgroundColor: T.accentDim, border: `1px solid ${T.accent}30`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Import from NPI Registry</div>
-              <div style={{ fontSize: 12, color: T.textMuted }}>Auto-fill licenses linked to NPI {data.settings.npi}</div>
-            </div>
-            <button onClick={handleNpiImport} disabled={npiImporting} style={{ padding: "8px 16px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: npiImporting ? "wait" : "pointer", opacity: npiImporting ? 0.7 : 1, flexShrink: 0 }}>
-              {npiImporting ? "Looking up..." : "Import"}
-            </button>
-          </div>
-        )}
-        {npiImportMsg && <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: npiImportMsg.includes("imported") ? T.success : T.warning, backgroundColor: npiImportMsg.includes("imported") ? T.successDim : T.warningDim }}>{npiImportMsg}</div>}
+        {/* The registry lookup and import is one component now (NpiPanel);
+            this page, the setup board's Your-licenses drawer and the old
+            wizard all used to reimplement it. */}
+        <div style={{ marginBottom: 12, padding: "14px 16px", borderRadius: 14, backgroundColor: T.accentDim, border: `1px solid ${T.accent}30` }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 2 }}>Import from the NPI registry</div>
+          <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 10 }}>Every state license number the federal registry lists, in one lookup.</div>
+          <NpiPanel dense />
+        </div>
         <CrudSection title="Licenses" sectionKey="licenses" {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={[
           { key: "type", label: "Type" },
           { key: "state", label: "State", width: "9%" },
@@ -1866,7 +1888,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." autoOpen={autoAddLicense} onAutoOpenDone={() => setAutoAddLicense(false)} fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
+        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "noExpiration", label: "Expiration", type: "checkbox", checkboxLabel: "This certificate does not expire", show: (f) => /board certification/i.test(f.type || ""), hint: "A lifetime diplomate has no renewal date. Tick this and the app stops asking for one. Course and device certifications are already treated this way." }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE && !(f.noExpiration === true && /board certification/i.test(f.type || "")) }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
       </>);
     }
     if (sub === "cme") return <CMESection onShare={openShare} />;
@@ -1967,7 +1989,19 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       const activeRailId = deskSub.startsWith("findCme:") ? "findCme" : deskSub;
       return (
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-          <nav style={{ width: 240, flexShrink: 0, position: "sticky", top: "calc(var(--desk-sticky-top, 56px) + 16px)", display: "flex", flexDirection: "column", gap: 14 }}>
+            <nav style={{ width: 240, flexShrink: 0, position: "sticky", top: "calc(var(--desk-sticky-top, 56px) + 16px)", display: "flex", flexDirection: "column", gap: 14 }}>
+            <button onClick={() => openSetup(null)} style={{
+              display: "flex", alignItems: "center", gap: 8, width: "100%",
+              padding: "8px 10px", borderRadius: 10, cursor: "pointer",
+              border: `1px solid ${setupTier1Done ? T.border : T.accent}`,
+              backgroundColor: setupTier1Done ? "transparent" : T.accentDim,
+              color: setupTier1Done ? T.textMuted : T.accent,
+              fontSize: 13.5, fontWeight: 700, textAlign: "left", fontFamily: "inherit",
+            }}>
+              <span style={{ fontSize: 16, width: 22, textAlign: "center", flexShrink: 0 }}>{"\u2705"}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>Setup</span>
+              <span style={{ fontSize: 11.5, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{setupCounts.done} of {setupCounts.total}</span>
+            </button>
             {credGroups.map(group => (
               <div key={group.title}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, paddingLeft: 10 }}>{group.title}</div>
@@ -2008,6 +2042,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <div>
         <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Credentials</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <button onClick={() => openSetup(null)} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: setupTier1Done ? T.card : T.accentDim,
+            border: `1px solid ${setupTier1Done ? T.border : T.accent}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer",
+            textAlign: "left", width: "100%", boxShadow: setupTier1Done ? T.shadow1 : "none",
+          }}>
+            <span style={{ fontSize: 22, width: 32, textAlign: "center" }}>{"\u2705"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: setupTier1Done ? T.text : T.accent }}>Setup</div>
+              <div style={{ fontSize: 13, color: T.textDim }}>Get everything on file</div>
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>{setupCounts.done} of {setupCounts.total}</span>
+            <span style={{ color: T.textDim, fontSize: 18 }}>{"\u203a"}</span>
+          </button>
           {credGroups.map(group => {
             const sorted = [...group.items].sort((a, b) => ((b.count || 0) > 0 ? 1 : 0) - ((a.count || 0) > 0 ? 1 : 0));
             return (
@@ -2054,6 +2103,19 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
   /* ─── MORE PAGE ──────────────────────────────────────────── */
   const renderMore = () => {
+    if (subPage === "setup") return (
+      <SetupPage
+        initialTask={setupTask}
+        onOpenCredentials={() => { setTab("credentials"); setSubPage(null); }}
+        onAddLicenseByHand={() => openAddIn("licenses", "licenses")}
+        onOpenSection={openAddIn}
+        onUpgrade={() => { setSubPage(null); setShowPricing(true); }}
+        onOpenRecord={(sec, id, taskId) => {
+          setAutoEditTarget({ sec, id, focus: "expirationDate", mode: "edit", returnTo: { tab: "more", subPage: "setup", taskId } });
+          setTab("credentials"); setSubPage(sec);
+        }}
+      />
+    );
     if (subPage === "settings") return <SettingsSection />;
     if (subPage === "cv") return <CVGenerator />;
     if (subPage === "finance") return <FinanceSection />;
@@ -2178,6 +2240,22 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Data & Backup</div>
               <div style={{ fontSize: 13, color: T.textDim }}>Export, import, or print your data</div>
             </div>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
+
+          {/* Setup */}
+          <button onClick={() => openSetup(null)} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${setupTier1Done ? T.border : T.accent}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\u2705"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Setup</div>
+              <div style={{ fontSize: 13, color: T.textDim }}>Get everything on file</div>
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>{setupCounts.done} of {setupCounts.total}</span>
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
@@ -2453,7 +2531,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
   // Reading pages take the narrower 840px measure at desk width; working
   // screens take the full 1140px. Phone ignores both.
-  const READING_PAGES = new Set(["settings", "faq", "assistant", "cv", "cancellation", "privacy", "terms", "data-rights"]);
+  const READING_PAGES = new Set(["setup", "settings", "faq", "assistant", "cv", "cancellation", "privacy", "terms", "data-rights"]);
   const isReadingPage = tab === "more" && READING_PAGES.has(subPage);
 
   // The top bar and content render identically at both widths; at desk they

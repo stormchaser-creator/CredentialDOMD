@@ -64,6 +64,11 @@ function normalizeClerkUser(clerkUser) {
 export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const [data, setData] = useState(DEFAULT_DATA);
   const [loaded, setLoaded] = useState(false);
+  // Where the record file in state came from. The setup board must not
+  // stamp its first-render marks off the local fallback: a degraded load
+  // looks like a brand-new account, and the next real load would then
+  // congratulate an established physician for finishing setup.
+  const [loadedFrom, setLoadedFrom] = useState(null); // "cloud" | "local"
   const userIdRef = useRef(null);
   // Clerk id the in-memory `data` was loaded for. The on-device cache is
   // written under this id only, so a stale timer can never file one
@@ -325,6 +330,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
 
           dataOwnerRef.current = authUserId;
           setData(merged);
+          setLoadedFrom("cloud");
           setLoaded(true);
 
           // Cache on-device under this account's key
@@ -373,6 +379,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
     dataOwnerRef.current = authUserId || null;
     setData(d);
+    setLoadedFrom("local");
     setLoaded(true);
   }
 
@@ -535,7 +542,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [onNavigate]);
 
   const value = useMemo(() => ({
-    data, setData, loaded, theme, toggleTheme, isDesktop,
+    data, setData, loaded, loadedFrom, theme, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
     allTrackedStates, navigate, userIdRef,
     // Auth
@@ -543,7 +550,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
-  }), [data, loaded, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

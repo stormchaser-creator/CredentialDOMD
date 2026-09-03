@@ -145,6 +145,9 @@ const SETTINGS_TO_PROFILE = {
   // apiKey / anthropicApiKey are deliberately NOT here: AI keys live on the
   // device only (see deviceKeys below), never in Postgres.
   taxPrep: "tax_prep",
+  // The setup board: skips, declared negatives, the snooze and the two
+  // completion stamps. Task completion itself is derived, never stored.
+  setupState: "setup_state",
   // Monthly server-built backup, opt-out. Column is NOT NULL DEFAULT true and
   // the client reads undefined as on, so an untouched account agrees.
   backupMonthly: "backup_monthly",

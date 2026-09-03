@@ -42,7 +42,7 @@ const rowToCamel = (row) => {
  * So on success this modal pulls the server's row and merges it into
  * data.shareLog by id, which is what the local send history reads.
  */
-function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, initialSubject, initialTo, onSent }) {
+function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, initialSubject, initialTo, onSent, onDownloadPacket }) {
   const { data, updateSection, userIdRef, theme: T } = useApp();
   const iS = useInputStyle();
   const [to, setTo] = useState("");
@@ -235,6 +235,15 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
       {(overFiles || overSize) && (
         <div style={{ fontSize: 12.5, color: T.danger, fontWeight: 600, marginBottom: 8 }}>
           Email carries up to {MAX_FILES} files and 25 MB per send. Anything past that is left out and named below after sending.
+          {/* A full credentialing packet routinely exceeds both caps. When
+              the caller has a ZIP to offer, offer it here rather than
+              letting the physician trim the selection by hand. */}
+          {onDownloadPacket && (
+            <button onClick={() => { onClose?.(); onDownloadPacket(); }} style={{
+              display: "block", marginTop: 6, border: "none", background: "transparent", padding: 0,
+              color: T.accent, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+            }}>Download the whole packet as one file instead</button>
+          )}
         </div>
       )}
       {notInCloud.length > 0 && !overFiles && !overSize && (
