@@ -163,6 +163,7 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
   theme: null,
   font_size: null,
   show_dashboard_credentials: null,
+  setup_state: null,
   reminder_lead_days: null,
   notify_email: null,
   notify_browser: null,

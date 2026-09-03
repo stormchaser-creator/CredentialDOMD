@@ -31,6 +31,9 @@ export const DEFAULT_SETTINGS = {
   lastCmeVerification: null,
   cmeVerificationResults: {},
   cmeVerificationAlerted: false,
+  // Setup board state. Null until the board is first rendered; see
+  // src/utils/setupTasks.js for the shape.
+  setupState: null,
 };
 
 export const DEFAULT_DATA = {

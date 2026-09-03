@@ -81,7 +81,7 @@ function isShown(f, form) {
   return typeof f.show === "function" ? !!f.show(form) : true;
 }
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
   const { data, setData, addItem, theme: T , user, isDesktop } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -99,6 +99,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const modalVideoRef = useRef(null);
   const modalCanvasRef = useRef(null);
   const modalStreamRef = useRef(null);
+  // True while an edit form that a deep link opened is still on screen.
+  const arrivedByLink = useRef(false);
 
   const openAdd = useCallback(() => { setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
@@ -137,6 +139,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     if (!autoEditId) return;
     const it = items.find(x => x.id === autoEditId);
     if (it) {
+      arrivedByLink.current = true;
       openEdit(it);
       onAutoEditDone?.();
       // "Add the expiration date" cards land the user INSIDE a long form —
@@ -167,7 +170,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     setRequiredError(null);
     if (modalStreamRef.current) { modalStreamRef.current.getTracks().forEach(t => t.stop()); modalStreamRef.current = null; }
     setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null);
-  }, []);
+    // A deep link that opened this form is finished only now. onAutoEditDone
+    // fires the moment the form OPENS (it has to, or the effect reopens it),
+    // so anything that wants the physician taken back where they came from
+    // has to hang off the close instead.
+    if (arrivedByLink.current) { arrivedByLink.current = false; onAutoEditClosed?.(); }
+  }, [onAutoEditClosed]);
 
   // Cleanup camera stream on unmount
   useEffect(() => {
