@@ -1645,7 +1645,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           {requestBanner}
           {checklist}
           {hasActionColumn ? (
-            <div className="cmd-responsive-grid-2">
+            // marginBottom matches every other desk section; without it the
+            // CME Progress heading sat flush against this row.
+            <div className="cmd-responsive-grid-2" style={{ marginBottom: 20 }}>
               <div style={{ minWidth: 0 }}>{leftStack}</div>
               <div style={{ minWidth: 0 }}>{actionSection}</div>
             </div>
@@ -1661,9 +1663,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </div>
           )}
           {(boardComps.length > 0 || showCredsPreview) && (
-            <div className="cmd-responsive-grid-3" style={{ marginBottom: 20 }}>
+            <div className={boardCards.length === 1 && showCredsPreview ? "cmd-responsive-grid-2" : "cmd-responsive-grid-3"} style={{ marginBottom: 20 }}>
               {boardComps.length > 0 && (
-                <div style={{ minWidth: 0, gridColumn: showCredsPreview ? "span 2" : "1 / -1" }}>
+                <div style={{ minWidth: 0, gridColumn: showCredsPreview && boardCards.length > 1 ? "span 2" : boardCards.length === 1 && showCredsPreview ? undefined : "1 / -1" }}>
                   {boardHeading}
                   <div className={showCredsPreview ? "cmd-responsive-grid-2" : "cmd-responsive-grid-3"} style={boardCards.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>{boardCards}</div>
                   {boardFollowNotes.length > 0 && (
