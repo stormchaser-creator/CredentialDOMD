@@ -35,11 +35,11 @@ Get in:
 1. Open ${APP_URL}
 2. Tap "Sign up" and use this exact email address: ${email}
    (the invitation is tied to it; another address will not get through)
-3. Set a password or use the emailed magic link, then follow the "Get set up" checklist on the home screen.
+3. Set a password or use the emailed magic link, then work down the Setup list. Five items and the app starts watching your renewal dates; the rest is for credentialing packets and can wait.
 
 A few things to know:
 - The beta is free. Every feature is on, no card, nothing to cancel.
-- AI features (document scanning, dictation, the RVU coder, Vera) use your own Google AI Studio key. Settings > AI walks you through it; the free tier is plenty. Keys stay on your device and are never uploaded.
+- AI features (document scanning, dictation, the RVU coder, Vera) work the moment you sign in. There is no API key to get and nothing to configure; it runs on keys held on the server with a per-account daily limit. You can add your own key in Settings if you ever want to lift that limit, and it stays on your device.
 - Do not put patient names, MRNs, or dates of birth anywhere except the private on-device vault. Everything else syncs so you can use it on your phone and computer.
 - It is a beta. If something looks wrong or you want something changed, use Support inside the app or just reply to this email. I read every one.
 
