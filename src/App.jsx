@@ -265,7 +265,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, updateSettings, user, authChecked, offlineMode, signOut, isPro, isPractice, plan, manage, hasSubscription, isFreeBeta, isLifetime } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
@@ -2116,7 +2116,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         }}
       />
     );
-    if (subPage === "settings") return <SettingsSection />;
+    if (subPage === "settings") return <SettingsSection onUpgrade={() => setShowPricing(true)} />;
     if (subPage === "cv") return <CVGenerator />;
     if (subPage === "finance") return <FinanceSection />;
     if (subPage === "export") return <DataExport />;
@@ -2139,50 +2139,82 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>More</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
-          {/* ─── Plan Card ─────────────────────────────────────── */}
-          <div style={{
-            borderRadius: 16, padding: "16px 18px", marginBottom: 4,
-            background: isPractice
-              ? "linear-gradient(135deg, #7c3aed, #4f46e5)"
-              : isPro
-                ? "linear-gradient(135deg, #059669, #0d9488)"
-                : "linear-gradient(135deg, #1e293b, #334155)",
-            boxShadow: isPro ? "0 4px 16px rgba(5,150,105,0.25)" : "0 2px 8px rgba(0,0,0,0.2)",
+          {/* Assistant */}
+          <button onClick={() => setSubPage("assistant")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `2px solid ${T.accent}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
           }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: isPro ? 10 : 0 }}>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Current Plan</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
-                  {isFreeBeta && !hasSubscription ? "Free beta" : isLifetime ? "Founding Lifetime" : isPractice ? "Clinic" : isPro ? "Pro" : "Free"}
-                </div>
-                {isFreeBeta && !hasSubscription && (
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>All features on. No card, nothing to cancel.</div>
-                )}
-                {!isFreeBeta && isLifetime && (
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>Paid once. Nothing renews.</div>
-                )}
-              </div>
-              {!isPro && !isFreeBeta && (
-                <button onClick={() => setShowPricing(true)} style={{
-                  padding: "10px 18px", borderRadius: 12, border: "none",
-                  backgroundColor: "#10b981", color: "#fff",
-                  fontSize: 14, fontWeight: 700, cursor: "pointer",
-                  boxShadow: "0 2px 8px rgba(16,185,129,0.4)",
-                }}>
-                  Upgrade →
-                </button>
-              )}
+            <span style={{ fontSize: 22 }}>{"\u2728"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Vera</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Questions, documents, packets, help and feedback</div>
             </div>
-            {isPro && hasSubscription && (
-              <button onClick={() => manage()} style={{
-                padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.25)",
-                backgroundColor: "rgba(255,255,255,0.1)", color: "#fff",
-                fontSize: 13, fontWeight: 600, cursor: "pointer", width: "100%",
-              }}>
-                {isLifetime ? "Receipts and payment details" : "Manage Billing"}
-              </button>
+          </button>
+
+          {/* Admin (founders only) */}
+          {isAdminUser(user) && (
+            <button onClick={() => setSubPage("admin")} className="cmd-card-hover" style={{
+              display: "flex", alignItems: "center", gap: 12,
+              backgroundColor: T.card, border: `2px solid ${T.accent}`,
+              borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+              boxShadow: T.shadow1,
+            }}>
+              <span style={{ fontSize: 20 }}>{"\ud83d\udd11"}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.accent }}>Admin</div>
+                <div style={{ fontSize: 13, color: T.textDim }}>Tickets, feedback, signups</div>
+              </div>
+              <span style={{ color: T.accent }}>{"\u203a"}</span>
+            </button>
+          )}
+
+          {/* Settings */}
+          <button onClick={() => setSubPage("settings")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${T.border}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\u2699\ufe0f"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Settings</span>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
+
+
+          {/* Setup */}
+          <button onClick={() => openSetup(null)} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${setupTier1Done ? T.border : T.accent}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\u2705"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Setup</div>
+              <div style={{ fontSize: 13, color: T.textDim }}>Get everything on file</div>
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>{setupCounts.done} of {setupCounts.total}</span>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
+
+          {/* Requests: document requests forwarded to docs@ */}
+          <button onClick={() => setSubPage("requests")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${newRequestCount ? T.accent : T.border}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\ud83d\udce8"}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Requests</div>
+            </div>
+            {newRequestCount > 0 && (
+              <span style={{ minWidth: 22, padding: "2px 8px", borderRadius: 11, backgroundColor: T.accent, color: "#fff", fontSize: 12, fontWeight: 800, textAlign: "center" }}>{newRequestCount}</span>
             )}
-          </div>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
 
           {/* Generate CV */}
           <button onClick={() => setSubPage("cv")} className="cmd-card-hover" style={{
@@ -2198,21 +2230,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <span style={{ color: T.accent }}>{"\u203a"}</span>
           </button>
 
-          {/* Finance — 1099 deductions and expense ledger */}
-          <button onClick={() => setSubPage("finance")} className="cmd-card-hover" style={{
-            display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `1px solid ${T.border}`,
-            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-            boxShadow: T.shadow1,
-          }}>
-            <span style={{ fontSize: 20 }}>{"\ud83d\udcb0"}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Finance</div>
-              <div style={{ fontSize: 13, color: T.textMuted }}>1099 deductions and expense ledger</div>
-            </div>
-            <span style={{ color: T.textDim }}>{"\u203a"}</span>
-          </button>
-
           {/* CPT Lookup */}
           <button onClick={() => setSubPage("cptLookup")} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
@@ -2224,6 +2241,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>CPT Lookup</div>
               <div style={{ fontSize: 13, color: T.textDim }}>Search and reference CPT codes</div>
+            </div>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
+
+          {/* Finance — 1099 deductions and expense ledger */}
+          <button onClick={() => setSubPage("finance")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${T.border}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\ud83d\udcb0"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Finance</div>
+              <div style={{ fontSize: 13, color: T.textMuted }}>1099 deductions and expense ledger</div>
             </div>
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
@@ -2243,154 +2275,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
-          {/* Setup */}
-          <button onClick={() => openSetup(null)} className="cmd-card-hover" style={{
-            display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `1px solid ${setupTier1Done ? T.border : T.accent}`,
-            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-            boxShadow: T.shadow1,
-          }}>
-            <span style={{ fontSize: 20 }}>{"\u2705"}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Setup</div>
-              <div style={{ fontSize: 13, color: T.textDim }}>Get everything on file</div>
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>{setupCounts.done} of {setupCounts.total}</span>
-            <span style={{ color: T.textDim }}>{"\u203a"}</span>
-          </button>
-
-          {/* Settings */}
-          <button onClick={() => setSubPage("settings")} className="cmd-card-hover" style={{
-            display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `1px solid ${T.border}`,
-            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-            boxShadow: T.shadow1,
-          }}>
-            <span style={{ fontSize: 20 }}>{"\u2699\ufe0f"}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Settings</span>
-            <span style={{ color: T.textDim }}>{"\u203a"}</span>
-          </button>
-
-
-          {/* Admin (founders only) */}
-          {isAdminUser(user) && (
-            <button onClick={() => setSubPage("admin")} className="cmd-card-hover" style={{
-              display: "flex", alignItems: "center", gap: 12,
-              backgroundColor: T.card, border: `2px solid ${T.accent}`,
-              borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-              boxShadow: T.shadow1,
-            }}>
-              <span style={{ fontSize: 20 }}>{"\ud83d\udd11"}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: T.accent }}>Admin</div>
-                <div style={{ fontSize: 13, color: T.textDim }}>Tickets, feedback, signups</div>
-              </div>
-              <span style={{ color: T.accent }}>{"\u203a"}</span>
-            </button>
-          )}
-
-          {/* Assistant */}
-          <button onClick={() => setSubPage("assistant")} className="cmd-card-hover" style={{
-            display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `2px solid ${T.accent}`,
-            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-            boxShadow: T.shadow1,
-          }}>
-            <span style={{ fontSize: 22 }}>{"\u2728"}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Vera</div>
-              <div style={{ fontSize: 12, color: T.textMuted }}>Everything starts here — questions, documents, packets, help, feedback</div>
-            </div>
-          </button>
-
-          {/* Theme Toggle */}
-          <div style={{
-            backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
-            padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
-            boxShadow: T.shadow1,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 20 }}>{data.settings.theme === "dark" ? "\ud83c\udf19" : "\u2600\ufe0f"}</span>
-              <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{data.settings.theme === "dark" ? "Dark Mode" : "Light Mode"}</span>
-            </div>
-            <button onClick={toggleTheme} style={{
-              width: 48, height: 28, borderRadius: 14, border: "none",
-              backgroundColor: data.settings.theme === "dark" ? T.accent : T.border,
-              cursor: "pointer", position: "relative", transition: "background 0.2s",
-            }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff",
-                position: "absolute", top: 3,
-                left: data.settings.theme === "dark" ? 23 : 3,
-                transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-              }} />
-            </button>
-          </div>
-
-          {/* Text Size */}
-          <div style={{
-            backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
-            padding: "14px 16px", boxShadow: T.shadow1,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: T.textMuted }}>Aa</span>
-              <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Text Size</span>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {[
-                { id: "S", label: "S", size: 14 },
-                { id: "M", label: "M", size: 17 },
-                { id: "L", label: "L", size: 20 },
-                { id: "XL", label: "XL", size: 24 },
-                { id: "XXL", label: "XXL", size: 28 },
-              ].map(opt => {
-                const active = (data.settings.fontSize || "M") === opt.id;
-                return (
-                  <button key={opt.id} onClick={() => updateSettings({ fontSize: opt.id })} style={{
-                    flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                    gap: 4, padding: "12px 4px", borderRadius: 12,
-                    border: active ? `2px solid ${T.accent}` : `1px solid ${T.border}`,
-                    backgroundColor: active ? T.accentGlow : T.input, cursor: "pointer",
-                    transition: "all 0.15s",
-                  }}>
-                    <span style={{ fontSize: opt.size, fontWeight: 700, color: active ? T.accent : T.text, lineHeight: 1.2 }}>Aa</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: active ? T.accent : T.textDim }}>{opt.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* FAQ */}
-          <button onClick={() => setSubPage("faq")} className="cmd-card-hover" style={{
-            display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `1px solid ${T.border}`,
-            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-            boxShadow: T.shadow1,
-          }}>
-            <span style={{ fontSize: 20 }}>{"\u2753"}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Help & FAQ</span>
-            <span style={{ color: T.textDim }}>{"\u203a"}</span>
-          </button>
-
-          {/* Requests: document requests forwarded to docs@ */}
-          <button onClick={() => setSubPage("requests")} className="cmd-card-hover" style={{
-            display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `1px solid ${newRequestCount ? T.accent : T.border}`,
-            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
-            boxShadow: T.shadow1,
-          }}>
-            <span style={{ fontSize: 20 }}>{"\ud83d\udce8"}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Requests</div>
-              <div style={{ fontSize: 12.5, color: T.textMuted }}>Document requests forwarded to docs@credentialdomd.com; reply with the packet attached</div>
-            </div>
-            {newRequestCount > 0 && (
-              <span style={{ minWidth: 22, padding: "2px 8px", borderRadius: 11, backgroundColor: T.accent, color: "#fff", fontSize: 12, fontWeight: 800, textAlign: "center" }}>{newRequestCount}</span>
-            )}
-            <span style={{ color: T.textDim }}>{"\u203a"}</span>
-          </button>
-
           {/* Support: file a ticket, read replies */}
           <button onClick={() => { setSupportTab("tickets"); setShowSupport(true); }} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
@@ -2401,6 +2285,18 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <span style={{ fontSize: 20 }}>{"\ud83d\udcac"}</span>
             <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Support</span>
             <span style={{ fontSize: 12, color: T.textMuted }}>tickets & replies</span>
+            <span style={{ color: T.textDim }}>{"\u203a"}</span>
+          </button>
+
+          {/* FAQ */}
+          <button onClick={() => setSubPage("faq")} className="cmd-card-hover" style={{
+            display: "flex", alignItems: "center", gap: 12,
+            backgroundColor: T.card, border: `1px solid ${T.border}`,
+            borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
+            boxShadow: T.shadow1,
+          }}>
+            <span style={{ fontSize: 20 }}>{"\u2753"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Help & FAQ</span>
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 

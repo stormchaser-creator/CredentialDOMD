@@ -21,8 +21,9 @@ import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusS
 import { CODER_MODELS } from "../../utils/cptCoder";
 import FoundingMemberBadge from "../shared/FoundingMemberBadge";
 
-function SettingsSection() {
-  const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop } = useApp();
+function SettingsSection({ onUpgrade }) {
+  const { data, setData, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
+    isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
 
@@ -147,6 +148,52 @@ function SettingsSection() {
   return (
     <div>
       <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Settings</h2>
+
+      {/* Your plan: moved out of More, which opened on a billing card
+          before anything a physician came to do. */}
+      <div style={{
+        borderRadius: 16, padding: "16px 18px", marginBottom: 4,
+        background: isPractice
+          ? "linear-gradient(135deg, #7c3aed, #4f46e5)"
+          : isPro
+            ? "linear-gradient(135deg, #059669, #0d9488)"
+            : "linear-gradient(135deg, #1e293b, #334155)",
+        boxShadow: isPro ? "0 4px 16px rgba(5,150,105,0.25)" : "0 2px 8px rgba(0,0,0,0.2)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: isPro ? 10 : 0 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Current Plan</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
+              {isFreeBeta && !hasSubscription ? "Free beta" : isLifetime ? "Founding Lifetime" : isPractice ? "Clinic" : isPro ? "Pro" : "Free"}
+            </div>
+            {isFreeBeta && !hasSubscription && (
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>All features on. No card, nothing to cancel.</div>
+            )}
+            {!isFreeBeta && isLifetime && (
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>Paid once. Nothing renews.</div>
+            )}
+          </div>
+          {!isPro && !isFreeBeta && (
+            <button onClick={() => onUpgrade && onUpgrade()} style={{
+              padding: "10px 18px", borderRadius: 12, border: "none",
+              backgroundColor: "#10b981", color: "#fff",
+              fontSize: 14, fontWeight: 700, cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(16,185,129,0.4)",
+            }}>
+              Upgrade →
+            </button>
+          )}
+        </div>
+        {isPro && hasSubscription && (
+          <button onClick={() => manage()} style={{
+            padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.25)",
+            backgroundColor: "rgba(255,255,255,0.1)", color: "#fff",
+            fontSize: 13, fontWeight: 600, cursor: "pointer", width: "100%",
+          }}>
+            {isLifetime ? "Receipts and payment details" : "Manage Billing"}
+          </button>
+        )}
+      </div>
 
       {/* Profile */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
@@ -438,6 +485,67 @@ function SettingsSection() {
             }}>Add</button>
           </div>
         )}
+      </div>
+
+      {/* Appearance: moved here from More, which was carrying settings that
+          belong in Settings. */}
+      <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 12 }}>Appearance</h3>
+        <div style={{
+          backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+          padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          boxShadow: T.shadow1,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 20 }}>{data.settings.theme === "dark" ? "\ud83c\udf19" : "\u2600\ufe0f"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{data.settings.theme === "dark" ? "Dark Mode" : "Light Mode"}</span>
+          </div>
+          <button onClick={toggleTheme} style={{
+            width: 48, height: 28, borderRadius: 14, border: "none",
+            backgroundColor: data.settings.theme === "dark" ? T.accent : T.border,
+            cursor: "pointer", position: "relative", transition: "background 0.2s",
+          }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff",
+              position: "absolute", top: 3,
+              left: data.settings.theme === "dark" ? 23 : 3,
+              transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+            }} />
+          </button>
+        </div>
+        <div style={{ height: 10 }} />
+        <div style={{
+          backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+          padding: "14px 16px", boxShadow: T.shadow1,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: T.textMuted }}>Aa</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Text Size</span>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[
+              { id: "S", label: "S", size: 14 },
+              { id: "M", label: "M", size: 17 },
+              { id: "L", label: "L", size: 20 },
+              { id: "XL", label: "XL", size: 24 },
+              { id: "XXL", label: "XXL", size: 28 },
+            ].map(opt => {
+              const active = (data.settings.fontSize || "M") === opt.id;
+              return (
+                <button key={opt.id} onClick={() => updateSettings({ fontSize: opt.id })} style={{
+                  flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  gap: 4, padding: "12px 4px", borderRadius: 12,
+                  border: active ? `2px solid ${T.accent}` : `1px solid ${T.border}`,
+                  backgroundColor: active ? T.accentGlow : T.input, cursor: "pointer",
+                  transition: "all 0.15s",
+                }}>
+                  <span style={{ fontSize: opt.size, fontWeight: 700, color: active ? T.accent : T.text, lineHeight: 1.2 }}>Aa</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: active ? T.accent : T.textDim }}>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Dashboard */}
