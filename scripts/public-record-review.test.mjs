@@ -19,7 +19,7 @@ import { buildEnvelope } from "../supabase/functions/public-record/normalize.ts"
 import {
   clean, dedupeKey, markAlreadyOnFile,
   GROUP_ORDER, groupFindings, sortFindings,
-  isSelectable, defaultSelectedIds, leadNote, needsLabel, evidenceLine, countSelected,
+  isSelectable, defaultSelectedIds, leadNote, needsLabel, evidenceLine, replacesLine, joinWords, countSelected,
   requestSourceFor, requestSourceForReport, retrySources, failedSourceNames,
   mergeEnvelopes, buildSavePlan, savedSummary,
 } from "../src/utils/publicRecord.js";
@@ -140,6 +140,66 @@ eq("a row not on file can be", isSelectable(byId(marked, "cms:privilege:050245")
 eq("counting ignores rows on file",
   countSelected(marked, ["cms:privilege:050573", "cms:privilege:050245"]), 1);
 
+// ── A profile row that would overwrite what the physician typed ─────────────
+// The profile is the one section whose findings write a patch of several
+// fields behind a one-line label, and primaryState is what the renewal
+// reminders, the CME state and the setup gate are all read from. A ticked
+// box must never be the only warning that it is about to change.
+const FILLED = {
+  name: "Eric E. Whitney",
+  address: "Barrow Neurological Institute, 350 W Thomas Rd, Phoenix, AZ 85013",
+  phone: "602-406-3000",
+  primaryState: "AZ",
+};
+const onFilled = markAlreadyOnFile(ALL, {}, FILLED);
+const filledDefaults = defaultSelectedIds(onFilled);
+
+eq("a profile row that would overwrite a name does not start ticked",
+  filledDefaults.includes("nppes:profile:name"), false);
+eq("nor one that would overwrite the address and the primary state",
+  filledDefaults.includes("nppes:profile:practiceAddress"), false);
+ok("the name row says what it replaces",
+  byId(onFilled, "nppes:profile:name").replaces.length > 0);
+eq("the address row names every field it would take",
+  byId(onFilled, "nppes:profile:practiceAddress").replaces.sort(),
+  ["address", "phone", "primaryState"]);
+eq("the line reads as a sentence",
+  replacesLine(byId(onFilled, "nppes:profile:practiceAddress"), FILLED),
+  "Replaces your address (Barrow Neurological Institute, 350 W Thomas Rd, Phoenix, AZ 85013), phone (602-406-3000) and primary state (AZ).");
+eq("a row that replaces nothing says nothing",
+  replacesLine(byId(onFilled, "nppes:profile:degree"), FILLED), "");
+eq("the degree the physician has not set still starts ticked",
+  filledDefaults.includes("nppes:profile:degree"), true);
+ok("nothing outside the profile is dragged into this",
+  onFilled.filter(f => f.section !== "settings").every(f => f.replaces === undefined));
+
+// A blank profile is the case this feature exists for, and it must keep
+// filling itself in: replacing nothing is not a judgement call.
+const blankDefaults = defaultSelectedIds(markAlreadyOnFile(ALL, {}, {}));
+eq("on a blank profile the name is still ticked by default",
+  blankDefaults.includes("nppes:profile:name"), true);
+eq("and so is the practice address", blankDefaults.includes("nppes:profile:practiceAddress"), true);
+eq("a blank profile replaces nothing",
+  markAlreadyOnFile(ALL, {}, {}).filter(f => (f.replaces || []).length).length, 0);
+
+// A field already holding the register's own value is not a replacement, and
+// a field the physician never filled in is not one either. Only a value that
+// exists and disagrees counts.
+const sameAddress = markAlreadyOnFile(ALL, {}, {
+  address: "26520 Cactus Ave Ste A2006, Moreno Valley, CA 92555-3927",
+  primaryState: "AZ",
+});
+eq("only the field that exists and disagrees counts",
+  byId(sameAddress, "nppes:profile:practiceAddress").replaces, ["primaryState"]);
+eq("and the row that would flip it does not start ticked",
+  defaultSelectedIds(sameAddress).includes("nppes:profile:practiceAddress"), false);
+eq("the sentence names just that one",
+  replacesLine(byId(sameAddress, "nppes:profile:practiceAddress"), { primaryState: "AZ" }),
+  "Replaces your primary state (AZ).");
+eq("a profile row entirely on file is flagged and replaces nothing",
+  [byId(marked, "nppes:profile:name").alreadyOnFile, byId(marked, "nppes:profile:name").replaces],
+  [true, []]);
+
 // ── What a lead says about itself ───────────────────────────────────────────
 eq("every lead carries a sentence",
   marked.filter(f => f.confidence === "lead").every(f => leadNote(f).length > 0), true);
@@ -148,12 +208,24 @@ eq("the hospital sentence", leadNote(byId(marked, "cms:privilege:050245")),
   "Medicare claims show you working here. Confirm before treating it as a privilege.");
 eq("the paper sentence", leadNote(byId(marked, "pubmed:publication:42350380")),
   "Matched by name; check it is yours.");
+// mj5m-pzi6 is Medicare enrolment, not claims. The hospital sentence above may
+// say claims because 27ea-46a8 is claims-derived; this one may not.
+eq("the work-history sentence names enrolment, not claims",
+  leadNote(byId(marked, "cms:workHistory:5890689657")),
+  "Medicare lists this as a practice location enrolled under your NPI. Confirm your title and dates.");
+eq("no work-history sentence calls it a claim",
+  marked.filter(f => f.section === "workHistory").some(f => /claim/i.test(leadNote(f))), false);
 eq("no lead sentence claims a privilege or a verification",
   marked.filter(f => f.confidence === "lead").some(f => /\bactive\b|verified|credentialed/i.test(leadNote(f))), false);
 eq("needs read as words", needsLabel(["expirationDate"]), "expiration date");
 eq("two needs read as a sentence", needsLabel(["type", "expirationDate"]), "type and expiration date");
 eq("three needs read as a list", needsLabel(["institution", "graduationDate", "type"]), "school, graduation date and type");
 eq("no needs, no line", needsLabel([]), "");
+eq("one name reads alone", joinWords(["PubMed"]), "PubMed");
+eq("two names take an and", joinWords(["PubMed", "NPPES"]), "PubMed and NPPES");
+eq("three dead registers read as a list",
+  joinWords(["PubMed", "NPPES", "Medicare"]), "PubMed, NPPES and Medicare");
+eq("nothing failed, nothing said", joinWords([]), "");
 // A name match is judged on its co-authors, journal and year, so the row
 // shows the citation the function already assembled rather than the bare title.
 eq("a paper shows the line that identifies it",

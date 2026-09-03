@@ -399,7 +399,9 @@ export function normalizeAffiliations(
       label: facility ? `${facility}${where ? ` (${where})` : ""}` : `${type}, CCN ${ccn}`,
       detail: "Medicare lists this affiliation from claims you filed there. It is evidence you worked at the facility. It is not proof of current privileges and no hospital or board has confirmed anything here. Confirm it with the medical staff office, then add the privilege type and your reappointment date.",
       fields,
-      needs: ["expirationDate"],
+      // The privileges form asks for a type as well as the reappointment
+      // date, and this affiliation supplies neither, so the row says both.
+      needs: ["type", "expirationDate"],
       source: src("cmsAffiliation", h ? careCompareHospitalUrl(ccn) : careCompareDoctorUrl(ctx.npi), ctx),
       confidence: "lead",
     });

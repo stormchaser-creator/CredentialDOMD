@@ -166,7 +166,7 @@ eq("an affiliation is only ever a lead", [...new Set(affs.map(f => f.confidence)
 eq("an affiliation lands in privileges", [...new Set(affs.map(f => f.section))], ["privileges"]);
 eq("an affiliation never invents a reappointment date", affs.map(f => f.fields.expirationDate), [undefined, undefined, undefined]);
 eq("an affiliation never invents a privilege type", affs.map(f => f.fields.type), [undefined, undefined, undefined]);
-eq("an affiliation asks for the reappointment date", affs[0].needs, ["expirationDate"]);
+eq("an affiliation asks for the type and the reappointment date", affs[0].needs, ["type", "expirationDate"]);
 ok("an affiliation says it is claims activity, not a verification",
   affs.every(f => /claims/i.test(f.detail) && /not proof of current privileges/i.test(f.detail)));
 ok("an affiliation never claims a status", affs.every(f => !/\bactive\b/i.test(JSON.stringify(f.fields))));

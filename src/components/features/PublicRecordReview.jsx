@@ -5,7 +5,8 @@ import { generateId } from "../../utils/helpers";
 import { fetchPublicRecord } from "../../utils/publicRecordApi";
 import {
   markAlreadyOnFile, groupFindings, defaultSelectedIds, isSelectable,
-  leadNote, needsLabel, evidenceLine, countSelected, buildSavePlan, savedSummary,
+  leadNote, needsLabel, evidenceLine, replacesLine, joinWords,
+  countSelected, buildSavePlan, savedSummary,
   retrySources, failedSourceNames, mergeEnvelopes,
 } from "../../utils/publicRecord";
 
@@ -24,6 +25,8 @@ import {
  *    name) starts unticked and carries the sentence that says why it is a
  *    lead. A privilege is never given a status and never given a date.
  *  - A record already on file is greyed, labelled, and cannot be ticked.
+ *  - A profile row that would overwrite an answer the physician already gave
+ *    starts unticked, says so, and names the values it would replace.
  *  - Saving goes through updateSettings and addItem, so every accepted row
  *    syncs exactly the way a hand-typed one does.
  *
@@ -88,6 +91,14 @@ function PublicRecordReview({ onSaved, onClose }) {
     setPhase("review");
   }, [npi, s, data, envelope]);
 
+  // A fresh search replaces the findings and resets the selection, so ticks
+  // already made are not thrown away without being asked about first.
+  const searchAgain = useCallback(() => {
+    if (countSelected(findings, selected) > 0 && typeof window !== "undefined"
+      && !window.confirm("Searching again clears what you have ticked. Nothing has been saved yet. Search again?")) return;
+    run();
+  }, [findings, selected, run]);
+
   const toggle = useCallback((id) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
@@ -148,6 +159,9 @@ function PublicRecordReview({ onSaved, onClose }) {
     const note = leadNote(f);
     const needs = needsLabel(f.needs);
     const evidence = evidenceLine(f);
+    // A profile row writes a patch of several fields behind a one-line label,
+    // so the row says out loud what it would take away.
+    const replaces = replacesLine(f, s);
     return (
       <div key={f.id}
         onClick={() => { if (!locked) toggle(f.id); }}
@@ -170,6 +184,9 @@ function PublicRecordReview({ onSaved, onClose }) {
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.35 }}>{f.label}</div>
+          {!locked && replaces && (
+            <div style={{ fontSize: 12.5, color: T.warning, fontWeight: 600, lineHeight: 1.45, marginTop: 4 }}>{replaces}</div>
+          )}
           {/* A name match is judged on its co-authors, journal and year, so
               the row shows them rather than asking for a tap first. */}
           {evidence && (
@@ -187,6 +204,7 @@ function PublicRecordReview({ onSaved, onClose }) {
             {sourceChip(f)}
             {locked && chip("already on file", T.textDim, T.neutralDim)}
             {!locked && f.confidence === "lead" && chip("lead", T.warning, T.warningDim)}
+            {!locked && replaces && chip("replaces what you have", T.warning, T.warningDim)}
             {!locked && needs && chip(`you add the ${needs}`, T.info, T.infoDim)}
             {note && f.detail && (
               <button type="button"
@@ -242,7 +260,7 @@ function PublicRecordReview({ onSaved, onClose }) {
         <div style={card}>
           <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>Fill this in from the public registers</div>
           <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>
-            Your NPI record, Medicare Care Compare and PubMed already hold most of what a credentialing packet asks for. This reads all three and shows you what it found. Nothing is saved until you tick it.
+            Your NPI record, Medicare Care Compare and PubMed already hold your license numbers, your degree, where you practise and your papers. This reads all three and shows you what it found. Nothing is saved until you tick it.
           </div>
           <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 12.5, color: T.textDim, lineHeight: 1.6 }}>
             <li>NPPES NPI Registry: your name, degree, state license numbers, practice address</li>
@@ -358,7 +376,7 @@ function PublicRecordReview({ onSaved, onClose }) {
       {failed.length > 0 && (
         <div style={{ ...card, borderColor: T.warning, backgroundColor: T.warningDim }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: T.warning, lineHeight: 1.5 }}>
-            {failed.join(" and ")} did not answer, so nothing from {failed.length === 1 ? "it" : "them"} is below.
+            {joinWords(failed)} did not answer, so nothing from {failed.length === 1 ? "it" : "them"} is below.
           </div>
           <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>
             Everything else came back and can be reviewed now.
@@ -402,7 +420,7 @@ function PublicRecordReview({ onSaved, onClose }) {
       )}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={() => run()} style={secondaryBtn}>Search again</button>
+        <button onClick={searchAgain} style={secondaryBtn}>Search again</button>
         {onClose && <button onClick={onClose} style={secondaryBtn}>Close</button>}
       </div>
     </div>

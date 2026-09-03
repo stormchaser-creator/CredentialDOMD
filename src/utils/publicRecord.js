@@ -99,9 +99,27 @@ function dedupeKeysOnFile(section, item) {
 }
 
 /**
+ * The fields a settings finding would overwrite: the physician has a value,
+ * and the register's differs. A profile finding writes a patch of several
+ * fields at once while the row shows one of them as its label, so this is the
+ * only thing that can tell the screen what accepting it actually costs.
+ */
+function replacedSettingsKeys(fields, settings) {
+  return Object.keys(fields || {}).filter((k) => {
+    const cur = clean(settings?.[k]);
+    return cur !== "" && cur.toUpperCase() !== clean(fields[k]).toUpperCase();
+  });
+}
+
+/**
  * Flag findings the physician already has, and drop nothing: an item on file
  * is shown as already on file rather than proposed a second time.
  * `existing` is the app's data object; `settings` is data.settings.
+ *
+ * A settings finding has a third outcome. It is not on file, and it is not
+ * new either: it replaces something the physician typed. `replaces` names
+ * those field keys, and everything downstream treats that as a row needing a
+ * judgement rather than a row that may start ticked.
  */
 export function markAlreadyOnFile(findings, existing = {}, settings = {}) {
   const have = new Set();
@@ -111,16 +129,14 @@ export function markAlreadyOnFile(findings, existing = {}, settings = {}) {
     }
   }
   return arr(findings).map((f) => {
-    let already = false;
     if (f.section === "settings") {
       const keys = Object.keys(f.fields || {});
-      already = keys.length > 0 && keys.every((k) =>
+      const already = keys.length > 0 && keys.every((k) =>
         clean(settings?.[k]).toUpperCase() === clean(f.fields[k]).toUpperCase());
-    } else {
-      const k = dedupeKey(f.section, f.fields);
-      already = !!k && have.has(k);
+      return { ...f, alreadyOnFile: already, replaces: replacedSettingsKeys(f.fields, settings) };
     }
-    return { ...f, alreadyOnFile: already };
+    const k = dedupeKey(f.section, f.fields);
+    return { ...f, alreadyOnFile: !!k && have.has(k) };
   });
 }
 
@@ -178,10 +194,15 @@ export function isSelectable(finding) {
  * What starts ticked. A register's own statement may; an inference never
  * does, because accepting a lead without reading it is the whole failure
  * this screen exists to prevent.
+ *
+ * A row that would overwrite something the physician typed does not either.
+ * The register stating a value is not a reason to replace an answer already
+ * given, and a profile row writes several fields behind a one-line label, so
+ * a default tick there is a silent edit of the record.
  */
 export function defaultSelectedIds(findings) {
   return arr(findings)
-    .filter((f) => isSelectable(f) && f.confidence === "record")
+    .filter((f) => isSelectable(f) && f.confidence === "record" && !(f.replaces && f.replaces.length))
     .map((f) => f.id);
 }
 
@@ -194,7 +215,7 @@ export function leadNote(finding) {
     case "publication":
       return "Matched by name; check it is yours.";
     case "practiceOrganization":
-      return "Medicare claims show you billing here. Confirm your title and dates.";
+      return "Medicare lists this as a practice location enrolled under your NPI. Confirm your title and dates.";
     default:
       return "Confirm this before you rely on it.";
   }
@@ -217,6 +238,40 @@ export function evidenceLine(finding) {
   return "";
 }
 
+/** "a", "a and b", "a, b and c". One list voice for every line that reads
+ * one out. */
+export function joinWords(words) {
+  const list = arr(words).map((w) => String(w || "")).filter(Boolean);
+  if (!list.length) return "";
+  if (list.length === 1) return list[0];
+  return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
+}
+
+/** What each profile field is called when a row has to name it. */
+const SETTINGS_FIELD_LABELS = {
+  name: "name",
+  degreeType: "degree",
+  address: "address",
+  phone: "phone",
+  primaryState: "primary state",
+};
+
+/**
+ * "Replaces your address (350 W Thomas Rd, Phoenix, AZ) and primary state
+ * (AZ)." The line a profile row needs before it can be ticked honestly: the
+ * label shows only the incoming value, the patch writes every field in the
+ * finding, and primaryState is what the renewal reminders and the CME state
+ * are read from. Empty for a row that replaces nothing.
+ */
+export function replacesLine(finding, settings = {}) {
+  const parts = arr(finding?.replaces).map((k) => {
+    const label = SETTINGS_FIELD_LABELS[k] || k;
+    const cur = clean(settings?.[k]);
+    return cur ? `${label} (${cur})` : label;
+  });
+  return parts.length ? `Replaces your ${joinWords(parts)}.` : "";
+}
+
 const NEED_LABELS = {
   expirationDate: "expiration date",
   graduationDate: "graduation date",
@@ -231,10 +286,7 @@ const NEED_LABELS = {
 
 /** "expiration date and type", for the line that says what to add after. */
 export function needsLabel(needs) {
-  const words = arr(needs).map((n) => NEED_LABELS[n] || String(n)).filter(Boolean);
-  if (!words.length) return "";
-  if (words.length === 1) return words[0];
-  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+  return joinWords(arr(needs).map((n) => NEED_LABELS[n] || String(n)));
 }
 
 export function countSelected(findings, selectedIds) {
