@@ -42,7 +42,7 @@ import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { isNonExpiring, mailtoHref } from "./utils/helpers";
-import { buildSetup } from "./utils/setupTasks";
+import { buildSetup, setupOwns } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
@@ -300,6 +300,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // {sec, id} — opens that record's edit form after navigating (Home → fix-it links)
   const [autoEditTarget, setAutoEditTarget] = useState(null);
 
+  // The return trip has to outlive autoEditTarget, which is cleared the
+  // moment the form OPENS. Held separately so the close can still find it.
+  const [autoEditReturn, setAutoEditReturn] = useState(null); // {sec, back}
+
   // Which setup task's drawer to open when the Setup page mounts.
   const [setupTask, setSetupTask] = useState(null);
   const openSetup = useCallback((taskId = null) => {
@@ -319,19 +323,28 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // the dashboard, search, or Vera), "edit" opens the form on a specific
   // field (the fix-this-expiration cards).
   const crudTarget = useCallback((sec) => {
-    if (autoEditTarget?.sec !== sec) return {};
+    // Deep links out of setup come back. The trip is read from autoEditReturn,
+    // not autoEditTarget, because the target is already gone by the time the
+    // form closes: CrudSection fires onAutoEditDone on the tick it OPENS.
+    const onAutoEditClosed = autoEditReturn?.sec === sec
+      ? () => { const back = autoEditReturn.back; setAutoEditReturn(null); goBackTo(back); }
+      : undefined;
+    if (autoEditTarget?.sec !== sec) return onAutoEditClosed ? { onAutoEditClosed } : {};
     const edit = autoEditTarget.mode === "edit";
     return {
       autoEditId: edit ? autoEditTarget.id : null,
       autoFocusField: edit ? (autoEditTarget.focus || null) : null,
-      onAutoEditDone: () => setAutoEditTarget(null),
-      // Deep links out of setup come back. Fired when the form closes, not
-      // when it opens, so the physician actually gets to edit the record.
-      onAutoEditClosed: edit && autoEditTarget.returnTo ? () => goBackTo(autoEditTarget.returnTo) : undefined,
+      // Fired on OPEN. Park the return trip here; always overwrite, so a
+      // later deep link with no returnTo cannot inherit a stale one.
+      onAutoEditDone: () => {
+        setAutoEditReturn(edit && autoEditTarget.returnTo ? { sec, back: autoEditTarget.returnTo } : null);
+        setAutoEditTarget(null);
+      },
+      onAutoEditClosed,
       autoViewId: edit ? null : autoEditTarget.id,
       onAutoViewDone: () => setAutoEditTarget(null),
     };
-  }, [autoEditTarget, goBackTo]);
+  }, [autoEditTarget, autoEditReturn, goBackTo]);
 
   // Beta gate: invite-only. Admins are always in; everyone else must be
   // 'active' in profiles.access_status (activated by the Clerk webhook, the
@@ -549,12 +562,20 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     return out;
   }, [data.licenses, data.privileges, data.insurance, data.healthRecords, data.settings.name]);
 
-  // What the banner shows. The standing ring keeps counting every undated
-  // record; the banner drops the licenses while setup owns them, and keeps
-  // privileges, insurance and health records, which setup does not own.
+  // Setup owns these two conversations only while it is actually having
+  // them: while the bordered card is on screen AND the task that would say
+  // the same thing is still open. A skip or a snooze hands the sentence
+  // back to the older banner rather than silencing both, so a physician who
+  // sets a license aside is still warned it has no date.
+  //
+  // The standing ring keeps counting every undated record either way, and
+  // the banner always keeps privileges, insurance and health records, which
+  // setup does not own.
+  const setupOwnsDates = setupOwns(setupBoard, "dates");
+  const setupOwnsProfile = setupOwns(setupBoard, "identity");
   const missingExpirationBanner = useMemo(
-    () => (setupTier1Done ? missingExpiration : missingExpiration.filter(m => m.sec !== "licenses")),
-    [missingExpiration, setupTier1Done]
+    () => (setupOwnsDates ? missingExpiration.filter(m => m.sec !== "licenses") : missingExpiration),
+    [missingExpiration, setupOwnsDates]
   );
 
   // States where a DEA registration (or other state credential) exists but no
@@ -777,8 +798,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       )}
 
       {/* Incomplete profile — the app can only compute what it knows.
-          Suppressed while setup owns it: T1 says the same thing better. */}
-      {setupTier1Done && profileGaps.length > 0 && (
+          Suppressed only while setup is actively saying it: T1 says the same
+          thing better, but a skipped or snoozed task says nothing at all. */}
+      {!setupOwnsProfile && profileGaps.length > 0 && (
         <div onClick={() => { setTab("more"); setSubPage("settings"); }} style={{
           backgroundColor: T.warningDim, border: `1px solid ${T.warning}55`,
           borderRadius: 12, padding: "12px 16px", marginBottom: 14, cursor: "pointer",

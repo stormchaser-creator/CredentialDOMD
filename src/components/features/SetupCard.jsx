@@ -121,6 +121,15 @@ export default function SetupCard({ onOpenSetup }) {
         </>
       )}
 
+      {/* Everything left is set aside, so there is no next task to name. The
+          card still has to say something: a header, a bar and a link with no
+          sentence between them reads as a rendering fault. */}
+      {!next && (
+        <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 4 }}>
+          {t1.total - t1.done} {t1.total - t1.done === 1 ? "task is" : "tasks are"} set aside. They are still on the list.
+        </div>
+      )}
+
       <button onClick={() => onOpenSetup?.(null)} style={{
         marginTop: 10, border: "none", background: "transparent", padding: 0,
         color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",

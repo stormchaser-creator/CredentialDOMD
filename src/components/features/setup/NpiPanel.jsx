@@ -20,7 +20,8 @@ import { splitName, mergeNpiLicenses, additionalStatesAfterImport, degreeFromCre
  *
  * Props:
  *  - onImported(count, licenses): fired after new licenses are written
- *  - autoRun: run the lookup once on mount when an NPI is already on file
+ *  - dense: tighter spacing for the setup drawer, where the panel sits
+ *    inside a row rather than owning the page
  */
 export default function NpiPanel({ onImported, dense = false }) {
   const { data, updateSettings, addItem, theme: T } = useApp();

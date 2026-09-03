@@ -6,7 +6,7 @@ import { generateId } from "../../utils/helpers";
 import { isDea } from "../../utils/setupTasks";
 import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
-import DateFixList, { DateRow } from "./setup/DateFixList";
+import DateFixList, { DateRow, SHARED_KEY_NOTE } from "./setup/DateFixList";
 
 /**
  * Setup — the board.
@@ -184,6 +184,9 @@ function DeaDrawer({ onDeclareNone }) {
       <div>
         <div style={{ fontSize: 13.5, color: T.textMuted, marginBottom: 6, lineHeight: 1.5 }}>
           On file. The expiration date is what the reminders count down from; photograph the certificate and the app reads it off the page.
+        </div>
+        <div style={{ fontSize: 12, color: T.textDim, margin: "4px 0 2px", lineHeight: 1.5 }}>
+          {SHARED_KEY_NOTE}
         </div>
         {existing.map((rec) => <DateRow key={rec.id} rec={rec} />)}
       </div>
@@ -446,7 +449,7 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
     <div>
       <h2 style={{ margin: "0 0 6px", fontSize: 22, fontWeight: 800, color: T.text }}>Setup</h2>
       <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 14 }}>
-        Five tasks and the app starts watching your dates. Anything after that is for credentialing packets, and it can wait.
+        Finish the list below and the app starts watching your dates. Anything after that is for credentialing packets, and it can wait.
       </div>
     </div>
   );
@@ -457,9 +460,6 @@ export default function SetupPage({ initialTask = null, onOpenCredentials, onAdd
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: T.text }}>Protected</h3>
         <span style={{ fontSize: 12, color: T.textDim, fontVariantNumeric: "tabular-nums" }}>{t1.done} of {t1.total}</span>
       </div>
-      {!sectionComplete && (
-        <div style={{ fontSize: 12.5, color: T.textDim, marginBottom: 6 }}>Five tasks. Two of them are a single tap.</div>
-      )}
       {rows.map((task) => (
         <div key={task.id}>
           <TaskRow

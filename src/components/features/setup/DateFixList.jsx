@@ -29,6 +29,13 @@ import { checkStorageQuota } from "../../../utils/storageQuota";
 
 const SCANNED_FIELDS = ["expirationDate", "issuedDate", "licenseNumber"];
 
+/**
+ * Why the camera works with nothing configured. Lives here so every surface
+ * that renders a camera control says it the same way, and says it once,
+ * directly under the first one on the screen.
+ */
+export const SHARED_KEY_NOTE = "Scanning runs on a shared key with no setup. Add your own free Gemini key in Settings to lift the daily limit.";
+
 export function DateRow({ rec, onCaptured, onOpenRecord }) {
   const { data, editItem, addItem, theme: T } = useApp();
   const cameraRef = useRef(null);
@@ -79,12 +86,17 @@ export function DateRow({ rec, onCaptured, onOpenRecord }) {
       const merged = mergeExtracted(rec, picked);
       if (SCANNED_FIELDS.some((k) => merged[k] !== rec[k])) editItem("licenses", merged);
 
-      // A file already in Files is linked, never stored a second time.
+      // A file already in Files is linked, never stored a second time. A
+      // duplicate that is already linked to a DIFFERENT record is left
+      // alone, so the message below must not claim a link that never got
+      // written.
+      let linked = true;
       const dup = findDuplicateDoc(data.documents, file, dataUrl);
       const linkedTo = `licenses:${rec.id}`;
       if (dup) {
         const relink = attachExistingDoc(dup, linkedTo);
         if (relink) editItem("documents", relink);
+        else linked = false;
       } else {
         addItem("documents", {
           id: generateId(), name: file.name, type: file.type, size: file.size,
@@ -93,7 +105,9 @@ export function DateRow({ rec, onCaptured, onOpenRecord }) {
       }
 
       if (merged.expirationDate) {
-        setMsg("Dated, and the copy is linked to this record.");
+        setMsg(linked
+          ? "Dated, and the copy is linked to this record."
+          : "Dated. That file is already on file and linked to another record, so nothing was attached here.");
         onCaptured?.(merged);
       } else if (!aiOn) {
         setMsg(`Attached. ${describeAiStatus(data.settings)} Type the two fields and this row closes.`);
@@ -185,10 +199,10 @@ export default function DateFixList({ importedNote = null, onCaptured, onOpenRec
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
         {fromRegistry === rows.length ? "The registry gave you these. Finish them." : `${rows.length} to date`}
       </div>
-      {rows.map((rec) => <DateRow key={rec.id} rec={rec} onCaptured={onCaptured} onOpenRecord={onOpenRecord} />)}
-      <div style={{ fontSize: 12, color: T.textDim, marginTop: 8, lineHeight: 1.5 }}>
-        Scanning runs on a shared key with no setup. Add your own free Gemini key in Settings to lift the daily limit.
+      <div style={{ fontSize: 12, color: T.textDim, margin: "4px 0 2px", lineHeight: 1.5 }}>
+        {SHARED_KEY_NOTE}
       </div>
+      {rows.map((rec) => <DateRow key={rec.id} rec={rec} onCaptured={onCaptured} onOpenRecord={onOpenRecord} />)}
     </div>
   );
 }

@@ -8,7 +8,7 @@
 import {
   buildSetup, dateless, normalizeSetupState, pruneSetupState, shortDate,
   withTask, withDeclared, withSnooze, withStarted, withTier1Done,
-  homeCardForm, firstRenderPatch, CARD_FORM, CARD_PRIORITY, TASK_DEFS,
+  homeCardForm, setupOwns, firstRenderPatch, CARD_FORM, CARD_PRIORITY, TASK_DEFS,
   isMedicalLicense, isDea, isCsr, isBoard, isLifeSupport,
 } from "../src/utils/setupTasks.js";
 
@@ -225,6 +225,75 @@ eq("dateless never walks privileges or insurance", dateless({
   const regressed = build({ settings: { ...settledSettings, setupState: { startedAt: day(30), tier1DoneAt: day(20) } }, licenses: [doLicense, { id: "n", type: "State Medical License (DO)", state: "TX" }] });
   eq("a later regression never brings the bordered card back", homeCardForm(regressed, { now: NOW }), CARD_FORM.D);
   eq("the regression names itself", regressed.next.regressionLine, "your TX license lost its expiration date");
+}
+
+// ── Who owns the sentence: setup, or the older Home banners ──
+// Home suppresses its missing-expiration and profile-gap banners only while
+// setupOwns() is true. A skip keeps the task in the denominator forever, so
+// tier1DoneAt never lands, so a "setup is finished" test would suppress
+// those banners for the life of the account.
+{
+  const undatedTx = { id: "tx", type: "State Medical License (DO)", state: "TX" };
+
+  const live = build({
+    ...settled(),
+    licenses: [{ ...doLicense }, { ...deaLicense }, { ...undatedTx }],
+    settings: { ...settledSettings, setupState: { startedAt: day(1) } },
+  });
+  eq("with a date still open the card is the bordered form", homeCardForm(live, { now: NOW }), CARD_FORM.A);
+  eq("...and dates is the task it is offering", live.next.id, "dates");
+  ok("setup owns the date sentence while it is actually saying it", setupOwns(live, "dates", { now: NOW }));
+
+  // The Fowler shape: three licenses on file, the date task set aside.
+  const skipped = build({
+    ...settled(),
+    licenses: [{ ...doLicense }, { ...deaLicense }, { ...undatedTx }],
+    settings: { ...settledSettings, setupState: { startedAt: day(30), tasks: { dates: { s: "skipped", at: day(30) } } } },
+  });
+  eq("a skip leaves the task in the denominator", skipped.counts.tier1, { total: 5, done: 4, skipped: 1, na: 0, left: 1, complete: false });
+  ok("a skip never stamps Tier 1 done", !skipped.state.tier1DoneAt);
+  eq("the card stays on Form A", homeCardForm(skipped, { now: NOW }), CARD_FORM.A);
+  eq("but it has nothing left to offer", skipped.next, null);
+  eq("the task reads as skipped, not pending", statusOf(skipped, "dates"), "skipped");
+  ok("so setup no longer owns the date sentence and the banner comes back", !setupOwns(skipped, "dates", { now: NOW }));
+
+  // Same board, still inside the re-offer window: setup is speaking again.
+  const reoffered = build({
+    ...settled(),
+    licenses: [{ ...doLicense }, { ...deaLicense }, { ...undatedTx }],
+    settings: { ...settledSettings, setupState: { startedAt: day(30), tasks: { dates: { s: "skipped", at: day(9) } } } },
+  });
+  eq("a skip re-enters the rotation for one week", reoffered.next.id, "dates");
+  ok("but a re-offered skip still does not silence the banner", !setupOwns(reoffered, "dates", { now: NOW }));
+
+  // "Not now": the card is gone for 14 days, so nothing is saying it.
+  const snoozed = build({
+    ...settled(),
+    licenses: [{ ...doLicense }, { ...deaLicense }, { ...undatedTx }],
+    settings: { ...settledSettings, setupState: { startedAt: day(1), hiddenUntil: new Date(NOW.getTime() + 13 * 86400000).toISOString() } },
+  });
+  eq("Not now takes the card off Home", homeCardForm(snoozed, { now: NOW }), CARD_FORM.NONE);
+  eq("the task itself is untouched by the snooze", statusOf(snoozed, "dates"), "pending");
+  ok("a snoozed card owns nothing, so the banner speaks for those 14 days", !setupOwns(snoozed, "dates", { now: NOW }));
+
+  // The profile gate rides the same rule.
+  const noProfile = build({
+    licenses: [{ ...doLicense }],
+    documents: [],
+    settings: { degreeType: "DO", email: "e@x.com", notifyEmail: true, reminderLeadDays: 90, setupState: { startedAt: day(1) } },
+  });
+  ok("setup owns the profile sentence while About you is open", setupOwns(noProfile, "identity", { now: NOW }));
+  const profileSkipped = build({
+    licenses: [{ ...doLicense }],
+    documents: [],
+    settings: { degreeType: "DO", email: "e@x.com", notifyEmail: true, reminderLeadDays: 90, setupState: { startedAt: day(30), tasks: { identity: { s: "skipped", at: day(30) } } } },
+  });
+  ok("a skipped About you hands the profile banner back", !setupOwns(profileSkipped, "identity", { now: NOW }));
+
+  // Once Tier 1 is stamped the card is Form D, which owns nothing either.
+  const done = build({ ...settled(), settings: { ...settledSettings, setupState: { startedAt: day(30), tier1DoneAt: day(20) } } });
+  eq("a finished board is Form D", homeCardForm(done, { now: NOW }), CARD_FORM.D);
+  ok("and Form D owns nothing", !setupOwns(done, "dates", { now: NOW }));
 }
 
 // ── First render ──

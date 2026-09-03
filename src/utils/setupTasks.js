@@ -445,6 +445,23 @@ export function homeCardForm(setup, { now = new Date() } = {}) {
 }
 
 /**
+ * Whether setup is the surface currently saying what `taskId` says.
+ *
+ * Home suppresses its older banners while setup owns the same sentence, and
+ * that ownership has to end the moment setup stops speaking, or a skipped or
+ * snoozed task silences BOTH surfaces forever: a skip keeps the task in the
+ * denominator by design, so tier1DoneAt never lands and a "done setting up"
+ * test would suppress the banner for the life of the account.
+ *
+ * Ownership therefore needs two things at once: the bordered card is on
+ * screen (Form A), and the task that would say it is still open.
+ */
+export function setupOwns(setup, taskId, opts = {}) {
+  if (homeCardForm(setup, opts) !== CARD_FORM.A) return false;
+  return setup.byId?.[taskId]?.status === "pending";
+}
+
+/**
  * The patch to write on the very first render of an account that has never
  * seen the board. An account that was already set up gets tier1DoneAt in the
  * same pass, so the Protected moment never fires for someone who was never
