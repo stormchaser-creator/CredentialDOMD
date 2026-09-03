@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, memo } from "react";
 import { useApp } from "../../context/AppContext";
+import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
@@ -153,6 +154,9 @@ function DocumentsSection() {
     setScanError(`${describeAiStatus(data.settings)} Documents are read and filed automatically when uploaded, which needs AI.`);
     return false;
   }, [aiOn, data.settings]);
+  // Upload is this screen's Add control; at desk width `n` opens the same
+  // file picker the button opens, behind the same AI gate.
+  useDeskAddShortcut(() => { if (requireApiKey()) fileRef.current?.click(); });
 
   const linkables = [
     ...data.licenses.map(l => ({ value: `licenses:${l.id}`, label: `License: ${l.name || l.type}` })),

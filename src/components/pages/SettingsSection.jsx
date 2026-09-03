@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, memo } from "react";
 import { formatPhone, emailProblem, websiteLabel } from "../../utils/contactFormat";
 import { useApp } from "../../context/AppContext";
+import { DESK_KEYS } from "../../utils/deskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Field from "../shared/Field";
 import { EmailIcon, TextMsgIcon } from "../shared/Icons";
@@ -17,7 +18,7 @@ import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusS
 import { CODER_MODELS } from "../../utils/cptCoder";
 
 function SettingsSection() {
-  const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate, plan, setMockPlan, isDevMode } = useApp();
+  const { data, setData, addItem, updateSettings, theme: T, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
 
@@ -429,6 +430,26 @@ function SettingsSection() {
           onToggle={() => update("showDashboardCredentials", s.showDashboardCredentials !== true)}
           color={T.accent} T={T} />
       </div>
+
+      {/* Keyboard (desk width only): the three keys hooks/useDeskKeys.js serves */}
+      {isDesktop && (
+        <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 4 }}>Keyboard</h3>
+          <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>Three keys at desk width. None fire while you are typing in a field.</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 28px" }}>
+            {DESK_KEYS.map(k => (
+              <div key={k.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <kbd style={{
+                  minWidth: 30, padding: "3px 8px", borderRadius: 6, boxSizing: "border-box", textAlign: "center",
+                  border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text,
+                  fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", boxShadow: T.shadow1,
+                }}>{k.key}</kbd>
+                <span style={{ fontSize: 13.5, color: T.textMuted }}>{k.does}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Notifications */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>

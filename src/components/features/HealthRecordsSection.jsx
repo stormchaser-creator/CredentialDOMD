@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useApp } from "../../context/AppContext";
+import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
@@ -64,6 +65,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
 
   const openAdd = useCallback(() => { setForm({ category: filter !== "all" ? filter : "" }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, [filter]);
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  useDeskAddShortcut(openAdd);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
   const [reqError, setReqError] = useState(null);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { useApp } from "../../../context/AppContext";
+import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { getPrivate, setPrivate, removePrivate, looksLikePHI } from "../../../utils/privateVault";
@@ -875,6 +876,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     setShowManual(true);
   }, []);
 
+  // The timer card's "Log past time" control. At desk width `n` opens it
+  // too, except on a day-rate contract, where DutyLog's own "Log a day"
+  // is the Add control on view and registers itself.
+  const openPastTime = useCallback(() => {
+    setManual({ type: "Call", date: localDate(new Date()), exact: true });
+    setShowManual(true);
+  }, []);
+  useDeskAddShortcut(contract && contract.payModel !== "daily" ? openPastTime : null);
+
   // Most recently ENTERED first (per Eric) — createdAt when we have it,
   // work time as the fallback for entries from before the stamp existed
   const contractEntries = useMemo(
@@ -1453,7 +1463,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                 }}>{t2}</button>
               ))}
             </div>
-            <button onClick={() => { setManual({ type: "Call", date: localDate(new Date()), exact: true }); setShowManual(true); }} style={{
+            <button onClick={openPastTime} style={{
               width: "100%", padding: "12px", borderRadius: 12, marginTop: 8,
               border: `1px solid ${T.border}`, backgroundColor: T.input,
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",

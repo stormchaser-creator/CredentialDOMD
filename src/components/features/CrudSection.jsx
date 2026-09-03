@@ -6,6 +6,8 @@ import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import DeskTable from "../shared/DeskTable";
+import { formRows } from "../../utils/formLayout";
+import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
@@ -101,6 +103,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
   const openAdd = useCallback(() => { setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
+  // Desk width: `n` opens the same Add form the header button opens.
+  useDeskAddShortcut(openAdd);
 
   // Follow-ups are logged from the Home dashboard's "Action Required" cards,
   // but this is the item's own screen — wherever you land (view or edit),
@@ -517,7 +521,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           </div>
         )}
         {editItem && renderFollowUps(editItem)}
-        {fields.filter(f => isShown(f, form)).map(f => (
+        {(() => {
+          // One renderer for every field at every width. Phone maps it over
+          // the shown fields exactly as before; desk width (below) flows
+          // short related fields two across.
+          const renderField = (f) => (
           <Field
             key={f.key}
             label={resolveFieldProp(f, "label", form) + ((typeof f.required === "function" ? f.required(form) : f.required) ? " *" : "")}
@@ -610,7 +618,18 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               />
             )}
           </Field>
-        ))}
+          );
+          const shown = fields.filter(f => isShown(f, form));
+          if (!isDesktop) return shown.map(renderField);
+          // Desk width: dates, state, cost, yes/no sit two across when they
+          // are neighbors; everything else keeps the full measure. Same
+          // Field, same inputs, same validation as the phone column.
+          return formRows(shown).map(row => row.length === 1 ? renderField(row[0]) : (
+            <div key={`pair:${row[0].key}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 14, alignItems: "start" }}>
+              {row.map(renderField)}
+            </div>
+          ));
+        })()}
         {/* Upload / Camera document */}
         <div style={{ marginTop: 14, padding: "14px", borderRadius: 12, border: `1px dashed ${T.border}`, backgroundColor: T.input }}>
           <input type="file" ref={uploadRef} multiple accept={UPLOAD_ACCEPT} style={{ display: "none" }} onChange={e => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = ""; }} />

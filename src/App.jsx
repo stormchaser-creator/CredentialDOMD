@@ -7,6 +7,7 @@ import {
   AsclepiusIcon, DocsIcon,
 } from "./components/shared/Icons";
 import SideNav from "./components/shared/SideNav";
+import { useDeskKeyboard } from "./hooks/useDeskKeys";
 import StatusDot from "./components/shared/StatusDot";
 import Modal from "./components/shared/Modal";
 import StatusBadge from "./components/shared/StatusBadge";
@@ -269,6 +270,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [veraSeed, setVeraSeed] = useState(null); // first question for Vera, from Home search
   const [veraRequest, setVeraRequest] = useState(null); // {id, from_addr, subject}: the document request Vera is working
   const newRequestCount = useNewRequestCount();
+  // Desk keys (`/`, `n`, Esc) live in hooks/useDeskKeys.js. When the screen
+  // on view has no search field, `/` goes Home, whose box searches everything.
+  useDeskKeyboard({ onSearchFallback: () => { setTab("home"); setSubPage(null); } });
 
 
   const aiOn = useAiAvailable(data.settings);
@@ -1685,7 +1689,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <p style={{ margin: "0 0 14px", fontSize: 14, color: T.textMuted }}>Search and send any credential.</p>
         <div style={{ position: "relative", marginBottom: 12 }}>
           <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.textDim }}><SearchIcon /></div>
-          <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search credentials..." style={{
+          <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search credentials..." data-desk-search="" style={{
             width: "100%", padding: "12px 14px 12px 40px", backgroundColor: T.input,
             border: `1px solid ${T.inputBorder}`, borderRadius: 10, color: T.text,
             fontSize: 15, outline: "none", boxSizing: "border-box",

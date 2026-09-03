@@ -1,5 +1,6 @@
 import { useState, useCallback, memo } from "react";
 import { useApp } from "../../../context/AppContext";
+import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
@@ -49,6 +50,7 @@ function Contracts() {
     setForm({ incrementMinutes: 15, minCallMinutes: 15, coveragePeriods: [] });
     setEditItem(null); setAttachedDocs([]); setShowForm(true);
   }, []);
+  useDeskAddShortcut(openAdd);
   const openEdit = useCallback((item) => {
     setForm({
       ...item,

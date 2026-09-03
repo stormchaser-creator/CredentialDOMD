@@ -1,5 +1,6 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useRef, memo } from "react";
 import { useApp } from "../../../context/AppContext";
+import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import SmartTimeField from "../../shared/SmartTimeField";
@@ -31,6 +32,10 @@ function TaskNotes({ onBill }) {
   const iS = useInputStyle();
   const [text, setText] = useState("");
   const [showDone, setShowDone] = useState(false);
+  // The capture line is this screen's Add control; `n` at desk width puts
+  // the cursor in it.
+  const captureRef = useRef(null);
+  useDeskAddShortcut(() => captureRef.current?.focus());
   const [finishing, setFinishing] = useState(null); // the task being completed
   const [form, setForm] = useState({});
   const [editTask, setEditTask] = useState(null); // open item being reworded
@@ -164,7 +169,7 @@ function TaskNotes({ onBill }) {
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <input value={text} onChange={e => setText(e.target.value)}
+        <input ref={captureRef} value={text} onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") capture(); }}
           placeholder="e.g. call back Dr. Nguyen about the ICU consult"
           style={{ ...iS, flex: 1 }} />

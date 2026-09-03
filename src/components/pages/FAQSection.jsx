@@ -230,6 +230,7 @@ function FAQSection() {
           value={searchQ}
           onChange={e => setSearchQ(e.target.value)}
           placeholder="Search FAQ..."
+          data-desk-search=""
           style={{
             width: "100%", padding: "12px 16px", backgroundColor: T.input,
             border: `1px solid ${T.inputBorder}`, borderRadius: 10, color: T.text,

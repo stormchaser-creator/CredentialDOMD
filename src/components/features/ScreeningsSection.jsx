@@ -1,5 +1,6 @@
 import { useState, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
+import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
@@ -38,6 +39,7 @@ function ScreeningsSection({ onShare }) {
 
   const openAdd = useCallback(() => { setForm({ components: [] }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item, components: item.components || [] }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  useDeskAddShortcut(openAdd);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
   const handleSave = useCallback(() => {

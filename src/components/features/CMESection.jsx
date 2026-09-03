@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, memo } from "react";
 import { supabase } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
+import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
@@ -67,6 +68,7 @@ function CMESection({ onShare }) {
 
   const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item, topics: item.topics || [] }); setEditItem(item); setShowForm(true); }, []);
+  useDeskAddShortcut(openAdd);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); }, []);
 
   const handleSave = useCallback(() => {
