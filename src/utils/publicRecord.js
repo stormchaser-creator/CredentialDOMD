@@ -183,11 +183,114 @@ export function groupFindings(findings) {
   return out;
 }
 
+// ── Opening on one section ──────────────────────────────────────────────────
+
+/**
+ * A Setup row opens this screen already pointed at the section it is about,
+ * and says what the registers actually hold for that section before the
+ * search runs. Understating is fine here; overstating is not, so each line
+ * names the gap as well as the answer.
+ *
+ * Keyed by the app section, which is what setupTasks calls `section`.
+ * Publications has no Setup row of its own, and is reached from Settings.
+ */
+export const FOCUS_COPY = {
+  education: {
+    title: "Medical school and training",
+    line: "Medicare states your degree and the year you graduated. It files most schools as \"OTHER\", so the school itself is not offered, and residency and fellowship are in neither register.",
+  },
+  workHistory: {
+    title: "Work history",
+    line: "Medicare lists the organizations enrolled under your NPI, with their address and phone. Your title and your dates are not in the register, so you add those.",
+  },
+  privileges: {
+    title: "Hospital privileges",
+    line: "Medicare lists the hospitals your claims came from. Each one is a lead to confirm with the hospital, never a privilege, and none of them carries a reappointment date.",
+  },
+  publications: {
+    title: "Publications",
+    line: "PubMed is searched on your author name, so the list will hold other people's papers. Read each one before you keep it.",
+  },
+};
+
+/** The section key a caller may open on, or "" for the whole screen. */
+export function focusSectionKey(section) {
+  const k = String(section || "");
+  return Object.prototype.hasOwnProperty.call(FOCUS_COPY, k) ? k : "";
+}
+
+/** True when a Setup row has something to offer from these registers. */
+export function canFillFromPublicRecord(section) {
+  return focusSectionKey(section) !== "";
+}
+
+/**
+ * The groups split into the one that was asked for and the rest. The rest is
+ * never dropped: a search that found a hospital while the physician was on
+ * the Education row still found a hospital, and the screen says so.
+ */
+export function splitGroups(groups, focus) {
+  const key = focusSectionKey(focus);
+  if (!key) return { focused: arr(groups), rest: [] };
+  return {
+    focused: arr(groups).filter((g) => g.section === key),
+    rest: arr(groups).filter((g) => g.section !== key),
+  };
+}
+
+/** How many rows in these groups are still a decision. */
+export function countPickable(groups) {
+  return arr(groups).reduce((n, g) => n + arr(g.findings).filter(isSelectable).length, 0);
+}
+
+// ── Sections a plan can close ───────────────────────────────────────────────
+
+/**
+ * Sections this screen proposes into that the account may not be able to
+ * open. App.jsx gates Privileges behind Pro, so accepting a hospital row on a
+ * free plan would file a record into a page the physician cannot reach: it
+ * would be in the account, counted nowhere, editable nowhere.
+ *
+ * The row is still shown. Hiding it would mean the register found something
+ * and the screen said nothing, which is the failure this feature exists to
+ * avoid. It is named, it says why it cannot be saved, and it cannot be
+ * ticked.
+ */
+export const PLAN_LOCKED_SECTIONS = ["privileges"];
+
+const PLAN_LOCK_NOTES = {
+  privileges: "Hospital privileges is a Pro section. This row can be read here, and saved once the section is open to you.",
+};
+
+/**
+ * Flag findings whose section this account cannot open. Runs after
+ * markAlreadyOnFile, because a row already on file stays "already on file":
+ * the record exists whatever the plan does, and calling it locked would read
+ * as the app having lost it.
+ */
+export function markPlanLocks(findings, { isPro = false } = {}) {
+  return arr(findings).map((f) => ({
+    ...f,
+    planLocked: !isPro && !f.alreadyOnFile && PLAN_LOCKED_SECTIONS.includes(f.section),
+  }));
+}
+
+/** The one sentence a locked row says about itself. */
+export function planLockNote(finding) {
+  if (!finding?.planLocked) return "";
+  return PLAN_LOCK_NOTES[finding.section]
+    || "This section is not open on your plan, so the row cannot be saved yet.";
+}
+
 // ── Selection ───────────────────────────────────────────────────────────────
 
-/** A row the physician can tick. Already on file is not one of them. */
+/**
+ * A row the physician can tick. Already on file is not one of them, and
+ * neither is a row whose section the plan keeps shut: the tick would write
+ * somewhere the physician cannot look.
+ */
 export function isSelectable(finding) {
-  return !!finding && !finding.alreadyOnFile;
+  return !!finding && !finding.alreadyOnFile && !finding.planLocked;
 }
 
 /**
@@ -204,6 +307,19 @@ export function defaultSelectedIds(findings) {
   return arr(findings)
     .filter((f) => isSelectable(f) && f.confidence === "record" && !(f.replaces && f.replaces.length))
     .map((f) => f.id);
+}
+
+/**
+ * What starts ticked when the screen was opened on one section.
+ *
+ * The folded sections start empty. A tick the physician cannot see is a tick
+ * he did not make, and the footer counts every tick, so seeding the fold
+ * would let Save write records that never appeared on screen. Opening the
+ * fold shows them, and he ticks what he wants there.
+ */
+export function defaultSelectedIdsForFocus(findings, focus) {
+  const key = focusSectionKey(focus);
+  return defaultSelectedIds(key ? arr(findings).filter((f) => f.section === key) : findings);
 }
 
 /** The one sentence that says why a lead is a lead. */

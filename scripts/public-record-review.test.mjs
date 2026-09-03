@@ -20,6 +20,9 @@ import {
   clean, dedupeKey, markAlreadyOnFile,
   GROUP_ORDER, groupFindings, sortFindings,
   isSelectable, defaultSelectedIds, leadNote, needsLabel, evidenceLine, replacesLine, joinWords, countSelected,
+  markPlanLocks, planLockNote, PLAN_LOCKED_SECTIONS,
+  FOCUS_COPY, focusSectionKey, canFillFromPublicRecord, splitGroups, countPickable,
+  defaultSelectedIdsForFocus,
   requestSourceFor, requestSourceForReport, retrySources, failedSourceNames,
   mergeEnvelopes, buildSavePlan, savedSummary,
 } from "../src/utils/publicRecord.js";
@@ -340,6 +343,91 @@ eq("an id that is not in the findings writes nothing", buildSavePlan(marked, ["m
 eq("what was saved reads back grouped",
   savedSummary(plan).map(g => [g.title, g.findings.length]),
   [["Profile", 2], ["Education", 1], ["Privileges", 1], ["Publications", 1]]);
+
+// ── A section this plan cannot open ─────────────────────────────────────────
+// App.jsx puts Privileges behind Pro. A hospital accepted on a free plan
+// would be filed into a page the physician cannot open, so the row is shown,
+// named and left unpickable rather than written or hidden.
+const free = markPlanLocks(marked, { isPro: false });
+const pro = markPlanLocks(marked, { isPro: true });
+
+eq("privileges is the section a plan closes", PLAN_LOCKED_SECTIONS, ["privileges"]);
+eq("a hospital is locked on a free plan", byId(free, "cms:privilege:050245").planLocked, true);
+eq("and open on Pro", byId(pro, "cms:privilege:050245").planLocked, false);
+eq("nothing else is touched", free.filter(f => f.planLocked).length,
+  ALL.filter(f => f.section === "privileges").length - 1); // the one already on file
+eq("a hospital already on file is on file, not locked",
+  [byId(free, "cms:privilege:050573").alreadyOnFile, byId(free, "cms:privilege:050573").planLocked],
+  [true, false]);
+eq("a locked row cannot be ticked", isSelectable(byId(free, "cms:privilege:050245")), false);
+eq("and is not in the default selection", defaultSelectedIds(free).some(id => id.startsWith("cms:privilege:")), false);
+ok("it says why", /Pro section/.test(planLockNote(byId(free, "cms:privilege:050245"))));
+eq("an unlocked row says nothing", planLockNote(byId(pro, "cms:privilege:050245")), "");
+eq("no finding is dropped by the lock pass", free.length, ALL.length);
+
+// The rule that matters: a locked id in the selection still writes nothing.
+const sneaky = buildSavePlan(free, ["cms:privilege:050245", "cms:education:medicalSchool"], () => "x");
+eq("a locked row in the selection is not written", sneaky.items.map(i => i.section), ["education"]);
+eq("and the count agrees", sneaky.count, 1);
+eq("the same tick on Pro does write the hospital",
+  buildSavePlan(pro, ["cms:privilege:050245"], () => "x").items.map(i => i.section), ["privileges"]);
+
+// ── Opening on one section ──────────────────────────────────────────────────
+eq("the four sections a Setup row can fill",
+  Object.keys(FOCUS_COPY), ["education", "workHistory", "privileges", "publications"]);
+ok("every focus key is a section the screen groups",
+  Object.keys(FOCUS_COPY).every(k => GROUP_ORDER.includes(k)));
+ok("every focus line names the gap as well as the answer",
+  Object.values(FOCUS_COPY).every(c => c.title && c.line.length > 40));
+ok("the privileges line never calls an affiliation a privilege",
+  /lead to confirm/.test(FOCUS_COPY.privileges.line), FOCUS_COPY.privileges.line);
+ok("the education line says the school is not offered",
+  /OTHER/.test(FOCUS_COPY.education.line), FOCUS_COPY.education.line);
+ok("the publications line says the match is by name",
+  /author name/.test(FOCUS_COPY.publications.line), FOCUS_COPY.publications.line);
+
+eq("a section with nothing to offer is not focusable", focusSectionKey("licenses"), "");
+eq("nor is a section that does not exist", focusSectionKey("nonsense"), "");
+eq("nor is nothing at all", focusSectionKey(undefined), "");
+eq("the Setup rows that get the button",
+  ["education", "workHistory", "privileges", "publications", "licenses", "insurance", "travelDocs", "peerReferences"]
+    .filter(canFillFromPublicRecord),
+  ["education", "workHistory", "privileges", "publications"]);
+
+const allGroups = groupFindings(free);
+const split = splitGroups(allGroups, "education");
+eq("the focused group is the one asked for", split.focused.map(g => g.section), ["education"]);
+eq("and every other group is kept, in order",
+  split.rest.map(g => g.section), allGroups.map(g => g.section).filter(x => x !== "education"));
+eq("nothing is lost in the split",
+  split.focused.concat(split.rest).reduce((n, g) => n + g.findings.length, 0), free.length);
+eq("no focus means one undivided screen",
+  [splitGroups(allGroups, "").focused.length, splitGroups(allGroups, "").rest.length],
+  [allGroups.length, 0]);
+eq("a focus with no findings still shows the rest",
+  [splitGroups(groupFindings(free.filter(f => f.section !== "education")), "education").focused.length,
+    splitGroups(groupFindings(free.filter(f => f.section !== "education")), "education").rest.length > 0],
+  [0, true]);
+eq("the rest is counted by what is still a decision",
+  countPickable(split.rest), split.rest.reduce((n, g) => n + g.findings.filter(isSelectable).length, 0));
+ok("and that count excludes the locked hospital",
+  countPickable(split.rest) < split.rest.reduce((n, g) => n + g.findings.length, 0));
+
+// A tick the physician cannot see is a tick he did not make: opened on one
+// section, the folded groups start empty, however tickable they would be.
+const wholeScreen = defaultSelectedIds(free);
+ok("the whole screen still seeds its record rows", wholeScreen.length > 0);
+eq("no focus behaves exactly as before", defaultSelectedIdsForFocus(free, ""), wholeScreen);
+eq("focused on education, only education is seeded",
+  defaultSelectedIdsForFocus(free, "education"),
+  wholeScreen.filter(id => byId(free, id).section === "education"));
+ok("and the profile rows the whole screen would have seeded are not",
+  defaultSelectedIdsForFocus(free, "education").every(id => !id.startsWith("nppes:profile:")));
+eq("focused on privileges, a free plan seeds nothing at all",
+  defaultSelectedIdsForFocus(free, "privileges"), []);
+eq("focused on publications, nothing is seeded either: every paper is a lead",
+  defaultSelectedIdsForFocus(free, "publications"), []);
+eq("an unknown focus is no focus", defaultSelectedIdsForFocus(free, "nonsense"), wholeScreen);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

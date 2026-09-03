@@ -4,10 +4,12 @@ import NpiPanel from "./setup/NpiPanel";
 import { generateId } from "../../utils/helpers";
 import { fetchPublicRecord } from "../../utils/publicRecordApi";
 import {
-  markAlreadyOnFile, groupFindings, defaultSelectedIds, isSelectable,
+  markAlreadyOnFile, markPlanLocks, planLockNote,
+  groupFindings, defaultSelectedIdsForFocus, isSelectable,
   leadNote, needsLabel, evidenceLine, replacesLine, joinWords,
   countSelected, buildSavePlan, savedSummary,
   retrySources, failedSourceNames, mergeEnvelopes,
+  FOCUS_COPY, focusSectionKey, splitGroups, countPickable,
 } from "../../utils/publicRecord";
 
 /**
@@ -25,6 +27,9 @@ import {
  *    name) starts unticked and carries the sentence that says why it is a
  *    lead. A privilege is never given a status and never given a date.
  *  - A record already on file is greyed, labelled, and cannot be ticked.
+ *  - So is a row whose section this plan keeps shut. It is still shown and
+ *    still named: a register found it, and the screen never pretends
+ *    otherwise.
  *  - A profile row that would overwrite an answer the physician already gave
  *    starts unticked, says so, and names the values it would replace.
  *  - Saving goes through updateSettings and addItem, so every accepted row
@@ -34,11 +39,18 @@ import {
  * the layout changes.
  *
  * Props:
- *  - onSaved(count)  fired after the accepted rows are written
- *  - onClose()       optional; renders a Close button when given
+ *  - onSaved(count)     fired after the accepted rows are written
+ *  - onClose()          optional; renders a Close button when given
+ *  - focusSection       an app section ("education", "workHistory",
+ *                       "privileges", "publications"): the screen opens
+ *                       pointed at that section, and everything else the
+ *                       same search found sits one tap away rather than
+ *                       being dropped
  */
-function PublicRecordReview({ onSaved, onClose }) {
-  const { data, addItem, updateSettings, theme: T, isDesktop } = useApp();
+function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
+  const { data, addItem, updateSettings, theme: T, isDesktop, isPro } = useApp();
+  const focus = focusSectionKey(focusSection);
+  const focusCopy = focus ? FOCUS_COPY[focus] : null;
   // Stable identity: the dedupe memo and the lookup callback both take it.
   const s = useMemo(() => data.settings || {}, [data.settings]);
 
@@ -50,6 +62,9 @@ function PublicRecordReview({ onSaved, onClose }) {
   const [expanded, setExpanded] = useState({});   // section -> show every row
   const [openDetail, setOpenDetail] = useState({}); // finding id -> show the register's own wording
   const [saved, setSaved] = useState(null);
+  // Opened on one section, the rest of the search is folded rather than
+  // thrown away.
+  const [showRest, setShowRest] = useState(false);
 
   const npi = String(s.npi || "").replace(/\D/g, "");
   const hasNpi = npi.length === 10;
@@ -57,12 +72,21 @@ function PublicRecordReview({ onSaved, onClose }) {
   // Marked against what is on file right now, not at fetch time: a license
   // saved in another tab must not be offered again here.
   const findings = useMemo(
-    () => markAlreadyOnFile(envelope?.findings || [], data, s),
-    [envelope, data, s],
+    () => markPlanLocks(markAlreadyOnFile(envelope?.findings || [], data, s), { isPro }),
+    [envelope, data, s, isPro],
   );
   const groups = useMemo(() => groupFindings(findings), [findings]);
+  const { focused: focusGroups, rest: restGroups } = useMemo(
+    () => splitGroups(groups, focus),
+    [groups, focus],
+  );
+  const restPickable = countPickable(restGroups);
+  // Ticks sitting in a group that is folded shut. Zero unless the physician
+  // opened the fold, ticked something, and closed it again.
+  const hiddenTicked = (focus && !showRest)
+    ? countSelected(restGroups.flatMap((g) => g.findings), selected)
+    : 0;
   const selectedCount = countSelected(findings, selected);
-  const onFileCount = findings.filter((f) => f.alreadyOnFile).length;
   const failed = envelope ? failedSourceNames(envelope) : [];
 
   const run = useCallback(async (sources) => {
@@ -82,14 +106,15 @@ function PublicRecordReview({ onSaved, onClose }) {
       // Only rows that were missing arrive here, so the selection stands and
       // the new ones follow the same default: records may start ticked, leads
       // never do.
-      const marked = markAlreadyOnFile(res.envelope.findings || [], data, s);
-      setSelected((prev) => [...new Set([...prev, ...defaultSelectedIds(marked)])]);
+      const marked = markPlanLocks(markAlreadyOnFile(res.envelope.findings || [], data, s), { isPro });
+      setSelected((prev) => [...new Set([...prev, ...defaultSelectedIdsForFocus(marked, focus)])]);
       return;
     }
     setEnvelope(res.envelope);
-    setSelected(defaultSelectedIds(markAlreadyOnFile(res.envelope.findings || [], data, s)));
+    setSelected(defaultSelectedIdsForFocus(
+      markPlanLocks(markAlreadyOnFile(res.envelope.findings || [], data, s), { isPro }), focus));
     setPhase("review");
-  }, [npi, s, data, envelope]);
+  }, [npi, s, data, envelope, isPro, focus]);
 
   // A fresh search replaces the findings and resets the selection, so ticks
   // already made are not thrown away without being asked about first.
@@ -131,6 +156,11 @@ function PublicRecordReview({ onSaved, onClose }) {
     fontSize: 12, fontWeight: 800, color: T.textMuted,
     textTransform: "uppercase", letterSpacing: 0.5,
   };
+  // Two across above 1024px, one column below it. Nothing about the phone
+  // layout changes.
+  const gridStyle = isDesktop
+    ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "start" }
+    : { display: "flex", flexDirection: "column", gap: 12 };
 
   const chip = (label, color, bg) => (
     <span style={{
@@ -156,6 +186,10 @@ function PublicRecordReview({ onSaved, onClose }) {
   const row = (f) => {
     const on = selected.includes(f.id);
     const locked = !isSelectable(f);
+    // Two different reasons a row cannot be ticked, and they say different
+    // things: one means you already have it, the other means the section is
+    // shut on this plan.
+    const planNote = planLockNote(f);
     const note = leadNote(f);
     const needs = needsLabel(f.needs);
     const evidence = evidenceLine(f);
@@ -184,6 +218,9 @@ function PublicRecordReview({ onSaved, onClose }) {
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.35 }}>{f.label}</div>
+          {planNote && (
+            <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.45, marginTop: 4 }}>{planNote}</div>
+          )}
           {!locked && replaces && (
             <div style={{ fontSize: 12.5, color: T.warning, fontWeight: 600, lineHeight: 1.45, marginTop: 4 }}>{replaces}</div>
           )}
@@ -202,7 +239,8 @@ function PublicRecordReview({ onSaved, onClose }) {
           ))}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
             {sourceChip(f)}
-            {locked && chip("already on file", T.textDim, T.neutralDim)}
+            {f.alreadyOnFile && chip("already on file", T.textDim, T.neutralDim)}
+            {f.planLocked && chip("not on your plan", T.textDim, T.neutralDim)}
             {!locked && f.confidence === "lead" && chip("lead", T.warning, T.warningDim)}
             {!locked && replaces && chip("replaces what you have", T.warning, T.warningDim)}
             {!locked && needs && chip(`you add the ${needs}`, T.info, T.infoDim)}
@@ -232,12 +270,18 @@ function PublicRecordReview({ onSaved, onClose }) {
     const showAll = expanded[g.section] || g.findings.length <= PREVIEW;
     const shown = showAll ? g.findings : g.findings.slice(0, PREVIEW);
     const pickable = g.findings.filter(isSelectable).length;
+    const onFile = g.findings.filter((f) => f.alreadyOnFile).length;
+    const shut = g.findings.filter((f) => f.planLocked).length;
     return (
       <div key={g.section} style={{ ...card, padding: "12px 14px" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
           <div style={heading}>{g.title}</div>
           <div style={{ fontSize: 11.5, color: T.textDim, fontWeight: 700 }}>
-            {pickable} to review{g.findings.length > pickable ? `, ${g.findings.length - pickable} on file` : ""}
+            {joinWords([
+              `${pickable} to review`,
+              onFile ? `${onFile} on file` : "",
+              shut ? `${shut} not on your plan` : "",
+            ].filter(Boolean))}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -258,10 +302,19 @@ function PublicRecordReview({ onSaved, onClose }) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={card}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>Fill this in from the public registers</div>
-          <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>
-            Your NPI record, Medicare Care Compare and PubMed already hold your license numbers, your degree, where you practise and your papers. This reads all three and shows you what it found. Nothing is saved until you tick it.
+          <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>
+            {focusCopy ? `${focusCopy.title}, from the public registers` : "Fill this in from the public registers"}
           </div>
+          <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>
+            {focusCopy
+              ? focusCopy.line
+              : "Your NPI record, Medicare Care Compare and PubMed already hold your license numbers, your degree, where you practise and your papers. This reads all three and shows you what it found. Nothing is saved until you tick it."}
+          </div>
+          {focusCopy && (
+            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>
+              Nothing is saved until you tick it. The search reads all three registers at once, so whatever it finds for the rest of your record is shown here too.
+            </div>
+          )}
           <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 12.5, color: T.textDim, lineHeight: 1.6 }}>
             <li>NPPES NPI Registry: your name, degree, state license numbers, practice address</li>
             <li>Medicare Care Compare: graduation year, the organizations you bill under, the hospitals your claims came from</li>
@@ -353,20 +406,26 @@ function PublicRecordReview({ onSaved, onClose }) {
 
   // ── review ────────────────────────────────────────────────────────────────
   const nothing = findings.length === 0;
+  // Opened on one row, the count in the header is that row's count. The rest
+  // of the search is announced by its own button rather than folded into a
+  // number the physician cannot see the parts of.
+  const headShown = focus ? focusGroups.flatMap((g) => g.findings) : findings;
+  const headOnFile = headShown.filter((f) => f.alreadyOnFile).length;
+  const headNoun = focus && focusCopy ? focusCopy.title.toLowerCase() : `NPI ${npi}`;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={card}>
         <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>
-          {nothing
-            ? "Nothing came back to add"
-            : `${findings.length} thing${findings.length === 1 ? "" : "s"} found for NPI ${npi}`}
+          {headShown.length === 0
+            ? (focus ? `Nothing came back for ${headNoun}` : "Nothing came back to add")
+            : `${headShown.length} thing${headShown.length === 1 ? "" : "s"} found for ${headNoun}`}
         </div>
         <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>
-          {nothing
+          {headShown.length === 0
             ? (failed.length
               ? "The registers that answered had nothing on file for this NPI."
               : "The registers answered and had nothing on file for this NPI beyond what you already have. That is common early on, and it is not a problem with your record.")
-            : <>Tick what is yours. Nothing is saved until you press Save at the bottom.{onFileCount > 0 && ` ${onFileCount} of these ${onFileCount === 1 ? "is" : "are"} already on file and shown greyed.`}</>}
+            : <>Tick what is yours. Nothing is saved until you press Save at the bottom.{headOnFile > 0 && ` ${headOnFile} of these ${headOnFile === 1 ? "is" : "are"} already on file and shown greyed.`}</>}
         </div>
         {envelope?.message && (
           <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 8, lineHeight: 1.5 }}>{envelope.message}</div>
@@ -392,11 +451,21 @@ function PublicRecordReview({ onSaved, onClose }) {
         <div style={{ fontSize: 13, color: T.danger, fontWeight: 700, lineHeight: 1.5 }}>{error}</div>
       )}
 
-      <div style={isDesktop
-        ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "start" }
-        : { display: "flex", flexDirection: "column", gap: 12 }}>
-        {groups.map(groupBlock)}
-      </div>
+      <div style={gridStyle}>{(focus ? focusGroups : groups).map(groupBlock)}</div>
+
+      {/* Opened on one row, everything else the same search found is one tap
+          away. It is never dropped: a register that answered for a section
+          the physician was not looking at still answered. */}
+      {focus && restGroups.length > 0 && (
+        <>
+          <button onClick={() => setShowRest((r) => !r)} style={secondaryBtn}>
+            {showRest
+              ? "Hide the rest of what was found"
+              : `The same search found ${restPickable} other ${restPickable === 1 ? "thing" : "things"} for your record`}
+          </button>
+          {showRest && <div style={gridStyle}>{restGroups.map(groupBlock)}</div>}
+        </>
+      )}
 
       {!nothing && (
       <div style={{
@@ -410,6 +479,14 @@ function PublicRecordReview({ onSaved, onClose }) {
           <div style={{ fontSize: 12, color: T.textDim }}>
             {selectedCount === 0 ? "Tick what you want to keep." : "Only these get saved."}
           </div>
+          {/* Save counts every tick, including one made in a group that has
+              since been folded shut. The number never stands for more rows
+              than the screen is showing without saying so. */}
+          {hiddenTicked > 0 && (
+            <div style={{ fontSize: 12, color: T.warning, fontWeight: 700 }}>
+              {hiddenTicked} {hiddenTicked === 1 ? "is" : "are"} in the part you have hidden.
+            </div>
+          )}
         </div>
         <button onClick={() => setSelected([])} disabled={selectedCount === 0}
           style={{ ...secondaryBtn, opacity: selectedCount === 0 ? 0.5 : 1 }}>Clear</button>

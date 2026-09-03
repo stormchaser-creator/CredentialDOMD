@@ -10,6 +10,8 @@ import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
 import DateFixList, { DateRow, SHARED_KEY_NOTE } from "./setup/DateFixList";
 import CaptureRun from "./setup/CaptureRun";
+import PublicRecordReview from "./PublicRecordReview";
+import { canFillFromPublicRecord } from "../../utils/publicRecord";
 import CMEImport from "./CMEImport";
 import EmailPacketModal from "./EmailPacketModal";
 
@@ -303,6 +305,11 @@ const RUN_NOUNS = {
 function PacketDrawer({ task, onOpenSection }) {
   const { data, theme: T } = useApp();
   const [running, setRunning] = useState(false);
+  // Three of these rows are about records the public registers already hold
+  // something for. The review screen opens in the drawer, the way the capture
+  // run does, so the row is never navigated away from.
+  const [pulling, setPulling] = useState(false);
+  const canPull = canFillFromPublicRecord(task.section);
   const queue = evidenceQueue(data, task.id);
   const [plural, singular] = RUN_NOUNS[queue.section] || ["records", "record"];
   // A board certificate held by a lifetime diplomate and a medical school
@@ -322,6 +329,10 @@ function PacketDrawer({ task, onOpenSection }) {
     );
   }
 
+  if (pulling) {
+    return <PublicRecordReview focusSection={task.section} onClose={() => setPulling(false)} />;
+  }
+
   return (
     <div>
       {queue.records.length > 0 && (
@@ -336,9 +347,16 @@ function PacketDrawer({ task, onOpenSection }) {
           }}>Start the run</button>
         </>
       )}
+      {canPull && (
+        <button onClick={() => setPulling(true)} style={{
+          marginTop: queue.records.length ? 10 : 0, width: "100%", padding: "11px 16px", borderRadius: 12,
+          border: `1px solid ${T.accent}`, backgroundColor: "transparent",
+          color: T.accent, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>Fill this from public records</button>
+      )}
       {task.section && (
         <button onClick={() => onOpenSection?.(task.section, task.id)} style={{
-          marginTop: queue.records.length ? 10 : 0, width: "100%", padding: "11px 16px", borderRadius: 12,
+          marginTop: (queue.records.length || canPull) ? 10 : 0, width: "100%", padding: "11px 16px", borderRadius: 12,
           border: `1px solid ${T.border}`, backgroundColor: "transparent",
           color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
         }}>{task.addVerb}</button>

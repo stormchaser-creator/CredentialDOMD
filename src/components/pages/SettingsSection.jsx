@@ -4,6 +4,8 @@ import { useApp } from "../../context/AppContext";
 import { DESK_KEYS } from "../../utils/deskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Field from "../shared/Field";
+import Modal from "../shared/Modal";
+import PublicRecordReview from "../features/PublicRecordReview";
 import { EmailIcon, TextMsgIcon } from "../shared/Icons";
 import { STATES } from "../../constants/states";
 import { findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
@@ -31,6 +33,10 @@ function SettingsSection() {
   const [npiNote, setNpiNote] = useState(""); // how the search was widened
   const [npiError, setNpiError] = useState(null);
   const [licenseImportMsg, setLicenseImportMsg] = useState(null);
+  // The public-register review, opened from beside the NPI it is keyed on.
+  // Nothing it finds is written until the physician ticks the row and saves.
+  const [publicOpen, setPublicOpen] = useState(false);
+  const [publicSavedMsg, setPublicSavedMsg] = useState(null);
 
   // Shared AI (server-held Gemini key, metered per user). Re-checked when
   // Settings opens so the "N of 200 calls used today" line is current.
@@ -208,6 +214,25 @@ function SettingsSection() {
               <span style={{ fontSize: 10, color: T.textDim, whiteSpace: "nowrap" }}>edit manually</span>
             </div>
           )}
+          {/* The registers keyed on this number hold more than the licenses
+              the lookup above imports: the degree and graduation year, the
+              organizations enrolled under it, the hospitals the claims came
+              from, and the papers under the name. Every one of them is a
+              proposal until it is ticked. */}
+          <div style={{ marginTop: 8 }}>
+            {String(s.npi || "").replace(/\D/g, "").length === 10 ? (
+              <button onClick={() => { setPublicSavedMsg(null); setPublicOpen(true); }} style={{
+                width: "100%", padding: "10px 16px", borderRadius: 10,
+                border: `1px solid ${T.border}`, backgroundColor: "transparent",
+                color: T.text, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+              }}>Pull from public records</button>
+            ) : (
+              <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.5 }}>
+                Find your NPI above and the public registers keyed on it can be read here.
+              </div>
+            )}
+          </div>
+          {publicSavedMsg && <div style={{ fontSize: 13, fontWeight: 600, color: T.success, marginTop: 6, padding: "8px 12px", borderRadius: 10, backgroundColor: T.successDim }}>{publicSavedMsg}</div>}
           {npiError && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{npiError}</div>}
           {licenseImportMsg && <div style={{ fontSize: 13, fontWeight: 600, color: T.success, marginTop: 6, padding: "8px 12px", borderRadius: 10, backgroundColor: T.successDim }}>{licenseImportMsg}</div>}
           {npiResults && npiResults.length > 0 && (
@@ -658,6 +683,18 @@ function SettingsSection() {
           })}
         </div>}
       </div>
+
+      <Modal
+        open={publicOpen}
+        onClose={() => setPublicOpen(false)}
+        title="Public records"
+        width={isDesktop ? 860 : undefined}
+      >
+        <PublicRecordReview
+          onSaved={(n) => setPublicSavedMsg(`${n} item${n === 1 ? "" : "s"} added from the public registers`)}
+          onClose={() => setPublicOpen(false)}
+        />
+      </Modal>
     </div>
   );
 }
