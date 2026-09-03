@@ -1,7 +1,7 @@
-// 20260903T0217-2189980 is replaced at build time (see stampBuildId in vite.config.js).
+// 20260903T0238-f96f25f is replaced at build time (see stampBuildId in vite.config.js).
 // Because the id changes every deploy, this file's bytes change every deploy,
 // which is what makes the browser fire `updatefound` and install the new SW.
-const BUILD_ID = "20260903T0217-2189980";
+const BUILD_ID = "20260903T0238-f96f25f";
 const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
@@ -16,7 +16,7 @@ const PRECACHE_URLS = [
   "./manifest.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
-  "./assets/index-CbboNf99.js",
+  "./assets/index-VG7cqRbu.js",
   "./assets/index-vByWTNVZ.css"
 ];
 
