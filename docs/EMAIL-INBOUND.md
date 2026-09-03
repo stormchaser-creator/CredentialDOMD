@@ -25,6 +25,25 @@ physician who signed up as `name@gmail.com` and forwards from
 `name@hospital.org` used to get the "not registered" reply; now the hospital
 address routes to their account once they have confirmed it.
 
+Two things to be honest about while this is half built.
+
+* **Pass 1 is self-asserted.** A forwarding address is usable only after the
+  mailbox owner clicks a link sent to it. `profiles.email` is not: any
+  signed-in account may type any address into it (the profiles identity lock
+  reverts `auth_user_id` and `access_status`, not `email`), and pass 1 returns
+  first, so it outranks even a legitimately verified forwarding address.
+  Closing this means re-locking the column, which
+  `supabase/migrations/20260819_lock_access_status.sql` unlocked on purpose and
+  which nothing should do before the Settings panel below exists. Note also
+  that `authenticated` holds table-level UPDATE on `public.profiles`, so a
+  column-level `revoke update (email)` is a no-op; the lock has to be the
+  trigger.
+* **There is no Settings > Email panel yet.** Nothing in the app calls the
+  forwarding-address function, so no physician can add an address today. The
+  unregistered replies and the confirmation page therefore point at nothing:
+  they say only "forward from the email on your account". Those pointers go
+  back in with the UI.
+
 A verified forwarding address routes another person's forwarded mail and its
 attachments into whichever account holds it, so the flow that creates one is
 deliberately strict: `supabase/functions/forwarding-address/index.ts` refuses

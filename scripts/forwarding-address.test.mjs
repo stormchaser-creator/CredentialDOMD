@@ -9,7 +9,7 @@
 const {
   TOKEN_TTL_HOURS, TOKEN_BYTES, MAX_PENDING_PER_ACCOUNT, MAX_SENDS_PER_DAY, SEND_COOLDOWN_MINUTES,
   normalizeEmail, isEmailShaped, domainOf, ilikeLiteral,
-  refuseAdd, refuseResend, cooldownRemainingMs, since24hIso,
+  refuseAdd, refuseResend, refuseUniqueViolation, cooldownRemainingMs, since24hIso,
   base64url, mintToken, isTokenShaped, hashToken, expiryFrom, isExpired,
   confirmLink, confirmationEmail, escapeHtml, resultPage, publicRow,
 } = await import("../supabase/functions/forwarding-address/lib.ts");
@@ -82,6 +82,26 @@ eq("ownership is checked before any limit",
 ok("the other-account message does not distinguish profile email from verified address",
   refuseAdd({ ...base, usedByAnotherAccount: true }).message === "That address is already in use by another CredentialDOMD account.");
 
+// ── Which unique index refused the insert ───────────────────────────────────
+// Both indexes raise 23505 on the same insert. The caller's own duplicate must
+// not be reported as somebody else's address: that is wrong, and it tells a
+// caller something about other accounts that their own row cannot support.
+const OWNER_ERR = 'duplicate key value violates unique constraint "forwarding_addresses_owner_email_key"';
+const VERIFIED_ERR = 'duplicate key value violates unique constraint "forwarding_addresses_verified_email_key"';
+eq("the caller's own duplicate reads as pending", refuseUniqueViolation(OWNER_ERR).code, "already_pending");
+eq("a verified duplicate reads as another account", refuseUniqueViolation(VERIFIED_ERR).code, "other_account");
+eq("both answer 409", [refuseUniqueViolation(OWNER_ERR).status, refuseUniqueViolation(VERIFIED_ERR).status], [409, 409]);
+ok("the caller's own duplicate is never blamed on another account",
+  !/another CredentialDOMD account/.test(refuseUniqueViolation(OWNER_ERR).message));
+ok("an unrecognised index discloses nothing about the caller",
+  refuseUniqueViolation("some other constraint").code === "other_account");
+ok("a missing error detail still returns a refusal, not a throw",
+  refuseUniqueViolation(undefined).status === 409 && refuseUniqueViolation(null).status === 409);
+eq("the pending message matches the one refuseAdd already uses",
+  refuseUniqueViolation(OWNER_ERR).message, refuseAdd({ ...base, ownRowVerified: false }).message);
+eq("the other-account message matches the one refuseAdd already uses",
+  refuseUniqueViolation(VERIFIED_ERR).message, refuseAdd({ ...base, usedByAnotherAccount: true }).message);
+
 // ── refuseResend ────────────────────────────────────────────────────────────
 const NOW = Date.parse("2026-09-03T12:00:00.000Z");
 const rcode = (over) => (refuseResend({ found: true, verified: false, lastSentAt: null, sendsLast24h: 0, nowMs: NOW, ...over }) || { code: null }).code;
@@ -150,6 +170,11 @@ ok("the failure page never says whether the token existed", !/not found|unknown|
 ok("neither page carries a token", !good.includes("token=") && !bad.includes("token="));
 ok("both pages are complete html", good.startsWith("<!doctype html>") && bad.startsWith("<!doctype html>"));
 ok("no em dash on either page", !good.includes("—") && !bad.includes("—"));
+// Until the Settings > Email panel exists, neither page may send the reader to
+// it. A page that names a screen nobody can open is a promise, not guidance.
+ok("neither page points at a Settings panel that does not exist",
+  !/Settings\s*(&gt;|>)\s*Email/.test(good) && !/Settings\s*(&gt;|>)\s*Email/.test(bad));
+ok("the failure page still says how long a link lives", /work once and last 24 hours/.test(bad));
 ok("an address with markup in it cannot inject",
   !resultPage({ ok: true, address: '<img src=x onerror=alert(1)>@x.org', accountEmail: "a@b.co" }).includes("<img"));
 

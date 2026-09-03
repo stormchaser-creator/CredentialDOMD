@@ -7,8 +7,14 @@
  * got the "not registered" reply. This function is how that second address
  * gets registered, and the reason it is a whole function rather than a table
  * write: a verified forwarding address routes someone's credentialing mail,
- * attachments and all, into the account that owns it. Nobody may claim an
- * address they cannot read.
+ * attachments and all, into the account that owns it. Nobody may claim a
+ * FORWARDING address they cannot read.
+ *
+ * That last sentence stops at this table. matchProfile checks profiles.email
+ * before it checks here, and profiles.email is self-asserted (see lib.ts), so
+ * the routing decision as a whole is not gated on proof of mailbox control.
+ * Re-locking profiles.email would close it and is a product decision:
+ * migration 20260819_lock_access_status unlocked the column on purpose.
  *
  *   POST { action: "add",    email }   Clerk JWT. Validates and refuses (see
  *       lib.ts refuseAdd), mints a 32-byte token, stores ONLY its SHA-256
@@ -36,8 +42,12 @@
  * emails per account per day (counted in forwarding_address_sends, which the
  * owner cannot delete), one email per address per 10 minutes.
  *
- * The raw token is never logged, never returned in a response, and appears in
- * exactly one place: the body of the email to the address being claimed.
+ * The raw token is never logged by this codebase, never returned in a
+ * response, and appears in exactly one place we write: the body of the email
+ * to the address being claimed. It does ride a query string, so the platform
+ * sees it: Supabase edge-function request logs, Cloudflare's logs for
+ * credentialdomd.com/api/confirm-forwarding, and the mailbox owner's browser
+ * history. Single use plus a 24 hour expiry is what limits that.
  *
  * Secrets: RESEND_API_KEY (already set), CLERK_ISSUER, SUPABASE_URL /
  * SUPABASE_SERVICE_ROLE_KEY (auto). Optional FORWARDING_CONFIRM_BASE
@@ -57,6 +67,7 @@ import {
   expiryFrom,
   hashToken,
   ilikeLiteral,
+  isEmailShaped,
   isExpired,
   isTokenShaped,
   mintToken,
@@ -64,6 +75,7 @@ import {
   publicRow,
   refuseAdd,
   refuseResend,
+  refuseUniqueViolation,
   resultPage,
   since24hIso,
 } from "./lib.ts";
@@ -142,6 +154,13 @@ const sendsLast24h = (db: Db, profileId: string, nowMs: number) =>
 
 async function handleAdd(db: Db, profileId: string, rawEmail: unknown) {
   const email = normalizeEmail(rawEmail);
+  // Shape before any query. normalizeEmail puts no bound on length, and an
+  // unbounded string has no business reaching two ilike patterns and two
+  // counts; this is the same 6-254 check refuseAdd would apply, moved ahead of
+  // the round trips it was sitting behind.
+  if (!isEmailShaped(email)) {
+    return json(400, { error: "That does not look like an email address.", code: "invalid" });
+  }
   const nowMs = Date.now();
 
   // profiles.email is what the sender matcher compares against, so the caller's
@@ -156,12 +175,23 @@ async function handleAdd(db: Db, profileId: string, rawEmail: unknown) {
   const usedByOtherProfile = (profileHits ?? [])
     .some((p: { id: string; email: string | null }) => normalizeEmail(p.email) === email && p.id !== profileId);
 
-  const { data: addrHits, error: aErr } = await db.from("forwarding_addresses")
-    .select("id, user_id, verified_at").ilike("email", ilikeLiteral(email)).limit(10);
+  // Two targeted lookups, not one page of rows. Reading a .limit(10) page and
+  // deriving "verified elsewhere" from it meant an address held pending by
+  // more than a page of accounts could push the verified row off the page, and
+  // the next caller would be sent a confirmation email for a mailbox someone
+  // else already owns. This account's own row is unique by
+  // forwarding_addresses_owner_email_key; the verified row is unique across
+  // every account by forwarding_addresses_verified_email_key, so limit(1) here
+  // is the whole answer, not a sample of it.
+  const { data: mineRow, error: aErr } = await db.from("forwarding_addresses")
+    .select("id, verified_at").eq("user_id", profileId).ilike("email", ilikeLiteral(email)).maybeSingle();
   if (aErr) throw new Error(`address lookup: ${aErr.message}`);
-  const rows = (addrHits ?? []) as { id: string; user_id: string; verified_at: string | null }[];
-  const mine = rows.find((r) => r.user_id === profileId) ?? null;
-  const verifiedElsewhere = rows.some((r) => r.user_id !== profileId && r.verified_at);
+  const mine = (mineRow ?? null) as { id: string; verified_at: string | null } | null;
+
+  const { data: verifiedRows, error: vErr } = await db.from("forwarding_addresses")
+    .select("user_id").ilike("email", ilikeLiteral(email)).not("verified_at", "is", null).limit(1);
+  if (vErr) throw new Error(`verified address lookup: ${vErr.message}`);
+  const verifiedElsewhere = ((verifiedRows ?? []) as { user_id: string }[]).some((r) => r.user_id !== profileId);
 
   const refusal = refuseAdd({
     email,
@@ -182,9 +212,12 @@ async function handleAdd(db: Db, profileId: string, rawEmail: unknown) {
     last_sent_at: new Date(nowMs).toISOString(),
   }).select(ROW_COLUMNS).single();
   if (iErr) {
-    // Someone verified the address between the check and the insert.
+    // A duplicate, but of which kind? The caller's own row (they raced
+    // themselves) reads differently from an address another account verified
+    // between the check and the insert. The index name in the error decides.
     if (iErr.code === "23505") {
-      return json(409, { error: "That address is already in use by another CredentialDOMD account.", code: "other_account" });
+      const r = refuseUniqueViolation(`${iErr.message ?? ""} ${iErr.details ?? ""} ${iErr.constraint ?? ""}`);
+      return json(r.status, { error: r.message, code: r.code });
     }
     throw new Error(`insert: ${iErr.message}`);
   }

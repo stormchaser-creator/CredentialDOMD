@@ -14,6 +14,23 @@
  * into whichever account owns it. So an address is refused when it belongs to
  * anyone else, and it becomes usable only after the mailbox proves control by
  * clicking a link sent to it.
+ *
+ * Scope that sentence honestly. It is true of forwarding_addresses and of
+ * nothing else. email-inbound's matchProfile checks profiles.email FIRST, and
+ * profiles.email is self-asserted: any signed-in account may type any address
+ * into it (Settings > Physician Profile > Email), because the profiles
+ * identity lock reverts auth_user_id and access_status, not email. Pass 1
+ * outranks this table, so "nobody may claim an address they cannot read"
+ * describes THIS flow, not the routing decision as a whole. Closing that gap
+ * means re-locking profiles.email, which migration 20260819_lock_access_status
+ * deliberately unlocked (it names inbound matching as a reason), so it is a
+ * product decision and not this file's to make.
+ *
+ * Known residual: a refusal for an address another account holds is returned
+ * before any email is sent, and only sent emails are counted, so a caller can
+ * probe addresses without spending the daily cap and learn whether an address
+ * belongs to some CredentialDOMD account. Which kind of holder it is stays
+ * hidden (one message covers both), but existence does not.
  */
 
 export const TOKEN_TTL_HOURS = 24;
@@ -112,6 +129,28 @@ export function refuseAdd(f: AddFacts): Refusal | null {
     };
   }
   return null;
+}
+
+/**
+ * Which unique index refused an insert. Two can fire on forwarding_addresses:
+ * forwarding_addresses_owner_email_key, which is the CALLER'S OWN duplicate,
+ * and forwarding_addresses_verified_email_key, the one-account-per-verified-
+ * address rule. Telling a caller that another account holds an address that is
+ * in fact their own row is wrong, and it is a small inverted disclosure, so the
+ * index name picks the message. An index this does not recognise falls back to
+ * the message that discloses nothing about the caller.
+ */
+export function refuseUniqueViolation(detail: unknown): Refusal {
+  if (String(detail ?? "").includes("forwarding_addresses_owner_email_key")) {
+    return {
+      code: "already_pending", status: 409,
+      message: "That address is already waiting to be confirmed. Send the confirmation email again if it did not arrive.",
+    };
+  }
+  return {
+    code: "other_account", status: 409,
+    message: "That address is already in use by another CredentialDOMD account.",
+  };
 }
 
 export interface ResendFacts {
@@ -228,15 +267,18 @@ export type PageResult = { ok: true; address: string; accountEmail: string } | {
  * The one page this codebase serves. A token that never existed, one that
  * expired, and one already used all render the SAME page: the person holding
  * the link learns nothing about which it was.
+ *
+ * Neither page sends the reader anywhere to manage the address: there is no
+ * Settings > Email panel in the app yet. When that panel ships, the two
+ * pointers this text used to carry go back in.
  */
 export function resultPage(r: PageResult): string {
   const title = r.ok ? "Address confirmed" : "This link is no longer valid";
   const body = r.ok
     ? `<p class="lead"><strong>${escapeHtml(r.address)}</strong> is confirmed for <strong>${escapeHtml(r.accountEmail)}</strong>.</p>
-      <p>Credentialing email forwarded from that address to docs@credentialdomd.com now reaches this account, and CME certificates forwarded to cme@credentialdomd.com are filed there too.</p>
-      <p>You can remove it any time in the app under More &gt; Settings &gt; Email.</p>`
+      <p>Credentialing email forwarded from that address to docs@credentialdomd.com now reaches this account, and CME certificates forwarded to cme@credentialdomd.com are filed there too.</p>`
     : `<p class="lead">This confirmation link has expired or has already been used.</p>
-      <p>Confirmation links work once and last 24 hours. To try again, open CredentialDOMD, go to More &gt; Settings &gt; Email, and send the confirmation email again.</p>`;
+      <p>Confirmation links work once and last 24 hours.</p>`;
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">

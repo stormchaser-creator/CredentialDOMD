@@ -5,8 +5,9 @@
  *
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
  *     Sender must match a profile: lower(profiles.email) = lower(from), or a
- *     CONFIRMED row in forwarding_addresses (the physician added the address in
- *     More > Settings > Email and clicked the link sent to it). Every
+ *     CONFIRMED row in forwarding_addresses (an address registered through the
+ *     forwarding-address function and confirmed from that mailbox; no Settings
+ *     panel drives it yet, so the unregistered reply does not offer it). Every
  *     PDF / image attachment is copied into the `documents` Storage bucket at
  *     <auth_user_id>/<doc id> and a `documents` row is written with
  *     type = "cme-certificate-inbox" and no linked_to, so the app shows it under
@@ -406,6 +407,16 @@ async function countSince(minutes: number, apply: (q: AnyQuery) => AnyQuery = (q
  *
  * Only verified_at rows count, and a verified address is unique across
  * accounts (partial unique index), so this pass can match at most one account.
+ *
+ * What the second pass does NOT do is make this whole matcher proof-of-mailbox.
+ * A forwarding address is usable only after the mailbox owner clicks a link
+ * sent to it; profiles.email, checked first and outranking it, is self-asserted
+ * and is not verified by that flow. Any signed-in account can type any address
+ * into profiles.email (the identity lock freezes auth_user_id and
+ * access_status, not email) and this function will route mail forwarded from
+ * that address to them. Closing that means re-locking the column, which
+ * migration 20260819_lock_access_status unlocked on purpose, naming inbound
+ * matching as one of the flows that needed it. Owner's call, not this file's.
  */
 async function matchProfile(from: string): Promise<MatchedProfile | null> {
   const direct = await profilesByIds(async () => {
@@ -576,9 +587,9 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account. Forward from the email on your account, or add this address in Settings and click the link we send here to confirm it.
+      `This address is not registered to a CredentialDOMD account. Forward from the email on your account.
 
-Open the app: ${APP_URL} (More > Settings > Email)
+Open the app: ${APP_URL}
 
 CredentialDOMD
 https://credentialdomd.com`);
@@ -739,7 +750,7 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account, or add this address in Settings (More > Settings > Email) and click the link we send here to confirm it.
+      `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account.
 
 Open the app: ${APP_URL}
 
