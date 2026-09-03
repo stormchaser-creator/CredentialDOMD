@@ -178,6 +178,7 @@ export const TASK_DEFS = [
     cardLine: () => "Your degree and primary state decide which CME rules apply to you.",
     nextPhrase: () => "your degree and primary state",
     doneClause: "your details",
+    regressionLine: ({ s }) => (s.primaryState ? "your degree is blank" : "your primary state is blank"),
     pendingDetail: ({ s }) => {
       const missing = [];
       if (!s.name) missing.push("your name");
@@ -199,6 +200,7 @@ export const TASK_DEFS = [
     cardLine: () => "No licenses on file yet. The federal registry probably already has yours.",
     nextPhrase: () => "the registry lookup that fills in your licenses",
     doneClause: "your licenses",
+    regressionLine: () => "no medical license is on file",
     pendingDetail: () => "No medical license on file yet.",
   },
   {
@@ -908,6 +910,43 @@ export function homeCardForm(setup, { now = new Date() } = {}) {
   return t2.total > 0 && !t2.complete ? CARD_FORM.C : CARD_FORM.D;
 }
 
+/**
+ * The whole board as one fraction. Tier 1 is the number that matters while
+ * setup is running; once it is stamped, "Setup" means the whole list, which
+ * is what the terminal Home line and the Setup tiles count.
+ */
+export function boardCounts(setup) {
+  const a = setup.counts.tier1;
+  const b = setup.counts.tier2;
+  return {
+    done: a.done + b.done,
+    total: a.total + b.total,
+    left: a.left + b.left,
+    skipped: a.skipped + b.skipped,
+    complete: a.complete && b.complete,
+  };
+}
+
+/**
+ * The Tier 1 task that has come undone since Tier 1 was stamped, or null.
+ *
+ * Read in CARD_PRIORITY order (exposure order), so a physician who deleted a
+ * date and turned reminders off in the same week is told about the date. It
+ * is deliberately NOT read off setup.next: the top-ranked open task can be a
+ * packet row, and a Tier 1 task carrying a skip that was written before it
+ * ever closed is not open at all, so either would leave the terminal line
+ * saying nothing about what actually changed.
+ */
+export function tier1Regressed(setup) {
+  for (const id of CARD_PRIORITY) {
+    const t = setup.byId?.[id];
+    if (!t || t.tier !== 1) continue;
+    if (t.status === "done" || t.status === "documented" || t.status === "na") continue;
+    if (t.regressionLine) return t;
+  }
+  return null;
+}
+
 /* ─── The re-engagement ladder ─────────────────────────────────────
  * What the card says depends on how long the physician has been away from
  * it, and every rung is built out of their own records. There is no email
@@ -1061,9 +1100,15 @@ export function setupOwns(setup, taskId, opts = {}) {
  * The patch to write on the very first render of an account that has never
  * seen the board. An account that was already set up gets tier1DoneAt in the
  * same pass, so the Protected moment never fires for someone who was never
- * setting up. (settings.onboardingDone is deliberately not consulted: the
- * derived rule already covers every account it described, and the flag never
- * synced past this device anyway.)
+ * setting up.
+ *
+ * settings.onboardingDone is deliberately not consulted: the derived rule
+ * already covers every account that flag described, and it never synced past
+ * one device anyway. It is not being deleted yet either. This is the release
+ * that replaces it, and the first-render rule above has to be seen working
+ * on real accounts before the key is stripped from the caches still holding
+ * it. It is already unreachable from every code path; retire it one release
+ * from now.
  */
 export function firstRenderPatch(setup, { now = new Date() } = {}) {
   if (setup.state.startedAt) return null;

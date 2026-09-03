@@ -12,6 +12,7 @@ import {
   isMedicalLicense, isDea, isCsr, isBoard, isLifeSupport,
   ladderState, LADDER, denominatorNarration, proSnapshot, proSnapshotMatches,
   evidenceQueue, runIntro, numberWord, secsPhrase, weekdayName,
+  boardCounts, tier1Regressed,
 } from "../src/utils/setupTasks.js";
 
 let pass = 0, fail = 0;
@@ -643,6 +644,102 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   ok("every other row's manual button is its own verb",
     TASK_DEFS.every((d) => d.id === "proof" || verbs[d.id].addVerb === verbs[d.id].verb));
   eq("an empty file gives an empty queue, never a crash", evidenceQueue(null, "proof").records.length, 0);
+}
+
+// ── The terminal state: what Home says once Tier 1 is stamped ──
+{
+  // packed() closes every FREE packet row. The three Pro rows need records
+  // too, or "everything resolved" is never reachable on a Pro account.
+  const fullyPacked = () => {
+    const d = packed();
+    return {
+      ...d,
+      privileges: [{ id: "p1", facility: "Arrowhead", expirationDate: "2027-05-01" }],
+      insurance: [{ id: "i1", type: "Malpractice", expirationDate: "2027-08-01" }],
+      peerReferences: [
+        { id: "r1", name: "A Smith, MD", email: "a@x.com" },
+        { id: "r2", name: "B Jones, DO", phone: "555-0101" },
+        { id: "r3", name: "C Lee, MD", email: "c@x.com" },
+      ],
+      documents: [...d.documents, { id: "g7", linkedTo: "privileges:p1" }, { id: "g8", linkedTo: "insurance:i1" }],
+    };
+  };
+  const stamped = (data) => ({
+    ...data,
+    settings: { ...data.settings, setupState: { v: 1, startedAt: day(30), tier1DoneAt: day(20) } },
+  });
+
+  // Everything resolved: one line of navigation, counted across the WHOLE
+  // board, not Tier 1 alone. "5 of 5" while the packet is half empty would
+  // be a true number saying a false thing.
+  const done = build(stamped(fullyPacked()), { isPro: true });
+  eq("the packet is finished", done.counts.tier2.complete, true);
+  eq("Form D is the terminal form", homeCardForm(done, { now: NOW }), CARD_FORM.D);
+  const all = boardCounts(done);
+  eq("the terminal line counts the whole board", [all.done, all.total], [15, 15]);
+  eq("nothing is left", all.left, 0);
+  eq("nothing regressed", tier1Regressed(done), null);
+
+  // Free beta ended, so the three Pro rows are locked and out of the total.
+  const free = build(stamped(fullyPacked()), { isPro: false });
+  eq("locked Pro rows leave the terminal total too", boardCounts(free).total, 12);
+
+  // A record deleted months later un-completes Tier 1. The bordered card
+  // never comes back; the terminal line names what changed.
+  const undated = stamped(fullyPacked());
+  undated.licenses = undated.licenses.map((l) => (l.id === "l1" ? { ...l, expirationDate: "" } : l));
+  const regressed = build(undated, { isPro: true });
+  eq("a lost date reopens Tier 1", regressed.counts.tier1.complete, false);
+  eq("but never the bordered card", homeCardForm(regressed, { now: NOW }), CARD_FORM.D);
+  eq("and the line names the record", tier1Regressed(regressed)?.regressionLine, "your CA license lost its expiration date");
+  eq("and links to the task that fixes it", tier1Regressed(regressed)?.id, "dates");
+
+  // Exposure order, not page order: a physician who lost a date AND turned
+  // reminders off is told about the date.
+  const both = stamped(fullyPacked());
+  both.licenses = both.licenses.map((l) => (l.id === "l1" ? { ...l, expirationDate: "" } : l));
+  both.settings = { ...both.settings, notifyEmail: false };
+  eq("the date outranks the reminder", tier1Regressed(build(both, { isPro: true }))?.id, "dates");
+  const off = stamped(fullyPacked());
+  off.settings = { ...off.settings, notifyEmail: false };
+  eq("reminders off is named when it is the only thing", tier1Regressed(build(off, { isPro: true }))?.regressionLine, "reminders are off");
+
+  // A stale skip is not an open task, so the line must not be read off
+  // setup.next: it would name a packet row, or nothing at all.
+  const skipped = stamped(fullyPacked());
+  skipped.licenses = skipped.licenses.map((l) => (l.id === "l1" ? { ...l, expirationDate: "" } : l));
+  skipped.settings = {
+    ...skipped.settings,
+    setupState: { v: 1, startedAt: day(30), tier1DoneAt: day(20), tasks: { dates: { s: "skipped", at: day(1) } } },
+  };
+  const withSkip = build(skipped, { isPro: true });
+  eq("the skipped task is not open, so there is no next task", withSkip.next, null);
+  eq("but the regression is still named", tier1Regressed(withSkip)?.id, "dates");
+  eq("and still names the record", tier1Regressed(withSkip)?.regressionLine, "your CA license lost its expiration date");
+
+  // Every Tier 1 task can name what it lost, or the terminal line falls
+  // back to a count and says nothing about what changed.
+  ok("every Tier 1 task carries a regression clause",
+    TASK_DEFS.filter((d) => d.tier === 1).every((d) => typeof d.regressionLine === "function"),
+    TASK_DEFS.filter((d) => d.tier === 1 && !d.regressionLine).map((d) => d.id).join(", "));
+  ok("no regression clause carries an em dash",
+    TASK_DEFS.filter((d) => d.tier === 1).every((d) => !String(build(stamped({ settings: {}, licenses: [] })).byId[d.id].regressionLine || "").includes("—")));
+}
+
+// ── A lifetime board certificate ──
+{
+  // isNonExpiring reads item.noExpiration, and until the licenses form grew
+  // a checkbox nothing set it. A diplomate with no renewal date must not be
+  // counted as a record owing one.
+  const life = packed();
+  life.licenses = [...life.licenses, { id: "b2", type: "Board Certification (ABMS)", noExpiration: true }];
+  eq("a declared non-expiring record is not dateless", dateless(life).map((l) => l.id), []);
+  eq("and is not in the datable denominator either", datable(life).map((l) => l.id), ["l1", "d1"]);
+  // Without the flag a board certificate is still not a Tier 1 date task:
+  // T3 is scoped to medical licenses, DEA and CSR on purpose.
+  const noFlag = packed();
+  noFlag.licenses = [...noFlag.licenses, { id: "b3", type: "Board Certification (ABMS)" }];
+  eq("a board certificate never blocks Protected", build(noFlag).byId.dates.status, "done");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

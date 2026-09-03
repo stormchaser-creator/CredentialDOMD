@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useSetupState } from "./setup/useSetupState";
-import { homeCardForm, ladderState, CARD_FORM, LADDER } from "../../utils/setupTasks";
+import { homeCardForm, ladderState, boardCounts, tier1Regressed, CARD_FORM, LADDER } from "../../utils/setupTasks";
 
 /**
  * The Home card. Five forms, and the physician only ever sees one of them.
@@ -88,16 +88,22 @@ export default function SetupCard({ onOpenSetup }) {
     );
   }
 
+  // Form D is the terminal state, and it is the only form Home ever shows
+  // again once Tier 1 is stamped. Two things it can say: everything is
+  // resolved, counted across the whole board rather than Tier 1 alone
+  // ("Setup · 15 of 15"), or something that was finished has come undone,
+  // named. Either way it is one line of navigation, never a prompt.
   if (form === CARD_FORM.D) {
-    const regression = setup.next?.regressionLine;
+    const regressed = tier1Regressed(setup);
+    const all = boardCounts(setup);
     return (
-      <button onClick={() => onOpenSetup?.(setup.next?.id || null)} style={{
+      <button onClick={() => onOpenSetup?.(regressed?.id || null)} style={{
         display: "flex", alignItems: "center", gap: 8, width: "100%",
         border: "none", background: "transparent", padding: "10px 0", marginBottom: 6,
         cursor: "pointer", textAlign: "left", fontFamily: "inherit",
       }}>
         <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
-          {regression ? `Setup: ${regression}` : `Setup · ${t1.done} of ${t1.total}`}
+          {regressed ? `Setup: ${regressed.regressionLine}` : `Setup · ${all.done} of ${all.total}`}
         </span>
         <span style={{ color: T.accent, fontWeight: 800 }}>{"›"}</span>
       </button>

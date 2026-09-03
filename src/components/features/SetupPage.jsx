@@ -4,12 +4,14 @@ import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId } from "../../utils/helpers";
 import { isDea, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
+import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine } from "../../utils/credentialExport";
 import { FREE_BETA_LABEL } from "../../constants/beta";
 import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
 import DateFixList, { DateRow, SHARED_KEY_NOTE } from "./setup/DateFixList";
 import CaptureRun from "./setup/CaptureRun";
 import CMEImport from "./CMEImport";
+import EmailPacketModal from "./EmailPacketModal";
 
 /**
  * Setup — the board.
@@ -30,6 +32,8 @@ import CMEImport from "./CMEImport";
 const GLYPH = 22;
 /** Stable empty field list for the runs that write nothing onto the record. */
 const NO_FIELDS = [];
+/** Stable empty preselection: EmailPacketModal re-sorts on identity change. */
+const EMPTY_IDS = [];
 
 function StatusGlyph({ status, T }) {
   const base = {
@@ -397,6 +401,65 @@ function LockedRow({ task, T, onUpgrade }) {
   );
 }
 
+/**
+ * The ending. Every applicable packet row is done or declared inapplicable,
+ * so the section header is replaced by the artifact the list was for.
+ *
+ * Both numbers are read off the physician's own file and both are checkable
+ * by opening the ZIP: the line items are the rows of
+ * credentials_summary.xlsx, and the documents are the files beside it, each
+ * one linked to the record it proves. Nothing congratulates anyone.
+ *
+ * Download comes first because a complete packet routinely exceeds what
+ * email carries (ten files, 25 MB), and the ZIP has no such ceiling.
+ */
+function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, onShowItems, T }) {
+  const btn = (primary) => ({
+    flex: 1, minWidth: 150, padding: "12px 16px", borderRadius: 12,
+    border: primary ? "none" : `1px solid ${T.border}`,
+    backgroundColor: primary ? T.accent : "transparent",
+    color: primary ? "#fff" : T.text,
+    fontSize: 14.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+  });
+  return (
+    <div style={{
+      backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 16,
+      padding: "18px 20px", boxShadow: T.shadow1,
+    }}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: T.text, marginBottom: 6 }}>Your packet is assembled.</div>
+      <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.55, marginBottom: 14, fontVariantNumeric: "tabular-nums" }}>
+        {packetSummaryLine(summary)}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={onDownload} disabled={busy} style={{ ...btn(true), opacity: busy ? 0.7 : 1, cursor: busy ? "default" : "pointer" }}>
+          {busy ? "Building the file" : "Download the packet"}
+        </button>
+        <button onClick={onSend} disabled={!summary.documents} style={{
+          ...btn(false),
+          color: summary.documents ? T.text : T.textDim,
+          cursor: summary.documents ? "pointer" : "default",
+        }}>Send it</button>
+      </div>
+      {/* Email carries ten files and 25 MB per send; the ZIP has no ceiling,
+          so a packet past either one is told which door fits it. */}
+      {summary.documents > 10 && (
+        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginTop: 10 }}>
+          Email carries up to 10 files per send, so the whole packet goes as the downloaded file. Send it picks a subset.
+        </div>
+      )}
+      {error && <div style={{ fontSize: 13, fontWeight: 700, color: T.danger, marginTop: 10 }}>{error}</div>}
+      {/* Absent at desk width, where the rows are already in the rail beside
+          this card and the link would unfold something that never folded. */}
+      {onShowItems && (
+        <button onClick={onShowItems} style={{
+          marginTop: 12, border: "none", background: "transparent", padding: 0,
+          color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+        }}>Show the {itemCount} items {"›"}</button>
+      )}
+    </div>
+  );
+}
+
 /** Two 6px dots, once, so "twelve records, four copies" needs no arithmetic. */
 function Legend({ T }) {
   const dot = (filled) => ({
@@ -518,9 +581,12 @@ export default function SetupPage({
   onOpenSection,
   onUpgrade,
 }) {
-  const { theme: T, isDesktop } = useApp();
+  const { data, theme: T, isDesktop } = useApp();
   const { setup, skip, markNa, restore, declare, narration, ackNarration } = useSetupState();
   const [open, setOpen] = useState(initialTask);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipError, setZipError] = useState(null);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [unfoldedT1, setUnfoldedT1] = useState(false);
   const [unfoldedT2, setUnfoldedT2] = useState(false);
   // null = follow Tier 1 (folded until it completes). Once tapped either
@@ -746,6 +812,49 @@ export default function SetupPage({
     </>
   );
 
+  /* ─── The ending ───────────────────────────────────────────────
+   * Only built when the packet is finished, because packetSummary walks
+   * every collection and this is the hottest render on the page otherwise.
+   */
+  const packetSum = useMemo(() => (t2.complete ? packetSummary(data) : null), [t2.complete, data]);
+  const packetDocIds = useMemo(() => (emailOpen ? packetDocuments(data).map((d) => d.id) : EMPTY_IDS), [emailOpen, data]);
+
+  const downloadPacket = async () => {
+    if (zipBusy) return;
+    setZipBusy(true);
+    setZipError(null);
+    try {
+      const blob = await generateCredentialZip(data);
+      downloadBlob(blob, `CredentialDOMD_Packet_${new Date().toISOString().slice(0, 10)}.zip`);
+    } catch (e) {
+      setZipError(`The file could not be built. ${e?.message || "Try again."}`);
+    } finally {
+      setZipBusy(false);
+    }
+  };
+
+  const packetEnding = packetSum ? (
+    <PacketEnding
+      summary={packetSum}
+      itemCount={t2.total}
+      busy={zipBusy}
+      error={zipError}
+      onDownload={downloadPacket}
+      onSend={() => setEmailOpen(true)}
+      onShowItems={isDesktop ? null : () => { setUnfoldedT2(true); setPacketOpen(true); }}
+      T={T}
+    />
+  ) : null;
+
+  const packetMailer = (
+    <EmailPacketModal
+      open={emailOpen}
+      onClose={() => setEmailOpen(false)}
+      initialDocIds={packetDocIds}
+      onDownloadPacket={downloadPacket}
+    />
+  );
+
   const footer = (
     <button onClick={onOpenCredentials} style={{
       marginTop: 18, display: "flex", alignItems: "center", gap: 8, width: "100%",
@@ -782,10 +891,14 @@ export default function SetupPage({
                 />
               ))}
             </div>
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
-              <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{TIER2_COPY.intro}</div>
-              <Legend T={T} />
-            </div>
+            {packetEnding
+              ? <div style={{ marginTop: 14 }}>{packetEnding}</div>
+              : (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+                  <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{TIER2_COPY.intro}</div>
+                  <Legend T={T} />
+                </div>
+              )}
             {t2Locked.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 800, color: T.text }}>{TIER2_COPY.proHeader}</div>
@@ -814,6 +927,7 @@ export default function SetupPage({
             })()}
           </div>
         </div>
+        {packetMailer}
       </div>
     );
   }
@@ -829,13 +943,18 @@ export default function SetupPage({
           ? foldedSection("Protected", t1.total, () => setUnfoldedT1(true))
           : tier1Body}
       </div>
+      {/* The packet section's header is replaced by the ending once every
+          applicable row is resolved. The rows themselves are one tap away,
+          never gone: a finished list still has to be readable. */}
       <div style={{ marginTop: 18 }}>
-        {t2.complete && !unfoldedT2
-          ? foldedSection(TIER2_COPY.header, t2.total, () => setUnfoldedT2(true))
-          : packetBody}
+        {packetEnding}
+        {(!packetEnding || unfoldedT2) && (
+          <div style={{ marginTop: packetEnding ? 18 : 0 }}>{packetBody}</div>
+        )}
       </div>
       {bottomGroups}
       {footer}
+      {packetMailer}
     </div>
   );
 }

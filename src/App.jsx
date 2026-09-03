@@ -550,8 +550,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // banners that say the same thing stand down: three surfaces nagging about
   // one license date is exactly the noise being complained about.
   const setupBoard = useMemo(() => buildSetup(data, { isPro, isFreeBeta, hasSubscription }), [data, isPro, isFreeBeta, hasSubscription]);
-  const setupCounts = setupBoard.counts.tier1;
   const setupTier1Done = !!setupBoard.state.tier1DoneAt;
+  // The tile counts what the page is currently about: Tier 1 while it is
+  // unfinished, the packet after it. A tile stuck at "5 of 5" would say the
+  // board is finished while the packet section is still half empty.
+  const setupCounts = setupBoard.counts.tier1.complete && setupBoard.counts.tier2.total > 0
+    ? setupBoard.counts.tier2
+    : setupBoard.counts.tier1;
 
   // An incomplete profile silently degrades everything downstream — degree
   // type drives MD-vs-DO CME rules, specialty drives board requirements,
@@ -572,8 +577,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // can't protect what it can't see. Surfaced on Home until fixed.
   const missingExpiration = useMemo(() => {
     const out = [];
-    // Course/device certifications legitimately never expire — don't nag for a date
-    for (const l of data.licenses || []) if (!l.expirationDate && l.type !== CERTIFICATION_TYPE) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
+    // Course/device certifications legitimately never expire, and so does a
+    // lifetime board certificate once the physician ticks "does not expire"
+    // on it. isNonExpiring reads both, so the banner stops nagging about a
+    // record that has been answered rather than only about a record type.
+    for (const l of data.licenses || []) if (!l.expirationDate && !isNonExpiring(l, "licenses")) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
     for (const pv of data.privileges || []) if (!pv.expirationDate) out.push({ item: pv, sec: "privileges", label: describeItem(pv, data.settings.name, "privileges") });
     // Personal coverage (health/dental/vision/disability/life) has no
     // credentialing expiration to chase — only professional policies nag.
@@ -1697,7 +1705,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
+        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "noExpiration", label: "Expiration", type: "checkbox", checkboxLabel: "This certificate does not expire", show: (f) => /board certification/i.test(f.type || ""), hint: "A lifetime diplomate has no renewal date. Tick this and the app stops asking for one. Course and device certifications are already treated this way." }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE && f.noExpiration !== true }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
       </>);
     }
     if (sub === "cme") return <CMESection onShare={openShare} />;

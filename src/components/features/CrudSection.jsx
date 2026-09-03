@@ -574,6 +574,25 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   {(f.options || []).map(o => <option key={o} value={o} />)}
                 </datalist>
               </>
+            ) : f.type === "checkbox" ? (
+              // A boolean the record carries, e.g. "this certificate does not
+              // expire". isNonExpiring has read item.noExpiration since it was
+              // written; until now nothing in the app could set it, so a
+              // lifetime diplomate had no way to say so anywhere.
+              <label style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
+                borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: T.input, cursor: "pointer",
+              }}>
+                <input
+                  type="checkbox"
+                  checked={form[f.key] === true}
+                  onChange={e => setField(f.key, e.target.checked)}
+                  style={{ width: 18, height: 18, flexShrink: 0 }}
+                />
+                <span style={{ fontSize: 14, color: T.text, lineHeight: 1.4 }}>
+                  {resolveFieldProp(f, "checkboxLabel", form) || resolveFieldProp(f, "label", form)}
+                </span>
+              </label>
             ) : f.type === "cptPicker" ? (
               <CPTCodePicker
                 value={form[f.key] || ""}
@@ -728,6 +747,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {(() => {
                     const v = viewItem[f.key];
+                    // Only a ticked box reaches here at all (the filter above
+                    // drops falsy values), so it reads as the claim it is.
+                    if (f.type === "checkbox") return resolveFieldProp(f, "checkboxLabel", viewItem) || "Yes";
                     if (f.type === "secret") {
                       const open = revealed[f.key];
                       return (
