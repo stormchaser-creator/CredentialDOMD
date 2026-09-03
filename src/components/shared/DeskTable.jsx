@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useApp } from "../../context/AppContext";
 
 /**
@@ -7,8 +7,9 @@ import { useApp } from "../../context/AppContext";
  *
  * What it does: sticky header, click-to-sort columns (string / date /
  * number aware), an optional leading status cell, row click that opens the
- * caller's EXISTING view modal, and a trailing quick-actions cell that
- * reuses the caller's existing card-button handlers.
+ * caller's EXISTING view modal, a trailing quick-actions cell that reuses
+ * the caller's existing card-button handlers, and optional grouping with a
+ * subtotal row per group (a work log's days, a CME log's cycles).
  *
  * What it deliberately does not do: inline cell editing, column management,
  * saved views, density toggles, pagination. These lists hold dozens of
@@ -30,15 +31,38 @@ import { useApp } from "../../context/AppContext";
  *   defaultSort    { key, dir: "asc" | "desc" }
  *   status?(item)  leading status cell content (e.g. <StatusDot />)
  *   actions?(item) trailing quick-actions cell content
+ *   actionsWidth?  width of that cell (default 122, room for three icon
+ *                  buttons; a fourth needs about 154)
  *   onRowClick?(item)
+ *
+ * Grouping (all optional; without groupBy the table is one flat run):
+ *   groupBy(item)  the item's group key, a plain string that orders
+ *                  correctly by comparison (an ISO date, a cycle label)
+ *   groupDir       "asc" (default) | "desc" — order of the groups by key.
+ *                  Column sort reorders rows WITHIN each group only, so a
+ *                  day-grouped log sorted by time stays day-by-day.
+ *   groupKeys      extra keys to render even when no item maps to them
+ *                  (a coverage day with nothing logged still earns its
+ *                  stipend); an empty group renders only its subtotal row
+ *   subtotal(key, groupItems)
+ *                  -> { label?, cells?: { [columnKey]: content } } | null
+ *                  A row after the group's items. `label` spans the leading
+ *                  columns up to the first one named in `cells`; each cell
+ *                  lands under its column in bold. null renders no row.
  *
  * Layout notes: tableLayout "fixed" + width 100% means the table can never
  * spill horizontally (long text ellipsizes), which keeps overflow-x
  * contained WITHOUT an overflow wrapper — an overflow wrapper would become
  * the sticky header's scroll container and kill its stickiness against the
- * page. The header sticks below the 56px top bar.
+ * page. The header sticks below the top bar: the shell publishes the bar's
+ * real height, already divided by the active FONT_ZOOM, as
+ * --desk-sticky-top on the zoomed content wrapper (a plain 56px inside a
+ * zoomed subtree scales with the zoom and drifts off the bar at L/XL/XXL).
  */
-export default function DeskTable({ columns, items, defaultSort, status, actions, onRowClick }) {
+export default function DeskTable({
+  columns, items, defaultSort, status, actions, onRowClick, actionsWidth = 122,
+  groupBy, groupDir = "asc", groupKeys, subtotal,
+}) {
   const { theme: T } = useApp();
   const [sort, setSort] = useState(defaultSort || null);
 
@@ -74,6 +98,22 @@ export default function DeskTable({ columns, items, defaultSort, status, actions
     });
   }, [items, sort, columns]);
 
+  // Groups keep the sorted order of their rows; the groups themselves order
+  // by key. A flat table is the one-group case with no key and no subtotal.
+  const groups = useMemo(() => {
+    if (!groupBy) return [{ key: null, items: sorted }];
+    const by = new Map();
+    for (const k of groupKeys || []) by.set(String(k), []);
+    for (const it of sorted) {
+      const k = String(groupBy(it));
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(it);
+    }
+    const keys = [...by.keys()].sort();
+    if (groupDir === "desc") keys.reverse();
+    return keys.map((k) => ({ key: k, items: by.get(k) }));
+  }, [sorted, groupBy, groupDir, groupKeys]);
+
   const toggleSort = (col) => setSort((s) => (
     s?.key === col.key
       ? { key: col.key, dir: s.dir === "asc" ? "desc" : "asc" }
@@ -81,7 +121,7 @@ export default function DeskTable({ columns, items, defaultSort, status, actions
   ));
 
   const thStyle = {
-    position: "sticky", top: 56, zIndex: 5,
+    position: "sticky", top: "var(--desk-sticky-top, 56px)", zIndex: 5,
     backgroundColor: T.card,
     padding: "10px 12px", textAlign: "left",
     fontSize: 11, fontWeight: 700, color: T.textDim,
@@ -96,7 +136,39 @@ export default function DeskTable({ columns, items, defaultSort, status, actions
     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
     verticalAlign: "middle",
   });
+  const numStyle = (col) => (col.type === "number" || col.type === "date" ? { fontVariantNumeric: "tabular-nums" } : null);
 
+  const renderSubtotal = (group, idx) => {
+    if (!subtotal || group.key == null) return null;
+    const sub = subtotal(group.key, group.items);
+    if (!sub) return null;
+    const cells = sub.cells || {};
+    // The label spans every leading column that carries no subtotal cell.
+    let firstCell = columns.findIndex((c) => cells[c.key] !== undefined);
+    if (firstCell < 0) firstCell = columns.length;
+    const base = {
+      ...tdStyle(idx), backgroundColor: T.input, fontWeight: 800,
+    };
+    return (
+      <tr key={`subtotal:${group.key}`} className="cmd-desk-subtotal">
+        {status && <td style={base} />}
+        {firstCell > 0 && (
+          <td colSpan={firstCell} style={{ ...base, fontWeight: 700 }}>{sub.label}</td>
+        )}
+        {columns.slice(firstCell).map((col) => (
+          <td
+            key={col.key}
+            style={{ ...base, textAlign: col.align || "left", ...numStyle(col) }}
+          >
+            {cells[col.key] !== undefined ? cells[col.key] : null}
+          </td>
+        ))}
+        {actions && <td style={base} />}
+      </tr>
+    );
+  };
+
+  let rowIdx = 0;
   return (
     <div style={{
       backgroundColor: T.card, border: `1px solid ${T.border}`,
@@ -126,37 +198,45 @@ export default function DeskTable({ columns, items, defaultSort, status, actions
                 )}
               </th>
             ))}
-            {actions && <th style={{ ...thStyle, width: 122, textAlign: "right", cursor: "default", borderTopRightRadius: 14 }}>Actions</th>}
+            {actions && <th style={{ ...thStyle, width: actionsWidth, textAlign: "right", cursor: "default", borderTopRightRadius: 14 }}>Actions</th>}
           </tr>
         </thead>
         <tbody>
-          {sorted.map((item, idx) => (
-            <tr
-              key={item.id ?? idx}
-              className="cmd-desk-row"
-              onClick={onRowClick ? () => onRowClick(item) : undefined}
-              style={{ cursor: onRowClick ? "pointer" : "default" }}
-            >
-              {status && <td style={{ ...tdStyle(idx), overflow: "visible" }}>{status(item)}</td>}
-              {columns.map((col) => (
-                <td
-                  key={col.key}
-                  style={{
-                    ...tdStyle(idx),
-                    textAlign: col.align || "left",
-                    ...(col.color ? { color: col.color(item) } : null),
-                    ...(col.type === "number" || col.type === "date" ? { fontVariantNumeric: "tabular-nums" } : null),
-                  }}
-                >
-                  {col.render ? col.render(item) : (item[col.key] != null && item[col.key] !== "" ? String(item[col.key]) : "—")}
-                </td>
-              ))}
-              {actions && (
-                <td onClick={(e) => e.stopPropagation()} style={{ ...tdStyle(idx), overflow: "visible", textAlign: "right" }}>
-                  {actions(item)}
-                </td>
-              )}
-            </tr>
+          {groups.map((group) => (
+            <Fragment key={group.key ?? "all"}>
+              {group.items.map((item) => {
+                const idx = rowIdx++;
+                return (
+                  <tr
+                    key={item.id ?? idx}
+                    className="cmd-desk-row"
+                    onClick={onRowClick ? () => onRowClick(item) : undefined}
+                    style={{ cursor: onRowClick ? "pointer" : "default" }}
+                  >
+                    {status && <td style={{ ...tdStyle(idx), overflow: "visible" }}>{status(item)}</td>}
+                    {columns.map((col) => (
+                      <td
+                        key={col.key}
+                        style={{
+                          ...tdStyle(idx),
+                          textAlign: col.align || "left",
+                          ...(col.color ? { color: col.color(item) } : null),
+                          ...numStyle(col),
+                        }}
+                      >
+                        {col.render ? col.render(item) : (item[col.key] != null && item[col.key] !== "" ? String(item[col.key]) : "—")}
+                      </td>
+                    ))}
+                    {actions && (
+                      <td onClick={(e) => e.stopPropagation()} style={{ ...tdStyle(idx), overflow: "visible", textAlign: "right" }}>
+                        {actions(item)}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+              {renderSubtotal(group, rowIdx++)}
+            </Fragment>
           ))}
         </tbody>
       </table>

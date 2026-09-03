@@ -1,5 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useApp } from "../../context/AppContext";
+import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
+import { pushModal, popModal } from "../../utils/deskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
@@ -26,13 +28,17 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
   const [lightbox, setLightbox] = useState(null);
 
   // Escape must close the lightbox, not the modal underneath it
+  // The lightbox is a modal layer too, so it joins the stack while up and
+  // the desk keys stay quiet beneath it.
   useEffect(() => {
     if (!lightbox) return;
+    const layer = {};
+    pushModal(layer);
     const onKey = (e) => {
       if (e.key === "Escape") { e.stopPropagation(); setLightbox(null); }
     };
     document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("keydown", onKey, true); popModal(layer); };
   }, [lightbox]);
 
   const linkedDocs = useCallback(
@@ -65,6 +71,7 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
 
   const openAdd = useCallback(() => { setForm({ category: filter !== "all" ? filter : "" }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, [filter]);
   const openEdit = useCallback((item) => { setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
+  useDeskAddShortcut(openAdd);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
   const [reqError, setReqError] = useState(null);

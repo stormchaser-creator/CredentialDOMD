@@ -165,6 +165,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
         <input
           value={searchQ} onChange={e => setSearchQ(e.target.value)}
           placeholder="Search providers, topics..."
+          data-desk-search=""
           style={{ width: "100%", padding: "12px 14px 12px 38px", backgroundColor: T.input, border: `1px solid ${T.inputBorder}`, borderRadius: 12, color: T.text, fontSize: 15, outline: "none", boxSizing: "border-box" }}
         />
       </div>

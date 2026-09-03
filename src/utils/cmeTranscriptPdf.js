@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatDate } from "./helpers.js";
-import { complianceFor, findStateLicense } from "./compliance";
+import { complianceFor, findStateLicense, cycleBucket } from "./compliance";
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 import { STATE_NAMES } from "../constants/states";
 import { computeBoardCompliance, aoaNationalEntry } from "./boardCompliance";
@@ -60,19 +60,15 @@ function mimeOf(doc) {
   return m ? m[1].toLowerCase() : "";
 }
 
-/** Same in-window test the compliance engine uses, so the transcript's
- *  numbers match the compliance card to the entry. Entry dates parse at LOCAL
- *  midnight to match the engine's window bounds (a bare YYYY-MM-DD is UTC
- *  midnight otherwise, which drops the first day of the cycle in US zones). */
+/** The compliance engine's own in-window test (cycleBucket), so the
+ *  transcript's numbers match the compliance card to the entry: entry dates
+ *  parse at LOCAL midnight to match the engine's window bounds (a bare
+ *  YYYY-MM-DD is UTC midnight otherwise, which drops the first day of the
+ *  cycle in US zones). The desk-width CME table groups by the same call. */
 function entriesBetween(cme, start, end) {
   const s = dateOf(start), e = dateOf(end);
   return (cme || [])
-    .filter(c => {
-      if (!c.date) return false;
-      const str = String(c.date);
-      const d = new Date(str.length === 10 ? str + "T00:00:00" : str);
-      return d >= s && d <= e;
-    })
+    .filter(c => cycleBucket(c, s, e) === "in")
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 }
 

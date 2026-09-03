@@ -161,6 +161,7 @@ export default function HomeSearch({ onOpen, onAskVera }) {
             }
           }}
           placeholder="Search everything, or ask Vera"
+          data-desk-search=""
           autoCapitalize="none"
           autoCorrect="off"
           style={{ flex: 1, border: "none", outline: "none", background: "transparent", color: T.text, fontSize: 16, minWidth: 0 }}

@@ -4,7 +4,7 @@
 // mandates, MATE Act topic scope, the cycle-window boundary, and intake
 // tagging of state-only topics.
 // Run: node scripts/compliance.test.mjs   (pure node, no test runner)
-import { computeCompliance, windowNotes, topicPeriodLabel, standingScore } from "../src/utils/compliance.js";
+import { computeCompliance, windowNotes, topicPeriodLabel, standingScore, cycleBucket } from "../src/utils/compliance.js";
 import { safeHttpUrl } from "../src/utils/safeUrl.js";
 import { STATE_REQS } from "../src/constants/stateRequirements.js";
 import { guessTopics } from "../src/utils/cmeImport.js";
@@ -694,6 +694,36 @@ ok("ME DO cites the osteopathic chapter", /\b2600-[A-Z]\b/.test(topicOf("ME", "D
   ok("items without dates and nothing required reads 100", standingScore({ items: [{ id: "y" }], stateComps: [] }).percent === 100);
 }
 
+
+// ── Desk CME table: cycleBucket is the engine's own in-window predicate ──
+// The desk-width entries table groups rows by cycleBucket() over the window
+// complianceFor() returns (and the transcript PDF lists entries by the same
+// call), so the in-window subtotal must equal the card's totalEarned with
+// both boundary days included, and undated rows must never count.
+{
+  const win = computeCompliance([], "TX", "MD", { licenseExpiration: "2027-06-30" });
+  const S = win.windowStart, E = win.windowEnd;
+  eq("cycleBucket: window start day is in", cycleBucket({ date: "2025-06-30" }, S, E), "in");
+  eq("cycleBucket: window end day is in", cycleBucket({ date: "2027-06-30" }, S, E), "in");
+  eq("cycleBucket: day before start is before", cycleBucket({ date: "2025-06-29" }, S, E), "before");
+  eq("cycleBucket: day after end is after", cycleBucket({ date: "2027-07-01" }, S, E), "after");
+  eq("cycleBucket: no date is undated", cycleBucket({}, S, E), "undated");
+  eq("cycleBucket: unparseable date is undated", cycleBucket({ date: "not a date" }, S, E), "undated");
+  const rows = [
+    cme("AMA PRA Category 1", 10, "2025-06-30"),   // start day
+    cme("AMA PRA Category 1", 2.5, "2026-01-15"),
+    cme("AMA PRA Category 1", 4, "2027-06-30"),    // end day
+    cme("AMA PRA Category 1", 7, "2025-06-29"),    // before
+    cme("AMA PRA Category 1", 3, "2027-07-01"),    // after
+    { category: "AMA PRA Category 1", hours: "9", topics: [] },  // undated
+  ];
+  const comp = computeCompliance(rows, "TX", "MD", { licenseExpiration: "2027-06-30" });
+  const bucket = (r) => cycleBucket(r, comp.windowStart, comp.windowEnd);
+  const inSum = rows.filter(r => bucket(r) === "in").reduce((s, r) => s + parseFloat(r.hours), 0);
+  eq("in-window subtotal equals the card's totalEarned", inSum, comp.totalEarned);
+  eq("in-window subtotal is the three windowed rows", inSum, 16.5);
+  eq("every row lands in exactly one bucket", rows.map(bucket), ["in", "in", "in", "before", "after", "undated"]);
+}
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef, useState } from "react";
 import { useApp } from "../../../context/AppContext";
+import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
 import { useInputStyle } from "../../shared/useInputStyle";
@@ -47,6 +48,7 @@ function Expenses() {
     setForm({ date: new Date().toISOString().slice(0, 10), category: "Airfare", agency: agencies[0] || "" });
   };
   const openEdit = (exp) => { setEditing(exp.id); setPendingFiles([]); setForm({ ...exp }); };
+  useDeskAddShortcut(openNew);
 
   const stageFiles = async (files) => {
     // The account's 2 GB line, counting receipts already staged on this

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { useApp } from "../../../context/AppContext";
+import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { getPrivate, setPrivate, removePrivate, looksLikePHI } from "../../../utils/privateVault";
@@ -16,6 +17,7 @@ import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { parseWorkDictation } from "../../../utils/workDictation";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
+import DeskTable from "../../shared/DeskTable";
 import DutyLog from "./DutyLog";
 import { selectableContracts } from "../../../utils/contractsForDate";
 
@@ -171,7 +173,7 @@ function billedSpan(e, c) {
 }
 
 function WorkLog({ billDraft, onBillDraftDone }) {
-  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
 
   const contracts = data.locumContracts || [];
@@ -875,6 +877,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     setShowManual(true);
   }, []);
 
+  // The timer card's "Log past time" control. At desk width `n` opens it
+  // too, except on a day-rate contract, where DutyLog's own "Log a day"
+  // is the Add control on view and registers itself.
+  const openPastTime = useCallback(() => {
+    setManual({ type: "Call", date: localDate(new Date()), exact: true });
+    setShowManual(true);
+  }, []);
+  useDeskAddShortcut(contract && contract.payModel !== "daily" ? openPastTime : null);
+
   // Most recently ENTERED first (per Eric) — createdAt when we have it,
   // work time as the fallback for entries from before the stamp existed
   const contractEntries = useMemo(
@@ -921,6 +932,23 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const remaining = Math.max(0, (c.stipendHours || 0) * 60 - usedBefore);
     return Math.max(0, (e.billedMin || 0) - remaining);
   }, [isStipendDay, allowanceUsed, entries, containerFor]);
+
+  // Everything a row says about one entry's money, computed once for both
+  // renderers (the phone card and the desk table) so they can never
+  // disagree: the dollar figure, the entry that contains it (no separate
+  // charge), whether it sits inside the day's stipend allowance, and the
+  // minutes beyond that allowance with no after-stipend rate to price them.
+  const entryStanding = useCallback((e, dayStipend) => {
+    const isCoverage = e.type === "CallDay";
+    const amt = amountForEntry(e, contract);
+    const container = !isCoverage && e.type !== "Orientation" ? containerFor(e, contract) : null;
+    const stipDay = !isCoverage && e.type !== "Orientation" && dayStipend && !container;
+    const overMin = stipDay ? overMinFor(e, contract) : 0;
+    const covered = stipDay && overMin === 0;
+    const noRate = stipDay && overMin > 0 && !((contract?.overageHourlyRate || 0) > 0);
+    return { isCoverage, amt, container, overMin, covered, noRate };
+  }, [amountForEntry, containerFor, overMinFor, contract]);
+
   // Re-derived on every render so the 7am call-day rollover is picked up
   // (the `now` tick keeps this fresh while a timer runs).
   const todayKey = callDayOf({ startTime: new Date(now).toISOString() });
@@ -989,6 +1017,50 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       return { key: k, list, stipDay, totalAmt, loggedMin, includedMin };
     });
   }, [contractEntries, contract, entries, isStipendDay, amountForEntry, todayKey]);
+
+  // The line under a day's date: what was logged and how the stipend covers
+  // it. One string for the phone day header and the desk subtotal row; the
+  // verb names the minutes it reports (g.loggedMin is billed minutes), so
+  // the desk row, which sits beside a raw Logged min column, says "billed".
+  const dayNote = (g, verb = "logged") => (
+    g.stipDay
+      ? (g.loggedMin > 0
+        ? `${fmtHM(g.loggedMin)} ${verb} · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond ${(contract?.overageHourlyRate || 0) > 0 ? `@ ${money(contract.overageHourlyRate)}/hr` : "· no after-stipend rate set"}` : ""}`
+        : `on call · nothing logged yet`)
+      : `${fmtHM(g.loggedMin)} ${verb}`
+  );
+
+  // Desk table inputs: the same day groups flattened to rows, plus the
+  // minute sums each day's subtotal row carries. Logged is the raw clock
+  // time; billed is the rounded minutes that reach an invoice, so an entry
+  // inside another entry's span (no separate charge) is left out of the
+  // billed sum exactly as computeBilling leaves it out of totalMin. Null on
+  // the phone: nothing here runs below desk width.
+  const deskDays = useMemo(() => {
+    if (!isDesktop || !contract) return null;
+    const by = new Map();
+    for (const g of dayGroups) {
+      const dayAll = contractEntries.filter(e => e.type !== "CallDay" && callDayOf(e) === g.key);
+      const sibs = overlapSiblings(contractEntries, contract.id, g.key);
+      // findContainer is THE containment rule: the same predicate the money
+      // math (line ~649) and the phone totals use, so the subtotal cannot
+      // drift from the invoice. Change the rule there and this follows.
+      let loggedRaw = 0, billedRaw = 0, billedEff = 0, orientMin = 0;
+      for (const e of dayAll) {
+        loggedRaw += e.durationMin || 0;
+        billedRaw += e.billedMin || 0;
+        if (findContainer(e, sibs)) continue;
+        billedEff += e.billedMin || 0;
+        if (e.type === "Orientation") orientMin += e.billedMin || 0;
+      }
+      by.set(g.key, { ...g, loggedRaw, billedRaw, billedEff, orientMin });
+    }
+    return by;
+  }, [isDesktop, contract, dayGroups, contractEntries]);
+  const deskList = useMemo(
+    () => (deskDays ? { rows: dayGroups.flatMap(g => g.list), keys: dayGroups.map(g => g.key) } : { rows: [], keys: [] }),
+    [deskDays, dayGroups]
+  );
 
   // The day-selection step. The full sweep prices every outstanding day
   // once, and the picker shows them grouped into Sun–Sat weeks — one agency
@@ -1290,6 +1362,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     );
   }
 
+  // Desk table cell and button styles, the same set Invoices uses.
+  const deskMain = { overflow: "hidden", textOverflow: "ellipsis" };
+  const deskSub = { fontSize: 11, color: T.textDim, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis" };
+  const deskBtn = {
+    width: 26, height: 26, padding: 0, borderRadius: 8, border: "none", cursor: "pointer",
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+  };
+  const deskGhostBtn = { ...deskBtn, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted };
+  const invoiceOf = (e) => (data.invoices || []).find(i => i.id === e.invoiceId) || null;
+
   return (
     <div>
       {picker}
@@ -1385,7 +1467,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                 }}>{t2}</button>
               ))}
             </div>
-            <button onClick={() => { setManual({ type: "Call", date: localDate(new Date()), exact: true }); setShowManual(true); }} style={{
+            <button onClick={openPastTime} style={{
               width: "100%", padding: "12px", borderRadius: 12, marginTop: 8,
               border: `1px solid ${T.border}`, backgroundColor: T.input,
               color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
@@ -1727,6 +1809,125 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       {contractEntries.length === 0 ? (
         <EmptyState icon={"📞"} title="Nothing logged yet"
           subtitle="Tap the timer when you get a call — it does the math for you." />
+      ) : isDesktop ? (
+        /* Desk width: the same day groups as one table, most recent day
+           first, rows in clock order within the day, and a subtotal row per
+           day carrying the minutes and the day total the phone header shows.
+           Row click opens the existing detail modal; the action cell is the
+           card's own edit and delete. Phone (the branch below) is untouched. */
+        <DeskTable
+          items={deskList.rows}
+          defaultSort={{ key: "date", dir: "asc" }}
+          onRowClick={(e) => setViewEntry(e)}
+          actionsWidth={88}
+          groupBy={(e) => callDayOf(e)}
+          groupDir="desc"
+          groupKeys={deskList.keys}
+          subtotal={(key) => {
+            const d = deskDays?.get(key);
+            if (!d) return null;
+            const inside = d.billedRaw - d.billedEff;
+            // A stipend day's note counts only the work the stipend covers;
+            // orientation bills on its own terms, so the label names it
+            // separately and the two figures add up to the Billed min cell.
+            const note = dayNote(d, "billed") + (d.stipDay && d.orientMin > 0 ? ` · ${fmtHM(d.orientMin)} orientation outside the stipend` : "");
+            return {
+              label: (
+                <span title={note}>
+                  {formatDate(key)}
+                  {d.stipDay && <span style={{ fontSize: 10.5, color: T.accent, marginLeft: 6, letterSpacing: 0.4 }}>STIPEND DAY</span>}
+                  <span style={{ fontWeight: 500, color: T.textDim }}>{" · "}{note}</span>
+                </span>
+              ),
+              cells: {
+                loggedMin: d.loggedRaw,
+                billedMin: (
+                  <>
+                    <div>{d.billedEff}</div>
+                    {inside > 0 && <div style={deskSub}>{inside} inside other entries</div>}
+                  </>
+                ),
+                amount: (
+                  <>
+                    <div style={{ color: T.accent }}>{money(d.totalAmt)}</div>
+                    <div style={deskSub}>day total</div>
+                  </>
+                ),
+              },
+            };
+          }}
+          columns={[
+            // Widths are percentages on purpose (see Invoices): pixel minimums
+            // would push the Actions cell out of the clipped wrapper at a
+            // 1024px window. Type takes the remainder and ellipsizes.
+            { key: "date", label: "Date", type: "date", width: "12%",
+              // Sorts by clock within the day; the day order itself is fixed
+              // (groupDir) so the log never interleaves days.
+              value: e => e.startTime || null,
+              render: e => {
+                const day = callDayOf(e);
+                return (
+                  <>
+                    <div style={deskMain}>{formatDate(e.date)}</div>
+                    {day !== e.date && <div style={deskSub}>call day {formatDate(day)}</div>}
+                  </>
+                );
+              } },
+            { key: "type", label: "Type",
+              render: e => {
+                const note = getPrivate("workLog", e.id);
+                return (
+                  <>
+                    <div style={{ ...deskMain, fontWeight: 700 }} title={note ? `Private note (this device only): ${note}` : undefined}>
+                      {e.type === "CallDay" ? "\ud83c\udfe5 Stipend day" : e.type}{note ? " \ud83d\udd12" : ""}
+                    </div>
+                    {e.description && <div style={deskSub} title={e.description}>{e.description}</div>}
+                  </>
+                );
+              } },
+            { key: "span", label: "Billed span", width: "15%",
+              value: e => e.startTime || null,
+              render: e => (e.type !== "CallDay" && e.startTime ? billedSpan(e, contract) : "\u2014") },
+            { key: "loggedMin", label: "Logged min", type: "number", width: "10.5%", align: "right",
+              value: e => (e.type === "CallDay" ? null : e.durationMin),
+              render: e => (e.type === "CallDay" || e.durationMin == null ? "\u2014" : e.durationMin) },
+            { key: "billedMin", label: "Billed min", type: "number", width: "10.5%", align: "right",
+              value: e => (e.type === "CallDay" ? null : e.billedMin),
+              render: e => (e.type === "CallDay" || e.billedMin == null ? "\u2014" : e.billedMin) },
+            { key: "amount", label: "Amount", type: "number", width: "11%", align: "right",
+              value: e => entryStanding(e, deskDays?.get(callDayOf(e))?.stipDay).amt,
+              // The same five states the card shows on its right edge.
+              render: e => {
+                const st = entryStanding(e, deskDays?.get(callDayOf(e))?.stipDay);
+                if (st.container) return <><div style={{ fontWeight: 800, color: T.textDim }}>no charge</div><div style={deskSub}>during {st.container.type}</div></>;
+                if (st.covered) return <><div style={{ fontWeight: 800, color: T.success }}>included</div><div style={deskSub}>{e.billedMin}m in stipend</div></>;
+                if (st.noRate) return <><div style={{ fontWeight: 800, color: T.warning }}>no rate set</div><div style={deskSub}>{st.overMin}m beyond stipend</div></>;
+                if (st.isCoverage) return <div style={{ fontWeight: 700, color: T.textDim }}>day marker</div>;
+                return <><div style={{ fontWeight: 800, color: T.accent }}>{money(st.amt)}</div><div style={deskSub}>{e.billedMin}m</div></>;
+              } },
+            { key: "invoice", label: "Invoice status", type: "number", width: "14%",
+              // Sorts by standing: not invoiced, awaiting payment, paid.
+              value: e => { if (!e.invoiceId) return 0; return invoiceOf(e)?.paidAt ? 2 : 1; },
+              render: e => {
+                if (!e.invoiceId) return <span style={{ color: T.textDim }}>Not invoiced</span>;
+                const inv = invoiceOf(e);
+                return (
+                  <>
+                    <div style={{ ...deskMain, fontWeight: 700, color: T.success }}>{inv ? inv.number : "Billed"}</div>
+                    {inv && <div style={deskSub}>{inv.paidAt ? "paid" : "awaiting payment"}</div>}
+                  </>
+                );
+              } },
+          ]}
+          actions={(e) => (
+            <div style={{ display: "inline-flex", gap: 3 }}>
+              <button title="Edit" aria-label="Edit entry" onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={deskGhostBtn}><EditIcon /></button>
+              {!e.invoiceId && (
+                <button title="Delete" aria-label="Delete entry" onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{ ...deskBtn, backgroundColor: T.dangerDim, color: T.danger }}><TrashIcon /></button>
+              )}
+            </div>
+          )}
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {dayGroups.map(g => (
@@ -1738,11 +1939,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                     {g.stipDay && <span style={{ fontSize: 10.5, fontWeight: 800, color: T.accent, marginLeft: 6, letterSpacing: 0.4 }}>STIPEND DAY</span>}
                   </div>
                   <div style={{ fontSize: 11.5, color: T.textDim }}>
-                    {g.stipDay
-                      ? (g.loggedMin > 0
-                        ? `${fmtHM(g.loggedMin)} logged · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond ${(contract?.overageHourlyRate || 0) > 0 ? `@ ${money(contract.overageHourlyRate)}/hr` : "— no after-stipend rate set"}` : ""}`
-                        : `on call · nothing logged yet`)
-                      : `${fmtHM(g.loggedMin)} logged`}
+                    {dayNote(g)}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -1752,16 +1949,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {g.list.map(e => {
-                  const isCoverage = e.type === "CallDay";
                   // Work inside the stipend allowance shows as included, not $0.
                   // Beyond-allowance minutes with no after-stipend rate are NOT
                   // "included" — they're unbillable until the rate is set.
-                  const amt = amountForEntry(e, contract);
-                  const container = !isCoverage && e.type !== "Orientation" ? containerFor(e, contract) : null;
-                  const stipDay = !isCoverage && e.type !== "Orientation" && g.stipDay && !container;
-                  const overMin = stipDay ? overMinFor(e, contract) : 0;
-                  const covered = stipDay && overMin === 0;
-                  const noRate = stipDay && overMin > 0 && !((contract?.overageHourlyRate || 0) > 0);
+                  const { isCoverage, amt, container, overMin, covered, noRate } = entryStanding(e, g.stipDay);
                   return (
                     <div key={e.id} onClick={() => setViewEntry(e)} style={{
                       display: "flex", alignItems: "center", gap: 10,

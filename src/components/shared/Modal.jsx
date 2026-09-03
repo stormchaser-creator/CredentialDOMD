@@ -1,17 +1,37 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { CloseIcon } from "./Icons";
+import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 
-function Modal({ open, onClose, title, children, width = 520 }) {
-  const { theme: T } = useApp();
+function Modal({ open, onClose, title, children, width }) {
+  const { theme: T, isDesktop } = useApp();
+  // Record forms and every other default-width modal widen at desk width;
+  // a modal that names its own width (a compact chooser, the wide importer)
+  // keeps it. Phone stays at 520.
+  const maxWidth = width ?? (isDesktop ? 720 : 520);
 
-  // Close on Escape key
+  // Open modals stack (a payment form over an invoice detail). Each one
+  // registers itself while open so Escape can tell which is on top.
+  const token = useRef({});
   useEffect(() => {
     if (!open) return;
-    const handleKey = (e) => { if (e.key === "Escape") onClose(); };
+    const t = token.current;
+    pushModal(t);
+    return () => popModal(t);
+  }, [open]);
+
+  // Close on Escape key. At desk width only the topmost modal answers, so
+  // Escape peels one layer at a time; phone keeps its existing behavior.
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (isDesktop && !isTopModal(token.current)) return;
+      onClose();
+    };
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  }, [open, onClose, isDesktop]);
 
   // When the iOS keyboard opens over a field, the field can end up buried —
   // scroll whatever gets focus to the center of what's still visible.
@@ -69,7 +89,7 @@ function Modal({ open, onClose, title, children, width = 520 }) {
         className="cmd-fade-in"
         style={{
           backgroundColor: T.modalBg, borderRadius: 16,
-          width: "calc(100% - 24px)", maxWidth: width,
+          width: "calc(100% - 24px)", maxWidth,
           maxHeight: vvh != null ? `calc(${vvh}px - env(safe-area-inset-top, 0px) - 20px)` : "100%",
           display: "flex", flexDirection: "column",
           boxShadow: T.shadow3 || "0 12px 24px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04)",

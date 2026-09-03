@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { mailtoHref } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
+import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { supabase } from "../../lib/supabase";
 
 const STATUS_COLORS = {
@@ -386,8 +387,28 @@ export default function TeamSection() {
 
 // Lightweight wrapper to lazy-import PricingModal when needed
 function PricingModalInline({ open, onClose }) {
-  const { theme: T, plan, checkout, isPro, isPractice, isDevMode } = useApp();
+  const { theme: T, plan, checkout, isPro, isPractice, isDevMode, isDesktop } = useApp();
   const [mockMsg, setMockMsg] = useState(null);
+  // This sheet is not built on shared/Modal, so it joins the modal stack
+  // itself: the desk keys stay quiet beneath it, and Escape closes it one
+  // layer at a time like every other modal.
+  const token = useRef({});
+  useEffect(() => {
+    if (!open) return;
+    const t = token.current;
+    pushModal(t);
+    return () => popModal(t);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (isDesktop && !isTopModal(token.current)) return;
+      onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [open, onClose, isDesktop]);
   if (!open) return null;
 
   const PLANS = [

@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, memo } from "react";
 import { supabase } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
+import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
@@ -12,25 +13,43 @@ import SmallSpecialtyNote from "../shared/SmallSpecialtyNote";
 import CMEImport from "./CMEImport";
 import RuleProvenance from "../shared/RuleProvenance";
 import TopicProvenance from "../shared/TopicProvenance";
-import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
+import DeskTable from "../shared/DeskTable";
+import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon } from "../shared/Icons";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getCMECategories } from "../../constants/credentialTypes";
 import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor, windowNotes } from "../../utils/compliance";
+import { complianceFor, windowNotes, cycleBucket } from "../../utils/compliance";
 import { computeBoardCompliance, boardIdsFromLicenses, aoaNationalEntry } from "../../utils/boardCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf } from "../../utils/cmeTranscriptPdf";
 import { CME_INBOX_ADDRESS } from "../../utils/inboxDocs";
 
+// What one entry is called and where it came from, read by the phone card and
+// the desk table alike so the two can never label the same record differently.
+const cmeTitle = (item) => item.title || item.category || "CME Activity";
+const cmeOrigin = (item) => item.source || item.customFields?.["Imported from"];
+const DELETE_CONFIRM = "Delete this CME entry? Its attached certificate (if any) will be deleted too. This cannot be undone.";
+
+// Desk table group order: rows after the cycle window (dated past the license
+// expiration) sit above the window, then the window itself, then everything
+// before it, then undated rows the engine never counts. Keys are strings
+// because DeskTable orders groups by key comparison.
+const CYCLE_ORDER = { after: "0", in: "1", before: "2", undated: "3" };
+// Stable identity for DeskTable's groups memo; a fresh array each render
+// would rebuild the grouping on every keystroke.
+const IN_CYCLE_FIRST = [CYCLE_ORDER.in];
+
 function CMESection({ onShare }) {
-  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate } = useApp();
+  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({});
-  const [showCompliance, setShowCompliance] = useState(false);
+  // The compliance cards are the top of the desk layout (spec 2.3), so they
+  // open by default there; on phone they stay behind the toggle as before.
+  const [showCompliance, setShowCompliance] = useState(() => !!isDesktop);
   const [showTranscript, setShowTranscript] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [transcriptBusy, setTranscriptBusy] = useState(false);
@@ -52,6 +71,7 @@ function CMESection({ onShare }) {
 
   const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setShowForm(true); }, []);
   const openEdit = useCallback((item) => { setForm({ ...item, topics: item.topics || [] }); setEditItem(item); setShowForm(true); }, []);
+  useDeskAddShortcut(openAdd);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); }, []);
 
   const handleSave = useCallback(() => {
@@ -190,6 +210,34 @@ function CMESection({ onShare }) {
     } finally { setDocBusy(null); }
   }, []);
 
+  // ── Desk width: the renewal cycle the entries table is grouped by ──
+  // One of the tracked states, the primary state by default, switchable
+  // when more than one is tracked. The window comes from the same
+  // complianceFor() call the state's compliance card is built from, and rows
+  // are bucketed by the engine's own cycleBucket(), so the in-window subtotal
+  // is the card's Total Hours figure by construction. Null on phone: nothing
+  // here runs below desk width.
+  const [auditPick, setAuditPick] = useState(null);
+  const auditState = isDesktop
+    ? (allTrackedStates.includes(auditPick) ? auditPick
+      : allTrackedStates.includes(data.settings.primaryState) ? data.settings.primaryState
+        : allTrackedStates[0] || null)
+    : null;
+  const auditCycle = useMemo(() => {
+    if (!auditState) return null;
+    const comp = complianceFor(data, auditState);
+    return { state: auditState, comp, start: comp.windowStart, end: comp.windowEnd };
+  }, [auditState, data.cme, data.licenses, deg]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deskMain = { overflow: "hidden", textOverflow: "ellipsis" };
+  const deskSub = { fontSize: 11, color: T.textDim, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis" };
+  const deskBtn = {
+    width: 26, height: 26, padding: 0, borderRadius: 8, border: "none", cursor: "pointer",
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+  };
+  const deskGhostBtn = { ...deskBtn, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted };
+  const round2 = (n) => Math.round(n * 100) / 100;
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
@@ -263,13 +311,16 @@ function CMESection({ onShare }) {
         )}
       </Modal>
 
-      {showCompliance && (
-        <div style={{ marginBottom: 16 }}>
-          {complianceData.map(({ state: st, compliance: comp }) => (
-            <div key={st} style={{
-              backgroundColor: T.card, border: `1px solid ${comp.fullyCompliant ? T.success : T.border}`,
-              borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: T.shadow1,
-            }}>
+      {showCompliance && (() => {
+        // Every card is the same JSX at every width. Desk lays the set out
+        // two across (the cards are dense: window notes, bars, topic
+        // provenance) and the grid gap replaces the stacking margin.
+        const cardStyle = (borderColor) => ({
+          backgroundColor: T.card, border: `1px solid ${borderColor}`,
+          borderRadius: 14, padding: "16px 18px", marginBottom: isDesktop ? 0 : 10, boxShadow: T.shadow1,
+        });
+        const stateCards = complianceData.map(({ state: st, compliance: comp }) => (
+            <div key={st} style={cardStyle(comp.fullyCompliant ? T.success : T.border)}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -370,13 +421,13 @@ function CMESection({ onShare }) {
                 upcoming={comp.upcoming}
               />
             </div>
-          ))}
+          ));
 
-          {/* Board MOC: the matched board's continuing-certification CME,
-              from Settings → Board Specialties or a Board Certification
-              license record. Same window logic as the Home card. */}
-          {boardComps.length > 0 && (
-            <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: T.shadow1 }}>
+          // Board MOC: the matched board's continuing-certification CME,
+          // from Settings → Board Specialties or a Board Certification
+          // license record. Same window logic as the Home card.
+          const boardCard = boardComps.length > 0 && (
+            <div style={cardStyle(T.border)}>
               <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>Board MOC</div>
               <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>Continuing certification CME for your board{boardComps.filter(b => !b.followsParent).length > 1 ? "s" : ""}</div>
               {boardComps.filter(b => !b.followsParent).map(b => (
@@ -413,16 +464,16 @@ function CMESection({ onShare }) {
                 </div>
               ))}
             </div>
-          )}
+          );
 
-          {/* AOA National 120/3-yr requirement, cycle-windowed via the same
-              engine the transcript and Home use (the old block compared a
-              LIFETIME hour sum to a 3-year requirement). Suppressed when an
-              AOA board card is already shown, matching Home's logic. */}
-          {deg === "DO" && !boardComps.some(b => b.source === "AOA" && !b.followsParent) && (() => {
+          // AOA National 120/3-yr requirement, cycle-windowed via the same
+          // engine the transcript and Home use (the old block compared a
+          // LIFETIME hour sum to a 3-year requirement). Suppressed when an
+          // AOA board card is already shown, matching Home's logic.
+          const aoaCard = deg === "DO" && !boardComps.some(b => b.source === "AOA" && !b.followsParent) && (() => {
             const aoa = aoaNationalEntry(data);
             return (
-              <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px", marginBottom: 10, boxShadow: T.shadow1 }}>
+              <div style={cardStyle(T.border)}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>AOA National</div>
                 <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>{aoa.windowLabel}{aoa.daysLeft != null ? ` · ${aoa.daysLeft} days left` : ""}</div>
                 <ComplianceBar label="Total" earned={aoa.earned} required={aoa.required} met={aoa.met} />
@@ -433,9 +484,12 @@ function CMESection({ onShare }) {
                 {aoa.cat1aEarned < aoa.cat1aRequired && <SmallSpecialtyNote degreeType={deg} />}
               </div>
             );
-          })()}
-        </div>
-      )}
+          })();
+
+          return isDesktop
+            ? <div className="cmd-responsive-grid-2" style={{ marginBottom: 16 }}>{stateCards}{boardCard}{aoaCard}</div>
+            : <div style={{ marginBottom: 16 }}>{stateCards}{boardCard}{aoaCard}</div>;
+      })()}
 
       {/* Add/Edit Modal */}
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit CME" : "Add CME"}>
@@ -503,6 +557,151 @@ function CMESection({ onShare }) {
       {/* List */}
       {data.cme.length === 0 ? (
         <EmptyState icon={"\ud83c\udf93"} title="No CME logged" subtitle="Track your continuing education hours and topic compliance." onAction={openAdd} actionLabel="Add CME" />
+      ) : isDesktop ? (
+        /* Desk width: the same entries as one table, grouped by the chosen
+           state's renewal cycle window so the rows audit against the math
+           the compliance card above shows: the in-window subtotal is that
+           card's Total Hours figure, from the same complianceFor() window
+           and the engine's own cycleBucket(). Newest first within a group.
+           The window's subtotal row renders even when nothing falls in it
+           (groupKeys): an empty cycle is the finding, not an absence of one.
+           Row click opens the existing edit modal (there is no CME view
+           modal); the action cell is the card's own share, edit, delete.
+           Phone (the branch below) is untouched. */
+        <>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10, fontSize: 12.5, color: T.textMuted, lineHeight: 1.45 }}>
+            {auditCycle ? (
+              <>
+                <span>
+                  <span style={{ fontWeight: 700, color: T.text }}>Grouped by the {STATE_NAMES[auditCycle.state] || auditCycle.state} renewal cycle.</span>
+                  {" "}{auditCycle.comp.windowLabel}.
+                </span>
+                {allTrackedStates.length > 1 && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.6, marginRight: 2 }}>Cycle</span>
+                    {allTrackedStates.map(st => {
+                      const sel = st === auditCycle.state;
+                      return (
+                        <button key={st} onClick={() => setAuditPick(st)} title={`Group entries by the ${STATE_NAMES[st] || st} renewal cycle`} style={{
+                          padding: "3px 10px", fontSize: 12, fontWeight: 700, borderRadius: 14,
+                          border: `1px solid ${sel ? T.accent : T.border}`,
+                          backgroundColor: sel ? T.accent : "transparent",
+                          color: sel ? "#fff" : T.textMuted, cursor: "pointer",
+                        }}>{st}</button>
+                      );
+                    })}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span>Add a state medical license or set your primary state in Settings to group entries by renewal cycle.</span>
+            )}
+          </div>
+          <DeskTable
+            items={data.cme}
+            defaultSort={{ key: "date", dir: "desc" }}
+            onRowClick={(item) => openEdit(item)}
+            actionsWidth={110}
+            groupBy={auditCycle ? (item) => CYCLE_ORDER[cycleBucket(item, auditCycle.start, auditCycle.end)] : undefined}
+            groupDir="asc"
+            groupKeys={auditCycle ? IN_CYCLE_FIRST : undefined}
+            subtotal={auditCycle ? (key, list) => {
+              const { state: st, comp, start, end } = auditCycle;
+              const total = round2(list.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0));
+              const count = `${list.length} entr${list.length === 1 ? "y" : "ies"}`;
+              const label = (text, note) => (
+                <span>
+                  {text}
+                  <span style={{ fontWeight: 500, color: T.textDim }}>{" \u00b7 "}{count}{note ? ` \u00b7 ${note}` : ""}</span>
+                </span>
+              );
+              if (key === CYCLE_ORDER.in) {
+                return {
+                  label: label(`In the ${st} cycle window`, `${formatDate(start)} to ${formatDate(end)}`),
+                  cells: {
+                    hours: (
+                      <>
+                        <div style={{ color: comp.noGeneralReq ? T.text : comp.totalMet ? T.success : T.danger }}>{total}</div>
+                        <div style={deskSub}>{comp.noGeneralReq ? "no hour requirement" : `of ${comp.totalRequired} required`}</div>
+                      </>
+                    ),
+                  },
+                };
+              }
+              if (key === CYCLE_ORDER.undated) {
+                return {
+                  label: label("No date", "never counted; add a date to each"),
+                  cells: { hours: <><div>{total}</div><div style={deskSub}>not counted</div></> },
+                };
+              }
+              return {
+                label: label(`${key === CYCLE_ORDER.after ? "After" : "Before"} the ${st} cycle window`),
+                cells: { hours: <><div>{total}</div><div style={deskSub}>outside this renewal</div></> },
+              };
+            } : undefined}
+            columns={[
+              // Widths are percentages (see Invoices): the CME pane sits
+              // beside the 240px Credentials rail, so pixel minimums would
+              // push the Actions cell out of the wrapper at a 1024px window.
+              // Title takes the remainder and ellipsizes.
+              { key: "date", label: "Date", type: "date", width: "11%",
+                render: c => (c.date ? formatDate(c.date) : "\u2014") },
+              { key: "title", label: "Title", value: c => cmeTitle(c),
+                render: c => <div style={{ ...deskMain, fontWeight: 700 }} title={cmeTitle(c)}>{cmeTitle(c)}</div> },
+              { key: "category", label: "Category", width: "15%",
+                render: c => (c.category ? <span title={c.category}>{c.category}</span> : "\u2014") },
+              { key: "hours", label: "Hours", type: "number", width: "7%", align: "right",
+                render: c => (c.hours != null && c.hours !== "" ? String(c.hours) : "\u2014") },
+              { key: "provider", label: "Provider", width: "14%",
+                render: c => (c.provider ? <span title={c.provider}>{c.provider}</span> : "\u2014") },
+              { key: "topics", label: "Topics", width: "17%",
+                value: c => ((c.topics || []).join(", ") || null),
+                // The card's chips as a comma list so the cell ellipsizes;
+                // topics a tracked state mandates keep the accent.
+                render: c => {
+                  const list = c.topics || [];
+                  if (!list.length) return "\u2014";
+                  return (
+                    <span title={list.join(", ")}>
+                      {list.map((t, i) => (
+                        <span key={i}>
+                          {i > 0 && ", "}
+                          <span style={requiredTopics.includes(t) ? { color: T.accent, fontWeight: 600 } : undefined}>{t}</span>
+                        </span>
+                      ))}
+                    </span>
+                  );
+                } },
+              { key: "certificate", label: "Certificate", type: "number", width: "10%",
+                // Sorts linked files first, then bare certificate numbers.
+                value: c => (sourceDoc(c) ? 2 : c.certificateNumber ? 1 : 0),
+                render: c => {
+                  const doc = sourceDoc(c);
+                  if (doc) {
+                    return (
+                      <button title={docBusy === doc.id ? "Opening..." : `Open ${doc.name || "certificate"}`} aria-label="Open certificate"
+                        onClick={(ev) => { ev.stopPropagation(); openSourceDoc(doc); }}
+                        style={{ ...deskBtn, backgroundColor: T.accentGlow, color: T.accent, opacity: docBusy === doc.id ? 0.5 : 1 }}>
+                        <FileIcon />
+                      </button>
+                    );
+                  }
+                  if (c.certificateNumber) {
+                    return <span title={`Certificate #${c.certificateNumber}, no file attached`} style={{ color: T.textMuted }}>#{c.certificateNumber}</span>;
+                  }
+                  const from = cmeOrigin(c);
+                  return <span title={from ? `From ${from}, no certificate attached` : "Added by hand, no certificate attached"} style={{ color: T.textDim }}>{"\u2014"}</span>;
+                } },
+            ]}
+            actions={(c) => (
+              <div style={{ display: "inline-flex", gap: 3 }}>
+                <button title="Share" aria-label="Share entry" onClick={(ev) => { ev.stopPropagation(); onShare(c, "cme"); }} style={{ ...deskBtn, backgroundColor: T.shareGlow, color: T.share }}><SendIcon /></button>
+                <button title="Edit" aria-label="Edit entry" onClick={(ev) => { ev.stopPropagation(); openEdit(c); }} style={deskGhostBtn}><EditIcon /></button>
+                <button title="Delete" aria-label="Delete entry" onClick={(ev) => { ev.stopPropagation(); if (window.confirm(DELETE_CONFIRM)) handleDelete(c.id); }} style={{ ...deskBtn, backgroundColor: T.dangerDim, color: T.danger }}><TrashIcon /></button>
+              </div>
+            )}
+          />
+        </>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {cmeNewestFirst.map(item => (
@@ -511,7 +710,7 @@ function CMESection({ onShare }) {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   {/* Sub-line only carries what the title doesn't already say */}
                   {(() => {
-                    const cardTitle = item.title || item.category || "CME Activity";
+                    const cardTitle = cmeTitle(item);
                     const inTitle = (v) => v != null && cardTitle.toLowerCase().includes(String(v).toLowerCase());
                     return (
                       <>
@@ -536,7 +735,7 @@ function CMESection({ onShare }) {
                               </button>
                             );
                           }
-                          const from = item.source || item.customFields?.["Imported from"];
+                          const from = cmeOrigin(item);
                           return (
                             <div style={{ marginTop: 5, fontSize: 11.5, color: T.textDim }}>
                               {from ? `From ${from}` : "Added by hand, no certificate attached"}
@@ -562,7 +761,7 @@ function CMESection({ onShare }) {
                 <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
                   <button onClick={() => onShare(item, "cme")} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
                   <button onClick={() => openEdit(item)} style={{ padding: "5px 7px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                  <button onClick={() => { if (window.confirm("Delete this CME entry? Its attached certificate (if any) will be deleted too. This cannot be undone.")) handleDelete(item.id); }} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  <button onClick={() => { if (window.confirm(DELETE_CONFIRM)) handleDelete(item.id); }} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                 </div>
               </div>
             </div>

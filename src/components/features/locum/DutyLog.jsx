@@ -1,5 +1,6 @@
 import { useState, useMemo, memo } from "react";
 import { useApp } from "../../../context/AppContext";
+import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
@@ -199,6 +200,7 @@ function DutyLog({ contract }) {
     });
   };
   const openEdit = (d) => { setEditing(d.id); setForm({ ...d, callPeriods: callPeriodsOf(d) }); };
+  useDeskAddShortcut(openNew);
 
   // The schedule is checked before the day is written, not after. A warning
   // is never a block — the physician knows where he was — but it has to be

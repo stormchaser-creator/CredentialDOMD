@@ -131,6 +131,7 @@ function CPTLookup() {
           value={query}
           onChange={e => handleSearch(e.target.value)}
           placeholder="e.g. 'suboccipital crani' or '61343'"
+          data-desk-search=""
           style={{ ...iS, paddingLeft: 36 }}
         />
       </div>

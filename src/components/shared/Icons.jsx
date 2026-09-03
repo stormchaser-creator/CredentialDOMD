@@ -32,6 +32,8 @@ export const BellIcon = memo(() => svg(<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 
 export const BackIcon = memo(() => svg(<><polyline points="15 18 9 12 15 6"/></>, 20));
 export const FileIcon = memo(() => svg(<><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></>, 16));
 export const ExternalLinkIcon = memo(() => svg(<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>, 14));
+export const DollarIcon = memo(() => svg(<><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>, 14));
+export const UndoIcon = memo(() => svg(<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>, 14));
 export const GraduationIcon = memo(() => svg(<><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></>, 18));
 
 // Brand mark — caduceus (matches the PWA icons in public/icons/):
