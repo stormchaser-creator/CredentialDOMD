@@ -338,10 +338,16 @@ export async function replayPendingOps(profileId, authUserId) {
           row.updated_at = new Date().toISOString();
           const { error } = await supabase.from("profiles").update(row).eq("id", profileId);
           // A duplicate email (profiles_email_unique_key, 20260903e) is the one
-          // failure retrying cannot fix: another account holds that address, and
-          // it will still hold it on the next replay. Drop the op instead of
-          // carrying it forever.
-          ok = !error || error.code === "23505";
+          // failure retrying cannot fix: another account holds that address and
+          // still will next time. Replay everything else rather than dropping
+          // the physician's whole queued patch over one refused field.
+          if (error && error.code === "23505" && "email" in row) {
+            const { email: _refused, ...rest } = row;
+            const retry = await supabase.from("profiles").update(rest).eq("id", profileId);
+            ok = !retry.error;
+          } else {
+            ok = !error;
+          }
         } catch { ok = false; }
       } else if (op.op === "tombstone") {
         ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload);
@@ -498,10 +504,22 @@ export async function saveSettings(userId, settings, authUserId = currentAuthUse
     .select()
     .maybeSingle();
   if (error) {
-    // Same exception as the replay path: a taken email address is a decision,
-    // not an outage, so it is not queued for retry.
-    if (error.code === "23505") {
-      console.warn("Settings email is already on another CredentialDOMD account; not saved:", error.message);
+    // A taken email is a decision, not an outage, so it is never queued for
+    // retry. But the update carries the whole profile, so dropping it whole
+    // would silently lose the name, NPI, phone and everything else the
+    // physician just typed. Retry once without the email; only the address is
+    // refused, and the caller is told which field did not save.
+    if (error.code === "23505" && "email" in row) {
+      const { email: refused, ...rest } = row;
+      const retry = await supabase.from("profiles").update(rest).eq("id", userId).select().maybeSingle();
+      if (!retry.error) {
+        console.warn("That email is on another CredentialDOMD account, so it was not saved. Everything else was.", { refused });
+        return { savedExcept: "email" };
+      }
+      console.warn("Failed to save settings:", retry.error.message);
+      const clean = { ...settings }; delete clean.email;
+      for (const f of DEVICE_KEY_FIELDS) delete clean[f];
+      queuePendingOp("settings", "settings", clean);
       return null;
     }
     console.warn("Failed to save settings:", error.message);

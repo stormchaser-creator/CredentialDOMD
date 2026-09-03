@@ -2,7 +2,8 @@
  * The addresses a physician may forward mail from.
  *
  * email-inbound matches a forwarded message to an account by its SENDER:
- * profiles.email first, then a CONFIRMED row in forwarding_addresses. So a
+ * a CONFIRMED forwarding address first, then profiles.email (the order was
+ * reversed in 20260903e so a confirmed address outranks a self-asserted one).
  * physician who signed up as name@gmail.com and forwards the credentialer's
  * request from name@hospital.org needs that second address registered and
  * confirmed before anything reaches their account.
