@@ -111,7 +111,7 @@ try {
     ok(`desk row for ${r.id} exists`, !!deskRow);
     if (!deskRow) continue;
     const phoneLine = r.hasEst
-      ? `est ${money(r.owed)} · paid ${money(r.paid)} · <b style="color:${r.remaining > 0 ? theme.warning : "#22c55e"}">${money(r.remaining)} left</b>`
+      ? `est ${money(r.owed)} · paid ${money(r.paid)} · <b style="color:${r.remaining > 0 ? theme.warning : theme.success}">${money(r.remaining)} left</b>`
       : `paid ${money(r.paid)} · no estimate (state model not loaded)`;
     ok(`phone ledger shows ${r.id}`, seq(phone, [r.label, phoneLine]) === true, phoneLine);
     const estCol = r.kind === "federal" ? 2 : 3;

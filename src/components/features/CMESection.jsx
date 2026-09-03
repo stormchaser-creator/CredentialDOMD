@@ -37,6 +37,9 @@ const DELETE_CONFIRM = "Delete this CME entry? Its attached certificate (if any)
 // before it, then undated rows the engine never counts. Keys are strings
 // because DeskTable orders groups by key comparison.
 const CYCLE_ORDER = { after: "0", in: "1", before: "2", undated: "3" };
+// Stable identity for DeskTable's groups memo; a fresh array each render
+// would rebuild the grouping on every keystroke.
+const IN_CYCLE_FIRST = [CYCLE_ORDER.in];
 
 function CMESection({ onShare }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop } = useApp();
@@ -601,7 +604,7 @@ function CMESection({ onShare }) {
             actionsWidth={110}
             groupBy={auditCycle ? (item) => CYCLE_ORDER[cycleBucket(item, auditCycle.start, auditCycle.end)] : undefined}
             groupDir="asc"
-            groupKeys={auditCycle ? [CYCLE_ORDER.in] : undefined}
+            groupKeys={auditCycle ? IN_CYCLE_FIRST : undefined}
             subtotal={auditCycle ? (key, list) => {
               const { state: st, comp, start, end } = auditCycle;
               const total = round2(list.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0));

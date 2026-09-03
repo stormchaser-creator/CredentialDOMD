@@ -1041,6 +1041,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     for (const g of dayGroups) {
       const dayAll = contractEntries.filter(e => e.type !== "CallDay" && callDayOf(e) === g.key);
       const sibs = overlapSiblings(contractEntries, contract.id, g.key);
+      // findContainer is THE containment rule: the same predicate the money
+      // math (line ~649) and the phone totals use, so the subtotal cannot
+      // drift from the invoice. Change the rule there and this follows.
       let loggedRaw = 0, billedRaw = 0, billedEff = 0, orientMin = 0;
       for (const e of dayAll) {
         loggedRaw += e.durationMin || 0;

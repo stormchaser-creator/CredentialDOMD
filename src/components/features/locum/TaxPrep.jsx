@@ -32,6 +32,10 @@ const DASH = "—";
  * and per-jurisdiction breakdown cards in a grid between them. Both read
  * the rows from utils/taxLedger, so the numbers cannot differ.
  */
+// Stable identity: an inline arrow here is a fresh value each render and
+// defeats the groups useMemo inside DeskTable.
+const ONE_GROUP = () => "all";
+
 function TaxPrep() {
   const { data, updateSettings, addItem, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
@@ -207,7 +211,7 @@ function TaxPrep() {
             <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{j.label}</div>
             <div style={{ fontSize: 12, color: T.textDim, fontVariantNumeric: "tabular-nums" }}>
               {j.hasEst
-                ? <>est {money(j.owed)} · paid {money(j.paid)} · <b style={{ color: j.remaining > 0 ? T.warning : "#22c55e" }}>{money(j.remaining)} left</b></>
+                ? <>est {money(j.owed)} · paid {money(j.paid)} · <b style={{ color: j.remaining > 0 ? T.warning : T.success }}>{money(j.remaining)} left</b></>
                 : <>paid {money(j.paid)}{ready ? " · no estimate (state model not loaded)" : ""}</>}
             </div>
           </div>
@@ -267,7 +271,7 @@ function TaxPrep() {
           <DeskTable
             items={incomeRows}
             actionsWidth={96}
-            groupBy={() => "all"}
+            groupBy={ONE_GROUP}
             subtotal={() => ({
               label: "Total",
               cells: {
@@ -398,7 +402,7 @@ function TaxPrep() {
         <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>Estimated {year} tax, all jurisdictions</div>
         <div style={{ fontSize: 28, fontWeight: 800, color: T.text, margin: "4px 0", fontVariantNumeric: "tabular-nums" }}>{money(est.totalAll)}</div>
         <div style={{ fontSize: 13, color: T.textDim }}>
-          {money(totals.paid)} paid · <b style={{ color: totals.remaining > 0 ? T.warning : "#22c55e" }}>{money(totals.remaining)} remaining</b>
+          {money(totals.paid)} paid · <b style={{ color: totals.remaining > 0 ? T.warning : T.success }}>{money(totals.remaining)} remaining</b>
           {" · "}set aside <b>{(est.setAsideRate * 100).toFixed(0)}%</b> of every payment
         </div>
         {isScorp && est.employerPayroll > 0 && (
