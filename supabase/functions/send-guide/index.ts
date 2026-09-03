@@ -24,6 +24,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "../send-reminders/renewalLinks.json" with { type: "json" };
+import stateGuides from "./stateGuides.json" with { type: "json" };
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -44,45 +45,169 @@ function stateNameFromGuideUrl(guide: string): string {
     .join(" ");
 }
 
-function emailText(state: string, s: { portal: string; board: string; due: string; fee?: string | null; guide: string }) {
-  return `${state} medical license renewal, the short version:
+type Guide = {
+  name?: string; abbreviation?: string; guide: string;
+  boardName?: string; boardUrl?: string; portalUrl?: string;
+  doBoardName?: string | null; doBoardUrl?: string | null;
+  renewalCycle?: string; renewalAnchor?: string; renewalMonth?: string;
+  cmeHours?: number; cmeDetails?: string; cmeSplit?: boolean;
+  cmeSource?: string; cmeSourceUrl?: string;
+  renewalFee?: string; lateFee?: string; graceOrLapse?: string; processingTime?: string;
+  steps?: string[]; pitfalls?: string[];
+  faqs?: { question: string; answer: string }[];
+  sources?: { url: string; what: string }[];
+  relatedStates?: { name: string; slug: string; abbreviation: string }[];
+  verified?: string;
+};
 
-When it's due
-${s.due}
+// Federal, identical in every state, and the single most commonly missed
+// requirement on a DEA renewal. It is not on the state pages because it is
+// not a state rule, which is exactly why the email carries it.
+const MATE_NOTE =
+  "One federal requirement applies wherever you practise: since June 2023 every DEA registration renewal asks you to attest to a one-time 8 hours of training on treating and managing patients with opioid or other substance use disorders. It is one-time, not per cycle, and past ACGME residency training or board certification in addiction medicine can satisfy it.";
 
-Where to renew
-${s.portal}
+const A = (url: string, label?: string) =>
+  `<a href="${esc(url)}" style="color:#1d4ed8;word-break:break-word;">${esc(label || url)}</a>`;
 
-Board
-${s.board}
-${s.fee ? `\nRenewal fee\n${s.fee}\n` : ""}
-CME requirements and the step-by-step checklist are on the full guide:
-${s.guide}
+const SECTION = (title: string, inner: string) =>
+  `<h2 style="margin:28px 0 8px;font-size:15px;font-weight:700;color:#111;border-bottom:1px solid #e5e7eb;padding-bottom:6px;">${esc(title)}</h2>${inner}`;
 
-About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. The beta is free and invite-only at https://credentialdomd.com if you want a look.
+const P = (body: string) => `<p style="margin:0 0 10px;color:#1a1a1a;">${body}</p>`;
 
-Eric Whitney, DO
-CredentialDOMD
+const ROW = (label: string, body: string) =>
+  `<tr><td style="padding:6px 12px 6px 0;color:#555;font-size:13px;vertical-align:top;white-space:nowrap;">${esc(label)}</td>` +
+  `<td style="padding:6px 0;color:#1a1a1a;font-size:14px;vertical-align:top;">${body}</td></tr>`;
 
-You asked for this guide on the ${state} renewal page. It is a single email, not a list; if you'd rather hear nothing further from CredentialDOMD, reply with the word stop and that's the end of it.`;
+const LIST = (items: string[], ordered = false) => {
+  const tag = ordered ? "ol" : "ul";
+  return `<${tag} style="margin:0 0 10px;padding-left:20px;color:#1a1a1a;">` +
+    items.map((i) => `<li style="margin:0 0 7px;">${esc(i)}</li>`).join("") + `</${tag}>`;
+};
+
+/** The whole guide, in the email. Links stay; nothing is held back for the page. */
+function emailHtml(state: string, s: Guide) {
+  const cme = typeof s.cmeHours === "number"
+    ? (s.cmeHours === 0 ? "No CME hours required for renewal" : `${s.cmeHours} hours per cycle`)
+    : "";
+  const parts: string[] = [];
+
+  parts.push(`<h1 style="margin:0 0 4px;font-size:22px;color:#111;">${esc(state)} medical license renewal</h1>`);
+  parts.push(`<p style="margin:0 0 18px;font-size:13px;color:#666;">The full guide${s.verified ? `, verified ${esc(s.verified)}` : ""}. Everything below is in this email; the links go to the board's own pages.</p>`);
+
+  // At a glance
+  const rows: string[] = [];
+  if (s.renewalCycle) rows.push(ROW("Cycle", esc(s.renewalCycle)));
+  if (s.renewalMonth) rows.push(ROW("Renewal month", esc(s.renewalMonth)));
+  if (cme) rows.push(ROW("CME", esc(cme)));
+  if (s.renewalFee) rows.push(ROW("Fee", esc(s.renewalFee)));
+  if (s.processingTime) rows.push(ROW("Processing", esc(s.processingTime)));
+  if (s.portalUrl) rows.push(ROW("Renew at", A(s.portalUrl)));
+  if (s.boardName) rows.push(ROW("Board", s.boardUrl ? A(s.boardUrl, s.boardName) : esc(s.boardName)));
+  if (s.doBoardName) rows.push(ROW("DO board", s.doBoardUrl ? A(s.doBoardUrl, s.doBoardName) : esc(s.doBoardName)));
+  if (rows.length) {
+    parts.push(SECTION("At a glance",
+      `<table style="width:100%;border-collapse:collapse;margin:0 0 4px;">${rows.join("")}</table>`));
+  }
+
+  if (s.renewalAnchor) parts.push(SECTION("When it is due", P(esc(s.renewalAnchor))));
+  if (s.steps?.length) parts.push(SECTION("Renewing, step by step", LIST(s.steps, true)));
+
+  if (cme) {
+    let block = P(esc(s.cmeDetails || cme));
+    if (s.cmeSplit) block += P("This state counts MD and DO requirements separately. Check the set that applies to your license.");
+    if (s.cmeSource) {
+      block += P(`Rule: ${esc(s.cmeSource)}${s.cmeSourceUrl ? `<br>${A(s.cmeSourceUrl)}` : ""}`);
+    }
+    parts.push(SECTION("CME required", block));
+  }
+
+  if (s.renewalFee || s.lateFee) {
+    let block = "";
+    if (s.renewalFee) block += P(`<strong>Renewal:</strong> ${esc(s.renewalFee)}`);
+    if (s.lateFee) block += P(`<strong>Late:</strong> ${esc(s.lateFee)}`);
+    parts.push(SECTION("What it costs", block));
+  }
+
+  if (s.graceOrLapse) parts.push(SECTION("If you miss the date", P(esc(s.graceOrLapse))));
+  if (s.pitfalls?.length) parts.push(SECTION("What trips physicians up", LIST(s.pitfalls)));
+
+  if (s.faqs?.length) {
+    parts.push(SECTION("Questions physicians ask",
+      s.faqs.map((f) =>
+        `<p style="margin:0 0 3px;font-weight:600;color:#111;">${esc(f.question)}</p>` +
+        `<p style="margin:0 0 12px;color:#1a1a1a;">${esc(f.answer)}</p>`).join("")));
+  }
+
+  parts.push(SECTION("One federal requirement, every state", P(esc(MATE_NOTE))));
+
+  if (s.sources?.length) {
+    parts.push(SECTION("Where this comes from",
+      `<ul style="margin:0 0 10px;padding-left:20px;color:#1a1a1a;font-size:13.5px;">` +
+      s.sources.map((x) => `<li style="margin:0 0 8px;">${A(x.url)}<br><span style="color:#555;">${esc(x.what)}</span></li>`).join("") +
+      `</ul>`));
+  }
+
+  if (s.relatedStates?.length) {
+    parts.push(SECTION("Licensed elsewhere too",
+      P(s.relatedStates.map((r) => A(`https://credentialdomd.com/states/${r.slug}`, r.name)).join(" &nbsp;·&nbsp; "))));
+  }
+
+  parts.push(`<p style="margin:26px 0 0;color:#1a1a1a;">This page, with the same information: ${A(s.guide)}</p>`);
+  parts.push(`<p style="margin:18px 0 0;color:#1a1a1a;">About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. The beta is free and invite-only at ${A("https://credentialdomd.com", "credentialdomd.com")} if you want a look.</p>`);
+  parts.push(`<p style="margin:18px 0 0;color:#1a1a1a;">Eric Whitney, DO<br>CredentialDOMD</p>`);
+  parts.push(`<p style="margin:24px 0 0;font-size:12px;color:#777;">You asked for this guide on the ${esc(state)} renewal page. It is a single email, not a list; if you'd rather hear nothing further from CredentialDOMD, reply with the word stop and that's the end of it.</p>`);
+
+  return `<div style="max-width:640px;margin:0 auto;padding:24px;background:#ffffff;color:#1a1a1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;">${parts.join("")}</div>`;
 }
 
-function emailHtml(state: string, s: { portal: string; board: string; due: string; fee?: string | null; guide: string }) {
-  const h = (label: string, body: string) =>
-    `<p style="margin:16px 0 4px;font-size:13px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:.04em;">${label}</p>` +
-    `<p style="margin:0;color:#1a1a1a;">${body}</p>`;
-  return `<div style="max-width:560px;margin:0 auto;padding:24px;background:#ffffff;color:#1a1a1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;">
-  <h1 style="margin:0 0 8px;font-size:20px;color:#1a1a1a;">${esc(state)} medical license renewal</h1>
-  ${h("When it's due", esc(s.due))}
-  ${h("Where to renew", `<a href="${esc(s.portal)}" style="color:#1d4ed8;word-break:break-all;">${esc(s.portal)}</a>`)}
-  ${h("Board", esc(s.board))}
-  ${s.fee ? h("Renewal fee", esc(s.fee)) : ""}
-  <p style="margin:20px 0 0;color:#1a1a1a;">CME requirements and the step-by-step checklist are on the full guide:<br>
-  <a href="${esc(s.guide)}" style="color:#1d4ed8;word-break:break-all;">${esc(s.guide)}</a></p>
-  <p style="margin:20px 0 0;color:#1a1a1a;">About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. The beta is free and invite-only at <a href="https://credentialdomd.com" style="color:#1d4ed8;">credentialdomd.com</a> if you want a look.</p>
-  <p style="margin:20px 0 0;color:#1a1a1a;">Eric Whitney, DO<br>CredentialDOMD</p>
-  <p style="margin:24px 0 0;font-size:12px;color:#777;">You asked for this guide on the ${esc(state)} renewal page. It is a single email, not a list; if you'd rather hear nothing further from CredentialDOMD, reply with the word stop and that's the end of it.</p>
-</div>`;
+/** The same guide as plain text, for clients that refuse HTML. */
+function emailText(state: string, s: Guide) {
+  const L: string[] = [];
+  const rule = () => L.push("", "-".repeat(52), "");
+  const cme = typeof s.cmeHours === "number"
+    ? (s.cmeHours === 0 ? "No CME hours required for renewal" : `${s.cmeHours} hours per cycle`)
+    : "";
+
+  L.push(`${state.toUpperCase()} MEDICAL LICENSE RENEWAL`);
+  if (s.verified) L.push(`The full guide, verified ${s.verified}.`);
+  rule();
+  L.push("AT A GLANCE");
+  if (s.renewalCycle) L.push(`Cycle: ${s.renewalCycle}`);
+  if (s.renewalMonth) L.push(`Renewal month: ${s.renewalMonth}`);
+  if (cme) L.push(`CME: ${cme}`);
+  if (s.renewalFee) L.push(`Fee: ${s.renewalFee}`);
+  if (s.processingTime) L.push(`Processing: ${s.processingTime}`);
+  if (s.portalUrl) L.push(`Renew at: ${s.portalUrl}`);
+  if (s.boardName) L.push(`Board: ${s.boardName}${s.boardUrl ? ` (${s.boardUrl})` : ""}`);
+  if (s.doBoardName) L.push(`DO board: ${s.doBoardName}${s.doBoardUrl ? ` (${s.doBoardUrl})` : ""}`);
+
+  if (s.renewalAnchor) { rule(); L.push("WHEN IT IS DUE", "", s.renewalAnchor); }
+  if (s.steps?.length) { rule(); L.push("RENEWING, STEP BY STEP", ""); s.steps.forEach((x, i) => L.push(`${i + 1}. ${x}`)); }
+  if (cme) {
+    rule(); L.push("CME REQUIRED", "", s.cmeDetails || cme);
+    if (s.cmeSplit) L.push("", "This state counts MD and DO requirements separately.");
+    if (s.cmeSource) L.push("", `Rule: ${s.cmeSource}${s.cmeSourceUrl ? ` (${s.cmeSourceUrl})` : ""}`);
+  }
+  if (s.renewalFee || s.lateFee) {
+    rule(); L.push("WHAT IT COSTS", "");
+    if (s.renewalFee) L.push(`Renewal: ${s.renewalFee}`);
+    if (s.lateFee) L.push("", `Late: ${s.lateFee}`);
+  }
+  if (s.graceOrLapse) { rule(); L.push("IF YOU MISS THE DATE", "", s.graceOrLapse); }
+  if (s.pitfalls?.length) { rule(); L.push("WHAT TRIPS PHYSICIANS UP", ""); s.pitfalls.forEach((x) => L.push(`* ${x}`, "")); }
+  if (s.faqs?.length) { rule(); L.push("QUESTIONS PHYSICIANS ASK", ""); s.faqs.forEach((f) => L.push(f.question, f.answer, "")); }
+  rule(); L.push("ONE FEDERAL REQUIREMENT, EVERY STATE", "", MATE_NOTE);
+  if (s.sources?.length) { rule(); L.push("WHERE THIS COMES FROM", ""); s.sources.forEach((x) => L.push(x.url, `  ${x.what}`, "")); }
+  if (s.relatedStates?.length) {
+    rule(); L.push("LICENSED ELSEWHERE TOO", "");
+    s.relatedStates.forEach((r) => L.push(`${r.name}: https://credentialdomd.com/states/${r.slug}`));
+  }
+  rule();
+  L.push(`This page, with the same information: ${s.guide}`, "");
+  L.push("About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. The beta is free and invite-only at https://credentialdomd.com if you want a look.", "");
+  L.push("Eric Whitney, DO", "CredentialDOMD", "");
+  L.push(`You asked for this guide on the ${state} renewal page. It is a single email, not a list; if you'd rather hear nothing further from CredentialDOMD, reply with the word stop and that's the end of it.`);
+  return L.join("\n");
 }
 
 serve(async (req) => {
@@ -118,7 +243,14 @@ serve(async (req) => {
   for (const row of rows || []) {
     const m = String(row.note || "").match(/^guide-email\s+([A-Za-z]{2})\b/);
     const abbr = m ? m[1].toUpperCase() : null;
-    const facts = abbr ? (renewalLinks as Record<string, any>)[abbr] : null;
+    const links = abbr ? (renewalLinks as Record<string, any>)[abbr] : null;
+    // The full guide is the email. renewalLinks stays as the fallback so a
+    // state missing from the bundle still sends its portal, board and fee
+    // rather than nothing at all.
+    const guide = abbr ? (stateGuides as Record<string, any>)[abbr] : null;
+    const facts = guide
+      ? { ...guide, portalUrl: guide.portalUrl || links?.portal, guide: guide.guide || links?.guide }
+      : (links ? { guide: links.guide, portalUrl: links.portal, boardName: links.board, renewalAnchor: links.due, renewalFee: links.fee } : null);
     if (!abbr || !facts) {
       // Retrying cannot fix a bad marker; park the row at the attempt cap.
       skipped++;
