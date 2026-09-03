@@ -6,6 +6,7 @@ import { analyzeDocument, analyzePDF } from "../../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../../utils/aiClient";
 import { mergeExtracted, findDuplicateDoc, attachExistingDoc } from "../../../utils/docPrefill";
 import { checkStorageQuota } from "../../../utils/storageQuota";
+import { screenDocument, phiWarningText } from "../../../utils/phiGuard";
 import { SHARED_KEY_NOTE } from "./DateFixList";
 
 /**
@@ -35,6 +36,9 @@ const SCAN_FIELDS = {
   privileges: ["expirationDate"],
   insurance: ["expirationDate"],
   travelDocs: ["expirationDate", "number"],
+  // A diploma and a residency certificate do not expire. The run asks for
+  // the copy and writes nothing onto the record.
+  education: [],
 };
 const fieldsFor = (sec) => SCAN_FIELDS[sec] || ["expirationDate"];
 
@@ -68,11 +72,17 @@ const readAsDataUrl = (file) => new Promise((resolve, reject) => {
 export default function CaptureRun({
   section = "licenses",
   records = [],
+  fields: fieldsProp,
   intro,
   startLabel,
   onExit,
 }) {
   const { data, editItem, addItem, theme: T } = useApp();
+  // The queue is frozen at the moment the run mounts. evidenceQueue is
+  // recomputed by the drawer on every render and a saved record leaves it
+  // immediately, so reading the live array by an incrementing index would
+  // shift the remaining records out from under the run and finish early.
+  const [run] = useState(() => (records || []).filter(Boolean));
   const aiOn = useAiAvailable(data.settings);
   const cameraRef = useRef(null);
   const fileRef = useRef(null);
@@ -84,18 +94,18 @@ export default function CaptureRun({
   const [note, setNote] = useState("");
   const [problem, setProblem] = useState("");
 
-  const fields = fieldsFor(section);
-  const rec = records[idx] || null;
-  const nextRec = records[idx + 1] || null;
+  const fields = fieldsProp || fieldsFor(section);
+  const rec = run[idx] || null;
+  const nextRec = run[idx + 1] || null;
 
   const advance = useCallback(() => {
     setDraft(null); setStaged(null); setNote(""); setProblem("");
     setIdx((i) => {
       const n = i + 1;
-      setStage(n >= records.length ? "done" : "pick");
+      setStage(n >= run.length ? "done" : "pick");
       return n;
     });
-  }, [records.length]);
+  }, [run.length]);
 
   // Auto-advance: the tick is shown, then the next record is already on
   // screen. Leaving the run mid-tick cancels the timer, never the work.
@@ -120,13 +130,23 @@ export default function CaptureRun({
       const dataUrl = await readAsDataUrl(file);
 
       let extracted = null;
+      let read = null;
       if (aiOn) {
         try {
-          const result = file.type === "application/pdf"
+          read = file.type === "application/pdf"
             ? await analyzePDF(dataUrl, data.settings.degreeType, data.settings.apiKey)
             : await analyzeDocument(dataUrl, data.settings.degreeType, data.settings.apiKey);
-          extracted = result?.extracted || null;
+          extracted = read?.extracted || null;
         } catch { /* the file still attaches; the fields are typed instead */ }
+      }
+
+      // Nothing is written until save(), so a chart caught here never reaches
+      // the bucket at all. Same screen and same words the Files upload uses.
+      const screen = screenDocument(read ? `${file.name}\n${JSON.stringify(read)}` : file.name);
+      if (screen?.level === "clinical") {
+        setProblem(`${phiWarningText(screen)} The run is paused here. Your finished records are saved.`);
+        setStage("paused");
+        return;
       }
 
       const picked = {};
@@ -135,13 +155,15 @@ export default function CaptureRun({
       // overwritten by what the camera thought it saw.
       setDraft(mergeExtracted(rec, picked));
       setStaged({ file, dataUrl });
-      setNote(
-        Object.keys(picked).length
-          ? ""
-          : aiOn
-            ? "Nothing could be read off that one. Type what it says and it still saves with the copy attached."
-            : `${describeAiStatus(data.settings)} Attached. Type the fields and this record closes.`
-      );
+      // A "maybe" hit is advisory: it rides above the confirm card rather than
+      // stopping a run over one stray phrase on a real certificate.
+      const advisory = screen ? phiWarningText(screen) : "";
+      const readNote = !fields.length || Object.keys(picked).length
+        ? ""
+        : aiOn
+          ? "Nothing could be read off that one. Type what it says and it still saves with the copy attached."
+          : `${describeAiStatus(data.settings)} Attached. Type the fields and this record closes.`;
+      setNote([advisory, readNote].filter(Boolean).join(" "));
       setStage("confirm");
     } catch {
       setProblem("That file could not be read. Choose another, or skip this one.");
@@ -225,18 +247,18 @@ export default function CaptureRun({
     </>
   );
 
-  const progress = records.length > 1 ? (
+  const progress = run.length > 1 ? (
     <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, fontVariantNumeric: "tabular-nums", marginBottom: 4 }}>
-      {Math.min(idx + 1, records.length)} of {records.length}
+      {Math.min(idx + 1, run.length)} of {run.length}
     </div>
   ) : null;
 
-  if (!records.length) {
+  if (!run.length) {
     return <div style={{ fontSize: 13.5, color: T.textMuted }}>Every record here already has its copy attached.</div>;
   }
 
   if (stage === "intro") {
-    const first = shortName(records[0], section);
+    const first = shortName(run[0], section);
     return (
       <div>
         <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.55, marginBottom: 10 }}>{intro}</div>
@@ -266,7 +288,9 @@ export default function CaptureRun({
       {stage === "pick" && (
         <div>
           <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
-            Photograph it and the app reads the dates and the number off the page.
+            {fields.length
+              ? "Photograph it and the app reads the dates and the number off the page."
+              : "Photograph it and the copy attaches to this record."}
           </div>
           <button onClick={() => cameraRef.current?.click()} style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -290,8 +314,13 @@ export default function CaptureRun({
       {stage === "confirm" && draft && (
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, marginTop: 8, marginBottom: 6 }}>
-            What it read
+            {fields.length ? "What it read" : "Ready to attach"}
           </div>
+          {!fields.length && (
+            <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
+              This record takes no date. Saving files the copy against it.
+            </div>
+          )}
           {fields.map((k) => (
             <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
               <div style={{ width: 76, flexShrink: 0, fontSize: 12.5, color: T.textMuted, fontWeight: 700 }}>{FIELD_LABEL[k] || k}</div>

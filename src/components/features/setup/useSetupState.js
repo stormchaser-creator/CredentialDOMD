@@ -62,7 +62,7 @@ const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); }
 const snapshot = () => pending;
 
 export function useSetupState() {
-  const { data, updateSettings, isPro, isFreeBeta, hasSubscription, loaded, user } = useApp();
+  const { data, updateSettings, isPro, isFreeBeta, hasSubscription, subLoading, loaded, user } = useApp();
   const userId = user?.id || null;
   // The optimistic overlay: a tap must move the board now, not in a second.
   const queued = useSyncExternalStore(subscribe, snapshot, snapshot);
@@ -144,9 +144,14 @@ export function useSetupState() {
    * recorded quietly; when it has, the sentence is handed to the page and
    * only recorded once the physician has seen it.
    */
+  // useSubscription starts every cold load at the free tier and resolves the
+  // real one over the network, so a paying account reads proLive === 0 on the
+  // first paint. Narrating that would tell a subscriber they lost items they
+  // still have, and snapshotting it would record a total they never saw.
+  // Nothing here is produced from a tier that has not resolved.
   const narration = useMemo(
-    () => denominatorNarration(setup, { isFreeBeta }),
-    [setup, isFreeBeta]
+    () => (subLoading ? null : denominatorNarration(setup, { isFreeBeta })),
+    [setup, isFreeBeta, subLoading]
   );
   const matches = proSnapshotMatches(setup, { isFreeBeta });
   const ackNarration = useCallback(
@@ -154,9 +159,9 @@ export function useSetupState() {
     [commit, setup, isFreeBeta, pruneArgs]
   );
   useEffect(() => {
-    if (!loaded || narration || matches) return;
+    if (!loaded || subLoading || narration || matches) return;
     ackNarration();
-  }, [loaded, narration, matches, ackNarration]);
+  }, [loaded, subLoading, narration, matches, ackNarration]);
 
   // Flush on unmount and whenever the app is backgrounded: a skip tapped on
   // the way out of the app must still be a skip when it comes back.

@@ -319,6 +319,9 @@ export const TASK_DEFS = [
     label: "Copies of your license and DEA",
     why: "A credentialing office asks for the document, not the number you typed into it.",
     verb: "Photograph them",
+    // The drawer's manual escape opens the Licenses add form, so it cannot
+    // carry the camera verb the Next card uses.
+    addVerb: "Add a license by hand",
     doneWhen: (ctx) => proofRecords(ctx).length > 0 && proofMissing(ctx).length === 0,
     // The proof IS the task here, so the record dot and the proof dot move
     // together. Both are filled or neither is.
@@ -583,8 +586,20 @@ const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven
 export const numberWord = (n) => (NUMBER_WORDS[n] != null ? NUMBER_WORDS[n] : String(n));
 const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
-/** The line a run opens with, counted from the queue it is about to walk. */
-export function runIntro(count, noun = "licenses", singular = "license") {
+/**
+ * The line a run opens with, counted from the queue it is about to walk.
+ *
+ * `wantsDate` false for the rows whose records carry no expiration at all: a
+ * lifetime diplomate has no board date and a diploma has no diploma date, and
+ * the run must not assert one, nor offer a field that would write one.
+ */
+export function runIntro(count, noun = "licenses", singular = "license", wantsDate = true) {
+  if (!wantsDate) {
+    if (count === 1) {
+      return `One ${singular} needs one thing: a copy of the certificate. Photograph it and the app reads it off the page.`;
+    }
+    return `${capitalize(numberWord(count))} ${noun} need one thing: a copy of the certificate. Photograph them one after another and the app reads them off the page.`;
+  }
   if (count === 1) {
     return `One ${singular} needs two things: the date it expires and a copy of the certificate. Photograph it and the app reads both off the page.`;
   }
@@ -650,6 +665,9 @@ function resolveTask(def, ctx, state) {
     label: def.label,
     why: def.why,
     verb: def.verb,
+    // What the drawer's "do it yourself" button says, when that is not the
+    // same action as the card's verb.
+    addVerb: def.addVerb || def.verb,
     pro: !!def.pro,
     // Locked is not a status: the row still resolves normally, it is simply
     // out of the denominator and out of the Next rotation while the account
@@ -943,8 +961,13 @@ const daysBetween = (from, to) => {
  *
  * Any rung that cannot say something true and specific falls back to day 0.
  */
-export function ladderState(setup, { now = new Date() } = {}) {
-  const next = setup.next;
+export function ladderState(setup, { now = new Date(), tier = null } = {}) {
+  // The Home card and the page's Next card both speak for Tier 1 while Tier 1
+  // is unfinished. Without this the ranker falls straight through to a packet
+  // row the moment every remaining Tier 1 row is skipped, and the bordered
+  // card offers board certification under a "Setup · 4 of 5" header.
+  const pool = tier ? setup.open.filter((t) => t.tier === tier) : setup.open;
+  const next = pool[0] || null;
   if (!next) return null;
   const fresh = { bucket: LADDER.FRESH, taskId: next.id, text: next.cardLine, verb: next.verb };
 
@@ -971,7 +994,9 @@ export function ladderState(setup, { now = new Date() } = {}) {
       : fresh;
   }
 
-  const cheapest = setup.cheapest || next;
+  const cheapest = (tier
+    ? [...pool].sort((a, b) => a.secs - b.secs || pool.indexOf(a) - pool.indexOf(b))[0]
+    : setup.cheapest) || next;
   if (!cheapest.nextPhrase) return fresh;
   return {
     bucket: LADDER.ONE_THING,

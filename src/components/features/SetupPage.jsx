@@ -4,6 +4,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId } from "../../utils/helpers";
 import { isDea, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
+import { FREE_BETA_LABEL } from "../../constants/beta";
 import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
 import DateFixList, { DateRow, SHARED_KEY_NOTE } from "./setup/DateFixList";
@@ -27,6 +28,8 @@ import CMEImport from "./CMEImport";
  */
 
 const GLYPH = 22;
+/** Stable empty field list for the runs that write nothing onto the record. */
+const NO_FIELDS = [];
 
 function StatusGlyph({ status, T }) {
   const base = {
@@ -298,13 +301,18 @@ function PacketDrawer({ task, onOpenSection }) {
   const [running, setRunning] = useState(false);
   const queue = evidenceQueue(data, task.id);
   const [plural, singular] = RUN_NOUNS[queue.section] || ["records", "record"];
+  // A board certificate held by a lifetime diplomate and a medical school
+  // diploma have no expiration to read. The run asks for the copy only, and
+  // is handed an empty field list so it can never write a date onto them.
+  const wantsDate = task.id !== "boards" && task.id !== "education";
 
   if (running) {
     return (
       <CaptureRun
         section={queue.section}
         records={queue.records}
-        intro={runIntro(queue.records.length, plural, singular)}
+        fields={wantsDate ? undefined : NO_FIELDS}
+        intro={runIntro(queue.records.length, plural, singular, wantsDate)}
         onExit={() => setRunning(false)}
       />
     );
@@ -315,7 +323,7 @@ function PacketDrawer({ task, onOpenSection }) {
       {queue.records.length > 0 && (
         <>
           <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.55, marginBottom: 10 }}>
-            {runIntro(queue.records.length, plural, singular)}
+            {runIntro(queue.records.length, plural, singular, wantsDate)}
           </div>
           <button onClick={() => setRunning(true)} style={{
             width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
@@ -329,7 +337,7 @@ function PacketDrawer({ task, onOpenSection }) {
           marginTop: queue.records.length ? 10 : 0, width: "100%", padding: "11px 16px", borderRadius: 12,
           border: `1px solid ${T.border}`, backgroundColor: "transparent",
           color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-        }}>{task.verb}</button>
+        }}>{task.addVerb}</button>
       )}
       {task.id === "boards" && !(data.settings?.specialties || []).length && (
         <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginTop: 10 }}>
@@ -430,7 +438,15 @@ function TaskRow({ task, open, onToggle, onSkip, onNa, onRestore, T, asRail }) {
             <span style={{
               display: "block", fontSize: 15, fontWeight: 800, color: T.text,
               textDecoration: task.status === "na" ? "line-through" : "none",
-            }}>{task.label}</span>
+            }}>
+              {task.label}
+              {task.betaTag && (
+                <span style={{
+                  marginLeft: 6, padding: "1px 6px", borderRadius: 6, fontSize: 10.5, fontWeight: 800,
+                  backgroundColor: T.accentDim, color: T.accent, verticalAlign: "middle",
+                }}>{FREE_BETA_LABEL}</span>
+              )}
+            </span>
             <span style={{ display: "block", fontSize: 12.5, color: T.textMuted, lineHeight: 1.4 }}>
               {task.detail}{est ? ` · ${est}` : ""}
             </span>
@@ -532,7 +548,9 @@ export default function SetupPage({
   const t2Locked = useMemo(() => setup.tier2.filter((t) => t.locked), [setup.tier2]);
   const skipped = setup.skipped.filter((t) => !t.locked);
   const na = setup.notApplicable.filter((t) => !t.locked);
-  const ladder = ladderState(setup);
+  // While Tier 1 is unfinished the Next card speaks for Tier 1, so a board
+  // with every remaining Tier 1 row skipped says so instead of naming a packet row.
+  const ladder = ladderState(setup, t1.complete ? {} : { tier: 1 });
 
   // While Tier 1 is unfinished the strip is Tier 1. After it, the same
   // countdown carries on over the packet, so the page never stops shrinking.

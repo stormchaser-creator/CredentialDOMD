@@ -567,6 +567,37 @@ eq("shortDate of garbage", shortDate("not a date"), "");
     ...packed(),
     settings: { ...packedSettings, setupState: { startedAt: day(40), lastTouched: day(40), lastDone: "cme" } },
   }), { now: NOW }), null);
+
+  // The Home card and the page's Next card are the TIER 1 card while Tier 1
+  // is unfinished. With the last open Tier 1 row skipped outside its re-offer
+  // window the tier-scoped ladder has nothing to say, and the card falls back
+  // to "set aside" rather than naming a packet row under a Tier 1 header.
+  const t1AllSkipped = build({
+    settings: {
+      ...settledSettings,
+      setupState: {
+        startedAt: day(40),
+        tasks: { dates: { s: "skipped", at: day(40) } },
+      },
+    },
+    licenses: [
+      { id: "a", type: "State Medical License (DO)", state: "CA", expirationDate: "2027-01-01" },
+      { id: "b", type: "State Medical License (DO)", state: "TX" },
+      { ...deaLicense },
+    ],
+    documents: [],
+  });
+  eq("every open Tier 1 row skipped leaves the Tier 1 ladder silent",
+    ladderState(t1AllSkipped, { now: NOW, tier: 1 }), null);
+  ok("while the unscoped ladder still finds a packet rung",
+    ladderState(t1AllSkipped, { now: NOW })?.taskId != null &&
+    t1AllSkipped.byId[ladderState(t1AllSkipped, { now: NOW }).taskId].tier === 2);
+
+  // Day 30 shrinks to the cheapest thing in the POOL it was given, never to a
+  // packet row the tier-scoped card cannot open.
+  const t1Cheap = ladderState(stalled(day(40), "licenses"), { now: NOW, tier: 1 });
+  eq("the tier-scoped day-30 rung stays inside Tier 1",
+    [t1Cheap.bucket, stalled(day(40), "licenses").byId[t1Cheap.taskId].tier], [LADDER.ONE_THING, 1]);
 }
 
 // ── The phrase builders the ladder and the run depend on ──
@@ -577,6 +608,14 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("one record reads as one record", runIntro(1),
     "One license needs two things: the date it expires and a copy of the certificate. Photograph it and the app reads both off the page.");
   eq("the run intro takes the section's own noun", runIntro(2, "privileges", "privilege").slice(0, 14), "Two privileges");
+  // A board certificate and a diploma carry no expiration, so the run must
+  // not claim one and must not offer to write one.
+  eq("a dateless row asks for one thing", runIntro(1, "records", "record", false),
+    "One record needs one thing: a copy of the certificate. Photograph it and the app reads it off the page.");
+  eq("and says so in the plural too", runIntro(2, "records", "record", false),
+    "Two records need one thing: a copy of the certificate. Photograph them one after another and the app reads them off the page.");
+  ok("no dateless intro asserts an expiration",
+    !/expire/i.test(runIntro(1, "records", "record", false) + runIntro(3, "records", "record", false)));
   eq("estimates are words, mid-sentence", [secsPhrase(10), secsPhrase(20), secsPhrase(45), secsPhrase(90)],
     ["about ten seconds", "about twenty seconds", "under a minute", "a minute or two"]);
   eq("a weekday reads as a weekday", weekdayName("2026-09-07T12:00:00.000Z").length > 0, true);
@@ -596,6 +635,13 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("the ID queue walks travel documents",
     evidenceQueue({ ...packed(), documents: [] }, "idPhoto").records.map((r) => r.id), ["t1"]);
   eq("a row that takes no proof has no queue", evidenceQueue(packed(), "cme"), { section: null, records: [] });
+  // The drawer's manual button opens the add form, so it carries its own
+  // label; every other row reuses the card's verb.
+  const verbs = build(packed()).byId;
+  eq("the proof row's manual button is not the camera verb",
+    [verbs.proof.verb, verbs.proof.addVerb], ["Photograph them", "Add a license by hand"]);
+  ok("every other row's manual button is its own verb",
+    TASK_DEFS.every((d) => d.id === "proof" || verbs[d.id].addVerb === verbs[d.id].verb));
   eq("an empty file gives an empty queue, never a crash", evidenceQueue(null, "proof").records.length, 0);
 }
 

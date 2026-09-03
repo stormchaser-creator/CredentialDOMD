@@ -87,6 +87,6 @@ export function phiWarningText(screen) {
   if (!screen) return "";
   const what = screen.reasons.join(" and ");
   return screen.level === "clinical"
-    ? `This looks like a patient record — it contains ${what}. CredentialDOMD is built to hold your credentials, not patient charts, and uploading this would put patient information on our servers. Please upload the credential document instead.`
-    : `Heads up: this mentions ${what}. If it is a patient record rather than your own credential, don't upload it — this app is not built to hold patient information.`;
+    ? `This looks like a patient record. It contains ${what}. CredentialDOMD is built to hold your credentials, not patient charts, and uploading this would put patient information on our servers. Please upload the credential document instead.`
+    : `Heads up: this mentions ${what}. If it is a patient record rather than your own credential, don't upload it. This app is not built to hold patient information.`;
 }

@@ -104,8 +104,11 @@ export default function SetupCard({ onOpenSetup }) {
     );
   }
 
-  // Form A
-  const ladder = ladderState(setup);
+  // Form A. Scoped to Tier 1: this card is the Tier 1 card, header, bar and
+  // all, so its sentence must never fall through to a packet row when every
+  // remaining Tier 1 row happens to be set aside. That is what the "set
+  // aside" line below is for.
+  const ladder = ladderState(setup, { tier: 1 });
 
   // A month of being ignored is an answer. The card shrinks to one line
   // offering the cheapest thing left, rather than repeating itself louder.
