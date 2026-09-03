@@ -133,6 +133,9 @@ eq("med_sch OTHER never becomes a display name", school.fields.name, undefined);
 ok("the education finding says the school is missing", /OTHER/.test(school.detail) && /Add the school/.test(school.detail));
 eq("education keeps the degree type", school.fields.type, "Doctor of Osteopathic Medicine (DO)");
 eq("education asks for school and date", school.needs, ["institution", "graduationDate"]);
+// Medicare states a year, the form wants a date; the year must survive the
+// save instead of living only in the label. (Branch review P4.)
+ok("the stated graduation year survives onto the record", /2018/.test(school.fields.notes || ""), school.fields.notes);
 eq("education never invents a graduation date", school.fields.graduationDate, undefined);
 ok("the label carries the year", school.label.includes("2018"));
 

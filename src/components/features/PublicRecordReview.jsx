@@ -278,6 +278,25 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
   // Publications run long on a common surname, and a license list runs long
   // on a physician working several states, so a group past PREVIEW_ROWS
   // collapses until the physician asks for the rest.
+  // A register that qualified its own answer (PubMed truncating 118 matches
+  // to 25, say) said so in envelope.sources. That sentence belongs beside the
+  // rows it qualifies, not in a banner at the top that reads as boilerplate.
+  // Which register speaks for which section. Only sources that can qualify
+  // their own answer need an entry.
+  const NOTE_FOR = {
+    publications: "pubmed",
+    privileges: "cmsHospital",
+    workHistory: "cmsClinician",
+    education: "cmsClinician",
+    licenses: "nppes",
+  };
+  const groupNote = (section) => {
+    const id = NOTE_FOR[section];
+    if (!id) return "";
+    const src = (envelope?.sources || []).find((x) => x?.id === id && x?.note);
+    return src ? src.note : "";
+  };
+
   const groupBlock = (g) => {
     const showAll = expanded[g.section] || g.findings.length <= PREVIEW_ROWS;
     const shown = showAll ? g.findings : g.findings.slice(0, PREVIEW_ROWS);
@@ -299,6 +318,13 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
             ].filter(Boolean))}
           </div>
         </div>
+        {groupNote(g.section) && (
+          <div style={{
+            fontSize: 12, color: T.textMuted, lineHeight: 1.45,
+            backgroundColor: T.warningDim, border: `1px solid ${T.warning}44`,
+            borderRadius: 8, padding: "7px 9px", marginBottom: 8,
+          }}>{groupNote(g.section)}</div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {shown.map(row)}
         </div>
@@ -434,7 +460,12 @@ function PublicRecordReview({ onSaved, onClose, focusSection = "" }) {
         <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>
           {headShown.length === 0
             ? (focus ? `Nothing came back for ${headNoun}` : "Nothing came back to add")
-            : `${headShown.length} thing${headShown.length === 1 ? "" : "s"} found for ${headNoun}`}
+            // Not "for NPI x": most of a publications list is matched on a
+            // name string, and the NPI never touched it. Each group says
+            // where its own rows came from.
+            : (focus
+              ? `${headShown.length} thing${headShown.length === 1 ? "" : "s"} found for ${headNoun}`
+              : `${headShown.length} thing${headShown.length === 1 ? "" : "s"} found in the public registers`)}
         </div>
         <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginTop: 6 }}>
           {headShown.length === 0

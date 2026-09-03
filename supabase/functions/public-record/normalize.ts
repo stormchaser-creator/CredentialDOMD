@@ -301,6 +301,10 @@ export function normalizeCmsClinician(raw: any, ctx: NormalizeContext): Finding[
       fields.institution = medSch;
       fields.name = `${degree || "Medical"} Diploma, ${medSch}`;
     }
+    // Medicare states a year, not a date, and the form wants a date. Keep the
+    // stated year in notes so accepting the row does not throw away the one
+    // fact the register actually gave.
+    if (gradYear) fields.notes = `Medicare lists the graduation year as ${gradYear}.`;
     const needs: string[] = [];
     if (!medSch) needs.push("institution");
     needs.push("graduationDate");

@@ -48,9 +48,18 @@ GET https://data.cms.gov/provider-data/api/1/datastore/query/<dataset>/0
 - `xubh-q36u` names those three: Eisenhower Medical Center (Rancho Mirage CA),
   Arrowhead Regional Medical Center (Colton CA), Riverside University Health
   System-Medical Center (Moreno Valley CA).
-- `esearch` on `Whitney EE[Author]` returns 2 PMIDs, and neither paper is his.
-  That is the fuzzy-match problem in one line, and it is why every publication
-  starts unticked and shows its journal, year and co-authors.
+- PubMed, measured 2026-09-03. The term the code builds is `"Whitney E"[Author]`
+  (surname plus first initial). It returns **118 matches**; the 25 most recent
+  are shown. Of those 25, roughly 8 are his (three StatPearls chapters, five
+  Cureus reviews on deep brain stimulation, arachnoid cysts, cerebral aneurysms
+  and two others) and roughly 17 belong to at least four other people: a
+  seismologist in Nature Communications, an HPV epidemiologist in MMWR and
+  Cancer Epidemiology, a dental educator, and an adolescent addiction group.
+  That is the fuzzy-match problem measured rather than asserted, and it is why
+  every publication starts unticked and shows its venue, year and co-authors.
+- Do not "improve" the term to `"Whitney EE"[Author]`. That returns **0**. The
+  first initial alone is the only form that finds his papers at all, and
+  carrying the false positives is the price of not silently finding nothing.
 
 ### `med_sch` is not a medical school
 
