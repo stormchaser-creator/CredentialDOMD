@@ -159,6 +159,11 @@ export default function AdminDashboard() {
     setBusy(false);
   };
 
+  // The panel loaded once per app session, so every number aged until the
+  // whole app was reloaded. reloadKey re-runs the same fetch, and the tab
+  // bar bumps it when a panel is opened.
+  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadedAt, setReloadedAt] = useState(null);
   useEffect(() => {
     if (!isAdmin || !supabase) {
       setLoading(false);
@@ -196,10 +201,11 @@ export default function AdminDashboard() {
       if (!ba.error) setInvites(ba.data || []);
       if (!ce.error) setErrors(ce.data || []);
       if (!am.error) setMessages(am.data || []);
+      setReloadedAt(new Date());
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [isAdmin]);
+  }, [isAdmin, reloadKey]);
 
   if (!isAdmin) {
     return (
@@ -253,6 +259,9 @@ export default function AdminDashboard() {
             key={t.id}
             onClick={() => {
               setTab(t.id);
+              // Opening a panel reads again. Every number here aged for the
+              // whole app session before this.
+              setReloadKey((k) => k + 1);
               if (t.id === "messages") updateSettings({ adminInboxSeenAt: new Date().toISOString() });
               if (t.id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
             }}
@@ -334,7 +343,7 @@ export default function AdminDashboard() {
           <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
             Signups
           </div>
-          <SignupsList rows={signups} T={T} />
+          <SignupsList rows={signups} T={T} reloadedAt={reloadedAt} onReload={() => setReloadKey((k) => k + 1)} />
         </>
       )}
       {tab === "errors" && !loading && <ErrorsList rows={errors} users={users} T={T} onCleared={() => setErrors([])} />}
@@ -581,18 +590,43 @@ function FeedbackList({ rows, T }) {
   );
 }
 
-function SignupsList({ rows, T }) {
+function SignupsList({ rows, T, onReload, reloadedAt }) {
   if (!rows.length) return <Empty T={T} text="No signups in last 90 days." />;
   const total = rows.reduce((s, r) => s + (r.signups || 0), 0);
+  // The old number added these three together and called the sum "signups",
+  // which is how a panel showing four physicians read 8.
+  const abandoned = rows.reduce((s, r) => s + (r.abandoned || 0), 0);
+  const adminAccts = rows.reduce((s, r) => s + (r.admin_accounts || 0), 0);
   return (
     <div>
       <div style={{
         backgroundColor: T.card, border: `2px solid ${T.accent}`,
         borderRadius: 12, padding: "12px 16px", marginBottom: 12,
       }}>
-        <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days</div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
-        <div style={{ fontSize: 11, color: T.textMuted }}>total signups</div>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>physicians who finished signing up</div>
+          </div>
+          {onReload && (
+            <button onClick={onReload} style={{
+              padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+              backgroundColor: "transparent", color: T.text, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+            }}>Refresh</button>
+          )}
+        </div>
+        {(abandoned > 0 || adminAccts > 0) && (
+          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 8, lineHeight: 1.5 }}>
+            Not counted above: {[
+              abandoned ? `${abandoned} started signing up and never came back (no email on the account)` : "",
+              adminAccts ? `${adminAccts} your own admin account` : "",
+            ].filter(Boolean).join(" \u00b7 ")}.
+          </div>
+        )}
+        {reloadedAt && (
+          <div style={{ fontSize: 11, color: T.textDim, marginTop: 6 }}>Read {reloadedAt.toLocaleTimeString()}</div>
+        )}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {rows.map((r) => (
