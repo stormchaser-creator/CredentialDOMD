@@ -93,8 +93,9 @@ const idRecords = (ctx) =>
 const hasHeadshot = (ctx) => (ctx.data.professionalPhotos || []).length > 0 || !!ctx.s.profilePhoto;
 
 const privilegeRecords = (ctx) => (ctx.data.privileges || []).filter(Boolean);
+const isMalpracticeType = (type) => /malpractice|tail|professional liability/i.test(type || "");
 const malpracticeRecords = (ctx) =>
-  (ctx.data.insurance || []).filter((i) => i && /malpractice|tail/i.test(i.type || "") && !!i.expirationDate);
+  (ctx.data.insurance || []).filter((i) => i && isMalpracticeType(i.type) && !!i.expirationDate);
 const reachableReferences = (ctx) =>
   (ctx.data.peerReferences || []).filter((r) => r && r.name && (r.email || r.phone));
 
@@ -530,7 +531,7 @@ export const TASK_DEFS = [
     doneClause: "your malpractice coverage",
     cardLine: () => "No dated malpractice policy on file.",
     pendingDetail: (ctx) =>
-      (ctx.data.insurance || []).some((i) => /malpractice|tail/i.test(i?.type || ""))
+      (ctx.data.insurance || []).some((i) => isMalpracticeType(i?.type))
         ? "On file, but with no expiration date."
         : "Nothing on file yet.",
   },

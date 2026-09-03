@@ -49,6 +49,7 @@ export const PRIVILEGE_TYPES = [
 export const INSURANCE_TYPES = [
   "Medical Malpractice (Occurrence)",
   "Medical Malpractice (Claims-Made)",
+  "Medical Professional Liability Coverage",
   "Tail Coverage",
   "General Liability",
   "Umbrella/Excess Liability",
