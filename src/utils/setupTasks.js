@@ -178,7 +178,13 @@ export const TASK_DEFS = [
     cardLine: () => "Your degree and primary state decide which CME rules apply to you.",
     nextPhrase: () => "your degree and primary state",
     doneClause: "your details",
-    regressionLine: ({ s }) => (s.primaryState ? "your degree is blank" : "your primary state is blank"),
+    // Three fields complete this task, so three fields can un-complete it.
+    // A cleared name used to be reported as a blank degree.
+    regressionLine: ({ s }) => {
+      if (!s.name) return "your name is blank";
+      if (!s.degreeType) return "your degree is blank";
+      return "your primary state is blank";
+    },
     pendingDetail: ({ s }) => {
       const missing = [];
       if (!s.name) missing.push("your name");
@@ -273,7 +279,12 @@ export const TASK_DEFS = [
     doneClause: "your DEA registration",
     pendingDetail: ({ licenses }) =>
       licenses.some(isDea) ? "On file, but with no expiration date." : "Nothing on file yet.",
-    regressionLine: () => "your DEA registration has no expiration date",
+    // A deleted registration and an undated one are different facts, and the
+    // constant asserted the second when it was the first.
+    regressionLine: ({ licenses }) =>
+      licenses.some(isDea)
+        ? "your DEA registration has no expiration date"
+        : "your DEA registration is no longer on file",
   },
   {
     id: "reminders",

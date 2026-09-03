@@ -4,7 +4,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId } from "../../utils/helpers";
 import { isDea, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
-import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine } from "../../utils/credentialExport";
+import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetPendingLine } from "../../utils/credentialExport";
 import { FREE_BETA_LABEL } from "../../constants/beta";
 import { useSetupState } from "./setup/useSetupState";
 import NpiPanel from "./setup/NpiPanel";
@@ -421,17 +421,29 @@ function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, onS
     color: primary ? "#fff" : T.text,
     fontSize: 14.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
   });
+  // Linked and on this device are two different facts. The proof is safely in
+  // the account either way, but the ZIP is written from the bytes this device
+  // holds, so until the last file lands the download would be a partial packet
+  // handed over silently. Send is unaffected: it goes by doc id and the bytes
+  // are read server-side.
+  const pending = packetPendingLine(summary);
+  const holdDownload = busy || !!pending;
   return (
     <div style={{
       backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 16,
       padding: "18px 20px", boxShadow: T.shadow1,
     }}>
       <div style={{ fontSize: 19, fontWeight: 800, color: T.text, marginBottom: 6 }}>Your packet is assembled.</div>
-      <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.55, marginBottom: 14, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ fontSize: 13.5, color: T.textMuted, lineHeight: 1.55, marginBottom: pending ? 6 : 14, fontVariantNumeric: "tabular-nums" }}>
         {packetSummaryLine(summary)}
       </div>
+      {pending && (
+        <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 14, fontVariantNumeric: "tabular-nums" }}>
+          {pending}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={onDownload} disabled={busy} style={{ ...btn(true), opacity: busy ? 0.7 : 1, cursor: busy ? "default" : "pointer" }}>
+        <button onClick={onDownload} disabled={holdDownload} style={{ ...btn(true), opacity: holdDownload ? 0.7 : 1, cursor: holdDownload ? "default" : "pointer" }}>
           {busy ? "Building the file" : "Download the packet"}
         </button>
         <button onClick={onSend} disabled={!summary.documents} style={{

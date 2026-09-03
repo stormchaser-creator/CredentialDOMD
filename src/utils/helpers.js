@@ -33,8 +33,14 @@ export function shortFacility(facility, contracts) {
 
 export function isNonExpiring(item, sectionKey) {
   if (!item || item.expirationDate) return false;
-  if (item.noExpiration === true) return true;
   const t = String(item.type || "");
+  // The licenses form offers the "does not expire" checkbox on a board
+  // certification and nowhere else, so under licenses only a board
+  // certification may be silenced by it. Ticking the box and then editing the
+  // record's type to a state license hid the checkbox but left the flag set,
+  // and a dated credential dropped out of the missing-date banner and out of
+  // dateless() with it: invisible to the one system Tier 1 exists to feed.
+  if (item.noExpiration === true && (sectionKey !== "licenses" || t === CERTIFICATION_TYPE || /board certification/i.test(t))) return true;
   if (sectionKey === "licenses" && t === CERTIFICATION_TYPE) return true;
   if (sectionKey === "insurance" && /health insurance|dental|vision|life insurance|disability/i.test(t)) return true;
   if (sectionKey === "healthRecords" && /immune|titer/i.test(String(item.name || "") + " " + String(item.category || "")) && !item.expirationDate) return true;

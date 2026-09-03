@@ -717,6 +717,24 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("but the regression is still named", tier1Regressed(withSkip)?.id, "dates");
   eq("and still names the record", tier1Regressed(withSkip)?.regressionLine, "your CA license lost its expiration date");
 
+  // A regression clause names the field that is actually blank. Identity
+  // completes on three fields, so a cleared name must not be reported as a
+  // blank degree, and a deleted DEA must not be reported as an undated one.
+  const noName = stamped(fullyPacked());
+  noName.settings = { ...noName.settings, name: "" };
+  eq("a cleared name names itself", tier1Regressed(build(noName, { isPro: true }))?.regressionLine, "your name is blank");
+  const noDegree = stamped(fullyPacked());
+  noDegree.settings = { ...noDegree.settings, degreeType: "" };
+  eq("a cleared degree still names the degree", tier1Regressed(build(noDegree, { isPro: true }))?.regressionLine, "your degree is blank");
+  const deaGone = stamped(fullyPacked());
+  deaGone.licenses = deaGone.licenses.filter((l) => l.id !== "d1");
+  eq("a deleted DEA is not an undated DEA",
+    tier1Regressed(build(deaGone, { isPro: true }))?.regressionLine, "your DEA registration is no longer on file");
+  const deaUndated = stamped(fullyPacked());
+  deaUndated.licenses = deaUndated.licenses.map((l) => (l.id === "d1" ? { ...l, expirationDate: "" } : l));
+  eq("an undated DEA still reads as undated",
+    build(deaUndated, { isPro: true }).byId.dea.regressionLine, "your DEA registration has no expiration date");
+
   // Every Tier 1 task can name what it lost, or the terminal line falls
   // back to a count and says nothing about what changed.
   ok("every Tier 1 task carries a regression clause",
@@ -740,6 +758,19 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   const noFlag = packed();
   noFlag.licenses = [...noFlag.licenses, { id: "b3", type: "Board Certification (ABMS)" }];
   eq("a board certificate never blocks Protected", build(noFlag).byId.dates.status, "done");
+
+  // The checkbox is only offered on a board certification. Tick it, then edit
+  // the record's type to a state license: the box is hidden but the flag is
+  // still on the form, and a dated credential silently left the reminder
+  // system. The flag is now scoped to the type it was written for.
+  const switched = packed();
+  switched.licenses = [...switched.licenses, { id: "b4", type: "State Medical License (DO)", state: "TX", noExpiration: true }];
+  eq("a stale flag cannot silence a state license", dateless(switched).map((l) => l.id), ["b4"]);
+  eq("and it stays in the denominator", datable(switched).map((l) => l.id), ["l1", "d1", "b4"]);
+  // The course/device certification the flag was already true for is untouched.
+  const course = packed();
+  course.licenses = [...course.licenses, { id: "b5", type: "Certification", name: "Da Vinci", noExpiration: true }];
+  eq("a course certification is still non-expiring", dateless(course).map((l) => l.id), []);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

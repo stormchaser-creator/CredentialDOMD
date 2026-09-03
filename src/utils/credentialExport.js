@@ -303,19 +303,28 @@ function docBase64(doc) {
 }
 
 /**
- * The packet proper: every document that carries bytes AND is linked to a
- * record that still exists, in folder order.
+ * The packet proper: every document linked to a record that still exists, in
+ * folder order.
  *
  * "Linked" is the whole claim the ending makes, so a stray upload sitting in
  * Files unattached is not counted, and a link pointing at a deleted record is
  * not counted either. Both still ride along in the ZIP; neither is described
  * as proof of anything.
+ *
+ * Being linked and being on this device are two different facts, and the
+ * count of documents was reading the second one. saveData strips `data` from
+ * every document that has a storagePath, and the app re-fetches the bytes one
+ * file at a time after load, so on a second device, offline, or in the window
+ * right after a sign-in a fully proved packet counted zero documents and the
+ * ending said so out loud. `withBytes` is for the ZIP writer, which genuinely
+ * can only write what it holds.
  */
-export function packetDocuments(data) {
+export function packetDocuments(data, { withBytes = false } = {}) {
   const rank = new Map(PACKET_FOLDERS.map((f, i) => [f, i]));
   const rows = [];
   for (const doc of data?.documents || []) {
-    if (!doc || !docBase64(doc)) continue;
+    if (!doc) continue;
+    if (withBytes && !docBase64(doc)) continue;
     const [section, id] = String(doc.linkedTo || "").split(":");
     if (!section || !id) continue;
     if (!(data?.[section] || []).some((r) => r && r.id === id)) continue;
@@ -328,9 +337,11 @@ export function packetDocuments(data) {
 
 /** What the assembled packet contains, counted off the physician's own file. */
 export function packetSummary(data) {
+  const linked = packetDocuments(data);
   return {
     lineItems: buildCredentialRows(data).length,
-    documents: packetDocuments(data).length,
+    documents: linked.length,
+    onDevice: packetDocuments(data, { withBytes: true }).length,
   };
 }
 
@@ -342,7 +353,22 @@ export function packetSummary(data) {
 export function packetSummaryLine({ lineItems = 0, documents = 0 } = {}) {
   const items = `${lineItems} line item${lineItems === 1 ? "" : "s"}`;
   if (!documents) return `${items}. No documents are attached to them yet.`;
-  return `${items}. ${documents} document${documents === 1 ? "" : "s"}, each one linked to the record it proves.`;
+  // "1 document, each one linked to..." is not a sentence anyone reads twice
+  // charitably, and the singular is the shape a first packet takes.
+  const proof = documents === 1 ? "linked to the record it proves" : "each one linked to the record it proves";
+  return `${items}. ${documents} document${documents === 1 ? "" : "s"}, ${proof}.`;
+}
+
+/**
+ * The second line, when some of the proof is still in Storage rather than on
+ * this device. Kept out of the sentence above on purpose: the count of linked
+ * documents is true everywhere, and this is a fact about this device at this
+ * moment. Null when the ZIP would carry everything the sentence claims.
+ */
+export function packetPendingLine({ documents = 0, onDevice = 0 } = {}) {
+  const n = documents - onDevice;
+  if (n <= 0) return null;
+  return `${n} of them ${n === 1 ? "is" : "are"} still coming back from your account on this device. Download once ${n === 1 ? "it lands" : "they land"} and the file carries everything.`;
 }
 
 export async function generateCredentialZip(data) {

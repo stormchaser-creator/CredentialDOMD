@@ -13,7 +13,7 @@
 // Run: node scripts/packet-export.test.mjs   (pure node, no runner)
 import {
   FOLDER_MAP, PACKET_FOLDERS, categorizeDocument,
-  packetDocuments, packetSummary, packetSummaryLine, generateCredentialZip,
+  packetDocuments, packetSummary, packetSummaryLine, packetPendingLine, generateCredentialZip,
 } from "../src/utils/credentialExport.js";
 
 let pass = 0, fail = 0;
@@ -121,7 +121,7 @@ eq("documents count the linked files", summary.documents, 15);
 eq("the ending sentence", packetSummaryLine(summary),
   "15 line items. 15 documents, each one linked to the record it proves.");
 eq("one of each reads as one", packetSummaryLine({ lineItems: 1, documents: 1 }),
-  "1 line item. 1 document, each one linked to the record it proves.");
+  "1 line item. 1 document, linked to the record it proves.");
 eq("no documents yet says so, and claims nothing", packetSummaryLine({ lineItems: 4, documents: 0 }),
   "4 line items. No documents are attached to them yet.");
 ok("no em dash in the ending", !packetSummaryLine(summary).includes("—"));
@@ -137,10 +137,25 @@ const loose = {
   ],
 };
 eq("an unattached file is not counted as proof", packetSummary(loose).documents, 15);
-// A document whose bytes have not come back from storage yet cannot be in
-// the ZIP, so it cannot be counted as being in it either.
-const notHydrated = { ...data, documents: [{ id: "n1", name: "x.pdf", storagePath: "u/n1", linkedTo: "licenses:l1" }] };
-eq("a document with no bytes is not counted", packetSummary(notHydrated).documents, 0);
+// The shape saveData writes: bytes stripped, storagePath kept, re-fetched one
+// file at a time after load. This is a normal document on a second device and
+// in the window after any sign-in, and counting it as absent made the ending
+// state something false about the physician's own file.
+const cached = { ...data, documents: [{ id: "n1", name: "x.pdf", type: "application/pdf", linkedTo: "licenses:l1", storagePath: "u/1" }] };
+const cachedSum = packetSummary(cached);
+eq("a document whose bytes are still in Storage is still linked", cachedSum.documents, 1);
+eq("but it is not on this device yet", cachedSum.onDevice, 0);
+eq("the sentence counts what is linked", packetSummaryLine(cachedSum),
+  "15 line items. 1 document, linked to the record it proves.");
+eq("and the second line says where the rest of it is", packetPendingLine(cachedSum),
+  "1 of them is still coming back from your account on this device. Download once it lands and the file carries everything.");
+eq("two pending read as two", packetPendingLine({ documents: 3, onDevice: 1 }),
+  "2 of them are still coming back from your account on this device. Download once they land and the file carries everything.");
+eq("nothing pending says nothing", packetPendingLine(summary), null);
+eq("everything on device counts as everything", summary.onDevice, 15);
+ok("no em dash in the pending line", !packetPendingLine(cachedSum).includes("\u2014"));
+// The ZIP writer still only writes the bytes it holds.
+eq("the ZIP writer takes the bytes test", packetDocuments(cached, { withBytes: true }).length, 0);
 
 // ── The ZIP itself ──
 const zip = await generateCredentialZip(loose);
