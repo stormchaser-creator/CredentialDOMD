@@ -8,6 +8,7 @@ import Field from "../shared/Field";
 import DeskTable from "../shared/DeskTable";
 import { formRows } from "../../utils/formLayout";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
+import { pushModal, popModal } from "../../utils/deskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
@@ -404,13 +405,17 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
 
   // Escape must close the lightbox, not the modal underneath it — capture
   // phase so this runs before Modal's own document-level Escape handler
+  // The lightbox is a modal layer too, so it joins the stack while up and
+  // the desk keys stay quiet beneath it.
   useEffect(() => {
     if (!lightbox) return;
+    const layer = {};
+    pushModal(layer);
     const onKey = (e) => {
       if (e.key === "Escape") { e.stopPropagation(); setLightbox(null); }
     };
     document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("keydown", onKey, true); popModal(layer); };
   }, [lightbox]);
 
   const linkedDocs = useCallback(

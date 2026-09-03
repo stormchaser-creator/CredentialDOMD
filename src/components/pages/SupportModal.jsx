@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
+import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { edgeErrorMessage } from "../../utils/edgeError";
 import { supabase } from "../../lib/supabase";
 import { compressImage } from "../../utils/documentScanner";
@@ -56,7 +57,7 @@ function timeAgo(iso) {
  * Admin replies also go out by email (trg_notify_ticket_reply -> send-ticket-reply).
  */
 export default function SupportModal({ open, onClose, contextPage, initialTab = "new" }) {
-  const { theme: T, user } = useApp();
+  const { theme: T, user, isDesktop } = useApp();
   const [tab, setTab] = useState(initialTab);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -182,6 +183,36 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     }
   };
 
+  const reset = useCallback(() => {
+    setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
+    setDone(false); setError("");
+    setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
+    setAttachment(null); setAttachError(""); setAttachmentUrl(null);
+  }, []);
+
+  const close = useCallback(() => { onClose(); reset(); }, [onClose, reset]);
+
+  // This sheet is not built on shared/Modal, so it joins the modal stack
+  // itself: the desk keys stay quiet beneath it, and Escape closes it one
+  // layer at a time like every other modal.
+  const token = useRef({});
+  useEffect(() => {
+    if (!open) return;
+    const t = token.current;
+    pushModal(t);
+    return () => popModal(t);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (isDesktop && !isTopModal(token.current)) return;
+      close();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [open, close, isDesktop]);
+
   if (!open) return null;
 
   const submit = async () => {
@@ -212,15 +243,6 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       setSubmitting(false);
     }
   };
-
-  const reset = () => {
-    setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
-    setDone(false); setError("");
-    setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
-    setAttachment(null); setAttachError(""); setAttachmentUrl(null);
-  };
-
-  const close = () => { onClose(); reset(); };
 
   const inputStyle = {
     width: "100%", padding: "10px 12px", borderRadius: 10,

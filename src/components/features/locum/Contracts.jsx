@@ -1,6 +1,7 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useDeskAddShortcut } from "../../../hooks/useDeskKeys";
+import { pushModal, popModal } from "../../../utils/deskKeys";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
@@ -120,6 +121,20 @@ function Contracts() {
 
   // View the original agreement: images full-screen, PDFs in a viewer sheet
   const [lightbox, setLightbox] = useState(null);
+  // Escape must close the lightbox, not the modal underneath it: capture
+  // phase so this runs before Modal's own document-level Escape handler.
+  // The lightbox is a modal layer too, so it joins the stack while up and
+  // the desk keys stay quiet beneath it.
+  useEffect(() => {
+    if (!lightbox) return;
+    const layer = {};
+    pushModal(layer);
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); setLightbox(null); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("keydown", onKey, true); popModal(layer); };
+  }, [lightbox]);
   const openPdfDoc = useCallback((doc) => {
     if (!doc.data) return;
     const byteStr = atob(doc.data.split(",")[1]);

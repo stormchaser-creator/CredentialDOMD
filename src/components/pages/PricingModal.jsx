@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { mailtoHref } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
+import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { FREE_BETA_LABEL, FREE_BETA_BLURB } from "../../constants/beta";
 import {
   TIERS,
@@ -26,7 +27,7 @@ import {
  */
 
 export default function PricingModal({ open, onClose }) {
-  const { theme: T, plan, checkout, isDevMode, isFreeBeta } = useApp();
+  const { theme: T, plan, checkout, isDevMode, isFreeBeta, isDesktop } = useApp();
   // Free beta: billing is off. Show the tier ladder for orientation but no
   // prices, no CTAs, no Stripe. Dev mode keeps its mock switcher.
   const betaMode = isFreeBeta && !isDevMode;
@@ -47,6 +48,27 @@ export default function PricingModal({ open, onClose }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  // This sheet is not built on shared/Modal, so it joins the modal stack
+  // itself: the desk keys stay quiet beneath it, and Escape closes it one
+  // layer at a time like every other modal.
+  const token = useRef({});
+  useEffect(() => {
+    if (!open) return;
+    const t = token.current;
+    pushModal(t);
+    return () => popModal(t);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (isDesktop && !isTopModal(token.current)) return;
+      onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [open, onClose, isDesktop]);
 
   if (!open) return null;
 
