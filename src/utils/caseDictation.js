@@ -89,7 +89,10 @@ export async function parseCaseDictation(transcript, apiKeyOrSettings, categorie
   const todayISO = new Date().toISOString().slice(0, 10);
 
   let raw = null;
-  if ((settings.coderModel || "opus") === "opus" && anthropicAvailable(settings)) {
+  // Gemini by default: filling a case-log form from a sentence is extraction,
+  // and the draft opens for the surgeon's review either way. Following the
+  // coder's setting means one switch covers both if a physician wants Opus.
+  if (settings.coderModel === "opus" && anthropicAvailable(settings)) {
     try { raw = await withOpus(transcript, todayISO, categories, settings); } catch { raw = null; }
   }
   if (raw == null) raw = await withGemini(geminiPrompt(transcript, todayISO, categories), settings.apiKey);

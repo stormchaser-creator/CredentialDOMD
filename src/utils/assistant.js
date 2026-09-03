@@ -408,7 +408,12 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
   const s = settings || { apiKey, anthropicApiKey: anthropicKey };
   const ownOpusKey = !!s.anthropicApiKey;
   let note = null; // one line atop the reply when Gemini took a turn meant for Opus
-  if (anthropicAvailable(s) && claudeCanRead(attachment)) {
+  // Gemini answers by default: it is roughly 25x cheaper per turn and the
+  // difference does not show in a records question. Opus is opt-in per
+  // account (settings.assistantModel === "opus"), and an attachment Claude
+  // cannot read falls through to Gemini either way.
+  const wantsOpus = s.assistantModel === "opus";
+  if (wantsOpus && anthropicAvailable(s) && claudeCanRead(attachment)) {
     try {
       return await anthropicTurn({ history, snapshot, settings: s, attachment });
     } catch (e) {

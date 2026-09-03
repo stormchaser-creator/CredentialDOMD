@@ -339,11 +339,19 @@ function SettingsSection() {
         )}
         <Field label="Code RVUs with" hint={(s.coderModel || "opus") === "opus"
           ? (opusOn
-            ? "The RVU coder sends each dictation to Claude Opus with the same rulebook and catalog. Each dictation counts toward the Opus daily limit; if Opus is unavailable, Gemini codes it and the review says so."
-            : "Claude Opus is not enabled for this account yet, so Gemini codes each dictation until it is (the review says so). Vera and the coder both switch to Opus automatically once it is on.")
-          : "Gemini codes each dictation: fast, included, and the path that was proven on the harness. Pick Claude Opus for the strongest read of a complex operative note."}>
+            ? "Claude Opus reads each dictation against the same rulebook and catalog. It costs about a dollar a month at ten cases and it is the model that got the hard combined cases right, so it stays the default here. Case-log dictation follows this setting. If Opus is ever unreachable, Gemini codes the case and the review says so."
+            : "Claude Opus is not enabled for this account yet, so Gemini codes each dictation until it is, and the review says so.")
+          : "Gemini codes each dictation. It is cheaper and quick, but on a long combined operative note it has picked the wrong code where Opus did not. Worth knowing, since these numbers are billed."}>
           <select value={s.coderModel || "opus"} onChange={e => update("coderModel", e.target.value)} style={{ ...iS, appearance: "auto" }}>
             {CODER_MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Vera answers with" hint={s.assistantModel === "opus"
+          ? "Claude Opus. The strongest read of your records, and the most expensive per question."
+          : "Gemini. Roughly 25 times cheaper per question than Claude Opus, and the difference does not show on a records question. Switch to Opus if you want the deepest reasoning."}>
+          <select value={s.assistantModel || "gemini"} onChange={e => update("assistantModel", e.target.value)} style={{ ...iS, appearance: "auto" }}>
+            <option value="gemini">Gemini (cheaper, the default)</option>
+            <option value="opus">Claude Opus (strongest)</option>
           </select>
         </Field>
         <Field label="Your own Gemini key (optional)" hint={s.apiKey

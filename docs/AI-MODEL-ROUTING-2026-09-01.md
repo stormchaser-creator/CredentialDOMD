@@ -54,3 +54,35 @@ Since 2026-09-02 every proxied call carries the model, the vendor's token counts
 
 The daily call caps above stay as a backstop under the dollars. The RVU coder's review note
 and Vera's reply both say "The monthly AI budget is used up, so Gemini answered." on that 429.
+
+
+## Revision, 2026-09-03: Gemini is the default and nothing is capped
+
+Eric: "we just use the gemini api key as it is cheap and not set caps, as caps
+mean the app wont work." Both halves are implemented, with one exception that
+is called out rather than buried.
+
+**No cap ever stops the app.** The Gemini path in `ai-proxy` counted calls and
+refused past 200 per physician per UTC day. That is the cap that made the app
+stop working, and it is gone. Calls are still counted and costed, because the
+number is useful and refusing on it is not.
+
+**The Anthropic ceilings stay, and they are not caps in that sense.** Past the
+per-physician monthly dollar line an Opus request routes to Gemini, which the
+proxy always serves, so the feature keeps working on a cheaper model. They
+exist to protect availability: without them a few heavy accounts reach
+Anthropic's own organization-wide spend cap, and that one pauses Opus for every
+physician at once with no fallback at all.
+
+**Routing after this change**
+
+| Surface | Model | Why |
+|---|---|---|
+| Vera | Gemini, Opus opt-in per account | The cost driver: 55 to 75 percent of the Opus bill, and the difference does not show on a records question |
+| Case-log dictation | Gemini, follows the coder setting | Filling a form from a sentence is extraction, and the draft opens for review |
+| RVU coder | **Opus stays the default** | About a dollar a month at ten cases, and the model that got the combined cardiac and posterior fossa cases right where Gemini did not. These numbers are billed |
+| Scans, CME import, work dictation, CPT lookup | Gemini | Extraction and lookup |
+
+The coder is the exception. It is not where the money goes, and it is where a
+wrong answer costs more than the model does. Flipping it is one line: the
+default in `src/utils/cptCoder.js`, or the "Code RVUs with" picker in Settings.

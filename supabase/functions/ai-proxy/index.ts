@@ -16,7 +16,6 @@
  *     403  profiles.access_status is not active (admins always pass)
  *     400  bad path / bad JSON
  *     503  { error: "shared_key_not_configured" }
- *     429  { error: "quota", used, limit }   past the per-user daily cap
  *     else Gemini's own status + JSON body, verbatim
  *     The monthly dollar budget never blocks Gemini: it is cheap, and it is
  *     where the app lands once Opus is over budget. Calls are still costed.
@@ -47,7 +46,7 @@
  * (_shared/aiPricing.ts; null for a model that is not in the table).
  *
  * Daily caps are per provider, per user, per UTC calendar day:
- *   Gemini     AI_DAILY_LIMIT secret,        default DEFAULT_DAILY_LIMIT
+ *   Gemini     counted, never refused: the app must always answer
  *   Anthropic  ANTHROPIC_DAILY_LIMIT secret, default DEFAULT_ANTHROPIC_DAILY_LIMIT
  * Dollar budgets are per user, per UTC calendar month, both providers summed:
  *   AI_BUDGET_SOFT_USD secret, default DEFAULT_BUDGET_SOFT_USD (warn in Settings)
@@ -63,7 +62,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import { meterUsage } from "../_shared/aiPricing.ts";
 
-const DEFAULT_DAILY_LIMIT = 200; // calls per user per UTC day. Override with the AI_DAILY_LIMIT secret.
+// Reported in the status response so Settings can show the day's usage.
+// Nothing is refused on this number; see the Gemini path below.
+const DEFAULT_DAILY_LIMIT = 200;
 const DAILY_LIMIT = (() => {
   const n = parseInt(Deno.env.get("AI_DAILY_LIMIT") || "", 10);
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_DAILY_LIMIT;
@@ -294,8 +295,11 @@ serve(async (req) => {
       if (used >= ANTHROPIC_DAILY_LIMIT) {
         return json(429, { error: "quota", used, limit: ANTHROPIC_DAILY_LIMIT, provider: "anthropic" }, cors, NO_RETRY);
       }
-      // The month's dollars: past the hard line Opus is done until the 1st;
-      // the app answers on Gemini, which this proxy keeps serving.
+      // The month's dollars. This is NOT a cap that stops the app: past the
+      // line the request routes to Gemini, which this proxy always serves.
+      // It exists to protect availability, not to ration it. Without it a
+      // few heavy accounts reach Anthropic's own org-wide spend cap, and
+      // that one pauses Opus for every physician at once with no fallback.
       const spent = await monthSpentUsd();
       if (spent >= BUDGET_HARD_USD) {
         return json(429, { error: "budget", spent_usd: spent, budget_usd: BUDGET_HARD_USD, provider: "anthropic" }, cors, NO_RETRY);
@@ -377,8 +381,12 @@ serve(async (req) => {
   if (!sharedKey) return json(503, { error: "shared_key_not_configured" });
 
   if (!user.isAdmin) {
-    const used = await usedToday("gemini");
-    if (used >= DAILY_LIMIT) return json(429, { error: "quota", used, limit: DAILY_LIMIT });
+    // Gemini is the floor and the floor never gives way. A per-user cap here
+    // meant the app simply stopped working for that physician for the rest of
+    // the UTC day, which is not a trade worth making at $0.30 per million
+    // input tokens. Calls are still counted and costed for visibility; the
+    // count no longer refuses anyone.
+    await usedToday("gemini");
   }
 
   const chars = promptChars(payload.body);
