@@ -42,7 +42,7 @@ import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { isNonExpiring, mailtoHref } from "./utils/helpers";
-import { buildSetup, setupOwns } from "./utils/setupTasks";
+import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
@@ -605,9 +605,17 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // setup does not own.
   const setupOwnsDates = setupOwns(setupBoard, "dates");
   const setupOwnsProfile = setupOwns(setupBoard, "identity");
+  // Suppress exactly the records the setup drawer lists, by id. Filtering by
+  // section instead hid every dateless license from BOTH surfaces: dateless()
+  // covers medical, DEA and CSR only, so a fluoroscopy permit or an ECFMG
+  // certificate fell through the gap and nothing asked for its date.
+  const setupOwnedDateIds = useMemo(
+    () => new Set(setupOwnsDates ? dateless(data).map(l => l.id) : []),
+    [setupOwnsDates, data]
+  );
   const missingExpirationBanner = useMemo(
-    () => (setupOwnsDates ? missingExpiration.filter(m => m.sec !== "licenses") : missingExpiration),
-    [missingExpiration, setupOwnsDates]
+    () => missingExpiration.filter(m => !setupOwnedDateIds.has(m.item.id)),
+    [missingExpiration, setupOwnedDateIds]
   );
 
   // States where a DEA registration (or other state credential) exists but no

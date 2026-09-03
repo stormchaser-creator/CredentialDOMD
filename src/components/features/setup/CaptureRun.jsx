@@ -100,12 +100,12 @@ export default function CaptureRun({
 
   const advance = useCallback(() => {
     setDraft(null); setStaged(null); setNote(""); setProblem("");
-    setIdx((i) => {
-      const n = i + 1;
-      setStage(n >= run.length ? "done" : "pick");
-      return n;
-    });
-  }, [run.length]);
+    // Both moves are computed from idx OUTSIDE the updater: React may invoke
+    // an updater more than once, and a setStage inside it would be a side
+    // effect running on every invocation.
+    setIdx((i) => i + 1);
+    setStage((idx + 1) >= run.length ? "done" : "pick");
+  }, [idx, run.length]);
 
   // Auto-advance: the tick is shown, then the next record is already on
   // screen. Leaving the run mid-tick cancels the timer, never the work.

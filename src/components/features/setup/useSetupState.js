@@ -62,7 +62,7 @@ const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); }
 const snapshot = () => pending;
 
 export function useSetupState() {
-  const { data, updateSettings, isPro, isFreeBeta, hasSubscription, subLoading, loaded, user } = useApp();
+  const { data, updateSettings, isPro, isFreeBeta, hasSubscription, subLoading, loaded, loadedFrom, user } = useApp();
   const userId = user?.id || null;
   // The optimistic overlay: a tap must move the board now, not in a second.
   const queued = useSyncExternalStore(subscribe, snapshot, snapshot);
@@ -105,18 +105,20 @@ export function useSetupState() {
   const stampTier1Done = useCallback(() => commit((st) =>
     st.tier1DoneAt ? st : withTier1Done(st, new Date().toISOString(), pruneArgs)), [commit, pruneArgs]);
 
-  // First render for an account that has never seen the board. Gated on
-  // `loaded` so an account that IS already set up is stamped complete rather
-  // than being told to start setting up during the empty first paint.
+  // First render for an account that has never seen the board. Gated on a
+  // real cloud load: `loaded` alone also goes true for the local offline
+  // fallback, and a degraded file there reads as a brand-new account. Left
+  // ungated, the next real load stamps tier1DoneAt and congratulates an
+  // established physician for finishing a setup they never ran.
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || loadedFrom !== "cloud") return;
     const patch = firstRenderPatch(setup);
     if (!patch) return;
     commit((st) => {
       const started = withStarted(st, patch.startedAt, pruneArgs);
       return patch.tier1DoneAt ? withTier1Done(started, patch.tier1DoneAt, pruneArgs) : started;
     });
-  }, [loaded, setup, commit, pruneArgs]);
+  }, [loaded, loadedFrom, setup, commit, pruneArgs]);
 
   // lastTouched: the last time any task actually closed. The card's copy
   // reads it ("You added 4 licenses on Monday"), so it must not move when

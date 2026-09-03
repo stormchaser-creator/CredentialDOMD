@@ -36,6 +36,10 @@ export default function SetupCard({ onOpenSetup }) {
   // why the moment is its own three-state latch rather than a read of
   // `form`: the stamp flips form to D immediately.
   const [moment, setMoment] = useState(null); // null | "open" | "done"
+  // Adjusting state during render is React's own recommendation for state
+  // derived from props (it re-renders before painting, with no extra pass);
+  // an effect here would flash the wrong card for one frame and the linter
+  // rejects it. The effect below does the OTHER job, the durable stamp.
   if (form === CARD_FORM.B && moment === null) setMoment("open");
   useEffect(() => {
     if (form === CARD_FORM.B) stampTier1Done();
