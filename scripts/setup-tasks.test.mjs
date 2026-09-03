@@ -773,5 +773,33 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("a course certification is still non-expiring", dateless(course).map((l) => l.id), []);
 }
 
+// ---------------------------------------------------------------------------
+// The Home banner and the setup drawer must cover the SAME records. dateless()
+// is medical / DEA / CSR only, so any other undated license has to stay
+// OUTSIDE what setup claims to own, or it falls through both surfaces and
+// nothing ever asks for its date. (Branch review P1, 2026-09-02.)
+{
+  const data = {
+    settings: { name: "Eric Whitney", degreeType: "DO", primaryState: "CO" },
+    licenses: [
+      { id: "med", type: "State Medical License (DO)", state: "CO", expirationDate: "2027-05-01" },
+      { id: "permit", type: "Fluoroscopy Permit", state: "CA" },
+      { id: "ecfmg", type: "ECFMG Certificate" },
+      { id: "dea", type: "DEA Registration", state: "CO" },
+    ],
+  };
+  const owned = dateless(data).map(l => l.id);
+  ok("dateless claims the undated DEA", owned.includes("dea"), owned.join(","));
+  ok("dateless leaves a fluoroscopy permit alone", !owned.includes("permit"), owned.join(","));
+  ok("dateless leaves an ECFMG certificate alone", !owned.includes("ecfmg"), owned.join(","));
+  ok("a dated medical license is not claimed", !owned.includes("med"), owned.join(","));
+  // The Home banner filter is `!ownedIds.has(id)`, so both unclaimed rows survive.
+  const ownedSet = new Set(owned);
+  const bannerKeeps = ["permit", "ecfmg", "dea"].filter(id => !ownedSet.has(id));
+  ok("the banner still speaks for the records setup does not list",
+    bannerKeeps.join(",") === "permit,ecfmg", bannerKeeps.join(","));
+}
+
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
