@@ -4,7 +4,9 @@
  * Three routes, decided by the local part of the address the message was sent to:
  *
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
- *     Sender must match a profile (lower(profiles.email) = lower(from)). Every
+ *     Sender must match a profile: lower(profiles.email) = lower(from), or a
+ *     CONFIRMED row in forwarding_addresses (the physician added the address in
+ *     More > Settings > Email and opened the link sent to it). Every
  *     PDF / image attachment is copied into the `documents` Storage bucket at
  *     <auth_user_id>/<doc id> and a `documents` row is written with
  *     type = "cme-certificate-inbox" and no linked_to, so the app shows it under
@@ -15,8 +17,9 @@
  *
  *   docs@ | requests@ | packets@credentialdomd.com   Document requests.
  *     A credentialer asked the physician for documents; the physician forwards
- *     that email here from the address on their profile. Same sender matching
- *     and authentication as cme@. The ORIGINAL requester (From:), subject and
+ *     that email here from the address on their profile, or from any address
+ *     they have confirmed as a forwarding address. Same sender matching and
+ *     authentication as cme@. The ORIGINAL requester (From:), subject and
  *     body are parsed out of the forwarded text (Gmail / Outlook / Apple Mail
  *     header blocks) and a `document_requests` row is written; PDF / image
  *     attachments (the requester's checklist) are stored as documents with
@@ -207,9 +210,16 @@ function pickOurAddress(ev: NonNullable<ReceivedEvent["data"]>): string {
   return ours ?? candidates[0] ?? "";
 }
 
-/** ilike pattern with % and _ escaped so an address is matched literally. */
+/**
+ * ilike pattern with every wildcard escaped, so an address is matched literally.
+ *
+ * Three characters, not two. % and _ are SQL's; * is PostgREST's, which
+ * rewrites it to % on the way to the ilike operator. Leaving * unescaped made
+ * every lookup below a prefix search over addresses. Kept identical to
+ * ilikeLiteral in supabase/functions/forwarding-address/lib.ts.
+ */
 function ilikeLiteral(s: string): string {
-  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+  return s.replace(/[\\%_*]/g, (c) => `\\${c}`);
 }
 
 function isAutomatedSender(from: string, headers: Record<string, string>): boolean {
@@ -391,15 +401,68 @@ async function countSince(minutes: number, apply: (q: AnyQuery) => AnyQuery = (q
 
 // ─── Shared by the physician routes (cme@, docs@) ─────────────────────────────
 
-/** Sender -> profile. profiles.email is what the physician typed in Settings. */
+/**
+ * Sender -> profile, in two passes. This function decides whose account
+ * receives a forwarded credentialing document, attachments and all, so the
+ * order of the passes is the whole security question.
+ *
+ * PROVEN FIRST. forwarding_addresses is checked before profiles.email, because
+ * the two claims are not equally good. A forwarding address is usable only
+ * after somebody opened a link sent to that mailbox and pressed Confirm, so it
+ * is evidence of control. profiles.email is a text box in Settings: a physician
+ * types it, nobody checks it, and migration 20260819_lock_access_status
+ * deliberately left the column editable by its owner (the identity lock freezes
+ * auth_user_id and access_status, not email).
+ *
+ * While the typed address won, that asymmetry was a takeover: an account that
+ * typed name@hospital.org into its own profile outranked the account that had
+ * confirmed name@hospital.org by reading the mailbox, and the forwarded mail
+ * went to the one that typed it. Confirmed now wins, and profiles.email is a
+ * fallback for the ordinary case where nobody registered anything.
+ *
+ * The other half of that fix lives in the database: profiles.email carries a
+ * unique index on lower(email) (migration 20260903e), so a second account
+ * cannot even hold a copy of an address the first one typed.
+ *
+ * Only verified_at rows count in pass 1, and a verified address is unique
+ * across accounts (partial unique index), so pass 1 matches at most one
+ * account. Both passes filter ilike results down to an exact lowercased match:
+ * ilike folds more than case, and this decides where a document lands.
+ */
 async function matchProfile(from: string): Promise<MatchedProfile | null> {
-  const { data: rows, error: pErr } = await db.from("profiles")
-    .select("id, auth_user_id, email, access_status")
-    .ilike("email", ilikeLiteral(from))
-    .limit(5);
-  if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
-  const profiles = ((rows ?? []) as { id: string; auth_user_id: string | null; email: string | null; access_status: string | null }[])
-    .filter((p) => (p.email ?? "").trim().toLowerCase() === from && p.auth_user_id) as MatchedProfile[];
+  const confirmed = await profilesByIds(async () => {
+    const { data: addrs, error } = await db.from("forwarding_addresses")
+      .select("user_id, email, verified_at")
+      .ilike("email", ilikeLiteral(from))
+      .not("verified_at", "is", null)
+      .limit(5);
+    if (error) throw new Error(`forwarding address lookup: ${error.message}`);
+    const owners = ((addrs ?? []) as { user_id: string; email: string | null; verified_at: string | null }[])
+      .filter((a) => (a.email ?? "").trim().toLowerCase() === from && a.verified_at)
+      .map((a) => a.user_id);
+    if (owners.length === 0) return [];
+    const { data: rows, error: pErr } = await db.from("profiles")
+      .select("id, auth_user_id, email, access_status").in("id", owners).limit(5);
+    if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
+    return (rows ?? []) as ProfileLookupRow[];
+  });
+  if (confirmed) return confirmed;
+
+  return await profilesByIds(async () => {
+    const { data: rows, error } = await db.from("profiles")
+      .select("id, auth_user_id, email, access_status")
+      .ilike("email", ilikeLiteral(from))
+      .limit(5);
+    if (error) throw new Error(`profile lookup: ${error.message}`);
+    return ((rows ?? []) as ProfileLookupRow[]).filter((p) => (p.email ?? "").trim().toLowerCase() === from);
+  });
+}
+
+type ProfileLookupRow = { id: string; auth_user_id: string | null; email: string | null; access_status: string | null };
+
+/** An account with access wins over one without, same rule for both passes. */
+async function profilesByIds(load: () => Promise<ProfileLookupRow[]>): Promise<MatchedProfile | null> {
+  const profiles = (await load()).filter((p) => p.auth_user_id) as MatchedProfile[];
   profiles.sort((a, b) => (a.access_status === "active" ? 0 : 1) - (b.access_status === "active" ? 0 : 1));
   return profiles[0] ?? null;
 }
@@ -535,7 +598,7 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account; forward from the email on your account or add it in Settings.
+      `This address is not registered to a CredentialDOMD account. Forward from the email on your account, or add this address in Settings and open the link we send here to confirm it.
 
 Open the app: ${APP_URL} (More > Settings > Email)
 
@@ -698,7 +761,7 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account; forward the request from the email on your account, or add it in Settings (More > Settings > Email).
+      `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account, or add this address in Settings (More > Settings > Email) and open the link we send here to confirm it.
 
 Open the app: ${APP_URL}
 

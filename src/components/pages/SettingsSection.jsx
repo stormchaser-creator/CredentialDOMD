@@ -20,6 +20,11 @@ import { generateAlerts, buildNotificationMessage, fireBrowserNotification, comp
 import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, describeAiBudget, useAnthropicAvailable } from "../../utils/aiClient";
 import { CODER_MODELS } from "../../utils/cptCoder";
 import FoundingMemberBadge from "../shared/FoundingMemberBadge";
+import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
+import {
+  addProblem, normalizeAddress, pendingLine, resendBlockedReason,
+  REQUESTS_INBOX, CME_INBOX, LINK_TTL_HOURS,
+} from "../../utils/forwardingAddresses";
 
 function SettingsSection({ onUpgrade }) {
   const { data, setData, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
@@ -372,6 +377,10 @@ function SettingsSection({ onUpgrade }) {
         <Field label="Professional Summary" hint="Opening paragraph of your CV"><textarea value={s.professionalSummary || ""} onChange={e => update("professionalSummary", e.target.value)} style={{ ...iS, minHeight: 96, resize: "vertical", fontFamily: "inherit" }} placeholder="Board-certified neurosurgeon with…" /></Field>
         <Field label="CV Highlight Line" hint="One bold line under the summary — books, projects, distinctions"><input value={s.cvHighlights || ""} onChange={e => update("cvHighlights", e.target.value)} style={iS} placeholder="e.g. Author of two books" /></Field>
       </div>
+
+      {/* Email: the addresses inbound mail may be forwarded from. The
+          "not registered" reply points a physician here by name. */}
+      <EmailBlock accountEmail={s.email || ""} T={T} iS={iS} />
 
       {/* AI */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
@@ -992,6 +1001,196 @@ function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Settings > Email. Which addresses a physician may forward mail FROM.
+ *
+ * The account address is the primary and is not managed here: it always
+ * routes, it cannot be removed, and it is edited in Physician Profile above.
+ * Everything under it is a registered forwarding address, and a forwarding
+ * address does nothing at all until the mailbox it names opens the link sent
+ * to it. That is the whole security property of the feature: a confirmed
+ * address routes another person's credentialing mail, attachments and all,
+ * into this account, so control of the mailbox is what earns it.
+ *
+ * The panel refuses locally what the server refuses (utils/forwardingAddresses
+ * mirrors the wording), but the server still decides; when it says no, its own
+ * sentence is what shows, because it is the one that knows whether another
+ * account already holds the address.
+ */
+function EmailBlock({ accountEmail, T, iS }) {
+  const { rows, loading, error, busyId, add, resend, remove } = useForwardingAddresses();
+  const [draft, setDraft] = useState("");
+  const [note, setNote] = useState(null);          // { ok: bool, text }
+  const [confirmId, setConfirmId] = useState(null); // remove asks once
+  const [now, setNow] = useState(() => Date.now());
+
+  // "Link sent 4 minutes ago" and the ten minute Resend floor both move on
+  // their own, so the panel re-reads the clock rather than the server.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const typed = normalizeAddress(draft);
+  const problem = addProblem({ email: draft, accountEmail, rows });
+  const adding = busyId === "add";
+  const canAdd = Boolean(typed) && !problem && !adding;
+
+  const say = (ok, text) => setNote({ ok, text });
+
+  const onAdd = async () => {
+    if (!canAdd) return;
+    setNote(null);
+    const res = await add(typed);
+    if (res.ok) {
+      setDraft("");
+      say(true, `Confirmation link sent to ${res.sentTo || typed}. Open it from that mailbox and the address starts working.`);
+    } else {
+      say(false, res.message);
+    }
+  };
+
+  const onResend = async (row) => {
+    setNote(null);
+    const res = await resend(row.id);
+    say(res.ok, res.ok ? `Confirmation link sent again to ${row.email}.` : res.message);
+  };
+
+  const onRemove = async (row) => {
+    setConfirmId(null);
+    setNote(null);
+    const res = await remove(row.id);
+    if (!res.ok) return say(false, res.message);
+    say(true, row.verified_at
+      ? `${row.email} removed. Mail forwarded from it no longer reaches this account.`
+      : `${row.email} removed.`);
+  };
+
+  const smallBtn = (tone) => ({
+    padding: "7px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+    border: tone === "danger" ? "none" : `1px solid ${T.border}`,
+    backgroundColor: tone === "danger" ? T.dangerDim : "transparent",
+    color: tone === "danger" ? T.danger : T.textMuted,
+  });
+
+  const badge = (bg, fg, text) => (
+    <span style={{
+      flexShrink: 0, fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5,
+      padding: "3px 7px", borderRadius: 6, backgroundColor: bg, color: fg,
+    }}>{text}</span>
+  );
+
+  const rowBox = (extra) => ({
+    padding: "12px 14px", borderRadius: 12, marginBottom: 6,
+    backgroundColor: T.input, border: `1px solid ${T.inputBorder}`, ...extra,
+  });
+
+  return (
+    <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, color: T.text }}>
+        <EmailIcon />
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: 0 }}>Email</h3>
+      </div>
+      <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14, lineHeight: 1.5 }}>
+        Mail forwarded from any of these addresses to {REQUESTS_INBOX} becomes a document request on this account, and {CME_INBOX} files certificates the same way.
+      </div>
+
+      {/* The account address. Always works, not removable here. */}
+      <div style={rowBox({ backgroundColor: T.accentGlow, borderColor: T.accent })}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>
+            {accountEmail || "No account email set yet"}
+          </span>
+          {badge(T.accent, "#fff", "Account")}
+        </div>
+        <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>
+          {accountEmail
+            ? "Always on. Change it in Physician Profile above."
+            : "Set your email in Physician Profile above so forwarded mail can reach you."}
+        </div>
+      </div>
+
+      {loading && rows.length === 0 && (
+        <div style={{ fontSize: 13, color: T.textDim, padding: "8px 2px" }}>Loading your other addresses…</div>
+      )}
+      {error && <div style={{ fontSize: 13, color: T.danger, fontWeight: 600, padding: "8px 2px" }}>{error}</div>}
+
+      {rows.map((r) => {
+        const busy = busyId === r.id;
+        const wait = resendBlockedReason(r, now);
+        return (
+          <div key={r.id} style={rowBox()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{r.email}</span>
+              {r.verified_at
+                ? badge(T.successDim, T.success, "Confirmed")
+                : badge(T.warningDim, T.warning, "Waiting")}
+            </div>
+            <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>
+              {r.verified_at ? "Confirmed from that mailbox. Forwarded mail from it reaches this account." : pendingLine(r, now)}
+            </div>
+            {wait && <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>{wait}</div>}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+              {!r.verified_at && (
+                <button onClick={() => onResend(r)} disabled={busy || Boolean(wait)}
+                  style={{ ...smallBtn(), opacity: busy || wait ? 0.5 : 1, cursor: busy || wait ? "default" : "pointer" }}>
+                  {busy ? "Sending…" : "Resend link"}
+                </button>
+              )}
+              {confirmId === r.id ? (
+                <>
+                  <button onClick={() => onRemove(r)} disabled={busy} style={{ ...smallBtn("danger"), opacity: busy ? 0.5 : 1 }}>
+                    {busy ? "Removing…" : "Yes, remove"}
+                  </button>
+                  <button onClick={() => setConfirmId(null)} style={smallBtn()}>Keep it</button>
+                </>
+              ) : (
+                <button onClick={() => { setNote(null); setConfirmId(r.id); }} style={smallBtn("danger")}>Remove</button>
+              )}
+            </div>
+            {confirmId === r.id && (
+              <div style={{ fontSize: 12, color: T.textDim, marginTop: 6, lineHeight: 1.45 }}>
+                {r.verified_at
+                  ? "Mail forwarded from this address will stop reaching your account."
+                  : "The link already sent to this address stops working."}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div style={{ marginTop: 10 }}>
+        <Field label="Add an address you forward from"
+          hint={`We email a confirmation link to it. The link works once and lasts ${LINK_TTL_HOURS} hours, and the address does nothing until someone opens it from that mailbox and presses Confirm.`}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="email" value={draft} inputMode="email" autoComplete="off"
+              onChange={(e) => { setDraft(e.target.value); setNote(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") onAdd(); }}
+              placeholder="you@hospital.org"
+              style={{ ...iS, flex: 1, minWidth: 0, ...(problem ? { borderColor: T.danger } : {}) }} />
+            <button onClick={onAdd} disabled={!canAdd} style={{
+              padding: "12px 18px", borderRadius: 10, border: "none",
+              backgroundColor: canAdd ? T.accent : T.border,
+              color: canAdd ? "#fff" : T.textDim,
+              fontSize: 14, fontWeight: 700, whiteSpace: "nowrap",
+              cursor: canAdd ? "pointer" : "default",
+            }}>{adding ? "Sending…" : "Add"}</button>
+          </div>
+          {problem && <div style={{ fontSize: 12.5, color: T.danger, marginTop: 6, lineHeight: 1.45 }}>{problem}</div>}
+        </Field>
+      </div>
+
+      {note && (
+        <div style={{
+          fontSize: 13, fontWeight: 600, lineHeight: 1.45, padding: "10px 12px", borderRadius: 10,
+          backgroundColor: note.ok ? T.successDim : T.dangerDim,
+          color: note.ok ? T.success : T.danger,
+        }}>{note.text}</div>
       )}
     </div>
   );

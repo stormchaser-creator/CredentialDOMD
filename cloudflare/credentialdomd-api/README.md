@@ -10,6 +10,7 @@ Cloudflare (this copy was pulled from the deployed script and then changed).
 | `POST /api/waitlist`         | `waitlist_signup`  | 5 / 10 min        | 20 / 10 min   |
 | `POST /api/waitlist-attempt` | `waitlist_attempt` | 15 / 10 min       | 60 / 10 min   |
 | `POST /api/pv`               | `track_pv`         | 60 / 10 min       | see below     |
+| `GET /api/confirm-forwarding` | proxies the `forwarding-address` function's GET | 20 / 10 min | 24 h single-use token |
 
 The DB caps live in `supabase/migrations/20260816_ratelimit.sql` and are the
 real ceiling on how many Resend welcome emails can be provoked. The Worker
@@ -22,6 +23,17 @@ the RPC (supabase/migrations/20260827_page_views.sql) whitelists the path,
 reduces the referrer to its registrable domain, and upserts a daily counter.
 Counts only, no visitor data. DB-side ceilings: 100k hits/row/day, row
 cardinality folds to 'other' past 2,000 rows/day.
+
+`/api/confirm-forwarding` (2026-09-03) is the link in the forwarding-address
+confirmation email. It forwards `?token=` to
+`functions/v1/forwarding-address` and returns that page as first-party
+`text/html`. It is here for two reasons: the Supabase functions gateway
+rewrites any HTML response to `text/plain` under a sandbox CSP, so a page
+served from `*.supabase.co` shows its own source; and a link a physician opens
+from a hospital mailbox meets the same content filters this relay exists for.
+The Worker keeps no copy of the token and logs nothing. All three outcomes
+(confirmed, expired, unknown token) come back as HTTP 200 with a page, on
+purpose: a guessed link learns nothing.
 
 Status codes seen by the landing page: 200 ok, 400 bad address, 409 already
 on the list, 413 body too large, 429 throttled (Worker or DB), 404 unknown path.

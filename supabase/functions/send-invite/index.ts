@@ -61,10 +61,15 @@ serve(async (req) => {
   const name = String(body.name || "").trim() || null;
   const note = String(body.note || "").trim() || null;
   const leadId = body.lead_id || null;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(400, { error: "Invalid email" });
+  // No wildcards: the lookups below are exact now, but a % or * or _ in an
+  // address is never legitimate and used to reach ilike, where an invite
+  // for *@*.com matched and then activated whichever profile came back.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || /[%_*\\]/.test(email)) {
+    return json(400, { error: "Invalid email" });
+  }
 
   const db = who.db;
-  const { data: existing } = await db.from("beta_access").select("*").ilike("email", email).maybeSingle();
+  const { data: existing } = await db.from("beta_access").select("*").eq("email", email).maybeSingle();
   let row = existing;
   if (!existing) {
     const { data, error } = await db.from("beta_access")
@@ -79,8 +84,9 @@ serve(async (req) => {
   }
 
   // If they already have a profile under this email, activate it now.
-  const { data: prof } = await db.from("profiles").select("id, access_status").ilike("email", email).maybeSingle();
-  if (prof && prof.access_status !== "active") {
+    // Exact, and re-checked below: this branch flips an account to active.
+  const { data: prof } = await db.from("profiles").select("id, access_status, email").eq("email", email).maybeSingle();
+  if (prof && String(prof.email || "").trim().toLowerCase() === email && prof.access_status !== "active") {
     await db.from("profiles").update({ access_status: "active" }).eq("id", prof.id);
     await db.from("beta_access").update({ status: "active", profile_id: prof.id, activated_at: new Date().toISOString() }).eq("id", row.id);
   }

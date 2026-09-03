@@ -26,7 +26,8 @@
  *           field_proposals, admin_messages (to the physician) and
  *           admin_message_replies, document_requests, inbound_emails,
  *           ai_usage, client_errors (by profile id and by Clerk id),
- *           user_events, backups, deleted_items
+ *           user_events, backups, deleted_items, forwarding_addresses and
+ *           forwarding_address_sends
  *   objects documents/<clerkId>/, documents/tickets/<id>/ for each ticket,
  *           backups/<clerkId>/ and backups/<profileId>/, plus any object a
  *           backups row still points at

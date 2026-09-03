@@ -7,6 +7,8 @@ import { docMime } from "../../utils/inboxDocs";
 import { docBytes, fmtBytes } from "../../utils/docLabel";
 import EmailPacketModal, { PACKET_FROM_ADDRESS, REQUEST_REPLIED_EVENT } from "./EmailPacketModal";
 import { REQUESTS_CHANGED_EVENT } from "../../hooks/useNewRequestCount";
+import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
+import { forwardingSenders, joinAddresses } from "../../utils/forwardingAddresses";
 
 // Where physicians forward credentialer emails. The inbound edge function
 // also accepts requests@ and packets@; docs@ is the one we print.
@@ -72,7 +74,7 @@ function attachmentsFor(req, documents) {
  * when it is not passed the inbox opens its own.
  */
 function RequestsInbox({ onAskVera, onReplyEmail }) {
-  const { data, user, theme: T } = useApp();
+  const { data, user, theme: T, navigate } = useApp();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -82,6 +84,13 @@ function RequestsInbox({ onAskVera, onReplyEmail }) {
   const [emailReq, setEmailReq] = useState(null);
 
   const accountEmail = data.settings?.email || user?.email || "your account email";
+  // Inbound mail is matched by SENDER, and the account address is no longer
+  // the only one that matches: a confirmed forwarding address does too. Naming
+  // only the account address here told a physician who registered their
+  // hospital email that it would not work.
+  const { rows: forwarding } = useForwardingAddresses();
+  const senders = useMemo(() => forwardingSenders(accountEmail, forwarding), [accountEmail, forwarding]);
+  const sendersText = joinAddresses(senders) || accountEmail;
 
   const load = useCallback(async ({ quiet } = {}) => {
     if (!supabase) { setErr("Not connected to your account."); setLoading(false); return; }
@@ -266,7 +275,18 @@ function RequestsInbox({ onAskVera, onReplyEmail }) {
         }}>{loading ? "Refreshing…" : "Refresh"}</button>
       </div>
       <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
-        Emails from credentialers asking for documents. Forward them from <b style={{ color: T.text }}>{accountEmail}</b> to <b style={{ color: T.text }}>{REQUESTS_ADDRESS}</b> and they show up here.
+        Emails from credentialers asking for documents. Forward them from{" "}
+        {senders.map((e, i) => (
+          <span key={e}>
+            {i > 0 ? (i === senders.length - 1 ? " or " : ", ") : ""}
+            <b style={{ color: T.text }}>{e}</b>
+          </span>
+        ))}
+        {" "}to <b style={{ color: T.text }}>{REQUESTS_ADDRESS}</b> and they show up here, or{" "}
+        <button onClick={() => navigate("more", "settings")} style={{
+          padding: 0, border: "none", background: "none", color: T.accent,
+          font: "inherit", fontWeight: 700, cursor: "pointer", textDecoration: "underline",
+        }}>add another address in Settings</button>.
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -291,7 +311,7 @@ function RequestsInbox({ onAskVera, onReplyEmail }) {
       ) : visible.length === 0 ? (
         tab === "new" ? (
           <EmptyState icon={"📨"} title="No document requests"
-            subtitle={`Forward document requests from ${accountEmail} to ${REQUESTS_ADDRESS} and they show up here. Vera matches the ask against your file; Reply by email sends the documents attached.`} />
+            subtitle={`Forward document requests from ${sendersText} to ${REQUESTS_ADDRESS} and they show up here. Vera matches the ask against your file; Reply by email sends the documents attached.`} />
         ) : (
           <div style={{ fontSize: 13.5, color: T.textDim, padding: "24px 0", textAlign: "center" }}>
             {tab === "replied" ? "Nothing replied to yet." : "Nothing dismissed."}

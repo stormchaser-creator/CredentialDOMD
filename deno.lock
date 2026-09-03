@@ -16,8 +16,14 @@
     "https://deno.land/std@0.168.0/async/retry.ts": "e8e5173623915bbc0ddc537698fa418cf875456c347eda1ed453528645b42e67",
     "https://deno.land/std@0.168.0/async/tee.ts": "3a47cc4e9a940904fd4341f0224907e199121c80b831faa5ec2b054c6d2eff5e",
     "https://deno.land/std@0.168.0/http/server.ts": "e99c1bee8a3f6571ee4cdeb2966efad465b8f6fe62bec1bdb59c1f007cc4d155",
+    "https://deno.land/std@0.224.0/encoding/_util.ts": "beacef316c1255da9bc8e95afb1fa56ed69baef919c88dc06ae6cb7a6103d376",
+    "https://deno.land/std@0.224.0/encoding/base64.ts": "dd59695391584c8ffc5a296ba82bcdba6dd8a84d41a6a539fbee8e5075286eaf",
     "https://esm.sh/@supabase/supabase-js@2.114.0": "946ce759db4e6549badf08f6fb26bf763a1740a20d044931769535162c45e1a3",
-    "https://esm.sh/jose@5.10.0": "43705c1f40e5191081bcac2851ad8265f03c23bf751f9b84260ac2874f8ce209"
+    "https://esm.sh/@supabase/supabase-js@2.97.0": "dcdf60d835a7a2edf75c186e8bb33fa5f43fec7dec96c93c89abfbb20b78245d",
+    "https://esm.sh/jose@5.10.0": "43705c1f40e5191081bcac2851ad8265f03c23bf751f9b84260ac2874f8ce209",
+    "https://esm.sh/svix-fetch@3.0.0": "5a1dba6b172e83a41384b51192fe349e1efa6474c061bb82f936103190eee4b9",
+    "https://esm.sh/svix-fetch@3.0.0/denonext/svix-fetch.mjs": "40f1a1c388e884af3d1639fb28cdf83f94da2fc1bf5b971fe7501083b291734c",
+    "https://esm.sh/svix@1.40.0": "624c613eee1a1fe7ecf59b2012ccb2ab62a3afccded91074aac451906361f272"
   },
   "workspace": {
     "packageJson": {
