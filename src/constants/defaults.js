@@ -6,6 +6,10 @@ export const DEFAULT_SETTINGS = {
   reminderLeadDays: 90,
   name: "",
   npi: "",
+  // Month and day only, as "MM-DD". ACCME asks a CME provider for the
+  // month and day of a learner's birth to match reported credit; the year
+  // is not part of that and is not stored. See src/utils/cmePassport.js.
+  birthMonthDay: "",
   degreeType: "", // unset until the physician chooses MD or DO; never assume
   specialties: [],
   email: "",

@@ -624,6 +624,8 @@ https://credentialdomd.com`);
   if (stored > 0) {
     text = `Got it: ${stored} certificate${stored === 1 ? "" : "s"} added to your Documents. Open the app, tap the certificate, and use File with AI (or link it to a CME entry) to count it.
 
+If what you sent was a full transcript rather than one certificate (a CME Passport or CE Broker export, say), use Import transcript on the CME page instead: it reads every activity as its own row for you to approve.
+
 If the app is already open, refresh it to see the new file.`;
   } else if (total === 0) {
     text = `No PDF or image attachment was found in that email, so nothing was added. Forward the certificate itself as an attachment (PDF or photo) to ${CME_LOCAL}@${INBOX_DOMAIN}.`;

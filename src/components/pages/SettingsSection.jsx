@@ -10,6 +10,7 @@ import { EmailIcon, TextMsgIcon } from "../shared/Icons";
 import { STATES } from "../../constants/states";
 import { findProvidersByName, extractLicensesFromNPI } from "../../utils/npiLookup";
 import { splitName, mergeNpiLicenses, additionalStatesAfterImport, degreeFromCredential } from "../../utils/npiImport";
+import { normalizeBirthday, formatBirthday } from "../../utils/cmePassport";
 import { generateId, downscalePhoto } from "../../utils/helpers";
 import {
   MATE_ACT, AOA_NATIONAL, ABMS_MOC, AOA_OCC,
@@ -34,6 +35,8 @@ function SettingsSection({ onUpgrade }) {
 
   const update = (k, v) => updateSettings({ [k]: v });
   const [addingState, setAddingState] = useState("");
+  // Stored as "MM-DD"; shown as "July 25" so the field reads like a date.
+  const [bdayText, setBdayText] = useState(() => formatBirthday(data.settings.birthMonthDay));
   const [npiLoading, setNpiLoading] = useState(false);
   const [npiResults, setNpiResults] = useState(null); // array of search results
   const [npiNote, setNpiNote] = useState(""); // how the search was widened
@@ -328,6 +331,30 @@ function SettingsSection({ onUpgrade }) {
               }}>Dismiss</button>
             </div>
           )}
+        </Field>
+        {/* ACCME asks a CME provider for the month and day of a learner's
+            birth in order to match reported credit to them. The year is not
+            part of that, so it is not asked for and not stored. */}
+        <Field label="Birth Month and Day" hint="What a CME provider needs to report your credit to the ACCME. The year is never asked for.">
+          <input
+            name="birthMonthDay"
+            value={bdayText}
+            onChange={e => {
+              setBdayText(e.target.value);
+              const n = normalizeBirthday(e.target.value);
+              if (n || !e.target.value.trim()) update("birthMonthDay", n);
+            }}
+            onBlur={() => { const n = normalizeBirthday(bdayText); if (n) setBdayText(formatBirthday(n)); }}
+            style={iS}
+            placeholder="July 25, or 7/25"
+          />
+          <div style={{ fontSize: 12, color: bdayText.trim() && !normalizeBirthday(bdayText) ? T.danger : T.textDim, marginTop: 4 }}>
+            {!bdayText.trim()
+              ? "Leave it blank if you would rather not. Without it a CME provider cannot report your credit to the ACCME."
+              : normalizeBirthday(bdayText)
+                ? `Read as ${formatBirthday(bdayText)}. The year is not stored.`
+                : "That could not be read as a month and day."}
+          </div>
         </Field>
         <Field label="Degree" hint={s.degreeType
           ? "Affects CME categories, board certification types, and requirements"

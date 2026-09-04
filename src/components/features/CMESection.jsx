@@ -11,6 +11,7 @@ import Cat1Bucket from "../shared/Cat1Bucket";
 import CreditEquivalenceNote from "../shared/CreditEquivalenceNote";
 import SmallSpecialtyNote from "../shared/SmallSpecialtyNote";
 import CMEImport from "./CMEImport";
+import CmePassportPanel from "./CmePassportPanel";
 import DocAttach from "./DocAttach";
 import { attachExistingDoc } from "../../utils/docPrefill";
 import RuleProvenance from "../shared/RuleProvenance";
@@ -301,6 +302,7 @@ function CMESection({ onShare }) {
 
       {/* Transcript import: CE Broker / ACCME / PARS / CSV -> review -> addItem("cme") */}
       <CMEImport open={showImport} onClose={() => setShowImport(false)} requiredTopics={requiredTopics} />
+      <CmePassportPanel onImport={() => setShowImport(true)} />
 
       {/* Transcript picker: which state renewal or board the PDF is for */}
       <Modal open={showTranscript} onClose={() => setShowTranscript(false)} title="Transcript PDF" width={460}>
