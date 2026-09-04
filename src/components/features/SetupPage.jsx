@@ -761,6 +761,17 @@ export default function SetupPage({
   const openTask = (id) => {
     setOpen(id);
     if (setup.byId[id]?.tier === 2) setPacketOpen(true);
+    // The Next card sits near the top of a long page. On mobile the row it
+    // opens can land well below the fold — a tier-2 row inside a packet
+    // section that was still folded, in particular — so the tap reads as
+    // "did nothing" (support ticket fa844b45). Desktop shows the same task
+    // in the always-visible right pane, so it needs no scroll.
+    if (!isDesktop) {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-task-row="${id}"]`);
+        try { el?.scrollIntoView({ block: "start", behavior: "smooth" }); } catch { /* older browser */ }
+      }, 100);
+    }
   };
 
   const nextCard = ladder ? (
@@ -787,7 +798,7 @@ export default function SetupPage({
 
   /** One task row plus its drawer, in the accordion. */
   const renderRow = (task) => (
-    <div key={task.id}>
+    <div key={task.id} data-task-row={task.id}>
       <TaskRow
         task={task}
         open={open === task.id}
