@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, memo, useCallback } from "react";
+import { snapToOption } from "../../utils/snapOption";
 import { useApp } from "../../context/AppContext";
 import { CPT_DESCS } from "../../constants/cptDescs";
 import { CPT_BY_CODE } from "../../constants/cpt";
@@ -564,7 +565,14 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     made the record look uneditable and drove help tickets.
                     Listing it lets the user see the truth and switch. */}
                 {form[f.key] && !(f.options || []).includes(form[f.key]) && (
-                  <option value={form[f.key]}>{form[f.key]} (from document)</option>
+                  // A value that differs from an option by punctuation or case
+                  // is the same answer written differently: a scan returning
+                  // "Driver's License" against a list offering "Driver’s
+                  // License" produced two types that read identically. Snap it
+                  // rather than offering it as a third choice.
+                  snapToOption(form[f.key], f.options) !== form[f.key]
+                    ? <option value={form[f.key]}>{snapToOption(form[f.key], f.options)}</option>
+                    : <option value={form[f.key]}>{form[f.key]} (from document)</option>
                 )}
                 {f.groups
                   ? f.groups.map(g => (
