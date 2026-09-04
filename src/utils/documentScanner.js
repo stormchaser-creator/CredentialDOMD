@@ -4,6 +4,7 @@
 // through the ai-proxy edge function, metered per user.
 
 import { geminiCall, proxyErrorMessage } from "./aiClient";
+import { normalizeScanDates } from "./scanDates.js";
 import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, normalizeReceipt } from "./receiptScan";
 
 const MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5 MB
@@ -27,6 +28,7 @@ function extractBase64(dataUrl) {
 
 const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "travel", RECEIPT_DOC_TYPE, "unknown"];
 
+
 function validateResponse(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   if (!VALID_DOC_TYPES.includes(parsed.documentType)) return null;
@@ -38,6 +40,7 @@ function validateResponse(parsed) {
   // (amount, ISO date, currency code, card last-4, a category from our list)
   // rather than trusting the model's formatting.
   if (parsed.documentType === RECEIPT_DOC_TYPE) parsed.extracted = normalizeReceipt(parsed.extracted);
+  parsed.extracted = normalizeScanDates(parsed.extracted);
   return parsed;
 }
 
@@ -109,6 +112,13 @@ Document types and their fields:
 ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical License (MD-equiv)", "DEA Registration", "State Controlled Substance", "Board Certification (AOA)", "Board Certification (ABMS)", "COMLEX", "USMLE", "BLS Certification", "ACLS Certification", "ATLS Certification", "Fluoroscopy Permit", "Laser Safety Certificate", "Certification", "Other"` : `    "State Medical License", "DEA Registration", "State Controlled Substance", "Board Certification (ABMS)", "ECFMG Certificate", "USMLE", "BLS Certification", "ACLS Certification", "ATLS Certification", "Fluoroscopy Permit", "Laser Safety Certificate", "Certification", "Other"`}
 - "cme": CME certificate, continuing education credit, conference attendance — ONLY use this type if the document contains EXPLICIT credit-designation language (e.g. "designates this activity for a maximum of X AMA PRA Category 1 Credit(s)", an AOA Category 1-A/1-B/2-A/2-B statement, or an equivalent accredited CME/CE credit-hour statement). A vendor/device/procedure training or course-completion certificate that has NO credit-hour designation statement is "license" with type "Certification", NOT "cme" — do not classify as "cme" just because the document looks like a certificate or award.
   Fields: title, category (MUST be EXACTLY one of: ${degreeType === "DO" ? '"AOA Category 1-A", "AOA Category 1-B", "AOA Category 2-A", "AOA Category 2-B", "AMA PRA Category 1"' : '"AMA PRA Category 1", "AMA PRA Category 2"'} — read the certificate's credit designation statement; AMA PRA Category 1 Credit(s) is the most common), hours (number), date (YYYY-MM-DD), provider, certificateNumber, topics (array — ONLY values from this list that the activity content clearly covers: "Pain Management", "Opioid Prescribing", "Controlled Substances", "Ethics", "Infection Control", "Patient Safety", "Medical Errors Prevention", "Risk Management", "Suicide Prevention", "Cultural Competency", "Implicit Bias", "End-of-Life Care", "Geriatric Medicine", "Domestic Violence", "Child Abuse Recognition", "Human Trafficking", "Pharmacology", "Telemedicine", "Sexual Harassment Prevention", "HIV/AIDS", "Palliative Care", "Mental Health", "Substance Use Disorders", "Prescriptive Practice", "Trauma-Informed Care"; use [] if none apply — these tags satisfy state CME mandates, so only tag what the certificate actually covers)
+  READING A FILL-IN CERTIFICATE. The standard ACCME template prints a sentence with ruled blanks and puts the answers ON the blanks, so the words and the values interleave. Read the ANSWER, not the label:
+    * "has participated in the ____ titled ____" gives the ACTIVITY FORMAT on the first blank (Live activity, Enduring material, Journal-based CME) and the TITLE on the second. The title is the second blank. Never return "Live activity" or "Enduring material" as the title; that is the format, and it belongs in notes if anywhere.
+    * "and is awarded ____ AMA PRA Category 1 Credit(s)" gives HOURS on the blank. The number sits to the LEFT of the credit wording and belongs to it.
+    * "Date of Completion: ____" is the date field. Use it even when the title itself names other dates.
+  A title often contains the meeting's own dates and city ("CICT 2026 held on June 24-25 in Newport Beach, CA"). Keep them in the title verbatim and do NOT use them as the completion date.
+  TWO-DIGIT YEARS. A date written 07/25/26 is MM/DD/YY: return 2026-07-25. Read 00 to 79 as 2000 to 2079 and 80 to 99 as 1980 to 1999. Never emit a year like 0026.
+  PROVIDER is the organisation that issued and is accredited for the activity, usually in the letterhead or logo and repeated in the accreditation sentence ("CMEsolutions, LLC" from "CMEsolutions is accredited by the ACCME"). It is never "ACCME" or "AMA": those accredit the provider, they do not run the activity.
 - "privilege": Hospital privilege letter, appointment letter, credentialing approval
   Fields: type, name, facility, state (2-letter), appointmentDate (YYYY-MM-DD), expirationDate (YYYY-MM-DD)
 - "insurance": Malpractice/liability insurance certificate, policy declaration, coverage summary, or a wallet-style proof-of-insurance/ID card issued by the carrier
