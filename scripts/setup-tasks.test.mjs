@@ -34,7 +34,11 @@ const settledSettings = {
 };
 const doLicense = { id: "l1", type: "State Medical License (DO)", state: "CA", licenseNumber: "A1", expirationDate: "2027-06-30" };
 const deaLicense = { id: "d1", type: "DEA Registration", state: "CA", licenseNumber: "BW1", expirationDate: "2027-01-31" };
-const settled = () => ({ settings: { ...settledSettings }, licenses: [{ ...doLicense }, { ...deaLicense }], documents: [] });
+// The CV is Tier 1's first row, and it resolves done from a CV-named file or
+// from education and work history both being on file. A settled physician has
+// been through setup, so they have one.
+const cvDoc = { id: "cv1", name: "Whitney CV 2026.pdf" };
+const settled = () => ({ settings: { ...settledSettings }, licenses: [{ ...doLicense }, { ...deaLicense }], documents: [{ ...cvDoc }] });
 const build = (data, opts = {}) => buildSetup(data, { now: NOW, ...opts });
 const statusOf = (setup, id) => setup.byId[id].status;
 // Tier 2 always has open rows, so "nothing next" now means nothing in Tier 1.
@@ -167,8 +171,8 @@ eq("dateless never walks privileges or insurance", dateless({
   const notDone = { settings: { ...settledSettings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } }, licenses: [doLicense] };
   eq("na wins over skipped for the same task", statusOf(build({ ...notDone, settings: { ...notDone.settings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } } }), "dea"), "na");
   eq("a skip shows its date", build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: new Date(2026, 8, 4, 12).toISOString() } } } }, licenses: [doLicense] }).byId.dea.detail, "Skipped 4 Sep. Still on the list.");
-  eq("the board is five protected rows and ten packet rows",
-    [TASK_DEFS.filter((d) => d.tier === 1).length, TASK_DEFS.filter((d) => d.tier === 2).length], [5, 10]);
+  eq("the board is six protected rows and ten packet rows",
+    [TASK_DEFS.filter((d) => d.tier === 1).length, TASK_DEFS.filter((d) => d.tier === 2).length], [6, 10]);
   ok("every task has a derived rule, so no checkbox can lie", TASK_DEFS.every((d) => typeof d.doneWhen === "function"));
 }
 
@@ -176,43 +180,78 @@ eq("dateless never walks privileges or insurance", dateless({
 {
   const base = { settings: { ...settledSettings }, licenses: [] };
   const empty = build(base);
-  eq("an empty account is 5 tasks, 2 done", [empty.counts.tier1.total, empty.counts.tier1.done], [5, 2]);
+  eq("an empty account is 6 tasks, 2 done", [empty.counts.tier1.total, empty.counts.tier1.done], [6, 2]);
   const skipped = build({ ...base, settings: { ...base.settings, setupState: { tasks: { dea: { s: "skipped", at: day(1) } } } } });
-  eq("a skip stays in the denominator", [skipped.counts.tier1.total, skipped.counts.tier1.done, skipped.counts.tier1.skipped], [5, 2, 1]);
-  eq("a skip never raises the score", skipped.counts.tier1.left, 3);
+  eq("a skip stays in the denominator", [skipped.counts.tier1.total, skipped.counts.tier1.done, skipped.counts.tier1.skipped], [6, 2, 1]);
+  eq("a skip never raises the score", skipped.counts.tier1.left, 4);
   const na = build({ ...base, settings: { ...base.settings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } } });
-  eq("not-applicable leaves the denominator", [na.counts.tier1.total, na.counts.tier1.done, na.counts.tier1.na], [4, 2, 1]);
-  eq("not-applicable shrinks what is left", na.counts.tier1.left, 2);
+  eq("not-applicable leaves the denominator", [na.counts.tier1.total, na.counts.tier1.done, na.counts.tier1.na], [5, 2, 1]);
+  eq("not-applicable shrinks what is left", na.counts.tier1.left, 3);
   const declaredNoDea = build({ settings: { ...settledSettings, setupState: { declared: { noDea: true } } }, licenses: [doLicense], documents: [] });
-  eq("declaring no DEA makes the board four items", declaredNoDea.counts.tier1.total, 4);
+  eq("declaring no DEA makes the board five items", declaredNoDea.counts.tier1.total, 5);
   eq("a settled account is complete", build(settled()).counts.tier1.complete, true);
   eq("an account with one open task is not complete", build(base).counts.tier1.complete, false);
   eq("skipping everything never reads as complete", build({ ...base, settings: { ...base.settings, setupState: { tasks: {
-    identity: { s: "skipped", at: day(1) }, licenses: { s: "skipped", at: day(1) }, dates: { s: "skipped", at: day(1) },
-    dea: { s: "skipped", at: day(1) }, reminders: { s: "skipped", at: day(1) },
+    cv: { s: "skipped", at: day(1) }, identity: { s: "skipped", at: day(1) }, licenses: { s: "skipped", at: day(1) },
+    dates: { s: "skipped", at: day(1) }, dea: { s: "skipped", at: day(1) }, reminders: { s: "skipped", at: day(1) },
   } } } }).counts.tier1.complete, false);
+}
+
+// ── The CV row ──
+{
+  const withCv = (extra) => build({ settings: { ...settledSettings }, licenses: [doLicense, deaLicense], ...extra });
+  eq("a CV-named file closes the row", statusOf(withCv({ documents: [{ id: "x", name: "Whitney CV 2026.pdf" }] }), "cv"), "done");
+  eq("so does a resume", statusOf(withCv({ documents: [{ id: "x", name: "logsdon-resume.docx" }] }), "cv"), "done");
+  eq("so does the accented spelling", statusOf(withCv({ documents: [{ id: "x", name: "Résumé 2026.pdf" }] }), "cv"), "done");
+  eq("an unrelated file does not", statusOf(withCv({ documents: [{ id: "x", name: "CA license.pdf" }] }), "cv"), "pending");
+  // The clause that keeps an established account from being told it is behind
+  // on a step it no longer needs.
+  eq("education and work history on file close it without any CV",
+    statusOf(withCv({ documents: [], education: [{ id: "e1" }], workHistory: [{ id: "w1" }] }), "cv"), "done");
+  eq("education alone does not", statusOf(withCv({ documents: [], education: [{ id: "e1" }] }), "cv"), "pending");
+  eq("an empty account is pending", statusOf(build({ settings: { ...settledSettings }, licenses: [] }), "cv"), "pending");
+  eq("declaring it inapplicable closes it",
+    statusOf(build({ settings: { ...settledSettings, setupState: withDeclared(null, "noCv", true) }, licenses: [] }), "cv"), "na");
+  eq("and says so in its own words",
+    build({ settings: { ...settledSettings, setupState: withDeclared(null, "noCv", true) }, licenses: [] }).byId.cv.detail,
+    "Not applicable. You said you would rather type it in.");
+  // Home must not carry a permanent line about a CV nobody uploaded.
+  eq("an unfinished CV row never reads as a regression",
+    tier1Regressed(build({ settings: { ...settledSettings, setupState: { v: 1, startedAt: day(30), tier1DoneAt: day(20) } }, licenses: [doLicense, deaLicense] })), null);
+  ok("no CV copy carries an em dash",
+    ["label", "why", "verb", "naDetail", "doneClause"].every((k) => !String(TASK_DEFS.find((d) => d.id === "cv")[k] || "").includes("\u2014")));
 }
 
 // ── The ranker ──
 {
-  eq("exposure order is fixed", CARD_PRIORITY, ["dates", "licenses", "dea", "reminders", "identity"]);
+  // The CV sits second. Exposure still ranks first, and below that the CV
+  // leads because it is the one row that can answer several of the others.
+  eq("exposure order is fixed", CARD_PRIORITY, ["dates", "cv", "licenses", "dea", "reminders", "identity"]);
   const blank = build({ settings: {}, licenses: [] });
-  eq("a blank account is offered About you and nothing else", blank.next.id, "identity");
-  const noLicenses = build({ settings: { ...settledSettings }, licenses: [] });
+  eq("a blank account is offered the CV first", blank.next.id, "cv");
+  // The degree gate still holds everything else out of the rotation, and the
+  // CV is the one row let through it, because uploading a CV is how the
+  // degree question gets answered.
+  eq("and About you is what it falls to when the CV is declared inapplicable",
+    build({ settings: { setupState: withDeclared(null, "noCv", true) }, licenses: [] }).next.id, "identity");
+  const noLicenses = build({ settings: { ...settledSettings }, licenses: [], documents: [cvDoc] });
   eq("with a degree but no licenses, the registry lookup ranks first", noLicenses.next.id, "licenses");
-  eq("dates outranks everything once it is unblocked", build({ settings: { ...settledSettings, notifyEmail: false, notifyBrowser: false, notifyText: false }, licenses: [doLicense, { id: "n", type: "State Medical License (DO)", state: "TX" }] }).next.id, "dates");
-  eq("the card sentence names the exposure", build({ settings: settledSettings, licenses: [doLicense, { id: "n", type: "State Medical License (DO)", state: "TX" }] }).next.cardLine,
+  eq("dates outranks everything once it is unblocked", build({ settings: { ...settledSettings, notifyEmail: false, notifyBrowser: false, notifyText: false }, licenses: [doLicense, { id: "n", type: "State Medical License (DO)", state: "TX" }], documents: [cvDoc] }).next.id, "dates");
+  // And it outranks the CV row too, because an undated license is an exposure
+  // and an unread CV is a convenience.
+  eq("an undated license beats the CV offer", build({ settings: { ...settledSettings }, licenses: [doLicense, { id: "n", type: "State Medical License (DO)", state: "TX" }] }).next.id, "dates");
+  eq("the card sentence names the exposure", build({ settings: settledSettings, licenses: [doLicense, { id: "n", type: "State Medical License (DO)", state: "TX" }], documents: [cvDoc] }).next.cardLine,
     "1 license on file with no expiration date. Nothing will warn you about it.");
-  eq("two undated licenses read as plural", build({ settings: settledSettings, licenses: [{ id: "a", type: "State Medical License (DO)", state: "CA" }, { id: "n", type: "State Medical License (DO)", state: "TX" }] }).next.cardLine,
+  eq("two undated licenses read as plural", build({ settings: settledSettings, licenses: [{ id: "a", type: "State Medical License (DO)", state: "CA" }, { id: "n", type: "State Medical License (DO)", state: "TX" }], documents: [cvDoc] }).next.cardLine,
     "2 licenses on file with no expiration date. Nothing will warn you about them.");
   eq("the button carries the task's verb", noLicenses.next.verb, "Import my licenses");
   eq("a settled account has nothing left in Tier 1", t1next(build(settled())), null);
   eq("and falls through to the packet", build(settled()).next.tier, 2);
-  const skippedNow = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(1) } } } }, licenses: [doLicense] });
+  const skippedNow = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(1) } } } }, licenses: [doLicense], documents: [cvDoc] });
   eq("a fresh skip leaves the Next rotation", t1next(skippedNow), null);
-  const skippedOld = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(8) } } } }, licenses: [doLicense] });
+  const skippedOld = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(8) } } } }, licenses: [doLicense], documents: [cvDoc] });
   eq("a week-old skip is offered once more", skippedOld.next.id, "dea");
-  const skippedAncient = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(30) } } } }, licenses: [doLicense] });
+  const skippedAncient = build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: day(30) } } } }, licenses: [doLicense], documents: [cvDoc] });
   eq("an old skip stops fighting the physician every morning", t1next(skippedAncient), null);
 }
 
@@ -298,7 +337,7 @@ ok("a complete board is form D, which SetupCard renders as nothing",
     licenses: [{ ...doLicense }, { ...deaLicense }, { ...undatedTx }],
     settings: { ...settledSettings, setupState: { startedAt: day(30), tasks: { dates: { s: "skipped", at: day(30) } } } },
   });
-  eq("a skip leaves the task in the denominator", skipped.counts.tier1, { total: 5, done: 4, skipped: 1, na: 0, left: 1, complete: false, locked: 0 });
+  eq("a skip leaves the task in the denominator", skipped.counts.tier1, { total: 6, done: 5, skipped: 1, na: 0, left: 1, complete: false, locked: 0 });
   ok("a skip never stamps Tier 1 done", !skipped.state.tier1DoneAt);
   eq("the card stays on Form A", homeCardForm(skipped, { now: NOW }), CARD_FORM.A);
   eq("but it has nothing left to offer in Tier 1", t1next(skipped), null);
@@ -595,7 +634,7 @@ eq("shortDate of garbage", shortDate("not a date"), "");
       { id: "b", type: "State Medical License (DO)", state: "TX" },
       { ...deaLicense },
     ],
-    documents: [],
+    documents: [cvDoc],
   });
   eq("every open Tier 1 row skipped leaves the Tier 1 ladder silent",
     ladderState(t1AllSkipped, { now: NOW, tier: 1 }), null);
@@ -685,13 +724,13 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("the packet is finished", done.counts.tier2.complete, true);
   eq("Form D is the terminal form", homeCardForm(done, { now: NOW }), CARD_FORM.D);
   const all = boardCounts(done);
-  eq("the terminal line counts the whole board", [all.done, all.total], [15, 15]);
+  eq("the terminal line counts the whole board", [all.done, all.total], [16, 16]);
   eq("nothing is left", all.left, 0);
   eq("nothing regressed", tier1Regressed(done), null);
 
   // Free beta ended, so the three Pro rows are locked and out of the total.
   const free = build(stamped(fullyPacked()), { isPro: false });
-  eq("locked Pro rows leave the terminal total too", boardCounts(free).total, 12);
+  eq("locked Pro rows leave the terminal total too", boardCounts(free).total, 13);
 
   // A record deleted months later un-completes Tier 1. The bordered card
   // never comes back; the terminal line names what changed.
@@ -746,9 +785,15 @@ eq("shortDate of garbage", shortDate("not a date"), "");
 
   // Every Tier 1 task can name what it lost, or the terminal line falls
   // back to a count and says nothing about what changed.
-  ok("every Tier 1 task carries a regression clause",
-    TASK_DEFS.filter((d) => d.tier === 1).every((d) => typeof d.regressionLine === "function"),
-    TASK_DEFS.filter((d) => d.tier === 1 && !d.regressionLine).map((d) => d.id).join(", "));
+  // Every Tier 1 row that states a FACT about the record carries a clause,
+  // because that fact can come undone and the physician has to be told which.
+  // The CV row is the exception and is meant to be: it is an input step, not
+  // a fact, and a permanent "Setup: your CV is gone" on the dashboard of a
+  // physician who typed everything in by hand would be a nag, not a warning.
+  ok("every Tier 1 task that states a fact carries a regression clause",
+    TASK_DEFS.filter((d) => d.tier === 1 && d.id !== "cv").every((d) => typeof d.regressionLine === "function"),
+    TASK_DEFS.filter((d) => d.tier === 1 && d.id !== "cv" && !d.regressionLine).map((d) => d.id).join(", "));
+  ok("and the CV row deliberately does not", !TASK_DEFS.find((d) => d.id === "cv").regressionLine);
   ok("no regression clause carries an em dash",
     TASK_DEFS.filter((d) => d.tier === 1).every((d) => !String(build(stamped({ settings: {}, licenses: [] })).byId[d.id].regressionLine || "").includes("—")));
 }

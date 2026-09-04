@@ -1,5 +1,6 @@
-import { formatDate } from "./helpers";
-import { websiteLabel } from "./contactFormat";
+// Extensions spelled out so pure-node test scripts can import this module.
+import { formatDate } from "./helpers.js";
+import { websiteLabel } from "./contactFormat.js";
 
 /**
  * The one place a CV's shape is decided. Preview, plain text, and PDF all

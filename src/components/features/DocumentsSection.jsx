@@ -7,11 +7,13 @@ import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
 import { generateId, downscalePhoto } from "../../utils/helpers";
-import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { analyzeDocument, analyzePDF, analyzeDocText, CV_DOC_TYPE } from "../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import ScanReviewCard from "./ScanReviewCard";
+import CvImportReview from "./CvImportReview";
+import Modal from "../shared/Modal";
 import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
@@ -43,6 +45,10 @@ function DocumentsSection() {
   // "Saved to Work > Expenses" style confirmation with a button to open the
   // destination: a receipt files somewhere other than the Credentials tab.
   const [filed, setFiled] = useState(null);
+  // A CV is not one credential, so it never joins the scan queue. It is
+  // offered to the CV import instead: {docId, dataUrl, fileName, mime}.
+  const [cvOffer, setCvOffer] = useState(null);
+  const [cvOpen, setCvOpen] = useState(false);
 
   const toggleSelected = useCallback((id) => {
     setSelectedIds(prev => {
@@ -278,6 +284,13 @@ function DocumentsSection() {
             continue;
           }
           if (screen) setScanError(phiWarningText(screen));
+          // A CV holds many records across many sections, and this queue
+          // files one record into one section. It goes to the CV import.
+          if (result.documentType === CV_DOC_TYPE) {
+            setCvOffer({ docId, dataUrl, fileName: file.name, mime: file.type });
+            setScanning(false);
+            continue;
+          }
           setScanQueue(q => [...q, { result, imageData: dataUrl, fileName: file.name, docId }]);
         } catch (err) {
           setScanError(err.message || "Analysis failed. Document has been saved to your files.");
@@ -328,6 +341,10 @@ function DocumentsSection() {
       setScanQueue(q => q.filter(item => item.docId !== docId));
       return;
     }
+    if (docType === CV_DOC_TYPE) {
+      setScanError("A CV holds many records at once, so it is not filed as one. Use Start from your CV.");
+      return;
+    }
     const section = SECTION_META[docType]?.section;
     if (!section) {
       setScanError(`Cannot file "${docType}" — this app version doesn't know that category. Update the app (reload) and re-scan.`);
@@ -373,7 +390,13 @@ function DocumentsSection() {
         : isPdf
           ? await analyzePDF(doc.data, deg, apiKey)
           : await analyzeDocument(doc.data, deg, apiKey);
-      setScanQueue(q => q.some(i => i.docId === doc.id) ? q : [...q, { result, imageData: doc.data, fileName: doc.name, docId: doc.id }]);
+      // Same branch as the upload path: a CV rescanned here would otherwise
+      // render a fieldless review card whose Save has nowhere to file it.
+      if (result.documentType === CV_DOC_TYPE) {
+        setCvOffer({ docId: doc.id, dataUrl: doc.data, fileName: doc.name, mime: docMime(doc) });
+      } else {
+        setScanQueue(q => q.some(i => i.docId === doc.id) ? q : [...q, { result, imageData: doc.data, fileName: doc.name, docId: doc.id }]);
+      }
     } catch (err) {
       setScanError(err.message || "Could not read this document.");
     }
@@ -571,6 +594,27 @@ function DocumentsSection() {
           <button onClick={() => setFiled(null)} style={{ border: "none", background: "none", color: T.textMuted, fontWeight: 700, cursor: "pointer", fontSize: 16 }}>&times;</button>
         </div>
       )}
+
+      {cvOffer && !cvOpen && (
+        <div style={{ padding: "12px 16px", borderRadius: 12, backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`, marginBottom: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200, fontSize: 14, color: T.text, lineHeight: 1.45 }}>
+            {`"${cvOffer.fileName}" looks like your CV. It is saved in your files. Read it and fill in your record?`}
+          </div>
+          <button onClick={() => setCvOpen(true)} style={{
+            padding: "8px 14px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff",
+            fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+          }}>Read my CV</button>
+          <button onClick={() => setCvOffer(null)} style={{ border: "none", background: "none", color: T.textMuted, fontWeight: 700, cursor: "pointer", fontSize: 16 }}>&times;</button>
+        </div>
+      )}
+
+      <Modal open={cvOpen} onClose={() => setCvOpen(false)} title="Start from your CV" width={880}>
+        <CvImportReview
+          source={cvOffer}
+          onSaved={() => { setCvOffer(null); }}
+          onClose={() => { setCvOpen(false); setCvOffer(null); }}
+        />
+      </Modal>
 
       {scanError && (
         <div style={{ padding: "12px 16px", borderRadius: 12, backgroundColor: T.warningDim, color: T.warning, fontSize: 14, marginBottom: 14 }}>

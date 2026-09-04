@@ -25,6 +25,7 @@
 
 import { isNonExpiring } from "./helpers.js";
 import { STATE_NAMES } from "../constants/states.js";
+import { CV_FILENAME_RE } from "./cvImport.js";
 
 export const SETUP_STATE_VERSION = 1;
 const MS_PER_DAY = 86400000;
@@ -166,6 +167,31 @@ const plural = (n, one, many) => (n === 1 ? one : many);
 const stateName = (code) => (code ? STATE_NAMES[code] || code : "");
 
 export const TASK_DEFS = [
+  {
+    // First, because it is the one step that can fill in most of the rest.
+    // Deliberately no regressionLine: an established account with no
+    // CV-named file must not be nagged forever about a file it never needed.
+    id: "cv",
+    tier: 1,
+    secs: 60,
+    pro: false,
+    label: "Start from your CV",
+    why: "Your CV already holds your degree, your training, where you work and your licenses. Reading it once fills in most of this list.",
+    verb: "Upload my CV",
+    declaredNa: "noCv",
+    naDetail: "Not applicable. You said you would rather type it in.",
+    // Done when a CV is on file, OR when the record it would have filled is
+    // already there. The second clause is what keeps an established account
+    // from being told it is behind on a step it no longer needs.
+    doneWhen: ({ data }) =>
+      (data.documents || []).some((d) => CV_FILENAME_RE.test(d?.name || ""))
+      || ((data.education || []).length > 0 && (data.workHistory || []).length > 0),
+    evidenceWhen: null,
+    cardLine: () => "Upload your CV and the app reads your degree, training, positions and licenses off it.",
+    nextPhrase: () => "your CV",
+    doneClause: "your CV",
+    pendingDetail: () => "Nothing uploaded yet.",
+  },
   {
     id: "identity",
     tier: 1,
@@ -637,7 +663,11 @@ export const TIER2_COPY = {
  * identity comes last because nothing lapses because of it. Within one tier
  * an unblocked task always outranks a blocked one, and secs breaks a tie.
  */
-export const CARD_PRIORITY = ["dates", "licenses", "dea", "reminders", "identity"];
+// The CV sits second, not first, on purpose: an undated license is invisible
+// to every warning in the app, and reading a CV is a convenience. Exposure
+// still comes first. Below that the CV leads, because it is the one row that
+// can answer several of the others at once.
+export const CARD_PRIORITY = ["dates", "cv", "licenses", "dea", "reminders", "identity"];
 
 /** A skipped task re-enters the Next rotation for one week, starting a week
  *  after the skip. Skipping means "not now"; a physician must not fight the
@@ -784,8 +814,10 @@ export function buildSetup(data, { isPro = false, isFreeBeta = false, hasSubscri
 
   // Degree unset means the license-type vocabulary is unknown, so the board
   // offers About you and nothing else until it is answered.
+  // The CV is the exception: it is the step that ANSWERS the degree question,
+  // so gating it behind the answer would make the first step unreachable.
   const degreeUnset = s.degreeType !== "MD" && s.degreeType !== "DO";
-  const candidates = degreeUnset ? tasks.filter((t) => t.id === "identity") : tasks;
+  const candidates = degreeUnset ? tasks.filter((t) => t.id === "identity" || t.id === "cv") : tasks;
   const open = openTasks(candidates, nowMs);
   const ranked = rankOpen(open, tasks);
 

@@ -4,6 +4,8 @@ import { AsclepiusIcon, ExternalLinkIcon } from "../shared/Icons";
 import { copyToClipboard } from "../../utils/helpers";
 import { shareCvPdf } from "../../utils/cvPdf";
 import { buildCvContent } from "../../utils/cvContent";
+import CvImportReview from "./CvImportReview";
+import Modal from "../shared/Modal";
 
 
 const CV_TEMPLATES = [
@@ -16,6 +18,7 @@ function CVGenerator() {
   const { data, theme: T } = useApp();
   const [template, setTemplate] = useState("clinical");
   const [preview, setPreview] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [note, setNote] = useState("");
 
   const s = data.settings;
@@ -124,9 +127,22 @@ function CVGenerator() {
         <div style={{ textAlign: "center", padding: "26px 18px", backgroundColor: T.card, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: T.shadow1 }}>
           <div style={{ marginBottom: 10 }}><AsclepiusIcon size={32} color={T.textDim} /></div>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4 }}>Add credentials first</div>
-          <div style={{ fontSize: 14, color: T.textMuted }}>Your CV will be auto-generated from the licenses, education, and other credentials you add.</div>
+          <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 14 }}>Your CV will be auto-generated from the licenses, education, and other credentials you add.</div>
+          {/* A physician who opened the CV generator with an empty record is
+              holding a CV already. Reading theirs is the shortest way to fill
+              this page. */}
+          <button onClick={() => setImporting(true)} style={{
+            padding: "11px 18px", borderRadius: 12, border: "none",
+            backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer",
+          }}>Start from my CV</button>
         </div>
       )}
+
+      <Modal open={importing} onClose={() => setImporting(false)} title="Start from your CV" width={880}>
+        {/* The review keeps itself open after a save so it can say what it
+            wrote; Done is what closes it. */}
+        <CvImportReview onClose={() => setImporting(false)} />
+      </Modal>
 
       {/* Preview */}
       {hasData && (

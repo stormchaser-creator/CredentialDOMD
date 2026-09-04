@@ -1,0 +1,38 @@
+{
+  "settings": {
+    "name": "Daniel Logsdon",
+    "degreeType": "MD",
+    "npi": "1234567890",
+    "email": "dan@example.org",
+    "phone": "(555) 201-8890",
+    "address": "1200 N State St, Los Angeles, CA 90033",
+    "specialties": ["Neurological Surgery"],
+    "professionalSummary": "Board-eligible neurosurgeon with a practice in complex spine.",
+    "cvHighlights": ""
+  },
+  "education": [
+    { "type": "Doctor of Medicine (MD)", "name": "Daniel Logsdon", "institution": "Keck School of Medicine of USC", "startDate": "2002", "graduationDate": "2006", "fieldOfStudy": "Medicine", "honors": "Alpha Omega Alpha" },
+    { "type": "Residency Certificate", "name": "", "institution": "Los Angeles County + USC Medical Center", "startDate": "June 2006", "graduationDate": "2013", "fieldOfStudy": "Neurological Surgery", "honors": "" },
+    { "type": "Spine Fellowship", "name": "", "institution": "Cleveland Clinic", "startDate": "2013", "graduationDate": "2014", "fieldOfStudy": "Complex Spine", "honors": "" }
+  ],
+  "workHistory": [
+    { "type": "Full-Time Employed", "position": "Attending Neurosurgeon", "employer": "Arrowhead Regional Medical Center", "city": "Colton", "state": "California", "startDate": "2014", "endDate": "", "current": "yes", "description": "Level II trauma call." },
+    { "type": "Locums", "position": "Locum Neurosurgeon", "employer": "Eisenhower Health", "city": "Rancho Mirage", "state": "CA", "startDate": "2019", "endDate": "2021", "current": "no", "description": "" }
+  ],
+  "licenses": [
+    { "type": "State Medical License", "name": "", "state": "CA", "licenseNumber": "A 98765", "issuedDate": "2007", "expirationDate": "" },
+    { "type": "State Medical License", "name": "", "state": "Ohio", "licenseNumber": "35.123456", "issuedDate": "2015", "expirationDate": "2027-03-31" },
+    { "type": "Board Certification (ABMS)", "name": "Daniel Logsdon MD", "state": "", "licenseNumber": "", "issuedDate": "2015", "expirationDate": "" }
+  ],
+  "privileges": [
+    { "type": "Surgical Privileges", "name": "", "facility": "Arrowhead Regional Medical Center", "city": "Colton", "state": "CA", "appointmentDate": "2014", "expirationDate": "" }
+  ],
+  "publications": [
+    { "name": "Cureus 2021", "citation": "Logsdon D, Smith J. Anterior cervical fusion outcomes. Cureus. 2021;13(4):e14320.", "year": "2021", "doi": "10.7759/cureus.14320", "pmid": "33987654", "url": "" },
+    { "name": "", "citation": "Logsdon D. Minimally invasive TLIF: a review. J Spine Surg. 2019;5(2):112-119.", "year": "2019", "doi": "", "pmid": "", "url": "" }
+  ],
+  "memberships": [
+    { "organization": "Congress of Neurological Surgeons", "role": "Member", "startDate": "2015", "endDate": "" },
+    { "organization": "American Association of Neurological Surgeons", "role": "Member", "startDate": "2016", "endDate": "" }
+  ]
+}

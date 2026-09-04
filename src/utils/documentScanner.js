@@ -26,7 +26,14 @@ function extractBase64(dataUrl) {
   return dataUrl.split(",")[1];
 }
 
-const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "travel", RECEIPT_DOC_TYPE, "unknown"];
+// "cv" is a CLASSIFICATION only. A CV holds many records across many
+// sections and this pipeline returns one record for one section, so a cv
+// result is never filed here: it is handed to the CV import
+// (src/utils/cvScan.js) instead. Deliberately absent from SECTION_META and
+// FIELD_DEFS for the same reason.
+const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "travel", RECEIPT_DOC_TYPE, "cv", "unknown"];
+
+export const CV_DOC_TYPE = "cv";
 
 
 function validateResponse(parsed) {
@@ -144,6 +151,7 @@ ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical Licens
 The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : degreeType === "MD" ? "an MD" : "an MD or DO (degree not yet specified in their profile; classify from the document itself)"}.
 Return JSON: { "documentType": "...", "confidence": "high"|"medium"|"low", "extracted": { ...fields }, "notes": "..." }
 Use YYYY-MM-DD dates. Omit fields that are not visible. Use 2-letter state abbreviations.
+If the document is a curriculum vitae or resume (a multi-section document listing this physician's own education, training, positions, licenses, publications and memberships), classify it as "cv", extract NOTHING, and return { "documentType": "cv", "confidence": "high", "extracted": {}, "notes": "" }. It is read elsewhere.
 IMPORTANT: the "name" field is a DISPLAY LABEL describing the credential itself (e.g. "CO Medical License", "DEA Registration", "MMR Vaccination", "DO Diploma - PCOM") — NEVER the physician's own name. Do not put a person's name in "name".`;
 
 export async function analyzeDocument(imageData, degreeType, apiKey) {

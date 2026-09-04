@@ -332,6 +332,8 @@ export function leadNote(finding) {
       return "Matched by name; check it is yours.";
     case "practiceOrganization":
       return "Medicare lists this as a practice location enrolled under your NPI. Confirm your title and dates.";
+    case "cvRow":
+      return "Read off your CV by AI. Check it against the document before you keep it.";
     default:
       return "Confirm this before you rely on it.";
   }

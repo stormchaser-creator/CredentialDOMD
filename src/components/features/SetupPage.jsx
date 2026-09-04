@@ -11,6 +11,7 @@ import NpiPanel from "./setup/NpiPanel";
 import DateFixList, { DateRow, SHARED_KEY_NOTE } from "./setup/DateFixList";
 import CaptureRun from "./setup/CaptureRun";
 import PublicRecordReview from "./PublicRecordReview";
+import CvImportReview from "./CvImportReview";
 import { canFillFromPublicRecord } from "../../utils/publicRecord";
 import CMEImport from "./CMEImport";
 import EmailPacketModal from "./EmailPacketModal";
@@ -171,6 +172,41 @@ function LicensesDrawer({ onAddByHand }) {
         border: `1px solid ${T.border}`, backgroundColor: "transparent",
         color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
       }}>Add a license by hand</button>
+    </div>
+  );
+}
+
+/**
+ * The CV row's drawer. The review screen renders inline, the way the packet
+ * drawer renders the public-record screen, so the row is never navigated away
+ * from and a half-ticked list is never lost to a back button.
+ */
+function CvDrawer({ onDeclareNone }) {
+  const { theme: T } = useApp();
+  const [importing, setImporting] = useState(false);
+
+  if (importing) {
+    // No onSaved handler on purpose: the review shows its own "Saved N
+    // items" screen, and closing on save would take that away before the
+    // physician has read what went where.
+    return <CvImportReview onClose={() => setImporting(false)} />;
+  }
+  return (
+    <div>
+      {/* The row's own "why" is printed above this, so this says what happens
+          next rather than saying the same thing a second time. */}
+      <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.55, marginBottom: 10 }}>
+        Every line it reads comes back as something to tick. Nothing is saved until you tick it,
+        and anything it gets wrong you can leave.
+      </div>
+      <button onClick={() => setImporting(true)} style={{
+        width: "100%", padding: "12px 16px", borderRadius: 12, border: "none",
+        backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer",
+      }}>Upload my CV</button>
+      <button onClick={onDeclareNone} style={{
+        marginTop: 10, border: "none", background: "transparent", padding: 0,
+        color: T.textDim, fontSize: 13, fontWeight: 700, cursor: "pointer",
+      }}>I would rather type it in</button>
     </div>
   );
 }
@@ -655,6 +691,7 @@ export default function SetupPage({
 
   const drawerFor = (task) => {
     const id = task.id;
+    if (id === "cv") return <CvDrawer onDeclareNone={() => { declare("noCv", true); setOpen(null); }} />;
     if (id === "identity") return <IdentityDrawer />;
     if (id === "licenses") return <LicensesDrawer onAddByHand={onAddLicenseByHand} />;
     if (id === "dates") return <DateFixList onOpenRecord={(recId) => onOpenRecord?.("licenses", recId, "dates")} />;
