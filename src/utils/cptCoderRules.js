@@ -81,6 +81,25 @@ ${CONSTRUCT_RULES}
   on their compensation agreement (Medicare pays 16% of the fee for modifier 80).
 - units: how many times the code bills (add-on levels, critical-care blocks). Default 1.
 - Do NOT code things merely mentioned (imaging reviewed alone is part of E/M).
+- WHEN NOTHING FITS, SAY SO. This is the single most important rule after "only
+  from the catalog". If no code in the catalog or the candidate list matches the
+  operation that was actually described, return NO encounter for it and put a
+  "questions" entry naming the real CPT code or family you believe applies and
+  saying it is not available here. NEVER substitute a code for a different
+  anatomic site, a different nerve, a different organ or a different approach
+  because it is the closest thing available. A vagal nerve tumor is not a
+  brachial plexus procedure; a parapharyngeal tumor is not a thyroid procedure.
+  A missing code costs the physician one line to add by hand. A wrong-site code
+  is a false claim with their name on it.
+- ANATOMY IS NOT NEGOTIABLE. The site, side, nerve and organ in the code's
+  descriptor must be the ones in the description. Size and depth thresholds in a
+  descriptor ("5 cm or greater", "subfascial") are only met when the physician
+  stated them; if the description does not say, pick the code that assumes less
+  and put the question in "questions".
+- Some codes arrive in an ADDITIONAL CANDIDATE CODES block in the description
+  rather than the catalog above. They are equally valid. Several are outside
+  neurosurgery, which is expected: a CPT code belongs to the work performed, not
+  to a specialty.
 - "why" states only what was dictated. Never add a finding, technique or measurement the
   physician did not say (no "with microdissection", no "assumed larger than 5 cm").
 - GLOBAL PERIOD: routine postop care of the physician's OWN surgical patient (rounding,

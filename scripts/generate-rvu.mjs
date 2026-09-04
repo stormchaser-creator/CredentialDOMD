@@ -19,6 +19,7 @@ const repo = join(here, "..");
 const { NEUROSURGERY_CODES } = await import(join(repo, "src/constants/cpt/neurosurgery.js"));
 const { CMS_BASE_CODES } = await import(join(repo, "src/constants/cpt/cmsBase.js"));
 const { ADDITIONAL_CODES } = await import(join(repo, "src/constants/cpt/additions.js"));
+const { SKULL_BASE_HEAD_NECK_CODES } = await import(join(repo, "src/constants/cpt/skullBaseHeadNeck.js"));
 
 // Deleted/invalid codes flagged by the CMS audit — excluded everywhere
 const DELETED = new Set(["61440", "61470", "61480", "99241", "49585"]);
@@ -27,6 +28,7 @@ const universe = new Set();
 for (const c of NEUROSURGERY_CODES) universe.add(c.code);
 for (const c of CMS_BASE_CODES) universe.add(c.code);
 for (const c of ADDITIONAL_CODES) universe.add(c.code);
+for (const c of SKULL_BASE_HEAD_NECK_CODES) universe.add(c.code);
 // Keep every code the previous table already covered (idempotent regen)
 try {
   const prev = await import(join(repo, "src/constants/cpt/rvuData.js"));

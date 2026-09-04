@@ -1,4 +1,6 @@
 import { CPT_BY_CODE } from "../constants/cpt/index.js";
+import { loadFullCatalog } from "./cptCatalog.js";
+import { candidateCodes, candidateBlock } from "./cptCandidates.js";
 import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, anthropicErrorMessage, anthropicSdk, AI_MESSAGES, opusUnavailableReason } from "./aiClient";
 import { CODER_RULES, buildCatalog, normalizeDictation, postProcess } from "./cptCoderRules.js";
 
@@ -36,7 +38,37 @@ export const CODER_MODELS = [
 // The XML line is the Anthropic guidance for a thinking-off request.
 const OPUS_JSON_ONLY = "Reply with the JSON object only: no prose before or after it, no markdown fences, no internal or system XML tags. The first character of your reply is { and the last is }.";
 
-const userPrompt = (text) => `PHYSICIAN'S DESCRIPTION:\n${normalizeDictation(text)}\n\nReturn only JSON.`;
+const userPrompt = (text, extras = "") =>
+  `PHYSICIAN'S DESCRIPTION:\n${normalizeDictation(text)}${extras}\n\nReturn only JSON.`;
+
+/**
+ * The codes worth showing the model for THIS dictation, on top of the cached
+ * catalog. Sent in the user message rather than the system block on purpose:
+ * the system block is cached across calls and a block that changes every time
+ * would break that cache for the rulebook too.
+ *
+ * Failure here is not a failure of the coder. If the fee schedule chunk cannot
+ * be loaded, the call goes out with the cached catalog alone, which is exactly
+ * what it did before.
+ */
+async function extrasFor(text) {
+  try {
+    const full = await loadFullCatalog();
+    const exclude = new Set(Object.keys(CPT_BY_CODE));
+    return candidateBlock(candidateCodes(text, full, { exclude }));
+  } catch {
+    return "";
+  }
+}
+
+/** The catalog every returned code is validated against. */
+async function validationCatalog() {
+  try {
+    return await loadFullCatalog();
+  } catch {
+    return CPT_BY_CODE;
+  }
+}
 
 function parseCoderJson(raw) {
   raw = (raw || "").replace(/```json/gi, "").replace(/```/g, "").trim();
@@ -47,8 +79,8 @@ function parseCoderJson(raw) {
   }
 }
 
-function finish(parsed, text) {
-  const result = postProcess(parsed, { text, catalog: CPT_BY_CODE });
+function finish(parsed, text, catalog) {
+  const result = postProcess(parsed, { text, catalog: catalog || CPT_BY_CODE });
   if (result.items.length === 0) {
     const why = result.dropped.length
       ? ` The AI proposed ${result.dropped.map(d => d.code).join(", ")}, none of which is in the catalog.`
@@ -69,6 +101,10 @@ export async function codeFromText(text, apiKeyOrSettings) {
     ? apiKeyOrSettings
     : { apiKey: apiKeyOrSettings || "" };
 
+  // Loaded once and memoised: the candidate shortlist and the validation
+  // pass both read it.
+  const [extras, catalog] = await Promise.all([extrasFor(text), validationCatalog()]);
+
   let note = null;
   // Routing policy: Opus for work that reasons over rules with money on it
   // (this coder, Vera, case dictation); Gemini for extraction and basics
@@ -80,7 +116,7 @@ export async function codeFromText(text, apiKeyOrSettings) {
       note = fallbackNote(opusUnavailableReason());
     } else {
       try {
-        return finish(await codeWithOpus(text, settings), text);
+        return finish(await codeWithOpus(text, settings, extras), text, catalog);
       } catch (e) {
         // Opus could not take this one; Gemini does, and the physician is
         // told why in the review rather than losing the dictation.
@@ -89,7 +125,7 @@ export async function codeFromText(text, apiKeyOrSettings) {
     }
   }
 
-  const result = finish(await codeWithGemini(text, settings.apiKey), text);
+  const result = finish(await codeWithGemini(text, settings.apiKey, extras), text, catalog);
   if (note) result.questions.unshift(note);
   return result;
 }
@@ -116,10 +152,10 @@ function opusFailureReason(e, settings) {
 
 // The Gemini request, unchanged from the day it shipped: the same body, the
 // same generationConfig, the same parse.
-async function codeWithGemini(text, apiKey) {
+async function codeWithGemini(text, apiKey, extras = "") {
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     systemInstruction: { parts: [{ text: CODER_RULES + buildCatalog() }] },
-    contents: [{ parts: [{ text: userPrompt(text) }] }],
+    contents: [{ parts: [{ text: userPrompt(text, extras) }] }],
     // Determinism. The same dictation must produce the same codes on every
     // run: the reproduction (5 harness runs per input) showed the cranioplasty
     // code flipping 62140/62141 between runs on a size the dictation never
@@ -146,7 +182,7 @@ async function codeWithGemini(text, apiKey) {
 
 // Same rulebook, same catalog, same user message; only the model differs.
 // Own Anthropic key or the shared key via ai-proxy, decided by aiClient.
-async function codeWithOpus(text, settings) {
+async function codeWithOpus(text, settings, extras = "") {
   const client = await anthropicClientFor(settings);
   const response = await client.messages.create({
     model: OPUS_MODEL,
@@ -163,7 +199,7 @@ async function codeWithOpus(text, settings) {
       { type: "text", text: CODER_RULES + buildCatalog(), cache_control: { type: "ephemeral" } },
       { type: "text", text: OPUS_JSON_ONLY },
     ],
-    messages: [{ role: "user", content: userPrompt(text) }],
+    messages: [{ role: "user", content: userPrompt(text, extras) }],
   });
   if (response.stop_reason === "refusal") throw new Error("Claude declined this request");
   if (response.stop_reason === "max_tokens") throw new Error("the Claude reply ran past its length limit");

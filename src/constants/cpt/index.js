@@ -3,6 +3,7 @@
 // Curated codes take priority (they have richer synonyms/keywords)
 
 import { NEUROSURGERY_CODES } from "./neurosurgery.js";
+import { SKULL_BASE_HEAD_NECK_CODES } from "./skullBaseHeadNeck.js";
 import { CMS_BASE_CODES } from "./cmsBase.js";
 import { ADDITIONAL_CODES } from "./additions.js";
 import { RVU_DATA } from "./rvuData.js";
@@ -13,6 +14,7 @@ const DELETED = new Set(["61440", "61470", "61480", "99241", "49585"]);
 // Build curated map — these override CMS base entries
 const curatedMap = new Map();
 NEUROSURGERY_CODES.forEach(c => curatedMap.set(c.code, c));
+SKULL_BASE_HEAD_NECK_CODES.forEach(c => { if (!curatedMap.has(c.code)) curatedMap.set(c.code, c); });
 ADDITIONAL_CODES.forEach(c => { if (!curatedMap.has(c.code)) curatedMap.set(c.code, c); });
 
 // Merge: curated codes override base, then add any curated codes not in base
@@ -48,3 +50,8 @@ export const CPT_CATEGORIES = [...new Set(CPT_CODES.map(c => c.category).filter(
 export function isCurated(code) {
   return curatedMap.has(code);
 }
+
+/** Every curated entry, keyed by code. The full CMS fee schedule is merged
+ *  under these at call time by src/utils/cptCatalog.js, which loads it
+ *  lazily so the 9,537-code table never rides in the main bundle. */
+export const CURATED_BY_CODE = Object.fromEntries([...curatedMap.values()].map(c => [c.code, c]));
