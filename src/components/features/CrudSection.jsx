@@ -509,6 +509,18 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit" : "Add"}>
         {contactImport && (
           <div style={{ marginBottom: 14 }}>
+            {!isContactPickerSupported() && (
+              // This phone has no live picker — the button below opens a
+              // FILE chooser, not the address book. Said up front, before
+              // the tap, because a description sitting under the button
+              // read as "this is a bug" (support ticket 350f8467).
+              <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 6, lineHeight: 1.4 }}>
+                This phone can't hand a contact straight to the browser, so the button below opens your file picker
+                looking for a saved contact card, not your contacts list. Export one first — Contacts → the person →
+                Share Contact → Save to Files — then pick that file. For one or two people it's faster to just type
+                their info into the form below.
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {isContactPickerSupported() && (
                 <button onClick={handleImportContact} style={{
@@ -524,16 +536,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 borderRadius: 10, border: `1px solid ${T.accent}`, fontSize: 13, fontWeight: 600,
                 cursor: "pointer", backgroundColor: "transparent", color: T.accent,
               }}>
-                {"📇"} Import a contact card (.vcf)
+                {"📇"} Import a saved contact file (.vcf)
               </button>
               <input ref={vcfRef} type="file" accept=".vcf,text/vcard,text/x-vcard" style={{ display: "none" }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleVcfFile(f); e.target.value = ""; }} />
             </div>
-            {!isContactPickerSupported() && (
-              <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 5, lineHeight: 1.4 }}>
-                On iPhone: open Contacts → the person → Share Contact → Save to Files, then pick that file here.
-              </div>
-            )}
             {contactMsg && (
               <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: contactMsgError ? T.danger : T.success }}>
                 {contactMsg}
