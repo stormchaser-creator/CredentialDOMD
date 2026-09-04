@@ -11,6 +11,8 @@ import Cat1Bucket from "../shared/Cat1Bucket";
 import CreditEquivalenceNote from "../shared/CreditEquivalenceNote";
 import SmallSpecialtyNote from "../shared/SmallSpecialtyNote";
 import CMEImport from "./CMEImport";
+import DocAttach from "./DocAttach";
+import { attachExistingDoc } from "../../utils/docPrefill";
 import RuleProvenance from "../shared/RuleProvenance";
 import TopicProvenance from "../shared/TopicProvenance";
 import DeskTable from "../shared/DeskTable";
@@ -47,6 +49,7 @@ function CMESection({ onShare }) {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({});
+  const [attachedDocs, setAttachedDocs] = useState([]);
   // The compliance cards are the top of the desk layout (spec 2.3), so they
   // open by default there; on phone they stay behind the toggle as before.
   const [showCompliance, setShowCompliance] = useState(() => !!isDesktop);
@@ -69,17 +72,34 @@ function CMESection({ onShare }) {
     [allTrackedStates, deg]
   );
 
-  const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setForm({ ...item, topics: item.topics || [] }); setEditItem(item); setShowForm(true); }, []);
+  const openAdd = useCallback(() => { setForm({ topics: [] }); setEditItem(null); setAttachedDocs([]); setShowForm(true); }, []);
+  const openEdit = useCallback((item) => { setForm({ ...item, topics: item.topics || [] }); setEditItem(item); setAttachedDocs([]); setShowForm(true); }, []);
   useDeskAddShortcut(openAdd);
-  const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); }, []);
+  const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
 
   const handleSave = useCallback(() => {
-    const entry = { ...form, id: editItem ? editItem.id : generateId() };
+    const itemId = editItem ? editItem.id : generateId();
+    const entry = { ...form, id: itemId };
     if (editItem) editItemCtx("cme", entry);
     else addItem("cme", entry);
+
+    // Same behavior as every other credential form: attached files are
+    // saved to Documents and linked to this record.
+    for (const doc of attachedDocs) {
+      if (doc.existingId) {
+        const linked = attachExistingDoc((data.documents || []).find(d => d.id === doc.existingId), `cme:${itemId}`);
+        if (linked) editItemCtx("documents", linked);
+        continue;
+      }
+      addItem("documents", {
+        id: generateId(),
+        name: doc.name, type: doc.type, size: doc.size, data: doc.data,
+        uploadedAt: new Date().toISOString(),
+        linkedTo: `cme:${itemId}`,
+      });
+    }
     closeForm();
-  }, [form, editItem, editItemCtx, addItem, closeForm]);
+  }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs, data.documents]);
 
   const handleDelete = useCallback((id) => deleteItem("cme", id), [deleteItem]);
 
@@ -548,6 +568,7 @@ function CMESection({ onShare }) {
         </Field>
 
         <Field label="Notes"><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 50, resize: "vertical" }} /></Field>
+        <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs} />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button onClick={closeForm} style={{ padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
           <button onClick={handleSave} style={{ padding: "12px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{editItem ? "Save" : "Add"}</button>
