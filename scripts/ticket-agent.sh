@@ -25,7 +25,7 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 # to ..." log line a resolve/reopen writes) AND the newest thread message
 # is not already ours.
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || { echo "$(date '+%F %T') ERROR — no Supabase token in keychain" >> "$LOG"; exit 1; }
-printf '{"query":"SELECT count(*) AS n FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND public.is_admin(t.user_id) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s))"}' "'" "'" "'" "'" "'" "'" "'" "'" > /tmp/ticket-agent-count.json
+printf '{"query":"SELECT count(*) AS n FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s))"}' "'" "'" "'" "'" "'" "'" "'" "'" > /tmp/ticket-agent-count.json
 N=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d @/tmp/ticket-agent-count.json | /usr/bin/python3 -c "import json,sys; print(json.load(sys.stdin)[0]['n'])" 2>/dev/null)
@@ -55,7 +55,7 @@ cd "$REPO" || exit 1
 # Pre-fetch the actual tickets and hand them to the model in the prompt —
 # a lazy single-turn run once claimed "no open tickets" without ever
 # running the query. With the queue in hand there is nothing to skip.
-printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at, t.agent_last_reply_at FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND public.is_admin(t.user_id) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) ORDER BY t.created_at"}' "'" "'" "'" "'" "'" "'" "'" "'" > /tmp/ticket-agent-list.json
+printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at, t.agent_last_reply_at, public.is_admin(t.user_id) AS from_admin FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) ORDER BY t.created_at"}' "'" "'" "'" "'" "'" "'" "'" "'" > /tmp/ticket-agent-list.json
 TICKETS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d @/tmp/ticket-agent-list.json)
