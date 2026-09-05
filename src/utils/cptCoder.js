@@ -1,7 +1,7 @@
 import { CPT_BY_CODE } from "../constants/cpt/index.js";
 import { loadFullCatalog } from "./cptCatalog.js";
 import { candidateCodes, candidateBlock } from "./cptCandidates.js";
-import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, anthropicErrorMessage, anthropicSdk, AI_MESSAGES, opusUnavailableReason } from "./aiClient";
+import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor } from "./aiClient";
 import { CODER_RULES, buildCatalog, normalizeDictation, postProcess } from "./cptCoderRules.js";
 
 export { normalizeDictation, parseDictatedDate, normalizeCode, postProcess, BUNDLED_PAIRS } from "./cptCoderRules.js";
@@ -105,49 +105,21 @@ export async function codeFromText(text, apiKeyOrSettings) {
   // pass both read it.
   const [extras, catalog] = await Promise.all([extrasFor(text), validationCatalog()]);
 
-  let note = null;
   // Routing policy: Opus for work that reasons over rules with money on it
   // (this coder, Vera, case dictation); Gemini for extraction and basics
   // (document scans, CME transcript import, work-log dictation). Unset means
   // Opus; the Settings picker lets a physician choose Gemini explicitly, and
-  // an unavailable Opus falls back to Gemini with a note, never a dead end.
-  if ((settings.coderModel || "opus") === "opus") {
-    if (!anthropicAvailable(settings)) {
-      note = fallbackNote(opusUnavailableReason());
-    } else {
-      try {
-        return finish(await codeWithOpus(text, settings, extras), text, catalog);
-      } catch (e) {
-        // Opus could not take this one; Gemini does, and the physician is
-        // told why in the review rather than losing the dictation.
-        note = fallbackNote(opusFailureReason(e, settings));
-      }
+  // an unavailable or failing Opus falls back to Gemini quietly — which model
+  // coded the case is not something the physician needs to see.
+  if ((settings.coderModel || "opus") === "opus" && anthropicAvailable(settings)) {
+    try {
+      return finish(await codeWithOpus(text, settings, extras), text, catalog);
+    } catch {
+      // Opus could not take this one; Gemini does, so the dictation is never lost.
     }
   }
 
-  const result = finish(await codeWithGemini(text, settings.apiKey, extras), text, catalog);
-  if (note) result.questions.unshift(note);
-  return result;
-}
-
-// The monthly budget line is the same sentence Vera uses; every other reason
-// is wrapped so the physician reads who coded the case and why.
-const fallbackNote = (why) => why === AI_MESSAGES.budget
-  ? AI_MESSAGES.budget
-  : `Claude Opus was not available for this one (${String(why).replace(/\.\s*$/, "")}), so Gemini coded it.`;
-
-// Why Opus did not code this one, in the physician's terms.
-function opusFailureReason(e, settings) {
-  const refused = anthropicErrorMessage(e); // the proxy said no: quota, not enabled, beta gate, signed out
-  if (refused) return refused;
-  const A = anthropicSdk();
-  if (A && (e instanceof A.AuthenticationError || e instanceof A.PermissionDeniedError)) {
-    return settings?.anthropicApiKey ? "your Anthropic key in Settings was rejected" : "Anthropic rejected the shared key";
-  }
-  if (A && e instanceof A.APIConnectionError) return "Claude could not be reached";
-  if (A && e instanceof A.RateLimitError) return "Claude is rate-limited right now";
-  if (A && e instanceof A.InternalServerError) return "Claude returned a server error";
-  return e?.message || "no reply from Claude";
+  return finish(await codeWithGemini(text, settings.apiKey, extras), text, catalog);
 }
 
 // The Gemini request, unchanged from the day it shipped: the same body, the
