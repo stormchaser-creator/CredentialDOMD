@@ -204,38 +204,60 @@ eq("dateless never walks privileges or insurance", dateless({
   const none = setupProgressSummary(null);
   eq("an untouched account", [none.label, none.done, none.pct], ["Setup not started", null, null]);
 
-  const scored = setupProgressSummary({ v: 1, startedAt: day(4), lastDone: "licenses",
-    progress: { done: 6, total: 16 }, tasks: { dates: { s: "skipped", at: day(2) } }, declared: { noDea: true } });
-  eq("a real score reads as a fraction", scored.label, "Setup 6 of 16");
-  eq("and carries the numbers for the bar", [scored.done, scored.total, scored.pct], [6, 16, 38]);
-  ok("the detail names what they last finished", /last finished: Your licenses/.test(scored.detail), scored.detail);
-  ok("and counts what they set aside", /1 skipped/.test(scored.detail) && /1 not applicable/.test(scored.detail), scored.detail);
+  // The Setup page shows ONE half at a time: the first six until they close,
+  // then the packet's ten. The admin row must say the same thing, or it is a
+  // third denominator nobody has ever seen.
+  const early = setupProgressSummary({ v: 1, startedAt: day(4), lastDone: "licenses",
+    progress: { done: 4, total: 16, t1: { done: 4, total: 6 }, t2: { done: 0, total: 10 } },
+    tasks: { dates: { s: "skipped", at: day(2) } }, declared: { noCv: true } });
+  eq("the first half reads as the page prints it", early.label, "Essentials 4 of 6");
+  eq("and the bar is that half", [early.done, early.total, early.pct], [4, 6, 67]);
+  ok("the detail names what they last finished", /last finished: Your licenses/.test(early.detail), early.detail);
+  ok("and counts what they set aside", /1 skipped/.test(early.detail) && /1 not applicable/.test(early.detail), early.detail);
 
-  const done = setupProgressSummary({ v: 1, startedAt: day(30), progress: { done: 16, total: 16 } });
-  eq("a finished board says so with the number", done.label, "Setup complete, 16 of 16");
+  const packet = setupProgressSummary({ v: 1, startedAt: day(10),
+    progress: { done: 9, total: 16, t1: { done: 6, total: 6 }, t2: { done: 3, total: 10 } } });
+  eq("once the essentials close it moves to the packet", packet.label, "Packet 3 of 10");
+  eq("and the bar moves with it", [packet.done, packet.total], [3, 10]);
+
+  const done = setupProgressSummary({ v: 1, startedAt: day(30),
+    progress: { done: 16, total: 16, t1: { done: 6, total: 6 }, t2: { done: 10, total: 10 } } });
+  eq("a finished board reads as the ten the physician saw", done.label, "Setup complete, 10 of 10");
   eq("and reads as complete", [done.tone, done.pct], ["complete", 100]);
 
-  // An account that has not opened the app since the score shipped.
+  // A free account has three Pro rows locked out of the denominator, so the
+  // packet is seven. The number still has to be the one THEY see.
+  const free = setupProgressSummary({ v: 1, startedAt: day(20),
+    progress: { done: 13, total: 13, t1: { done: 6, total: 6 }, t2: { done: 7, total: 7 } } });
+  eq("a free account's own total, not a Pro one", free.label, "Setup complete, 7 of 7");
+
+  // An account stamped before the halves were stored, and one not stamped yet.
+  const sumOnly = setupProgressSummary({ v: 1, startedAt: day(20), progress: { done: 9, total: 16 } });
+  eq("an older stamp says what it actually has", sumOnly.label, "Setup 9 of 16");
   const old = setupProgressSummary({ v: 1, startedAt: day(60), lastDone: "dea" });
   eq("no stored score still says something true", old.label, "Setup in progress");
   eq("and no fraction is invented", [old.done, old.total, old.pct], [null, null, null]);
 
   // The words the admin row must never use: they are internal names for the
   // two halves of the board and mean nothing on someone else's row.
-  for (const p of [none, scored, done, old]) {
-    ok(`no board jargon in "${p.label}"`, !/protected|packet|tier/i.test(`${p.label} ${p.detail}`));
+  for (const p of [none, early, packet, done, free, sumOnly, old]) {
+    ok(`no board jargon in "${p.label}"`, !/protected|tier/i.test(`${p.label} ${p.detail}`));
     ok("no em dash", !`${p.label} ${p.detail}`.includes("\u2014"));
   }
 }
 
 // ── The score round-trips through the stored state ──
 {
-  const st = withProgress(normalizeSetupState(null), { done: 3, total: 16 }, "2026-09-05T00:00:00.000Z");
-  eq("it is stored", [st.progress.done, st.progress.total], [3, 16]);
-  eq("and survives a normalize", normalizeSetupState(st).progress.done, 3);
+  const st = withProgress(normalizeSetupState(null),
+    { done: 3, total: 16, t1: { done: 3, total: 6 }, t2: { done: 0, total: 10 } }, "2026-09-05T00:00:00.000Z");
+  eq("the sum is stored", [st.progress.done, st.progress.total], [3, 16]);
+  eq("and both halves with it", [st.progress.t1.done, st.progress.t2.total], [3, 10]);
+  eq("it survives a normalize", normalizeSetupState(st).progress.t1.done, 3);
   eq("a malformed score is dropped rather than shown",
     normalizeSetupState({ progress: { done: "six", total: 16 } }).progress, null);
-  eq("and a missing one is null", normalizeSetupState({}).progress, null);
+  eq("a malformed half is dropped without losing the sum",
+    normalizeSetupState({ progress: { done: 3, total: 16, t1: "nope" } }).progress.t1, null);
+  eq("and a missing score is null", normalizeSetupState({}).progress, null);
 }
 
 // ── The CV row ──

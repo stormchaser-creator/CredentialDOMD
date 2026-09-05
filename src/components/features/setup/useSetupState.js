@@ -126,16 +126,24 @@ export function useSetupState() {
   // numbers actually move, and the same debounced queue carries it, so it
   // costs no extra round trip.
   const board = boardCounts(setup);
-  const scoreKey = `${board.done}/${board.total}`;
+  const t1c = setup.counts.tier1, t2c = setup.counts.tier2;
+  // Both halves, because the Setup page shows one at a time and never the sum.
+  const scoreKey = `${t1c.done}/${t1c.total}:${t2c.done}/${t2c.total}`;
   const scoreRef = useRef(null);
   useEffect(() => {
     if (!loaded || loadedFrom !== "cloud") return;
-    const stored2 = normalizeSetupState(effective).progress;
-    const same = stored2 && stored2.done === board.done && stored2.total === board.total;
+    const was = normalizeSetupState(effective).progress;
+    const same = was && was.t1 && was.t2
+      && was.t1.done === t1c.done && was.t1.total === t1c.total
+      && was.t2.done === t2c.done && was.t2.total === t2c.total;
     if (same || scoreRef.current === scoreKey) return;
     scoreRef.current = scoreKey;
-    commit((st) => withProgress(st, { done: board.done, total: board.total }, new Date().toISOString(), pruneArgs));
-  }, [loaded, loadedFrom, scoreKey, board.done, board.total, effective, commit, pruneArgs]);
+    commit((st) => withProgress(st, {
+      done: board.done, total: board.total,
+      t1: { done: t1c.done, total: t1c.total },
+      t2: { done: t2c.done, total: t2c.total },
+    }, new Date().toISOString(), pruneArgs));
+  }, [loaded, loadedFrom, scoreKey, board.done, board.total, t1c.done, t1c.total, t2c.done, t2c.total, effective, commit, pruneArgs]);
 
   // lastTouched: the last time any task actually closed. The card's copy
   // reads it ("You added 4 licenses on Monday"), so it must not move when

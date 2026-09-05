@@ -123,6 +123,13 @@ export const EMPTY_SETUP_STATE = Object.freeze({
 });
 
 /** Anything on file (or nothing at all) read back as the full shape. */
+/** One half of the board as stored, or null. */
+function half(v) {
+  return v && typeof v === "object" && typeof v.done === "number" && typeof v.total === "number"
+    ? { done: v.done, total: v.total }
+    : null;
+}
+
 export function normalizeSetupState(raw) {
   const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const declared = r.declared && typeof r.declared === "object" && !Array.isArray(r.declared) ? r.declared : {};
@@ -147,7 +154,12 @@ export function normalizeSetupState(raw) {
     // far they got. { done, total, at } or null before the first read.
     progress: r.progress && typeof r.progress === "object"
       && typeof r.progress.done === "number" && typeof r.progress.total === "number"
-      ? { done: r.progress.done, total: r.progress.total, at: r.progress.at || null }
+      ? {
+        done: r.progress.done, total: r.progress.total, at: r.progress.at || null,
+        // Both halves, because the Setup page never shows the sum: it shows
+        // the first six until they are finished, then the packet's ten.
+        t1: half(r.progress.t1), t2: half(r.progress.t2),
+      }
       : null,
     declared: { ...declared },
     tasks: { ...tasks },
@@ -926,9 +938,9 @@ export function withTask(state, id, status, { why = "", now = new Date() } = {},
 /** A declared negative, e.g. declared.noDea for a physician who holds none. */
 /** Stamp the board's score. Written only when it moves, by the one device
  *  that can compute it. */
-export function withProgress(state, { done, total }, at, prune) {
+export function withProgress(state, { done, total, t1, t2 }, at, prune) {
   const next = normalizeSetupState(state);
-  return write(next, { progress: { done, total, at: at || null } }, prune);
+  return write(next, { progress: { done, total, at: at || null, t1: half(t1), t2: half(t2) } }, prune);
 }
 
 export function withDeclared(state, key, value, prune) {
@@ -1202,9 +1214,6 @@ function taskLabel(id) {
 export function setupProgressSummary(setupState) {
   const s = normalizeSetupState(setupState);
   const p = s.progress;
-  const done = p ? p.done : null;
-  const total = p && p.total > 0 ? p.total : null;
-  const pct = done !== null && total ? Math.round((done / total) * 100) : null;
 
   const bits = [];
   if (s.startedAt) bits.push(`started ${shortDate(s.startedAt)}`);
@@ -1219,12 +1228,9 @@ export function setupProgressSummary(setupState) {
   if (na) bits.push(`${na} not applicable`);
   const detail = bits.join(", ");
 
-  // Nothing at all: no score, no start. All that is known is that they have
-  // not opened it.
   if (!p && !s.startedAt) {
     return { tone: "none", label: "Setup not started", detail: "Nothing on this account yet", done: null, total: null, pct: null };
   }
-  // An older account whose device has not stamped a score since this shipped.
   if (!p) {
     return {
       tone: s.tier2DoneAt ? "complete" : "started",
@@ -1233,14 +1239,36 @@ export function setupProgressSummary(setupState) {
       done: null, total: null, pct: null,
     };
   }
-  if (done >= total) {
-    return { tone: "complete", label: `Setup complete, ${done} of ${total}`, detail, done, total, pct: 100 };
+
+  // The physician's own Setup page shows ONE half at a time: the first six
+  // until they are finished, then the packet's ten. It never shows the sum, so
+  // neither does this: a third denominator nobody has seen is not a clearer
+  // number, it is a number to argue with.
+  const t1 = p.t1, t2 = p.t2;
+  const stage = (!t1 || !t2)
+    // An older stamp holds only the sum. Say that rather than invent halves.
+    ? { name: "Setup", done: p.done, total: p.total }
+    : (t1.done < t1.total
+      ? { name: "Essentials", done: t1.done, total: t1.total }
+      : { name: "Packet", done: t2.done, total: t2.total });
+
+  const pct = stage.total > 0 ? Math.round((stage.done / stage.total) * 100) : null;
+  const finished = stage.total > 0 && stage.done >= stage.total;
+  // Finished the packet as well as the essentials, so there is nothing left.
+  const wholeBoardDone = t1 && t2 ? (t1.done >= t1.total && t2.done >= t2.total) : p.done >= p.total;
+
+  if (wholeBoardDone) {
+    return {
+      tone: "complete",
+      label: t1 && t2 ? `Setup complete, ${t2.done} of ${t2.total}` : `Setup complete, ${p.done} of ${p.total}`,
+      detail, done: stage.done, total: stage.total, pct: 100, stage: stage.name,
+    };
   }
   return {
-    tone: done > 0 ? "started" : "none",
-    label: `Setup ${done} of ${total}`,
+    tone: stage.done > 0 || finished ? "started" : "none",
+    label: `${stage.name} ${stage.done} of ${stage.total}`,
     detail: detail || "Not started yet",
-    done, total, pct,
+    done: stage.done, total: stage.total, pct, stage: stage.name,
   };
 }
 
