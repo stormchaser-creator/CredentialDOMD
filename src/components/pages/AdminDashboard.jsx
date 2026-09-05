@@ -6,6 +6,8 @@ import { isAdminUser } from "../../lib/admin";
 import { Modal, ScreenshotAttach } from "../shared";
 import { FOUNDING_COHORT_CAP } from "../../utils/pricingConstants";
 import { foundingText } from "../../utils/founding";
+import { setupProgressSummary } from "../../utils/setupTasks";
+import { leadNoteLabel } from "../../utils/adminLabels";
 
 /**
  * AdminDashboard — gated to admin emails only.
@@ -178,7 +180,7 @@ export default function AdminDashboard() {
       supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at,waitlist").order("created_at", { ascending: false }).limit(500),
       supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number").order("created_at", { ascending: false }).limit(500),
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("client_errors").select("id, created_at, kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra").order("created_at", { ascending: false }).limit(50),
       supabase.from("admin_messages_overview").select("*").limit(200),
@@ -763,7 +765,7 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
 
   const refresh = async () => {
     const [pr, ba] = await Promise.all([
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number").order("created_at", { ascending: false }).limit(500),
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
     ]);
     if (pr.data) setUsers(pr.data);
@@ -886,6 +888,20 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
                 <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || u.email || "(no name yet)"}</div>
                 <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name && u.email ? u.email : ""}{u.degree_type ? ` · ${u.degree_type}` : ""}{u.primary_state ? ` · ${u.primary_state}` : ""}</div>
                 <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>joined {timeAgo(u.created_at)} · last seen {timeAgo(u.last_seen_at)}{inv ? " · invited " + timeAgo(inv.invited_at) : u.access_status === "active" ? "" : " · not on invite list"}</div>
+                {/* Where they are in setup. Read from their own setup_state
+                    stamps, which sync; the percentage itself is derived from
+                    records RLS keeps owner-scoped, so it is not shown and not
+                    guessed at. */}
+                {(() => {
+                  const p = setupProgressSummary(u.setup_state);
+                  const tint = { complete: T.success, protected: T.accent, started: T.warning, none: T.textDim }[p.tone];
+                  return (
+                    <div style={{ fontSize: 11, marginTop: 3, display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 800, color: tint, whiteSpace: "nowrap" }}>{p.label}</span>
+                      <span style={{ color: T.textDim }}>{p.detail}</span>
+                    </div>
+                  );
+                })()}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                 {u.founding_number != null && (
@@ -905,6 +921,14 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
     </div>
   );
 }
+
+// One badge shape for the whole waitlist row, so a badge can never win width
+// from the email beside it.
+const badge = (color, bg) => ({
+  fontSize: 10, fontWeight: 800, color, backgroundColor: bg,
+  padding: "2px 7px", borderRadius: 8, textTransform: "uppercase",
+  whiteSpace: "nowrap", flexShrink: 0,
+});
 
 function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite }) {
   // Full back-end control: see everyone, add someone by hand (a physician
@@ -1021,20 +1045,34 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
             backgroundColor: T.card, border: `1px solid ${T.border}`,
             borderRadius: 10, padding: "10px 12px",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{r.name || r.email}</span>
-                  {r.note && <span style={{ fontSize: 10, fontWeight: 800, color: T.warning, textTransform: "uppercase" }}>{r.note}</span>}
-                  {r.source === "admin-manual" && <span style={{ fontSize: 10, fontWeight: 800, color: T.accent, textTransform: "uppercase" }}>added by you</span>}
-                  {r.waitlist === false && <span style={{ fontSize: 10, fontWeight: 800, color: T.textMuted, textTransform: "uppercase" }}>guide only, not on waitlist</span>}
+            {/* The email is the row. It used to share one non-wrapping flex
+                line with up to four uppercase badges, and since a guide
+                request carries no name the email WAS the heading: flex gave
+                the badges their width and squeezed the address down to a few
+                characters. Now the address gets its own full-width line, and
+                the badges wrap underneath it. */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0, flex: "1 1 240px" }}>
+                {r.name && (
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{r.name}</div>
+                )}
+                <div style={{
+                  fontSize: r.name ? 12.5 : 14,
+                  fontWeight: r.name ? 500 : 700,
+                  color: r.name ? T.textMuted : T.text,
+                  marginTop: r.name ? 2 : 0,
+                  overflowWrap: "anywhere",
+                }}>{r.email}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
+                  {r.note && <span style={badge(T.warning, T.warningDim)}>{leadNoteLabel(r.note)}</span>}
+                  {r.source === "admin-manual" && <span style={badge(T.accent, T.accentGlow)}>added by you</span>}
+                  {r.waitlist === false && <span style={badge(T.textMuted, T.neutralDim)}>guide only</span>}
                   {activeEmails.has((r.email || "").toLowerCase()) && (
-                    <span style={{ fontSize: 10, fontWeight: 800, color: "#10b981", textTransform: "uppercase" }}>already a user</span>
+                    <span style={badge("#10b981", "rgba(16,185,129,0.14)")}>already a user</span>
                   )}
                 </div>
-                {r.name && <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: 2, overflowWrap: "anywhere" }}>{r.email}</div>}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
                 <button onClick={() => cycleStatus(r)} title="Tap to advance: waiting → invited → joined → paying" style={{
                   padding: "3px 9px", borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: "uppercase", cursor: "pointer",
                   border: `1px solid ${r.status ? T.accent : T.border}`,
@@ -1072,11 +1110,11 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
             These people hit Join but the signup itself did not land — reach out or add them manually above.
           </div>
           {orphanAttempts.map(a => (
-            <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 10, padding: "8px 12px", marginBottom: 5 }}>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{a.name || "(no name)"}</span>
-                <span style={{ fontSize: 12, color: T.textMuted, marginLeft: 8, overflowWrap: "anywhere" }}>{a.email}</span>
-                <span style={{ fontSize: 10, fontWeight: 800, color: T.warning, marginLeft: 8, textTransform: "uppercase" }}>{a.stage}</span>
+            <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap", backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 10, padding: "8px 12px", marginBottom: 5 }}>
+              <div style={{ minWidth: 0, flex: "1 1 220px" }}>
+                {a.name && <div style={{ fontSize: 13, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{a.name}</div>}
+                <div style={{ fontSize: a.name ? 12 : 13, fontWeight: a.name ? 500 : 700, color: a.name ? T.textMuted : T.text, overflowWrap: "anywhere" }}>{a.email}</div>
+                <span style={{ ...badge(T.warning, T.warningDim), display: "inline-block", marginTop: 4 }}>{a.stage}</span>
               </div>
               <button onClick={() => removeAttempt(a)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: "transparent", color: T.textDim, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>dismiss</button>
             </div>

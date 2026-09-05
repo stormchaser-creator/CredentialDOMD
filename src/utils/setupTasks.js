@@ -1161,3 +1161,43 @@ export function firstRenderPatch(setup, { now = new Date() } = {}) {
   if (setup.counts.tier1.complete) patch.tier1DoneAt = nowIso;
   return patch;
 }
+
+/* ─── What an admin can honestly say about someone else's setup ─── */
+
+/**
+ * The setup board is DERIVED from a physician's own records, and an admin
+ * cannot read those: RLS is owner-scoped and that is the point. What does sync
+ * is profiles.setup_state, the board's own stamps, and those are enough to say
+ * where somebody is without seeing a single credential.
+ *
+ * Returns { label, detail, tone }, where tone is one of "none" | "started" |
+ * "protected" | "complete". Never guesses: an account with no stamp reads as
+ * not started, because that is all that is known.
+ */
+export function setupProgressSummary(setupState) {
+  const s = normalizeSetupState(setupState);
+  const taskCounts = Object.values(s.tasks || {}).reduce((acc, t) => {
+    if (t?.s === "skipped") acc.skipped += 1;
+    if (t?.s === "na") acc.na += 1;
+    return acc;
+  }, { skipped: 0, na: 0 });
+  const declared = Object.keys(s.declared || {}).length;
+  const aside = [
+    taskCounts.skipped ? `${taskCounts.skipped} skipped` : "",
+    taskCounts.na + declared ? `${taskCounts.na + declared} marked not applicable` : "",
+  ].filter(Boolean).join(", ");
+
+  if (s.tier2DoneAt) {
+    return { tone: "complete", label: "Setup complete",
+      detail: `Packet finished ${shortDate(s.tier2DoneAt)}${aside ? `, ${aside}` : ""}` };
+  }
+  if (s.tier1DoneAt) {
+    return { tone: "protected", label: "Protected, packet in progress",
+      detail: `Protected finished ${shortDate(s.tier1DoneAt)}${s.lastDone ? `, last did ${s.lastDone}` : ""}${aside ? `, ${aside}` : ""}` };
+  }
+  if (s.startedAt) {
+    return { tone: "started", label: "Setup in progress",
+      detail: `Started ${shortDate(s.startedAt)}${s.lastDone ? `, last did ${s.lastDone}` : ""}${aside ? `, ${aside}` : ""}` };
+  }
+  return { tone: "none", label: "Setup not started", detail: "No setup activity on this account yet" };
+}

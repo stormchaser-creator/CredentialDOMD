@@ -10,6 +10,7 @@ import { searchCPT } from "../../../utils/cptSearch";
 import { Modal, Field } from "../../shared";
 import { CPT_DESCS } from "../../../constants/cptDescs";
 import { CASE_CATEGORY_GROUPS } from "../../../constants/credentialTypes";
+import { categoryForCase } from "../../../utils/caseCategory";
 
 const localDate = (d) => {
   const x = new Date(d);
@@ -90,6 +91,9 @@ function RVULog() {
       return Number.isFinite(n) && n >= 10000 && n < 70000;
     });
   }, [review]);
+  // What the codes say this case is. Shown in the picker so the surgeon sees
+  // it before saving rather than finding "Other" in the log afterwards.
+  const suggestedCategory = useMemo(() => categoryForCase(surgicalPreview, text), [surgicalPreview, text]);
   const [encDraft, setEncDraft] = useState(null); // its editable copy
   const [encQ, setEncQ] = useState("");           // code search inside the modal
   const [encResults, setEncResults] = useState([]);
@@ -197,11 +201,15 @@ function RVULog() {
     });
     if (surgical.length) {
       const wRvu = surgical.reduce((s2, c) => s2 + (c.wRVU || 0) * (c.units || 1), 0);
+      // The codes already say what kind of case this is, so the log stops
+      // filing everything as "Other" when the picker was left alone. A picked
+      // category always wins; "Other" is only written when the codes genuinely
+      // do not decide one.
       addItem("caseLogs", {
         id: generateId(),
         date,
         title: surgical[0].desc || `CPT ${surgical[0].code}`,
-        category: caseCategory || "Other",
+        category: caseCategory || categoryForCase(surgical, text) || "Other",
         cptCodes: surgical.map(c => {
           const base = c.modifier ? `${c.code}-${c.modifier}` : c.code;
           return (c.units || 1) > 1 ? `${base} x${c.units}` : base;
@@ -229,7 +237,7 @@ function RVULog() {
       id: generateId(),
       date: info.date,
       title: (info.codes || [])[0]?.desc || "Case from RVU log",
-      category: caseCategory || "Other",
+      category: caseCategory || categoryForCase(info.codes, info.spokenText || "") || "Other",
       cptCodes: (info.codes || []).map(c => (c.modifier ? `${c.code}-${c.modifier}` : c.code)).join(", "),
       wRvu: Math.round(wRvu * 100) / 100,
       facility: contracts.find(c2 => c2.id === info.cid)?.facility || "",
@@ -383,10 +391,10 @@ function RVULog() {
             {surgicalPreview.length > 0 && (
               <div style={{ marginTop: 10 }}>
                 <label style={{ fontSize: 11.5, fontWeight: 700, color: T.textMuted, display: "block", marginBottom: 4 }}>
-                  Case log category — {surgicalPreview.length} operative code{surgicalPreview.length === 1 ? "" : "s"} will land here
+                  Case log category, for the {surgicalPreview.length} operative code{surgicalPreview.length === 1 ? "" : "s"} landing there
                 </label>
                 <select value={caseCategory} onChange={e => setCaseCategory(e.target.value)} style={{ ...iS, appearance: "auto" }}>
-                  <option value="">Other (pick one to skip fixing it later)</option>
+                  <option value="">{suggestedCategory ? `${suggestedCategory} (read from the codes)` : "Other (the codes do not say; pick one)"}</option>
                   {CASE_CATEGORY_GROUPS.map(g => (
                     <optgroup key={g.header} label={g.header}>
                       {g.options.map(o => <option key={o} value={o}>{o}</option>)}
