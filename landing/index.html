@@ -1592,7 +1592,11 @@ nav {
 }
 
 .faq-item.open .faq-answer {
-  max-height: 300px;
+  /* A max-height transition clips anything taller than the value, and 300px
+     is about eleven lines. The security answer was already longer than that,
+     so part of it was unreadable; the backup answers are longer still. This
+     only has to exceed the tallest answer at the narrowest screen. */
+  max-height: 2000px;
 }
 
 .faq-answer-inner {
@@ -2739,6 +2743,50 @@ footer {
         <div class="faq-answer">
           <div class="faq-answer-inner">
             Yes. Your records live in a database and a private file store at Supabase (US region), encrypted at rest and in transit, and row-level security ties every row and file to your account. We never share or sell your information. You can export all of your data at any time, and Delete All My Data in the app removes your records, documents, backups, support tickets, and assistant log; after a cancellation the same deletion runs automatically 7 days later. Two things we want you to know plainly: support tickets and feedback you send are read by the founder, and AI features send what you give them to outside AI services under keys we hold. Document scans and dictated text go to Google&rsquo;s Gemini API, and the assistant sends your question, a summary of your records, and any document you attach to Anthropic&rsquo;s Claude API. Anthropic deletes API inputs and outputs within 30 days and does not train on them; Google&rsquo;s API terms apply to what goes to Gemini. Keep patient identifiers out of documents you scan and notes you dictate. <strong>CredentialDOMD holds no patient health information by design.</strong> It records your credentials, your billable time and your case codes, not your patients&rsquo; data. That is why it sits outside HIPAA and why we do not sign business associate agreements. Patient identifiers do not belong in it; the one field meant for a patient reminder stays in your own browser and is never uploaded.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          What happens to my records if your servers go down?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">
+            You keep working. The app is offline first: your records live in your own browser as well as on the server, so a flight, a hospital basement or an outage at our end does not stop you opening a licence number or logging a case. Changes queue on the device and sync when the connection returns.
+            <br><br>
+            Behind that there are three separate copies. The database is Postgres at Supabase in the United States, which takes its own daily snapshot. Every night at 03:10 a second job runs on hardware we control and pulls a full copy: every table, the schema, and <strong>every document you have uploaded</strong>, into one archive encrypted with AES-256 before it is written to disk. That archive is kept for 30 days locally and copied off site for 14. Both copies carry a checksum so a corrupted file is detected rather than discovered during a restore.
+            <br><br>
+            The reason the nightly job exists is specific: the provider&rsquo;s own snapshots cover the database but <strong>not</strong> your uploaded files. Without it, a lost project would mean lost documents. With it, the documents sit in a second place, in our custody, encrypted.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Has the restore actually been tested, or just the backup?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">
+            Tested. A backup nobody has restored is a hope, not a failsafe. The archive has been decrypted and loaded into a clean Postgres database end to end, table counts and row hashes compared against the live database, and a document opened from the restored copy. That result is written down, and the runbook puts the next full restore test on the calendar quarterly.
+            <br><br>
+            An archive can also be opened without us and without Supabase: it is a plain tar file behind standard OpenSSL encryption, holding your data as JSON and CSV and your documents as the original files. There is no proprietary format to be locked into and no tool of ours you need in order to read it.
+          </div>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          Can I hold my own copy, and what if you disappear?
+          <span class="faq-toggle">+</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">
+            Yes, and you should. <strong>More &gt; Data &amp; Backup</strong> exports everything you have entered whenever you want it, in open formats. Once a month the server also builds a ZIP of your records and your uploaded documents and emails you that it is ready. The email carries no link to the file: you download it while signed in, through a link that expires in 15 minutes, and the three most recent months are kept.
+            <br><br>
+            Nothing about your record depends on this company continuing to exist. It is your licences, your CME and your documents, in formats a spreadsheet and a PDF reader can open, one export away at any time.
           </div>
         </div>
       </div>
