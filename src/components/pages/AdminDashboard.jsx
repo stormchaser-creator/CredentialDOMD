@@ -8,6 +8,7 @@ import { FOUNDING_COHORT_CAP } from "../../utils/pricingConstants";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
 import { leadNoteLabel } from "../../utils/adminLabels";
+import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 
 /**
  * AdminDashboard — gated to admin emails only.
@@ -38,9 +39,9 @@ export default function AdminDashboard() {
   // Signed links from ticket-attachment-url: the ticket's own screenshot, and
   // one per reply keyed by message id. replyAttachment is the one going out
   // with the next reply.
-  const [attachmentUrl, setAttachmentUrl] = useState(null);
+  const [attachmentUrls, setAttachmentUrls] = useState([]);
   const [replyUrls, setReplyUrls] = useState({});
-  const [replyAttachment, setReplyAttachment] = useState(null); // { data: dataURL, name }
+  const [replyAttachment, setReplyAttachment] = useState([]); // [{ data: dataURL, name }]
   // Manual ticket controls — the assistant sometimes fails to raise a card,
   // and resolved tickets pile up; both get first-class buttons here.
   const [showArchived, setShowArchived] = useState(false);
@@ -49,7 +50,7 @@ export default function AdminDashboard() {
   const [newBody, setNewBody] = useState("");
   const [newCategory, setNewCategory] = useState("feature_request");
   const [creating, setCreating] = useState(false);
-  const [newAttachment, setNewAttachment] = useState(null); // { data: dataURL, name }
+  const [newAttachment, setNewAttachment] = useState([]); // [{ data: dataURL, name }]
 
   const isAdmin = isAdminUser(user);
 
@@ -61,17 +62,18 @@ export default function AdminDashboard() {
   // Signed links for every screenshot on the thread (the ticket's own plus one
   // per reply), one round trip through ticket-attachment-url.
   const loadAttachmentUrls = async (t, msgs) => {
-    if (!t.context_payload?.attachment_path && !msgs.some((m) => m.attachment_path)) return;
+    const onTicket = t.context_payload?.attachment_path || t.context_payload?.attachment_paths?.length;
+    if (!onTicket && !msgs.some((m) => m.attachment_path || m.attachment_paths?.length)) return;
     const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
     if (res.error) { setTicketMsg(await edgeErrorMessage(res.error, "Could not open the screenshot.")); return; }
-    setAttachmentUrl(res.data?.url || null);
+    setAttachmentUrls(linksFor(res.data?.urls ?? res.data?.url));
     setReplyUrls(res.data?.replies || {});
   };
 
   // Tap a ticket → read it, see the whole thread, answer it, change its state.
   const openTicketDetail = async (t) => {
-    setOpenTicket(t); setReply(""); setReplyAttachment(null); setTicketMsg("");
-    setAttachmentUrl(null); setReplyUrls({});
+    setOpenTicket(t); setReply(""); setReplyAttachment([]); setTicketMsg("");
+    setAttachmentUrls([]); setReplyUrls({});
     const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
     setThread(data || []);
     await loadAttachmentUrls(t, data || []);
@@ -86,11 +88,11 @@ export default function AdminDashboard() {
       const res = await supabase.functions.invoke("create-ticket", {
         body: {
           subject: subject.slice(0, 180), body, category: newCategory, priority: "normal", context_page: "admin",
-          ...(newAttachment ? { attachment: { data: newAttachment.data } } : {}),
+          ...attachmentsPayload(newAttachment),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
-      setNewOpen(false); setNewSubject(""); setNewBody(""); setNewAttachment(null);
+      setNewOpen(false); setNewSubject(""); setNewBody(""); setNewAttachment([]);
       await refreshTickets();
     } catch (e2) { setTicketMsg(e2.message); }
     setCreating(false);
@@ -114,7 +116,7 @@ export default function AdminDashboard() {
       const res = await supabase.functions.invoke("reply-ticket", {
         body: {
           ticket_id: openTicket.id, body: body || "Status set to resolved.", status: "resolved",
-          ...(replyAttachment ? { attachment: { data: replyAttachment.data } } : {}),
+          ...attachmentsPayload(replyAttachment),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
@@ -122,7 +124,7 @@ export default function AdminDashboard() {
         .update({ archived_at: new Date().toISOString() })
         .eq("id", openTicket.id);
       if (e2) throw new Error(e2.message);
-      setReply(""); setReplyAttachment(null);
+      setReply(""); setReplyAttachment([]);
       setTicketMsg("Resolved and archived.");
       await refreshTickets();
       setTimeout(() => setOpenTicket(null), 900);
@@ -135,7 +137,7 @@ export default function AdminDashboard() {
   const sendReply = async (newStatus) => {
     if (!openTicket) return;
     const body = reply.trim();
-    if (!body && !newStatus && !replyAttachment) { setTicketMsg("Write a reply first."); return; }
+    if (!body && !newStatus && !replyAttachment.length) { setTicketMsg("Write a reply first."); return; }
     setBusy(true); setTicketMsg("");
     try {
       // A screenshot alone is a valid reply; reply-ticket gives it a stock body.
@@ -144,13 +146,13 @@ export default function AdminDashboard() {
           ticket_id: openTicket.id,
           body: body || (newStatus ? `Status set to ${newStatus}.` : ""),
           ...(newStatus ? { status: newStatus } : {}),
-          ...(replyAttachment ? { attachment: { data: replyAttachment.data } } : {}),
+          ...attachmentsPayload(replyAttachment),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
       const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
       setThread(data || []);
-      setReply(""); setReplyAttachment(null);
+      setReply(""); setReplyAttachment([]);
       setTicketMsg(newStatus ? `Marked ${newStatus.replace("_", " ")}.` : "Reply sent.");
       await refreshTickets();
       await loadAttachmentUrls(openTicket, data || []);
@@ -381,10 +383,14 @@ export default function AdminDashboard() {
             <div style={{ fontSize: 14, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.55, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
               {openTicket.body}
             </div>
-            {attachmentUrl && (
-              <a href={attachmentUrl} target="_blank" rel="noreferrer">
-                <img src={attachmentUrl} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 200, maxHeight: 200, borderRadius: 8, border: `1px solid ${T.border}` }} />
-              </a>
+            {attachmentUrls.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                {attachmentUrls.map((u, i) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer">
+                    <img src={u} alt={`Attached screenshot ${i + 1}`} style={{ maxWidth: 200, maxHeight: 200, borderRadius: 8, border: `1px solid ${T.border}`, display: "block" }} />
+                  </a>
+                ))}
+              </div>
             )}
 
             {thread.length > 0 && (
@@ -399,10 +405,14 @@ export default function AdminDashboard() {
                       {m.is_admin_reply ? "You" : m.author_email || "User"} · {new Date(m.created_at).toLocaleString()}
                     </div>
                     <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
-                    {m.attachment_path && (replyUrls[m.id] ? (
-                      <a href={replyUrls[m.id]} target="_blank" rel="noreferrer">
-                        <img src={replyUrls[m.id]} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 200, maxHeight: 200, borderRadius: 8, border: `1px solid ${T.border}` }} />
-                      </a>
+                    {Boolean(m.attachment_path || m.attachment_paths?.length) && (linksFor(replyUrls[m.id]).length ? (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        {linksFor(replyUrls[m.id]).map((u, i) => (
+                          <a key={u} href={u} target="_blank" rel="noreferrer">
+                            <img src={u} alt={`Attached screenshot ${i + 1}`} style={{ maxWidth: 200, maxHeight: 200, borderRadius: 8, border: `1px solid ${T.border}`, display: "block" }} />
+                          </a>
+                        ))}
+                      </div>
                     ) : (
                       <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>Screenshot attached</div>
                     ))}
@@ -452,7 +462,7 @@ export default function AdminDashboard() {
       </Modal>
 
       {/* Manual ticket entry — the direct road when the assistant fumbles */}
-      <Modal open={newOpen} onClose={() => { setNewOpen(false); setNewAttachment(null); }} title="New ticket">
+      <Modal open={newOpen} onClose={() => { setNewOpen(false); setNewAttachment([]); }} title="New ticket">
         <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
           placeholder="One-line summary"
           style={{
@@ -894,11 +904,18 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
                     guessed at. */}
                 {(() => {
                   const p = setupProgressSummary(u.setup_state);
-                  const tint = { complete: T.success, protected: T.accent, started: T.warning, none: T.textDim }[p.tone];
+                  const tint = { complete: T.success, started: T.accent, none: T.textDim }[p.tone] || T.textDim;
                   return (
-                    <div style={{ fontSize: 11, marginTop: 3, display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap" }}>
-                      <span style={{ fontWeight: 800, color: tint, whiteSpace: "nowrap" }}>{p.label}</span>
-                      <span style={{ color: T.textDim }}>{p.detail}</span>
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ fontSize: 11, display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 800, color: tint, whiteSpace: "nowrap" }}>{p.label}</span>
+                        {p.detail && <span style={{ color: T.textDim }}>{p.detail}</span>}
+                      </div>
+                      {p.pct !== null && (
+                        <div style={{ height: 4, borderRadius: 3, backgroundColor: T.neutralDim, marginTop: 4, maxWidth: 220, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${p.pct}%`, backgroundColor: tint, borderRadius: 3 }} />
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

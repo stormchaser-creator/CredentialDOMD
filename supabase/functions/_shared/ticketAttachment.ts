@@ -10,8 +10,15 @@
  * Storage keys live here too so the writer (create-ticket / reply-ticket)
  * and the reader (ticket-attachment-url) agree on the layout under the
  * private "documents" bucket:
- *   tickets/<ticket_id>/screenshot.<ext>            the ticket's own
- *   tickets/<ticket_id>/replies/<message_id>.<ext>  one per reply
+ *   tickets/<ticket_id>/screenshot.<ext>              the ticket's first
+ *   tickets/<ticket_id>/screenshot-2.<ext>            the second, and so on
+ *   tickets/<ticket_id>/replies/<message_id>.<ext>    a reply's first
+ *   tickets/<ticket_id>/replies/<message_id>-2.<ext>  the second, and so on
+ *
+ * The first key of each pair is unchanged from when one screenshot was all a
+ * ticket could carry, so nothing already in the bucket has to move. A
+ * physician asked to send several at once because one picture rarely shows
+ * a bug; the index starts at 2 for exactly that reason.
  */
 
 export const ATTACHMENT_BUCKET = "documents";
@@ -68,3 +75,63 @@ export const ticketScreenshotPath = (ticketId: string, ext: string) =>
 
 export const replyScreenshotPath = (ticketId: string, messageId: string, ext: string) =>
   `tickets/${ticketId}/replies/${messageId}.${ext}`;
+
+/** How many images one ticket or one reply may carry. */
+export const MAX_ATTACHMENTS = 5;
+export const ATTACHMENT_COUNT_ERROR = `Attach at most ${MAX_ATTACHMENTS} images at a time.`;
+/** And how much they may weigh together, so one request cannot carry 25 MB. */
+export const MAX_TOTAL_ATTACHMENT_BYTES = 12 * 1024 * 1024;
+export const ATTACHMENT_TOTAL_ERROR = "Those images are too large together (12 MB max). Send them across two messages.";
+
+/**
+ * Reads either shape the client may send:
+ *   attachment:  { data }            one image, the original wire field
+ *   attachments: [{ data }, ...]     several
+ * Returns [] when there is nothing to read, { error } when the set is
+ * refused, and the decoded images otherwise. A single bad image refuses the
+ * whole set rather than silently dropping one: a physician who attached four
+ * and sees three arrive has no way to know which went missing.
+ */
+export function parseAttachments(body: unknown): DecodedAttachment[] | { error: string } {
+  const b = (body || {}) as { attachment?: unknown; attachments?: unknown };
+  const list = Array.isArray(b.attachments)
+    ? b.attachments
+    : (b.attachment ? [b.attachment] : []);
+  if (!list.length) return [];
+  if (list.length > MAX_ATTACHMENTS) return { error: ATTACHMENT_COUNT_ERROR };
+
+  const out: DecodedAttachment[] = [];
+  let total = 0;
+  for (const item of list) {
+    const one = parseAttachment(item);
+    if (one === null) continue;            // an empty slot is not an error
+    if ("error" in one) return { error: one.error };
+    total += one.bytes.length;
+    if (total > MAX_TOTAL_ATTACHMENT_BYTES) return { error: ATTACHMENT_TOTAL_ERROR };
+    out.push(one);
+  }
+  return out;
+}
+
+/**
+ * The key for image `index` (0-based). Index 0 keeps the original key so
+ * every object already in the bucket stays where the reader expects it.
+ */
+export const ticketScreenshotPathAt = (ticketId: string, ext: string, index: number) =>
+  index === 0 ? ticketScreenshotPath(ticketId, ext) : `tickets/${ticketId}/screenshot-${index + 1}.${ext}`;
+
+export const replyScreenshotPathAt = (ticketId: string, messageId: string, ext: string, index: number) =>
+  index === 0
+    ? replyScreenshotPath(ticketId, messageId, ext)
+    : `tickets/${ticketId}/replies/${messageId}-${index + 1}.${ext}`;
+
+/**
+ * Every path a ticket or message row carries, old shape or new, in order and
+ * without duplicates. `attachment_path` was the only column for a while, so a
+ * row can hold the singular, the array, or both.
+ */
+export function attachmentPathsOf(row: { attachment_path?: string | null; attachment_paths?: string[] | null } | null | undefined): string[] {
+  const many = Array.isArray(row?.attachment_paths) ? row!.attachment_paths.filter(Boolean) : [];
+  const one = row?.attachment_path ? [row.attachment_path] : [];
+  return [...new Set([...one, ...many])];
+}

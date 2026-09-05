@@ -4,6 +4,7 @@ import {
   buildSetup, firstRenderPatch, normalizeSetupState,
   withTask, withDeclared, withSnooze, withStarted, withTier1Done, withProSnapshot,
   denominatorNarration, proSnapshot, proSnapshotMatches,
+  withProgress, boardCounts,
 } from "../../../utils/setupTasks";
 
 /**
@@ -119,6 +120,22 @@ export function useSetupState() {
       return patch.tier1DoneAt ? withTier1Done(started, patch.tier1DoneAt, pruneArgs) : started;
     });
   }, [loaded, loadedFrom, setup, commit, pruneArgs]);
+
+  // The board's own score, stamped so somebody who cannot read this
+  // physician's records can still see how far they got. Written only when the
+  // numbers actually move, and the same debounced queue carries it, so it
+  // costs no extra round trip.
+  const board = boardCounts(setup);
+  const scoreKey = `${board.done}/${board.total}`;
+  const scoreRef = useRef(null);
+  useEffect(() => {
+    if (!loaded || loadedFrom !== "cloud") return;
+    const stored2 = normalizeSetupState(effective).progress;
+    const same = stored2 && stored2.done === board.done && stored2.total === board.total;
+    if (same || scoreRef.current === scoreKey) return;
+    scoreRef.current = scoreKey;
+    commit((st) => withProgress(st, { done: board.done, total: board.total }, new Date().toISOString(), pruneArgs));
+  }, [loaded, loadedFrom, scoreKey, board.done, board.total, effective, commit, pruneArgs]);
 
   // lastTouched: the last time any task actually closed. The card's copy
   // reads it ("You added 4 licenses on Monday"), so it must not move when

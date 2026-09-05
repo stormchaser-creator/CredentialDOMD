@@ -8,6 +8,8 @@ const {
   parseAttachment, MAX_ATTACHMENT_BYTES, MIME_EXT,
   ATTACHMENT_TYPE_ERROR, ATTACHMENT_SIZE_ERROR,
   ticketScreenshotPath, replyScreenshotPath,
+  parseAttachments, ticketScreenshotPathAt, replyScreenshotPathAt, attachmentPathsOf,
+  MAX_ATTACHMENTS, ATTACHMENT_COUNT_ERROR, ATTACHMENT_TOTAL_ERROR, MAX_TOTAL_ATTACHMENT_BYTES,
 } = await import("../supabase/functions/_shared/ticketAttachment.ts");
 
 let pass = 0, fail = 0;
@@ -80,6 +82,64 @@ globalThis.atob = realAtob;
 // ticket folder, so the reader (ticket-attachment-url) can sign either.
 eq("ticket screenshot path", ticketScreenshotPath("t1", "png"), "tickets/t1/screenshot.png");
 eq("reply screenshot path", replyScreenshotPath("t1", "m1", "jpg"), "tickets/t1/replies/m1.jpg");
+
+
+// ── Several images on one ticket or reply ─────────────────────────────────
+// A physician asked for this: one picture rarely shows a bug.
+// Base64 only decodes in blocks of four, so the length is rounded to one:
+// an odd length throws inside atob and every case comes back as a type error.
+const shot = (kb) => ({
+  data: "data:image/png;base64," + "A".repeat(Math.ceil((kb * 1024 * 4 / 3) / 4) * 4),
+});
+
+eq("no attachment field is an empty set, not an error", parseAttachments({}), []);
+eq("the singular field still works", parseAttachments({ attachment: shot(1) }).length, 1);
+eq("and so does the plural", parseAttachments({ attachments: [shot(1), shot(1), shot(1)] }).length, 3);
+eq("the plural wins when both are sent",
+  parseAttachments({ attachment: shot(1), attachments: [shot(1), shot(1)] }).length, 2);
+eq("an empty array is an empty set", parseAttachments({ attachments: [] }), []);
+
+eq(`more than ${MAX_ATTACHMENTS} is refused as a whole`,
+  parseAttachments({ attachments: Array.from({ length: MAX_ATTACHMENTS + 1 }, () => shot(1)) }).error,
+  ATTACHMENT_COUNT_ERROR);
+eq(`exactly ${MAX_ATTACHMENTS} is allowed`,
+  parseAttachments({ attachments: Array.from({ length: MAX_ATTACHMENTS }, () => shot(1)) }).length,
+  MAX_ATTACHMENTS);
+
+// One bad image refuses the set. A physician who attached four and saw three
+// arrive would have no way to know which one went missing.
+eq("one image of the wrong type refuses the whole set",
+  parseAttachments({ attachments: [shot(1), { data: "data:application/pdf;base64,AAAA" }] }).error,
+  ATTACHMENT_TYPE_ERROR);
+eq("one oversized image refuses the whole set",
+  parseAttachments({ attachments: [shot(1), shot(6 * 1024)] }).error,
+  ATTACHMENT_SIZE_ERROR);
+ok("and a set too heavy together is refused as well",
+  parseAttachments({ attachments: [shot(4500), shot(4500), shot(4500)] }).error === ATTACHMENT_TOTAL_ERROR);
+ok("the total cap is under what five maximum images would weigh",
+  MAX_TOTAL_ATTACHMENT_BYTES < MAX_ATTACHMENT_BYTES * MAX_ATTACHMENTS);
+
+// ── Keys: the first one never moves ───────────────────────────────────────
+eq("the first ticket key is the one that already exists",
+  ticketScreenshotPathAt("t1", "png", 0), ticketScreenshotPath("t1", "png"));
+eq("the second is indexed from 2", ticketScreenshotPathAt("t1", "png", 1), "tickets/t1/screenshot-2.png");
+eq("and the fifth", ticketScreenshotPathAt("t1", "jpg", 4), "tickets/t1/screenshot-5.jpg");
+eq("the first reply key is unchanged too",
+  replyScreenshotPathAt("t1", "m1", "png", 0), replyScreenshotPath("t1", "m1", "png"));
+eq("and the second is indexed", replyScreenshotPathAt("t1", "m1", "png", 1), "tickets/t1/replies/m1-2.png");
+ok("every key stays inside the ticket's own folder",
+  [ticketScreenshotPathAt("t1", "png", 3), replyScreenshotPathAt("t1", "m1", "png", 3)]
+    .every((k) => k.startsWith("tickets/t1/") && !k.includes("..")));
+
+// ── Reading rows written before and after the array ───────────────────────
+eq("an old row with one path", attachmentPathsOf({ attachment_path: "a.png" }), ["a.png"]);
+eq("a new row with several", attachmentPathsOf({ attachment_paths: ["a.png", "b.png"] }), ["a.png", "b.png"]);
+eq("a row with both does not list the first twice",
+  attachmentPathsOf({ attachment_path: "a.png", attachment_paths: ["a.png", "b.png"] }), ["a.png", "b.png"]);
+eq("a row with neither", attachmentPathsOf({}), []);
+eq("null does not throw", attachmentPathsOf(null), []);
+eq("a null inside the array is dropped",
+  attachmentPathsOf({ attachment_paths: ["a.png", null, ""] }), ["a.png"]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

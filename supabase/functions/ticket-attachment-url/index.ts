@@ -20,7 +20,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
-import { ATTACHMENT_BUCKET } from "../_shared/ticketAttachment.ts";
+import { ATTACHMENT_BUCKET , attachmentPathsOf } from "../_shared/ticketAttachment.ts";
 
 const LINK_TTL_SECONDS = 3600;
 
@@ -54,20 +54,25 @@ serve(async (req) => {
       return json(403, { error: "You don't have access to this ticket." });
     }
 
-    const ticketPath: string | null = ticket.context_payload?.attachment_path || null;
+    // Both shapes, merged and de-duplicated: attachment_path held the only
+    // screenshot before several were allowed, and still holds the first.
+    const ticketPaths = attachmentPathsOf(ticket.context_payload);
 
     // Reply screenshots. A failure here should not take the ticket's own
-    // screenshot down with it, so it is logged and the map comes back empty.
+    // screenshots down with it, so it is logged and the map comes back empty.
     const { data: msgs, error: mErr } = await who.db
       .from("support_messages")
-      .select("id, attachment_path")
+      .select("id, attachment_path, attachment_paths")
       .eq("ticket_id", ticketId)
-      .not("attachment_path", "is", null);
+      .or("attachment_path.not.is.null,attachment_paths.not.is.null");
     if (mErr) console.error(`ticket-attachment-url: reply lookup failed for ${ticketId}: ${mErr.message}`);
-    const replyRows: { id: string; attachment_path: string }[] = mErr ? [] : (msgs || []);
+    const replyRows = (mErr ? [] : (msgs || []))
+      .map((m: { id: string; attachment_path: string | null; attachment_paths: string[] | null }) =>
+        ({ id: m.id, paths: attachmentPathsOf(m) }))
+      .filter((m) => m.paths.length);
 
-    const paths = [...(ticketPath ? [ticketPath] : []), ...replyRows.map((m) => m.attachment_path)];
-    if (!paths.length) return json(200, { url: null, replies: {} });
+    const paths = [...ticketPaths, ...replyRows.flatMap((m) => m.paths)];
+    if (!paths.length) return json(200, { url: null, urls: [], replies: {} });
 
     const signed = await who.db.storage.from(ATTACHMENT_BUCKET).createSignedUrls(paths, LINK_TTL_SECONDS);
     if (signed.error || !signed.data) {
@@ -80,23 +85,26 @@ serve(async (req) => {
       return hit && !hit.error && hit.signedUrl ? hit.signedUrl : null;
     };
 
-    const url = ticketPath ? urlFor(ticketPath, 0) : null;
-    if (ticketPath && !url) {
-      // Same contract as before reply attachments existed: a ticket that has
-      // a screenshot but no link is an error, not "no screenshot".
-      console.error(`ticket-attachment-url: no signed url for ticket screenshot ${ticketId}`);
+    const urls = ticketPaths.map((p, i) => urlFor(p, i)).filter((u): u is string => !!u);
+    if (ticketPaths.length && !urls.length) {
+      // Same contract as before: a ticket that has screenshots but no link is
+      // an error, not "no screenshot".
+      console.error(`ticket-attachment-url: no signed url for ticket screenshots ${ticketId}`);
       return json(502, { error: "Could not build a link to the screenshot. Try again." });
     }
 
-    const offset = ticketPath ? 1 : 0;
-    const replies: Record<string, string> = {};
-    replyRows.forEach((m, i) => {
-      const u = urlFor(m.attachment_path, i + offset);
-      if (u) replies[m.id] = u;
+    let cursor = ticketPaths.length;
+    const replies: Record<string, string[]> = {};
+    for (const m of replyRows) {
+      const got = m.paths.map((p, i) => urlFor(p, cursor + i)).filter((u): u is string => !!u);
+      cursor += m.paths.length;
+      if (got.length) replies[m.id] = got;
       else console.error(`ticket-attachment-url: no signed url for reply ${m.id} on ${ticketId}`);
-    });
+    }
 
-    return json(200, { url, replies });
+    // `url` and a reply's first link keep the old scalar shape for any client
+    // that has not reloaded yet.
+    return json(200, { url: urls[0] ?? null, urls, replies });
   } catch (e) {
     console.error("ticket-attachment-url failed:", e instanceof Error ? e.message : String(e));
     return json(500, { error: "Could not load the attachment." });

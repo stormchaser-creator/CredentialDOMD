@@ -141,6 +141,14 @@ export function normalizeSetupState(raw) {
     // explained when it actually changes under someone.
     proCounted: typeof r.proCounted === "number" ? r.proCounted : null,
     betaCounted: typeof r.betaCounted === "boolean" ? r.betaCounted : null,
+    // The board's own score, stamped by the physician's device each time it
+    // moves. The board is derived from their records and nobody else can read
+    // those, so without this an admin can say a physician started and not how
+    // far they got. { done, total, at } or null before the first read.
+    progress: r.progress && typeof r.progress === "object"
+      && typeof r.progress.done === "number" && typeof r.progress.total === "number"
+      ? { done: r.progress.done, total: r.progress.total, at: r.progress.at || null }
+      : null,
     declared: { ...declared },
     tasks: { ...tasks },
   };
@@ -916,6 +924,13 @@ export function withTask(state, id, status, { why = "", now = new Date() } = {},
 }
 
 /** A declared negative, e.g. declared.noDea for a physician who holds none. */
+/** Stamp the board's score. Written only when it moves, by the one device
+ *  that can compute it. */
+export function withProgress(state, { done, total }, at, prune) {
+  const next = normalizeSetupState(state);
+  return write(next, { progress: { done, total, at: at || null } }, prune);
+}
+
 export function withDeclared(state, key, value, prune) {
   const next = normalizeSetupState(state);
   const declared = { ...next.declared };
@@ -1164,40 +1179,68 @@ export function firstRenderPatch(setup, { now = new Date() } = {}) {
 
 /* ─── What an admin can honestly say about someone else's setup ─── */
 
+/** The task id the board last closed, said as the row's own label. */
+function taskLabel(id) {
+  const def = TASK_DEFS.find((d) => d.id === id);
+  return def ? def.label : "";
+}
+
 /**
- * The setup board is DERIVED from a physician's own records, and an admin
- * cannot read those: RLS is owner-scoped and that is the point. What does sync
- * is profiles.setup_state, the board's own stamps, and those are enough to say
- * where somebody is without seeing a single credential.
+ * Where somebody else is in setup, for the admin list.
  *
- * Returns { label, detail, tone }, where tone is one of "none" | "started" |
- * "protected" | "complete". Never guesses: an account with no stamp reads as
- * not started, because that is all that is known.
+ * The board is DERIVED from a physician's own records and RLS keeps those
+ * owner-scoped, which is why this cannot recompute it. What it reads instead
+ * is the score their own device stamped into setup_state the last time the
+ * board moved, plus the board's own timestamps.
+ *
+ * Plain words only. "Protected" and "packet" are what the two halves of the
+ * board are called inside the app, and they mean nothing on an admin row.
+ *
+ * Returns { label, detail, tone, done, total, pct }. done and total are null
+ * for an account whose device has not stamped a score yet.
  */
 export function setupProgressSummary(setupState) {
   const s = normalizeSetupState(setupState);
-  const taskCounts = Object.values(s.tasks || {}).reduce((acc, t) => {
-    if (t?.s === "skipped") acc.skipped += 1;
-    if (t?.s === "na") acc.na += 1;
-    return acc;
-  }, { skipped: 0, na: 0 });
-  const declared = Object.keys(s.declared || {}).length;
-  const aside = [
-    taskCounts.skipped ? `${taskCounts.skipped} skipped` : "",
-    taskCounts.na + declared ? `${taskCounts.na + declared} marked not applicable` : "",
-  ].filter(Boolean).join(", ");
+  const p = s.progress;
+  const done = p ? p.done : null;
+  const total = p && p.total > 0 ? p.total : null;
+  const pct = done !== null && total ? Math.round((done / total) * 100) : null;
 
-  if (s.tier2DoneAt) {
-    return { tone: "complete", label: "Setup complete",
-      detail: `Packet finished ${shortDate(s.tier2DoneAt)}${aside ? `, ${aside}` : ""}` };
+  const bits = [];
+  if (s.startedAt) bits.push(`started ${shortDate(s.startedAt)}`);
+  if (s.lastDone) {
+    const label = taskLabel(s.lastDone);
+    if (label) bits.push(`last finished: ${label}`);
   }
-  if (s.tier1DoneAt) {
-    return { tone: "protected", label: "Protected, packet in progress",
-      detail: `Protected finished ${shortDate(s.tier1DoneAt)}${s.lastDone ? `, last did ${s.lastDone}` : ""}${aside ? `, ${aside}` : ""}` };
+  const skipped = Object.values(s.tasks || {}).filter((t) => t?.s === "skipped").length;
+  const na = Object.values(s.tasks || {}).filter((t) => t?.s === "na").length
+    + Object.keys(s.declared || {}).length;
+  if (skipped) bits.push(`${skipped} skipped`);
+  if (na) bits.push(`${na} not applicable`);
+  const detail = bits.join(", ");
+
+  // Nothing at all: no score, no start. All that is known is that they have
+  // not opened it.
+  if (!p && !s.startedAt) {
+    return { tone: "none", label: "Setup not started", detail: "Nothing on this account yet", done: null, total: null, pct: null };
   }
-  if (s.startedAt) {
-    return { tone: "started", label: "Setup in progress",
-      detail: `Started ${shortDate(s.startedAt)}${s.lastDone ? `, last did ${s.lastDone}` : ""}${aside ? `, ${aside}` : ""}` };
+  // An older account whose device has not stamped a score since this shipped.
+  if (!p) {
+    return {
+      tone: s.tier2DoneAt ? "complete" : "started",
+      label: s.tier2DoneAt ? "Setup complete" : "Setup in progress",
+      detail: detail || "No score yet, it appears the next time they open the app",
+      done: null, total: null, pct: null,
+    };
   }
-  return { tone: "none", label: "Setup not started", detail: "No setup activity on this account yet" };
+  if (done >= total) {
+    return { tone: "complete", label: `Setup complete, ${done} of ${total}`, detail, done, total, pct: 100 };
+  }
+  return {
+    tone: done > 0 ? "started" : "none",
+    label: `Setup ${done} of ${total}`,
+    detail: detail || "Not started yet",
+    done, total, pct,
+  };
 }
+

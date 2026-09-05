@@ -21,7 +21,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
-import { ATTACHMENT_BUCKET, parseAttachment, replyScreenshotPath } from "../_shared/ticketAttachment.ts";
+import { ATTACHMENT_BUCKET, parseAttachment, replyScreenshotPath , parseAttachments, replyScreenshotPathAt } from "../_shared/ticketAttachment.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,13 +59,13 @@ serve(async (req) => {
       });
     }
 
-    const attachment = parseAttachment(body.attachment);
-    if (attachment && "error" in attachment) {
-      return new Response(JSON.stringify({ error: attachment.error }), {
+    const attachments = parseAttachments(body);
+    if ("error" in attachments) {
+      return new Response(JSON.stringify({ error: attachments.error }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!replyBody && attachment) replyBody = SCREENSHOT_ONLY_BODY;
+    if (!replyBody && attachments.length) replyBody = SCREENSHOT_ONLY_BODY;
 
     if (!replyBody || replyBody.length < 1) {
       return new Response(JSON.stringify({ error: "body is required" }), {
@@ -90,18 +90,21 @@ serve(async (req) => {
     // The message id is minted here so the screenshot can be stored under it
     // before the row exists (see header).
     const messageId = crypto.randomUUID();
-    let attachmentPath: string | null = null;
-    if (attachment) {
-      attachmentPath = replyScreenshotPath(ticketId, messageId, attachment.ext);
+    const attachmentPaths: string[] = [];
+    for (let i = 0; i < attachments.length; i++) {
+      const a = attachments[i];
+      const path = replyScreenshotPathAt(ticketId, messageId, a.ext, i);
       const { error: upErr } = await user.db.storage.from(ATTACHMENT_BUCKET)
-        .upload(attachmentPath, attachment.bytes, { contentType: attachment.mime, upsert: true });
+        .upload(path, a.bytes, { contentType: a.mime, upsert: true });
       if (upErr) {
-        console.error(`reply-ticket: attachment upload failed for ${ticketId}: ${upErr.message}`);
-        return new Response(JSON.stringify({ error: "Could not upload the screenshot. Try again." }), {
+        console.error(`reply-ticket: attachment ${i + 1} upload failed for ${ticketId}: ${upErr.message}`);
+        return new Response(JSON.stringify({ error: "Could not upload the screenshots. Try again." }), {
           status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      attachmentPaths.push(path);
     }
+    const attachmentPath: string | null = attachmentPaths[0] ?? null;
 
     const { data: msg, error: msgErr } = await user.db
       .from("support_messages")
@@ -112,14 +115,15 @@ serve(async (req) => {
         body: replyBody.slice(0, 10000),
         is_admin_reply: isAdmin,
         ...(attachmentPath ? { attachment_path: attachmentPath } : {}),
+        ...(attachmentPaths.length ? { attachment_paths: attachmentPaths } : {}),
       })
       .select()
       .single();
 
     if (msgErr) {
       // Do not leave an orphan in the bucket for a reply that never landed.
-      if (attachmentPath) {
-        try { await user.db.storage.from(ATTACHMENT_BUCKET).remove([attachmentPath]); } catch { /* best effort */ }
+      if (attachmentPaths.length) {
+        try { await user.db.storage.from(ATTACHMENT_BUCKET).remove(attachmentPaths); } catch { /* best effort */ }
       }
       throw msgErr;
     }
@@ -143,7 +147,7 @@ serve(async (req) => {
       );
     }
 
-    return new Response(JSON.stringify({ id: msg.id, ok: true, attachment_path: attachmentPath }), {
+    return new Response(JSON.stringify({ id: msg.id, ok: true, attachment_path: attachmentPath, attachment_paths: attachmentPaths }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

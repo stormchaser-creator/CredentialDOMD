@@ -7,6 +7,7 @@
 // Pure node, no test runner. Exit code 1 on any failure.
 import {
   buildSetup, dateless, datable, normalizeSetupState, pruneSetupState, shortDate,
+  setupProgressSummary, withProgress,
   withTask, withDeclared, withSnooze, withStarted, withTier1Done, withProSnapshot,
   homeCardForm, setupOwns, firstRenderPatch, CARD_FORM, CARD_PRIORITY, TASK_DEFS,
   isMedicalLicense, isDea, isCsr, isBoard, isLifeSupport,
@@ -195,6 +196,46 @@ eq("dateless never walks privileges or insurance", dateless({
     cv: { s: "skipped", at: day(1) }, identity: { s: "skipped", at: day(1) }, licenses: { s: "skipped", at: day(1) },
     dates: { s: "skipped", at: day(1) }, dea: { s: "skipped", at: day(1) }, reminders: { s: "skipped", at: day(1) },
   } } } }).counts.tier1.complete, false);
+}
+
+
+// ── The score an admin reads, and the words it uses ──
+{
+  const none = setupProgressSummary(null);
+  eq("an untouched account", [none.label, none.done, none.pct], ["Setup not started", null, null]);
+
+  const scored = setupProgressSummary({ v: 1, startedAt: day(4), lastDone: "licenses",
+    progress: { done: 6, total: 16 }, tasks: { dates: { s: "skipped", at: day(2) } }, declared: { noDea: true } });
+  eq("a real score reads as a fraction", scored.label, "Setup 6 of 16");
+  eq("and carries the numbers for the bar", [scored.done, scored.total, scored.pct], [6, 16, 38]);
+  ok("the detail names what they last finished", /last finished: Your licenses/.test(scored.detail), scored.detail);
+  ok("and counts what they set aside", /1 skipped/.test(scored.detail) && /1 not applicable/.test(scored.detail), scored.detail);
+
+  const done = setupProgressSummary({ v: 1, startedAt: day(30), progress: { done: 16, total: 16 } });
+  eq("a finished board says so with the number", done.label, "Setup complete, 16 of 16");
+  eq("and reads as complete", [done.tone, done.pct], ["complete", 100]);
+
+  // An account that has not opened the app since the score shipped.
+  const old = setupProgressSummary({ v: 1, startedAt: day(60), lastDone: "dea" });
+  eq("no stored score still says something true", old.label, "Setup in progress");
+  eq("and no fraction is invented", [old.done, old.total, old.pct], [null, null, null]);
+
+  // The words the admin row must never use: they are internal names for the
+  // two halves of the board and mean nothing on someone else's row.
+  for (const p of [none, scored, done, old]) {
+    ok(`no board jargon in "${p.label}"`, !/protected|packet|tier/i.test(`${p.label} ${p.detail}`));
+    ok("no em dash", !`${p.label} ${p.detail}`.includes("\u2014"));
+  }
+}
+
+// ── The score round-trips through the stored state ──
+{
+  const st = withProgress(normalizeSetupState(null), { done: 3, total: 16 }, "2026-09-05T00:00:00.000Z");
+  eq("it is stored", [st.progress.done, st.progress.total], [3, 16]);
+  eq("and survives a normalize", normalizeSetupState(st).progress.done, 3);
+  eq("a malformed score is dropped rather than shown",
+    normalizeSetupState({ progress: { done: "six", total: 16 } }).progress, null);
+  eq("and a missing one is null", normalizeSetupState({}).progress, null);
 }
 
 // ── The CV row ──

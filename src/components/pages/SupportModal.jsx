@@ -4,6 +4,7 @@ import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { edgeErrorMessage } from "../../utils/edgeError";
 import { supabase } from "../../lib/supabase";
 import { ScreenshotAttach } from "../shared";
+import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 
 const CATEGORIES = [
   { id: "bug",             label: "Bug / something broken" },
@@ -68,11 +69,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
-  const [attachment, setAttachment] = useState(null); // { data: dataURL, name }
+  const [attachment, setAttachment] = useState([]); // [{ data: dataURL, name }]
 
   // Owner-or-admin-only signed links from ticket-attachment-url: the ticket's
   // own screenshot, and one per reply keyed by message id.
-  const [attachmentUrl, setAttachmentUrl] = useState(null);
+  const [attachmentUrls, setAttachmentUrls] = useState([]);
   const [replyUrls, setReplyUrls] = useState({});
 
   // Your tickets
@@ -83,7 +84,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [thread, setThread] = useState([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [reply, setReply] = useState("");
-  const [replyAttachment, setReplyAttachment] = useState(null); // { data: dataURL, name }
+  const [replyAttachment, setReplyAttachment] = useState([]); // [{ data: dataURL, name }]
   const [replying, setReplying] = useState(false);
   const [replyMsg, setReplyMsg] = useState("");
 
@@ -137,16 +138,17 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   // was lost" when the file is fine and the link call is what broke. Say so
   // instead.
   const loadAttachmentUrls = async (t, msgs) => {
-    if (!t.context_payload?.attachment_path && !msgs.some((m) => m.attachment_path)) return;
+    const onTicket = t.context_payload?.attachment_path || t.context_payload?.attachment_paths?.length;
+    if (!onTicket && !msgs.some((m) => m.attachment_path || m.attachment_paths?.length)) return;
     const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
     if (res.error) { setReplyMsg(await edgeErrorMessage(res.error, "Could not open the attachment.")); return; }
-    setAttachmentUrl(res.data?.url || null);
+    setAttachmentUrls(linksFor(res.data?.urls ?? res.data?.url));
     setReplyUrls(res.data?.replies || {});
   };
 
   const openThread = async (t) => {
-    setOpenTicket(t); setThread([]); setReply(""); setReplyAttachment(null); setReplyMsg("");
-    setAttachmentUrl(null); setReplyUrls({});
+    setOpenTicket(t); setThread([]); setReply(""); setReplyAttachment([]); setReplyMsg("");
+    setAttachmentUrls([]); setReplyUrls({});
     setThreadLoading(true);
     const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
     setThread(data || []);
@@ -156,19 +158,19 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
 
   const sendReply = async () => {
     const text = reply.trim();
-    if (!openTicket || (text.length < 1 && !replyAttachment)) return;
+    if (!openTicket || (text.length < 1 && !replyAttachment.length)) return;
     setReplying(true); setReplyMsg("");
     try {
       const res = await supabase.functions.invoke("reply-ticket", {
         body: {
           ticket_id: openTicket.id, body: text,
-          ...(replyAttachment ? { attachment: { data: replyAttachment.data } } : {}),
+          ...attachmentsPayload(replyAttachment),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not send the reply."));
       const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
       setThread(data || []);
-      setReply(""); setReplyAttachment(null);
+      setReply(""); setReplyAttachment([]);
       setReplyMsg("Sent.");
       loadTickets();
       await loadAttachmentUrls(openTicket, data || []);
@@ -183,7 +185,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
     setDone(false); setError("");
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
-    setAttachment(null); setReplyAttachment(null); setAttachmentUrl(null); setReplyUrls({});
+    setAttachment([]); setReplyAttachment([]); setAttachmentUrls([]); setReplyUrls({});
   }, []);
 
   const close = useCallback(() => { onClose(); reset(); }, [onClose, reset]);
@@ -227,7 +229,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           category: category === "feedback" ? "other" : category,
           priority,
           context_page: contextPage || window.location.pathname,
-          ...(attachment ? { attachment: { data: attachment.data } } : {}),
+          ...attachmentsPayload(attachment),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not file the ticket."));
@@ -378,7 +380,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   );
 
   // A reply can be text, a screenshot, or both.
-  const canSend = !replying && (reply.trim().length > 0 || !!replyAttachment);
+  const canSend = !replying && (reply.trim().length > 0 || replyAttachment.length > 0);
 
   const renderThread = () => (
     <>
@@ -404,10 +406,14 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               You {"·"} {new Date(openTicket.created_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{openTicket.body}</div>
-            {attachmentUrl && (
-              <a href={attachmentUrl} target="_blank" rel="noreferrer">
-                <img src={attachmentUrl} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}` }} />
-              </a>
+            {attachmentUrls.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                {attachmentUrls.map((u, i) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer">
+                    <img src={u} alt={`Attached screenshot ${i + 1}`} style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}`, display: "block" }} />
+                  </a>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -421,10 +427,14 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               {m.is_admin_reply ? "Eric" : "You"} {"·"} {new Date(m.created_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
-            {m.attachment_path && (replyUrls[m.id] ? (
-              <a href={replyUrls[m.id]} target="_blank" rel="noreferrer">
-                <img src={replyUrls[m.id]} alt="Attached screenshot" style={{ marginTop: 8, maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}` }} />
-              </a>
+            {Boolean(m.attachment_path || m.attachment_paths?.length) && (linksFor(replyUrls[m.id]).length ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                {linksFor(replyUrls[m.id]).map((u, i) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer">
+                    <img src={u} alt={`Attached screenshot ${i + 1}`} style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}`, display: "block" }} />
+                  </a>
+                ))}
+              </div>
             ) : (
               <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>Screenshot attached</div>
             ))}
