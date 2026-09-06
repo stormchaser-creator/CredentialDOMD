@@ -163,6 +163,13 @@ const SETTINGS_TO_PROFILE = {
   cmeVerificationResults: "cme_verification_results",
   cmeVerificationAlerted: "cme_verification_alerted",
   lastCmeVerification: "last_cme_verification",
+  // Unread badges: when this account last opened the panel, so "unread"
+  // survives a reload instead of resetting every session. adminInboxSeenAt
+  // and adminErrorsSeenAt are Eric's own admin-dashboard tabs; adminMessagesSeenAt
+  // is any physician's "seen Eric's message" stamp on their home card.
+  adminInboxSeenAt: "admin_inbox_seen_at",
+  adminMessagesSeenAt: "admin_messages_seen_at",
+  adminErrorsSeenAt: "admin_errors_seen_at",
 };
 
 const PROFILE_TO_SETTINGS = Object.fromEntries(
