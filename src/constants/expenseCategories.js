@@ -3,6 +3,6 @@
 // lands in the same vocabulary a typed expense uses, and the expense invoice
 // labels the line the same way either way.
 export const EXPENSE_CATEGORIES = [
-  "Airfare", "Baggage", "Hotel", "Rental car", "Gas", "Rideshare / Taxi",
-  "Parking", "Tolls", "Mileage", "Meals", "Other",
+  "Airfare", "Baggage", "Gas", "Hotel", "Meals", "Mileage", "Parking",
+  "Rental car", "Rideshare / Taxi", "Tolls", "Other",
 ];
