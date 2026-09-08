@@ -44,7 +44,7 @@ const ASSIST_MODIFIERS = [
  * physician reviews the chips, saves, and running wRVU totals accumulate.
  */
 function RVULog() {
-  const { data, addItem, editItem, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
   const contracts = data.locumContracts || [];
   const encounters = data.encounters || [];
@@ -309,7 +309,7 @@ function RVULog() {
     <div>
       <div style={{ marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.text }}>RVU Log</h3>
-        <div style={{ fontSize: 12, color: T.textMuted }}>Say what you did — the AI codes it, you approve it.</div>
+        <div style={{ fontSize: 12, color: T.textMuted }}>Say what you did. The AI codes it, you approve it.</div>
       </div>
 
       {/* Totals */}
@@ -368,13 +368,27 @@ function RVULog() {
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {review.items.map((it, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
+                // The descriptor and the controls used to share one flex line.
+                // The controls need about 200px and never shrink, so on a
+                // phone the descriptor got what was left, which is one or two
+                // words per line. It gets the full width now and the controls
+                // sit under it; above 1024px they still fit side by side.
+                <div key={i} style={{
+                  display: "flex", alignItems: isDesktop ? "center" : "flex-start",
+                  flexWrap: isDesktop ? "nowrap" : "wrap", gap: 8,
+                  padding: "8px 10px", borderRadius: 10,
+                  backgroundColor: T.input, border: `1px solid ${T.border}`,
+                }}>
+                  <div style={{ minWidth: 0, flex: isDesktop ? 1 : "1 1 100%" }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: T.text }}>
                       {it.code} <span style={{ fontWeight: 500, color: T.textMuted }}>{it.desc}</span>
                     </div>
                     <div style={{ fontSize: 11, color: T.textDim }}>{(it.wRVU || 0).toFixed(2)} wRVU × {it.units} {it.why && `· ${it.why}`}{it.flag && <span style={{ color: T.warning, fontWeight: 700 }}> · {it.flag}</span>}</div>
                   </div>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
+                    ...(isDesktop ? {} : { width: "100%", justifyContent: "flex-end" }),
+                  }}>
                   <select value={it.modifier || ""} onChange={e => setModifier(i, e.target.value)}
                     style={{ ...iS, appearance: "auto", width: "auto", flexShrink: 0, padding: "4px 6px", fontSize: 11.5 }}
                     title="Assistant surgeon modifier">
@@ -384,6 +398,7 @@ function RVULog() {
                   <span style={{ fontSize: 13, fontWeight: 800, color: T.text, minWidth: 14, textAlign: "center" }}>{it.units}</span>
                   <button onClick={() => setUnits(i, 1)} style={{ padding: "4px 9px", borderRadius: 7, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.text, cursor: "pointer", fontWeight: 800 }}>+</button>
                   <button onClick={() => removeItem(i)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontWeight: 800 }}>×</button>
+                  </div>
                 </div>
               ))}
             </div>

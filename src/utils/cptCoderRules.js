@@ -399,8 +399,25 @@ export const BUNDLED_PAIRS = [
 
 // ─── Post-model pass ────────────────────────────────────────────────────────
 
-const QUESTION_ULTRASOUND =
+// Ultrasound is two different conversations and this used to have one answer.
+// Inside a craniotomy it is an instrument within the resection. At the groin
+// or the wrist it is guidance for vascular access, a different code with a
+// different documentation rule, and telling a surgeon who dictated
+// "ultrasound access" that it was "an instrument within the resection" is an
+// answer to a question nobody asked.
+const QUESTION_ULTRASOUND_INTRAOP =
   "Ultrasound, CUSA or Doppler: no code emitted. They are instruments within the resection. Intraoperative ultrasound guidance is reportable only with a permanently recorded image and a written description of the localization (CPT Diagnostic Ultrasound guidelines); that code (76998-26, 0.89 wRVU on the CY2026 PFS) is not in this catalog.";
+
+const QUESTION_ULTRASOUND_ACCESS =
+  "Ultrasound-guided vascular access: no code emitted. The code is 76937 (0.29 wRVU on the CY2026 PFS), and CPT requires all of it before it may be reported: evaluation of the potential access sites, documented patency of the vessel you chose, real-time visualization of the needle entering it, a permanently recorded image, and a written report. A note that says only \"ultrasound access\" does not meet that. It is also an add-on to the access procedure, so check your payer's bundling edits against the catheterization codes before you bill it. Not in this catalog.";
+
+/** Words that put the ultrasound at the access site rather than in the wound. */
+// The site often sits between the two words a physician says: "ultrasound
+// guided FEMORAL puncture", "ultrasound access", "radial access under
+// ultrasound". Up to two words are allowed between, which reaches the real
+// phrasings without matching a sentence that merely contains both words.
+const ULTRASOUND_ACCESS_RE =
+  /ultrasound[- ]?(?:guided\s+)?(?:\w+\s+){0,2}(?:access|puncture|stick|cannulat)|(?:access|puncture|stick|cannulat)\w*\s+(?:\w+\s+){0,2}(?:under|with|using)\s+ultrasound/i;
 
 /**
  * Words that put the TEE in the surgeon's own hands: "I performed and
@@ -570,7 +587,9 @@ export function postProcess(parsed, { text = "", catalog = CPT_BY_CODE } = {}) {
   // 5. Instruments/intraoperative events that never carry their own code: say
   //    so instead of staying silent.
   if (/\bultrasound\b|\bultrasonic\b|\bcusa\b|\bdoppler\b/i.test(text) && hasPrimary) {
-    questions.push(QUESTION_ULTRASOUND);
+    questions.push(ULTRASOUND_ACCESS_RE.test(text)
+      ? QUESTION_ULTRASOUND_ACCESS
+      : QUESTION_ULTRASOUND_INTRAOP);
   }
   if (/\btee\b|\btransesophageal\b/i.test(text) && hasPrimary) {
     if (surgeonPerformedTee(text)) {

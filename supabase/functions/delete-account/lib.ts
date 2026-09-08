@@ -179,6 +179,14 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
   last_cme_verification: null,
   backup_monthly: false,
   last_seen_at: null,
+  // Admin read-marks. They only ever hold a value on an admin's own profile,
+  // but they sync from settings like everything else, so a deletion that left
+  // them behind would leave the account holding three timestamps after being
+  // told everything was gone. Caught by scripts/delete-account.test.mjs, which
+  // reads SETTINGS_TO_PROFILE and refuses any synced column this list forgets.
+  admin_inbox_seen_at: null,
+  admin_messages_seen_at: null,
+  admin_errors_seen_at: null,
   // stored-key columns (always empty in practice; keys live on the device)
   api_key: null,
   anthropic_api_key: null,

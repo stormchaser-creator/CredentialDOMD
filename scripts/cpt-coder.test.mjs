@@ -392,5 +392,46 @@ ok("construct rules name 33268/33269/93312/93314 and bar the clip beside a maze"
   eq("catalogDesc drops an orphan paren", catalogDesc("Laminectomy at fused level, single (add-on that runs on and on and on and on and on and on and on and on"), "Laminectomy at fused level, single");
 }
 
+
+// ── Ultrasound says the right thing for the case it is in ────────────────
+// A surgeon dictated "3d rotational angiogram and ultrasound access and 6
+// vessel diagnostic" and was told the ultrasound was "an instrument within
+// the resection". There was no resection. One sentence was answering two
+// different questions.
+{
+  const cat = {
+    "36224": { code: "36224", shortDesc: "Selective cath ICA with angiography", wRVU: 6.09, status: "A" },
+    "61510": { code: "61510", shortDesc: "Craniotomy for tumor", wRVU: 37.0, status: "A" },
+  };
+  const usQuestions = (text, codes) => postProcess(
+    { encounters: codes.map((c) => ({ code: c, units: 1, why: "" })), questions: [], confidence: "high" },
+    { text, catalog: cat },
+  ).questions.filter((q) => /ultrasound/i.test(q));
+
+  const angio = usQuestions("Three d rotational angiogram and ultrasound access and 6 vessel diagnostic.", ["36224"]);
+  eq("an access case gets one ultrasound line", angio.length, 1);
+  ok("and it names the access code", /76937/.test(angio[0]), angio[0]);
+  ok("not the intraoperative one", !/76998/.test(angio[0]));
+  ok("and never calls an angiogram a resection", !/resection/i.test(angio[0]), angio[0]);
+  ok("it says what the note has to contain", /permanently recorded image/i.test(angio[0]));
+
+  const tumor = usQuestions("Craniotomy for tumor with intraoperative ultrasound and CUSA", ["61510"]);
+  eq("a resection still gets the resection line", tumor.length, 1);
+  ok("which names the intraoperative code", /76998/.test(tumor[0]), tumor[0]);
+
+  for (const phrase of [
+    "radial artery access under ultrasound",
+    "ultrasound guided femoral puncture",
+    "ultrasound-guided access to the common femoral",
+    "femoral cannulation with ultrasound",
+  ]) {
+    const q = usQuestions(`${phrase}, diagnostic cerebral angiogram`, ["36224"]);
+    ok(`"${phrase}" reads as access`, q.length === 1 && /76937/.test(q[0]), q[0]);
+  }
+
+  ok("no em dash in either sentence",
+    [...angio, ...tumor].every((q) => !q.includes("\u2014")));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
