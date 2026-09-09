@@ -7,7 +7,7 @@
 // board case log all read.
 // Run: node scripts/case-category.test.mjs
 import { categoryForCode, categoryForCase, producibleCategories } from "../src/utils/caseCategory.js";
-import { CASE_CATEGORIES } from "../src/constants/credentialTypes.js";
+import { CASE_CATEGORIES, CASE_CATEGORY_HINTS } from "../src/constants/credentialTypes.js";
 
 let pass = 0, fail = 0;
 const eq = (n, got, want) => {
@@ -106,6 +106,46 @@ eq("a shunt", categoryForCode("62223"), "Cranial: CSF Diversion/ETV/Other");
 // ── House rules ───────────────────────────────────────────────────────────
 ok("no em dash in any category this produces",
   producibleCategories().every((x) => !x.includes("—")));
+
+
+// ── Vertebral augmentation, where the ACGME actually files it ─────────────
+// A surgeon did a kyphoplasty and found no category that looked like one. The
+// mapping was also wrong: it filed it under fusion. The ACGME Institutional
+// Case Report Form lists "Image-guided kyphoplasty/biopsy/injection" as a case
+// type inside Spinal: Stimulation/Lesion/Pump/Other, and the category total
+// sums that row, so the placement is structural.
+eq("kyphoplasty, thoracic", categoryForCode("22513"), "Spinal: Stimulation/Lesion/Pump/Other");
+eq("kyphoplasty, lumbar", categoryForCode("22514"), "Spinal: Stimulation/Lesion/Pump/Other");
+eq("vertebroplasty, cervicothoracic", categoryForCode("22510"), "Spinal: Stimulation/Lesion/Pump/Other");
+eq("vertebroplasty, lumbosacral", categoryForCode("22511"), "Spinal: Stimulation/Lesion/Pump/Other");
+ok("and it is NOT filed as a fusion",
+  !/Instrumentation\/Fusion/.test(categoryForCode("22513")));
+eq("a whole kyphoplasty case, base plus each-additional",
+  categoryForCase([c("22513", 8.43), c("22515", 3.9)], "kyphoplasty T12 and L1"),
+  "Spinal: Stimulation/Lesion/Pump/Other");
+// The arthrodesis codes in the same numeric block are unaffected.
+for (const code of ["22532", "22533", "22534"]) {
+  eq(`${code} is still a fusion`, categoryForCode(code), "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion");
+}
+
+// ── 63046 used to fall between two ranges ────────────────────────────────
+eq("cervical laminectomy with facetectomy", categoryForCode("63045"), "Spinal: Posterior Cervical");
+eq("the thoracic one reached nothing before", categoryForCode("63046"), "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion");
+eq("and the lumbar one", categoryForCode("63047"), "Spinal: Lumbar Laminectomy/Laminotomy");
+ok("no member of the family is homeless",
+  ["63045", "63046", "63047", "63048"].every((x) => categoryForCode(x) !== "" || x === "63048"));
+
+// ── The hint that makes a category findable ──────────────────────────────
+{
+  const hint = CASE_CATEGORY_HINTS["Spinal: Stimulation/Lesion/Pump/Other"];
+  ok("the category a kyphoplasty lands in explains itself", !!hint);
+  ok("and says the word the surgeon was looking for", /kyphoplasty/i.test(hint), hint);
+  ok("every hint names a category that exists",
+    Object.keys(CASE_CATEGORY_HINTS).every((k) => CASE_CATEGORIES.includes(k)),
+    Object.keys(CASE_CATEGORY_HINTS).filter((k) => !CASE_CATEGORIES.includes(k)).join(", "));
+  ok("no em dash in any hint",
+    Object.values(CASE_CATEGORY_HINTS).every((v) => !v.includes("\u2014")));
+}
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -11,6 +11,7 @@ import { Modal, Field } from "../../shared";
 import { CPT_DESCS } from "../../../constants/cptDescs";
 import { CASE_CATEGORY_GROUPS } from "../../../constants/credentialTypes";
 import { categoryForCase } from "../../../utils/caseCategory";
+import { CASE_CATEGORY_HINTS } from "../../../constants/credentialTypes";
 
 const localDate = (d) => {
   const x = new Date(d);
@@ -416,6 +417,15 @@ function RVULog() {
                     </optgroup>
                   ))}
                 </select>
+                {/* Some category names do not say what is in them. A surgeon
+                    looked for a kyphoplasty and found nothing that looked like
+                    one, because it lives under a name that lists four other
+                    things. This prints the ACGME's own case types. */}
+                {CASE_CATEGORY_HINTS[caseCategory || suggestedCategory] && (
+                  <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 5, lineHeight: 1.45 }}>
+                    Includes: {CASE_CATEGORY_HINTS[caseCategory || suggestedCategory]}
+                  </div>
+                )}
               </div>
             )}
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>

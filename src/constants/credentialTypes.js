@@ -147,6 +147,28 @@ export const CASE_CATEGORY_GROUPS = [
   { header: "Other", options: ["Other"] },
 ];
 
+/**
+ * What the ACGME actually files under a category, in its own words.
+ *
+ * A surgeon logged a kyphoplasty, read down this list, and found nothing that
+ * looked like one. He was right to: the category it belongs to is called
+ * "Spinal: Stimulation/Lesion/Pump/Other", which names four things and then a
+ * shrug, and a kyphoplasty is none of the four.
+ *
+ * The ACGME's own Institutional Case Report Form breaks that category into
+ * five case types (Report Form rows A58-A62), and the last of them is
+ * "Image-guided kyphoplasty/biopsy/injection". The category total at B63 sums
+ * that row, so the placement is structural and not a reading of the layout.
+ *
+ * Only categories with a sourced breakdown appear here. The rest have no entry
+ * rather than a guess, because a hint invented for a career case log is worse
+ * than no hint.
+ */
+export const CASE_CATEGORY_HINTS = {
+  "Spinal: Stimulation/Lesion/Pump/Other":
+    "Spinal stimulation for pain or a functional disorder, cordotomy or intradural rhizotomy, sympathectomy, intrathecal pump, and image-guided kyphoplasty, biopsy or injection.",
+};
+
 export const CASE_CATEGORIES = CASE_CATEGORY_GROUPS.flatMap(g => g.options);
 
 export const HEALTH_RECORD_CATEGORIES = ["Vaccination", "Titer / Immunity", "TB Test", "Drug Screen", "Fit Test"];

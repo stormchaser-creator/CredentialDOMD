@@ -130,6 +130,9 @@ const RANGES = [
   [63020, 63020, "Spinal: Posterior Cervical"],
   [63040, 63040, "Spinal: Posterior Cervical"],
   [63045, 63045, "Spinal: Posterior Cervical"],
+  // 63046 is the thoracic member of the same family and used to fall between
+  // the cervical row above and the lumbar rows below, reaching no category.
+  [63046, 63046, "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion"],
   [63050, 63051, "Spinal: Posterior Cervical"],
   [63003, 63005, "Spinal: Lumbar Laminectomy/Laminotomy"],
   [63011, 63012, "Spinal: Lumbar Laminectomy/Laminotomy"],
@@ -137,7 +140,14 @@ const RANGES = [
   [63030, 63035, "Spinal: Lumbar Laminectomy/Laminotomy"],
   [63042, 63044, "Spinal: Lumbar Laminectomy/Laminotomy"],
   [63047, 63048, "Spinal: Lumbar Laminectomy/Laminotomy"],
-  [22510, 22534, "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion"],
+  // Percutaneous vertebral augmentation is NOT a fusion and NOT instrumentation.
+  // The ACGME Institutional Case Report Form lists "Image-guided
+  // kyphoplasty/biopsy/injection" as a case type inside Spinal:
+  // Stimulation/Lesion/Pump/Other (Report Form rows 57-63; the category total
+  // at B63 sums the kyphoplasty row), so that is where a kyphoplasty belongs.
+  // 22532-22534 in the same numeric block ARE arthrodesis and stay with fusion.
+  [22510, 22515, "Spinal: Stimulation/Lesion/Pump/Other"],
+  [22526, 22534, "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion"],
   [22556, 22558, "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion"],
   [22610, 22634, "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion"],
   [22800, 22819, "Spinal: Thoracic/Lumbar/Sacral/Instrumentation/Fusion"],
