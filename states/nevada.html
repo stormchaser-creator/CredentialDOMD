@@ -285,6 +285,21 @@ a:hover { color: var(--emerald-light); }
 .guide-choice label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text); }
 .guide-choice input[type="radio"] { width: 18px; height: 18px; margin: 0; accent-color: var(--emerald); flex: 0 0 auto; }
 .guide-choice.is-missing legend { color: var(--amber); }
+/* The hero copy of the capture. Tighter than the page-end one because it sits
+   under the H1, and the board portal link below it is demoted to a text link:
+   the only above-the-fold button used to send the visitor to the state board
+   and off the site. */
+.guide-capture--hero { margin: 18px 0 0; padding: 20px 22px; }
+.hero-subtitle--lead { margin-bottom: 0; }
+.hero-subtitle--detail { margin-top: 16px; font-size: 15px; }
+.guide-capture--hero h2 { font-size: 17px; margin-bottom: 6px; }
+.guide-capture--hero p { font-size: 14px; margin-bottom: 14px; }
+.hero-portal-link { color: var(--text-secondary); font-size: 14.5px; text-decoration: none; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+.hero-portal-link:hover { color: var(--emerald); border-bottom-color: var(--emerald); }
+@media (max-width: 640px) {
+  .guide-capture--hero { padding: 16px 16px; }
+  .guide-capture--hero h2 { font-size: 16px; }
+}
 .guide-choice--compact { margin-top: 6px; font-size: 13px; gap: 6px 14px; }
 .guide-choice--compact legend { width: auto; margin: 0 6px 0 0; font-size: 13px; }
 .guide-hp { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
@@ -351,9 +366,28 @@ a:hover { color: var(--emerald-light); }
       Nevada (NV)
     </div>
     <h1>Nevada Medical License Renewal, <span class="accent">2026</span></h1>
-    <p class="hero-subtitle">Biennial (2 years) for MDs. DOs are mid-transition: renewal was annual through the December 31, 2025 renewal, and starting in 2026 DO licenses renew every even-numbered year for a two-year period (AB 56, signed May 26, 2025). renewal through the Nevada State Board of Medical Examiners. MD registration is due June 30 of odd-numbered years; DO licenses renew by December 31, moving to even-numbered years starting in 2026. Verified from the board's own pages, August 2026.</p>
-    <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
-      <a href="https://nsbme.us.thentiacloud.net/webs/nsbme/service/#/login" target="_blank" rel="noopener" class="nav-cta" style="padding:12px 24px;font-size:15px;">Renew at the NV board portal &rarr;</a>
+    <p class="hero-subtitle hero-subtitle--lead">Biennial (2 years) for MDs. DOs are mid-transition: renewal was annual through the December 31, 2025 renewal, and starting in 2026 DO licenses renew every even-numbered year for a two-year period (AB 56, signed May 26, 2025). renewal through the Nevada State Board of Medical Examiners. Verified from the board's own pages, August 2026.</p>
+    <!-- The only button above the fold used to be the board portal, which sent
+         every search visitor straight off the site. It is still here, because
+         it is the useful thing, but the ask comes first now. -->
+    <div class="guide-capture guide-capture--hero">
+      <h2>Get the Nevada guide by email</h2>
+      <p>This page as one email you can keep. Free, no account.</p>
+      <form class="guide-form" data-placement="hero">
+        <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
+        <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button type="submit">Email me the guide</button>
+        <fieldset class="guide-choice guide-choice--compact">
+          <legend>Also join the waitlist?</legend>
+          <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
+          <label><input type="radio" name="waitlist" value="no" checked><span>No, guide only</span></label>
+        </fieldset>
+      </form>
+      <p class="guide-msg" role="status" aria-live="polite"></p>
+    </div>
+    <p class="hero-subtitle hero-subtitle--detail">MD registration is due June 30 of odd-numbered years; DO licenses renew by December 31, moving to even-numbered years starting in 2026.</p>
+    <div style="margin-top:14px;display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="https://nsbme.us.thentiacloud.net/webs/nsbme/service/#/login" target="_blank" rel="noopener" class="hero-portal-link">Or renew at the NV board portal &rarr;</a>
     </div>
   </div>
 </section>
@@ -410,7 +444,7 @@ a:hover { color: var(--emerald-light); }
       <fieldset class="guide-choice">
         <legend>Add me to the CredentialDOMD waitlist? <span class="guide-choice-sub">Early access to the app that tracks every license, CME cycle, and renewal for you.</span></legend>
         <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
-        <label><input type="radio" name="waitlist" value="no"><span>No, just the guide</span></label>
+        <label><input type="radio" name="waitlist" value="no" checked><span>No, just the guide</span></label>
       </fieldset>
     </form>
     <p class="guide-msg" role="status" aria-live="polite"></p>
@@ -602,7 +636,7 @@ a:hover { color: var(--emerald-light); }
       <fieldset class="guide-choice">
         <legend>Add me to the CredentialDOMD waitlist? <span class="guide-choice-sub">Early access to the app that tracks every license, CME cycle, and renewal for you.</span></legend>
         <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
-        <label><input type="radio" name="waitlist" value="no"><span>No, just the guide</span></label>
+        <label><input type="radio" name="waitlist" value="no" checked><span>No, just the guide</span></label>
       </fieldset>
     </form>
     <p class="guide-msg" role="status" aria-live="polite"></p>
@@ -639,7 +673,7 @@ a:hover { color: var(--emerald-light); }
     <fieldset class="guide-choice guide-choice--compact">
       <legend>Waitlist?</legend>
       <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
-      <label><input type="radio" name="waitlist" value="no"><span>No, guide only</span></label>
+      <label><input type="radio" name="waitlist" value="no" checked><span>No, guide only</span></label>
     </fieldset>
   </form>
   <p class="guide-msg" role="status" aria-live="polite"></p>
@@ -690,11 +724,11 @@ a:hover { color: var(--emerald-light); }
       var placement = form.getAttribute('data-placement') || 'inline';
       var choiceBox = form.querySelector('.guide-choice');
       var optEl = form.querySelector('input[name="waitlist"]:checked');
-      if (choiceBox && !optEl) {
-        choiceBox.classList.add('is-missing');
-        if (msg) { msg.style.color = 'var(--amber)'; msg.textContent = 'Choose yes or no on the waitlist question, then send.'; }
-        return;
-      }
+      // The waitlist question used to BLOCK the send when nothing was ticked.
+      // Every radio now defaults to "no", so this cannot normally happen, but
+      // if the markup ever drifts an unanswered question must not cost a lead:
+      // no answer reads as no, which is the conservative half of an opt-in and
+      // what every requester has chosen anyway.
       if (choiceBox) choiceBox.classList.remove('is-missing');
       var wantsWaitlist = !!(optEl && optEl.value === 'yes');
       var note = 'guide-email ' + ABBR + ' ' + placement + (flags.length ? ' ' + flags.join(',') : '');
@@ -759,6 +793,6 @@ document.querySelectorAll('.faq-question').forEach(q => {
 });
 </script>
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. -->
-<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname,r:document.referrer}))</script>
+<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:document.referrer}))</script>
 </body>
 </html>
