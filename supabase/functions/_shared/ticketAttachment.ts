@@ -1,5 +1,5 @@
 /**
- * The one screenshot a ticket or a ticket reply can carry.
+ * The files a ticket or a ticket reply can carry.
  *
  * The client sends it as a data URL; this decodes it and applies the type
  * and size rules once, so create-ticket and reply-ticket accept exactly the
@@ -18,17 +18,42 @@
  * The first key of each pair is unchanged from when one screenshot was all a
  * ticket could carry, so nothing already in the bucket has to move. A
  * physician asked to send several at once because one picture rarely shows
- * a bug; the index starts at 2 for exactly that reason.
+ * a bug; the index starts at 2 for exactly that reason. The word "screenshot"
+ * in the key is history now that a PDF can be attached too, and renaming it
+ * would move every object already in the bucket for nothing.
  */
 
 export const ATTACHMENT_BUCKET = "documents";
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB decoded
 
+/**
+ * What may be stored, and under which extension.
+ *
+ * Images were the whole list until a physician tried to attach the PDF he was
+ * complaining about and found every file in the picker grayed out. A ticket is
+ * where someone shows you the thing that is wrong, so the thing that is wrong
+ * has to fit: a certificate PDF, a statement, a spreadsheet.
+ *
+ * Two types are deliberately absent. HTML and SVG are documents a browser
+ * executes, and these are served from a storage domain under a signed link, so
+ * storing one means hosting a script someone else wrote.
+ */
 export const MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+  "image/heic": "heic", "image/heif": "heif",
+  "application/pdf": "pdf",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "text/csv": "csv",
+  "text/plain": "txt",
+  "application/rtf": "rtf",
+  "text/rtf": "rtf",
 };
 
-export const ATTACHMENT_TYPE_ERROR = "Attachment must be a JPEG, PNG, WEBP, or GIF image.";
+export const ATTACHMENT_TYPE_ERROR =
+  "Attach an image, a PDF, or a document (Word, Excel, CSV, or text).";
 export const ATTACHMENT_SIZE_ERROR = "Attachment is too large (5 MB max).";
 
 export interface DecodedAttachment {
@@ -76,12 +101,12 @@ export const ticketScreenshotPath = (ticketId: string, ext: string) =>
 export const replyScreenshotPath = (ticketId: string, messageId: string, ext: string) =>
   `tickets/${ticketId}/replies/${messageId}.${ext}`;
 
-/** How many images one ticket or one reply may carry. */
+/** How many files one ticket or one reply may carry. */
 export const MAX_ATTACHMENTS = 5;
-export const ATTACHMENT_COUNT_ERROR = `Attach at most ${MAX_ATTACHMENTS} images at a time.`;
+export const ATTACHMENT_COUNT_ERROR = `Attach at most ${MAX_ATTACHMENTS} files at a time.`;
 /** And how much they may weigh together, so one request cannot carry 25 MB. */
 export const MAX_TOTAL_ATTACHMENT_BYTES = 12 * 1024 * 1024;
-export const ATTACHMENT_TOTAL_ERROR = "Those images are too large together (12 MB max). Send them across two messages.";
+export const ATTACHMENT_TOTAL_ERROR = "Those files are too large together (12 MB max). Send them across two messages.";
 
 /**
  * Reads either shape the client may send:

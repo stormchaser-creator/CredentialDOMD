@@ -6,7 +6,7 @@
  * Auth: Required. Allowed if user is the ticket owner OR is_admin().
  * Side effect: Telegram ping if reply is from non-admin (i.e., customer).
  *
- * One screenshot per reply, same type and size rules as create-ticket
+ * Up to five files per reply, same type and size rules as create-ticket
  * (_shared/ticketAttachment.ts). It is uploaded to the private "documents"
  * bucket under tickets/<ticket_id>/replies/<message_id>.<ext> BEFORE the row
  * is inserted, so support_messages.attachment_path is already set when
@@ -14,7 +14,7 @@
  * a screenshot came with the email. The service-role client bypasses the
  * bucket's owner-prefix storage RLS; readers get a signed link from
  * ticket-attachment-url, which re-checks owner-or-admin. A reply that is
- * only a screenshot gets a stock body, since the column is NOT NULL and the
+ * only a file gets a stock body, since the column is NOT NULL and the
  * email and Telegram paths both quote it.
  */
 
@@ -30,7 +30,7 @@ const corsHeaders = {
 };
 
 const VALID_STATUSES = ["open", "in_progress", "waiting_user", "resolved", "closed"];
-const SCREENSHOT_ONLY_BODY = "Screenshot attached.";
+const ATTACHMENT_ONLY_BODY = "File attached.";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -65,7 +65,7 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!replyBody && attachments.length) replyBody = SCREENSHOT_ONLY_BODY;
+    if (!replyBody && attachments.length) replyBody = ATTACHMENT_ONLY_BODY;
 
     if (!replyBody || replyBody.length < 1) {
       return new Response(JSON.stringify({ error: "body is required" }), {
@@ -98,7 +98,7 @@ serve(async (req) => {
         .upload(path, a.bytes, { contentType: a.mime, upsert: true });
       if (upErr) {
         console.error(`reply-ticket: attachment ${i + 1} upload failed for ${ticketId}: ${upErr.message}`);
-        return new Response(JSON.stringify({ error: "Could not upload the screenshots. Try again." }), {
+        return new Response(JSON.stringify({ error: "Could not upload the attachments. Try again." }), {
           status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -141,7 +141,7 @@ serve(async (req) => {
     if (!isAdmin) {
       notifyOperator(
         `💬 *Customer reply* on "${ticketRow.subject || "(unknown)"}"` +
-        (attachmentPath ? " (screenshot attached)" : "") + "\n" +
+        (attachmentPath ? " (file attached)" : "") + "\n" +
         `From: ${user.email}\n\n` +
         replyBody.slice(0, 500)
       );

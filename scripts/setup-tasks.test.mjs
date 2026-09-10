@@ -172,8 +172,8 @@ eq("dateless never walks privileges or insurance", dateless({
   const notDone = { settings: { ...settledSettings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } }, licenses: [doLicense] };
   eq("na wins over skipped for the same task", statusOf(build({ ...notDone, settings: { ...notDone.settings, setupState: { tasks: { dea: { s: "na", at: day(1) } } } } }), "dea"), "na");
   eq("a skip shows its date", build({ settings: { ...settledSettings, setupState: { tasks: { dea: { s: "skipped", at: new Date(2026, 8, 4, 12).toISOString() } } } }, licenses: [doLicense] }).byId.dea.detail, "Skipped 4 Sep. Still on the list.");
-  eq("the board is six protected rows and ten packet rows",
-    [TASK_DEFS.filter((d) => d.tier === 1).length, TASK_DEFS.filter((d) => d.tier === 2).length], [6, 10]);
+  eq("the board is six protected rows and eleven packet rows",
+    [TASK_DEFS.filter((d) => d.tier === 1).length, TASK_DEFS.filter((d) => d.tier === 2).length], [6, 11]);
   ok("every task has a derived rule, so no checkbox can lie", TASK_DEFS.every((d) => typeof d.doneWhen === "function"));
 }
 
@@ -521,18 +521,28 @@ eq("shortDate of garbage", shortDate("not a date"), "");
     ...packed(), education: [{ id: "e1", type: "Doctor of Medicine (MD)" }, { id: "e2", type: "Internship Certificate" }], documents: [],
   }), "education"), "done");
 
-  // idPhoto: an ID with a number, plus a headshot from either place.
-  eq("a passport with a number and a headshot close it", st(build(packed()), "idPhoto"), "documented");
+  // idPhoto: an ID with its number on file. The headshot is its own row now.
+  // It was one row that needed both, and a physician who uploaded his driver's
+  // license found it still gray with nothing saying which half was missing.
+  eq("a passport with a number closes it", st(build(packed()), "idPhoto"), "documented");
   eq("a passport with no number is not an ID on file",
     st(t2({ travelDocs: [{ id: "t1", type: "Passport" }] }), "idPhoto"), "pending");
   eq("a loyalty card is not a photo ID",
     st(t2({ travelDocs: [{ id: "t1", type: "Airline loyalty", number: "99" }] }), "idPhoto"), "pending");
+  eq("and no headshot no longer holds the ID row open", st(build({
+    ...packed(), professionalPhotos: [], settings: { ...packedSettings, profilePhoto: "" },
+  }), "idPhoto"), "documented");
+
+  // headshot: either place it can live counts, and neither leaves it open.
+  eq("a professional photo closes the headshot row", st(build(packed()), "headshot"), "done");
   eq("the profile photo counts as the headshot", st(build({
     ...packed(), professionalPhotos: [], settings: { ...packedSettings, profilePhoto: "data:image/png;base64,AA" },
-  }), "idPhoto"), "documented");
+  }), "headshot"), "done");
   eq("neither photo anywhere leaves it open", st(build({
     ...packed(), professionalPhotos: [], settings: { ...packedSettings, profilePhoto: "" },
-  }), "idPhoto"), "pending");
+  }), "headshot"), "pending");
+  ok("the headshot row asks for no document of its own, because it IS the document",
+    TASK_DEFS.find((d) => d.id === "headshot").evidenceWhen === null);
 }
 
 // ── The three Pro rows ──
@@ -568,14 +578,14 @@ eq("shortDate of garbage", shortDate("not a date"), "");
 // ── The Pro denominator, and the beta ──
 {
   const free = build(packed());
-  eq("a free account counts seven packet rows", [free.counts.tier2.total, free.counts.tier2.done], [7, 7]);
+  eq("a free account counts eight packet rows", [free.counts.tier2.total, free.counts.tier2.done], [8, 8]);
   eq("and its packet is complete with the three Pro rows still locked", free.counts.tier2.complete, true);
   eq("the Pro rows are still on the board, just locked", free.counts.tier2.locked, 3);
   ok("every locked row is a Pro row", free.tier2.filter((t) => t.locked).every((t) => t.pro));
   ok("a locked row never becomes the next action", !free.open.some((t) => t.locked));
 
   const pro = build(packed(), { isPro: true });
-  eq("Pro counts ten", pro.counts.tier2.total, 10);
+  eq("Pro counts eleven", pro.counts.tier2.total, 11);
   eq("and reopens the board", pro.counts.tier2.complete, false);
   eq("the ranker offers a Pro row once the account can reach it", pro.next.pro, true);
 
@@ -590,9 +600,9 @@ eq("shortDate of garbage", shortDate("not a date"), "");
 
   // na leaves the denominator; a skip stays in it. Same rule as Tier 1.
   const naCme = build({ ...packed(), settings: { ...packedSettings, setupState: { tasks: { cme: { s: "na", at: day(1) } } } }, cme: [] });
-  eq("a packet row marked inapplicable leaves the total", naCme.counts.tier2.total, 6);
+  eq("a packet row marked inapplicable leaves the total", naCme.counts.tier2.total, 7);
   const skippedCme = build({ ...packed(), settings: { ...packedSettings, setupState: { tasks: { cme: { s: "skipped", at: day(1) } } } }, cme: [] });
-  eq("a skipped packet row stays in the total", [skippedCme.counts.tier2.total, skippedCme.counts.tier2.done], [7, 6]);
+  eq("a skipped packet row stays in the total", [skippedCme.counts.tier2.total, skippedCme.counts.tier2.done], [8, 7]);
 }
 
 // ── The denominator, narrated ──
@@ -787,13 +797,13 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   eq("the packet is finished", done.counts.tier2.complete, true);
   eq("Form D is the terminal form", homeCardForm(done, { now: NOW }), CARD_FORM.D);
   const all = boardCounts(done);
-  eq("the terminal line counts the whole board", [all.done, all.total], [16, 16]);
+  eq("the terminal line counts the whole board", [all.done, all.total], [17, 17]);
   eq("nothing is left", all.left, 0);
   eq("nothing regressed", tier1Regressed(done), null);
 
   // Free beta ended, so the three Pro rows are locked and out of the total.
   const free = build(stamped(fullyPacked()), { isPro: false });
-  eq("locked Pro rows leave the terminal total too", boardCounts(free).total, 13);
+  eq("locked Pro rows leave the terminal total too", boardCounts(free).total, 14);
 
   // A record deleted months later un-completes Tier 1. The bordered card
   // never comes back; the terminal line names what changed.

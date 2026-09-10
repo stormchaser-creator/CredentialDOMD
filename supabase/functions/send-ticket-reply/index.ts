@@ -7,7 +7,7 @@
 // mechanism as send-welcome / trg_welcome_lead.
 //
 // The record is the whole support_messages row (to_jsonb(new)), so a reply that
-// carries a screenshot arrives with attachment_path set. The email says so and
+// carries a file arrives with attachment_path set. The email says so and
 // points at the app rather than embedding the image: the bucket is private and
 // its signed links expire, while the thread in the app signs a fresh one each
 // time it opens.
@@ -22,9 +22,9 @@ const supabase = createClient(
 
 const APP_URL = "https://credentialdomd.com/app/";
 
-const replyText = (reply: string, screenshot: boolean) => [
+const replyText = (reply: string, attachment: boolean) => [
   reply,
-  screenshot ? "A screenshot is attached to this reply. Open the ticket in the app to see it." : "",
+  attachment ? "A file is attached to this reply. Open the ticket in the app to see it." : "",
   `Reply here: ${APP_URL}#support (More > Support > Your tickets)`,
   "Eric",
   "--\nEric Whitney, DO\nCredentialDOMD: credential tracking for physicians, by a physician\nhttps://credentialdomd.com",

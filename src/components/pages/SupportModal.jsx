@@ -5,6 +5,7 @@ import { edgeErrorMessage } from "../../utils/edgeError";
 import { supabase } from "../../lib/supabase";
 import { ScreenshotAttach } from "../shared";
 import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
+import TicketAttachments from "../shared/TicketAttachments";
 
 const CATEGORIES = [
   { id: "bug",             label: "Bug / something broken" },
@@ -435,15 +436,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               You {"·"} {new Date(openTicket.created_at).toLocaleString()}
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{openTicket.body}</div>
-            {attachmentUrls.length > 0 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                {attachmentUrls.map((u, i) => (
-                  <a key={u} href={u} target="_blank" rel="noreferrer">
-                    <img src={u} alt={`Attached screenshot ${i + 1}`} style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}`, display: "block" }} />
-                  </a>
-                ))}
-              </div>
-            )}
+            <TicketAttachments urls={attachmentUrls} size={160} />
           </div>
         )}
         {thread.map((m) => (
@@ -457,15 +450,9 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
             </div>
             <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
             {Boolean(m.attachment_path || m.attachment_paths?.length) && (linksFor(replyUrls[m.id]).length ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                {linksFor(replyUrls[m.id]).map((u, i) => (
-                  <a key={u} href={u} target="_blank" rel="noreferrer">
-                    <img src={u} alt={`Attached screenshot ${i + 1}`} style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, border: `1px solid ${T.border}`, display: "block" }} />
-                  </a>
-                ))}
-              </div>
+              <TicketAttachments urls={linksFor(replyUrls[m.id])} size={160} />
             ) : (
-              <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>Screenshot attached</div>
+              <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>File attached</div>
             ))}
           </div>
         ))}

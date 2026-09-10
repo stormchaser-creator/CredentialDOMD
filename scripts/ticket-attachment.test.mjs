@@ -42,17 +42,28 @@ eq("png ext", good.ext, "png");
 eq("png bytes round-trip", Array.from(good.bytes), Array.from(png));
 ok("bytes come back as a Uint8Array (what storage.upload takes)", good.bytes instanceof Uint8Array);
 
-// Every whitelisted type maps to its extension, and only those four are whitelisted.
+// Every whitelisted type maps to its extension.
 for (const [mime, ext] of Object.entries(MIME_EXT)) {
   eq(`${mime} -> .${ext}`, parseAttachment({ data: dataUrl(mime, png) }).ext, ext);
 }
-eq("exactly four image types are accepted", Object.keys(MIME_EXT).length, 4);
 eq("charset parameter is tolerated", parseAttachment({ data: `data:image/jpeg;charset=utf-8;base64,${b64(png)}` }).ext, "jpg");
 
-// Anything else is refused with the sentence the form shows the person who attached it.
-eq("pdf refused", parseAttachment({ data: dataUrl("application/pdf", png) }), { error: ATTACHMENT_TYPE_ERROR });
+// A PDF is the file a physician actually had in his hand when he was reporting
+// a problem with a PDF, and the picker used to gray it out.
+eq("pdf accepted", parseAttachment({ data: dataUrl("application/pdf", png) }).ext, "pdf");
+eq("word accepted", parseAttachment({ data: dataUrl("application/msword", png) }).ext, "doc");
+eq("excel accepted",
+  parseAttachment({ data: dataUrl("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", png) }).ext, "xlsx");
+eq("csv accepted", parseAttachment({ data: dataUrl("text/csv", png) }).ext, "csv");
+eq("an iPhone heic accepted", parseAttachment({ data: dataUrl("image/heic", png) }).ext, "heic");
+
+// Two are still refused, and not for tidiness: a browser executes both, and
+// these come back to the reader under a signed link on a storage domain.
 eq("svg refused (scriptable)", parseAttachment({ data: dataUrl("image/svg+xml", png) }), { error: ATTACHMENT_TYPE_ERROR });
-eq("heic refused", parseAttachment({ data: dataUrl("image/heic", png) }), { error: ATTACHMENT_TYPE_ERROR });
+eq("html refused (scriptable)", parseAttachment({ data: dataUrl("text/html", png) }), { error: ATTACHMENT_TYPE_ERROR });
+eq("an executable refused", parseAttachment({ data: dataUrl("application/x-msdownload", png) }), { error: ATTACHMENT_TYPE_ERROR });
+
+// Anything else is refused with the sentence the form shows the person who attached it.
 eq("plain string refused", parseAttachment({ data: "hello" }), { error: ATTACHMENT_TYPE_ERROR });
 eq("non-base64 data url refused", parseAttachment({ data: "data:image/png,rawbytes" }), { error: ATTACHMENT_TYPE_ERROR });
 eq("data url with no payload refused", parseAttachment({ data: "data:image/png;base64," }), { error: ATTACHMENT_TYPE_ERROR });
@@ -106,11 +117,14 @@ eq(`exactly ${MAX_ATTACHMENTS} is allowed`,
   parseAttachments({ attachments: Array.from({ length: MAX_ATTACHMENTS }, () => shot(1)) }).length,
   MAX_ATTACHMENTS);
 
-// One bad image refuses the set. A physician who attached four and saw three
+// One bad file refuses the set. A physician who attached four and saw three
 // arrive would have no way to know which one went missing.
-eq("one image of the wrong type refuses the whole set",
-  parseAttachments({ attachments: [shot(1), { data: "data:application/pdf;base64,AAAA" }] }).error,
+eq("one file of the wrong type refuses the whole set",
+  parseAttachments({ attachments: [shot(1), { data: "data:image/svg+xml;base64,AAAA" }] }).error,
   ATTACHMENT_TYPE_ERROR);
+eq("a PDF alongside a screenshot is a valid set now",
+  parseAttachments({ attachments: [shot(1), { data: "data:application/pdf;base64,AAAA" }] }).map((a) => a.ext),
+  ["png", "pdf"]);
 eq("one oversized image refuses the whole set",
   parseAttachments({ attachments: [shot(1), shot(6 * 1024)] }).error,
   ATTACHMENT_SIZE_ERROR);

@@ -9,7 +9,9 @@
 // Run: node scripts/ticket-attachments-client.test.mjs
 import {
   MAX_TICKET_IMAGES, MAX_TICKET_IMAGE_BYTES, MAX_TICKET_TOTAL_BYTES,
+  TICKET_ATTACH_ACCEPT, TICKET_MIME_BY_EXT,
   dataUrlBytes, totalBytes, addImages, attachmentsPayload, linksFor,
+  attachmentKind, attachmentLabel, mimeOfDataUrl,
 } from "../src/utils/ticketAttachments.js";
 
 const server = await import("../supabase/functions/_shared/ticketAttachment.ts");
@@ -89,6 +91,54 @@ eq("the same maximum count", MAX_TICKET_IMAGES, server.MAX_ATTACHMENTS);
 eq("the same per-image cap", MAX_TICKET_IMAGE_BYTES, server.MAX_ATTACHMENT_BYTES);
 eq("the same total cap", MAX_TICKET_TOTAL_BYTES, server.MAX_TOTAL_ATTACHMENT_BYTES);
 
+// ── What the picker offers, and what the server will store ────────────────
+// The bug: the picker said image/* and a physician reporting a problem with a
+// PDF found every PDF on his phone grayed out. The one file that showed what
+// was wrong was the one file he could not send.
+{
+  ok("the picker offers PDFs", /application\/pdf/.test(TICKET_ATTACH_ACCEPT));
+  ok("and the extension too, because iOS grays out what it cannot match by MIME",
+    TICKET_ATTACH_ACCEPT.split(",").includes(".pdf"));
+  ok("images still go", /image\/\*/.test(TICKET_ATTACH_ACCEPT));
+
+  // Every MIME the client offers is one the server stores, and the other way
+  // round. A picker that accepts a type the function refuses is a failure the
+  // physician meets after writing the message.
+  const serverMimes = new Set(Object.keys(server.MIME_EXT));
+  const clientMimes = new Set(Object.values(TICKET_MIME_BY_EXT));
+  const unstorable = [...clientMimes].filter((m) => !serverMimes.has(m));
+  eq("nothing offered that the server would refuse", unstorable, []);
+  const unofferable = [...serverMimes].filter((m) => !clientMimes.has(m) && m !== "text/rtf");
+  eq("nothing stored that the picker never offers", unofferable, []);
+
+  ok("neither side takes SVG or HTML, which a browser executes",
+    !serverMimes.has("image/svg+xml") && !serverMimes.has("text/html")
+    && !/svg|text\/html/.test(TICKET_ATTACH_ACCEPT));
+}
+
+// ── Telling a picture from a file ─────────────────────────────────────────
+// The reader of a thread has the signed link and nothing else: the filename
+// stayed on the sender's phone. Putting a PDF in an <img> drew a broken icon.
+{
+  const signed = (name) => `https://x.supabase.co/storage/v1/object/sign/documents/tickets/t1/${name}?token=ey.j`;
+  eq("a signed png is a picture", attachmentKind(signed("screenshot.png")), "image");
+  eq("a signed pdf is not", attachmentKind(signed("screenshot.pdf")), "pdf");
+  eq("a signed xlsx is a file", attachmentKind(signed("screenshot-2.xlsx")), "file");
+  eq("an uppercase extension still reads", attachmentKind("SHOT.JPG"), "image");
+  eq("a heic is a file, because no browser draws one", attachmentKind("IMG_0041.HEIC"), "file");
+  eq("the MIME wins when there is one", attachmentKind("whatever", "image/webp"), "image");
+  eq("a pdf MIME wins too", attachmentKind("whatever", "application/pdf"), "pdf");
+  eq("nothing at all is treated as a file, never drawn", attachmentKind("", ""), "file");
+
+  eq("a data URL says its type", mimeOfDataUrl("data:application/pdf;base64,AAAA"), "application/pdf");
+  eq("and rubbish says nothing", mimeOfDataUrl("hello"), "");
+
+  eq("a link names itself for the reader", attachmentLabel(signed("screenshot.pdf"), 0), "PDF attachment 1");
+  eq("and counts from one", attachmentLabel(signed("screenshot-2.pdf"), 1), "PDF attachment 2");
+  eq("an unknown extension still gets a name", attachmentLabel("https://x/a/file.bin", 0), "BIN attachment 1");
+  eq("and no extension at all", attachmentLabel("https://x/a/file", 0), "Attachment 1");
+}
+
 // ── House rules ───────────────────────────────────────────────────────────
 {
   const messages = [
@@ -96,7 +146,9 @@ eq("the same total cap", MAX_TICKET_TOTAL_BYTES, server.MAX_TOTAL_ATTACHMENT_BYT
     addImages([], [img("huge", 6 * 1024)]).error,
     addImages([], [img("a", 4500), img("b", 4500), img("c", 4500)]).error,
   ];
-  ok("no em dash in anything the physician reads", messages.every((m) => !m.includes("—")));
+  ok("no em dash in anything the physician reads", messages.every((m) => !m.includes("\u2014")));
+  ok("and nothing a physician reads still says screenshots only",
+    messages.every((m) => !/screenshot/i.test(m)), messages.join(" | "));
 }
 
 console.log(`${pass} passed, ${fail} failed`);

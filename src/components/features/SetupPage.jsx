@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
-import { generateId } from "../../utils/helpers";
+import { generateId, downscalePhoto } from "../../utils/helpers";
 import { isDea, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
 import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetPendingLine } from "../../utils/credentialExport";
 import { FREE_BETA_LABEL } from "../../constants/beta";
@@ -404,9 +404,103 @@ function PacketDrawer({ task, onOpenSection }) {
       )}
       {task.id === "idPhoto" && (
         <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginTop: 10 }}>
-          The headshot lives under Professional Photo, and the ID under Travel and IDs.
+          A passport or a driver's license, under Travel and IDs. The headshot is its own row.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The headshot row.
+ *
+ * It used to share a row with the photo ID, and the row went green only when
+ * both were on file, so a physician who uploaded his driver's license came
+ * back to a gray row with nothing saying which half was missing. He asked for
+ * two rows and for the camera to face him, which is the whole point: the
+ * headshot is the one packet item nobody has a copy of, and the phone in their
+ * hand can make one in ten seconds.
+ *
+ * capture="user" is what turns the front camera on. It is a hint, not a
+ * guarantee (a desktop browser shows a file picker instead), so the upload
+ * button is always there next to it.
+ */
+function HeadshotDrawer({ onOpenSection }) {
+  const { data, updateSettings, theme: T } = useApp();
+  const s = data.settings || {};
+  const cameraRef = useRef(null);
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const onPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError("");
+    setBusy(true);
+    try {
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = (ev) => res(ev.target.result);
+        r.onerror = () => rej(new Error("Could not read that photo."));
+        r.readAsDataURL(file);
+      });
+      updateSettings({ profilePhoto: await downscalePhoto(dataUrl) });
+    } catch {
+      // A HEIC from an older iPhone is the usual cause: the browser cannot
+      // redraw it, so say what to do instead of failing silently.
+      setError("Could not read that photo. Try taking a new one with the camera button.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const button = (label, onClick, primary) => (
+    <button onClick={onClick} disabled={busy} style={{
+      flex: 1, minWidth: 140, padding: "12px 16px", borderRadius: 12,
+      border: primary ? "none" : `1px solid ${T.accent}`,
+      backgroundColor: primary ? T.accent : "transparent",
+      color: primary ? "#fff" : T.accent, fontSize: 14.5, fontWeight: 800,
+      cursor: busy ? "wait" : "pointer", fontFamily: "inherit",
+    }}>{label}</button>
+  );
+
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: T.text, lineHeight: 1.55, marginBottom: 10 }}>
+        A hospital directory, a privileges packet and most applications ask for a
+        photograph of you. Take one now with the front camera, or upload the one
+        you already use.
+      </div>
+
+      {s.profilePhoto && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <img src={s.profilePhoto} alt="Your headshot" style={{
+            width: 72, height: 72, borderRadius: 36, objectFit: "cover", objectPosition: "50% 25%",
+            border: `1px solid ${T.border}`, display: "block",
+          }} />
+          <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
+            On file. This is also your avatar in the app. Taking another replaces it.
+          </div>
+        </div>
+      )}
+
+      <input type="file" ref={cameraRef} accept="image/*" capture="user" style={{ display: "none" }} onChange={onPhoto} />
+      <input type="file" ref={fileRef} accept="image/*" style={{ display: "none" }} onChange={onPhoto} />
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {button(s.profilePhoto ? "Take a new headshot" : "Take a headshot", () => cameraRef.current?.click(), true)}
+        {button("Upload a photo", () => fileRef.current?.click(), false)}
+      </div>
+
+      {error && <div style={{ marginTop: 8, fontSize: 12.5, color: "#ef4444", fontWeight: 600 }}>{error}</div>}
+
+      <button onClick={() => onOpenSection?.("professionalPhotos", "headshot")} style={{
+        marginTop: 10, width: "100%", padding: "11px 16px", borderRadius: 12,
+        border: `1px solid ${T.border}`, backgroundColor: "transparent",
+        color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+      }}>Keep several under Professional Photo</button>
     </div>
   );
 }
@@ -467,7 +561,7 @@ function LockedRow({ task, T, onUpgrade }) {
  * Download comes first because a complete packet routinely exceeds what
  * email carries (ten files, 25 MB), and the ZIP has no such ceiling.
  */
-function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, onShowItems, T }) {
+function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, T }) {
   const btn = (primary) => ({
     flex: 1, minWidth: 150, padding: "12px 16px", borderRadius: 12,
     border: primary ? "none" : `1px solid ${T.border}`,
@@ -514,14 +608,12 @@ function PacketEnding({ summary, itemCount, busy, error, onDownload, onSend, onS
         </div>
       )}
       {error && <div style={{ fontSize: 13, fontWeight: 700, color: T.danger, marginTop: 10 }}>{error}</div>}
-      {/* Absent at desk width, where the rows are already in the rail beside
-          this card and the link would unfold something that never folded. */}
-      {onShowItems && (
-        <button onClick={onShowItems} style={{
-          marginTop: 12, border: "none", background: "transparent", padding: 0,
-          color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-        }}>Show the {itemCount} items {"›"}</button>
-      )}
+      {/* The rows themselves are below this card on a phone and in the rail
+          beside it at desk width, so this says what the number counts rather
+          than hiding the list behind a tap. */}
+      <div style={{ marginTop: 12, fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
+        All {itemCount} packet items are listed below, each with what is on file.
+      </div>
     </div>
   );
 }
@@ -654,7 +746,6 @@ export default function SetupPage({
   const [zipError, setZipError] = useState(null);
   const [emailOpen, setEmailOpen] = useState(false);
   const [unfoldedT1, setUnfoldedT1] = useState(false);
-  const [unfoldedT2, setUnfoldedT2] = useState(false);
   // null = follow Tier 1 (folded until it completes). Once tapped either
   // way, the physician's choice wins: the packet is folded, never locked.
   const [packetOpen, setPacketOpen] = useState(null);
@@ -670,7 +761,6 @@ export default function SetupPage({
     setSeeded(initialTask);
     setOpen(initialTask);
     setUnfoldedT1(true);
-    setUnfoldedT2(true);
     setPacketOpen(true);
   }
 
@@ -688,6 +778,7 @@ export default function SetupPage({
   // countdown carries on over the packet, so the page never stops shrinking.
   const stripTasks = t1.complete ? t2Rows : setup.tier1;
   const stripCounts = t1.complete ? t2 : t1;
+  const stripLabel = t1.complete ? TIER2_COPY.header : "Protected";
 
   const drawerFor = (task) => {
     const id = task.id;
@@ -698,6 +789,7 @@ export default function SetupPage({
     if (id === "dea") return <DeaDrawer onDeclareNone={() => { declare("noDea", true); setOpen(null); }} />;
     if (id === "reminders") return <RemindersDrawer />;
     if (id === "cme") return <CmeDrawer onOpenSection={onOpenSection} />;
+    if (id === "headshot") return <HeadshotDrawer onOpenSection={onOpenSection} />;
     if (task.tier === 2) return <PacketDrawer task={task} onOpenSection={onOpenSection} />;
     return null;
   };
@@ -723,7 +815,7 @@ export default function SetupPage({
         {stripTasks.map((t) => {
           const done = t.status === "done" || t.status === "documented";
           return (
-            <div key={t.id} style={{
+            <div key={t.id} title={t.label} aria-label={`${t.label}: ${done ? "done" : t.status}`} style={{
               flex: 1, height: 6, borderRadius: 3,
               backgroundColor: done ? T.accent : T.border,
               border: t.status === "skipped" ? `1px solid ${T.accent}` : "none",
@@ -733,8 +825,11 @@ export default function SetupPage({
           );
         })}
       </div>
+      {/* "10 of 10 done" on its own is a number with no subject. The strip
+          switches from the first six to the packet the moment the six are
+          finished, and nothing said so. */}
       <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text, fontVariantNumeric: "tabular-nums" }}>
-        {stripCounts.done} of {stripCounts.total} done{stripCounts.skipped ? ` · ${stripCounts.skipped} skipped` : ""}
+        {stripLabel}: {stripCounts.done} of {stripCounts.total} done{stripCounts.skipped ? ` · ${stripCounts.skipped} skipped` : ""}
       </div>
       <div style={{ fontSize: 13, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
         {stripCounts.left === 0 ? "Nothing left." : `${stripCounts.left} left`}
@@ -844,8 +939,10 @@ export default function SetupPage({
 
   // Folded until Tier 1 completes, and never locked: one tap opens it at any
   // time, because a physician who wants to see the whole job should be able
-  // to see the whole job.
-  const packetCollapsed = packetOpen === null ? !t1.complete : !packetOpen;
+  // to see the whole job. Once the packet is finished it opens itself: the
+  // page was saying "10 of 10 done" with the ten items one tap away, and the
+  // owner of the app could not tell what the ten were.
+  const packetCollapsed = packetOpen === null ? (!t1.complete && !t2.complete) : !packetOpen;
   const packetHeader = (
     <button onClick={() => setPacketOpen(packetCollapsed)} style={{
       display: "flex", alignItems: "baseline", gap: 8, width: "100%",
@@ -919,7 +1016,6 @@ export default function SetupPage({
       error={zipError}
       onDownload={downloadPacket}
       onSend={() => setEmailOpen(true)}
-      onShowItems={isDesktop ? null : () => { setUnfoldedT2(true); setPacketOpen(true); }}
       T={T}
     />
   ) : null;
@@ -1021,14 +1117,12 @@ export default function SetupPage({
           ? foldedSection("Protected", t1.total, () => setUnfoldedT1(true))
           : tier1Body}
       </div>
-      {/* The packet section's header is replaced by the ending once every
-          applicable row is resolved. The rows themselves are one tap away,
-          never gone: a finished list still has to be readable. */}
+      {/* The ending card sits above the rows once every applicable row is
+          resolved. The rows stay on the page: a finished list still has to be
+          readable, and "10 of 10 done" does not say what the ten were. */}
       <div style={{ marginTop: 18 }}>
         {packetEnding}
-        {(!packetEnding || unfoldedT2) && (
-          <div style={{ marginTop: packetEnding ? 18 : 0 }}>{packetBody}</div>
-        )}
+        <div style={{ marginTop: packetEnding ? 18 : 0 }}>{packetBody}</div>
       </div>
       {bottomGroups}
       {footer}

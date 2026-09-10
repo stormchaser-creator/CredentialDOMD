@@ -512,27 +512,46 @@ export const TASK_DEFS = [
     cardLine: () => "No work history on file.",
     pendingDetail: () => "Nothing on file yet.",
   },
+  // These were one row, "Photo ID and a headshot", and it went green only when
+  // both were on file. A physician uploaded his driver's license, came back,
+  // and found the row still gray with no way to tell which half was missing,
+  // so he filed it as a bug twice. They are two separate asks on an
+  // application, they are kept in two different places in the app, and a
+  // checklist that cannot show one of two done is not a checklist.
   {
     id: "idPhoto",
     tier: 2,
-    secs: 60,
+    secs: 45,
     pro: false,
     variable: true,
     section: "travelDocs",
-    label: "Photo ID and a headshot",
-    why: "Two separate asks on nearly every application, and neither one changes.",
+    label: "Photo ID",
+    why: "A government photo ID is asked for on nearly every application, and it does not change.",
     verb: "Add my ID",
-    doneWhen: (ctx) => idRecords(ctx).length > 0 && hasHeadshot(ctx),
+    doneWhen: (ctx) => idRecords(ctx).length > 0,
     evidenceWhen: (ctx) => idRecords(ctx).some((t) => hasDoc(ctx.data, "travelDocs", t.id)),
-    nextPhrase: (ctx) => (idRecords(ctx).length ? "a headshot" : "your passport or driver's license"),
+    nextPhrase: () => "your passport or driver's license",
     costLine: null,
     doneClause: "your photo ID",
-    cardLine: () => "No photo ID or no headshot on file.",
-    pendingDetail: (ctx) => {
-      if (!idRecords(ctx).length && !hasHeadshot(ctx)) return "Neither one on file yet.";
-      if (!idRecords(ctx).length) return "Headshot on file. No photo ID yet.";
-      return "Photo ID on file. No headshot yet.";
-    },
+    cardLine: () => "No photo ID on file.",
+    pendingDetail: () => "A passport or a driver's license, with its number.",
+  },
+  {
+    id: "headshot",
+    tier: 2,
+    secs: 30,
+    pro: false,
+    section: "professionalPhotos",
+    label: "Headshot",
+    why: "A hospital directory and a privileges packet both ask for one, and it is the single item people do not have ready.",
+    verb: "Add my headshot",
+    doneWhen: (ctx) => hasHeadshot(ctx),
+    evidenceWhen: null,
+    nextPhrase: () => "a headshot",
+    costLine: null,
+    doneClause: "your headshot",
+    cardLine: () => "No headshot on file.",
+    pendingDetail: () => "Nothing on file yet. The camera on this card takes one.",
   },
   {
     id: "privileges",
