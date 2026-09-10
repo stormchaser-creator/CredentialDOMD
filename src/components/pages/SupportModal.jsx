@@ -87,6 +87,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [replyAttachment, setReplyAttachment] = useState([]); // [{ data: dataURL, name }]
   const [replying, setReplying] = useState(false);
   const [replyMsg, setReplyMsg] = useState("");
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => { if (open) setTab(initialTab); }, [open, initialTab]);
 
@@ -178,6 +179,26 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       setReplyMsg(e.message || "Failed to send");
     } finally {
       setReplying(false);
+    }
+  };
+
+  // Owner can close out their own ticket once it's actually solved. RLS lets
+  // the owner UPDATE their own support_tickets row (tickets_owner_or_admin_update),
+  // so this is a direct client update, no edge function needed.
+  const markResolved = async () => {
+    if (!openTicket) return;
+    setResolving(true); setReplyMsg("");
+    try {
+      const { error } = await supabase.from("support_tickets")
+        .update({ status: "resolved", resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", openTicket.id);
+      if (error) throw error;
+      setOpenTicket((t) => (t ? { ...t, status: "resolved" } : t));
+      loadTickets();
+    } catch (e) {
+      setReplyMsg(e.message || "Could not mark this resolved.");
+    } finally {
+      setResolving(false);
     }
   };
 
@@ -394,8 +415,16 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           {STATUS_LABEL[openTicket.status] || openTicket.status}
         </span>
       </div>
-      <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10 }}>
-        Opened {new Date(openTicket.created_at).toLocaleString()}
+      <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
+        <span>Opened {new Date(openTicket.created_at).toLocaleString()}</span>
+        {openTicket.status !== "resolved" && openTicket.status !== "closed" && (
+          <button onClick={markResolved} disabled={resolving} style={{
+            background: "none", border: "none", padding: 0, cursor: resolving ? "default" : "pointer",
+            color: T.accent, fontSize: 11.5, fontWeight: 700,
+          }}>
+            {resolving ? "Marking resolved..." : "Mark as resolved"}
+          </button>
+        )}
       </div>
 
       {threadLoading && <div style={{ fontSize: 13, color: T.textMuted }}>Loading...</div>}
