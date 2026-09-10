@@ -1,7 +1,7 @@
 /**
  * email-inbound: Resend "email.received" webhook for @credentialdomd.com.
  *
- * Three routes, decided by the local part of the address the message was sent to:
+ * Four routes, decided by the local part of the address the message was sent to:
  *
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
  *     Sender must match a profile: lower(profiles.email) = lower(from), or a
@@ -26,6 +26,16 @@
  *     type = "request-attachment-inbox". The physician gets a short reply
  *     pointing at More > Requests, where the packet is built and sent by
  *     the send-packet-email function.
+ *
+ *   contacts@ | contact@ | refs@ | reference@ | references@   Peer references.
+ *     An iPhone cannot hand a contact card to a web app: iOS has no Contact
+ *     Picker API and Safari ignores the Web Share Target manifest, so nothing
+ *     in the share sheet can reach the app. Mail can. Contacts > the person >
+ *     Share Contact > Mail > contacts@ arrives here as a .vcf, every card in
+ *     it is parsed (a multi-select share carries several), and a
+ *     `peer_references` row is written per person with relationship "Other"
+ *     and a note saying where it came from. Same sender matching and
+ *     authentication as cme@. The reply names who was added.
  *
  *   anything else (support@, hello@, whit@, privacy@, ...)   Mailbox relay.
  *     The whole message (subject prefixed "[credentialdomd.com <local>] ",
@@ -63,17 +73,24 @@
 import { Webhook } from "https://esm.sh/svix@1.40.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
+import { parseVCards, isVCardAttachment, looksLikeVCardText, type VCardContact } from "../_shared/vcard.ts";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const INBOX_DOMAIN = "credentialdomd.com";
 const CME_LOCAL = "cme";
 const DOCS_LOCALS = new Set(["docs", "requests", "packets"]);
+// Share Contact > Mail > one of these. iOS cannot hand a contact card to a web
+// app at all (no Contact Picker API, and Safari ignores the Web Share Target
+// manifest), so Mail is the whole of the share sheet that can reach us.
+const CONTACT_LOCALS = new Set(["contacts", "contact", "refs", "reference", "references"]);
+const CONTACTS_ADDR = `contacts@${INBOX_DOMAIN}`;
 const DOCS_ADDR = `docs@${INBOX_DOMAIN}`;
 const FORWARD_TO = "stormchaser@elryx.com";
 const FROM_ADDR = "whit@credentialdomd.com";
 const FROM_CME = `CredentialDOMD <${FROM_ADDR}>`;
 const FROM_DOCS = `CredentialDOMD <${DOCS_ADDR}>`;
+const FROM_CONTACTS = `CredentialDOMD <${CONTACTS_ADDR}>`;
 const FROM_RELAY = `CredentialDOMD Inbox <${FROM_ADDR}>`;
 const APP_URL = "https://credentialdomd.com/app/";
 const INBOX_DOC_TYPE = "cme-certificate-inbox";
@@ -92,6 +109,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;   // matches the app's 10 MB upload cap
 const MAX_TOTAL_BYTES = 20 * 1024 * 1024;  // raw; base64 stays under Resend's 40 MB per-email limit
 const MIN_INLINE_IMAGE_BYTES = 40 * 1024;  // inline images under this are signature logos, not certificates
 const MAX_BODY_CHARS = 200_000;
+const MAX_CONTACTS_PER_EMAIL = 25;       // a multi-select share, not a mailing list
 
 // ─── Env / clients ────────────────────────────────────────────────────────────
 
@@ -167,7 +185,7 @@ interface LedgerRow {
   updated_at: string;
 }
 
-type Route = "cme" | "docs" | "forward";
+type Route = "cme" | "docs" | "contacts" | "forward";
 
 interface MatchedProfile {
   id: string;
@@ -641,6 +659,123 @@ If the app is already open, refresh it to see the new file.`;
   return json({ ok: true, route: "cme", stored, duplicates, skipped, failed, confirmed: r.ok });
 }
 
+// ─── Route: contacts@ / refs@ ────────────────────────────────────────────────
+
+/** A .vcf, by type or by extension. Some clients send octet-stream. */
+function acceptVCardLike(a: ReceivedAttachment): boolean {
+  return isVCardAttachment(safeFilename(a.filename, ""), a.content_type ?? "");
+}
+
+/**
+ * A contact card, emailed in, written as a peer reference.
+ *
+ * relationship is NOT NULL on the table and the app's form requires it, so it
+ * is set to "Other" rather than guessed: a colleague is not a department head
+ * and the app must not decide which. The note says where the row came from, so
+ * a reference that appears without being typed is never a mystery.
+ */
+async function handleContacts(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
+  const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "contacts").neq("id", ledgerId));
+  if (recent >= CME_PER_SENDER_PER_HOUR) {
+    await finish(ledgerId, "rate_limited", `${recent} contact messages from this sender in the last hour`);
+    return json({ ok: true, route: "contacts", result: "rate_limited" });
+  }
+
+  const profile = await matchProfile(from);
+  const replySubject = `Re: ${(subject || "the contact you sent").slice(0, 150)}`;
+  const replyHeaders = replyThreading(messageId);
+  const email = await getReceivedEmail(emailId, "cid");
+
+  if (!profile) {
+    return await replyUnregistered(ledgerId, "contacts", email, from, FROM_CONTACTS, replySubject, replyHeaders,
+      `This address is not registered to a CredentialDOMD account, so the contact was not added. Send it from the email on your account, or add this address in Settings and open the link we send here to confirm it.
+
+Open the app: ${APP_URL} (More > Settings > Email)
+
+CredentialDOMD
+https://credentialdomd.com`);
+  }
+
+  const authFail = senderAuthFailure(email);
+  if (authFail) {
+    await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
+    return json({ ok: true, route: "contacts", result: "rejected_auth" });
+  }
+
+  // The card arrives as an attachment from the share sheet. A few clients
+  // paste it into the body instead, so the body is read when no file came.
+  const { files, skipped } = await downloadAttachments(emailId, acceptVCardLike);
+  const texts = files.map((f) => new TextDecoder().decode(f.bytes));
+  const body = String(email.text ?? "").slice(0, MAX_BODY_CHARS);
+  if (!texts.length && looksLikeVCardText(body)) texts.push(body);
+
+  const cards: VCardContact[] = [];
+  const seen = new Set<string>();
+  for (const t of texts) {
+    for (const c of parseVCards(t, MAX_CONTACTS_PER_EMAIL)) {
+      const key = `${c.name.toLowerCase()}|${c.email.toLowerCase()}|${c.phone.replace(/\D/g, "")}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cards.push(c);
+      if (cards.length >= MAX_CONTACTS_PER_EMAIL) break;
+    }
+    if (cards.length >= MAX_CONTACTS_PER_EMAIL) break;
+  }
+
+  let added = 0;
+  const names: string[] = [];
+  if (cards.length) {
+    const now = new Date().toISOString();
+    const rows = cards.map((c) => ({
+      id: crypto.randomUUID(),
+      // user_id on every collection table is the PROFILE id, not the Clerk id
+      // (the app writes it that way and RLS reads it with current_profile_id()).
+      // auth_user_id here is a Clerk string and is not even a uuid.
+      user_id: profile.id,
+      name: c.name || null,
+      institution: c.institution || null,
+      email: c.email || null,
+      phone: c.phone || null,
+      relationship: "Other",
+      notes: "Added from a contact card you emailed in. Set the relationship and check the details.",
+      created_at: now,
+      updated_at: now,
+    }));
+    const { error } = await db.from("peer_references").insert(rows);
+    if (error) {
+      console.error(`contacts: peer_references insert failed for ${profile.id}: ${error.message}`);
+      await finish(ledgerId, "failed", `peer_references insert failed: ${error.message.slice(0, 200)}`, { profile_id: profile.id });
+      return json({ ok: true, route: "contacts", result: "insert_failed" });
+    }
+    added = rows.length;
+    names.push(...cards.map((c) => c.name || c.email || c.phone).filter(Boolean));
+  }
+
+  let text: string;
+  if (added === 1) {
+    text = `Added ${names[0]} to your peer references.
+
+Open References and set the relationship (colleague, chair, program director) and anything else the card did not carry. The relationship is the one field a credentialing office always asks for, and a contact card never has it.`;
+  } else if (added > 1) {
+    text = `Added ${added} peer references: ${names.join(", ")}.
+
+Open References and set the relationship on each one. That is the field a credentialing office always asks for, and a contact card never carries it.`;
+  } else {
+    text = `No contact card was found in that email, so nothing was added.
+
+On an iPhone: Contacts, the person, Share Contact, then Mail, and send it to ${CONTACTS_ADDR}. The card travels as a .vcf attachment. A typed-out name and number in the body is not a card and cannot be read.`;
+  }
+  if (skipped > 0) {
+    text += `\n\n${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file) or count (10 per email).`;
+  }
+  text += `\n\nOpen the app: ${APP_URL} (References)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
+
+  const r = await sendEmail({ from: FROM_CONTACTS, to: [from], subject: replySubject, headers: replyHeaders, text });
+  await finish(ledgerId, "done", `added ${added} reference${added === 1 ? "" : "s"}, skipped ${skipped}${r.ok ? "" : `, confirmation failed ${r.status}`}`,
+    { attachment_count: added, profile_id: profile.id });
+  return json({ ok: true, route: "contacts", added, skipped, confirmed: r.ok });
+}
+
 // ─── Route: docs@ / requests@ / packets@ ──────────────────────────────────────
 
 interface ParsedForward {
@@ -920,7 +1055,11 @@ Deno.serve(async (req) => {
   const subject = String(d.subject ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 500);
   const messageId = (String(d.message_id ?? "").trim() || `resend:${emailId}`).slice(0, 500);
   const local = localPart(ourAddr);
-  const route: Route = local === CME_LOCAL ? "cme" : DOCS_LOCALS.has(local) ? "docs" : "forward";
+  const route: Route = local === CME_LOCAL
+    ? "cme"
+    : DOCS_LOCALS.has(local)
+      ? "docs"
+      : CONTACT_LOCALS.has(local) ? "contacts" : "forward";
 
   // Global ceiling. 429 makes Resend retry later instead of dropping the mail.
   try {
@@ -943,6 +1082,7 @@ Deno.serve(async (req) => {
   try {
     if (route === "cme") return await handleCme(ledgerId, emailId, from, subject, messageId);
     if (route === "docs") return await handleDocsRequest(ledgerId, emailId, from, subject, messageId);
+    if (route === "contacts") return await handleContacts(ledgerId, emailId, from, subject, messageId);
     return await handleForward(ledgerId, emailId, from, ourAddr, subject, messageId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

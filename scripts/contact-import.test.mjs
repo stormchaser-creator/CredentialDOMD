@@ -5,7 +5,7 @@
 // name alone missed all of them and landed a name-only reference, which is
 // what a physician reported as "the button doesn't add contact info".
 // Run: node scripts/contact-import.test.mjs
-import { parseVCard } from "../src/utils/contactImport.js";
+import { parseVCard, parseLooseContact, parseContactText } from "../src/utils/contactImport.js";
 
 let pass = 0, fail = 0;
 const eq = (n, got, want) => {
@@ -73,6 +73,37 @@ eq("a line with no colon does not throw", parseVCard("BEGIN:VCARD\nGARBAGE\nFN:A
 {
   const c = parseVCard(APPLE);
   eq("a card read this way is reachable", !!(c.name && (c.email || c.phone)), true);
+}
+
+// ── Pasted text, which is not a card ──────────────────────────────────────
+// Apple's share sheet will not hand a contact to a web app, so the other two
+// ways a physician has one in his hand are a saved .vcf and the clipboard: an
+// email signature, a line from a text message, three lines typed out. Nothing
+// here is saved on its own, it prefills the form, so a wrong guess costs one
+// correction and a refusal costs the whole entry.
+{
+  const sig = parseContactText("Jane Smith, MD\nAssistant Professor of Neurosurgery\nMemorial Hospital\njsmith@hospital.org\n(555) 123-4567");
+  eq("an email signature gives up a reference", sig,
+    { name: "Jane Smith, MD", email: "jsmith@hospital.org", phone: "(555) 123-4567", institution: "Memorial Hospital" });
+
+  eq("the parens on a US number survive", parseLooseContact("Jane Smith\n(555) 123-4567").phone, "(555) 123-4567");
+  eq("and so does a country code", parseLooseContact("Jane Smith\n+1 555-123-4567").phone, "+1 555-123-4567");
+  eq("a year is not a phone number, so there is nothing to reach and nothing to import",
+    parseLooseContact("Jane Smith\nclass of 2014"), null);
+  eq("a name with a number is a reference", parseLooseContact("Jane Smith\n555 123 4567").name, "Jane Smith");
+  eq("a labelled line is not the name",
+    parseLooseContact("Mobile: 555 123 4567\nJane Smith").name, "Jane Smith");
+  eq("the institution is the line that names a place",
+    parseLooseContact("Jane Smith\nProfessor\nCity Medical Center\n555 123 4567").institution, "City Medical Center");
+  eq("nothing usable is nothing", parseLooseContact("hello there"), null);
+  eq("empty is nothing", parseLooseContact(""), null);
+  eq("null does not throw", parseLooseContact(null), null);
+
+  // A card pasted as text is read as a card, not guessed at.
+  eq("a pasted card is parsed as a card",
+    parseContactText(APPLE), parseVCard(APPLE));
+  eq("and a card always wins over the loose read",
+    parseContactText(APPLE).institution, "Memorial Hospital");
 }
 
 console.log(`${pass} passed, ${fail} failed`);

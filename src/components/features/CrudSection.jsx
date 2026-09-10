@@ -17,7 +17,7 @@ import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
-import { isContactPickerSupported, pickContact, parseVCard } from "../../utils/contactImport";
+import { isContactPickerSupported, pickContact, parseVCard, parseContactText, CONTACT_EMAIL } from "../../utils/contactImport";
 import { STATE_NAMES } from "../../constants/states";
 import CPTCodePicker from "./CPTCodePicker";
 import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
@@ -290,24 +290,59 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     }
   }, [aiOn, data.settings.apiKey, data.settings.degreeType, fields, data.documents, attachedDocs]);
 
+  /** Every route in puts the same fields on the form and says where it came from. */
+  const applyContact = useCallback((contact, source) => {
+    setForm(prev => ({
+      ...prev,
+      name: contact.name || prev.name,
+      email: contact.email || prev.email,
+      phone: contact.phone || prev.phone,
+      institution: prev.institution || contact.institution || "",
+    }));
+    setContactMsgError(false);
+    setContactMsg(`Read from ${source}. Check it before saving.`);
+  }, []);
+
   const handleImportContact = useCallback(async () => {
     setContactMsg(null);
     setContactMsgError(false);
     try {
       const contact = await pickContact();
       if (!contact) return; // user backed out of the native picker
-      setForm(prev => ({
-        ...prev,
-        name: contact.name || prev.name,
-        email: contact.email || prev.email,
-        phone: contact.phone || prev.phone,
-      }));
-      setContactMsg("Imported from contacts — review before saving.");
+      applyContact(contact, "your contacts");
     } catch (err) {
       setContactMsg("Could not read contact: " + (err.message || "permission denied"));
       setContactMsgError(true);
     }
-  }, []);
+  }, [applyContact]);
+
+  // The clipboard route. iOS will not hand a contact to a web app, but it will
+  // copy one, and an email signature pasted in is the same three fields.
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+
+  const readPasted = useCallback((text) => {
+    const contact = parseContactText(text);
+    if (!contact) {
+      setContactMsg("Nothing to import from that. A contact card, or a signature with an email or a phone number in it.");
+      setContactMsgError(true);
+      return false;
+    }
+    applyContact(contact, "what you pasted");
+    return true;
+  }, [applyContact]);
+
+  const handlePasteContact = useCallback(async () => {
+    setContactMsg(null);
+    setContactMsgError(false);
+    // Safari asks the user to allow the read, and refuses outright in some
+    // contexts. The box below is the fallback, and it always works.
+    try {
+      const text = await navigator.clipboard?.readText?.();
+      if (text && readPasted(text)) { setPasteOpen(false); setPasteText(""); return; }
+    } catch { /* fall through to the box */ }
+    setPasteOpen(true);
+  }, [readPasted]);
 
   // iPhone path — no picker API there, but Contacts shares any card as a
   // .vcf file. Read it, prefill the same fields.
@@ -322,19 +357,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         setContactMsgError(true);
         return;
       }
-      setForm(prev => ({
-        ...prev,
-        name: contact.name || prev.name,
-        email: contact.email || prev.email,
-        phone: contact.phone || prev.phone,
-        institution: prev.institution || contact.institution || "",
-      }));
-      setContactMsg("Imported from the contact card — review before saving.");
+      applyContact(contact, "the contact card");
     } catch (err) {
       setContactMsg("Could not read the contact card: " + (err.message || "unreadable file"));
       setContactMsgError(true);
     }
-  }, []);
+  }, [applyContact]);
 
   const captureModalPhoto = useCallback(() => {
     const video = modalVideoRef.current;
@@ -510,15 +538,27 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         {contactImport && (
           <div style={{ marginBottom: 14 }}>
             {!isContactPickerSupported() && (
-              // This phone has no live picker — the button below opens a
-              // FILE chooser, not the address book. Said up front, before
-              // the tap, because a description sitting under the button
-              // read as "this is a bug" (support ticket 350f8467).
-              <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 6, lineHeight: 1.4 }}>
-                This phone can't hand a contact straight to the browser, so the button below opens your file picker
-                looking for a saved contact card, not your contacts list. Export one first — Contacts → the person →
-                Share Contact → Save to Files — then pick that file. For one or two people it's faster to just type
-                their info into the form below.
+              // This phone has no live picker, so the buttons below are not
+              // the address book. Said up front, before the tap, because a
+              // description sitting under the button read as "this is a bug"
+              // (support ticket 350f8467).
+              //
+              // The email route is first because it is the only one that uses
+              // the iPhone share sheet, which is what was asked for: iOS has
+              // no Contact Picker API and Safari ignores Web Share Target, so
+              // Mail is the only entry in that sheet that can reach this app.
+              <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 8, lineHeight: 1.45 }}>
+                Your phone will not hand a contact straight to a web page, so there are three ways in.
+                <div style={{ marginTop: 4 }}>
+                  <b style={{ color: T.textMuted }}>From the share sheet:</b> Contacts, the person, Share Contact, then
+                  Mail, and send it to <b style={{ color: T.accent }}>{CONTACT_EMAIL}</b> from the address on your
+                  account. The reference is written for you and you get a reply naming who was added. Several people at
+                  once works: share them all in one email.
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <b style={{ color: T.textMuted }}>Right now:</b> copy the contact (or their email signature) and tap
+                  Paste a contact. Or Share Contact, Save to Files, then pick the saved card below.
+                </div>
               </div>
             )}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -531,6 +571,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   {"📇"} Import from Contacts
                 </button>
               )}
+              <button onClick={handlePasteContact} style={{
+                display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
+                borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600,
+                cursor: "pointer", backgroundColor: T.accentDim, color: T.accent,
+              }}>
+                {"\u{1F4CB}"} Paste a contact
+              </button>
               <button onClick={() => vcfRef.current?.click()} style={{
                 display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
                 borderRadius: 10, border: `1px solid ${T.accent}`, fontSize: 13, fontWeight: 600,
@@ -541,6 +588,31 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               <input ref={vcfRef} type="file" accept=".vcf,text/vcard,text/x-vcard" style={{ display: "none" }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleVcfFile(f); e.target.value = ""; }} />
             </div>
+
+            {pasteOpen && (
+              <div style={{ marginTop: 8 }}>
+                <textarea
+                  value={pasteText}
+                  onChange={e => setPasteText(e.target.value)}
+                  placeholder={"Paste the contact card or the signature here.\n\nJane Smith, MD\nMemorial Hospital\njsmith@hospital.org\n(555) 123-4567"}
+                  rows={5}
+                  style={{
+                    width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10,
+                    border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text,
+                    fontSize: 13, fontFamily: "inherit", lineHeight: 1.5, resize: "vertical",
+                  }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <button onClick={() => { if (readPasted(pasteText)) { setPasteOpen(false); setPasteText(""); } }} style={{
+                    padding: "9px 16px", borderRadius: 10, border: "none", fontSize: 13, fontWeight: 700,
+                    cursor: "pointer", backgroundColor: T.accent, color: "#fff",
+                  }}>Read it</button>
+                  <button onClick={() => { setPasteOpen(false); setPasteText(""); setContactMsg(null); }} style={{
+                    padding: "9px 16px", borderRadius: 10, border: `1px solid ${T.border}`, fontSize: 13, fontWeight: 600,
+                    cursor: "pointer", backgroundColor: "transparent", color: T.textMuted,
+                  }}>Cancel</button>
+                </div>
+              </div>
+            )}
             {contactMsg && (
               <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: contactMsgError ? T.danger : T.success }}>
                 {contactMsg}
