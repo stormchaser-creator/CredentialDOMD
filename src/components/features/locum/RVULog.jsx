@@ -264,6 +264,19 @@ function RVULog() {
     return { today: t, month: m, all };
   }, [encounters]);
 
+  // Tapping "This month" or "All time" opens a scrollable list of every
+  // encounter that feeds that total, grouped by day like the main history.
+  const [rvuDetail, setRvuDetail] = useState(null); // "month" | "all" | null
+  const rvuDetailByDay = useMemo(() => {
+    if (!rvuDetail) return [];
+    const today = localDate(new Date());
+    const month = today.slice(0, 7);
+    const list = rvuDetail === "all" ? encounters : encounters.filter(e => (e.date || "").startsWith(month));
+    const map = {};
+    for (const e of list) (map[e.date] = map[e.date] || []).push(e);
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [encounters, rvuDetail]);
+
   // History filters — the log is only useful as a list if you can slice it:
   // by assignment, by period, by code. Totals recompute for the slice.
   const [fltContract, setFltContract] = useState("all");
@@ -315,8 +328,11 @@ function RVULog() {
 
       {/* Totals */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
-        {[["Today", totals.today], ["This month", totals.month], ["All time", totals.all]].map(([lbl, v]) => (
-          <div key={lbl} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px" }}>
+        {[["Today", totals.today, null], ["This month", totals.month, "month"], ["All time", totals.all, "all"]].map(([lbl, v, key]) => (
+          <div key={lbl} role={key ? "button" : undefined} tabIndex={key ? 0 : undefined}
+            onClick={key ? () => setRvuDetail(key) : undefined}
+            onKeyDown={key ? (ev => { if (ev.key === "Enter") setRvuDetail(key); }) : undefined}
+            style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", cursor: key ? "pointer" : "default" }}>
             <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>{lbl}</div>
             <div style={{ fontSize: 18, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{v.toFixed(2)}</div>
             <div style={{ fontSize: 10, color: T.textDim }}>wRVU</div>
@@ -558,6 +574,45 @@ function RVULog() {
           ))}
         </div>
       )}
+
+      {/* Tap "This month" or "All time" → scrollable list of every encounter behind that total */}
+      <Modal open={!!rvuDetail} onClose={() => setRvuDetail(null)} title={rvuDetail === "all" ? "All time" : "This month"}>
+        {rvuDetailByDay.length === 0 ? (
+          <div style={{ fontSize: 13, color: T.textMuted, textAlign: "center", padding: "24px 0" }}>No encounters yet.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {rvuDetailByDay.map(([day, list]) => (
+              <div key={day}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: T.text }}>{formatDate(day)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>{list.reduce((s, e) => s + rvuOf(e), 0).toFixed(2)} wRVU</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {list.map(e => (
+                    <div key={e.id} role="button" tabIndex={0}
+                      onClick={() => { setRvuDetail(null); setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); setEncQ(""); setEncResults([]); }}
+                      onKeyDown={ev => { if (ev.key === "Enter") { setRvuDetail(null); setViewEnc(e); setEncDraft({ ...e, codes: (e.codes || []).map(c => ({ ...c })) }); } }}
+                      style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", boxShadow: T.shadow1, cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          {(e.codes || []).map((c, i) => (
+                            <div key={i} style={{ fontSize: 13, color: T.text }}>
+                              <b>{c.code}{c.modifier && `-${c.modifier}`}</b>{c.units > 1 ? ` ×${c.units}` : ""} <span style={{ color: T.textMuted }}>{c.desc}</span>
+                              <span style={{ color: T.textDim }}> · {((c.wRVU || 0) * (c.units || 1)).toFixed(2)}</span>
+                            </div>
+                          ))}
+                          {facilityOf(e.contractId) && <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{facilityOf(e.contractId)}</div>}
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: T.accent, flexShrink: 0 }}>{rvuOf(e).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {/* Tap an encounter → see everything in it and edit it in place */}
       <Modal open={!!viewEnc} onClose={() => { setViewEnc(null); setEncDraft(null); }} title="Encounter">
