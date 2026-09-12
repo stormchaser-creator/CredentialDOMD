@@ -38,13 +38,19 @@ import RuleProvenance from "./components/shared/RuleProvenance";
 import { BOARD_REQS_META } from "./constants/boardRequirements";
 import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirements";
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
-import { LocumDashboard, MultiStateMatrix, RequestsInbox, useNewRequestCount } from "./components/features";
+import { LocumDashboard, MultiStateMatrix, RequestsInbox } from "./components/features";
+import { useOpenRequests } from "./hooks/useNewRequestCount";
+import { useRequestProposals } from "./hooks/useRequestProposals";
+import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
+import { forwardingSenders } from "./utils/forwardingAddresses";
+import { RequestPacketSummary, ApproveSendButton, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
+import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { isNonExpiring, mailtoHref } from "./utils/helpers";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
-import { claimBetaAccess, touchLastSeen } from "./lib/supabase";
+import { claimBetaAccess, touchLastSeen, supabase } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
@@ -271,7 +277,37 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [supportTab, setSupportTab] = useState("new");
   const [veraSeed, setVeraSeed] = useState(null); // first question for Vera, from Home search
   const [veraRequest, setVeraRequest] = useState(null); // {id, from_addr, subject}: the document request Vera is working
-  const newRequestCount = useNewRequestCount();
+  // The open requests themselves, not just a count: the newest one's proposal
+  // is what the Home banner sends with one tap. A row that arrived without a
+  // proposal, or whose proposal predates the newest upload, is rebuilt on
+  // the client by the same hook the inbox mounts, so the banner's button
+  // and the inbox's card never disagree about what is ready.
+  const { rows: openRequests, count: newRequestCount, refresh: refreshRequests } = useOpenRequests();
+  const openRequestRows = useRequestProposals(openRequests);
+  // The request Home's Review link opens. The inbox reports back once it
+  // has opened it, and the id is cleared so a later trip to More > Requests
+  // starts on the list.
+  const [requestsOpenId, setRequestsOpenId] = useState(null);
+  const onRequestOpened = useCallback(() => setRequestsOpenId(null), []);
+  // Every address this physician forwards from (account email plus confirmed
+  // forwarding addresses): a request whose from_addr is one of them has no
+  // requester, and the banner must say so instead of offering a send that
+  // can only fail.
+  const { rows: forwardingRows } = useForwardingAddresses();
+  const ownSenders = useMemo(() => forwardingSenders(data.settings?.email || user?.email || "", forwardingRows), [data.settings?.email, user?.email, forwardingRows]);
+  // The packet that just went out from the banner. Held until the physician
+  // clears it, because the next open request would otherwise slide its own
+  // green button into the same spot within one round trip of the tap, and a
+  // second tap "to make sure" mailed a different credentialer's packet.
+  const [lastSent, setLastSent] = useState(null); // { id, to, attached }
+  // Every request the banner has sent this session, kept out of the
+  // banner's rows until the fetch catches up. The open rows still hold the
+  // sent row for one round trip after the tap, so the strip read "Next
+  // request (1 waiting)" when nothing was, and a tap inside that window
+  // cleared lastSent and put the packet just sent back under a live green
+  // button; the second tap got 409 from the claim. Ids, not lastSent, so
+  // clearing the strip cannot reopen the window.
+  const [bannerSentIds, setBannerSentIds] = useState([]);
   // Desk keys (`/`, `n`, Esc) live in hooks/useDeskKeys.js. When the screen
   // on view has no search field, `/` goes Home, whose box searches everything.
   useDeskKeyboard({ onSearchFallback: () => { setTab("home"); setSubPage(null); } });
@@ -281,6 +317,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // Reply emails link to /app/#support: open the sheet on "Your tickets".
   // Backup emails link to /app/#backups: open More > Data & Backup, the one
   // place a link to the archive is minted (build-backup emails no link).
+  // The "we read your forwarded request" email links to /app/#requests:
+  // open More > Requests, where the packet it describes is waiting.
   useEffect(() => {
     const hash = window.location.hash;
     if (hash === "#support") {
@@ -289,6 +327,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     } else if (hash === "#backups") {
       setTab("more");
       setSubPage("export");
+    } else if (hash === "#requests") {
+      setTab("more");
+      setSubPage("requests");
     } else {
       return;
     }
@@ -758,13 +799,78 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const renderHome = () => {
     const hasActionColumn = isDesktop && (urgent.length > 0 || snoozed.length > 0);
     const homeSearch = <HomeSearch onOpen={openFromSearch} onAskVera={askVera} />;
-    const requestBanner = newRequestCount > 0 && (
-      <div onClick={() => { setTab("more"); setSubPage("requests"); }} style={{ display: "flex", alignItems: "center", gap: 10, backgroundColor: T.accentDim, border: `1px solid ${T.accent}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14, cursor: "pointer" }}>
-        <span style={{ fontSize: 18 }}>{"\ud83d\udce8"}</span>
-        <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.text }}>{newRequestCount} document request{newRequestCount === 1 ? "" : "s"} waiting for a reply</div>
-        <span style={{ color: T.accent, fontWeight: 800 }}>{"\u203a"}</span>
-      </div>
+    // A forwarded request is the last thing the physician types. When the
+    // newest open request carries a proposal (built on arrival, or rebuilt
+    // on the client by useRequestProposals), the banner is the packet itself
+    // with one button: Approve and send. Review is a link, not a gate, and
+    // it lands on the request, not the list. The old "N requests waiting"
+    // shape is left only for the beat before the file has loaded, since a
+    // proposal cannot be built against an empty document list.
+    const bannerRows = bannerSentIds.length ? openRequestRows.filter((r) => !bannerSentIds.includes(r.id)) : openRequestRows;
+    const bannerCount = bannerRows.length;
+    const newestRequest = bannerRows[0] || null;
+    const goRequests = () => { setTab("more"); setSubPage("requests"); };
+    const reviewRequest = () => { setRequestsOpenId(newestRequest?.id || null); goRequests(); };
+    const sendPacket = async (body) => {
+      if (!supabase) throw new Error("Not connected to your account.");
+      return unwrapInvoke(await supabase.functions.invoke("send-packet-email", { body }));
+    };
+    const onPacketSent = (result) => {
+      const sentId = newestRequest?.id;
+      setLastSent({ id: sentId, to: result?.to || newestRequest?.from_addr || "", attached: result?.attached ?? 0 });
+      if (sentId) setBannerSentIds((ids) => (ids.includes(sentId) ? ids : [...ids, sentId]));
+      try { window.dispatchEvent(new CustomEvent(REQUEST_REPLIED_EVENT, { detail: { id: sentId, email_id: result?.email_id } })); } catch { /* no window */ }
+      refreshRequests();
+    };
+    const linkStyle = {
+      padding: "6px 0", border: "none", background: "none", color: T.accent,
+      fontSize: 13.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline",
+    };
+    // A tap on the count opens the list; it used to be a line of text that
+    // named the other requests and offered no way to them.
+    const moreWaiting = bannerCount > 1 && (
+      <button onClick={goRequests} style={{ ...linkStyle, display: "block", marginTop: 4, fontSize: 12.5, color: T.textMuted }}>
+        and {bannerCount - 1} more waiting
+      </button>
     );
+    const requestBanner = lastSent ? (
+      <div style={{ backgroundColor: T.card, border: `1px solid ${T.success}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, boxShadow: T.shadow1 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: T.success, overflowWrap: "anywhere", lineHeight: 1.45 }}>
+            Sent to {lastSent.to} with {lastSent.attached} attachment{lastSent.attached === 1 ? "" : "s"}.
+          </div>
+          <button onClick={() => setLastSent(null)} style={linkStyle}>{bannerCount > 0 ? `Next request (${bannerCount} waiting)` : "Done"}</button>
+        </div>
+      </div>
+    ) : bannerCount > 0 && (newestRequest?.proposal ? (
+      <div style={{ backgroundColor: T.card, border: `1px solid ${T.accent}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, boxShadow: T.shadow1 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>{"\ud83d\udce8"}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <RequestPacketSummary request={newestRequest} T={T} compact ownAddresses={ownSenders} />
+          </div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", marginTop: 10, minWidth: 0 }}>
+          {/* The reasons under a grey button name the link beside it. This
+              banner's only way into the request is Review; the default
+              "Open the request" sent a physician on a phone to More >
+              Requests instead of the link that lands on it. */}
+          <ApproveSendButton key={newestRequest.id} request={newestRequest} T={T}
+            accountEmail={data.settings?.email || user?.email} ownAddresses={ownSenders} send={sendPacket} onSent={onPacketSent}
+            notFoundReason={HOME_NOT_FOUND_REASON} noMatchReason={HOME_NO_MATCH_REASON} />
+          <button onClick={reviewRequest} style={linkStyle}>Review</button>
+        </div>
+        {moreWaiting}
+      </div>
+    ) : (
+      <div onClick={goRequests} style={{ backgroundColor: T.accentDim, border: `1px solid ${T.accent}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14, cursor: "pointer" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 18 }}>{"\ud83d\udce8"}</span>
+          <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: T.text }}>{bannerCount} document request{bannerCount === 1 ? "" : "s"} waiting for a reply</div>
+          <span style={{ color: T.accent, fontWeight: 800 }}>{"\u203a"}</span>
+        </div>
+      </div>
+    ));
     // Setup lives on its own page now; this card is the way in and the
     // only thing Home says about it. Both layouts place {checklist}.
     const checklist = <SetupCard onOpenSetup={openSetup} />;
@@ -2148,7 +2254,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (subPage === "finance") return <FinanceSection />;
     if (subPage === "export") return <DataExport />;
     if (subPage === "cptLookup") return <CPTLookup />;
-    if (subPage === "requests") return <RequestsInbox onAskVera={askVera} />;
+    if (subPage === "requests") return <RequestsInbox onAskVera={askVera} initialOpenId={requestsOpenId} onOpened={onRequestOpened} />;
     if (subPage === "assistant") return offlineMode
       ? <OfflineUnavailable T={T} feature="Vera" detail="Vera answers through the cloud AI service." onBack={() => setSubPage(null)} />
       : <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} />;

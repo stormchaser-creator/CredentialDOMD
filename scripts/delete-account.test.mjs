@@ -120,7 +120,24 @@ for (const col of ["email", "name", "npi", "phone", "address", "tax_prep", "prof
   eq(`tombstone nulls ${col}`, PROFILE_TOMBSTONE_PATCH[col], null);
 }
 eq("backup_monthly (NOT NULL) goes to false so no empty archive is ever built", PROFILE_TOMBSTONE_PATCH.backup_monthly, false);
+eq("ack_requests (NOT NULL) goes to false so an emptied account never acknowledges mail in anyone's name", PROFILE_TOMBSTONE_PATCH.ack_requests, false);
 ok("every patch value is null or false", Object.values(PROFILE_TOMBSTONE_PATCH).every((v) => v === null || v === false));
+
+// The client-side purge (deleteAllData) spreads every synced column to null
+// and must then override each NOT NULL column with a real value, or Postgres
+// rejects the whole UPDATE and the profile keeps its name, email and NPI
+// while the UI reports the account emptied. Read from the source text, the
+// same way the sync map is.
+{
+  const start = appSource.indexOf("// Reset profile");
+  const end = appSource.indexOf('.eq("id", userId)', start);
+  const reset = start >= 0 && end > start ? appSource.slice(start, end) : "";
+  ok("the client purge block was found in supabase.js", reset.length > 0);
+  for (const col of ["backup_monthly", "ack_requests"]) {
+    ok(`client purge gives NOT NULL column ${col} an explicit value`, new RegExp(`\\b${col}:\\s*(?:true|false|\\d|"[^"]*")`).test(reset));
+  }
+  ok("client purge reports a failed UPDATE instead of discarding it", /const \{ error: profileErr \} = await supabase/.test(reset) || /profileErr/.test(appSource.slice(start, end + 400)));
+}
 for (const col of PROFILE_KEEP_COLUMNS) {
   ok(`tombstone never touches ${col}`, !(col in PROFILE_TOMBSTONE_PATCH));
 }

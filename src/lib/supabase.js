@@ -151,6 +151,9 @@ const SETTINGS_TO_PROFILE = {
   // Monthly server-built backup, opt-out. Column is NOT NULL DEFAULT true and
   // the client reads undefined as on, so an untouched account agrees.
   backupMonthly: "backup_monthly",
+  // Auto-acknowledge a forwarded document request to its requester from
+  // docs@, opt-out. The client reads undefined as on, same as backupMonthly.
+  ackRequests: "ack_requests",
   reminderLeadDays: "reminder_lead_days",
   notifyEmail: "notify_email",
   notifyBrowser: "notify_browser",
@@ -747,7 +750,7 @@ export async function deleteAllData(userId) {
   );
   await Promise.all(deletes);
   // Reset profile (keep the row but clear fields)
-  await supabase
+  const { error: profileErr } = await supabase
     .from("profiles")
     .update({
       // Derived from the sync map, so a column added to SETTINGS_TO_PROFILE
@@ -756,11 +759,18 @@ export async function deleteAllData(userId) {
       specialties: "[]", additional_states: "[]",
       theme: "dark", font_size: "M", reminder_lead_days: 90,
       notify_email: true, notify_text: true, notify_freq_days: 7,
+      // The two NOT NULL columns in the sync map. A null here fails the whole
+      // UPDATE (23502) and leaves name, email and NPI on the row while the UI
+      // reports the account emptied; that happened when ack_requests joined
+      // the map without joining this list. Checked by
+      // scripts/delete-account.test.mjs.
       backup_monthly: true,
+      ack_requests: true,
       cme_verification_results: "{}", cme_verification_alerted: false,
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId);
+  if (profileErr) console.error("profile reset failed:", profileErr.message);
 }
 
 // ─── Server-side account deletion ────────────────────────────

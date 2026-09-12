@@ -28,6 +28,9 @@ export const DEFAULT_SETTINGS = {
   apiKey: (typeof import.meta.env !== "undefined" && import.meta.env.VITE_GEMINI_API_KEY) || "",
   notifyEmail: true,
   notifyText: true,
+  // A forwarded document request is acknowledged to its requester from
+  // docs@ on arrival; the physician still approves before anything is sent.
+  ackRequests: true,
   notifyFreqDays: 7,
   lastNotified: null,
   alertsFingerprint: null,

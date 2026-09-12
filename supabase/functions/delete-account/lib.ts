@@ -140,7 +140,9 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
  * column the app syncs (SETTINGS_TO_PROFILE) plus the legacy columns and
  * the stored-key columns go to null. backup_monthly is NOT NULL, so it goes
  * to false: an emptied account must not get an empty archive built and
- * emailed to nobody every month. Kept as they are: id, auth_user_id,
+ * emailed to nobody every month. ack_requests is the second NOT NULL opt-out
+ * and goes to false for the same reason: an emptied account must never
+ * acknowledge a document request in anyone's name. Kept as they are: id, auth_user_id,
  * created_at, access_status (the beta gate is the operator's, not the
  * physician's data), is_founding_member and founding_number (billing facts).
  */
@@ -178,6 +180,7 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
   cme_verification_alerted: null,
   last_cme_verification: null,
   backup_monthly: false,
+  ack_requests: false,
   last_seen_at: null,
   // Admin read-marks. They only ever hold a value on an admin's own profile,
   // but they sync from settings like everything else, so a deletion that left

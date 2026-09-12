@@ -18,14 +18,47 @@
  *   docs@ | requests@ | packets@credentialdomd.com   Document requests.
  *     A credentialer asked the physician for documents; the physician forwards
  *     that email here from the address on their profile, or from any address
- *     they have confirmed as a forwarding address. Same sender matching and
- *     authentication as cme@. The ORIGINAL requester (From:), subject and
- *     body are parsed out of the forwarded text (Gmail / Outlook / Apple Mail
- *     header blocks) and a `document_requests` row is written; PDF / image
- *     attachments (the requester's checklist) are stored as documents with
- *     type = "request-attachment-inbox". The physician gets a short reply
- *     pointing at More > Requests, where the packet is built and sent by
- *     the send-packet-email function.
+ *     they have confirmed as a forwarding address, and that forward is the
+ *     last thing they type. Same sender matching and authentication as cme@.
+ *     The ORIGINAL requester (From:), subject and body are parsed out of the
+ *     forwarded text (Gmail / Outlook / Apple Mail header blocks) and a
+ *     `document_requests` row is written; PDF / image attachments (the
+ *     requester's checklist) are stored as documents with
+ *     type = "request-attachment-inbox". Then, still on arrival:
+ *       (1) every asked-for item is matched against the physician's documents
+ *           (_shared/requestPacket.ts) and the proposal is stored on the row
+ *           (proposal, proposal_at); a matcher failure leaves it null and the
+ *           request intact;
+ *       (2) the physician gets a summary from docs@ ("Madeline Castorena asked
+ *           for 1 item: board certificate: Board Certification (AOA). Packet
+ *           ready: 1 document. Open the app and tap Approve and send");
+ *       (3) the REQUESTER gets a short acknowledgement from "<Name>, <Degree>
+ *           via CredentialDOMD <docs@>", reply_to the physician, threaded on
+ *           their own Message-ID, when _shared/requestFlow.ts ackAllowed says
+ *           so: never when the requester was not found, is one of our
+ *           addresses, is the physician, the forwarder or any confirmed
+ *           forwarding address, is a no-reply mailbox, or the physician
+ *           turned acks off (profiles.ack_requests); never twice for one
+ *           message (ack_sent_at, stamped BEFORE the send so a webhook retry
+ *           after a timeout finds it); never more than ACK_PER_PROFILE_PER_DAY
+ *           for one account, counted on the service-role-only ledger and not
+ *           on a column the account can edit; never to an automated sender
+ *           (an out-of-office reply to our own summary is not a request and
+ *           gets nothing, not even a row); and never unless the forward
+ *           itself carried dmarc=pass or an aligned spf+dkim pass. That last
+ *           rule is stricter than the one that files a certificate: this is
+ *           mail from our domain to an address the forwarded text chose, so
+ *           a missing Authentication-Results header is a no here even though
+ *           it is a pass for the reply to the physician. The header is read
+ *           from the raw message (top-most occurrence; see authResultsFrom),
+ *           never from Resend's collapsed header map: when the raw message
+ *           cannot be read, nobody is acknowledged. INBOUND_AUTHSERV_IDS
+ *           can pin it to the receiving MTA's authserv-id. reply_to is the
+ *           address the forward came from when that is a confirmed address
+ *           other than the profile email, so the credentialer keeps
+ *           writing to the mailbox they were already in.
+ *     In the app, Home and More > Requests show the proposal and one button,
+ *     Approve and send, which send-packet-email turns into the reply.
  *
  *   contacts@ | contact@ | refs@ | reference@ | references@   Peer references.
  *     An iPhone cannot hand a contact card to a web app: iOS has no Contact
@@ -68,12 +101,22 @@
  *
  * Secrets: RESEND_API_KEY (already set for the send-* functions),
  * RESEND_WEBHOOK_SECRET (new), SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (auto).
+ * Optional: INBOUND_AUTHSERV_IDS, comma-separated authserv-ids (the token
+ * Resend's MTA writes at the front of Authentication-Results) whose verdicts
+ * alone may authorise the requester acknowledgement. Unset means any
+ * top-most header counts.
  */
 
 import { Webhook } from "https://esm.sh/svix@1.40.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { parseVCards, isVCardAttachment, looksLikeVCardText, type VCardContact } from "../_shared/vcard.ts";
+import { buildProposal, catalogueFromRows } from "../_shared/requestPacket.ts";
+// replySubject is imported under another name because each route handler
+// below already holds a local `replySubject` string (the physician's own
+// confirmation subject); the bare name would have resolved to that string
+// at the ack's call site and thrown.
+import { ackAllowed, ackText, authEvidence, physicianSummaryText, replySubject as replySubjectFor, senderAuthFailure, senderPositivelyAuthenticated, type AuthEvidence, type Proposal } from "../_shared/requestFlow.ts";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -95,14 +138,33 @@ const FROM_RELAY = `CredentialDOMD Inbox <${FROM_ADDR}>`;
 const APP_URL = "https://credentialdomd.com/app/";
 const INBOX_DOC_TYPE = "cme-certificate-inbox";
 const REQUEST_DOC_TYPE = "request-attachment-inbox";
+// Documents that arrived by email and are not yet the physician's own
+// filed record. Kept out of the packet matcher's catalogue: the requester's
+// checklist is stored before the proposal is built, and the CV rule matches
+// any unlinked file by name, so "Provider_CV_Request_Form.pdf" was offered
+// straight back to the credentialer who attached it, as the physician's CV.
+const INBOX_DOC_TYPES = new Set([INBOX_DOC_TYPE, REQUEST_DOC_TYPE]);
 const STORAGE_BUCKET = "documents";
 const MAX_REQUEST_BODY_CHARS = 20_000;   // document_requests.body_text
 
 const GLOBAL_PER_10MIN = 120;
 const CME_PER_SENDER_PER_HOUR = 20;
+// Acknowledgements docs@ sends to third parties per account per day. The
+// per-sender hourly cap above is keyed on the From header, which a spoofer
+// picks; this one is keyed on the account the spoof landed in, which they
+// cannot multiply.
+const ACK_PER_PROFILE_PER_DAY = 10;
 const UNREG_REPLY_PER_DAY = 1;
+// How much of the raw message is read for its Authentication-Results header.
+// The receiving MTA prepends that header, so it sits in the first few KB;
+// the rest of the file is the body and the attachments, up to tens of MB,
+// and none of it is wanted here.
+const RAW_HEAD_BYTES = 256 * 1024;
 const STALE_PROCESSING_MIN = 10;
 const UNREG_REPLIED = "replied: not registered";   // ledger detail that marks a sent "not registered" reply
+// The ledger marker ledgerAcksSince counts for the daily ack cap. Every other
+// ack outcome is worded so that these two words appear in no other detail.
+const ACK_SENT = "ack sent";
 
 const MAX_FILES = 10;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;   // matches the app's 10 MB upload cap
@@ -116,6 +178,10 @@ const MAX_CONTACTS_PER_EMAIL = 25;       // a multi-select share, not a mailing 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_API = (Deno.env.get("RESEND_API_BASE") ?? "https://api.resend.com").replace(/\/$/, ""); // override only for local tests
 const WEBHOOK_SECRET = Deno.env.get("RESEND_WEBHOOK_SECRET") ?? "";
+// Authserv-ids whose Authentication-Results verdicts may authorise the
+// requester acknowledgement (see authResultsFrom). Empty when unset, and then
+// the top-most header counts whoever wrote it.
+const INBOUND_AUTHSERV_IDS = (Deno.env.get("INBOUND_AUTHSERV_IDS") ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 if (!WEBHOOK_SECRET) console.error("RESEND_WEBHOOK_SECRET is not set; every request will be rejected.");
 if (!RESEND_API_KEY) console.error("RESEND_API_KEY is not set; nothing can be fetched or sent.");
 
@@ -157,6 +223,10 @@ interface ReceivedEmail {
   message_id?: string;
   created_at?: string;
   attachments?: { id: string; filename?: string; content_type?: string; size?: number }[];
+  // The full RFC 5322 message. Resend's docs (read 2026-09-11) return it as
+  // { download_url, expires_at }, a signed URL with no query parameter to
+  // inline it; the string form is accepted in case that changes.
+  raw?: string | { download_url?: string | null; expires_at?: string | null } | null;
 }
 
 interface ReceivedAttachment {
@@ -283,6 +353,21 @@ function safeFilename(name: string | undefined, fallback: string): string {
   // deno-lint-ignore no-control-regex
   const n = String(name ?? "").trim().replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").slice(0, 180);
   return n || fallback;
+}
+
+/** Header-safe display text: no line breaks, quotes or angle brackets. Same as send-packet-email. */
+function cleanHeaderText(s: string | null | undefined, max = 80): string {
+  return String(s ?? "").replace(/[\r\n"<>\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+/**
+ * The From header the packet itself goes out under, so the acknowledgement
+ * and the documents that follow it come from the same name. Quoted because
+ * the display name contains a comma. Kept identical to send-packet-email.
+ */
+function fromHeader(name: string, degree: string): string {
+  const display = name ? `${name}${degree ? `, ${degree}` : ""} via CredentialDOMD` : "CredentialDOMD";
+  return `"${display}" <${DOCS_ADDR}>`;
 }
 
 function isCertificateType(contentType: string, filename: string): boolean {
@@ -517,21 +602,90 @@ async function replyUnregistered(
 }
 
 /**
- * Sender authentication: the From header is trusted only when the inbound
- * path's Authentication-Results do not say it failed. A forged From with
- * dmarc=fail (or spf and dkim both failed) is dropped silently: no upload,
- * no reply. A missing header is treated as pass (residual risk noted in
- * docs/EMAIL-INBOUND.md). Returns the offending header text, or "" when ok.
+ * Authentication-Results from Resend's collapsed header map, arc- as the
+ * fallback. Duplicate headers collapse to one value in that map and which
+ * occurrence wins is undocumented, so this is evidence enough to refuse an
+ * explicit failure (a sender gains nothing by forging a failure) and not
+ * enough to authorise mail to a third party; see authResultsFrom for that.
  */
-function senderAuthFailure(email: ReceivedEmail): string {
+function authResultsFromHeaders(email: ReceivedEmail): string {
   const h = lowerKeys(email.headers);
-  const auth = (h["authentication-results"] || h["arc-authentication-results"] || "").toLowerCase();
-  if (!auth) return "";
-  const dmarcFail = /dmarc=fail/.test(auth);
-  const spfFail = /spf=(fail|softfail)/.test(auth);
-  const dkimFail = /dkim=fail/.test(auth) || !/dkim=pass/.test(auth);
-  return dmarcFail || (spfFail && dkimFail) ? auth : "";
+  return h["authentication-results"] || h["arc-authentication-results"] || "";
 }
+
+/**
+ * The first `max` bytes of a URL as text, or null when it could not be read.
+ * Asks for a Range; a server that ignores it is cut off client-side after
+ * `max` bytes and the stream cancelled, so a 20 MB raw file costs 256 KB.
+ */
+async function fetchHead(url: string, max: number): Promise<string | null> {
+  try {
+    const r = await fetch(url, { headers: { Range: `bytes=0-${max - 1}` } });
+    if (!r.ok || !r.body) return null;
+    const reader = r.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let got = 0;
+    while (got < max) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      got += value.byteLength;
+    }
+    try { await reader.cancel(); } catch { /* already closed */ }
+    const out = new Uint8Array(got);
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.byteLength; }
+    return new TextDecoder().decode(out.subarray(0, max));
+  } catch (err) {
+    console.error(`raw head fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
+ * The authentication evidence for the docs@ route, in two parts that are
+ * never joined (see authEvidence in _shared/requestFlow.ts).
+ *
+ * `positive` is what the acknowledgement decision may trust. It used to be
+ * hdrs["authentication-results"] from Resend's header map. That map
+ * collapses duplicate headers into one string, and nothing says which
+ * occurrence survives, so a sender who typed their own
+ * "Authentication-Results: mx.resend.com; dmarc=pass" into a message could
+ * have been the one that was read, and docs@ would have mailed a stranger
+ * under the physician's name on the strength of it. The raw message keeps
+ * every header in order and the receiving MTA prepends its own above all of
+ * them, so the TOP-MOST header is the MTA's; topAuthenticationResults
+ * returns that one. Resend serves raw as a signed download_url (no inline
+ * form and no parameter for one, per its docs), so the head of that file is
+ * fetched; a string `raw` is parsed directly should the API ever inline it.
+ * A raw message with no Authentication-Results at all yields "", which the
+ * ack reads as not authenticated. When raw is absent from the response or
+ * cannot be read, positive is null and the ack is refused: for a while the
+ * header map stood in here, which put the forgeable value back on the very
+ * path it had been removed from, on every expired signed URL and on every
+ * response that simply lacked the field.
+ *
+ * `negative` is the header map, ARC included. It refuses an explicit failure
+ * (a sender gains nothing by forging one) and authorises nothing.
+ */
+async function authResultsFrom(email: ReceivedEmail): Promise<AuthEvidence> {
+  let raw: string | null = null;
+  if (typeof email.raw === "string") {
+    raw = email.raw;
+  } else if (email.raw && typeof email.raw === "object" && email.raw.download_url) {
+    raw = await fetchHead(String(email.raw.download_url), RAW_HEAD_BYTES);
+  }
+  const evidence = authEvidence(raw, email.headers);
+  if (evidence.positive === null) console.error(`raw unavailable for ${email.id}; acknowledgement refused`);
+  return evidence;
+}
+
+// senderAuthFailure, the filing check (an explicit dmarc=fail, or spf and
+// dkim both failing, drops the message; a missing header passes), lives in
+// _shared/requestFlow.ts beside the acknowledgement's gate so that both read
+// their verdicts from the same clause parser and the test can run it. It
+// takes one header value (authResultsFromHeaders, or either side of
+// authResultsFrom) and returns the offending text, or "" when ok.
 
 /** Attachments worth keeping: PDFs always; images unless they are small inline logos. */
 function acceptCertificateLike(a: ReceivedAttachment): boolean {
@@ -624,7 +778,7 @@ CredentialDOMD
 https://credentialdomd.com`);
   }
 
-  const authFail = senderAuthFailure(email);
+  const authFail = senderAuthFailure(authResultsFromHeaders(email));
   if (authFail) {
     await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
     return json({ ok: true, route: "cme", result: "rejected_auth" });
@@ -686,6 +840,15 @@ async function handleContacts(ledgerId: string, emailId: string, from: string, s
   const replyHeaders = replyThreading(messageId);
   const email = await getReceivedEmail(emailId, "cid");
 
+  // An automatic reply (out of office, a bounce, list mail) is not a card
+  // and must not get an answer: our own confirmation invites one, and
+  // answering it would mail the physician about nothing for as long as the
+  // responder keeps going. Nothing is written and nothing is sent.
+  if (isAutomatedSender(from, lowerKeys(email.headers))) {
+    await finish(ledgerId, "done", "automated sender, no reply", profile ? { profile_id: profile.id } : {});
+    return json({ ok: true, route: "contacts", result: "automated" });
+  }
+
   if (!profile) {
     return await replyUnregistered(ledgerId, "contacts", email, from, FROM_CONTACTS, replySubject, replyHeaders,
       `This address is not registered to a CredentialDOMD account, so the contact was not added. Send it from the email on your account, or add this address in Settings and open the link we send here to confirm it.
@@ -696,7 +859,7 @@ CredentialDOMD
 https://credentialdomd.com`);
   }
 
-  const authFail = senderAuthFailure(email);
+  const authFail = senderAuthFailure(authResultsFromHeaders(email));
   if (authFail) {
     await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
     return json({ ok: true, route: "contacts", result: "rejected_auth" });
@@ -884,6 +1047,142 @@ function parseForwarded(text: string): ParsedForward {
   return { found: Boolean(addr), from_addr: addr, from_name: name, subject, original_message_id, body_text };
 }
 
+/**
+ * The record tables a document can be linked to, with the columns the matcher
+ * reads to describe a record ("DEA Registration, ND"; "QuantiFERON-TB Gold,
+ * Negative"). Table names are snake_case; the section keys are the app's
+ * camelCase ones, because documents.linked_to is written by the app as
+ * "<section>:<record id>" and the matcher joins on that.
+ */
+const RECORD_TABLES: { table: string; section: string; columns: string }[] = [
+  { table: "licenses", section: "licenses", columns: "id, type, name, license_number, state, issued_date, expiration_date" },
+  { table: "health_records", section: "healthRecords", columns: "id, category, type, name, date_administered, expiration_date, result, doses" },
+  { table: "education", section: "education", columns: "id, type, name, institution, graduation_date" },
+  { table: "insurance", section: "insurance", columns: "id, type, name, provider, policy_number, effective_date, expiration_date" },
+  { table: "screenings", section: "screenings", columns: "id, type, name, agency, report_date, result, expiration_date" },
+  { table: "privileges", section: "privileges", columns: "id, type, name, facility, state, appointment_date, expiration_date" },
+  { table: "travel_docs", section: "travelDocs", columns: "id, type, name, provider, number, expiration_date" },
+  { table: "professional_photos", section: "professionalPhotos", columns: "id, name, date_taken" },
+  { table: "cme", section: "cme", columns: "id, title, category, hours, date, provider" },
+  { table: "work_history", section: "workHistory", columns: "id, type, position, employer, start_date, end_date" },
+  { table: "peer_references", section: "peerReferences", columns: "id, name, degree, institution, relationship, email, phone" },
+  { table: "malpractice_history", section: "malpracticeHistory", columns: "id, outcome, facility, state, date_filed" },
+  // Never attached (the matcher's NEVER_SECTIONS), loaded only so the link
+  // resolves. The app hands the matcher every section it holds, so a contract
+  // or a receipt linked as "locumContracts:<id>" is excluded there as a
+  // section; here, with no rows to resolve against, the same file read as
+  // unlinked, and the CV rule, which matches any unlinked file by name,
+  // offered a signed locum agreement to a credentialer who asked for a CV.
+  { table: "locum_contracts", section: "locumContracts", columns: "id" },
+  { table: "travel_expenses", section: "travelExpenses", columns: "id" },
+];
+
+// Rows go straight to the matcher, which declares its own row shapes; typing
+// them here would only make two files disagree about a nullable column.
+// deno-lint-ignore no-explicit-any
+type RecordRows = any[];
+
+/**
+ * Everything the matcher can attach, described. One query per table, all at
+ * once. A record table that fails (a column renamed underneath us, a table
+ * not yet deployed) costs that section's descriptions, not the proposal: its
+ * documents still appear, unlinked, under their filenames. The documents
+ * query itself failing is the one error worth throwing, since there is then
+ * nothing to propose.
+ */
+async function loadCatalogue(profileId: string) {
+  const docsQ = db.from("documents").select("id, name, mime_type, type, linked_to, uploaded_at").eq("user_id", profileId);
+  const recordQs = RECORD_TABLES.map(async (t): Promise<[string, RecordRows]> => {
+    const { data, error } = await db.from(t.table).select(t.columns).eq("user_id", profileId);
+    if (error) { console.error(`catalogue: ${t.table}: ${error.message}`); return [t.section, []]; }
+    return [t.section, (data ?? []) as RecordRows];
+  });
+  const [docsRes, recordPairs] = await Promise.all([docsQ, Promise.all(recordQs)]);
+  if (docsRes.error) throw new Error(`catalogue: documents: ${docsRes.error.message}`);
+  const records: Record<string, RecordRows> = {};
+  for (const [section, rows] of recordPairs) records[section] = rows;
+  const docs = ((docsRes.data ?? []) as { type?: string | null }[]).filter((d) => !INBOX_DOC_TYPES.has(String(d.type ?? "")));
+  return catalogueFromRows(docs as RecordRows, records);
+}
+
+/**
+ * The physician's confirmed forwarding addresses, lowercased. Empty on a
+ * failed read: the guards that use it then fall back to the profile address
+ * and the forwarder, which is where they stood before the set existed.
+ */
+async function verifiedAddresses(profileId: string): Promise<Set<string>> {
+  const { data, error } = await db.from("forwarding_addresses")
+    .select("email, verified_at").eq("user_id", profileId).not("verified_at", "is", null);
+  if (error) { console.error(`forwarding addresses: ${error.message}`); return new Set(); }
+  return new Set(((data ?? []) as { email: string | null }[]).map((a) => (a.email ?? "").trim().toLowerCase()).filter(Boolean));
+}
+
+interface PhysicianDetails {
+  name: string;         // header-safe, for the From display name and the signatures
+  degree: string;
+  email: string;        // the profile address
+  replyTo: string;      // where the requester's reply lands
+  ackRequests: boolean; // profiles.ack_requests; only an explicit false is off
+}
+
+/**
+ * Name, degree, reply address and the ack switch. The profile address falls
+ * back to the forwarding sender: it is a confirmed address of this physician,
+ * and an ack with no reply_to would strand the credentialer's answer at docs@.
+ *
+ * reply_to is the forwarding sender whenever that is a confirmed address
+ * other than the profile email. A physician who keeps a personal address on
+ * the profile and forwards from the confirmed hospital one is in that thread
+ * from the hospital address; putting the personal one on Reply-To handed it,
+ * on arrival and unreviewed, to a credentialer who never had it.
+ */
+async function physicianDetails(profile: MatchedProfile, forwarder: string, own: Set<string>): Promise<PhysicianDetails> {
+  const { data, error } = await db.from("profiles")
+    .select("name, degree_type, email, ack_requests").eq("id", profile.id).maybeSingle();
+  if (error) throw new Error(`profile details: ${error.message}`);
+  const p = (data ?? {}) as { name?: string | null; degree_type?: string | null; email?: string | null; ack_requests?: boolean | null };
+  const email = String(p.email ?? profile.email ?? "").trim().toLowerCase() || forwarder;
+  const fwd = forwarder.trim().toLowerCase();
+  const replyTo = fwd && fwd !== email && own.has(fwd) ? fwd : email;
+  return { name: cleanHeaderText(p.name), degree: cleanHeaderText(p.degree_type, 20), email, replyTo, ackRequests: p.ack_requests !== false };
+}
+
+/**
+ * Acknowledgements this account sent in the last `hours`, counted on the
+ * ledger. It was counted on document_requests.ack_sent_at, and RLS lets the
+ * owner UPDATE any column of their own rows, so a signed-in script clearing
+ * that column lifted the daily cap for as many third-party emails as it
+ * liked. inbound_emails is written by the service role only and its detail
+ * carries "ack sent" for exactly the messages whose acknowledgement went
+ * out (ACK_SENT below, and nothing else writes those two words), so the
+ * count comes from there. The row for the message in hand is still
+ * "processing" with no detail and does not count itself.
+ */
+async function ledgerAcksSince(profileId: string, hours: number): Promise<number> {
+  return await countSince(hours * 60, (q) => q.eq("profile_id", profileId).eq("route", "docs").ilike("detail", `%${ACK_SENT}%`));
+}
+
+/**
+ * Has the requester already been acknowledged for this message? A Svix
+ * redelivery of a failed attempt re-runs this route and inserts a fresh
+ * request row, so the new row's own ack_sent_at (null) proves nothing; the
+ * question is asked of every OTHER row this physician has for the same
+ * forwarded Message-ID, or for the requester's own Message-ID when the
+ * forward carried one (the same request forwarded twice).
+ */
+async function ackAlreadySent(profileId: string, requestId: string, messageId: string, originalMessageId: string | null): Promise<boolean> {
+  const hit = async (column: string, value: string) => {
+    const { count, error } = await db.from("document_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profileId).eq(column, value).not("ack_sent_at", "is", null).neq("id", requestId);
+    if (error) throw new Error(`ack lookup: ${error.message}`);
+    return (count ?? 0) > 0;
+  };
+  if (await hit("message_id", messageId)) return true;
+  if (originalMessageId && await hit("original_message_id", originalMessageId)) return true;
+  return false;
+}
+
 async function handleDocsRequest(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
   const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "docs").neq("id", ledgerId));
   if (recent >= CME_PER_SENDER_PER_HOUR) {
@@ -896,6 +1195,17 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
   const replyHeaders = replyThreading(messageId);
   const email = await getReceivedEmail(emailId, "cid");
 
+  // An automatic reply is not a request. This route sends two emails per
+  // message (the physician's summary and, with the guards below, the
+  // requester's acknowledgement), and an out-of-office reply to either one
+  // arrives here looking like a new forward. Left alone it became a request
+  // row with nothing in it and a third email; answered, it could go round
+  // until the holiday ended. Nothing is inserted and nothing is sent.
+  if (isAutomatedSender(from, lowerKeys(email.headers))) {
+    await finish(ledgerId, "done", "automated sender, no reply", profile ? { profile_id: profile.id } : {});
+    return json({ ok: true, route: "docs", result: "automated" });
+  }
+
   if (!profile) {
     return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
       `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account, or add this address in Settings (More > Settings > Email) and open the link we send here to confirm it.
@@ -906,7 +1216,14 @@ CredentialDOMD
 https://credentialdomd.com`);
   }
 
-  const authFail = senderAuthFailure(email);
+  // Two readings, kept apart. The filing refusal reads both: an explicit
+  // failure in the raw top-most header OR in the header map (ARC included)
+  // drops the message, which is the strictness cme@ and contacts@ have and
+  // this route briefly lost when it read the raw header alone. The ack below
+  // reads only the raw one. The other two routes keep the header map; they
+  // send nothing to a third party.
+  const auth = await authResultsFrom(email);
+  const authFail = senderAuthFailure(auth.positive ?? "") || senderAuthFailure(auth.negative);
   if (authFail) {
     await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
     return json({ ok: true, route: "docs", result: "rejected_auth" });
@@ -916,12 +1233,19 @@ https://credentialdomd.com`);
   const rawText = (email.text && email.text.trim()) ? email.text : (email.html ? stripHtml(email.html) : "");
   const parsed = parseForwarded(rawText);
   const fromAddr = parsed.found ? parsed.from_addr : from;
+  const requesterName = parsed.found ? parsed.from_name : null;
+  // What the matcher reads: the request as written, before the not-found
+  // notice below is prepended. That notice contains "forwarded" and
+  // "replying", which are the very words the matcher's fallback looks for
+  // when the email has no list, and it would have become an ask.
+  const requestBody = parsed.body_text.slice(0, MAX_REQUEST_BODY_CHARS);
   let bodyText = parsed.body_text;
   if (!parsed.found) {
     bodyText = `Requester address not found in the forwarded text; edit before replying.\n\n${bodyText}`.trim();
   }
   bodyText = bodyText.slice(0, MAX_REQUEST_BODY_CHARS);
   const requestSubject = parsed.subject ?? (stripFwdPrefix(subject) || null);
+  const receivedAt = email.created_at || new Date().toISOString();
 
   // The requester's checklist PDF, when one rides along (rare).
   const { files, skipped } = await downloadAttachments(emailId, acceptCertificateLike);
@@ -930,33 +1254,141 @@ https://credentialdomd.com`);
   const { data: reqRow, error: rErr } = await db.from("document_requests").insert({
     user_id: profile.id,
     from_addr: fromAddr,
-    from_name: parsed.found ? parsed.from_name : null,
+    from_name: requesterName,
     subject: requestSubject,
     body_text: bodyText,
     message_id: messageId,
     original_message_id: parsed.original_message_id,
     forwarded_by: from,
-    received_at: email.created_at || new Date().toISOString(),
+    received_at: receivedAt,
     status: "new",
     inbound_ledger_id: ledgerId,
   }).select("id").single();
   if (rErr) throw new Error(`document_requests insert: ${rErr.message}`);
   const requestId = (reqRow as { id: string }).id;
 
+  // Who the physician is, for the cover note's signature and the ack. A
+  // failed read keeps the request and turns the ack off for this message: an
+  // acknowledgement with no name on it is not something to send a credentialer.
+  const own = await verifiedAddresses(profile.id);
+  const profileEmail = (profile.email ?? "").trim().toLowerCase() || from;
+  let phys: PhysicianDetails = { name: "", degree: "", email: profileEmail, replyTo: profileEmail, ackRequests: false };
+  try {
+    phys = await physicianDetails(profile, from, own);
+  } catch (err) {
+    console.error(`docs: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // The packet proposal: every asked-for item matched against the file, and
+  // the cover note that goes with it. Built on arrival so the app can offer
+  // one button. A failure anywhere in here never loses the request: the row
+  // stays with proposal null and the app falls back to the hand-built reply.
+  let proposal: Proposal | null = null;
+  try {
+    const catalogue = await loadCatalogue(profile.id);
+    proposal = buildProposal(
+      { subject: requestSubject ?? "", body: requestBody, fromName: requesterName ?? "", fromAddr },
+      catalogue,
+      { name: phys.name, degree: phys.degree },
+    );
+    // An AI pass over the rules' result (naming the asks the rules could not) would run here, before the proposal is stored.
+    const now = new Date().toISOString();
+    const { error: uErr } = await db.from("document_requests")
+      .update({ proposal, proposal_at: now, updated_at: now }).eq("id", requestId);
+    if (uErr) throw new Error(`proposal update: ${uErr.message}`);
+  } catch (err) {
+    console.error(`docs: proposal for request ${requestId} failed: ${err instanceof Error ? err.message : String(err)}`);
+    proposal = null;
+  }
+
+  // The physician's summary: who asked, for what, what was found, one thing
+  // left to do. The not-found notice lives inside physicianSummaryText.
   const notes: string[] = [];
-  if (!parsed.found) notes.push("The requester's address was not found in the forwarded text, so the request is addressed to you for now. Open it and correct the To address before replying.");
   if (stored > 0) notes.push(`${stored} attachment${stored === 1 ? "" : "s"} from the request ${stored === 1 ? "was" : "were"} saved to your Documents.`);
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed > 0) notes.push(`${failed} attachment${failed === 1 ? "" : "s"} could not be saved.`);
 
-  let text = `Got it. The request from ${fromAddr} is in your app under More > Requests. Open it to build the packet and reply by email.`;
+  let text = physicianSummaryText({ requesterName, requesterAddr: fromAddr, requesterFound: parsed.found, proposal, appUrl: APP_URL });
   if (notes.length) text += `\n\n${notes.join("\n")}`;
-  text += `\n\nOpen the app: ${APP_URL} (More > Requests)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
+  text += `\n\nCredentialDOMD\nhttps://credentialdomd.com`;
 
   const r = await sendEmail({ from: FROM_DOCS, to: [from], subject: replySubject, headers: replyHeaders, text });
-  const detail = `request ${requestId}, from ${fromAddr}${parsed.found ? "" : " (requester not found)"}, attachments ${stored}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+
+  // The requester hears "received; any documents come from this address"
+  // from docs@ with the physician's name on it and reply_to set to the
+  // physician. It promises nothing (see ackText). Every refusal in ackAllowed
+  // is a way that mail would go to the wrong place, and one is a way it
+  // would go at all on a forged From: the forward must carry dmarc=pass or
+  // an aligned spf+dkim pass in the RAW top-most header, a missing header
+  // counting as a no (senderAuthFailure lets a missing header through,
+  // which is fine for filing into the sender's own account and not for mail
+  // that leaves our domain addressed by the message itself), and a raw
+  // message that could not be read counting as a no too (the header map is
+  // never consulted here). Three more live here because they need the
+  // database: no name on the profile (a nameless ack reads as spam), an ack
+  // already sent for this message (a redelivered webhook, or the same
+  // request forwarded twice), and the per-account daily cap. The per-sender
+  // cap above bounds how many can go out in an hour.
+  let ackDetail: string;
+  try {
+    const authOk = auth.positive !== null && senderPositivelyAuthenticated(auth.positive, from, INBOUND_AUTHSERV_IDS);
+    const allowed = ackAllowed({
+      requesterAddr: fromAddr, requesterName, forwarderAddr: from, physicianEmail: phys.email, ownAddresses: own,
+      requesterFound: parsed.found, ackRequests: phys.ackRequests, senderAuthenticated: authOk,
+    });
+    if (!allowed.ok) {
+      ackDetail = `ack skipped: ${allowed.why}${auth.positive === null ? " (raw message unavailable)" : ""}`;
+    } else if (!phys.name) {
+      ackDetail = "ack skipped: no name on the profile";
+    } else if (await ackAlreadySent(profile.id, requestId, messageId, parsed.original_message_id)) {
+      ackDetail = "ack skipped: already sent for this message";
+    } else if (await ledgerAcksSince(profile.id, 24) >= ACK_PER_PROFILE_PER_DAY) {
+      ackDetail = `ack skipped: daily cap of ${ACK_PER_PROFILE_PER_DAY} for this account reached`;
+    } else {
+      const ackPayload: Record<string, unknown> = {
+        from: fromHeader(phys.name, phys.degree),
+        to: [fromAddr],
+        reply_to: [phys.replyTo],
+        subject: replySubjectFor(requestSubject),
+        text: ackText({ requesterName, physicianName: phys.name, degree: phys.degree, askCount: proposal?.items?.length ?? 1, receivedAtIso: receivedAt }),
+      };
+      const threading = replyThreading(parsed.original_message_id ?? "");
+      if (Object.keys(threading).length) ackPayload.headers = threading;
+      // The intent is recorded before the send, not after it. ack_sent_at
+      // used to be written once Resend answered, and a webhook retry after
+      // a timeout could ack twice: the first attempt had sent the ack and
+      // been cut off before the write, so the retry found no record of it,
+      // inserted its own row and sent again. Now the stamp goes on first,
+      // ackAlreadySent sees it from the retry, and it comes off only when
+      // Resend says the send did not happen. A stamp that cannot be written
+      // means no send: an ack nobody can account for is the thing to avoid.
+      const stampAt = new Date().toISOString();
+      const { error: sErr } = await db.from("document_requests").update({ ack_sent_at: stampAt, updated_at: stampAt }).eq("id", requestId);
+      if (sErr) throw new Error(`ack_sent_at stamp: ${sErr.message}`);
+      const ack = await sendEmail(ackPayload);
+      if (ack.ok) {
+        ackDetail = ACK_SENT;
+      } else {
+        const { error: aErr } = await db.from("document_requests").update({ ack_sent_at: null, updated_at: new Date().toISOString() }).eq("id", requestId);
+        if (aErr) console.error(`docs: ack_sent_at clear failed for ${requestId}: ${aErr.message}`);
+        ackDetail = `ack failed: ${ack.status}`;
+      }
+    }
+  } catch (err) {
+    ackDetail = `ack skipped: ${err instanceof Error ? err.message : String(err)}`;
+    console.error(`docs: ${ackDetail}`);
+  }
+
+  const proposalDetail = proposal ? `proposal ${proposal.docIds.length} doc(s), ${proposal.missing.length} missing` : "proposal none";
+  // The ack outcome sits right after the id: finish() cuts detail at 500
+  // characters and ledgerAcksSince counts on the words being there.
+  const detail = `request ${requestId}, ${ackDetail}, from ${fromAddr}${parsed.found ? "" : " (requester not found)"}, ${proposalDetail}, attachments ${stored}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
   await finish(ledgerId, "done", detail, { attachment_count: stored, profile_id: profile.id });
-  return json({ ok: true, route: "docs", request_id: requestId, requester_found: parsed.found, stored, skipped, failed, confirmed: r.ok });
+  return json({
+    ok: true, route: "docs", request_id: requestId, requester_found: parsed.found,
+    proposed: proposal ? proposal.docIds.length : null, ack: ackDetail,
+    stored, skipped, failed, confirmed: r.ok,
+  });
 }
 
 // ─── Route: everything else -> relay to the owner ─────────────────────────────

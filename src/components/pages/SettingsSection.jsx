@@ -652,6 +652,19 @@ function SettingsSection({ onUpgrade }) {
         {/* Email toggle */}
         <ToggleRow label="Email reminders" sub={s.email ? `Daily check, sent to ${s.email} only when something is due or changed` : "Add email in profile"} active={s.notifyEmail} onToggle={() => update("notifyEmail", !s.notifyEmail)} color={T.accent} T={T} />
         <ToggleRow label="Text Notifications" sub={s.phone ? `${s.phone} (not sending yet; email and in-app alerts are live)` : "Add phone in profile"} active={s.notifyText} onToggle={() => update("notifyText", !s.notifyText)} color="#10b981" T={T} />
+        {/* Opt-out, so undefined reads as on: an account that never saw this
+            switch still acknowledges its requests, which is the default a
+            physician who forwards from the OR expects. */}
+        {/* The sub says what the note says and no more. It used to promise
+            "documents will follow once you approve", which the note itself
+            never says (ackText promises nothing), and it read as
+            unconditional when the note goes only for a forward that passed
+            the sender checks. */}
+        <ToggleRow label="Acknowledge document requests automatically"
+          sub="When a forwarded request passes sender checks, the requester gets a short note from docs@credentialdomd.com saying it was received. It promises nothing about what will be sent; replies come to you."
+          active={s.ackRequests !== false}
+          onToggle={() => update("ackRequests", s.ackRequests === false)}
+          color={T.accent} T={T} />
 
         {/* Frequency */}
         <div style={{ padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
@@ -1224,13 +1237,17 @@ function EmailBlock({ accountEmail, T, iS }) {
 }
 
 function ToggleRow({ label, sub, active, onToggle, color, T }) {
+  // The text block shrinks, the switch never does. Without flexShrink: 0 on
+  // the switch and minWidth: 0 on the text, a long sub-text squeezed the
+  // 44px track to 22px at 375px and the knob rendered past its right edge,
+  // half the tap target gone and on hard to tell from off.
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${T.border}` }}>
-      <div>
+      <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{label}</div>
         <div style={{ fontSize: 12, color: T.textDim }}>{sub}</div>
       </div>
-      <button onClick={onToggle} style={{ width: 44, height: 24, borderRadius: 12, border: "none", backgroundColor: active ? color : T.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+      <button onClick={onToggle} style={{ width: 44, height: 24, flexShrink: 0, borderRadius: 12, border: "none", backgroundColor: active ? color : T.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
         <div style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff", position: "absolute", top: 3, left: active ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
       </button>
     </div>
