@@ -1,3 +1,15 @@
+/**
+ * NOT DEPLOYED (removed 2026-09-13).
+ *
+ * This reads public.onboarding_queue, and that table does not exist in this
+ * database, so every invocation ended in an error. It was deployed with no
+ * caller check of any kind (verify_jwt is satisfied by the public anon key)
+ * while holding the service role and a Resend key, which made it an
+ * unauthenticated way to ask the project to send mail. Nothing in the app or
+ * in cron calls it. The deployment was deleted; the source stays for the
+ * record, and the queue table would have to come back before it means
+ * anything.
+ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
 
 const corsHeaders = {

@@ -1,4 +1,15 @@
 /**
+ * NOT DEPLOYED (removed 2026-09-13).
+ *
+ * Nothing calls this any more: src/utils/npiLookup.js queries the NIH/NLM
+ * Clinical Tables mirror of the NPI registry directly, because that mirror
+ * sends CORS headers and NPPES does not, and supabase/functions/public-record
+ * uses _shared/nppes.ts server-side. What was left was an unauthenticated
+ * open proxy on our domain that anyone could point at the registry all day,
+ * so the deployment was deleted. The source stays for the record; deploying
+ * it again would want an auth check first.
+ */
+/**
  * npi-proxy — Supabase Edge Function
  * Proxies NPPES NPI Registry API to bypass browser CORS restrictions.
  *
