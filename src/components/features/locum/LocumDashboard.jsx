@@ -21,6 +21,7 @@ import Expenses from "./Expenses";
 import Schedule from "./Schedule";
 import Invoices from "./Invoices";
 import RVULog from "./RVULog";
+import { BASE_KEYS, lsSet } from "../../../utils/storageScope";
 
 const SUBTABS = [
   { id: "work", label: "Work" },
@@ -78,7 +79,9 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
       {sub === "work" && <WorkLog billDraft={billDraft} onBillDraftDone={() => setBillDraft(null)} />}
       {sub === "rvus" && <RVULog />}
       {sub === "schedule" && <Schedule />}
-      {sub === "invoices" && <Invoices />}
+      {sub === "invoices" && (
+        <Invoices onOpenContract={(contractId) => { lsSet(BASE_KEYS.lastContract, contractId); setSub("work"); }} />
+      )}
       {sub === "contracts" && <Contracts />}
       {sub === "expenses" && <Expenses />}
       {sub === "todo" && <TaskNotes onBill={(d) => { setBillDraft(d); setSub("work"); }} />}

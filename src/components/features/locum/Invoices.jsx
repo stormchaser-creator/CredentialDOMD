@@ -92,7 +92,7 @@ function StandingBadge({ tone, style }) {
  * Mark paid when the money lands; unpaid invoices age visibly so nothing
  * slips. Deleting an invoice releases its work entries back to unbilled.
  */
-function Invoices() {
+function Invoices({ onOpenContract }) {
   const { data, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const [viewInv, setViewInv] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -133,10 +133,17 @@ function Invoices() {
         Needs invoicing
       </div>
       {needsInvoicing.map(n => (
-        <div key={n.contractId} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, padding: "4px 0" }}>
+        <div key={n.contractId} role="button" tabIndex={0}
+          onClick={() => onOpenContract?.(n.contractId)}
+          onKeyDown={(e) => { if (e.key === "Enter") onOpenContract?.(n.contractId); }}
+          style={{
+            display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, padding: "4px 0",
+            cursor: onOpenContract ? "pointer" : undefined,
+          }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{n.facility}</div>
-          <div style={{ fontSize: 12, color: T.textMuted, textAlign: "right", flexShrink: 0 }}>
-            {n.count} unbilled {n.count === 1 ? "entry" : "entries"}{n.oldest ? ` · since ${formatDate(n.oldest)}` : ""}
+          <div style={{ fontSize: 12, color: T.textMuted, textAlign: "right", flexShrink: 0, display: "flex", alignItems: "baseline", gap: 4 }}>
+            <span>{n.count} unbilled {n.count === 1 ? "entry" : "entries"}{n.oldest ? ` · since ${formatDate(n.oldest)}` : ""}</span>
+            {onOpenContract && <span style={{ color: T.warning, fontWeight: 700 }}>›</span>}
           </div>
         </div>
       ))}
