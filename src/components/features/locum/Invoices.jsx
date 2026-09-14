@@ -9,6 +9,7 @@ import { sortInvoiceLines, invoiceSubject, shareInvoiceText } from "../../../uti
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { money } from "../../../utils/invoiceCover";
+import { callPeriodsOf } from "../../../utils/dutyPay";
 
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
 
@@ -98,6 +99,49 @@ function Invoices() {
   const contracts = data.locumContracts || [];
   const facilityOf = (cid) => contracts.find(c => c.id === cid)?.facility || "Contract";
   const billNameOf = (inv) => inv.billToLabel || facilityOf(inv.contractId);
+
+  // Work sitting unbilled per contract — surfaced so a month at a second
+  // facility doesn't just fall off the radar. Same "unbilled" definition
+  // the Work and Duty Day tabs use for their own invoice CTA (!invoiceId).
+  const needsInvoicing = useMemo(() => {
+    const byContract = new Map();
+    const bump = (contractId, dateStr) => {
+      if (!contractId) return;
+      const cur = byContract.get(contractId) || { count: 0, oldest: null };
+      cur.count += 1;
+      if (dateStr && (!cur.oldest || dateStr < cur.oldest)) cur.oldest = dateStr;
+      byContract.set(contractId, cur);
+    };
+    for (const e of data.workLog || []) {
+      if (e.invoiceId) continue;
+      bump(e.contractId, (e.startTime || e.date || "").slice(0, 10));
+    }
+    for (const d of data.dutyDays || []) {
+      if (d.invoiceId || !(d.workedDay || callPeriodsOf(d).length > 0)) continue;
+      bump(d.contractId, d.date);
+    }
+    return [...byContract.entries()]
+      .map(([contractId, v]) => ({ contractId, facility: facilityOf(contractId), ...v }))
+      .sort((a, b) => (a.oldest || "").localeCompare(b.oldest || ""));
+  }, [data.workLog, data.dutyDays, contracts]);
+  const needsInvoicingCard = needsInvoicing.length > 0 && (
+    <div style={{
+      backgroundColor: T.warningDim || T.card, border: `1px solid ${T.warning}55`, borderRadius: 14,
+      padding: "12px 14px", marginBottom: 14,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.warning, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+        Needs invoicing
+      </div>
+      {needsInvoicing.map(n => (
+        <div key={n.contractId} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, padding: "4px 0" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: T.text }}>{n.facility}</div>
+          <div style={{ fontSize: 12, color: T.textMuted, textAlign: "right", flexShrink: 0 }}>
+            {n.count} unbilled {n.count === 1 ? "entry" : "entries"}{n.oldest ? ` · since ${formatDate(n.oldest)}` : ""}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   // Newest SERVICE PERIOD first — sorting by sentAt put backfilled invoices
   // (entered later) above work that happened after them.
@@ -251,8 +295,11 @@ function Invoices() {
 
   if (invoices.length === 0) {
     return (
-      <EmptyState icon={"🧾"} title="No invoices yet"
-        subtitle="Invoices you send from the Work tab land here, so you can track what's been sent and what's been paid." />
+      <div>
+        {needsInvoicingCard}
+        <EmptyState icon={"🧾"} title="No invoices yet"
+          subtitle="Invoices you send from the Work tab land here, so you can track what's been sent and what's been paid." />
+      </div>
     );
   }
 
@@ -336,6 +383,8 @@ function Invoices() {
           {paidTile(true)}
         </div>
       ) : totalTile(false)}
+
+      {needsInvoicingCard}
 
       <Modal open={showMonths} onClose={() => setShowMonths(false)} title="Billed by month">
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>
