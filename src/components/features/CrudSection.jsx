@@ -515,7 +515,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       });
     }
     closeForm();
-  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields]);
+  }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft]);
 
   const setField = useCallback((key, value) => {
     setForm(p => ({ ...p, [key]: value }));
