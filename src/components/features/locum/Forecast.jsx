@@ -227,17 +227,19 @@ function Forecast() {
                 {vacation ? (
                   <div style={{ fontSize: 10.5, fontWeight: 800, color: T.warning, lineHeight: 1.2 }}>V</div>
                 ) : workEntries.length > 0 ? (
-                  <div style={{ fontSize: 9, fontWeight: 800, color: T.accent, lineHeight: 1.2 }}>
-                    {workEntries.length > 1 ? `${workEntries.length}\u00d7 ${facilityShort(workEntries[0].contractId)}` : facilityShort(workEntries[0].contractId)}<br />{short(est)}
+                  // Once a day is billed, the billed number is reality — lead
+                  // with that instead of the estimate it replaced.
+                  <div style={{ fontSize: 9, fontWeight: 800, color: isPastOrToday && act > 0 ? "#22c55e" : T.accent, lineHeight: 1.2 }}>
+                    {workEntries.length > 1 ? `${workEntries.length}\u00d7 ${facilityShort(workEntries[0].contractId)}` : facilityShort(workEntries[0].contractId)}<br />{short(isPastOrToday && act > 0 ? act : est)}
                   </div>
                 ) : act > 0 ? (
                   <div style={{ fontSize: 9, fontWeight: 800, color: "#22c55e", lineHeight: 1.2 }}>Logged<br />{short(act)}</div>
                 ) : null}
-                {/* The green billed figure only earns its row when it differs
-                    from the estimate — past days seeded from actuals would
+                {/* The estimate only earns its row when it differs from what
+                    was billed — a day billed exactly as planned would
                     otherwise print the same number twice. */}
                 {isPastOrToday && act > 0 && workEntries.length > 0 && Math.round(act) !== Math.round(est) && (
-                  <div style={{ fontSize: 8.5, fontWeight: 700, color: "#22c55e" }}>{short(act)}</div>
+                  <div style={{ fontSize: 8.5, fontWeight: 700, color: T.textDim }}>est {short(est)}</div>
                 )}
               </div>
             );
