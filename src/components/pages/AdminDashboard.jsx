@@ -1081,17 +1081,17 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
       {orphanAttempts.length > 0 && (
         <>
           <div style={{ fontSize: 12, fontWeight: 800, color: T.warning, textTransform: "uppercase", letterSpacing: 0.5, margin: "16px 0 6px" }}>
-            Attempts that never became signups ({orphanAttempts.length})
+            Requests that were not saved ({orphanAttempts.length})
           </div>
           <div style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 6 }}>
-            These people hit Join but the signup itself did not land — reach out or add them manually above.
+            These submissions have no saved request. A guide-form attempt does not establish waitlist consent; do not invite or add it to the waitlist without an explicit signup.
           </div>
           {orphanAttempts.map(a => (
             <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap", backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 10, padding: "8px 12px", marginBottom: 5 }}>
               <div style={{ minWidth: 0, flex: "1 1 220px" }}>
                 {a.name && <div style={{ fontSize: 13, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{a.name}</div>}
                 <div style={{ fontSize: a.name ? 12 : 13, fontWeight: a.name ? 500 : 700, color: a.name ? T.textMuted : T.text, overflowWrap: "anywhere" }}>{a.email}</div>
-                <span style={{ ...badge(T.warning, T.warningDim), display: "inline-block", marginTop: 4 }}>{a.stage}</span>
+                <span style={{ ...badge(T.warning, T.warningDim), display: "inline-block", marginTop: 4 }}>{a.stage === "guide" ? "guide request" : a.stage === "normal" ? "waitlist signup" : "request"}</span>
               </div>
               <button onClick={() => removeAttempt(a)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: "transparent", color: T.textDim, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>dismiss</button>
             </div>

@@ -7,6 +7,10 @@ import urllib.request, urllib.error
 PROJECT = "hkpnnsjcwprrwobmpqyy"
 
 def get(url, token=None, as_json=True):
+    if token is None:
+        # Match the public endpoint checks used by the deployment tooling.
+        raw = subprocess.check_output(["curl", "-fsS", "--max-time", "30", url], stderr=subprocess.DEVNULL).decode()
+        return json.loads(raw) if as_json else raw
     headers = {"Authorization": "Bearer " + token} if token else {}
     try:
         with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
