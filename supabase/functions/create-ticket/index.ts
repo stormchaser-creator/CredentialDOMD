@@ -50,6 +50,24 @@ serve(async (req) => {
       });
     }
 
+    // Access gate, the same one ai-proxy applies. Signing in is not the bar:
+    // Clerk sign-up is open to anyone, and this function was the one place a
+    // stranger with a fresh account could put text of their choosing inside
+    // the project. A ticket body is read by a person and, within the hour, by
+    // the unattended agent on the operator's machine that works this queue,
+    // so "who may write here" has to be the same question as "who may use the
+    // app". Nobody legitimate loses anything: an account that is not active
+    // sees the invite-only screen, which has no way to open a ticket at all.
+    if (!user.isAdmin) {
+      const { data: prof } = await user.db.from("profiles")
+        .select("access_status").eq("id", user.profileId).maybeSingle();
+      if (prof?.access_status !== "active") {
+        return new Response(JSON.stringify({ error: "This account does not have access yet." }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const body = await req.json();
     const subject  = (body.subject || "").trim();
     const ticketBody = (body.body || "").trim();
