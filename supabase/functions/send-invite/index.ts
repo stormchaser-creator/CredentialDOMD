@@ -60,7 +60,7 @@ serve(async (req) => {
   const email = String(body.email || "").trim().toLowerCase();
   const name = String(body.name || "").trim() || null;
   const note = String(body.note || "").trim() || null;
-  const leadId = body.lead_id || null;
+  const requestedLeadId = body.lead_id || null;
   // No wildcards: the lookups below are exact now, but a % or * or _ in an
   // address is never legitimate and used to reach ilike, where an invite
   // for *@*.com matched and then activated whichever profile came back.
@@ -69,6 +69,15 @@ serve(async (req) => {
   }
 
   const db = who.db;
+  const { data: leads, error: leadError } = await db.from("early_access_leads")
+    .select("id,email,waitlist").ilike("email", email);
+  if (leadError) return json(503, { error: "Could not verify waitlist consent" });
+  if ((leads || []).some(lead => lead.waitlist !== true)) {
+    return json(409, { error: "This person requested a guide only. They must join the waitlist before receiving an invitation." });
+  }
+  const lead = (leads || []).find(lead => String(lead.email).trim().toLowerCase() === email);
+  if (requestedLeadId && requestedLeadId !== lead?.id) return json(400, { error: "Waitlist entry does not match this email" });
+  const leadId = lead?.id || null;
   const { data: existing } = await db.from("beta_access").select("*").eq("email", email).maybeSingle();
   let row = existing;
   if (!existing) {

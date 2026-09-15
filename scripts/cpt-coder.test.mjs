@@ -433,5 +433,15 @@ ok("construct rules name 33268/33269/93312/93314 and bar the clip beside a maze"
     [...angio, ...tumor].every((q) => !q.includes("\u2014")));
 }
 
+// Approach conflicts ask for review without silently deleting work or selecting a modifier.
+for (const pair of [["61154", "61312"], ["61154", "61314"], ["61156", "61313"], ["61156", "61315"], ["61108", "61154"], ["61108", "61312"]]) {
+  const result = run(pair.map(code => enc(code)), "Separate hematoma collections; verify each site");
+  ok(`${pair.join("/")} prompts site review`, hasQ(result, /review whether these describe the same hematoma/));
+  ok(`${pair.join("/")} retains both for review`, pair.every(code => codes(result).includes(code)));
+  ok(`${pair.join("/")} does not prescribe a modifier`, result.items.every(item => !item.modifier));
+  ok(`${pair.join("/")} does not assert a PTP indicator`, !hasQ(result, /modifier indicator|mutually exclusive/));
+}
+ok("single hematoma code has no pair warning", !hasQ(run([enc("61312")]), /same hematoma/));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

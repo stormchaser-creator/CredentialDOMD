@@ -8,6 +8,7 @@ import { FOUNDING_COHORT_CAP } from "../../utils/pricingConstants";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
 import { leadNoteLabel } from "../../utils/adminLabels";
+import { waitlistView, leadState } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 
@@ -180,10 +181,10 @@ export default function AdminDashboard() {
       supabase.from("admin_feedback_recent").select("*").limit(50),
       supabase.from("admin_signups_daily").select("*").limit(30),
       supabase.from("admin_visits_daily").select("*").limit(30),
-      supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at,waitlist").order("created_at", { ascending: false }).limit(500),
+      supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at,waitlist,guide_sent_at,guide_attempts").order("created_at", { ascending: false }).limit(500),
       supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
       supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state").order("created_at", { ascending: false }).limit(500),
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state,deleted_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("client_errors").select("id, created_at, kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra").order("created_at", { ascending: false }).limit(50),
       supabase.from("admin_messages_overview").select("*").limit(200),
@@ -193,7 +194,7 @@ export default function AdminDashboard() {
       else setTickets(t.data || []);
       if (f.error) setError((prev) => prev || `Feedback: ${f.error.message}`);
       else setFeedback(f.data || []);
-      if (s.error) setError((prev) => prev || `Signups: ${s.error.message}`);
+      if (s.error) setError((prev) => prev || `New accounts: ${s.error.message}`);
       else setSignups(s.data || []);
       if (!v.error) setVisits(v.data || []);
       if (w.error) setError((prev) => prev || `Waitlist: ${w.error.message}`);
@@ -225,12 +226,7 @@ export default function AdminDashboard() {
 
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = tickets.filter(t => t.archived_at);
-  const activeUserEmails = new Set(
-    users.filter(u => u.access_status === "active" && u.email).map(u => u.email.toLowerCase())
-  );
-  // waitlist === false is a state-guide request whose sender left the "add me
-  // to the waitlist" box unchecked: a lead for the record, not a signup.
-  const openWaitlist = waitlist.filter(r => r.waitlist !== false && !activeUserEmails.has((r.email || "").toLowerCase()));
+  const openWaitlist = waitlistView(waitlist, users, invites).waiting;
   const messagesSeenAt = data?.settings?.adminInboxSeenAt;
   const unreadMessages = messages.filter(m =>
     m.last_physician_reply_at && (!messagesSeenAt || new Date(m.last_physician_reply_at) > new Date(messagesSeenAt))
@@ -242,7 +238,7 @@ export default function AdminDashboard() {
     { id: "messages",  label: unreadMessages > 0 ? `Messages (${unreadMessages})` : "Messages" },
     { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
     { id: "errors",    label: unattendedErrors > 0 ? `Errors (${unattendedErrors})` : "Errors" },
-    { id: "signups",   label: "Signups" },
+    { id: "signups",   label: "Traffic" },
     { id: "waitlist",  label: `Waitlist (${openWaitlist.length})` },
     { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
     { id: "ai",        label: "AI" },
@@ -252,7 +248,7 @@ export default function AdminDashboard() {
     <div>
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: T.text }}>Admin</h2>
       <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textMuted }}>
-        Tickets, feedback, and signups for credentialdomd.com
+        Support, accounts, waitlist signups, and traffic for credentialdomd.com
       </p>
 
       <div style={{
@@ -346,14 +342,14 @@ export default function AdminDashboard() {
             Page loads = every landing-page view that day. Homepage = loads of credentialdomd.com itself. State pages = loads across the 50 state SEO pages (views, not states). Via links = arrived from another site (search, forum, shared link) instead of typing the address.
           </div>
           <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
-            Signups
+            New accounts
           </div>
           <SignupsList rows={signups} T={T} reloadedAt={reloadedAt} onReload={() => setReloadKey((k) => k + 1)} />
         </>
       )}
       {tab === "errors" && !loading && <ErrorsList rows={errors} users={users} T={T} onCleared={() => setErrors([])} />}
       {tab === "users" && !loading && <UsersPanel users={users} setUsers={setUsers} invites={invites} setInvites={setInvites} T={T} />}
-      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} T={T} onInvite={async (r) => {
+      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onInvite={async (r) => {
         const res = await sendInvite({ email: r.email, name: r.name, lead_id: r.id });
         if (res.ok) {
           setWaitlist(rs => rs.map(x => x.id === r.id ? { ...x, status: "invited", invited_at: new Date().toISOString() } : x));
@@ -590,7 +586,7 @@ function FeedbackList({ rows, T }) {
 }
 
 function SignupsList({ rows, T, onReload, reloadedAt }) {
-  if (!rows.length) return <Empty T={T} text="No signups in last 90 days." />;
+  if (!rows.length) return <Empty T={T} text="No new accounts in last 90 days." />;
   const total = rows.reduce((s, r) => s + (r.signups || 0), 0);
   // The old number added these three together and called the sum "signups",
   // which is how a panel showing four physicians read 8.
@@ -606,7 +602,7 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
           <div>
             <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>physicians who finished signing up</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>physicians who created an account (email on file, admin excluded)</div>
           </div>
           {onReload && (
             <button onClick={onReload} style={{
@@ -762,7 +758,7 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
 
   const refresh = async () => {
     const [pr, ba] = await Promise.all([
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state").order("created_at", { ascending: false }).limit(500),
+      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state,deleted_at").order("created_at", { ascending: false }).limit(500),
       supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
     ]);
     if (pr.data) setUsers(pr.data);
@@ -934,7 +930,7 @@ const badge = (color, bg) => ({
   whiteSpace: "nowrap", flexShrink: 0,
 });
 
-function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite }) {
+function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T, onInvite }) {
   // Full back-end control: see everyone, add someone by hand (a physician
   // whose network ate the form), remove test rows, and review attempts
   // that never became signups.
@@ -946,22 +942,15 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
     if (!email || !name) return;
     setBusy(true);
     const { data, error } = await supabase.from("early_access_leads")
-      .insert({ name, email, source: "admin-manual" }).select().single();
+      .insert({ name, email, source: "admin-manual", waitlist: true }).select().single();
     setBusy(false);
     if (!error && data) { setRows(rs => [data, ...rs]); setAddName(""); setAddEmail(""); }
   };
-  // Conversion funnel: tap the chip to advance waiting → invited → joined → paying
   const [inviting, setInviting] = useState(null);
   const [inviteMsg, setInviteMsg] = useState("");
-  const STATUSES = [null, "invited", "joined", "paying"];
-  const cycleStatus = async (r) => {
-    const next = STATUSES[(STATUSES.indexOf(r.status || null) + 1) % STATUSES.length];
-    const patch = { status: next, invited_at: next === "invited" ? new Date().toISOString() : r.invited_at };
-    setRows(rs => rs.map(x => x.id === r.id ? { ...x, ...patch } : x));
-    await supabase.from("early_access_leads").update(patch).eq("id", r.id);
-  };
   const removeLead = async (r) => {
-    if (!window.confirm(`Remove ${r.email} from the waitlist?`)) return;
+    const from = r.waitlist === false ? "the guide-request list" : "the waitlist";
+    if (!window.confirm(`Remove ${r.email} from ${from}?`)) return;
     setRows(rs => rs.filter(x => x.id !== r.id));
     await supabase.from("early_access_leads").delete().eq("id", r.id);
   };
@@ -969,28 +958,14 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
     setAttempts(as2 => as2.filter(x => x.id !== a.id));
     await supabase.from("waitlist_attempts").delete().eq("id", a.id);
   };
-  // A lead who's already signed up gets pulled off the active list — they're
-  // not deleted (data stays for the record and the "already a user" badge
-  // still shows if you dig them up), just hidden by default so the list only
-  // shows people you still need to convert.
-  const activeEmails = new Set(
-    (users || []).filter(u => u.access_status === "active" && u.email).map(u => u.email.toLowerCase())
-  );
   const [showJoined, setShowJoined] = useState(false);
   const [showGuideOnly, setShowGuideOnly] = useState(false);
-  const alreadyJoined = rows.filter(r => activeEmails.has((r.email || "").toLowerCase()));
-  // Guide-only requests (waitlist === false) asked for a state renewal guide
-  // and chose not to join the waitlist; they stay out of the count and the
-  // default list, and never get invited from here.
-  const guideOnly = rows.filter(r => r.waitlist === false);
-  const visibleRows = rows.filter(r =>
-    (showJoined || !activeEmails.has((r.email || "").toLowerCase())) &&
-    (showGuideOnly || r.waitlist !== false)
-  );
+  const view = waitlistView(rows, users || [], invites || [], { showJoined, showGuideOnly });
+  const { activeEmails, guideOnly, joined: alreadyJoined, waiting, visible: visibleRows } = view;
   const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
   const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
   const copyAll = () => {
-    const text = visibleRows.map((r) => `${r.name || ""} <${r.email}>`).join(", ");
+    const text = view.contactable.map(r => `${r.name || ""} <${r.email}>`).join(", ");
     try { navigator.clipboard.writeText(text); } catch { /* older browser */ }
   };
   return (
@@ -1001,16 +976,16 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
         borderRadius: 12, padding: "12px 16px", marginBottom: 12,
       }}>
         <div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{visibleRows.length}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{waiting.length}</div>
           <div style={{ fontSize: 11, color: T.textMuted }}>
-            on the list · {rows.filter(r => r.status === "invited").length} invited · {rows.filter(r => r.status === "joined").length} joined · {rows.filter(r => r.status === "paying").length} paying
+            waiting to join · {alreadyJoined.length} already have access · {guideOnly.length} guide-only requests
           </div>
           {inviteMsg && <div style={{ fontSize: 12, marginTop: 4, color: inviteMsg.startsWith("Could not") ? "#ef4444" : "#10b981" }}>{inviteMsg}</div>}
         </div>
-        <button onClick={copyAll} style={{
+        <button onClick={copyAll} disabled={!view.contactable.length} style={{
           padding: "8px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
           backgroundColor: "transparent", color: T.text, fontSize: 12, fontWeight: 700, cursor: "pointer",
-        }}>Copy all emails</button>
+        }}>Copy waiting emails</button>
       </div>
 
       {(alreadyJoined.length > 0 || guideOnly.length > 0) && (
@@ -1042,7 +1017,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
         }}>Add</button>
       </div>
 
-      {visibleRows.length === 0 && <Empty T={T} text={rows.length === 0 ? "No early-access signups yet. Share the site!" : "Everyone left on the list already signed up."} />}
+      {visibleRows.length === 0 && <Empty T={T} text="No pending waitlist signups in this view." />}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {visibleRows.map((r) => (
           <div key={r.id || r.email + r.created_at} style={{
@@ -1068,7 +1043,10 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
                   overflowWrap: "anywhere",
                 }}>{r.email}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
-                  {r.note && <span style={badge(T.warning, T.warningDim)}>{leadNoteLabel(r.note)}</span>}
+                  {/* Provenance, not a problem: amber is reserved for failed
+                      attempts, so a lead who came off a state guide page and
+                      ticked "add me" reads as informational. */}
+                  {r.note && <span style={badge(T.info, T.infoDim)}>{leadNoteLabel(r.note)}{/^guide(?:-email)?(?: |$)/.test(r.note) ? (r.guide_sent_at ? " · sent" : r.guide_attempts >= 5 ? " · delivery failed" : " · pending") : ""}</span>}
                   {r.source === "admin-manual" && <span style={badge(T.accent, T.accentGlow)}>added by you</span>}
                   {r.waitlist === false && <span style={badge(T.textMuted, T.neutralDim)}>guide only</span>}
                   {activeEmails.has((r.email || "").toLowerCase()) && (
@@ -1077,14 +1055,9 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-                <button onClick={() => cycleStatus(r)} title="Tap to advance: waiting → invited → joined → paying" style={{
-                  padding: "3px 9px", borderRadius: 999, fontSize: 10, fontWeight: 800, textTransform: "uppercase", cursor: "pointer",
-                  border: `1px solid ${r.status ? T.accent : T.border}`,
-                  backgroundColor: r.status === "paying" ? T.accent : "transparent",
-                  color: r.status === "paying" ? "#fff" : r.status ? T.accent : T.textDim,
-                }}>{r.status || "waiting"}</button>
+                {r.waitlist === true && <span style={badge(T.accent, T.accentGlow)}>{leadState(r, view)}</span>}
                 <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
-                {onInvite && r.status !== "joined" && r.status !== "paying" && (
+                {onInvite && r.waitlist === true && !activeEmails.has((r.email || "").trim().toLowerCase()) && (
                   <button disabled={inviting === r.id} onClick={async () => {
                     if (!window.confirm(`Send ${r.email} a beta invitation? They will be able to sign up with that address.`)) return;
                     setInviting(r.id); setInviteMsg("");
@@ -1093,7 +1066,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, T, onInvite
                     setInviteMsg(res.ok ? `Invitation sent to ${r.email}.` : `Could not invite ${r.email}: ${res.error}`);
                   }} style={{
                     padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
-                  }}>{inviting === r.id ? "..." : r.status === "invited" ? "Re-invite" : "Invite"}</button>
+                  }}>{inviting === r.id ? "..." : leadState(r, view) === "invited" ? "Re-invite" : "Invite"}</button>
                 )}
                 <button onClick={() => removeLead(r)} style={{
                   padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)",

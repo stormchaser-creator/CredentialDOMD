@@ -664,6 +664,12 @@ export function postProcess(parsed, { text = "", catalog = CPT_BY_CODE } = {}) {
     }
   }
 
+  for (const [a, b, why] of APPROACH_CONFLICTS) {
+    if (items.some(it => it.code === a) && items.some(it => it.code === b)) {
+      questions.push(`${a} and ${b}: review whether these describe the same hematoma. ${why} For one collection, do not separately count the access procedure. If these treated separate collections, document each site and verify current payer edits before retaining both. No modifier is selected automatically. (NCCI Policy Manual Ch I, surgical access and more extensive procedures.)`);
+    }
+  }
+
   // 8. Primary first. RVULog titles the case log with the first operative
   //    line, so an add-on listed first by the model would name the case
   //    "Microsurgery add-on". Stable sort: non-add-ons by wRVU descending,
@@ -692,4 +698,16 @@ export const MUTUALLY_EXCLUSIVE = [
   ["61518", "61519", "61518 is a posterior fossa tumor that is not a meningioma; 61519 is a posterior fossa meningioma."],
   ["61510", "61512", "61510 is a supratentorial tumor that is not a meningioma; 61512 is a supratentorial meningioma."],
   ["62140", "62141", "one cranioplasty per defect: 62140 up to 5 cm diameter, 62141 over 5 cm."],
+];
+
+// Review prompts, not assertions about unverified pair-specific PTP edits.
+// CMS 2026 NCCI Ch I B/L: surgical access is integral to the definitive procedure.
+// https://www.cms.gov/files/document/01-chapter1-ncci-medicare-policy-manual-2026-final.pdf
+export const APPROACH_CONFLICTS = [
+  ["61154", "61312", "These describe burr-hole drainage and supratentorial craniotomy evacuation of an extradural or subdural hematoma."],
+  ["61154", "61314", "These describe burr-hole drainage and infratentorial craniotomy evacuation of an extradural or subdural hematoma."],
+  ["61156", "61313", "These describe burr-hole aspiration and supratentorial craniotomy evacuation of an intracerebral hematoma."],
+  ["61156", "61315", "These describe burr-hole aspiration and infratentorial craniotomy evacuation of an intracerebral hematoma."],
+  ["61108", "61154", "Check whether twist-drill drainage and burr-hole evacuation addressed the same collection."],
+  ["61108", "61312", "Check whether twist-drill drainage and supratentorial craniotomy evacuation addressed the same collection."],
 ];

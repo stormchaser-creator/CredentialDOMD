@@ -10,7 +10,7 @@ TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || exit
 SINCE=$(cat "$STATE")
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-Q="select 'waitlist' as kind, coalesce(name,'') as name, coalesce(email,'') as email, coalesce(source,'') as extra, created_at from early_access_leads where created_at > '$SINCE'
+Q="select case when waitlist then 'waitlist' else 'guide only' end as kind, coalesce(name,'') as name, coalesce(email,'') as email, coalesce(source,'') as extra, created_at from early_access_leads where created_at > '$SINCE'
 union all select 'founding', coalesce(name,''), coalesce(email,''), '', created_at from founding_signups where created_at > '$SINCE'
 union all select 'app profile', coalesce(name,''), coalesce(email,''), '', created_at from profiles where created_at > '$SINCE'
 union all select 'FAILED ATTEMPT', coalesce(a.name,''), coalesce(a.email,''), coalesce(a.stage,''), a.created_at
@@ -31,19 +31,21 @@ union all select 'BETA JOINED', coalesce(name,''), coalesce(email,''), '', activ
   from beta_access where activated_at > '$SINCE'
 order by created_at"
 
-ROWS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
+ROWS=$(curl -fsS --max-time 30 -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  --data "$(python3 -c 'import json,sys; print(json.dumps({"query": sys.argv[1]}))' "$Q")")
+  --data "$(python3 -c 'import json,sys; print(json.dumps({"query": sys.argv[1]}))' "$Q")") || exit 1
 
 MSG=$(python3 - "$ROWS" <<'PY'
 import json, sys
 try:
     rows = json.loads(sys.argv[1])
 except Exception:
+    sys.exit(1)
+if not isinstance(rows, list):
+    sys.exit(1)
+if not rows:
     sys.exit(0)
-if not isinstance(rows, list) or not rows:
-    sys.exit(0)
-tickets = any((r.get("kind") or "").startswith(("TICKET","CLIENT","BETA")) for r in rows)
+tickets = any((r.get("kind") or "").startswith(("TICKET","CLIENT","BETA","guide only")) for r in rows)
 lines = ["CredentialDOMD activity" if tickets else "CredentialDOMD signup" + ("s" if len(rows) > 1 else "")]
 for r in rows:
     who = r.get("name") or "(no name)"
@@ -54,7 +56,7 @@ for r in rows:
     lines.append(f"• [{r.get('kind')}] {who} — {email}{extra}")
 print("\n".join(lines))
 PY
-)
+) || exit 1
 
 if [ -n "$MSG" ]; then
   osascript -e 'on run argv
@@ -62,6 +64,7 @@ if [ -n "$MSG" ]; then
       set svc to 1st account whose service type = iMessage
       send (item 1 of argv) to participant "stormchaser@elryx.com" of svc
     end tell
-  end run' "$MSG" && echo "$(date) sent: $MSG" >> "$HOME/.credentialdomd-signup-notify.log"
+  end run' "$MSG" || exit 1
+  echo "$(date) sent: $MSG" >> "$HOME/.credentialdomd-signup-notify.log"
 fi
 echo "$NOW" > "$STATE"

@@ -1,3 +1,10 @@
+> September 15 release: account migration is **not enabled**. `clerk-relink.mjs`
+> is a read-only readiness report and refuses `--apply`. The prior move-first
+> approach was not safely resumable after moving bytes but before updating
+> database paths. A separate cutover must validate a recovery journal, identity
+> ownership, profile conflicts, stored files, device settings, and sessions.
+> Instructions below are historical and are not authorization to switch users.
+
 # Clerk production cutover, status 2026-08-19
 
 ## Done (live now, nothing user-visible changed yet)
@@ -16,7 +23,14 @@
 2. Secret key: production `sk_live_...` (Clerk > Configure > API keys). Needed only by the re-link script. Never goes in the repo.
 3. Set `CLERK_ISSUER=https://clerk.credentialdomd.com` on the edge functions (they default to the dev host).
 4. GitHub secret `VITE_CLERK_PUBLISHABLE_KEY` -> the pk_live value; push to main to rebuild.
-5. Eric signs up on production with stormchaser@elryx.com (same email); run the re-link; same for Fowler and anyone else.
+5. Eric signs up on production with **drericwhitney@gmail.com**, which is what
+   profiles.email holds for his row. stormchaser@elryx.com is an additional
+   address on the account, not the primary, and clerk-relink.mjs matches the
+   production user's VERIFIED PRIMARY email against profiles.email: signing up
+   as stormchaser would leave his profile unmatched while the script still
+   exited 0. Both addresses are in ADMIN_EMAILS, so the admin UI would keep
+   working and hide the miss. Then run the re-link; same for Fowler and anyone
+   else.
 6. Optional: Google sign-in (needs a Google OAuth client; Clerk > SSO connections).
 
 ## Rollback

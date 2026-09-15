@@ -10,13 +10,27 @@
  * work; identity is the verified `sub` claim resolved to `profiles`.
  *
  * CLERK_ISSUER must move with any Clerk instance change (dev → production).
+ * There is deliberately no default. A hardcoded fallback meant that shipping a
+ * pk_live_ front end without setting the secret left every function quietly
+ * verifying against the dev issuer: the app loads, each of the 16 Clerk-authed
+ * functions returns 401, and nothing says why. Unset is now loud and fails
+ * closed. scripts/deploy-clerk-functions.sh checks it before deployment.
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5";
 
-const ISSUER = Deno.env.get("CLERK_ISSUER") || "https://dynamic-goshawk-87.clerk.accounts.dev";
-const JWKS = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`));
+const ISSUER = Deno.env.get("CLERK_ISSUER") || "";
+if (!ISSUER) {
+  console.error("CLERK_ISSUER is not set. Every Clerk-authenticated request will be rejected. Set it to the issuer matching the currently deployed Clerk publishable key");
+}
+// Built lazily so an unset issuer cannot throw at module load and take the
+// whole function down with an opaque boot error.
+let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+function getJwks() {
+  if (!jwks) jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`));
+  return jwks;
+}
 
 const ADMIN_EMAILS = new Set([
   "admin@credentialdomd.com",
@@ -32,16 +46,22 @@ export interface ClerkProfile {
 }
 
 export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
+  if (!ISSUER) return null;
+
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!token) return null;
 
   let sub = "";
   let claimEmail = "";
   try {
-    const { payload } = await jwtVerify(token, JWKS, { issuer: ISSUER });
+    const { payload } = await jwtVerify(token, getJwks(), { issuer: ISSUER });
     sub = (payload.sub as string) || "";
     claimEmail = (payload.email as string) || "";
-  } catch {
+  } catch (err) {
+    // Distinct from the no-profile branch below on purpose. After a Clerk
+    // cutover the dominant failure is a perfectly valid production token whose
+    // sub has no profiles row yet, and the two used to be indistinguishable.
+    console.error(`clerkAuth: token failed verification against ${ISSUER}: ${err instanceof Error ? err.message : err}`);
     return null;
   }
   if (!sub) return null;
@@ -55,7 +75,10 @@ export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
     .select("id, email")
     .eq("auth_user_id", sub)
     .maybeSingle();
-  if (!data) return null;
+  if (!data) {
+    console.error(`clerkAuth: verified sub ${sub} has no profiles row (issuer ${ISSUER}). After a Clerk cutover this means the re-link has not run for this user yet.`);
+    return null;
+  }
 
   // The verified JWT claim wins over profiles.email, which is a field the user
   // edits and which nothing reverts: migration 20260819_lock_access_status
