@@ -416,7 +416,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         width: "100%", marginTop: 14, padding: "12px", borderRadius: 10,
         border: `1px solid ${T.border}`, backgroundColor: "transparent",
         color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
-      }}>Close</button>
+      }}>Done</button>
     </>
   );
 
