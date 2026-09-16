@@ -37,6 +37,11 @@ function statusColor(s) {
   return "#94a3b8";
 }
 
+function daysOpen(iso) {
+  if (!iso) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+}
+
 function timeAgo(iso) {
   if (!iso) return "";
   const ms = Date.now() - new Date(iso).getTime();
@@ -118,11 +123,19 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           .order("created_at", { ascending: true });
         for (const m of msgs || []) last[m.ticket_id] = m; // last one wins (ascending)
       }
-      setTickets((rows || []).map((r) => ({
+      // Open tickets first (grouped ahead of resolved/closed), most recent first within each group.
+      const withMeta = (rows || []).map((r) => ({
         ...r,
         last_message_at: last[r.id]?.created_at || r.created_at,
         last_from_admin: !!last[r.id]?.is_admin_reply,
-      })));
+      }));
+      const isSettled = (s) => s === "resolved" || s === "closed";
+      withMeta.sort((a, b) => {
+        const grp = Number(isSettled(a.status)) - Number(isSettled(b.status));
+        if (grp) return grp;
+        return new Date(b.last_message_at) - new Date(a.last_message_at);
+      });
+      setTickets(withMeta);
     } catch (e) {
       setTicketsError(e.message || "Could not load your tickets.");
     } finally {
@@ -188,6 +201,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   // so this is a direct client update, no edge function needed.
   const markResolved = async () => {
     if (!openTicket) return;
+    if (!window.confirm("Mark this ticket resolved? You can still reply later if it comes back.")) return;
     setResolving(true); setReplyMsg("");
     try {
       const { error } = await supabase.from("support_tickets")
@@ -386,6 +400,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: statusColor(t.status), whiteSpace: "nowrap" }}>
                 {STATUS_LABEL[t.status] || t.status}
               </span>
+              {t.status !== "resolved" && t.status !== "closed" && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: T.textDim, whiteSpace: "nowrap" }}>
+                  {daysOpen(t.created_at)}d open
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 3 }}>
               {t.last_from_admin ? "Reply from Eric " : "Last message "}{timeAgo(t.last_message_at)}
@@ -416,16 +435,8 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           {STATUS_LABEL[openTicket.status] || openTicket.status}
         </span>
       </div>
-      <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
-        <span>Opened {new Date(openTicket.created_at).toLocaleString()}</span>
-        {openTicket.status !== "resolved" && openTicket.status !== "closed" && (
-          <button onClick={markResolved} disabled={resolving} style={{
-            background: "none", border: "none", padding: 0, cursor: resolving ? "default" : "pointer",
-            color: T.accent, fontSize: 11.5, fontWeight: 700,
-          }}>
-            {resolving ? "Marking resolved..." : "Mark as resolved"}
-          </button>
-        )}
+      <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 10 }}>
+        Opened {new Date(openTicket.created_at).toLocaleString()}
       </div>
 
       {threadLoading && <div style={{ fontSize: 13, color: T.textMuted }}>Loading...</div>}
@@ -478,12 +489,22 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           color: "#fff", fontSize: 14, fontWeight: 700,
           cursor: canSend ? "pointer" : "not-allowed",
         }}>{replying ? "Sending..." : "Send reply"}</button>
-        <button onClick={close} style={{
+        <button onClick={() => setOpenTicket(null)} style={{
           padding: "12px 18px", borderRadius: 10,
           border: `1px solid ${T.border}`, backgroundColor: "transparent",
           color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
-        }}>Close</button>
+        }}>Back</button>
       </div>
+      {openTicket.status !== "resolved" && openTicket.status !== "closed" && (
+        <button onClick={markResolved} disabled={resolving} style={{
+          width: "100%", marginTop: 10, padding: "12px", borderRadius: 10,
+          border: `1px solid ${T.border}`, backgroundColor: "transparent",
+          color: T.accent, fontSize: 14, fontWeight: 700,
+          cursor: resolving ? "default" : "pointer",
+        }}>
+          {resolving ? "Marking resolved..." : "Mark as resolved"}
+        </button>
+      )}
     </>
   );
 
