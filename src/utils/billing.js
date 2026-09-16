@@ -1,4 +1,4 @@
-import { formatDate } from "./helpers";
+import { formatDate } from "./helpers.js";
 
 /**
  * Locum time-engine billing math — shared between WorkLog (invoice

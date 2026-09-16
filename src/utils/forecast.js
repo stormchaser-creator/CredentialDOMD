@@ -1,4 +1,4 @@
-import { computeBilling } from "./billing";
+import { computeBilling } from "./billing.js";
 
 /**
  * Billing forecast: schedule future days per contract with an expected
