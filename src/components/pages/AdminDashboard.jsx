@@ -252,7 +252,7 @@ export default function AdminDashboard() {
       </p>
 
       <div style={{
-        display: "flex", gap: 4, marginBottom: 14,
+        display: "flex", gap: 4, marginBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch",
         backgroundColor: T.input, borderRadius: 10, padding: 3,
       }}>
         {TABS.map((t) => (
@@ -267,7 +267,7 @@ export default function AdminDashboard() {
               if (t.id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
             }}
             style={{
-              flex: 1, padding: "8px", borderRadius: 8, border: "none",
+              flex: "0 0 auto", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 8, border: "none",
               backgroundColor: tab === t.id ? T.card : "transparent",
               color: tab === t.id ? T.text : T.textMuted,
               fontSize: 13, fontWeight: 700, cursor: "pointer",
@@ -421,10 +421,6 @@ export default function AdminDashboard() {
                 backgroundColor: busy ? T.textDim : T.accent, color: "#fff", fontSize: 14, fontWeight: 800,
                 cursor: busy ? "wait" : "pointer",
               }}>{busy ? "Sending…" : "Send reply"}</button>
-              <button onClick={() => sendReply("in_progress")} disabled={busy} style={{
-                padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
-                backgroundColor: "transparent", color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer",
-              }}>Working on it</button>
               <button onClick={() => sendReply("resolved")} disabled={busy} style={{
                 padding: "12px 14px", borderRadius: 10, border: "none",
                 backgroundColor: "#10b981", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
