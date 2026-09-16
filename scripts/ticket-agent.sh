@@ -25,12 +25,37 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 # to ..." log line a resolve/reopen writes) AND the newest thread message
 # is not already ours.
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || { echo "$(date '+%F %T') ERROR — no Supabase token in keychain" >> "$LOG"; exit 1; }
-printf '{"query":"SELECT count(*) AS n FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s))"}' "'" "'" "'" "'" "'" "'" "'" "'" > /tmp/ticket-agent-count.json
-N=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d @/tmp/ticket-agent-count.json | /usr/bin/python3 -c "import json,sys; print(json.load(sys.stdin)[0]['n'])" 2>/dev/null)
 
-if [ "${N:-0}" = "0" ]; then
+# A physician's ticket waits for the owner. Ticket 8e66cf06, 2026-09-16: "When
+# a user makes a request and puts in a ticket that ticket needs to come to me
+# and be approved for you to work before you resolve or respond to the user."
+# This NARROWS the 2026-09-04 instruction "always reply to tickets": that one
+# still holds for everything in the queue, and this decides what is in it.
+#
+# The owner's own tickets need no approval row: filing one IS the approval,
+# which is what from_admin has always meant. Defined once and used by both
+# queries below, because two spellings of one rule drift and the one that
+# drifts is the one nobody notices.
+APPROVED="AND (public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)"
+printf '{"query":"SELECT count(*) AS n FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) %s"}' "'" "'" "'" "'" "'" "'" "'" "'" "$APPROVED" > /tmp/ticket-agent-count.json
+COUNT_RAW=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d @/tmp/ticket-agent-count.json)
+N=$(printf '%s' "$COUNT_RAW" | /usr/bin/python3 -c "import json,sys; print(json.load(sys.stdin)[0]['n'])" 2>/dev/null)
+
+# A FAILED query is not an empty queue, and it used to be indistinguishable
+# from one. N came back empty, ${N:-0} made it 0, and the run logged "idle" and
+# exited 0. So any schema change, expired token or outage turned this agent
+# permanently silent while its own log said everything was fine, and nobody
+# would notice until a physician asked why nobody had answered. Demonstrated
+# against the live database while adding the approval clause below: the column
+# did not exist yet, the API returned 42703, and the script reported idle.
+if [ -z "$N" ]; then
+  echo "$(date '+%F %T') ERROR — queue query failed, NOT an empty queue: $(printf '%s' "$COUNT_RAW" | head -c 300)" >> "$LOG"
+  exit 1
+fi
+
+if [ "$N" = "0" ]; then
   echo "$(date '+%F %T') idle — no actionable open tickets" >> "$LOG"
   exit 0
 fi
@@ -55,7 +80,7 @@ cd "$REPO" || exit 1
 # Pre-fetch the actual tickets and hand them to the model in the prompt —
 # a lazy single-turn run once claimed "no open tickets" without ever
 # running the query. With the queue in hand there is nothing to skip.
-printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at, t.agent_last_reply_at, public.is_admin(t.user_id) AS from_admin FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) ORDER BY t.created_at"}' "'" "'" "'" "'" "'" "'" "'" "'" > /tmp/ticket-agent-list.json
+printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at, t.agent_last_reply_at, public.is_admin(t.user_id) AS from_admin FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) %s ORDER BY t.created_at"}' "'" "'" "'" "'" "'" "'" "'" "'" "$APPROVED" > /tmp/ticket-agent-list.json
 TICKETS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d @/tmp/ticket-agent-list.json)

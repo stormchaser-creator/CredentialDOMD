@@ -100,6 +100,26 @@ export default function AdminDashboard() {
     setCreating(false);
   };
 
+  // Release a physician's ticket to the unattended agent, or take it back.
+  // Ticket 8e66cf06: a user's request has to come to Eric and be approved
+  // before the agent works or answers it. The runner's queue asks the same
+  // question (scripts/ticket-agent.sh APPROVED), so this button is the whole
+  // gate. A ticket Eric filed himself needs no approval and shows no button:
+  // filing it was the approval.
+  const setAgentApproved = async (t, approved) => {
+    const { error: e2 } = await supabase.from("support_tickets")
+      .update({ agent_approved_at: approved ? new Date().toISOString() : null })
+      .eq("id", t.id);
+    if (e2) { setTicketMsg(e2.message); return; }
+    setTicketMsg(approved
+      ? "Released to the agent. It will pick this up on its next run."
+      : "Approval withdrawn. The agent will not touch this.");
+    await refreshTickets();
+    setOpenTicket((cur) => (cur && cur.id === t.id
+      ? { ...cur, agent_approved_at: approved ? new Date().toISOString() : null }
+      : cur));
+  };
+
   const setArchived = async (t, archived) => {
     const { error: e2 } = await supabase.from("support_tickets")
       .update({ archived_at: archived ? new Date().toISOString() : null })
@@ -435,6 +455,15 @@ export default function AdminDashboard() {
                 padding: "12px 14px", borderRadius: 10, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.textMuted, fontSize: 13, fontWeight: 700, cursor: "pointer",
               }}>{openTicket.archived_at ? "Unarchive" : "Archive"}</button>
+              {openTicket.from_admin === false && (
+                <button onClick={() => setAgentApproved(openTicket, !openTicket.agent_approved_at)} disabled={busy} style={{
+                  padding: "12px 14px", borderRadius: 10,
+                  border: openTicket.agent_approved_at ? `1px solid ${T.border}` : "none",
+                  backgroundColor: openTicket.agent_approved_at ? "transparent" : "#7c3aed",
+                  color: openTicket.agent_approved_at ? T.textMuted : "#fff",
+                  fontSize: 13, fontWeight: openTicket.agent_approved_at ? 700 : 800, cursor: "pointer",
+                }}>{openTicket.agent_approved_at ? "Withdraw from agent" : "Approve for agent"}</button>
+              )}
             </div>
           </>
         )}
@@ -519,6 +548,16 @@ function TicketsList({ rows, T, onOpen }) {
             <span style={{ fontSize: 10, fontWeight: 700, color: T.textMuted }}>
               {r.category}
             </span>
+            {/* A physician's ticket the agent has not been released to. This
+                is the one badge worth scanning the list for: it is the only
+                state where somebody is waiting on YOU rather than on the
+                agent. Tickets you filed yourself never show it. */}
+            {r.from_admin === false && !r.agent_approved_at && (
+              <span style={{
+                fontSize: 10, fontWeight: 800, padding: "2px 8px",
+                borderRadius: 10, color: "#fff", backgroundColor: "#7c3aed",
+              }}>NEEDS YOU</span>
+            )}
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{r.subject}</div>
           {r.last_message && (() => {
