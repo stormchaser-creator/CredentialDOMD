@@ -1,3 +1,5 @@
+import { computeBilling } from "./billing";
+
 /**
  * Billing forecast: schedule future days per contract with an expected
  * dollar amount (defaulted from what each contract has actually paid per
@@ -8,7 +10,14 @@
 const pad = (n) => String(n).padStart(2, "0");
 export const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-/** date → billed dollars, from invoice line items and ANMG duty days. */
+/**
+ * date → billed dollars, from invoice line items and ANMG duty days, PLUS —
+ * for time/stipend contracts — whatever the invoice engine would currently
+ * bill for logged-but-not-yet-invoiced work. A day-rate contract's actual
+ * still waits on its duty day / invoice (that engine is a separate one, see
+ * DutyLog); a stipend/hourly day is real the moment it's logged, so once it
+ * has passed it should read as billed even before an invoice goes out.
+ */
 export function actualByDate(data) {
   const map = {};
   for (const inv of data.invoices || []) {
@@ -27,6 +36,20 @@ export function actualByDate(data) {
     // counting them again doubled ANMG's July.
     if (d.invoiceId) continue;
     if (d.date && parseFloat(d.amount) > 0) map[d.date] = (map[d.date] || 0) + parseFloat(d.amount);
+  }
+  const workLog = data.workLog || [];
+  for (const c of data.locumContracts || []) {
+    if (c.payModel === "daily") continue; // day-rate money lives in duty days, not here
+    const all = workLog.filter(e => e.contractId === c.id);
+    const unbilled = all.filter(e => !e.invoiceId);
+    // Same call the invoice button makes (list = what's still unbilled,
+    // allList = full history for the allowance math) — so this can never
+    // show a number the real invoice wouldn't also produce.
+    const { lines } = computeBilling(c, unbilled, true, all, data.invoices || []);
+    for (const l of lines) {
+      if (l.amount == null || !l.date) continue;
+      map[l.date] = (map[l.date] || 0) + l.amount;
+    }
   }
   return map;
 }
