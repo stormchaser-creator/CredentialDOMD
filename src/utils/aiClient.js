@@ -424,7 +424,7 @@ function syntheticResponse(status, proxyError) {
 
 /**
  * POST a Gemini request.
- *   path   — "models/gemini-2.5-flash:generateContent" (no leading slash)
+ *   path   — "models/gemini-3.8-flash:generateContent" (no leading slash)
  *   body   — the Gemini request JSON (object; stringified here)
  *   apiKey — the user's own key, or falsy to use the shared key via the proxy
  *   opts   — { signal } for AbortController

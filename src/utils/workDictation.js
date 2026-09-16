@@ -1,3 +1,4 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 /**
  * Voice → structured work entry. The physician says what happened
  * ("took a transfer call at eight oh eight last night about a head bleed,
@@ -8,7 +9,6 @@
 
 import { geminiCall, proxyErrorMessage } from "./aiClient";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
 
 const PROMPT = (transcript, todayISO, workTypes) => `You convert a physician's spoken description of
 locum work into ONE JSON object for a time-log entry. Respond with JSON only, no fences.
@@ -54,7 +54,7 @@ export async function parseWorkDictation(transcript, apiKey, workTypes) {
   const todayISO = new Date().toISOString().slice(0, 10);
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     contents: [{ role: "user", parts: [{ text: PROMPT(transcript, todayISO, workTypes) }] }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
   if (!response.ok) {
     const why = proxyErrorMessage(response);
@@ -62,7 +62,7 @@ export async function parseWorkDictation(transcript, apiKey, workTypes) {
     throw new Error(`Couldn't reach the AI (error ${response.status}) — the words were kept, check your connection and try again.`);
   }
   const json = await response.json();
-  let raw = json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
+  let raw = geminiResponseText(json);
   raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
   const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
   return {

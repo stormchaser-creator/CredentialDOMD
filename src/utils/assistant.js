@@ -1,3 +1,4 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 import { complianceFor, findStateLicense } from "./compliance";
 import { RENEWAL_INFO } from "../constants/renewalInfo";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
@@ -16,16 +17,8 @@ import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, 
  *     {label: value} on the record, so no information is ever dropped.
  */
 
-// Vera thinks on Pro — same free AI Studio key, better judgment. The free
-// tier caps Pro at far fewer requests/day than Flash, so when Pro's limit
-// runs dry (429) the turn silently falls back to Flash instead of erroring.
-// Pro requires a thinking budget (0 is rejected); Flash runs without one.
-// responseMimeType forces syntactically-valid JSON at the API level — Gemini
-// kept drifting into prose ("here is the card, tap Approve") with no card.
-const CHAT_MODELS = [
-  { model: "gemini-2.5-pro", generationConfig: { maxOutputTokens: 8192, responseMimeType: "application/json" } },
-  { model: "gemini-2.5-flash", generationConfig: { maxOutputTokens: 8192, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } } },
-];
+// Gemini Flash supplies the Gemini route and the fallback from Anthropic.
+// JSON mode keeps proposed actions in the app's existing approval contract.
 
 // The app's vetted CME directory (links re-checked by the app) — the ONLY
 // sources the assistant may recommend. An AI's remembered links go stale;
@@ -397,10 +390,9 @@ function parseAssistantJson(raw) {
  * One assistant turn. history = [{role:"user"|"model", text}], newest last
  * (the last item is the pending user message). attachment (optional) =
  * { dataUrl } for images/PDFs or { text, name } for extracted office text.
- * Vera thinks on Claude Opus whenever an Opus route exists: the user's own
- * Anthropic key first, else the shared key via ai-proxy (so every active
- * account gets Opus with nothing pasted). Otherwise she runs on Gemini: the
- * user's own key when they have one, else the shared Gemini key.
+ * Vera uses Gemini by default and Claude Opus when selected in Settings.
+ * Either provider uses the user's own key when present, else its shared key
+ * through ai-proxy. An unavailable Opus route falls back to Gemini.
  * Pass `settings` (the whole settings object) or the loose apiKey /
  * anthropicKey pair; both shapes route the same way.
  */
@@ -408,9 +400,8 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
   const s = settings || { apiKey, anthropicApiKey: anthropicKey };
   const ownOpusKey = !!s.anthropicApiKey;
   let note = null; // one line atop the reply when Gemini took a turn meant for Opus
-  // Gemini answers by default: it is roughly 25x cheaper per turn and the
-  // difference does not show in a records question. Opus is opt-in per
-  // account (settings.assistantModel === "opus"), and an attachment Claude
+  // Gemini answers by default to keep routine records questions economical.
+  // Opus is opt-in per account (settings.assistantModel === "opus"). An attachment Claude
   // cannot read falls through to Gemini either way.
   const wantsOpus = s.assistantModel === "opus";
   if (wantsOpus && anthropicAvailable(s) && claudeCanRead(attachment)) {
@@ -547,23 +538,20 @@ async function geminiTurn({ history, snapshot, apiKey, attachment }) {
     return { role: m.role === "model" ? "model" : "user", parts };
   });
 
-  const bodyFor = (tier) => ({
+  const body = {
     systemInstruction: { parts: [{ text: SYSTEM(snapshot) }] },
     contents,
-    generationConfig: tier.generationConfig,
-  });
+    generationConfig: geminiJsonConfig(8192),
+  };
   // Phones drop requests mid-flight (weak signal, screen lock, guest Wi-Fi
   // that blocks AI endpoints) — retry the network hop before giving up, and
   // abort any attempt that silently stalls so the chat never locks up.
-  // A Pro rate-limit or server error demotes to Flash rather than failing.
   let response;
-  let tierIdx = 0;
   for (let attempt = 0; ; attempt++) {
-    const tier = CHAT_MODELS[tierIdx];
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 45000);
     try {
-      response = await geminiCall(`models/${tier.model}:generateContent`, bodyFor(tier), apiKey, { signal: ctrl.signal });
+      response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, body, apiKey, { signal: ctrl.signal });
     } catch {
       if (attempt >= 2) throw new Error(NETWORK_MSG);
       await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
@@ -571,13 +559,8 @@ async function geminiTurn({ history, snapshot, apiKey, attachment }) {
     } finally {
       clearTimeout(timer);
     }
-    // A proxy refusal (daily quota, beta gate, key not configured) is final:
-    // no point demoting to Flash, the answer would be the same.
-    if (response.proxyError) break;
-    if (!response.ok && tierIdx < CHAT_MODELS.length - 1 && (response.status === 429 || response.status >= 500 || response.status === 404)) {
-      tierIdx += 1; // Pro exhausted or unavailable on this key — Flash takes the turn
-      continue;
-    }
+    // A provider or proxy refusal is returned to the caller without a second
+    // paid request. Network failures above keep their bounded retry policy.
     break;
   }
   if (!response.ok) {
@@ -589,7 +572,7 @@ async function geminiTurn({ history, snapshot, apiKey, attachment }) {
   let json;
   try { json = await response.json(); }
   catch { throw new Error(NETWORK_MSG); }
-  return parseAssistantJson(json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "");
+  return parseAssistantJson(geminiResponseText(json));
 }
 
 /**

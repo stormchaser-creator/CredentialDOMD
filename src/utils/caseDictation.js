@@ -1,3 +1,4 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 /**
  * Voice → a surgical case-log draft. The surgeon says what they did
  * ("right craniotomy for SDH evacuation today at Eisenhower, primary
@@ -8,7 +9,6 @@
 import { CONSTRUCT_RULES } from "../constants/cptConstructs.js";
 import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor } from "./aiClient.js";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
 const OPUS_MODEL = "claude-opus-5";
 const OPUS_JSON_ONLY = "Reply with the JSON object only: no prose before or after it, no markdown fences, no internal or system XML tags. The first character of your reply is { and the last is }.";
 
@@ -112,11 +112,11 @@ export async function parseCaseDictation(transcript, apiKeyOrSettings, categorie
   };
 }
 
-// The Gemini request, unchanged from the day it shipped.
+// The Gemini path shares the same rules and review step.
 async function withGemini(prompt, apiKey) {
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
   if (!response.ok) {
     const why = proxyErrorMessage(response);
@@ -124,7 +124,7 @@ async function withGemini(prompt, apiKey) {
     throw new Error(`Couldn't reach the AI (error ${response.status}). The words were kept, try again.`);
   }
   const json = await response.json();
-  return json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "";
+  return geminiResponseText(json);
 }
 
 // Same rules on Claude Opus (own key or the shared key via ai-proxy), with

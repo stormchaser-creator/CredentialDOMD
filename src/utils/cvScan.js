@@ -1,3 +1,4 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 // Reading a CV with the AI reader.
 //
 // The network half of the CV import; src/utils/cvImport.js is the pure half
@@ -16,7 +17,6 @@ import {
   EDUCATION_TYPES, WORK_HISTORY_TYPES, PRIVILEGE_TYPES, getLicenseTypes,
 } from "../constants/credentialTypes.js";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
 
 // A sixty-publication academic CV runs past 8192 output tokens and the JSON
 // comes back truncated, which surfaces as a bare SyntaxError from JSON.parse.
@@ -88,7 +88,7 @@ RULES, all of them hard:
 const USER_LINE = "Read this curriculum vitae. Return only the JSON object.";
 
 function parseReply(json) {
-  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const text = geminiResponseText(json);
   const stripped = text.replace(/```json|```/g, "").trim();
   if (!stripped) throw new Error("The AI reader returned nothing for this CV.");
   let parsed;
@@ -109,11 +109,7 @@ async function run(parts, degreeType, apiKey) {
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     systemInstruction: { parts: [{ text: CV_PROMPT(degreeType) }] },
     contents: [{ parts }],
-    generationConfig: {
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
-      thinkingConfig: { thinkingBudget: 0 },
-      responseMimeType: "application/json",
-    },
+    generationConfig: geminiJsonConfig(MAX_OUTPUT_TOKENS),
   }, apiKey);
   if (!response.ok) handleApiError(response);
   return parseReply(await response.json());

@@ -201,6 +201,8 @@ function parseUpstream(text: string, contentType: string): unknown {
 }
 
 serve(async (req) => {
+  // Price calls using their start date, including calls across a rate change.
+  const requestStartedAt = new Date();
   const isAnthropic = new URL(req.url).pathname.endsWith("/v1/messages");
 
   if (req.method === "OPTIONS") {
@@ -338,7 +340,7 @@ serve(async (req) => {
     // comes from the buffered response (streaming is refused above).
     await logUsage({
       path: ANTHROPIC_USAGE_PATH, ok: upstreamOk, status: upstreamStatus, prompt_chars: chars, provider: "anthropic",
-      ...meterUsage("anthropic", body.model, parseUpstream(upstreamText, upstreamType)),
+      ...meterUsage("anthropic", body.model, parseUpstream(upstreamText, upstreamType), requestStartedAt),
     });
 
     // Anthropic's own status and body, verbatim (the shared key never appears in either).
@@ -415,7 +417,7 @@ serve(async (req) => {
   // usageMetadata (a countTokens reply has none: tokens and cost stay null).
   await logUsage({
     path, ok: upstreamOk, status: upstreamStatus, prompt_chars: chars, provider: "gemini",
-    ...meterUsage("gemini", requestModel, parseUpstream(upstreamText, upstreamType)),
+    ...meterUsage("gemini", requestModel, parseUpstream(upstreamText, upstreamType), requestStartedAt),
   });
 
   // Google's own status and body, verbatim (the shared key never appears in either).

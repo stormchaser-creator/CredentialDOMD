@@ -1,3 +1,4 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 /**
  * CME transcript import: turn a CE Broker CE Report PDF, an ACCME PARS
  * learner file, a generic CSV/XLSX, or pasted text into review-ready CME
@@ -1403,7 +1404,6 @@ export async function readImportFile(file) {
   return { kind: "text", text };
 }
 
-const GEMINI_MODEL = "gemini-2.5-flash";
 
 const TRANSCRIPT_PROMPT = (deg) => `You read continuing medical education transcripts and course histories for a physician (${deg === "DO" ? "DO" : "MD"}). Return ONLY a JSON array, no markdown. One object per completed activity:
 {"date":"YYYY-MM-DD","title":"...","provider":"...","hours":number,"creditType":"...","subjects":"...","certificateNumber":"..."}
@@ -1424,7 +1424,7 @@ export async function structureTranscriptWithAI({ text, pdfDataUrl }, deg, apiKe
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     systemInstruction: { parts: [{ text: TRANSCRIPT_PROMPT(deg) }] },
     contents: [{ parts }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 }, responseMimeType: "application/json" },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
   if (!response.ok) {
     const why = proxyErrorMessage(response);
@@ -1434,7 +1434,7 @@ export async function structureTranscriptWithAI({ text, pdfDataUrl }, deg, apiKe
     throw new Error("The AI service could not read this transcript.");
   }
   const json = await response.json();
-  const raw = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const raw = geminiResponseText(json);
   return rowsFromAI(raw, deg, requiredTopics);
 }
 

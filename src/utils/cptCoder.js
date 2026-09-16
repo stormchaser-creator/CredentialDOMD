@@ -1,3 +1,4 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 import { CPT_BY_CODE } from "../constants/cpt/index.js";
 import { loadFullCatalog } from "./cptCatalog.js";
 import { candidateCodes, candidateBlock } from "./cptCandidates.js";
@@ -20,13 +21,11 @@ export { normalizeDictation, parseDictatedDate, normalizeCode, postProcess, BUND
  *     catalog as a cached system block; counts toward the Opus daily limit.
  *     When it is not reachable (not enabled, quota, key rejected, network),
  *     Gemini codes the case and a question line says so.
- *   gemini: the path that shipped first; fast, included, byte-for-byte the
- *     same request as before. Also the fallback for every Opus failure.
+ *   gemini: Gemini Flash; fast and included. Also the fallback for every Opus failure.
  * Both feed the SAME postProcess(), so the bundling and the questions are
  * model-agnostic.
  */
 
-const GEMINI_MODEL = "gemini-2.5-flash";
 const OPUS_MODEL = "claude-opus-5";
 
 export const CODER_MODELS = [
@@ -122,25 +121,14 @@ export async function codeFromText(text, apiKeyOrSettings) {
   return finish(await codeWithGemini(text, settings.apiKey, extras), text, catalog);
 }
 
-// The Gemini request, unchanged from the day it shipped: the same body, the
-// same generationConfig, the same parse.
+// Both providers use the same rulebook, catalog and validation pass.
 async function codeWithGemini(text, apiKey, extras = "") {
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     systemInstruction: { parts: [{ text: CODER_RULES + buildCatalog() }] },
     contents: [{ parts: [{ text: userPrompt(text, extras) }] }],
-    // Determinism. The same dictation must produce the same codes on every
-    // run: the reproduction (5 harness runs per input) showed the cranioplasty
-    // code flipping 62140/62141 between runs on a size the dictation never
-    // gave. temperature 0 makes decoding greedy; responseMimeType forces
-    // syntactically valid JSON at the API level (already used by assistant.js
-    // and cmeImport.js through the same proxy); thinkingBudget 0 keeps the
-    // flash model from spending tokens on a hidden chain that varies per run.
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: 4096,
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 0 },
-    },
+    // Omit deprecated sampling controls. The deterministic validation below
+    // still checks the catalog, bundling and add-on requirements.
+    generationConfig: geminiJsonConfig(4096),
   }, apiKey);
   if (!response.ok) {
     const why = proxyErrorMessage(response);
@@ -149,7 +137,7 @@ async function codeWithGemini(text, apiKey, extras = "") {
     throw new Error(`AI request failed (${response.status}).`);
   }
   const json = await response.json();
-  return parseCoderJson(json?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "");
+  return parseCoderJson(geminiResponseText(json));
 }
 
 // Same rulebook, same catalog, same user message; only the model differs.

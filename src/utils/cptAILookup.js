@@ -1,10 +1,8 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 // CPT Code AI-Assisted Lookup via Gemini API (own key or the shared key via ai-proxy)
 
 import { geminiCall, proxyErrorMessage } from "./aiClient";
 
-// gemini-2.0-flash was shut down 2026-06-01; every lookup on it failed and still
-// spent a cap unit. Same request shape on 2.5 Flash.
-const GEMINI_MODEL = "gemini-2.5-flash";
 
 const SYSTEM_PROMPT = `You are a CPT code lookup assistant for physicians. Given a procedure description, return the most relevant CPT codes. Return ONLY valid JSON (no markdown, no backticks, no explanation outside the JSON).
 
@@ -29,7 +27,7 @@ export async function aiCPTLookup(query, nearbyMatches, apiKey) {
     contents: [{
       parts: [{ text: `Find CPT codes for this procedure: "${query}"${nearbyContext}` }],
     }],
-    generationConfig: { maxOutputTokens: 1000 },
+    generationConfig: geminiJsonConfig(1000),
   }, apiKey);
 
   if (!response.ok) {
@@ -44,7 +42,7 @@ export async function aiCPTLookup(query, nearbyMatches, apiKey) {
   }
 
   const json = await response.json();
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const text = geminiResponseText(json);
 
   // Clean any markdown wrapping
   const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();

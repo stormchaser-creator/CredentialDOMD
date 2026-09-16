@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import {
-  AI_PRICES, priceFor, normalizeModel, costUsd, roundUsd, anthropicUsage, geminiUsage, meterUsage,
+  AI_PRICES, AI_PRICE_CHANGES, priceFor, normalizeModel, costUsd, roundUsd, anthropicUsage, geminiUsage, meterUsage,
 } from "../supabase/functions/_shared/aiPricing.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -24,11 +24,15 @@ const close = (name, got, want) => ok(name, typeof got === "number" && Math.abs(
 
 // ── The table and its JSON mirror agree, and carry the plan's list prices ────
 eq("mirror matches the TS table", mirror.prices, AI_PRICES);
+eq("mirror matches the dated price changes", mirror.priceChanges, AI_PRICE_CHANGES);
 eq("Opus 5 list price", AI_PRICES["claude-opus-5"], { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 });
 eq("Sonnet 5 list price", AI_PRICES["claude-sonnet-5"], { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 });
 eq("Gemini 2.5 Flash list price", AI_PRICES["gemini-2.5-flash"], { input: 0.3, output: 2.5, cacheRead: 0.03 });
 eq("Gemini 2.5 Pro list price", AI_PRICES["gemini-2.5-pro"], { input: 1.25, output: 10 });
+eq("Gemini 3.8 Flash introductory price", AI_PRICES["gemini-3.8-flash"], { input: 0.75, output: 3.75, cacheRead: 0.075 });
 ok("every price is a positive finite number", Object.values(AI_PRICES).every(p => Object.values(p).every(v => Number.isFinite(v) && v > 0)));
+ok("dated changes have valid dates and positive prices", Object.values(AI_PRICE_CHANGES).every(changes => changes.every(c =>
+  Number.isFinite(Date.parse(c.effectiveAt)) && Object.values(c.price).every(v => Number.isFinite(v) && v > 0))));
 
 // ── Model matching: exact, dated/preview variants, never a different product ─
 eq("exact opus", priceFor("claude-opus-5")?.key, "claude-opus-5");
@@ -45,6 +49,24 @@ eq("empty model", priceFor(""), null);
 eq("non-string model", priceFor(42), null);
 eq("normalizeModel strips prefix and space", normalizeModel("  models/gemini-2.5-flash "), "gemini-2.5-flash");
 
+// ── Announced 3.8 price change: request-time UTC boundary, including cache ──
+const promoDate = new Date("2026-12-31T23:59:59.999Z");
+const fullPriceDate = new Date("2027-01-01T00:00:00.000Z");
+const promoPrice = { input: 0.75, output: 3.75, cacheRead: 0.075 };
+const fullPrice = { input: 1.5, output: 7.5, cacheRead: 0.15 };
+eq("3.8 introductory price through last millisecond of December", priceFor("gemini-3.8-flash", promoDate)?.price, promoPrice);
+eq("3.8 January increase starts at midnight UTC", priceFor("gemini-3.8-flash", fullPriceDate)?.price, fullPrice);
+eq("3.8 January price remains in effect", priceFor("gemini-3.8-flash", new Date("2028-03-01T12:00:00Z"))?.price, fullPrice);
+eq("3.8 default date uses current price", priceFor("gemini-3.8-flash")?.price, new Date() < fullPriceDate ? promoPrice : fullPrice);
+eq("3.8 dated response model keeps request date's price", priceFor("models/gemini-3.8-flash-20260902", fullPriceDate), { key: "gemini-3.8-flash", price: fullPrice });
+eq("3.8 numbered version is metered", priceFor("gemini-3.8-flash-001", promoDate), { key: "gemini-3.8-flash", price: promoPrice });
+eq("3.8 preview version is metered", priceFor("gemini-3.8-flash-preview-09-02", promoDate)?.price, promoPrice);
+eq("3.8 Vertex version is metered", priceFor("gemini-3.8-flash@20260902", fullPriceDate)?.price, fullPrice);
+eq("3.8 image product is not standard Flash", priceFor("gemini-3.8-flash-image", promoDate), null);
+eq("3.8 lite product is not standard Flash", priceFor("gemini-3.8-flash-lite", promoDate), null);
+eq("invalid request date cannot silently use a guessed price", priceFor("gemini-3.8-flash", new Date("invalid")), null);
+eq("older Flash price does not change in January", priceFor("gemini-2.5-flash", fullPriceDate)?.price, AI_PRICES["gemini-2.5-flash"]);
+
 // ── Arithmetic ───────────────────────────────────────────────────────────────
 const U = (o) => ({ input: null, output: null, cacheRead: null, cacheWrite: null, thinking: null, ...o });
 close("a million uncached Opus input tokens is $5", costUsd("claude-opus-5", U({ input: 1_000_000 })), 5);
@@ -60,6 +82,9 @@ close("Gemini flash scan: text + image prompt, short reply", costUsd("gemini-2.5
 close("Gemini thinking bills at the output price", costUsd("gemini-2.5-flash", U({ input: 1000, output: 100, thinking: 900 })), roundUsd(0.0003 + 0.00025 + 0.00225));
 close("Gemini cached input at 0.03", costUsd("gemini-2.5-flash", U({ input: 2000, cacheRead: 8000, output: 0 })), roundUsd(0.0006 + 0.00024));
 close("Gemini Pro cached tokens bill at the input price (no cache price listed)", costUsd("gemini-2.5-pro", U({ input: 0, cacheRead: 1_000_000 })), 1.25);
+close("3.8 introductory uncached input, cache read, output and thinking", costUsd("gemini-3.8-flash", U({ input: 1_000_000, cacheRead: 1_000_000, output: 1_000_000, thinking: 1_000_000 }), promoDate), 8.325);
+close("3.8 January doubles all generation rates", costUsd("gemini-3.8-flash", U({ input: 1_000_000, cacheRead: 1_000_000, output: 1_000_000, thinking: 1_000_000 }), fullPriceDate), 16.65);
+close("3.8 has no listed long-context price tier", costUsd("gemini-3.8-flash", U({ input: 300_000, output: 100 }), promoDate), 0.225375);
 eq("unknown model gives null, never a guess", costUsd("gemini-2.0-flash", U({ input: 5000, output: 500 })), null);
 eq("no token counts at all gives null", costUsd("claude-opus-5", U({})), null);
 close("zero tokens is zero dollars, not null", costUsd("claude-opus-5", U({ input: 0, output: 0 })), 0);
@@ -112,6 +137,26 @@ eq("response model wins over the request model for pricing", meterUsage("anthrop
 eq("unknown responding model: tokens kept, cost null", meterUsage("gemini", "gemini-2.5-flash", { ...geminiBody, modelVersion: "gemini-2.5-flash-lite" }), {
   model: "gemini-2.5-flash-lite", input_tokens: 2000, output_tokens: 420, cache_read_tokens: 8000, cache_write_tokens: null, thinking_tokens: 310, cost_usd: null,
 });
+const gemini38Body = { ...geminiBody, modelVersion: "gemini-3.8-flash-001" };
+eq("3.8 metering subtracts cache from prompt and bills separate thinking once", meterUsage("gemini", "gemini-3.8-flash", gemini38Body, promoDate), {
+  model: "gemini-3.8-flash-001", input_tokens: 2000, output_tokens: 420, cache_read_tokens: 8000, cache_write_tokens: null, thinking_tokens: 310,
+  cost_usd: roundUsd(2000 * 0.75e-6 + 8000 * 0.075e-6 + (420 + 310) * 3.75e-6),
+});
+eq("3.8 metering forwards January request date", meterUsage("gemini", "gemini-3.8-flash", gemini38Body, fullPriceDate).cost_usd,
+  roundUsd(2000 * 1.5e-6 + 8000 * 0.15e-6 + (420 + 310) * 7.5e-6));
+eq("3.8 responding model controls price over old requested model", meterUsage("gemini", "gemini-2.5-flash", gemini38Body, promoDate).cost_usd,
+  meterUsage("gemini", "gemini-3.8-flash", gemini38Body, promoDate).cost_usd);
+eq("3.8 request model supplies price if response omits version", meterUsage("gemini", "models/gemini-3.8-flash", { ...gemini38Body, modelVersion: undefined }, fullPriceDate).cost_usd,
+  meterUsage("gemini", "gemini-3.8-flash", gemini38Body, fullPriceDate).cost_usd);
+eq("3.8 error with no usage does not invent a charge", meterUsage("gemini", "gemini-3.8-flash", { error: { code: 503 } }, promoDate).cost_usd, null);
+const multimodal38 = {
+  modelVersion: "gemini-3.8-flash",
+  usageMetadata: {
+    promptTokenCount: 10000, candidatesTokenCount: 100, thoughtsTokenCount: 100,
+    promptTokensDetails: [{ modality: "TEXT", tokenCount: 5000 }, { modality: "IMAGE", tokenCount: 4000 }, { modality: "AUDIO", tokenCount: 1000 }],
+  },
+};
+eq("3.8 modality details do not double count aggregate prompt tokens", meterUsage("gemini", "gemini-3.8-flash", multimodal38, promoDate).cost_usd, 0.00825);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

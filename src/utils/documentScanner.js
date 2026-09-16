@@ -1,3 +1,4 @@
+import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 // Document analysis via Gemini API.
 // Every call goes through geminiCall(): the user's own key (device-local)
 // talks to Gemini directly; without one the request rides the shared key
@@ -9,7 +10,6 @@ import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, normalizeReceipt } from "./receip
 
 const MAX_IMAGE_BYTES = 4.5 * 1024 * 1024; // 4.5 MB
 const MAX_DIMENSION = 2048;
-const GEMINI_MODEL = "gemini-2.5-flash";
 
 function isValidDataUrl(url) {
   return typeof url === "string" && url.startsWith("data:") && url.includes(",");
@@ -90,7 +90,7 @@ export function compressImage(dataUrl) {
 }
 
 function parseResponse(data) {
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const text = geminiResponseText(data);
   const clean = text.replace(/```json|```/g, "").trim();
   return JSON.parse(clean);
 }
@@ -174,7 +174,7 @@ export async function analyzeDocument(imageData, degreeType, apiKey) {
         { text: "Analyze this document (a medical credential or an expense receipt). Return only JSON." },
       ],
     }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
 
   if (!response.ok) handleApiError(response);
@@ -206,7 +206,7 @@ export async function analyzePDF(pdfData, degreeType, apiKey) {
         { text: `Analyze this document (a medical credential or an expense receipt)${degreeType ? ` for a ${degreeType}` : ""}. Return ONLY JSON.` },
       ],
     }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
 
   if (!response.ok) handleApiError(response);
@@ -237,7 +237,7 @@ export async function analyzeDocText(text, degreeType, apiKey) {
         { text: "Analyze this document (a medical credential or an expense receipt). Return only JSON." },
       ],
     }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
 
   if (!response.ok) handleApiError(response);
@@ -333,7 +333,7 @@ export async function analyzeAgreementText(text, apiKey) {
         { text: "Extract the locum agreement terms. Return only JSON." },
       ],
     }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
 
   if (!response.ok) handleApiError(response);
@@ -366,7 +366,7 @@ export async function analyzeAgreement(dataUrl, apiKey) {
         { text: "Extract the locum agreement terms. Return only JSON." },
       ],
     }],
-    generationConfig: { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(8192),
   }, apiKey);
 
   if (!response.ok) handleApiError(response);
@@ -406,7 +406,7 @@ export async function analyzeStatement(dataUrl, apiKey) {
         { text: "Extract all transactions. Return only JSON." },
       ],
     }],
-    generationConfig: { maxOutputTokens: 16384, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(16384),
   }, apiKey);
   if (!response.ok) handleApiError(response);
   const json = await response.json();
@@ -424,7 +424,7 @@ export async function categorizeStatementRows(rows, categories, apiKey) {
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
     systemInstruction: { parts: [{ text: `You categorize a physician's business credit-card charges for Schedule C tax prep. Allowed categories (use EXACTLY these strings):\n${categories.map(c => `- ${c}`).join("\n")}\nReturn ONLY JSON: {"rows":[{"i":<index>,"category":"<exact category>"}]} — one entry per input row. Hotels/lodging → lodging; airlines → airfare; restaurants/coffee/delivery → the meals category; medical boards and state agencies → licensing; software subscriptions → SaaS. When genuinely unknowable from the merchant name, use "Other deductible expense".` }] },
     contents: [{ parts: [{ text: `index|merchant|amount\n${listing}` }, { text: "Categorize every row. Return only JSON." }] }],
-    generationConfig: { maxOutputTokens: 16384, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: geminiJsonConfig(16384),
   }, apiKey);
   if (!response.ok) handleApiError(response);
   const json = await response.json();
