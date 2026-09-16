@@ -93,6 +93,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [replyAttachment, setReplyAttachment] = useState([]); // [{ data: dataURL, name }]
   const [replying, setReplying] = useState(false);
   const [replyMsg, setReplyMsg] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [resolving, setResolving] = useState(false);
 
   useEffect(() => { if (open) setTab(initialTab); }, [open, initialTab]);
@@ -108,7 +109,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       if (!profile) { setTickets([]); return; }
       const { data: rows, error: e1 } = await supabase
         .from("support_tickets")
-        .select("id, subject, body, status, created_at, updated_at, context_payload")
+        .select("id, subject, body, status, created_at, updated_at, archived_at, context_payload")
         .eq("user_id", profile.id)
         .order("updated_at", { ascending: false })
         .limit(100);
@@ -198,17 +199,23 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
 
   // Owner can close out their own ticket once it's actually solved. RLS lets
   // the owner UPDATE their own support_tickets row (tickets_owner_or_admin_update),
-  // so this is a direct client update, no edge function needed.
+  // so this is a direct client update, no edge function needed. Resolving also
+  // archives it: it drops off the main list for both the owner and admin, and
+  // moves to the Archived view on each side. Replying to it later still works
+  // fine from that view -- archiving is a visibility flag, not a lock.
   const markResolved = async () => {
     if (!openTicket) return;
     if (!window.confirm("Mark this ticket resolved? You can still reply later if it comes back.")) return;
     setResolving(true); setReplyMsg("");
     try {
       const { error } = await supabase.from("support_tickets")
-        .update({ status: "resolved", resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .update({
+          status: "resolved", resolved_at: new Date().toISOString(),
+          archived_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        })
         .eq("id", openTicket.id);
       if (error) throw error;
-      setOpenTicket((t) => (t ? { ...t, status: "resolved" } : t));
+      setOpenTicket((t) => (t ? { ...t, status: "resolved", archived_at: new Date().toISOString() } : t));
       loadTickets();
     } catch (e) {
       setReplyMsg(e.message || "Could not mark this resolved.");
@@ -222,6 +229,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     setDone(false); setError("");
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
     setAttachment([]); setReplyAttachment([]); setAttachmentUrls([]); setReplyUrls({});
+    setShowArchived(false);
   }, []);
 
   const close = useCallback(() => { onClose(); reset(); }, [onClose, reset]);
@@ -374,21 +382,38 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     </>
   );
 
-  const renderTicketList = () => (
+  const renderTicketList = () => {
+    const activeTickets = tickets.filter((t) => !t.archived_at);
+    const archivedTickets = tickets.filter((t) => t.archived_at);
+    const shownTickets = showArchived ? archivedTickets : activeTickets;
+    return (
     <>
-      <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800, color: T.text }}>Your tickets</h2>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+        <h2 style={{ margin: "0 0 4px", flex: 1, fontSize: 18, fontWeight: 800, color: T.text }}>
+          {showArchived ? "Archived tickets" : "Your tickets"}
+        </h2>
+        {archivedTickets.length > 0 && (
+          <button onClick={() => setShowArchived((a) => !a)} style={{
+            padding: "5px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
+            backgroundColor: showArchived ? T.card : "transparent", color: showArchived ? T.text : T.textMuted,
+            fontSize: 11.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+          }}>{showArchived ? "Back to active" : `Archived (${archivedTickets.length})`}</button>
+        )}
+      </div>
       <p style={{ margin: "0 0 14px", fontSize: 13, color: T.textMuted }}>
-        Everything you have sent, with Eric's replies. New replies also land in your email.
+        {showArchived
+          ? "Resolved tickets you closed out. Still open for a reply if it comes back."
+          : "Everything you have sent, with Eric's replies. New replies also land in your email."}
       </p>
       {ticketsLoading && <div style={{ fontSize: 13, color: T.textMuted, padding: "12px 0" }}>Loading...</div>}
       {ticketsError && <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600, padding: "8px 0" }}>{ticketsError}</div>}
-      {!ticketsLoading && !ticketsError && tickets.length === 0 && (
+      {!ticketsLoading && !ticketsError && shownTickets.length === 0 && (
         <div style={{ fontSize: 13, color: T.textMuted, padding: "16px 0", textAlign: "center" }}>
-          No tickets yet. Anything you send from New ticket shows up here.
+          {showArchived ? "No archived tickets." : "No tickets yet. Anything you send from New ticket shows up here."}
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {tickets.map((t) => (
+        {shownTickets.map((t) => (
           <button key={t.id} onClick={() => openThread(t)} style={{
             textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: "pointer",
             backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text,
@@ -418,7 +443,8 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
       }}>Done</button>
     </>
-  );
+    );
+  };
 
   // A reply can be text, a screenshot, or both.
   const canSend = !replying && (reply.trim().length > 0 || replyAttachment.length > 0);
