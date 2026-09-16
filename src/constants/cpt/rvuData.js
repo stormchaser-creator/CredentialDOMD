@@ -147,6 +147,8 @@ export const RVU_DATA = {
   "27236": { wRVU: 17.17, totalRVU: 32.63, totalFacilityRVU: 32.63, status: "A", global: "090", desc: "Treat thigh fracture" },
   "27244": { wRVU: 17.73, totalRVU: 33.57, totalFacilityRVU: 33.57, status: "A", global: "090", desc: "Treat thigh fracture" },
   "27245": { wRVU: 17.73, totalRVU: 33.48, totalFacilityRVU: 33.48, status: "A", global: "090", desc: "Treat thigh fracture" },
+  "27279": { wRVU: 11.83, totalRVU: 22.71, totalFacilityRVU: 22.71, status: "A", global: "090", desc: "Arthrd si jt plmt tartclr dv" },
+  "27280": { wRVU: 19.5, totalRVU: 38.43, totalFacilityRVU: 38.43, status: "A", global: "090", desc: "Arthr si jt opn b1grf instrm" },
   "27447": { wRVU: 19.11, totalRVU: 34.71, totalFacilityRVU: 34.71, status: "A", global: "090", desc: "Total knee arthroplasty" },
   "27752": { wRVU: 6.11, totalRVU: 18.21, totalFacilityRVU: 14.99, status: "A", global: "090", desc: "Treatment of tibia fracture" },
   "29826": { wRVU: 2.93, totalRVU: 4.42, totalFacilityRVU: 4.42, status: "A", global: "ZZZ", desc: "Sho arthrs srg decompression" },

@@ -134,6 +134,13 @@ export const NEUROSURGERY_CODES = [
   { code: "22634", shortDesc: "Combined interbody + posterolateral each additional (TLIF add-on)", fullDesc: "Arthrodesis, combined posterior or posterolateral technique with posterior interbody; each additional interspace and segment, lumbar (add-on)", category: "Neurosurgery", subcategory: "Spinal Fusion - Lumbar", synonyms: ["additional TLIF level", "multi-level TLIF", "additional combined fusion level"], keywords: ["arthrodesis", "combined", "posterior", "interbody", "additional", "lumbar", "add-on", "TLIF"], relatedCodes: ["22633", "22614"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // SPINAL FUSION - SACROILIAC JOINT
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  { code: "27279", shortDesc: "SI joint arthrodesis, percutaneous, with image guidance", fullDesc: "Arthrodesis, sacroiliac joint, percutaneous or minimally invasive (indirect visualization), with image guidance, includes obtaining bone graft when performed, and placement of transfixing device", category: "Neurosurgery", subcategory: "Spinal Fusion - Sacroiliac Joint", synonyms: ["SI joint fusion", "sacroiliac joint fusion", "percutaneous SI joint fusion", "minimally invasive SI joint fusion", "SI joint arthrodesis", "iFuse", "sacroiliac fusion percutaneous", "SIJ fusion"], keywords: ["arthrodesis", "sacroiliac", "SI joint", "percutaneous", "minimally invasive", "image guidance", "transfixing device", "fusion"], relatedCodes: ["27280"] },
+  { code: "27280", shortDesc: "SI joint arthrodesis, open, with bone graft and instrumentation", fullDesc: "Arthrodesis, open, sacroiliac joint, including obtaining bone graft, including instrumentation, when performed", category: "Neurosurgery", subcategory: "Spinal Fusion - Sacroiliac Joint", synonyms: ["open SI joint fusion", "open sacroiliac joint fusion", "open sacroiliac arthrodesis", "SI joint fusion open approach"], keywords: ["arthrodesis", "open", "sacroiliac", "SI joint", "bone graft", "instrumentation", "fusion"], relatedCodes: ["27279"] },
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // SPINAL INSTRUMENTATION
   // ═══════════════════════════════════════════════════════════════════════════
 
