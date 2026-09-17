@@ -312,8 +312,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if ((end - start) < 120000 && !window.confirm(
       `Only ${Math.round((end - start) / 1000)} seconds on the clock — logging bills ${f.billed} min. Log it? (Cancel keeps the timer running.)`
     )) return;
+    const newId = generateId();
+    // The identifier note goes to this device, keyed to the entry — the
+    // synced row carries an empty string.
+    if (timer.privateNote?.trim()) setPrivate("workLog", newId, timer.privateNote);
     addItem("workLog", {
-      id: generateId(),
+      id: newId,
       createdAt: new Date().toISOString(),
       contractId: timer.contractId,
       type: timer.type,
