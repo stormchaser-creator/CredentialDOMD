@@ -2698,7 +2698,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       backgroundColor: T.bg, minHeight: "100vh", position: "relative",
     } : {
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      backgroundColor: T.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative",
+      backgroundColor: T.bg, height: "100vh", maxWidth: 480, margin: "0 auto", position: "relative",
+      // Phone content scrolls in its own div below, not the document. Keeping
+      // html/body from ever scrolling removes the rubber-band/momentum-scroll
+      // bounce that drags a `position: fixed` bottom bar along with it on iOS
+      // Safari — the two earlier fixes here (GPU-layer transform, then
+      // overscroll-behavior-y) only reduced that drift; this removes the
+      // document-level scroll that causes it.
+      overflow: "hidden",
     }}>
       <ShareModal open={!!shareItem} onClose={closeShare} item={shareItem} section={shareSection} linkedDocs={linkedDocs} onLogShare={logShare} />
       {/* Billing is cloud-only; in offline mode the context's checkout/manage
@@ -2716,7 +2723,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         />
       )}
 
-      {isDesktop ? <div className="cmd-content-area">{shellBody}</div> : shellBody}
+      {isDesktop
+        ? <div className="cmd-content-area">{shellBody}</div>
+        : <div style={{ height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>{shellBody}</div>}
 
       {/* ─── BOTTOM TAB BAR (phone only) ───────────────── */}
       {!isDesktop && <div style={{
