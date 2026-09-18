@@ -14,6 +14,9 @@ import StatusBadge from "./components/shared/StatusBadge";
 import ComplianceRing from "./components/shared/ComplianceRing";
 import { cat1BucketLabel } from "./constants/creditEquivalence";
 import { ShareModal } from "./components/features";
+import CredentialPortalLauncher from "./components/features/CredentialPortalModal.jsx";
+import ApplicationRecordsPaused from "./components/features/ApplicationRecordsPaused.jsx";
+import { PAUSED_APPLICATION_SECTIONS } from "./utils/pausedApplicationRecords.js";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
 import { CaseDictate } from "./components/features";
@@ -1947,6 +1950,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <div>
         <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Quick Share</h2>
         <p style={{ margin: "0 0 14px", fontSize: 14, color: T.textMuted }}>Search and send any credential.</p>
+        <CredentialPortalLauncher />
         <div style={{ position: "relative", marginBottom: 12 }}>
           <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.textDim }}><SearchIcon /></div>
           <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search credentials..." data-desk-search="" style={{
@@ -2030,6 +2034,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   ];
 
   const renderCredSection = (sub) => {
+    if (Object.hasOwn(PAUSED_APPLICATION_SECTIONS, sub)) {
+      return <ApplicationRecordsPaused section={sub} count={(data[sub] || []).length} theme={T} />;
+    }
     if (sub === "licenses") {
       return (<>
         {/* The registry lookup and import is one component now (NpiPanel);
@@ -2144,8 +2151,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Malpractice History" /></div>;
       return <CrudSection title="Malpractice History" sectionKey="malpracticeHistory" {...crudTarget("malpracticeHistory")} items={data.malpracticeHistory || []} {...crud("malpracticeHistory")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No malpractice claims" emptySub="Track malpractice claims for consistent disclosure across applications." fields={[{ key: "dateOfIncident", label: "Date of Incident", type: "date" }, { key: "dateFiled", label: "Date Filed", type: "date" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "outcome", label: "Outcome", type: "select", options: MALPRACTICE_OUTCOMES }, { key: "settlementAmount", label: "Settlement Amount" }, { key: "description", label: "Description", type: "textarea" }, { key: "facility", label: "Facility" }, { key: "insuranceCarrier", label: "Insurance Carrier" }, { key: "dateResolved", label: "Date Resolved", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
-    if (sub === "answerBank") return <CrudSection title="Answer Bank" sectionKey="answerBank" {...crudTarget("answerBank")} items={data.answerBank || []} {...crud("answerBank")} onShare={openShare} emptyIcon={"\ud83d\uddc2\ufe0f"} emptyTitle="No saved answers" emptySub="Store dated, reusable answers to credentialing questions \u2014 including explicit no-claims attestations \u2014 separate from your actual malpractice or licensure records." fields={[{ key: "question", label: "Question / Attestation", placeholder: "e.g. Have you ever had a malpractice claim filed against you?", required: true }, { key: "questionVersion", label: "Form / Version", placeholder: "e.g. AMA Uniform Application 2024" }, { key: "answer", label: "Answer", type: "select", options: ["Yes", "No", "Unknown", "Not applicable"], required: true }, { key: "scope", label: "Scope", type: "select", options: ["All practice", "Named employer/application"] }, { key: "scopeDetail", label: "Applies To", placeholder: "e.g. Baptist Health \u2014 planned position", show: (f) => f.scope === "Named employer/application" }, { key: "confirmationDate", label: "Confirmed / As-Of Date", type: "date", required: true }, { key: "source", label: "Source", placeholder: "e.g. Physician attestation, NPDB self-query" }, { key: "explanation", label: "Explanation", type: "textarea", show: (f) => f.answer === "Yes", hint: "Detail for a Yes answer \u2014 stored as the reusable explanation, not a new malpractice record." }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (sub === "identityVault") return <CrudSection title="Protected Identity" sectionKey="identityVault" {...crudTarget("identityVault")} items={data.identityVault || []} {...crud("identityVault")} onShare={openShare} emptyIcon={"\ud83d\udd12"} emptyTitle="No protected identity records" emptySub="Store legal name, full date of birth, and SSN for a specific application \u2014 encrypted, masked by default, and kept out of your CV and routine exports." fields={[{ key: "label", label: "Record Label", placeholder: "e.g. MedPro Liability Application 2026", required: true }, { key: "legalFirstName", label: "Legal First Name" }, { key: "legalMiddleName", label: "Legal Middle Name" }, { key: "legalLastName", label: "Legal Last Name" }, { key: "suffix", label: "Suffix", placeholder: "Jr., III, etc." }, { key: "fullDob", label: "Full Date of Birth", type: "secret", hint: "Encrypted with your lock code \u2014 separate from the birth month/day used for CME reporting in Settings. Enter it however you like, e.g. 1985-04-12." }, { key: "ssn", label: "Social Security Number", type: "secret", hint: "Encrypted with your lock code. Masked by default \u2014 tap Show to reveal, Copy to paste into an application." }, { key: "source", label: "Source", placeholder: "e.g. Signed 2023 credentialing packet" }, { key: "verifiedDate", label: "Verified Date", type: "date" }, { key: "notes", label: "Notes", type: "textarea", hint: "Plain text \u2014 do not put the SSN or DOB here, they belong in the encrypted fields above." }]} />;
 
   };
 

@@ -11,19 +11,23 @@ export async function packageSite(root, legacyDir) {
   if (!/<script\b[^>]*src=["']\/app\/assets\//.test(entryHtml)) {
     throw new Error('Build the app with --base=/app/ before packaging; refusing broken asset paths');
   }
-  for (const page of ['index', 'locums', 'security', 'privacy', 'terms']) {
+  for (const page of ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'credential-access']) {
     await access(resolve(root, `landing/${page}.html`));
   }
+  await access(resolve(root, 'scripts/root-sw-retirement.js'));
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   await cp(resolve(root, 'dist'), resolve(output, 'app'), { recursive: true });
+  // An old root registration only checks its original script URL for updates.
+  // Publish its retirement there while preserving the active /app/sw.js worker.
+  await cp(resolve(root, 'scripts/root-sw-retirement.js'), resolve(output, 'sw.js'));
   // Public root assets only. The app's service worker stays scoped to /app/.
   for (const entry of await readdir(resolve(root, 'public'), { withFileTypes: true })) {
     if (entry.isFile() && /\.(?:png|jpg|jpeg|svg|ico|txt|xml)$/.test(entry.name)) {
       await cp(resolve(root, 'public', entry.name), resolve(output, entry.name));
     }
   }
-  for (const page of ['index', 'locums', 'security', 'privacy', 'terms']) {
+  for (const page of ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'credential-access']) {
     const html = await readFile(resolve(root, `landing/${page}.html`), 'utf8');
     await writeFile(resolve(output, `${page}.html`), html);
     if (page !== 'index') {
@@ -31,6 +35,8 @@ export async function packageSite(root, legacyDir) {
       await writeFile(resolve(output, page, 'index.html'), html);
     }
   }
+  await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true });
+  await cp(resolve(root, 'public/knowledge'), resolve(output, 'knowledge'), { recursive: true });
   await mkdir(resolve(output, 'states'), { recursive: true });
   for (const name of await readdir(resolve(root, 'landing/states'))) {
     if (name.endsWith('.html')) await cp(resolve(root, 'landing/states', name), resolve(output, 'states', name));
@@ -54,7 +60,12 @@ export async function packageSite(root, legacyDir) {
   // Pages applies redirects even when a static file exists. A wildcard /app/*
   // rewrite would turn JS, sw.js and version.json into HTML and break the PWA.
   await writeFile(resolve(output, '_redirects'), '/app/privacy /privacy 302\n/app/terms /terms 302\n');
-  await writeFile(resolve(output, '_headers'), '/app/sw.js\n  Cache-Control: no-cache\n/app/version.json\n  Cache-Control: no-store\n/app/index.html\n  Cache-Control: no-cache\n');
+  const privatePage = await readFile(resolve(root, 'landing/credential-access.html'), 'utf8');
+  const portalCsp = privatePage.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
+  if (!portalCsp) throw new Error('Private access page must declare its content security policy');
+  const portalHeaders = ['/credential-access', '/credential-access.html', '/credential-access/*'].map(route =>
+    `${route}\n  Cache-Control: no-store\n  Referrer-Policy: no-referrer\n  X-Robots-Tag: noindex, nofollow, noarchive\n  X-Content-Type-Options: nosniff\n  Content-Security-Policy: ${portalCsp}; frame-ancestors 'none'\n`).join('\n');
+  await writeFile(resolve(output, '_headers'), '/sw.js\n  Cache-Control: no-cache\n/app/sw.js\n  Cache-Control: no-cache\n/app/version.json\n  Cache-Control: no-store\n/app/index.html\n  Cache-Control: no-cache\n\n' + portalHeaders);
   return output;
 }
 

@@ -65,7 +65,7 @@ const FAQ_DATA = [
       },
       {
         q: "How do I set up my profile?",
-        a: "Go to More > Settings. Enter your full name and tap \"Find My NPI\". The app will search the NPPES registry and show matching providers. Select yourself to auto-fill your NPI, degree type (MD or DO), and practice state. Then add any additional states where you hold licenses.",
+        a: "Open More > Setup > About you and check your name, degree and primary state. Review any NPI lookup match before importing it. Continue with Your licenses and Expiration dates, using the dates on your current documents. You can return to Setup later; the other app features remain available.",
       },
       {
         q: "What's the difference between MD and DO mode?",
@@ -82,15 +82,15 @@ const FAQ_DATA = [
       },
       {
         q: "How do expiration alerts work?",
-        a: "CredentialDOMD monitors all expiration dates and categorizes them: red (expired), orange (expiring within 30 days), amber (expiring within your lead time, default 90 days), and green (current). You can customize the lead time in Settings. Alerts appear on the home page under \"Action Required\" and can be sent via email, text, or browser notifications.",
+        a: "Alerts use the dates saved on your records and your lead time in Settings. Review Action Required on Home. Browser alerts need permission and an open app. The email service checks dated credential records daily and sends according to your settings and changes to those records, subject to scheduling and mail delivery. Automatic text reminders are not available. The current email digest does not include CME-hour shortfalls.",
       },
       {
         q: "Can I scan documents to add credentials?",
-        a: "Yes. Go to the Scan tab, upload or photograph a credential document, and the AI will extract the relevant information (type, license number, dates, state, etc.) and pre-fill the form for you. AI is on for your account with no setup: the image goes to Google Gemini through our server under a shared key with a daily per-user limit. Add your own Gemini key in Settings to lift that limit; then the image goes to Google under your key instead. Upload the credential itself, never a patient record.",
+        a: "Yes. Tap Add on a phone or Documents on a desktop to open Smart Scan, then choose Upload or Camera. Review the extracted type, number, state and dates against your document before saving. Scanning sends the supplied content to Google Gemini through shared service access with usage limits, or through your optional own key in Settings. Use the credential itself and keep patient records out of uploads. If analysis fails, check Documents first because the file may already be saved.",
       },
       {
         q: "How do I share credentials with a hospital or employer?",
-        a: "There are two ways: (1) From any credential, tap the Send button to email, text, or copy that credential's details. (2) Go to the Send tab to search across all your credentials and share any of them. Shared credentials include your name, NPI, degree, and all relevant details in a formatted message.",
+        a: "Use a credential's share control to review and share its details. For a credential packet, use the packet tools and check the selected documents and recipient before sending. Shared information can include your profile details. A copy or a message opened in another app still needs to be sent by you; check the result of the sharing method you choose.",
       },
     ],
   },
@@ -99,23 +99,27 @@ const FAQ_DATA = [
     items: [
       {
         q: "How does CME compliance tracking work?",
-        a: "CredentialDOMD computes compliance for all 50 states. When you add CME credits and tag them with topics (e.g., Pain Management, Ethics, Opioid Prescribing), the app cross-references your hours against each state's mandatory requirements, including total hours, category minimums, and topic-specific mandates.",
+        a: "The tracker compares your saved CME entries with the rules on file for your tracked states and the renewal dates used by the calculation. Open Credentials > CME Credits > Compliance to check the counted dates, categories, topics and source links. Topic tags do not prove course eligibility, and some exceptions are described in notes rather than fully calculated. A completed bar is not a board decision or a guarantee of compliance. Confirm unclear requirements with the relevant board.",
       },
       {
         q: "What is the Find CME feature?",
-        a: "Find CME is a curated directory of 33 accredited CME providers. It shows you where to earn credits for your specific unmet topics. The \"For You\" view highlights providers that cover your compliance gaps. You can filter by pricing (free, paid, subscription), MATE Act compliance, state-specific courses, and DO dual credit.",
+        a: "Find CME is a directory with topic, pricing and credit filters. Its For You view uses the gaps calculated from your saved records. Check the provider's current course page for price, accreditation, credit category and whether a course meets the requirement you are addressing. A directory listing or a reachable link is not a verification of eligibility.",
       },
       {
         q: "Does CredentialDOMD track the DEA MATE Act requirement?",
-        a: "Yes. The MATE Act requires all DEA-registered practitioners to complete a one-time 8-hour training on substance use disorders. CredentialDOMD tracks this in your CME compliance, and the Find CME section has a MATE Act filter to show providers offering qualifying courses (several are free).",
+        a: "The app includes MATE-related tracking and a Find CME filter to help organize relevant training. Its result depends on your entries and tags. Confirm your own eligibility, qualifying training and any alternative pathway against the DEA's current guidance before making an attestation; the app does not make that attestation for you.",
       },
       {
         q: "How do I tag CME topics for state compliance?",
-        a: "When adding or editing a CME entry, you'll see topic chips at the bottom. Topics required by your tracked states are highlighted at the top. Tap any topic to tag your CME with it. The compliance engine uses these tags to determine which state requirements your CME satisfies.",
+        a: "When adding or editing a CME entry, use Topics Covered. Topics from the rules on file for your tracked states appear first. Select tags that match the actual course content, and check the date and credit category too. The calculator uses those fields; a matching tag alone does not establish that the board accepts the course.",
       },
       {
         q: "Can I track CME for multiple states?",
-        a: "Yes. In Settings, add all states where you hold licenses. CredentialDOMD will compute compliance for each state independently, showing you which requirements are met and which topics still need attention.",
+        a: "Yes. Add your licenses and check Licensed States in Settings. The app shows a separate calculation for each tracked state. Review the license and dates being counted, especially if you have multiple licenses or an unusual renewal cycle. Where the app asks whether a condition applies, keep Not sure until you can confirm it.",
+      },
+      {
+        q: "How do I import a CME transcript?",
+        a: "Open Credentials > CME Credits > Import transcript. Choose a PDF, CSV or XLSX file, or Paste text instead. Map columns if asked, then review the dates, categories, hours and topic tags. Duplicates start unticked. Choose Add to CME log only after the selected rows are correct. Individual certificates can be linked from Documents afterward.",
       },
     ],
   },
@@ -137,11 +141,11 @@ const FAQ_DATA = [
     items: [
       {
         q: "How do I back up my data?",
-        a: "Go to More > Data & Backup. You can export all your data as a JSON file, which you can save anywhere and import later to restore. You can also print a formatted summary of all credentials. Your data also syncs to the cloud under your account, but a JSON export is the copy you control, so take one now and then.",
+        a: "Open More > Data & Backup > Export JSON Backup to save a copy of your loaded records. This readable file can include local private notes, so keep it somewhere you control. The Private notes section also has a separate Export to a file action. Cloud records sync under your account; local private notes do not sync automatically and are not part of the server's monthly backup.",
       },
       {
         q: "Can I move my data to a new device?",
-        a: "Sign in on the new device and your synced data loads from the cloud. The private note on a work entry lives only in the browser it was written in; to carry it over, export on the old device (More > Data & Backup > Export JSON) and import on the new one. A JSON export also restores everything else if you ever need it.",
+        a: "Sign in on the new device to load synced records. To move private work notes, export them on the old device in More > Data & Backup and restore the file on the new one. Check the result before clearing the old browser or signing out. Before a JSON restore, export your current data: restoring can replace collections included in the file and update settings. Keep both exports until you have checked the result.",
       },
       {
         q: "Does CredentialDOMD share my data with anyone?",
@@ -187,11 +191,24 @@ const FAQ_DATA = [
     items: [
       {
         q: "How do I set up notifications?",
-        a: "Go to More > Settings and scroll to the Notifications section. Enable browser notifications (requires permission), and optionally set up email and text notifications. You can choose a check frequency (daily to monthly). Notifications auto-escalate as deadlines approach.",
+        a: "Open More > Settings, check your email, and set your lead time and reminder frequency. Enable Email reminders for expiration digests and allow browser notifications on this device if wanted. The service's scheduler and mail delivery determine whether email arrives. The text setting currently does not send automatic SMS. Use Get help if an expected email is missing after checking your settings and spam folder.",
       },
       {
         q: "What does auto-escalation mean?",
-        a: "CredentialDOMD automatically increases notification frequency as deadlines get closer. For example, if you set weekly notifications, the app may send daily notifications when a credential is expiring within 30 days, and multiple per day when something has expired. This ensures critical expirations don't slip through.",
+        a: "The in-app alert check can shorten its interval as deadlines approach while the app is open. The server email digest follows its own daily check, your saved frequency and changes to dated records; it does not promise multiple emails per day. A manual email or text action opens your messaging app and still requires you to send the message.",
+      },
+    ],
+  },
+  {
+    category: "Locum Work & Support",
+    items: [
+      {
+        q: "Where do I start with locum invoices?",
+        a: "Open Practice > Contracts and add or review an agreement. Its rates and increment drive the work log. In Work, select that agreement, log work and review the billed amount. Use Invoice to select days and inspect the preview. Sending or Copy records the invoice and marks entries billed; Copy alone does not deliver it to the recipient. In Invoices, record full or partial payments yourself to track the remaining balance.",
+      },
+      {
+        q: "My ticket submitted but I have no response. Where do I check?",
+        a: "Open Get help > Your tickets and select the original ticket. Replies appear there and can also be emailed. If there are no replies yet, add useful details to that ticket with Send reply. Filing a ticket does not mean the issue is fixed, and no response time is guaranteed here. If you cannot sign in, email support@credentialdomd.com. Support may use AI assistance; you can ask for a human review.",
       },
     ],
   },
@@ -226,6 +243,7 @@ function FAQSection() {
       </div>
       <p style={{ margin: "0 0 14px", fontSize: 13, color: T.textMuted }}>
         Answers to common questions about CredentialDOMD.
+        {" "}<a href="/help" style={{ color: T.accent }}>Open step-by-step written guides</a>.
       </p>
 
       {/* Search */}

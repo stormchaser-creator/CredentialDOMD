@@ -8,6 +8,7 @@ import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage,
 import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
 import { vaultCount } from "../utils/privateVault";
+import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
 import { MS_PER_DAY } from "../utils/helpers";
@@ -208,7 +209,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           userIdRef.current = profileId;
 
           // Merge with defaults
-          const merged = {
+          let merged = {
             ...DEFAULT_DATA,
             ...sbData,
             settings: { ...DEFAULT_DATA.settings, ...(sbData.settings || {}) },
@@ -251,6 +252,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
               if (merged[key]?.length) merged[key] = merged[key].filter(x => !tombstones.has(x?.id));
             }
           }
+
+          // These two unfinished editors have no cloud/restore registration.
+          // Keep only this account's cached rows, respecting the deletion
+          // ledger, before the merged snapshot replaces its local cache.
+          merged = preservePausedApplicationRecords(merged, local, tombstones);
 
           if (local) {
             // Self-healing sync: any item that exists on this device but not
@@ -305,6 +311,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
             if (key === "documents") continue;
             for (const x of merged[key] || []) if (x?.id) liveIds.add(`${key}:${x.id}`);
           }
+          for (const ref of pausedApplicationLinks(merged)) liveIds.add(ref);
           merged.documents = (merged.documents || []).map(d => {
             if (d.linkedTo && !liveIds.has(d.linkedTo)) {
               sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }).catch(() => {});
