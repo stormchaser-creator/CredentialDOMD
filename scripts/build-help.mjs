@@ -33,6 +33,7 @@ export function guideSearchText(article) {
 }
 
 export function renderVideo(video) {
+  if (typeof video.transcriptText !== 'string' || !video.transcriptText.trim()) throw Error(`Missing loaded transcript: ${video.id}`);
   const e=escapeHtml, href=kind=>e(videoHref(video.id,kind));
   const seconds=Math.round(video.durationSeconds), duration=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
   return `<section class="tutorial-video" aria-labelledby="video-title-${e(video.id)}">
@@ -43,7 +44,8 @@ export function renderVideo(video) {
                 <track kind="captions" src="${href('captions')}" srclang="en" label="English"${video.burnedCaptions?'':' default'}>
                 Your browser cannot play this video. Use the transcript or download link below.
               </video>
-              <p class="video-links"><a href="${href('transcript')}">Read the transcript</a><a href="${href('video')}" download>Download video</a></p>
+              <details class="video-transcript"><summary>Read the transcript</summary><div class="transcript-text">${e(video.transcriptText)}</div></details>
+              <p class="video-links"><a href="${href('transcript')}" download>Download transcript</a><a href="${href('video')}" download>Download video</a></p>
             </section>`;
 }
 
@@ -115,14 +117,14 @@ export function renderHelp(input, videoCatalog = null) {
     .filters button[aria-pressed="true"] { background:var(--accent); color:#08241b; border-color:var(--accent); }
     #result-count { font-size:14px; color:var(--muted); margin:12px 0 20px; }
     article { border:1px solid var(--line); border-radius:14px; background:var(--card); margin:12px 0; scroll-margin-top:20px; }
-    summary { display:flex; gap:18px; padding:22px; cursor:pointer; list-style:none; align-items:flex-start; }
-    summary::-webkit-details-marker { display:none; }
-    summary > span:nth-child(2) { flex:1; min-width:0; }
-    summary strong { display:block; font-size:19px; line-height:1.4; margin:3px 0 6px; }
+    article > details > summary { display:flex; gap:18px; padding:22px; cursor:pointer; list-style:none; align-items:flex-start; }
+    article > details > summary::-webkit-details-marker { display:none; }
+    article > details > summary > span:nth-child(2) { flex:1; min-width:0; }
+    article > details > summary strong { display:block; font-size:19px; line-height:1.4; margin:3px 0 6px; }
     .description { display:block; font-size:14px; color:var(--muted); }
     .number { font-size:13px; color:var(--accent); font-variant-numeric:tabular-nums; padding-top:5px; }
     .chevron { font-size:24px; line-height:1; color:var(--accent); padding-top:8px; }
-    details[open] .chevron { transform:rotate(45deg); }
+    article > details[open] > summary .chevron { transform:rotate(45deg); }
     .guide-body { padding:0 24px 24px 60px; max-width:920px; }
     .availability { font-size:14px; color:var(--muted); margin:0 0 20px; }
     ol { padding-left:24px; margin:0 0 24px; }
@@ -138,6 +140,9 @@ export function renderHelp(input, videoCatalog = null) {
     .tutorial-video video { display:block; width:100%; height:auto; aspect-ratio:16/9; background:#050a0e; border:1px solid var(--line); border-radius:10px; }
     .video-links { display:flex; flex-wrap:wrap; gap:12px 24px; }
     .video-links a { padding:5px 0; }
+    .video-transcript { margin-top:14px; border:1px solid var(--line); border-radius:10px; }
+    .video-transcript > summary { padding:12px 16px; cursor:pointer; color:var(--accent); font-weight:700; }
+    .transcript-text { padding:0 16px 16px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; }
     video:focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
     .outcome { margin:22px 0 14px; }
     .related { display:flex; flex-wrap:wrap; gap:8px 20px; font-size:14px; }
@@ -147,7 +152,7 @@ export function renderHelp(input, videoCatalog = null) {
     .support p { color:var(--muted); max-width:760px; }
     footer { border-top:1px solid var(--line); padding:24px 0 36px; color:var(--muted); font-size:13px; }
     footer a { margin-right:18px; display:inline-block; padding:7px 0; }
-    @media(max-width:700px) { .wrap { padding:0 18px; } .topnav { align-items:flex-start; flex-direction:column; gap:6px; } header { padding:36px 0 28px; } .orientation { grid-template-columns:1fr; gap:10px; } .orientation a { padding:16px; } summary { padding:18px 14px; gap:10px; } .guide-body { padding:0 18px 20px; } .support { padding:20px; } .lead { font-size:18px; } }
+    @media(max-width:700px) { .wrap { padding:0 18px; } .topnav { align-items:flex-start; flex-direction:column; gap:6px; } header { padding:36px 0 28px; } .orientation { grid-template-columns:1fr; gap:10px; } .orientation a { padding:16px; } article > details > summary { padding:18px 14px; gap:10px; } .guide-body { padding:0 18px 20px; } .support { padding:20px; } .lead { font-size:18px; } }
     @media print { .topnav, .actions, .orientation, .searchbox, .filters, footer { display:none; } body { color:#111; background:white; } article { break-inside:avoid; } }
   </style>
 </head>
@@ -201,7 +206,7 @@ export function renderHelp(input, videoCatalog = null) {
         document.querySelectorAll('video').forEach(video => { if (video !== event.target) video.pause(); });
       }, true);
       guides.forEach(guide => guide.querySelector('details').addEventListener('toggle', event => {
-        if (!event.target.open) guide.querySelector('video')?.pause();
+        if (event.target === event.currentTarget && !event.currentTarget.open) guide.querySelector('video')?.pause();
       }));
       input.addEventListener('input', applyFilter);
       filters.forEach(button => button.addEventListener('click', () => { category = button.dataset.filter; applyFilter(); }));
