@@ -40,7 +40,12 @@ export async function loadVideoCatalog(root) {
       const bytes=await readFile(file);
       if (!bytes.length || createHash('sha256').update(bytes).digest('hex') !== entry.sha256) throw Error(`Video asset hash mismatch: ${entry.file}`);
       if (kind==='captions' && !/^WEBVTT(?:\r?\n|$)/.test(bytes.toString('utf8'))) throw Error(`Invalid WebVTT captions: ${video.id}`);
-      if (kind==='transcript' && !bytes.toString('utf8').trim()) throw Error(`Empty transcript: ${video.id}`);
+      if (kind==='transcript') {
+        const transcriptText=bytes.toString('utf8');
+        if (!transcriptText.trim()) throw Error(`Empty transcript: ${video.id}`);
+        // Only verified file bytes supply page text; ignore any catalog-provided copy.
+        video.transcriptText=transcriptText;
+      }
     }
   }
   return catalog;

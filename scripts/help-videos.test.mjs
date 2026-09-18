@@ -11,7 +11,7 @@ import {packageSite} from './package-site.mjs';
 const help=JSON.parse(await readFile(new URL('../public/knowledge/credentialdo-help.json',import.meta.url),'utf8'));
 const bytes={video:Buffer.from('synthetic MP4 fixture; never published'),poster:Buffer.from('synthetic poster fixture; never published'),captions:Buffer.from('WEBVTT\n\n00:00.000 --> 00:01.000\nSynthetic demo\n'),transcript:Buffer.from('Synthetic tutorial transcript.\n')};
 const sha=data=>createHash('sha256').update(data).digest('hex');
-function entry(id='first-license') {return {id,title:'First license',status:'approved_for_publication',durationSeconds:50,width:1920,height:1080,demoLabel:true,burnedCaptions:true,sourceRevision:'2c28f87a',review:{visual:true,playback:true,videoSHA256:sha(bytes.video),reviewedAt:'2026-09-18T23:00:00Z',reviewedBy:'synthetic test only'},files:Object.fromEntries(Object.entries(VIDEO_FILES).map(([kind,file])=>[kind,{file:`${id}/${file}`,sha256:sha(bytes[kind])}]))};}
+function entry(id='first-license') {return {id,title:'First license',transcriptText:bytes.transcript.toString('utf8'),status:'approved_for_publication',durationSeconds:50,width:1920,height:1080,demoLabel:true,burnedCaptions:true,sourceRevision:'2c28f87a',review:{visual:true,playback:true,videoSHA256:sha(bytes.video),reviewedAt:'2026-09-18T23:00:00Z',reviewedBy:'synthetic test only'},files:Object.fromEntries(Object.entries(VIDEO_FILES).map(([kind,file])=>[kind,{file:`${id}/${file}`,sha256:sha(bytes[kind])}]))};}
 function catalog(ids=['first-license']) {return {schemaVersion:1,status:'approved_for_publication',tutorials:ids.map(entry)};}
 async function fixture(t,metadata=catalog()) {
  const root=await mkdtemp(resolve(tmpdir(),'credentialdo-help-video-test-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -93,4 +93,43 @@ test('actual help search excludes video boilerplate and pauses the hidden licens
 test('changing a video hash cannot retain approval for the old encoded file',()=>{
  const c=catalog();c.tutorials[0].files.video.sha256=sha(Buffer.from('new encoding requiring fresh playback review'));
  assert.throws(()=>validateVideoCatalog(c),/Playback review does not match video bytes/);
+});
+
+
+test('inline transcript comes from exact verified file bytes, overriding catalog text',async t=>{
+ const c=catalog();c.tutorials[0].transcriptText='Unverified catalog wording';
+ const root=await fixture(t,c),loaded=await loadVideoCatalog(root);
+ assert.equal(loaded.tutorials[0].transcriptText,bytes.transcript.toString('utf8'));
+ const html=renderHelp(help,loaded);
+ assert.ok(html.includes('<details class="video-transcript"><summary>Read the transcript</summary><div class="transcript-text">Synthetic tutorial transcript.\n</div></details>'));
+ assert.doesNotMatch(html,/Unverified catalog wording/);
+ assert.match(html,/<a href="\/help\/videos\/first-license\/transcript.txt" download>Download transcript<\/a>/);
+ assert.equal(JSON.parse(await readFile(resolve(root,'landing/help-videos/manifest.json'),'utf8')).tutorials[0].transcriptText,'Unverified catalog wording','loading does not rewrite approval metadata');
+});
+
+test('verified transcript markup renders as literal text without fetching or injection',async t=>{
+ const text='  Exact opening whitespace\n</div><script>alert("x")</script>\n<img src=x onerror=alert(1)> & \'quoted\'\n';
+ const c=catalog();c.tutorials[0].files.transcript.sha256=sha(Buffer.from(text));
+ const root=await fixture(t,c);
+ await writeFile(resolve(root,'landing/help-videos/first-license/transcript.txt'),text);
+ const loaded=await loadVideoCatalog(root),html=renderHelp(help,loaded);
+ assert.equal(loaded.tutorials[0].transcriptText,text);
+ assert.ok(html.includes('<div class="transcript-text">  Exact opening whitespace\n&lt;/div&gt;&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;\n&lt;img src=x onerror=alert(1)&gt; &amp; &#39;quoted&#39;\n</div>'));
+ assert.doesNotMatch(html,/<script>alert|<img src=x|fetch\(/);
+ const unloaded=catalog();delete unloaded.tutorials[0].transcriptText;
+ assert.throws(()=>renderHelp(help,unloaded),/Missing loaded transcript/);
+});
+
+test('nested transcript toggles preserve the outer guide and do not pause its player',()=>{
+ const html=renderHelp(help,catalog()),handlers={};
+ const details={open:true,addEventListener:(name,handler)=>{handlers[name]=handler;}},transcript={open:false};
+ const video={pauses:0,pause(){this.pauses++;}};
+ const guide={id:'first-license',dataset:{search:'license',category:'Getting started'},querySelector:selector=>selector==='details'?details:selector==='video'?video:null};
+ const input={value:'',addEventListener(){}};
+ const elements={'help-search':input,'result-count':{},'no-results':{},'search-tools':{}};
+ const document={querySelectorAll:selector=>selector==='[data-guide]'?[guide]:[],getElementById:id=>elements[id],addEventListener(){}};
+ vm.runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1],{document,window:{addEventListener(){}},location:{hash:''}});
+ for(const open of [true,false]){transcript.open=open;handlers.toggle({target:transcript,currentTarget:details});assert.equal(video.pauses,0);assert.equal(details.open,true);}
+ handlers.toggle({target:details,currentTarget:details});assert.equal(video.pauses,0);
+ details.open=false;handlers.toggle({target:details,currentTarget:details});assert.equal(video.pauses,1);
 });
