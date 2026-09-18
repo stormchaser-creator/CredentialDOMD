@@ -1,0 +1,614 @@
+{
+  "schemaVersion": 1,
+  "status": "approved_for_publication",
+  "tutorials": [
+    {
+      "id": "first-license",
+      "title": "First license",
+      "number": 1,
+      "status": "approved_for_publication",
+      "durationSeconds": 50.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "first-license/tutorial.mp4",
+          "sha256": "5482d66156225f7a564ed86309feba1ea3fe3509ad458e675b33e75ebff8fec7",
+          "bytes": 1264788
+        },
+        "poster": {
+          "file": "first-license/poster.jpg",
+          "sha256": "6c9310bdf59b8028fccd0562c4596627c9655231ed33611947a0a5d017db0981",
+          "bytes": 108985
+        },
+        "captions": {
+          "file": "first-license/captions.vtt",
+          "sha256": "8395ce4a6574f18c4dfe85bbe7fb9da3db32b9fcde68eab2e3d96583636f810e",
+          "bytes": 706
+        },
+        "transcript": {
+          "file": "first-license/transcript.txt",
+          "sha256": "54e0adb5834a329654235bf676b899f7ff2126497dc04bfe9bace40f01ddb0e4",
+          "bytes": 440
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "5482d66156225f7a564ed86309feba1ea3fe3509ad458e675b33e75ebff8fec7",
+        "reviewedAt": "2026-09-18T18:47:57.625Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "scan-license",
+      "title": "Scan a license",
+      "number": 2,
+      "status": "approved_for_publication",
+      "durationSeconds": 50.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "scan-license/tutorial.mp4",
+          "sha256": "2b1465a8304176196448c5dde998fd39920b4cf8bf6634b34e24e0e941ae9355",
+          "bytes": 1305243
+        },
+        "poster": {
+          "file": "scan-license/poster.jpg",
+          "sha256": "41ecc1c8d4a9e7c90d6df0c7f6ec2fa95e3c1288c70aef2117b04ed1b655f6c1",
+          "bytes": 111643
+        },
+        "captions": {
+          "file": "scan-license/captions.vtt",
+          "sha256": "3d7d6503340b79a3fb28340614a1b5f241fde99aa99b2eed4129f93929e686d2",
+          "bytes": 718
+        },
+        "transcript": {
+          "file": "scan-license/transcript.txt",
+          "sha256": "e0a288ee5fab064ddcc797aff55e07b4a971b28053557c79c62f8e7aa7b27d38",
+          "bytes": 491
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "2b1465a8304176196448c5dde998fd39920b4cf8bf6634b34e24e0e941ae9355",
+        "reviewedAt": "2026-09-18T18:32:22.547Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "scan-cme",
+      "title": "CME certificate",
+      "number": 3,
+      "status": "approved_for_publication",
+      "durationSeconds": 50.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "scan-cme/tutorial.mp4",
+          "sha256": "00cf5709db138813cb982e0b738dd283bdcbb7cda640cef9fb1d1d928aab4403",
+          "bytes": 1837082
+        },
+        "poster": {
+          "file": "scan-cme/poster.jpg",
+          "sha256": "f8768669a0e01fb794c73db39809f0ed98cf0abb930e5a3084b53f671d6aa583",
+          "bytes": 113471
+        },
+        "captions": {
+          "file": "scan-cme/captions.vtt",
+          "sha256": "4c05ff97a5d9d683f4554eed3c61d111be5c322a68128508756b7441ed35d9be",
+          "bytes": 709
+        },
+        "transcript": {
+          "file": "scan-cme/transcript.txt",
+          "sha256": "8422eb1cc6835cdc27cb388b70ebb391288edde9f5d63b58d07a21350fcdc11b",
+          "bytes": 491
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "00cf5709db138813cb982e0b738dd283bdcbb7cda640cef9fb1d1d928aab4403",
+        "reviewedAt": "2026-09-18T18:40:29.315Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "import-cme",
+      "title": "Transcript import",
+      "number": 4,
+      "status": "approved_for_publication",
+      "durationSeconds": 60.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "import-cme/tutorial.mp4",
+          "sha256": "e908be6bf1b5824000b8887b183a2dbd8377a74eeee4b276511c6de3999f3a0a",
+          "bytes": 1874197
+        },
+        "poster": {
+          "file": "import-cme/poster.jpg",
+          "sha256": "9efece1287d9e84d76163e1a210fe5ea77830c2895f9ffad700f40ad59e63b49",
+          "bytes": 114058
+        },
+        "captions": {
+          "file": "import-cme/captions.vtt",
+          "sha256": "697e69e67e53d456210001be73c01c869cde4703ef8fab4b0ff894b896ee6059",
+          "bytes": 805
+        },
+        "transcript": {
+          "file": "import-cme/transcript.txt",
+          "sha256": "05b2436237ed0b96c4a5209af65cf67870cb8377b027539e382732e034ba0973",
+          "bytes": 512
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "e908be6bf1b5824000b8887b183a2dbd8377a74eeee4b276511c6de3999f3a0a",
+        "reviewedAt": "2026-09-18T18:48:57.746Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "review-cme",
+      "title": "Understand a CME calculation",
+      "number": 5,
+      "status": "approved_for_publication",
+      "durationSeconds": 60.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "review-cme/tutorial.mp4",
+          "sha256": "cc2a93a5624162f01cb5513203793203f403b197d1bd1bd755a949d3547e46d6",
+          "bytes": 1772528
+        },
+        "poster": {
+          "file": "review-cme/poster.jpg",
+          "sha256": "daa6cbfbf1a45d89333b6d74df94fe5fef68ad6a959acda34045942163271a1a",
+          "bytes": 128763
+        },
+        "captions": {
+          "file": "review-cme/captions.vtt",
+          "sha256": "8b0a83dcb4b3279cc0a52e75f5e15fb516af104553f4fd392f7355f47c801a30",
+          "bytes": 801
+        },
+        "transcript": {
+          "file": "review-cme/transcript.txt",
+          "sha256": "f943b0b9b207606926fa5246d639548ed2c89ab64b7f04ffdf7ba203c6685a44",
+          "bytes": 541
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "cc2a93a5624162f01cb5513203793203f403b197d1bd1bd755a949d3547e46d6",
+        "reviewedAt": "2026-09-18T18:37:25.898Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "locum-contract",
+      "title": "Agreement to reviewed rates",
+      "number": 6,
+      "status": "approved_for_publication",
+      "durationSeconds": 60.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "locum-contract/tutorial.mp4",
+          "sha256": "ba35cd1f0f8e0119d844d632a4bb4d28003413664b08acb3c94af79b0f3ac661",
+          "bytes": 1695137
+        },
+        "poster": {
+          "file": "locum-contract/poster.jpg",
+          "sha256": "e26d7a3cfc7b24eb1e0979c578438c4b830a1f6141cf6f0bb1105def2997ab22",
+          "bytes": 128466
+        },
+        "captions": {
+          "file": "locum-contract/captions.vtt",
+          "sha256": "3a5563b0906af93d19eb7d52f03426defd9ce09fa819875f240c1c739dec5094",
+          "bytes": 802
+        },
+        "transcript": {
+          "file": "locum-contract/transcript.txt",
+          "sha256": "2110636dc3beb34e1293720ba0a217e22e2abe3d60dd4cb6bb5819962a1acf60",
+          "bytes": 538
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "ba35cd1f0f8e0119d844d632a4bb4d28003413664b08acb3c94af79b0f3ac661",
+        "reviewedAt": "2026-09-18T18:41:35.980Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "locum-work",
+      "title": "Log past work",
+      "number": 7,
+      "status": "approved_for_publication",
+      "durationSeconds": 60.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "locum-work/tutorial.mp4",
+          "sha256": "41ddbea87a0a2785151279947c1d94e54e8d461792689ba7da3dfe106454fcd7",
+          "bytes": 1316035
+        },
+        "poster": {
+          "file": "locum-work/poster.jpg",
+          "sha256": "7d803e3f9974c52c505a3a411c7f3cfc894bb239e2555396687710b643ecc07b",
+          "bytes": 110875
+        },
+        "captions": {
+          "file": "locum-work/captions.vtt",
+          "sha256": "ce9f2d44641d97b4c2ca222e2b09448c315d3306a075dd625a66ce545adb7fea",
+          "bytes": 670
+        },
+        "transcript": {
+          "file": "locum-work/transcript.txt",
+          "sha256": "83e33ce772c3f3a4f1bd9f91786645f157f8babb3eb4f9f98d03e306d29d0dc0",
+          "bytes": 445
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "41ddbea87a0a2785151279947c1d94e54e8d461792689ba7da3dfe106454fcd7",
+        "reviewedAt": "2026-09-18T18:42:36.873Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "locum-invoice",
+      "title": "Build an invoice",
+      "number": 8,
+      "status": "approved_for_publication",
+      "durationSeconds": 60.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "locum-invoice/tutorial.mp4",
+          "sha256": "b865b149cd0f7fc7228fc8b834d1f2832723c7b62b51638fac05b1a04ad1c744",
+          "bytes": 1441790
+        },
+        "poster": {
+          "file": "locum-invoice/poster.jpg",
+          "sha256": "560f7c03ab7137a25e8c608b96e94713604787484ad358111849238e0b258186",
+          "bytes": 112497
+        },
+        "captions": {
+          "file": "locum-invoice/captions.vtt",
+          "sha256": "17a4500f73f4c196f33a07be77b948d3bc6f2404c63b68374eb60c19679315c4",
+          "bytes": 761
+        },
+        "transcript": {
+          "file": "locum-invoice/transcript.txt",
+          "sha256": "fee3fa1752f0459f8871da86df8f7fc3b10bb1045c394343ff9cf486c413a4fd",
+          "bytes": 502
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "b865b149cd0f7fc7228fc8b834d1f2832723c7b62b51638fac05b1a04ad1c744",
+        "reviewedAt": "2026-09-18T18:43:36.992Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "locum-payment",
+      "title": "Partial then full payment",
+      "number": 9,
+      "status": "approved_for_publication",
+      "durationSeconds": 60.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "locum-payment/tutorial.mp4",
+          "sha256": "8ea01fdea40253ccd729d9cb8b079acb104c63f2f3046977cd8afd5965fe1dd6",
+          "bytes": 1485638
+        },
+        "poster": {
+          "file": "locum-payment/poster.jpg",
+          "sha256": "2889f1ec8ad770467e2daf9ff1b79bd03f52b18103084f81417f34c78abe1da1",
+          "bytes": 121663
+        },
+        "captions": {
+          "file": "locum-payment/captions.vtt",
+          "sha256": "d3e13b3e20e87569c7dab50d83a30a7a64d2a57d98069bce0290211fe076a35d",
+          "bytes": 726
+        },
+        "transcript": {
+          "file": "locum-payment/transcript.txt",
+          "sha256": "12cd4e98c272e8a516ffbb3383f1b8abe04f6dfd2bff861569432d87be95f9c7",
+          "bytes": 499
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "8ea01fdea40253ccd729d9cb8b079acb104c63f2f3046977cd8afd5965fe1dd6",
+        "reviewedAt": "2026-09-18T18:38:27.033Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "reminders",
+      "title": "Reminder expectations",
+      "number": 10,
+      "status": "approved_for_publication",
+      "durationSeconds": 50.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "reminders/tutorial.mp4",
+          "sha256": "4b14734ca18d616ac82de52770bed672b5958f2124e8e2858dd868ee08728154",
+          "bytes": 1278698
+        },
+        "poster": {
+          "file": "reminders/poster.jpg",
+          "sha256": "e64a6f34ecbfabdb2c40a44eb1d8b91a98bf74a9a689823020f85caf764c7760",
+          "bytes": 122705
+        },
+        "captions": {
+          "file": "reminders/captions.vtt",
+          "sha256": "ef50591bc3434a3d5823d5300e4a08c556f67fd1924be84b9f4de62b5972b9d8",
+          "bytes": 753
+        },
+        "transcript": {
+          "file": "reminders/transcript.txt",
+          "sha256": "778650e48c3dcc82213ef8830789d48c088f7364ba6d9e7b10f2c53c04cc7967",
+          "bytes": 526
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "4b14734ca18d616ac82de52770bed672b5958f2124e8e2858dd868ee08728154",
+        "reviewedAt": "2026-09-18T18:44:27.098Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "get-help",
+      "title": "Follow your ticket",
+      "number": 11,
+      "status": "approved_for_publication",
+      "durationSeconds": 50.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "022fc7c4",
+      "files": {
+        "video": {
+          "file": "get-help/tutorial.mp4",
+          "sha256": "40884137c1d1867f6264b4b1ddae699ecc0e453d6336b060e0a3d0ea9849f9a4",
+          "bytes": 1451091
+        },
+        "poster": {
+          "file": "get-help/poster.jpg",
+          "sha256": "7275e00a99d718a9941988ed2ec70d877711cc7023800ecd31b1ad2db1799176",
+          "bytes": 114838
+        },
+        "captions": {
+          "file": "get-help/captions.vtt",
+          "sha256": "119ed84812a1d2be5509656d10022ce1bc950733710d91243a8924593cdfcc26",
+          "bytes": 827
+        },
+        "transcript": {
+          "file": "get-help/transcript.txt",
+          "sha256": "1c8df52d863f7b7d8394e54a14e4ed38a62286811beff8690e9fa52472e90ac8",
+          "bytes": 535
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "40884137c1d1867f6264b4b1ddae699ecc0e453d6336b060e0a3d0ea9849f9a4",
+        "reviewedAt": "2026-09-18T18:45:17.208Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "backup-data",
+      "title": "Backup and device move",
+      "number": 12,
+      "status": "approved_for_publication",
+      "durationSeconds": 50.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "backup-data/tutorial.mp4",
+          "sha256": "e1c4ff8eb766ede1bb8226596e4dea86885945d25f190bbca8252b932be7796c",
+          "bytes": 1119562
+        },
+        "poster": {
+          "file": "backup-data/poster.jpg",
+          "sha256": "f27baa9fdac402ef403d8298caf7ef9c8ba3f6a8f9624b87266962842e5fc6bd",
+          "bytes": 123557
+        },
+        "captions": {
+          "file": "backup-data/captions.vtt",
+          "sha256": "8a16cd815e387a8c8dd1f8ed2295901febc51ad177923e436799f7083370a476",
+          "bytes": 709
+        },
+        "transcript": {
+          "file": "backup-data/transcript.txt",
+          "sha256": "869598389c52ba9e4d74cb2dfabf53c3a8a4fedfe8789493401b2fb24c8c8998",
+          "bytes": 476
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "e1c4ff8eb766ede1bb8226596e4dea86885945d25f190bbca8252b932be7796c",
+        "reviewedAt": "2026-09-18T18:39:28.159Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "share-references",
+      "title": "Share selected references",
+      "number": 13,
+      "status": "approved_for_publication",
+      "durationSeconds": 55.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "share-references/tutorial.mp4",
+          "sha256": "190c8256b11395db47060215ccba666a34105ff6083301f77f623c89d62fbbe2",
+          "bytes": 1617391
+        },
+        "poster": {
+          "file": "share-references/poster.jpg",
+          "sha256": "2633f37c3532373ea3975dd88305c6e3bdc253c27464aa8803857f2390c958b8",
+          "bytes": 126520
+        },
+        "captions": {
+          "file": "share-references/captions.vtt",
+          "sha256": "1c6356b36c35e29ef2e4dec14c5f6f87859e8ffc843266ac53b666a9ba02c831",
+          "bytes": 839
+        },
+        "transcript": {
+          "file": "share-references/transcript.txt",
+          "sha256": "f23928c2593f81f563a2b659f87e32463a21110c38f940a3c0a850b2432c4f76",
+          "bytes": 551
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "190c8256b11395db47060215ccba666a34105ff6083301f77f623c89d62fbbe2",
+        "reviewedAt": "2026-09-18T18:46:12.335Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    },
+    {
+      "id": "share-documents",
+      "title": "Share a credential document",
+      "number": 14,
+      "status": "approved_for_publication",
+      "durationSeconds": 55.0,
+      "width": 1920,
+      "height": 1080,
+      "demoLabel": true,
+      "burnedCaptions": true,
+      "sourceRevision": "2c28f87a",
+      "files": {
+        "video": {
+          "file": "share-documents/tutorial.mp4",
+          "sha256": "578c923d8f6bf31eb2ae5d5e86b56d786ecdf50159a0dc900bfa012d5966fb2c",
+          "bytes": 1701222
+        },
+        "poster": {
+          "file": "share-documents/poster.jpg",
+          "sha256": "a1d5f09fe81fe5e767e2eab2eb2707fa29a148d96591ae4695f92559c880f024",
+          "bytes": 127713
+        },
+        "captions": {
+          "file": "share-documents/captions.vtt",
+          "sha256": "d74b26e03df58d25c9c20275d96207decc62ec55f8149aec50a18f833af49ba0",
+          "bytes": 823
+        },
+        "transcript": {
+          "file": "share-documents/transcript.txt",
+          "sha256": "4d59e64bc452b6fdaffd0311697bc59271c7a9e9509c919ebfe442ce45043c3e",
+          "bytes": 563
+        }
+      },
+      "review": {
+        "visual": true,
+        "playback": true,
+        "videoSHA256": "578c923d8f6bf31eb2ae5d5e86b56d786ecdf50159a0dc900bfa012d5966fb2c",
+        "reviewedAt": "2026-09-18T18:47:07.510Z",
+        "reviewedBy": "root",
+        "manualListening": false,
+        "audioVerification": "automated_signal_and_input_checks"
+      }
+    }
+  ],
+  "qa": {
+    "objectiveChecks": "14/14 passed",
+    "audioVerification": "automated_signal_and_input_checks",
+    "manualListening": false,
+    "demonstrationOnly": true
+  }
+}

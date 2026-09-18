@@ -1,0 +1,7 @@
+First license
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Start in Setup under More. Check your name, degree and primary state. Add a license, then use the expiration date on your current document. If you use an NPI match, review it before importing. Your saved record and its supporting document are separate steps. You can return to Setup later.
+
+Demo license. A saved record is not board verification.

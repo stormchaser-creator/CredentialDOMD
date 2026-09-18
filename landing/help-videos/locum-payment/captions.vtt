@@ -1,0 +1,29 @@
+WEBVTT
+
+NOTE Actual app components with demonstration data. No real sends.
+
+00:00:00.000 --> 00:00:02.800
+Partial then full payment — demonstration
+
+1
+00:00:02.800 --> 00:00:14.303
+When money arrives, find the invoice and record the amount and date received.
+
+2
+00:00:14.303 --> 00:00:24.385
+A partial payment leaves the remaining balance open.
+
+3
+00:00:24.385 --> 00:00:34.129
+Record the next installment when it arrives.
+
+4
+00:00:34.129 --> 00:00:46.696
+This is your payment ledger; payments are entered by you, not imported automatically from a bank.
+
+5
+00:00:46.696 --> 00:00:56.800
+Writing off a balance is different from receiving money.
+
+00:00:56.800 --> 00:01:00.000
+Try it with your own records. Review the result.

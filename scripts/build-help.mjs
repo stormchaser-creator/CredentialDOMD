@@ -3,6 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadVideoCatalog, validateVideoCatalog, videoHref } from './help-videos.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -27,17 +28,38 @@ export function validateHelp(help) {
   return help;
 }
 
-export function renderHelp(input) {
-  const help = validateHelp(input);
+export function guideSearchText(article) {
+  return [article.title, article.category, article.summary, ...article.steps, ...article.notes, article.availability, article.success].join(' ').toLowerCase();
+}
+
+export function renderVideo(video) {
+  const e=escapeHtml, href=kind=>e(videoHref(video.id,kind));
+  const seconds=Math.round(video.durationSeconds), duration=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
+  return `<section class="tutorial-video" aria-labelledby="video-title-${e(video.id)}">
+              <h3 id="video-title-${e(video.id)}">Watch the walkthrough</h3>
+              <p id="video-note-${e(video.id)}">${duration} · Narrated demo with captions. Synthetic data; no live messages or payments.</p>
+              <video controls playsinline preload="none" width="${video.width}" height="${video.height}" poster="${href('poster')}" aria-label="${e(video.title)}" aria-describedby="video-note-${e(video.id)}">
+                <source src="${href('video')}" type="video/mp4">
+                <track kind="captions" src="${href('captions')}" srclang="en" label="English"${video.burnedCaptions?'':' default'}>
+                Your browser cannot play this video. Use the transcript or download link below.
+              </video>
+              <p class="video-links"><a href="${href('transcript')}">Read the transcript</a><a href="${href('video')}" download>Download video</a></p>
+            </section>`;
+}
+
+export function renderHelp(input, videoCatalog = null) {
+  const help = structuredClone(validateHelp(input));
+  const videos = videoCatalog ? validateVideoCatalog(videoCatalog).tutorials : [];
+  const videoById = new Map(videos.map(video=>[video.id,video]));
   const e = escapeHtml;
   const categories = [...new Set(help.articles.map(article => article.category))];
   const titles = Object.fromEntries(help.articles.map(article => [article.id, article.title]));
   const guides = help.articles.map((article, index) => `
-      <article id="${e(article.id)}" data-guide data-category="${e(article.category)}">
+      <article id="${e(article.id)}" data-guide data-category="${e(article.category)}" data-search="${e(guideSearchText(article))}">
         <details>
           <summary><span class="number">${String(index + 1).padStart(2, '0')}</span><span><span class="category">${e(article.category)}</span><strong>${e(article.title)}</strong><span class="description">${e(article.summary)}</span></span><span class="chevron" aria-hidden="true">+</span></summary>
           <div class="guide-body">
-            <p class="availability">${e(article.availability)}</p>
+            <p class="availability">${e(article.availability)}</p>${videoById.has(article.id)?"\n            "+renderVideo(videoById.get(article.id)):""}
             <ol>${article.steps.map(step => `<li>${e(step)}</li>`).join('')}</ol>
             <div class="notes"><h3>Good to know</h3><ul>${article.notes.map(note => `<li>${e(note)}</li>`).join('')}</ul></div>
             <p class="outcome"><strong>You’re done when:</strong> ${e(article.success)}</p>
@@ -52,7 +74,7 @@ export function renderHelp(input) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Help center | CredentialDoMD</title>
-  <meta name="description" content="Written walkthroughs for license uploads, CME transcripts, locum agreements, work logs, invoices, payments and support in CredentialDoMD.">
+  <meta name="description" content="${videos.length ? "Written and video walkthroughs" : "Written walkthroughs"} for license uploads, CME transcripts, locum agreements, work logs, invoices, payments and support in CredentialDoMD.">
   <link rel="canonical" href="https://credentialdomd.com/help">
   <meta name="theme-color" content="#0a1014">
   <style>
@@ -110,6 +132,13 @@ export function renderHelp(input) {
     .notes h3 { font-size:14px; margin:0 0 6px; }
     .notes ul { margin:0; padding-left:18px; }
     .notes li { color:var(--muted); font-size:14px; margin:8px 0; }
+    .tutorial-video { margin:0 0 26px; }
+    .tutorial-video h3 { margin:0 0 6px; font-size:18px; }
+    .tutorial-video > p { color:var(--muted); font-size:13px; margin:6px 0 12px; }
+    .tutorial-video video { display:block; width:100%; height:auto; aspect-ratio:16/9; background:#050a0e; border:1px solid var(--line); border-radius:10px; }
+    .video-links { display:flex; flex-wrap:wrap; gap:12px 24px; }
+    .video-links a { padding:5px 0; }
+    video:focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
     .outcome { margin:22px 0 14px; }
     .related { display:flex; flex-wrap:wrap; gap:8px 20px; font-size:14px; }
     .related a { padding:6px 0; }
@@ -127,10 +156,10 @@ export function renderHelp(input) {
   <div class="wrap">
     <nav class="topnav" aria-label="Main navigation"><a class="brand" href="/">Credential<span>DoMD</span></a><div class="navlinks"><a href="/locums">Locum tools</a><a href="/security">Data handling</a><a href="/app/">Open app</a></div></nav>
     <main id="main">
-      <header><div class="eyebrow">Help center</div><h1>Help with your next step.</h1><p class="lead">Add a license, make sense of your CME log, or take locum work through to a recorded payment. Start with the task in front of you.</p><div class="actions"><a class="button" href="/app/">Open CredentialDoMD</a><a href="#get-help">Find your support ticket</a></div><p class="updated">Written walkthroughs · Updated ${e(help.updatedAt)} · Videos are not available yet.</p></header>
+      <header><div class="eyebrow">Help center</div><h1>Help with your next step.</h1><p class="lead">Add a license, make sense of your CME log, or take locum work through to a recorded payment. Start with the task in front of you.</p><div class="actions"><a class="button" href="/app/">Open CredentialDoMD</a><a href="#get-help">Find your support ticket</a></div><p class="updated">${videos.length ? `${videos.length} video walkthroughs with transcripts` : "Written walkthroughs"} · Updated ${e(help.updatedAt)}${videos.length ? " · Demo data only." : " · Videos are not available yet."}</p></header>
       <nav class="orientation" aria-label="Choose a starting point"><a href="#first-license"><strong>I’m getting started</strong><span>Add your first license and its document.</span></a><a href="#import-cme"><strong>I’m organizing CME</strong><span>Import credits and review what counts.</span></a><a href="#locum-contract"><strong>I’m tracking locum work</strong><span>Agreement → work → invoice → payment.</span></a></nav>
       <section aria-labelledby="guide-heading">
-        <h2 id="guide-heading">${help.articles.length} written walkthroughs</h2>
+        <h2 id="guide-heading">${help.articles.length} ${videos.length ? "step-by-step guides" : "written walkthroughs"}</h2>
         <div id="search-tools" hidden><div class="searchbox"><label for="help-search">Find a task</label><input id="help-search" type="search" placeholder="Try “certificate”, “payment” or “ticket”" autocomplete="off"></div><div class="filters" role="group" aria-label="Filter guides"><button type="button" data-filter="" aria-pressed="true">All guides</button>${categories.map(category => `<button type="button" data-filter="${e(category)}" aria-pressed="false">${e(category)}</button>`).join('')}</div><p id="result-count" role="status" aria-live="polite"></p></div>
         <div id="no-results" class="empty" hidden><strong>No matching guide yet.</strong><p>Try a shorter phrase, choose All guides, or <a href="#get-help">follow a support ticket</a>.</p></div>
         ${guides}
@@ -149,9 +178,10 @@ export function renderHelp(input) {
         const words = input.value.toLowerCase().trim().split(/\\s+/).filter(Boolean);
         let count = 0;
         guides.forEach(guide => {
-          const text = guide.textContent.toLowerCase();
+          const text = guide.dataset.search || '';
           const matches = (!category || guide.dataset.category === category) && words.every(word => text.includes(word));
           guide.hidden = !matches;
+          if (!matches) guide.querySelector('video')?.pause();
           if (matches) count += 1;
           if (words.length && matches) guide.querySelector('details').open = true;
         });
@@ -166,6 +196,13 @@ export function renderHelp(input) {
         target.querySelector('details').open = true;
         target.scrollIntoView({ block: 'start' });
       }
+      document.addEventListener('play', event => {
+        if (event.target.tagName !== 'VIDEO') return;
+        document.querySelectorAll('video').forEach(video => { if (video !== event.target) video.pause(); });
+      }, true);
+      guides.forEach(guide => guide.querySelector('details').addEventListener('toggle', event => {
+        if (!event.target.open) guide.querySelector('video')?.pause();
+      }));
       input.addEventListener('input', applyFilter);
       filters.forEach(button => button.addEventListener('click', () => { category = button.dataset.filter; applyFilter(); }));
       document.addEventListener('click', event => {
@@ -184,7 +221,8 @@ export function renderHelp(input) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const help = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-help.json'), 'utf8'));
-  const html = renderHelp(help);
+  const videoCatalog = await loadVideoCatalog(root);
+  const html = renderHelp(help, videoCatalog);
   const target = resolve(root, 'landing/help.html');
   if (process.argv.includes('--check')) {
     if (await readFile(target, 'utf8') !== html) throw new Error('Help page is stale. Run node scripts/build-help.mjs');
