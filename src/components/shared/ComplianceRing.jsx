@@ -7,8 +7,9 @@ import { useApp } from "../../context/AppContext";
  * @param {number} size — diameter in px (default 140)
  * @param {number} stroke — stroke width (default 10)
  * @param {string} label — text below the number (default "Compliant")
+ * @param {boolean} pending — show neutral confirmation state instead of a percentage
  */
-function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Compliant" }) {
+function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Compliant", pending = false }) {
   const { theme: T } = useApp();
   const [animatedPercent, setAnimatedPercent] = useState(0);
   const [displayNum, setDisplayNum] = useState(0);
@@ -17,7 +18,7 @@ function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Complia
 
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (animatedPercent / 100) * circumference;
+  const offset = pending ? circumference : circumference - (animatedPercent / 100) * circumference;
 
   // Animate stroke on mount/change
   useEffect(() => {
@@ -45,8 +46,8 @@ function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Complia
   }, [percent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gradient colors based on percentage
-  const gradStart = percent >= 80 ? "#10b981" : percent >= 50 ? "#f59e0b" : "#ef4444";
-  const gradEnd   = percent >= 80 ? "#34d399" : percent >= 50 ? "#fbbf24" : "#f87171";
+  const gradStart = pending ? T.textMuted : percent >= 80 ? "#10b981" : percent >= 50 ? "#f59e0b" : "#ef4444";
+  const gradEnd   = pending ? T.textMuted : percent >= 80 ? "#34d399" : percent >= 50 ? "#fbbf24" : "#f87171";
   const trackColor = T.input;
 
   return (
@@ -96,10 +97,10 @@ function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Complia
           fontFeatureSettings: "'tnum'",
           fontVariantNumeric: "tabular-nums",
         }}>
-          {displayNum}%
+          {pending ? "?" : `${displayNum}%`}
         </div>
         <div style={{ fontSize: Math.round(size * 0.09), fontWeight: 600, color: T.textMuted, marginTop: 3 }}>
-          {label}
+          {pending ? "Confirm CME" : label}
         </div>
       </div>
     </div>

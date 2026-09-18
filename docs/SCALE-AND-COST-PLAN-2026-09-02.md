@@ -1,3 +1,9 @@
+> **Historical material — pricing and launch instructions superseded September 18, 2026.**
+> Current owner decision: Core $149/year; Core + Locum $245/year; billing off,
+> invite-only beta, no end date. Do not execute old payment/cutover instructions
+> or send old sales copy. See [current decision](PRICE-DECISION-2026-09-18.md) and
+> [launch readiness](LAUNCH-READINESS-2026-09-18.md).
+
 # CredentialDOMD: scale, storage, safety, and API cost
 
 Date: 2026-09-02. Facts below were measured against the live Supabase project, the repo, and vendor pricing pages fetched today. Every projection is labeled estimated and shows its arithmetic. Price is $199 per physician per year ($16.58 per month). Physicians never bring their own API keys; the shared keys are part of the product.

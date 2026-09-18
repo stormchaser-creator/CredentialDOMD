@@ -1,4 +1,5 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
+import { topicApplicability } from "./conditionalCme.js";
 
 /**
  * CME compliance engine — cycle-windowed.
@@ -223,7 +224,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // they started logging CME in the app still shows unmet; a per-topic
   // "attest completed" override stored per user is the follow-on for that.
   // The periodicity fix alone stops satisfied credits from aging out.
-  const topicResults = (entry?.topics || []).map(t => {
+  const evaluatedTopics = (entry?.topics || []).map(t => {
     let pool, period;
     if (t.period === "lifetime") {
       pool = cmeEntries || [];
@@ -237,7 +238,8 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       pool = windowed;
       period = null;
     }
-    const tagged = pool.filter(c => (c.topics || []).includes(t.topic));
+    const tagged = pool.filter(c => (c.topics || []).includes(t.topic)
+      && (!t.acceptedCategories || t.acceptedCategories.includes(c.category)));
     const earned = tagged.reduce((s, c) => s + hours(c), 0);
     const checklist = !(t.hours > 0);
     // Per-topic provenance, falling back to the rule set's own citation and
@@ -257,6 +259,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const url = t.url || entryUrl;
     return {
       topic: t.topic,
+      condition: t.condition || null,
+      applicability: topicApplicability(t, opts.topicApplicability),
+      checkedOn: t.checkedOn || null,
       required: t.hours || 0,
       earned,
       checklist,
@@ -270,6 +275,12 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       sourceInherited: !!url && url === entryUrl,
     };
   });
+
+  // Unknown is neither a shortfall nor an exemption. Keep conditional rows
+  // visible separately; only confirmed applicable rules can demand hours.
+  const conditionalTopics = evaluatedTopics.filter(t => t.condition);
+  const topicResults = evaluatedTopics.filter(t => t.applicability === "applies");
+  const applicabilityUnknown = conditionalTopics.some(t => t.applicability === "unknown");
 
   // ── MATE Act (one-time, DEA registrants) — lifetime, not windowed ──
   let mate = null;
@@ -286,6 +297,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const totalMet = noGeneralReq || totalHrs >= totalRequired;
   const cat1Met = cat1Required <= 0 || cat1Hrs >= cat1Required;
   const allTopicsMet = topicResults.every(t => t.met);
+  const knownRequirementsMet = totalMet && cat1Met && allTopicsMet && (!mate || mate.met);
+  const assessmentStatus = !knownRequirementsMet ? "needs-hours"
+    : applicabilityUnknown ? "needs-confirmation" : "met";
 
   return {
     state,
@@ -307,8 +321,12 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     cycle: cycleYears,
     topicResults,
     allTopicsMet,
+    conditionalTopics,
+    applicabilityUnknown,
+    knownRequirementsMet,
+    assessmentStatus,
     mate,
-    fullyCompliant: totalMet && cat1Met && allTopicsMet && (!mate || mate.met),
+    fullyCompliant: knownRequirementsMet && !applicabilityUnknown,
     notes: entry?.notes,
     // Provenance for the rule set behind these numbers: the statute or rule
     // citation, and the month it was last checked against the regulator (if
@@ -432,6 +450,7 @@ export function complianceFor(data, state) {
     // Already on the license record; every state proration rule reads it.
     licenseIssued: lic?.issuedDate || null,
     cycleStart: lic?.cmeCycleStart || null,
+    topicApplicability: lic?.customFields || {},
     hasDEA: hasDEARegistration(data.licenses),
   });
 }
@@ -471,7 +490,7 @@ export function standingScore({ items = [], missingRequired = [], stateComps = [
     // 90 days out); before that there is nothing to do yet.
     const due = x.comp?.daysLeft == null || x.comp.daysLeft <= leadDays;
     if (x.comp?.fullyCompliant || !due) good += 1;
-    else needsAction.push({ item: { id: `cme:${x.st}`, _sec: "cme", _cat: "CME", state: x.st }, days: x.comp?.daysLeft ?? null });
+    else needsAction.push({ item: { id: `cme:${x.st}`, _sec: "cme", _cat: "CME", state: x.st, needsConfirmation: x.comp?.assessmentStatus === "needs-confirmation" }, days: x.comp?.daysLeft ?? null });
   }
   needsAction.sort((a, b) => (a.days ?? 9e9) - (b.days ?? 9e9));
   const percent = total === 0 ? (items.length === 0 ? 0 : 100) : Math.round((good / total) * 100);

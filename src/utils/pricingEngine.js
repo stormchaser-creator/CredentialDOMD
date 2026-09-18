@@ -1,20 +1,10 @@
 /**
- * CredentialDoMD Pricing Engine — Architecture D.
- *
- * Spec: AutoAIBiz Architecture D (CredentialDoMD code agent specification, May 2026).
- * 8-tier model: Free, Resident, Founding (cohort-capped), Core (id solo), Core + Locum (id locum), Practice,
- * Group, Enterprise.
- *
- * RULES (enforced):
- *  1. Founding counter is hidden until ≥ 10 of 100 claimed (FOUNDING_COUNTER_VISIBILITY_THRESHOLD).
- *  2. No strikethrough discount pricing.
- *  3. No $X.99 charm pricing — round-9 only ($19, $29, $39, $99, $190).
- *  4. No empty social proof — testimonial section omitted entirely if count = 0.
- *  5. Free and Resident tiers are forever-free, not trial-disguised.
- *
- * Replaces legacy cohort-based ($4.99→$14.99) + Practice $119.99 + Enterprise $429.99
- * pricing model from previous version.
+ * Existing-account entitlement metadata plus the public founding offer catalog.
+ * Legacy tier IDs below remain available to account/feature gates. Public pricing
+ * comes only from billingCatalog; old tier prices are not current sales offers.
  */
+
+import { BILLING_CATALOG, getBillingOffer } from "../../supabase/functions/_shared/billingCatalog.mjs";
 
 import {
   FOUNDING_COHORT_CAP,
@@ -25,7 +15,7 @@ import {
   ANNUAL_DISCOUNT_PCT,
   ANNUAL_DISCOUNT_LABEL,
   STRIPE_LOOKUP_KEYS,
-} from "./pricingConstants";
+} from "./pricingConstants.js";
 
 export {
   FOUNDING_COHORT_CAP,
@@ -260,21 +250,39 @@ export function getOrderedTiers() {
   return Object.values(TIERS).sort((a, b) => a.order - b.order);
 }
 
-/**
- * Returns tiers visible on the public pricing page.
- * Founding is hidden until claimedCount >= FOUNDING_COUNTER_VISIBILITY_THRESHOLD.
- * Resident is shown only on /residents (omitted from main grid by default).
- */
-export function getPublicTiers(claimedFoundingCount = 0, opts = {}) {
-  const { includeResident = false } = opts;
-  return getOrderedTiers().filter(t => {
-    if (t.id === "founding") {
-      return claimedFoundingCount >= FOUNDING_COUNTER_VISIBILITY_THRESHOLD;
-    }
-    if (t.id === "resident" && !includeResident) return false;
-    return true;
-  });
+/** Exactly the two approved annual founding offers, independent of cohort counts. */
+export function getPublicTiers() {
+  return Object.values(BILLING_CATALOG.offers).map(offer => ({
+    id: offer.id,
+    tier: offer.tier,
+    name: offer.name,
+    annualCents: offer.unitAmount,
+    billingCadence: "annual_only",
+    trialDays: 0,
+    membership: "founding",
+    audience: offer.id === "core"
+      ? "Credential management for one physician."
+      : "Credential management plus tools for your locum work.",
+    features: TIERS[offer.tier].features,
+    bullets: offer.id === "core" ? [
+      "Unlimited credentials, licenses and certifications",
+      "CME tracking and renewal reminders",
+      "Document scanning, credential packets and CV tools",
+      "Vera, the in-app assistant",
+      "Founding membership",
+    ] : [
+      "Everything in Core",
+      "Contracts, scheduling and invoices",
+      "Agency remittance reconciliation",
+      "Travel expenses and receipts",
+      "RVU coding, case logs and billing forecasts",
+      "Founding membership",
+    ],
+    cta: "Choose this annual plan",
+  }));
 }
+
+export const PUBLIC_BILLING_ENABLED = BILLING_CATALOG.billingEnabled;
 
 export function annualMonthlyEquivalent(tierId) {
   const t = TIERS[tierId];
@@ -299,6 +307,12 @@ export function formatPrice(cents) {
  * @returns {{ display: string, perInterval: string, secondaryLine: string|null }}
  */
 export function priceFor(tierId, cadence = "annual") {
+  const offer = getBillingOffer(tierId);
+  if (offer) return {
+    display: formatPrice(offer.unitAmount),
+    perInterval: "/year",
+    secondaryLine: "Annual founding membership",
+  };
   const t = TIERS[tierId];
   if (!t) return { display: "—", perInterval: "", secondaryLine: null };
 

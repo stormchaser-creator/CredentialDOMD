@@ -1,7 +1,8 @@
+import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
 import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { SearchIcon, ExternalLinkIcon, GraduationIcon, CheckIcon } from "../shared/Icons";
-import { CME_PROVIDERS, getProvidersForTopic, getMateActProviders, getDualAccreditedProviders } from "../../constants/cmeProviders";
+import { CME_PROVIDERS } from "../../constants/cmeProviders";
 import { providerAoaLine } from "../../constants/creditEquivalence";
 import { complianceFor } from "../../utils/compliance";
 import { getProviderVerificationStatus } from "../../utils/cmeVerification";
@@ -34,7 +35,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
       comp.topicResults.filter(t => !t.met).forEach(t => topics.add(t.topic));
     });
     return [...topics];
-  }, [allTrackedStates, data.cme, deg]);
+  }, [allTrackedStates, data]);
 
   // All unique required topics across user's states
   const allRequiredTopics = useMemo(() => {
@@ -44,7 +45,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
       comp.topicResults.forEach(t => topics.add(t.topic));
     });
     return [...topics].sort();
-  }, [allTrackedStates, data.cme, deg]);
+  }, [allTrackedStates, data]);
 
   // Per-state compliance gaps for personalized header
   const perStateGaps = useMemo(() => {
@@ -53,9 +54,9 @@ function CMEResourcesSection({ initialTopicFilter }) {
       const unmet = comp.topicResults.filter(t => !t.met);
       const hoursGap = comp.noGeneralReq ? 0 : Math.max(0, comp.totalRequired - comp.totalEarned);
       const cat1Gap = comp.cat1Required > 0 ? Math.max(0, comp.cat1Required - comp.cat1Earned) : 0;
-      return { state: st, unmet, hoursGap, cat1Gap, fullyCompliant: comp.fullyCompliant };
+      return { state: st, unmet, hoursGap, cat1Gap, fullyCompliant: comp.fullyCompliant, assessmentStatus: comp.assessmentStatus, comp };
     });
-  }, [allTrackedStates, data.cme, deg]);
+  }, [allTrackedStates, data]);
 
   // Specialty keyword matching for sort boost
   const specialtyProviderIds = useMemo(() => {
@@ -147,7 +148,7 @@ function CMEResourcesSection({ initialTopicFilter }) {
     return providers;
   }, [viewMode, topicFilter, pricingFilter, searchQ, showMateAct, showStateSpecific, showDualAccredited, unmetTopics, deg, specialtyProviderIds]);
 
-  const isFullyCompliant = unmetTopics.length === 0 && allTrackedStates.length > 0;
+  const isFullyCompliant = perStateGaps.length > 0 && perStateGaps.every(g => g.fullyCompliant);
 
   return (
     <div>
@@ -229,13 +230,14 @@ function CMEResourcesSection({ initialTopicFilter }) {
         </div>
       )}
 
+      {perStateGaps.filter(g => g.comp.applicabilityUnknown).map(g => <ConditionalCmeTopics key={g.state} comp={g.comp} />)}
       {/* Personalized compliance gap summary */}
-      {viewMode === "forYou" && !isFullyCompliant && perStateGaps.filter(g => !g.fullyCompliant).length > 0 && (
+      {viewMode === "forYou" && !isFullyCompliant && perStateGaps.filter(g => g.assessmentStatus === "needs-hours").length > 0 && (
         <div style={{ backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 6 }}>
-            Gaps in {perStateGaps.filter(g => !g.fullyCompliant).length} state{perStateGaps.filter(g => !g.fullyCompliant).length > 1 ? "s" : ""}
+            Gaps in {perStateGaps.filter(g => g.assessmentStatus === "needs-hours").length} state{perStateGaps.filter(g => g.assessmentStatus === "needs-hours").length > 1 ? "s" : ""}
           </div>
-          {perStateGaps.filter(g => !g.fullyCompliant).map(g => (
+          {perStateGaps.filter(g => g.assessmentStatus === "needs-hours").map(g => (
             <div key={g.state} style={{ fontSize: 13, color: T.textMuted, marginBottom: 4, lineHeight: 1.4 }}>
               <span style={{ fontWeight: 700, color: T.text }}>{g.state}:</span>
               {g.hoursGap > 0 && <span> {g.hoursGap} general hrs needed.</span>}

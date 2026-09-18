@@ -20,6 +20,7 @@ import { TIERS, getTier } from "../utils/pricingEngine";
 import { tierIncludesFeature, FEATURES } from "../utils/featureMap";
 import { isAdminUser } from "../lib/admin";
 import { isFreeBetaActive } from "../constants/beta";
+import { BILLING_CATALOG, getBillingOffer, entitlementFromRow } from "../../supabase/functions/_shared/billingCatalog.mjs";
 
 const VALID_TIER_IDS = new Set(Object.keys(TIERS));
 
@@ -56,7 +57,7 @@ function readPreviewTierFromURL() {
       localStorage.setItem(PREVIEW_STORAGE_KEY, t);
       return t;
     }
-  } catch {}
+  } catch { /* Preview preferences are optional. */ }
   return null;
 }
 
@@ -96,6 +97,7 @@ export function useSubscription(userOverride) {
   // overrides, so billing UI (Manage Billing, Cancel Subscription) can key
   // off a real subscription rather than the effective feature tier.
   const [hasSubscription, setHasSubscription] = useState(false);
+  const [subscriptionUserId, setSubscriptionUserId] = useState(null);
   const [periodEnd, setPeriodEnd] = useState(null);
   const [trialEndsAt, setTrialEndsAt] = useState(null);
   const [foundingLockEndsAt, setFoundingLockEndsAt] = useState(null);
@@ -122,151 +124,118 @@ export function useSubscription(userOverride) {
     };
   }, []);
 
-  // Load real subscription state from Supabase
+  const userId = user?.id;
+  // Reset stale identity state immediately when the signed-in account changes.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (IS_DEV_MODE) { setLoading(false); return; }
     // If the admin preview override is active, don't overwrite the tier
     // with whatever Supabase returns. Used to test tier-locked features
     // before Stripe is wired.
     if (previewTier) { setTier(previewTier); setLoading(false); return; }
-    if (!user || !supabase) {
+    if (!userId || !supabase) {
       setTier("free");
       setHasSubscription(false);
       setLoading(false);
       return;
     }
 
+    // No billing query during the open-ended beta. New billing tables are
+    // deployed only after the launch decision; absence is not an entitlement.
+    if (!BILLING_CATALOG.billingEnabled) {
+      setTier("free");
+      setHasSubscription(false);
+      setLoading(false);
+      return;
+    }
+    let current = true;
+    setSubscriptionUserId(null);
+    setLoading(true);
     supabase
-      .from("subscriptions")
-      .select("tier, status, period_end, trial_ends_at, founding_lock_ends_at, seat_count, metadata")
-      .eq("auth_user_id", user.id)
-      .eq("app", "credentialdomd")
+      .from("billing_subscriptions")
+      .select("offer_id, status, membership_active, period_end, livemode, profiles!inner(auth_user_id)")
+      .eq("profiles.auth_user_id", userId)
+      .eq("livemode", true)
       .maybeSingle()
-      .then(({ data }) => {
-        const incomingTier = data?.tier;
-        if (isValidTier(incomingTier) && data.status !== "canceled") {
-          setTier(incomingTier);
-          setHasSubscription(incomingTier !== "free" && incomingTier !== "resident");
-        } else {
-          setTier("free");
-          setHasSubscription(false);
-        }
-        setPeriodEnd(data?.period_end ?? null);
-        setTrialEndsAt(data?.trial_ends_at ?? null);
-        setFoundingLockEndsAt(data?.founding_lock_ends_at ?? null);
-        setSeatCount(data?.seat_count ?? 1);
-        setGraduationDate(data?.metadata?.graduation_date ?? null);
+      .then(({ data, error }) => {
+        if (!current) return;
+        const state = entitlementFromRow(error ? null : data);
+        setSubscriptionUserId(userId);
+        setTier(state.tier);
+        setHasSubscription(state.hasSubscription);
+        setPeriodEnd(state.periodEnd);
+        setTrialEndsAt(null);
+        setFoundingLockEndsAt(null);
+        setSeatCount(1);
+        setGraduationDate(null);
         setLoading(false);
       })
-      .catch((err) => {
-        // Schema may not have all new columns yet (migration deferred).
-        // Fall back to legacy plan_type column.
-        console.warn("subscription query failed, falling back:", err.message);
-        supabase
-          .from("subscriptions")
-          .select("status, plan_type, period_end")
-          .eq("auth_user_id", user.id)
-          .eq("app", "credentialdomd")
-          .maybeSingle()
-          .then(({ data }) => {
-            // Map legacy plan_type → new tier id
-            const legacyMap = {
-              pro_monthly: "solo",
-              pro_annual: "solo",
-              practice: "practice",
-            };
-            const mapped = legacyMap[data?.plan_type];
-            const legacyLive = isValidTier(mapped) && data?.status !== "canceled";
-            setTier(legacyLive ? mapped : "free");
-            setHasSubscription(legacyLive);
-            setPeriodEnd(data?.period_end ?? null);
-            setLoading(false);
-          });
+      .catch(() => {
+        if (!current) return;
+        setTier("free");
+        setHasSubscription(false);
+        setLoading(false);
       });
 
     // Load credential usage count (for free-tier 5-credential cap)
     supabase
       .from("credentials")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .then(({ count }) => setCredentialUsage(count ?? 0))
+      .eq("user_id", userId)
+      .then(({ count }) => { if (current) setCredentialUsage(count ?? 0); })
       .catch(() => {});
-  }, [user, previewTier]);
+    return () => { current = false; };
+  }, [userId, previewTier]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Mock tier setter (dev mode only)
   const setMockTier = useCallback((newTier) => {
     if (!IS_DEV_MODE || !isValidTier(newTier)) return;
-    try { localStorage.setItem(MOCK_STORAGE_KEY, newTier); } catch {}
+    try { localStorage.setItem(MOCK_STORAGE_KEY, newTier); } catch { /* Private browsing may disable storage. */ }
     setTier(newTier);
     window.dispatchEvent(new CustomEvent("mock-tier-change", { detail: newTier }));
   }, []);
 
-  // Checkout — accepts either a tier id (e.g. "solo") or a tier object
+  // Two annual founding bundles only. Price, membership and identity are
+  // rechecked on the server; no browser price ID or metadata is trusted.
   const checkout = useCallback(async (tierOrId, billing = "annual") => {
-    const tierId = typeof tierOrId === "string" ? tierOrId : tierOrId?.id;
-    const t = getTier(tierId);
-    if (!t) {
-      console.warn("Unknown tier:", tierId);
-      return;
-    }
-
+    if (isFreeBetaActive() || !BILLING_CATALOG.billingEnabled) return { ok: false, error: "free_beta" };
+    const selected = typeof tierOrId === "string" ? tierOrId : tierOrId?.id;
+    const offerId = selected === "locum" ? "core_locum" : selected === "founding" ? "core" : selected;
+    const offer = getBillingOffer(offerId);
+    if (!offer || billing !== "annual") return { ok: false, error: "invalid_offer" };
     if (IS_DEV_MODE) {
-      setMockTier(tierId);
-      return { mock: true, tier: tierId };
+      setMockTier(offer.tier);
+      return { mock: true, tier: offer.tier };
     }
-
-    // Billing is off during the free beta: nothing to buy yet.
-    if (isFreeBetaActive()) return { ok: false, error: "free_beta" };
-
-    if (!supabase) return;
-
-    const lookupKey = billing === "annual"
-      ? t.stripeAnnualLookupKey
-      : t.stripeMonthlyLookupKey;
-
-    if (!lookupKey) {
-      console.warn(`No Stripe lookup key configured for tier=${tierId} billing=${billing}`);
-      return;
-    }
-
-    const res = await supabase.functions.invoke("create-checkout-session", {
-      body: {
-        // Edge function expects either price_id or lookup_key (both supported).
-        lookupKey,
-        priceId: undefined,
-        app: "credentialdomd",
-        successUrl: window.location.origin + "/?upgraded=true",
-        cancelUrl: window.location.origin + "/",
-        metadata: { tier: tierId, billing_cadence: billing },
-      },
-    });
-    if (res.data?.url) {
+    if (!supabase) return { ok: false, error: "checkout_unavailable" };
+    const res = await supabase.functions.invoke("create-checkout-session", { body: { offerId } });
+    if (!res.error && /^https:\/\/checkout\.stripe\.com\//.test(res.data?.url || "")) {
       window.location.href = res.data.url;
       return { ok: true };
     }
-    // No checkout URL — payments not reachable (function undeployed, Stripe
-    // not configured, or network error). Tell the caller so the UI can say so.
-    console.error("Checkout error:", res.error ?? "no checkout URL returned");
     return { ok: false, error: "checkout_unavailable" };
   }, [setMockTier]);
 
   const manage = useCallback(async () => {
-    if (IS_DEV_MODE) return;
+    if (IS_DEV_MODE || isFreeBetaActive() || !BILLING_CATALOG.billingEnabled) return;
     if (!supabase) return;
     // No Stripe customer exists without a real subscription; the portal
     // would only 401. Callers should hide the button when !hasSubscription.
     if (!hasSubscription) return;
     const res = await supabase.functions.invoke("customer-portal", {
-      body: { returnUrl: window.location.origin + "/" },
+      body: {},
     });
-    if (res.data?.url) window.location.href = res.data.url;
+    if (!res.error && /^https:\/\/billing\.stripe\.com\//.test(res.data?.url || "")) window.location.href = res.data.url;
   }, [hasSubscription]);
 
   // Derived state.
   // While the free beta is on, everyone is treated as Locum (the full
   // individual feature set) regardless of what the subscriptions table says.
   const freeBeta = isFreeBetaActive();
-  const effectiveTier = freeBeta ? "locum" : tier;
+  const ownsLoadedSubscription = !!userId && subscriptionUserId === userId;
+  const currentTier = IS_DEV_MODE || previewTier || ownsLoadedSubscription ? tier : "free";
+  const effectiveTier = freeBeta ? "locum" : currentTier;
   const tierObject = getTier(effectiveTier);
   const isPaid = effectiveTier !== "free" && effectiveTier !== "resident";
   const isFreeAtLimit = effectiveTier === "free" && credentialUsage >= (tierObject?.credentialLimit ?? Infinity);
@@ -300,16 +269,16 @@ export function useSubscription(userOverride) {
     isFoundingLocked,
     // Billing truth, independent of the beta unlock: is there a live paid
     // subscription row for this user? Drives Manage Billing / Cancel.
-    hasSubscription,
+    hasSubscription: ownsLoadedSubscription && hasSubscription,
     // Free-beta switch (src/constants/beta.js). While true, plan labels read
     // "Free beta" and every Stripe surface is hidden.
     isFreeBeta: freeBeta,
 
     // Dates
-    periodEnd,
-    trialEndsAt,
-    foundingLockEndsAt,
-    graduationDate,
+    periodEnd: ownsLoadedSubscription ? periodEnd : null,
+    trialEndsAt: ownsLoadedSubscription ? trialEndsAt : null,
+    foundingLockEndsAt: ownsLoadedSubscription ? foundingLockEndsAt : null,
+    graduationDate: ownsLoadedSubscription ? graduationDate : null,
 
     // Conversion preview
     willConvertToTier,
@@ -317,7 +286,7 @@ export function useSubscription(userOverride) {
 
     // Quotas
     seatCount,
-    credentialUsage,
+    credentialUsage: ownsLoadedSubscription ? credentialUsage : 0,
     credentialLimit: tierObject?.credentialLimit ?? null,
 
     // Capability checks

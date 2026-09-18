@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:site": "vite build --base=/app/ && node scripts/package-site.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

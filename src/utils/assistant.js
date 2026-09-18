@@ -1,3 +1,4 @@
+import { ohioCmeContext } from "./conditionalCme.js";
 import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 import { complianceFor, findStateLicense } from "./compliance";
 import { RENEWAL_INFO } from "../constants/renewalInfo";
@@ -55,6 +56,9 @@ export function buildSnapshot(data, allTrackedStates = []) {
         earned: comp.totalEarned, required: comp.totalRequired,
         renewal: lic?.expirationDate || null, daysLeft: comp.daysLeft,
         unmetTopics: comp.topicResults.filter(t => !t.met).map(t => t.topic),
+        assessmentStatus: comp.assessmentStatus,
+        pendingApplicability: comp.conditionalTopics.filter(t => t.applicability === "unknown").map(t => ({ topic: t.topic, condition: t.condition.description })),
+        ...(st === "OH" ? { verifiedRuleContext: ohioCmeContext(comp) } : {}),
       };
     } catch { /* state without rules */ }
   }
@@ -339,6 +343,12 @@ not in it. Match the recommendation to the SPECIFIC gap:
 - For gaps that accept any category (like an AOBS total-hours gap, since AOBS publishes
   no Category 1-A minimum), free ACCME platforms work fine and say so.
 - For state topic mandates, match the provider's topics to the mandate.
+- The Ohio verifiedRuleContext in cmeSummary.byState.OH is a deterministic rule pilot,
+  checked against the linked Ohio code. Use its applicability conditions and citations
+  before generic remembered rules. Unknown pain-clinic applicability is a question to
+  resolve, not a 20-hour shortfall or an exemption. Do not infer it from specialty or
+  DEA registration or propose changing it without the physician's explicit answer.
+  Topic tags do not establish board approval or addiction-course content.
 - Point them to Credentials → Find CME for the full filterable directory.
 
 VETTED PROVIDER DIRECTORY (name | url | pricing | accreditation | note):

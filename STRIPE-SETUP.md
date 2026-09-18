@@ -1,3 +1,9 @@
+> **Historical material — pricing and launch instructions superseded September 18, 2026.**
+> Current owner decision: Core $149/year; Core + Locum $245/year; billing off,
+> invite-only beta, no end date. Do not execute old payment/cutover instructions
+> or send old sales copy. See [current decision](docs/PRICE-DECISION-2026-09-18.md) and
+> [launch readiness](docs/LAUNCH-READINESS-2026-09-18.md).
+
 # Stripe Setup — CredentialDOMD
 
 ## What you need from Stripe

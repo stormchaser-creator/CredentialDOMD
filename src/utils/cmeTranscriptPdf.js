@@ -240,7 +240,7 @@ export function boardTranscriptModel(data, board) {
 
 // ─── Rendering ────────────────────────────────────────────────────────────
 
-function stateRequirementRows(model) {
+export function stateRequirementRows(model) {
   const { comp, req } = model;
   const deg = model.physician.degree;
   const rows = [];
@@ -279,6 +279,17 @@ function stateRequirementRows(model) {
       required: t.checklist ? "Any activity" : fmtHrs(t.required),
       earned: fmtHrs(t.earned),
       met: t.met,
+    });
+  }
+  for (const topic of comp.conditionalTopics || []) {
+    if (topic.applicability === "applies") continue;
+    rows.push({
+      name: `${topic.topic} (conditional)`,
+      rule: `${topic.condition.description} ${topic.cite}; checked ${topic.checkedOn}. ${topic.url}`,
+      required: topic.applicability === "unknown" ? `${topic.required} if applicable` : "Not applied",
+      earned: "-",
+      met: null,
+      status: topic.applicability === "unknown" ? "Confirm applicability" : "Not applicable (selected)",
     });
   }
   if (comp.mate) {
@@ -351,7 +362,7 @@ export function buildTranscriptPdf(model, { today = new Date() } = {}) {
     startY: y,
     margin: tableMargin,
     head: [["Requirement", "Rule", "Required", "Earned", "Status"]],
-    body: reqRows.map(r => [r.name, r.rule || "", r.required, r.earned, r.met ? "Met" : "Not met"]),
+    body: reqRows.map(r => [r.name, r.rule || "", r.required, r.earned, r.status || (r.met ? "Met" : "Not met")]),
     styles: { font: "helvetica", fontSize: 8.5, cellPadding: 3.5, textColor: INK, overflow: "linebreak", valign: "top" },
     headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5 },
     alternateRowStyles: { fillColor: [245, 247, 250] },
@@ -364,7 +375,7 @@ export function buildTranscriptPdf(model, { today = new Date() } = {}) {
     },
     didParseCell: (h) => {
       if (h.section === "body" && h.column.index === 4) {
-        h.cell.styles.textColor = h.cell.raw === "Met" ? GREEN : RED;
+        h.cell.styles.textColor = h.cell.raw === "Met" ? GREEN : h.cell.raw === "Not met" ? RED : MUTED;
       }
     },
   });

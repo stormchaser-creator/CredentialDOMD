@@ -266,8 +266,20 @@ export const STATE_REQS = {
   ], notes: "No CME requirement", rollover: "No", moc: "", source: "N.Y. Comp. Codes tit. 8, \u00a7\u00a7 59.12-13", verified: "2026-08", sourceUrl: "https://www.op.nysed.gov/professions/physicians/nysdoh-mandatory-prescriber-education" },
   OH: { total: 50, cycle: 2, cat1min: 50, cat1note: "All Cat 1", topics: [
     { topic: "Ethics", hours: 1.0, note: "1 hr duty to report" },
-    { topic: "Pain Management", hours: 20.0, note: "20 hrs pain medicine (pain clinic operators, incl. addiction)" },
-  ], notes: "1 hr duty to report; 20 hrs pain medicine (pain clinic operators, incl. addiction)", rollover: "No", moc: "No", source: "Ohio Admin. Code \u00a7\u00a7 4731-10-02", verified: "2026-08", sourceUrl: "https://codes.ohio.gov/ohio-administrative-code/rule-4731-10-02" },
+    {
+      topic: "Pain Management", hours: 20.0,
+      note: "20 Category I hours in pain medicine every 2 years for physicians who own or provide care at a qualifying pain management clinic; must include a course addressing potential for addiction. Review course content, not just the topic tag.",
+      cite: "OAC 4731-29-01(B)(1), (C)",
+      url: "https://codes.ohio.gov/ohio-administrative-code/rule-4731-29-01",
+      checkedOn: "2026-09-18", effectiveDate: "2026-01-31",
+      acceptedCategories: ["AMA PRA Category 1", "AOA Category 1-A", "AOA Category 1-B"],
+      condition: {
+        field: "Ohio pain clinic CME applies",
+        question: "Do you own or provide care at an Ohio pain management clinic covered by this rule?",
+        description: "Physicians who own or provide care at a pain management clinic as defined by OAC 4731-29-01. The rule excludes hospitals, hospital-operated or hospital-owned practices, and several other facility types; prescribing pain medicine or holding an Ohio license alone does not determine applicability.",
+      },
+    },
+  ], notes: "1 hr board-approved duty-to-report CME; conditional 20 Category I pain-medicine hours for qualifying pain-clinic owners and care providers, including addiction content", rollover: "No", moc: "No", source: "Ohio Admin. Code \u00a7\u00a7 4731-10-02", verified: "2026-08", sourceUrl: "https://codes.ohio.gov/ohio-administrative-code/rule-4731-10-02" },
   OK: { md: { total: 60, cycle: 3, cat1min: 60, cat1note: "All Cat 1", topics: [
     { topic: "Opioid Prescribing", hours: 1.0, note: "1 hr pain management or opioid use/addiction in EACH year preceding renewal (DEA holders). Oklahoma's cycle is 3 years; counted on a 1-year clock so the current year's hour is what is checked, rather than one hour anywhere in three.", period: { years: 1 }, cite: "OAC 435:10-15-1; 59 O.S. \u00a7 495a.1" },
   ], notes: "1 hr/yr pain management or opioid use/addiction (DEA holders); 1-hr training on provider rights/responsibilities every 2 yrs", rollover: "No", moc: "AMA PRA or ABMS cert/recert accepted", source: "59 O.S. \u00a7 495a.1; OAC 435:10-15-1", verified: "2026-08", sourceUrl: "https://www.okmedicalboard.org/cme/CMEguidelines.pdf" }, do: { total: 16, cycle: 1, cat1min: 16, cat1note: "16 AOA Cat 1 (AMA PRA Cat 1 accepted if ABMS certified)", topics: [

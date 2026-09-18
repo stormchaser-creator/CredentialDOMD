@@ -1,3 +1,4 @@
+import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
 import { useState, useMemo, useCallback, memo } from "react";
 import { supabase } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
@@ -117,7 +118,7 @@ function CMESection({ onShare }) {
       state: st,
       compliance: complianceFor(data, st),
     }));
-  }, [showCompliance, allTrackedStates, data.cme, deg]);
+  }, [showCompliance, allTrackedStates, data]);
 
   const totalHours = useMemo(() => data.cme.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0), [data.cme]);
 
@@ -359,10 +360,10 @@ function CMESection({ onShare }) {
                 </div>
                 <div style={{
                   width: 26, height: 26, borderRadius: 13,
-                  backgroundColor: comp.fullyCompliant ? T.successDim : T.dangerDim,
+                  backgroundColor: comp.fullyCompliant ? T.successDim : comp.assessmentStatus === "needs-confirmation" ? T.input : T.dangerDim,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  color: comp.fullyCompliant ? T.success : T.danger, fontSize: 15, fontWeight: 700,
-                }}>{comp.fullyCompliant ? "\u2713" : "\u2717"}</div>
+                  color: comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.textMuted : T.danger, fontSize: 15, fontWeight: 700,
+                }}>{comp.fullyCompliant ? "\u2713" : comp.assessmentStatus === "needs-confirmation" ? "?" : "\u2717"}</div>
               </div>
               {/* The counting window, in plain text. It used to be invisible,
                   so a physician had to guess which of their entries counted
@@ -397,6 +398,7 @@ function CMESection({ onShare }) {
                 degreeType={deg}
                 onFindCme={() => navigate("credentials", "findCme")}
               />
+              <ConditionalCmeTopics comp={comp} />
               {/* Every mandated topic carries its own periodicity and its own
                   link to the rule, because the rule set's single sourceUrl
                   cannot tell a physician where any one of these lines came

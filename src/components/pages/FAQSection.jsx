@@ -1,6 +1,10 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { AsclepiusIcon } from "../shared/Icons";
+import { BILLING_CATALOG } from "../../../supabase/functions/_shared/billingCatalog.mjs";
+
+const coreAnnual = BILLING_CATALOG.offers.core.unitAmount / 100;
+const locumAnnual = BILLING_CATALOG.offers.core_locum.unitAmount / 100;
 
 const FAQ_DATA = [
   {
@@ -11,36 +15,36 @@ const FAQ_DATA = [
         a: "Yes. The app is in beta and free while the beta lasts; billing is switched off. The plan names below describe what pricing is expected to look like later. If paid plans launch you will hear about it in advance, and nothing is charged without your agreement.",
       },
       {
-        q: "Is the free tier really free forever?",
-        a: "Yes. Up to 5 credentials, no expiration, no credit card. Upgrade only when you need more.",
+        q: "Is there a permanent free plan?",
+        a: "The current free access is an invite-only beta. CredentialDoMD is preparing two annual founding-member bundles; there is no permanent free plan or automatic upgrade.",
       },
       {
-        q: "Why is there a free tier for residents?",
-        a: "Because residents earn $60K and already pay for board prep. Once you graduate, the system flips you to Core at $15/mo (or $149 a year) automatically, 90 days after graduation. You can cancel anytime.",
+        q: "When will paid plans start?",
+        a: "No paid launch date is set. Billing remains off while checkout, account migration and launch preparation are completed. You will receive advance notice and must agree before any charge.",
       },
       {
         q: "Can I deduct CredentialDoMD on my taxes?",
-        a: "If you are a 1099 locum or self-employed physician, yes. The Locum add-on keeps a deduction ledger and exports an itemized deduction memo for your CPA.",
+        a: "Core + Locum includes an expense ledger and an export for your tax professional. Ask them whether a subscription or any recorded expense is deductible in your circumstances.",
       },
       {
-        q: "What is the Founding Physician tier?",
-        a: "The first 100 physicians lock in $12/mo for 24 months. After 24 months, you convert to Core at the standard rate. The slots are limited and counted live.",
+        q: "What are the planned founding-member prices?",
+        a: `Core is planned at $${coreAnnual} per physician per year. Core + Locum is planned at $${locumAnnual} per physician per year. Billing is off; these are future annual offers, with no monthly plan or automatic conversion.`,
       },
       {
-        q: "How is Core priced against other trackers?",
-        a: "Core is $149 a year or $15 month to month. Mocingbird starts at $199 a year, annual only, and CE Broker's paid tiers run $40 to $125. Core costs less than Mocingbird and adds MOC tables, AI reading of your certificates, packets, a CV builder, an assistant, and offline use. Locums billing is a $96 a year add-on on top of Core ($25 a month, $245 a year together).",
+        q: "What does Core + Locum add?",
+        a: "Core covers credentials, CME tracking, document scans, credential packets, CVs and the assistant. Core + Locum adds contracts, work logs, invoices, payment tracking and locums finance tools. Review extracted contract rates before using them, and record payments to track the remaining balance.",
       },
       {
-        q: "How does Practice billing work?",
-        a: "$39 per provider per month, billed annually. A 5-provider practice pays $39 × 5 × 12 = $2,340/year, billed once.",
+        q: "Are group plans available?",
+        a: "The prepared launch offer has two individual annual founding-member bundles. Group and enterprise plans are not offered for purchase.",
       },
       {
         q: "Can I cancel anytime?",
-        a: "Yes. Monthly cancels at the end of the current cycle. Annual cancels at end of term.",
+        a: "There is no paid subscription to cancel during the beta. Renewal and cancellation terms will be shown before any future purchase.",
       },
       {
         q: "Do you store my documents securely?",
-        a: "Uploaded documents go to a private Supabase Storage bucket in the US region, in a folder only your account can reach (row-level security), encrypted in transit and at rest. Note that CredentialDOMD is built to hold no patient information, so we make no HIPAA compliance claim and do not offer a BAA on any plan.",
+        a: "Uploaded documents go to Supabase cloud storage. Access rules are designed to separate accounts; the operator has administrative access. AI features send the content you submit to the selected provider. Private notes are stored separately in your browser and can be included in manual exports. The app makes no HIPAA compliance claim and currently offers no BAA. See the Security and Privacy pages for details before uploading sensitive material.",
       },
     ],
   },
@@ -53,7 +57,7 @@ const FAQ_DATA = [
       },
       {
         q: "Is my data stored securely?",
-        a: "Your data is cached in this browser so the app opens offline, and synced under your account to a Supabase database (US region); uploaded document files go to a private storage bucket. Row-level security ties every row and file to your user id, and everything travels over TLS. Sign out on shared computers, and use Data & Backup for a JSON copy of your own. The one on-device-only item is the private note on a work entry, which never syncs. Details are in More > Privacy.",
+        a: "Records are cached in this browser for offline use and synced to Supabase under your account. Uploaded documents use cloud storage, with access rules designed to separate accounts. Private notes use separate local storage, are not encrypted by the app, and do not sync automatically; manual exports can include them. The operator has administrative access. Details are in More > Privacy and the public Security page.",
       },
       {
         q: "Does CredentialDOMD work offline?",
@@ -141,7 +145,7 @@ const FAQ_DATA = [
       },
       {
         q: "Does CredentialDOMD share my data with anyone?",
-        a: "We do not sell it or share it with anyone outside the services that run the app: Clerk (sign-in), Supabase (database and file storage, US region), Cloudflare (proxy), Resend (email), and, only when you use them, the NPPES registry for NPI lookup and Google or Anthropic for AI features under your own key. The operator (Eric Whitney, DO) has admin access for support and reads tickets, feedback, and the assistant log; tickets may be processed with AI tooling. The full list is in More > Privacy.",
+        a: "Services process information needed to run the app: Clerk for sign-in, Supabase for records and files, Cloudflare for proxying, Resend for email, and the NPI lookup service. AI features send submitted content to Google or Anthropic using a shared service key or your optional own key. Sharing a packet sends selected information to its recipient. The operator has administrative access for support, and tickets may be processed by AI tooling. See More > Privacy for the full list and details.",
       },
       {
         q: "What happens if I clear my browser data?",

@@ -63,6 +63,7 @@ import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardComplianc
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
+import ConditionalCmeTopics from "./components/shared/ConditionalCmeTopics";
 import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
 
@@ -877,7 +878,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
-    const cmeBehind = stateComps.filter(x => !x.comp.fullyCompliant).map(x => x.st);
+    const cmeBehind = stateComps.filter(x => x.comp.assessmentStatus === "needs-hours").map(x => x.st);
     const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && credStats.undated === 0;
     // What is holding the ring below 100, listed where the number is, each
     // line a tap to the record that fixes it. One renderer for both heroes.
@@ -885,11 +886,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
         {standing.needsAction.slice(0, max).map(({ item, days }) => {
           const isCme = item._sec === "cme" && String(item.id).startsWith("cme:");
-          const label = isCme ? `${item.state} CME` : describeItem(item, data.settings.name, item._sec);
-          const when = days == null ? (isCme ? "behind" : "no expiration date")
+          const label = isCme ? `${item.state} CME${item.needsConfirmation ? ": confirm applicability" : ""}` : describeItem(item, data.settings.name, item._sec);
+          const when = item.needsConfirmation ? "review rule" : days == null ? (isCme ? "behind" : "no expiration date")
             : days < 0 ? `expired ${-days} day${-days === 1 ? "" : "s"} ago`
             : days === 0 ? "expires today" : `${days} day${days === 1 ? "" : "s"} left`;
-          const color = days != null && days < 0 ? T.danger : T.warning;
+          const color = item.needsConfirmation ? T.textMuted : days != null && days < 0 ? T.danger : T.warning;
           const go = () => {
             if (isCme) { setTab("credentials"); setSubPage("cme"); return; }
             setTab("credentials"); setSubPage(item._sec);
@@ -929,7 +930,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       }}>
         {heroGlow}
         <div className="cmd-ring-animated">
-          <ComplianceRing percent={compliancePercent} size={120} stroke={9} label="In good standing" />
+          <ComplianceRing percent={compliancePercent} size={120} stroke={9} label="In good standing" pending={stateComps.some(x => x.comp.applicabilityUnknown)} />
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -995,7 +996,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       }}>
         {heroGlow}
         <div className="cmd-ring-animated" style={{ flexShrink: 0 }}>
-          <ComplianceRing percent={compliancePercent} size={136} stroke={10} />
+          <ComplianceRing percent={compliancePercent} size={136} stroke={10} pending={stateComps.some(x => x.comp.applicabilityUnknown)} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: hasActionColumn ? "repeat(auto-fit, minmax(120px, 1fr))" : "repeat(4, 1fr)" }}>
@@ -1231,7 +1232,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {/* CME math — which entries counted, which didn't, and why */}
         <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? `${cmeDetail.st} CME — the math` : "CME"}>
           {cmeDetail && (() => {
-            const { comp } = cmeDetail;
+            const comp = complianceFor(data, cmeDetail.st);
             const deg = data.settings.degreeType;
             // The credit types the engine actually filtered on. This used to be
             // recomputed here from the degree, which for a CA DO listed AMA PRA
@@ -1256,6 +1257,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   ))}
                 </div>
 
+                <ConditionalCmeTopics comp={comp} />
                 {/* Requirement scoreboard */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
                   {!comp.noGeneralReq && (
@@ -1631,7 +1633,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <div key={st} onClick={() => setCmeDetail({ st, comp })} style={{
           backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
           boxShadow: T.shadow1, cursor: "pointer",
-          borderLeft: `3px solid ${comp.fullyCompliant ? T.success : T.warning}`,
+          borderLeft: `3px solid ${comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.border : T.warning}`,
         }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1649,10 +1651,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               }
               <div style={{
                 width: 22, height: 22, borderRadius: 11,
-                backgroundColor: comp.fullyCompliant ? T.successDim : T.warningDim,
+                backgroundColor: comp.fullyCompliant ? T.successDim : comp.assessmentStatus === "needs-confirmation" ? T.input : T.warningDim,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: comp.fullyCompliant ? T.success : T.warning, fontSize: 13, fontWeight: 700,
-              }}>{comp.fullyCompliant ? "\u2713" : "!"}</div>
+                color: comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.textMuted : T.warning, fontSize: 13, fontWeight: 700,
+              }}>{comp.fullyCompliant ? "\u2713" : comp.assessmentStatus === "needs-confirmation" ? "?" : "!"}</div>
             </div>
           </div>
           {/* Renewal deadline */}
@@ -1683,6 +1685,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             )}
           </div>
 
+          <ConditionalCmeTopics comp={comp} />
           {/* Progress bar */}
           {!comp.noGeneralReq && comp.totalRequired > 0 && (
             <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginBottom: unmetTopics.length > 0 ? 8 : 0 }}>

@@ -11,7 +11,7 @@
 
 <!-- Open Graph -->
 <meta property="og:title" content="4 agencies, 9 states, 1 ledger: locum tenens invoices, taxes, licenses">
-<meta property="og:description" content="Every agency gives you an app. None of them can tell you what you made this year. Contract-priced invoices, a payment ledger, multistate tax estimates with the source cited, and 50-state license tracking.">
+<meta property="og:description" content="Contract-based invoices, a payment ledger and credential tracking across your locum agencies. Review the agreement, log the work, build the invoice and track what gets paid.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://credentialdomd.com/locums">
 <meta property="og:site_name" content="CredentialDoMD">
@@ -109,7 +109,7 @@
       "name": "Is my patient data safe? Is this HIPAA compliant?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "There is no HIPAA compliance claim, because the design is no PHI at all. The app holds credential paperwork and billing data. The note saying which patient a phone call was about stays in that device's own storage and is never uploaded, and the billing description that reaches the invoice stays free of identifiers. The scanner warns when an upload reads like a chart rather than a credential. The trade is stated in the app: those private notes do not follow you to another device."
+        "text": "CredentialDOMD makes no HIPAA compliance claim and does not offer a BAA. Cloud records and documents are separate from private notes saved in this browser. Private notes do not sync automatically and are not separately encrypted by the app; you can export them manually. AI requests send the content you submit to Google or Anthropic. Keep patient identifiers out of uploads, dictated text, chats and synced fields. Screening cannot guarantee that patient information is removed. Read /security for details."
       }
     },
     {
@@ -117,7 +117,7 @@
       "name": "What does it cost?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Right now it is a free invite beta with every feature on and no card. Paid pricing is being finalized, and every beta member sees the number before anything is ever charged."
+        "text": "The invite beta is free with no card required. Planned founding membership is $149/year for Core or $245/year total for Core + Locum. Billing is not open, and joining the beta does not start a paid subscription."
       }
     },
     {
@@ -1776,6 +1776,8 @@ footer {
 
 .footer-links {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 24px;
 }
 
@@ -2235,7 +2237,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
     <div class="nav-links">
       <a href="/#features">Features</a>
       <a href="/locums" class="current" aria-current="page">For Locums</a>
-      <a href="/states/">Renewal Guides</a>
+      <a href="/security">Security</a>
       <a href="#faq">FAQ</a>
       <a href="/app/">Sign in</a>
       <a href="#beta" class="btn-primary nav-cta">Get Early Access</a>
@@ -2258,14 +2260,14 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
     <div class="hero-content">
       <div class="badge hero-badge">For locum tenens physicians</div>
 
-      <h1>Every agency gives you an app. <span class="highlight">None of them can tell you what you made this year.</span></h1>
+      <h1>Contract. Work log. Invoice. <span class="highlight">Know what gets paid.</span></h1>
 
       <p class="hero-subtitle">
-        One ledger across every agency and every state you work in. The license that has to stay current, the invoice nobody chased, and the quarterly estimate that comes out of both, in one place. Built and used by a practicing neurosurgeon who works locums.
+        Review your contract rates, log your shifts and calls, build itemized invoices, and record payments across agencies. Keep your licenses and CME current alongside the work. Built and used by a practicing neurosurgeon who works locums.
       </p>
 
       <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
-        <input type="email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
+        <input type="email" aria-label="Email address" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 220px; padding: 15px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
         <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
@@ -2277,7 +2279,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
       <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
       <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); margin-bottom: 22px;">
         <span>Free beta &middot; every feature on &middot; no card</span>
-        <a href="#tax" style="white-space: nowrap;">See the tax engine &rarr;</a>
+        <a href="/#how-it-works" style="white-space: nowrap;">See the four-step workflow &rarr;</a>
       </div>
 
       <div class="hero-trust">
@@ -3356,24 +3358,24 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
     <div class="animate-on-scroll" style="text-align: center;">
       <div class="section-label" style="justify-content: center;">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        No PHI by design
+        Your data, explained
       </div>
-      <h2 class="section-title">There is no HIPAA claim here, because there is no patient data here.</h2>
-      <p class="section-subtitle" style="margin: 0 auto;">The app holds credential paperwork and billing data. That is a deliberate design choice, not a gap waiting to be filled.</p>
+      <h2 class="section-title">Know what stays on your device and what leaves it.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">CredentialDOMD handles your professional records. It makes no HIPAA compliance claim and does not offer a business associate agreement. <a href="/security">Read the security and data-handling details.</a></p>
     </div>
 
     <div class="lives-grid" style="margin-top: 44px;">
       <div class="lives-card animate-on-scroll">
         <div class="lives-path">The private vault</div>
-        <p>The note saying which patient a two-minute phone call was about stays in this device's own storage and is never uploaded. The billing description that reaches the invoice stays free of identifiers. Dictation routes any patient name it hears into the private note rather than the synced billing field.</p>
+        <p>Private notes are stored separately in this browser and excluded from normal cloud sync, invoices and AI requests. They are readable browser data, not separately encrypted by the app. Protect access to your device and browser.</p>
       </div>
       <div class="lives-card animate-on-scroll">
         <div class="lives-path">The trade, stated plainly</div>
-        <p>Those private notes do not follow you to another device. The app says so, in the app. The only way to make them follow you is to send them to a server, and that is exactly the thing this design refuses to do.</p>
+        <p>Private notes do not sync to your other devices or appear in cloud backups. You can export and restore them yourself through Data &amp; Backup. The exported file is readable; keep it private. Signing out or clearing browser storage can erase the local copy.</p>
       </div>
       <div class="lives-card animate-on-scroll">
-        <div class="lives-path">The upload guard</div>
-        <p>The document scanner warns when an upload reads like a chart rather than a credential, because the fastest way to create a PHI problem is to photograph the wrong page in a hurry.</p>
+        <div class="lives-path">Uploads and AI</div>
+        <p>Scans, dictation and assistant messages can send content to Google or Anthropic. Upload screening is limited and is not a guarantee that identifiers are removed before submission. Review the source and leave patient identifiers out of AI inputs, documents and synced fields.</p>
       </div>
     </div>
   </div>
@@ -3435,7 +3437,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
       <h3>Request access</h3>
       <p style="margin-bottom: 22px;">One email when your invite is ready. Paid pricing is being finalized, and every beta member sees the number before anything is ever charged.</p>
       <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-        <input type="email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
+        <input type="email" aria-label="Email address" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
         <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
@@ -3508,7 +3510,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
           <span class="faq-toggle">+</span>
         </button>
         <div class="faq-answer"><div class="faq-answer-inner">
-          There is no HIPAA compliance claim, because the design is no PHI at all. The app holds credential paperwork and billing data. The note saying which patient a phone call was about stays in that device's own storage and is never uploaded, and the billing description that reaches the invoice stays free of identifiers. The scanner warns when an upload reads like a chart rather than a credential. The trade is stated in the app: those private notes do not follow you to another device.
+          CredentialDOMD makes no HIPAA compliance claim and does not offer a BAA. Cloud records and documents are separate from private notes saved in this browser. Private notes do not sync automatically and are not separately encrypted by the app; you can export them manually. AI requests send the content you submit to Google or Anthropic. Keep patient identifiers out of uploads, dictated text, chats and synced fields. Screening cannot guarantee that patient information is removed. Read /security for details.
         </div></div>
       </div>
 
@@ -3518,7 +3520,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
           <span class="faq-toggle">+</span>
         </button>
         <div class="faq-answer"><div class="faq-answer-inner">
-          Right now it is a free invite beta with every feature on and no card. Paid pricing is being finalized, and every beta member sees the number before anything is ever charged.
+          The invite beta is free with no card required. Planned founding membership is $149/year for Core or $245/year total for Core + Locum. Billing is not open, and joining the beta does not start a paid subscription.
         </div></div>
       </div>
 
@@ -3631,8 +3633,9 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="footer-links">
         <a href="/states/">License Renewal by State</a>
-        <a href="/app/privacy">Privacy Policy</a>
-        <a href="/app/terms">Terms of Service</a>
+        <a href="/security">Security</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
         <a href="mailto:support@credentialdomd.com">Contact</a>
         <a href="mailto:support@credentialdomd.com">Support</a>
       </div>

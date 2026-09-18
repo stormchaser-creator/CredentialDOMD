@@ -12,11 +12,11 @@
  * **double asterisks** mark bold. Plain text only, no HTML.
  */
 
-export const LEGAL_UPDATED = "August 17, 2026";
-// The privacy policy moved on its own on September 2, 2026 (AI vendors,
-// retention periods, deletion); the terms did not change and keep their date.
-export const PRIVACY_UPDATED = "September 2, 2026";
-export const LEGAL_OPERATOR = "CredentialDOMD, operated by Eric Whitney, DO";
+export const LEGAL_UPDATED = "September 18, 2026";
+// Technical data-handling statements reconciled with the app on September 18.
+// Operator identity confirmed against the merchant business settings and formation record on September 18.
+export const PRIVACY_UPDATED = "September 18, 2026";
+export const LEGAL_OPERATOR = "Eric Whitney, DO, A Professional Corporation";
 export const LEGAL_CONTACT = "support@credentialdomd.com";
 
 export const PRIVACY = {
@@ -24,14 +24,14 @@ export const PRIVACY = {
   title: "Privacy Policy",
   updated: PRIVACY_UPDATED,
   intro: [
-    `${LEGAL_OPERATOR}. This policy says what the app collects, where it lives, which companies touch it, and how you get it back or delete it. Questions go to ${LEGAL_CONTACT}.`,
+    `CredentialDOMD is operated by ${LEGAL_OPERATOR}. This policy says what the app collects, where it lives, which companies touch it, and how you get it back or delete it. Questions go to ${LEGAL_CONTACT}.`,
     "CredentialDOMD is in free beta. Features, storage layout, and this policy will change as the product matures. The date above tells you which version you are reading.",
   ],
   sections: [
     {
       title: "1. An account is required",
       blocks: [
-        "You sign in with an account managed by Clerk (email plus a one-time code, a passkey, or a password, depending on what you set up). Clerk holds the sign-in credentials; we receive your Clerk user id, the email address on the account, and the name you gave at sign-up. Everything you store in the app is keyed to that user id.",
+        "You sign in with an account managed by Clerk (email plus a one-time code, a passkey, or a password, depending on what you set up). Clerk holds the sign-in credentials; we receive your Clerk user id, the email address on the account, and the name you gave at sign-up. Everything you store in the app is keyed to that user id."
       ],
     },
     {
@@ -43,38 +43,37 @@ export const PRIVACY = {
           "**Locum and case data:** case logs, work and billing entries, invoices, and contract terms.",
           "**Documents you upload**, plus the fields the app extracts from them.",
           "**Support and feedback:** tickets and replies, field proposals, and a log of assistant questions with a one-line summary of each answer.",
-          "**Settings.** Any AI keys you enter yourself stay on your device and are not stored in the database (section 4). The server keeps a count of your AI calls per day for the shared keys' daily limits.",
-        ],
+          "**Settings.** Any AI keys you enter yourself stay on your device and are not stored in the database (section 4). The server keeps a count of your AI calls per day for the shared keys' daily limits."
+        ]
       ],
     },
     {
       title: "3. Where it is stored",
       blocks: [
         [
-          "**On your device.** Browser storage holds a cache so the app opens and reads offline; it syncs when you are online. Sign out when you finish on a shared computer, because that cache belongs to whoever opens the app there next.",
-          "**Supabase, US region.** A Postgres database holds your records, and a private Storage bucket holds uploaded document files in a folder per user. Row-level security ties every row and every file to your user id. Traffic is encrypted with TLS and Supabase encrypts data at rest.",
+          "**On your device.** Browser storage holds a cache associated with the signed-in account so records can open offline and sync when you are online. Cached records and private notes are not separately encrypted by the app. Protect access to your device and browser, and sign out when you finish on a shared computer. Export any local private notes you need before signing out.",
+          "**Supabase, US region.** A Postgres database holds your records, and a private Storage bucket holds uploaded document files in a folder per user. Account access policies are designed to limit access to the appropriate account. The operator has administrative access for support and operations. Traffic is encrypted with TLS and Supabase encrypts data at rest.",
           "**Monthly backups.** Unless you turn them off in More > Data & Backup, once a month the server builds a ZIP of your records and your uploaded documents, keeps it in a separate private bucket only you can reach, and emails you when it is ready. The email carries no link to the file. You download it from More > Data & Backup while signed in, through a link that works for 15 minutes, and the server keeps the three most recent months. The archive contains no private vault notes and no AI keys, because neither is ever on the server.",
-          "**The private vault.** On this device only, never synced. See section 5.",
-        ],
+          "**The private vault.** On this device only, never synced. See section 5."
+        ]
       ],
     },
     {
       title: "4. AI features",
       blocks: [
-        "Two AI companies receive data from the app, and only when you use an AI feature. Document scanning, CME import, work-log dictation, CPT lookup, and statement and row parsing send the document images, PDFs, and dictated text you give them to Google's Gemini API. The assistant (Vera), case dictation, and the CPT coder send your question or dictation to Anthropic's Claude API; for the assistant that also includes a summary of your records (the same fields you see in the app, including the license, DEA, and NPI numbers you entered) and any document you attach to the conversation. When Claude is unavailable (the daily limit is reached, or an attachment is a type Claude cannot read), those three fall back to Gemini.",
-        "By default both run under shared keys that CredentialDOMD holds on the server: your request goes from your browser to our server, which forwards it to Google or Anthropic under that key and returns the answer. The server records the time, the provider, the model called, the size of the text sent, and whether it succeeded, so it can apply a per-user daily limit; it does not keep the content of the request, and those usage rows are deleted after 90 days.",
-        "You may add your own Google Gemini key, an Anthropic key, or both in Settings. Those keys stay on your device and are never stored in the database. With your own key the request goes straight from your browser to that provider under your key, the shared daily limit does not apply, and you are responsible for the key and any charges on it.",
-        "Either way, what you submit is handled under Google's or Anthropic's terms, not ours. Anthropic deletes API inputs and outputs within 30 days and does not use them to train its models. Google's Gemini API terms govern what is sent to Gemini; if you use your own key, the terms attached to that key apply. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.",
-        "AI output is a draft: review it before you rely on it.",
+        "AI features can send content to Google’s Gemini API or Anthropic’s Claude API. Scanning and import features send the text, images or PDFs supplied for that task. Dictation sends the transcript. Vera uses Gemini by default and can use Claude when selected and available; the assistant request includes your question, conversation context, a summary of your records and any attachment. Other coding or dictation features may use either provider, depending on the feature and settings, with Gemini fallback when applicable.",
+        "Approved accounts can use shared keys held on the server. Your request passes through our server to the provider. The server records usage metadata such as provider, model, token counts, time and success or failure for usage controls and cost tracking. Separately, assistant activity logs are available to the operator as described below.",
+        "You may add your own Gemini key, an Anthropic key, or both in Settings. These keys are stored on the device rather than in the cloud database. Requests using your key go directly to that provider, and you are responsible for charges and the terms attached to the key. Your own key is optional.",
+        "Submitted content is processed under the relevant provider’s terms. Dictation also uses the browser’s speech-recognition service, which may process audio outside the device. Keep patient identifiers out of all AI inputs. Review AI output before saving or relying on it."
       ],
     },
     {
-      title: "5. No patient information, by design",
+      title: "5. Patient information and private notes",
       blocks: [
-        "CredentialDOMD is built for your professional data, not your patients'. Do not upload patient records (operative notes, progress notes, discharge summaries, face sheets, chart printouts) and do not type patient identifiers (names, medical record numbers, dates of birth, addresses, phone numbers) into any synced field or document. Upload the credential itself: the license, the certificate, the agreement, the lab slip.",
-        "The app screens uploads and refuses a document that reads as a patient record, and the AI features are instructed to omit identifiers. That is a safety net, not a substitute for your judgment.",
-        "**The one exception is the private note on a work or case entry.** It lives in the private vault in your browser, is never uploaded, never sent to an AI provider, and never printed on an invoice or shared packet. It exists so you can recognize which patient a billed call concerned. It does not follow you to another device unless you export and restore it from Data & Backup.",
-        "**Because the app holds no PHI, we make no HIPAA compliance claim and do not offer a business associate agreement (BAA), on any plan, now or in the future.** If your group requires a BAA before staff can use a tool, this is not that tool.",
+        "CredentialDOMD is intended for your professional records. Do not upload patient charts or put patient identifiers such as names, medical record numbers, dates of birth, addresses or phone numbers into synced fields, attachments, support tickets, chats or dictated text.",
+        "Document screening and AI instructions are limited safeguards. They can miss identifiers and do not guarantee that information is removed before processing by the server or an AI provider.",
+        "**The private note field on a work or case entry uses separate browser storage.** It is excluded from normal cloud sync, AI requests, invoices, shared packets and cloud backups. It is not separately encrypted by the app. You can manually export and restore those notes through Data & Backup; the exported file is readable. Signing out, clearing browser storage or losing the device can remove the local copy. A local note does not protect information you copy, dictate or submit elsewhere.",
+        "**We make no HIPAA compliance claim and do not offer a business associate agreement (BAA).** Do not use the service for a workflow requiring a BAA. Read Security and data handling (credentialdomd.com/security) for practical details."
       ],
     },
     {
@@ -88,10 +87,10 @@ export const PRIVACY = {
           "**Resend**: transactional email, such as the early-access welcome note and account emails.",
           "**Google** (Gemini API) and **Anthropic** (Claude API): when you use an AI feature, under the shared keys or your own (section 4).",
           "**CMS NPPES registry**, **CMS provider data** (data.cms.gov, the Medicare Care Compare files), **NLM Clinical Tables**, and **NLM PubMed** (E-utilities): the NPI and public-register lookups. Public government APIs, called from our server, that receive only what the search is keyed on: your NPI, or the name and state you searched by, or the surname and initials PubMed is matched on.",
-          "**Telegram**: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram.",
+          "**Telegram**: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram."
         ],
         "The register lookups (NPPES, CMS provider data, NLM Clinical Tables and PubMed) run the other way from the rest of this list. They are reads: the app asks a public government register what it already publishes about you, keyed on your NPI or your name, and shows you the answer to accept or ignore. Nothing you have stored in the app is sent to those registers, and they are never written to.",
-        "We do not sell your data and do not share it with anyone not on this list. Share and Send compose an email or text message on your device; we do not send it for you and keep no copy.",
+        "We do not sell your data. Sharing can use your device’s share, email or text controls. Where you choose the server email option, selected files and recipient details pass through our server and email provider, and the app records a share history. Check the recipients and files before sending."
       ],
     },
     {
@@ -99,17 +98,17 @@ export const PRIVACY = {
       blocks: [
         [
           "**You**, in the app.",
-          "**The operator**, Eric Whitney, DO, has administrative access to the database and storage for support, debugging, and abuse prevention, and reads tickets, feedback, and the assistant log. Tickets and feedback may be triaged and acted on with AI tooling. Credential data is opened only when needed to run the service.",
+          `**The service administrator**, Eric Whitney, DO, acts for ${LEGAL_OPERATOR} and has administrative access to the database and storage for support, debugging, and abuse prevention, and reads tickets, feedback, and the assistant log. Tickets and feedback may be triaged and acted on with AI tooling. Credential data is opened only when needed to run the service.`,
           "**The companies in section 6**, to the extent needed to provide their service.",
           "**Anyone you choose to share** a credential or packet with.",
-          "**Authorities**, if we are legally required to disclose.",
-        ],
+          "**Authorities**, if we are legally required to disclose."
+        ]
       ],
     },
     {
       title: "8. Cookies and the marketing site",
       blocks: [
-        "Inside the app there are no third-party analytics, ad pixels, or trackers; the only cookies are Clerk's session cookies. On the marketing site at credentialdomd.com, a first-party beacon records the page path, referrer, and utm source of each visit, without cookies or identifiers, so we can see which pages are read; those visit counts are kept for 13 months. The site loads the Inter typeface from Google Fonts, which shows Google your IP address the way any hosted font does. If you join the early-access list, we keep the email address (and name, if you gave one) to send your invite.",
+        "Inside the app there are no third-party analytics, ad pixels, or trackers; the only cookies are Clerk's session cookies. On the marketing site at credentialdomd.com, a first-party beacon records the page path, referrer, and utm source of each visit, without cookies or identifiers, so we can see which pages are read; those visit counts are kept for 13 months. The site loads the Inter typeface from Google Fonts, which shows Google your IP address the way any hosted font does. If you join the early-access list, we keep the email address (and name, if you gave one) to send your invite."
       ],
     },
     {
@@ -121,8 +120,8 @@ export const PRIVACY = {
           "**More > Data Rights > Delete All My Data** clears this device and deletes everything the app holds for your account on the server: your records, uploaded documents, monthly backups and their archives, support tickets and their screenshots, feedback, notes from the operator and your replies to them, the assistant log, AI usage rows, and error reports. Your profile is reduced to an account id with no name, email, or other fields, so the sign-in still resolves. It cannot be undone; export first.",
           "After a cancellation, the same deletion runs automatically 7 days later unless you reactivate before then; the Cancellation page shows the date.",
           "Operating records have fixed lifetimes whether or not you delete: AI usage rows 90 days, marketing-site visit counts 13 months, the assistant question log 12 months, and error reports 7 days.",
-          "To close the sign-in account itself, or to have anything else removed, email " + LEGAL_CONTACT + " from the address on the account.",
-        ],
+          "To close the sign-in account itself, or to have anything else removed, email support@credentialdomd.com from the address on the account."
+        ]
       ],
     },
     {
@@ -132,20 +131,20 @@ export const PRIVACY = {
           "**Access and correction:** everything you stored is visible and editable in the app.",
           "**Export:** More > Data & Backup downloads all of it as JSON, which imports back into CredentialDOMD or any system that reads JSON.",
           "**Deletion:** section 9.",
-          "If your state's privacy law gives you additional rights, email us and we will honor them.",
-        ],
+          "If your state's privacy law gives you additional rights, email us and we will honor them."
+        ]
       ],
     },
     {
       title: "11. Changes to this policy",
       blocks: [
-        "We update this policy as the product changes and move the date at the top. Material changes are announced in the app. Continued use after a change means you accept it.",
+        "We update this policy as the product changes and move the date at the top. Material changes are announced in the app. Continued use after a change means you accept it."
       ],
     },
     {
       title: "12. Contact",
       blocks: [
-        `**${LEGAL_CONTACT}**. ${LEGAL_OPERATOR}.`,
+        `**${LEGAL_CONTACT}**. CredentialDOMD is operated by ${LEGAL_OPERATOR}.`
       ],
     },
   ],
@@ -156,92 +155,92 @@ export const TERMS = {
   title: "Terms of Service",
   updated: LEGAL_UPDATED,
   intro: [
-    `These terms are the agreement between you and ${LEGAL_OPERATOR} ("we"). By creating an account or using the app you accept them. If you do not agree, do not use the app.`,
+    `These terms are the agreement between you and ${LEGAL_OPERATOR}, which operates CredentialDOMD ("we"). By creating an account or using the app you accept them. If you do not agree, do not use the app.`,
   ],
   sections: [
     {
       title: "1. Beta status",
       blocks: [
-        "CredentialDOMD is in beta. It is free while the beta lasts. If paid plans launch, you will be told in advance and nothing will be charged without your agreement. Features may change, be renamed, or be removed. There is no uptime guarantee and no service-level commitment; export a backup regularly.",
+        "CredentialDOMD is in beta. It is free while the beta lasts. If paid plans launch, you will be told in advance and nothing will be charged without your agreement. Features may change, be renamed, or be removed. There is no uptime guarantee and no service-level commitment; export a backup regularly."
       ],
     },
     {
       title: "2. Your account",
       blocks: [
-        "An account is required and is issued through Clerk. Keep your sign-in method to yourself, sign out on shared computers, and tell us if you think someone else has used your account. One person per account. You must be at least 18 and either a physician (MD or DO), a resident or fellow, or someone with permission to manage a physician's credentials.",
+        "An account is required and is issued through Clerk. Keep your sign-in method to yourself, sign out on shared computers, and tell us if you think someone else has used your account. One person per account. You must be at least 18 and either a physician (MD or DO), a resident or fellow, or someone with permission to manage a physician's credentials."
       ],
     },
     {
       title: "3. What the app is",
       blocks: [
         "CredentialDOMD helps physicians organize, track, and share their own professional credentials and locum work. It keeps a cache on your device and syncs to a cloud database and private file storage under your account (details in the Privacy Policy).",
-        "It is not a credentialing verification organization, a state medical board system, a hospital medical staff office, or an accredited CME tracker. Verify against the official source before you submit anything for credentialing.",
+        "It is not a credentialing verification organization, a state medical board system, a hospital medical staff office, or an accredited CME tracker. Verify against the official source before you submit anything for credentialing."
       ],
     },
     {
       title: "4. Your data, your responsibility",
       blocks: [
-        "You are responsible for the accuracy of what you enter. Compliance and CME calculations are based on published state requirements and are informational; requirements change, and the state board's page is the authority. Reminders are a convenience: keep your own calendar for anything you cannot afford to miss.",
+        "You are responsible for the accuracy of what you enter. Compliance and CME calculations are based on published state requirements and are informational; requirements change, and the state board's page is the authority. Reminders are a convenience: keep your own calendar for anything you cannot afford to miss."
       ],
     },
     {
       title: "5. AI features and keys",
       blocks: [
-        "AI features run on a shared Google Gemini key held on our server, subject to a per-user daily limit that we may change, or on API keys you supply (Google Gemini, Anthropic, or both). If you supply a key you are responsible for it, for the charges on it, and for complying with the provider's terms. Content you submit to an AI feature goes to that provider under whichever key is in use. We may suspend shared-key access for abuse. AI output is a draft for your review; do not rely on it without checking.",
+        "AI features can run on shared Google Gemini or Anthropic keys held on our server, subject to availability and usage limits that we may change, or on API keys you supply (Google Gemini, Anthropic, or both). If you supply a key you are responsible for it, for the charges on it, and for complying with the provider's terms. Content you submit to an AI feature goes to that provider under whichever key is in use. We may suspend shared-key access for abuse. AI output is a draft for your review; do not rely on it without checking."
       ],
     },
     {
-      title: "6. No patient information",
+      title: "6. Patient information",
       blocks: [
-        "You agree not to upload patient records and not to enter patient identifiers into any synced field or document. The private note on a work or case entry, stored only on your device, is the one place for a patient-identifying cue. We hold no PHI by design, make no HIPAA compliance claim, and do not offer a BAA on any plan, now or later. If your use requires a BAA, do not use this app for it.",
+        "You agree not to upload patient records or enter patient identifiers into synced fields, attachments, support tickets, chats or dictated text. The private note field on a work or case entry uses separate local browser storage and does not normally sync. It is not separately encrypted by the app, and manual exports are readable files. Screening and AI instructions cannot guarantee that identifiers are removed from content you submit elsewhere. We make no HIPAA compliance claim and do not offer a BAA. If your workflow requires a BAA, do not use this app for it. See Security and data handling (credentialdomd.com/security)."
       ],
     },
     {
       title: "7. Acceptable use",
       blocks: [
-        "Do not use the app to store or share credentials that are not yours without permission, to misrepresent qualifications, to probe or overload the service, or to break the law. We may suspend accounts that do.",
+        "Do not use the app to store or share credentials that are not yours without permission, to misrepresent qualifications, to probe or overload the service, or to break the law. We may suspend accounts that do."
       ],
     },
     {
       title: "8. Support",
       blocks: [
-        `Support is by email at ${LEGAL_CONTACT} and through Get help in the app. Tickets are read by the operator and may be processed with AI tooling. During beta there is no guaranteed response time.`,
+        "Support is by email at support@credentialdomd.com and through Get help in the app. Tickets are read by the operator and may be processed with AI tooling. During beta there is no guaranteed response time."
       ],
     },
     {
       title: "9. Ownership",
       blocks: [
-        "You own your data. We own the app, its code, design, and brand, and you receive a personal, revocable, non-transferable license to use it. Feedback you send may be used to improve the product without obligation to you.",
+        "You own your data. We own the app, its code, design, and brand, and you receive a personal, revocable, non-transferable license to use it. Feedback you send may be used to improve the product without obligation to you."
       ],
     },
     {
       title: "10. Warranty and liability",
       blocks: [
-        "The app is provided as is, without warranty of any kind, express or implied. To the fullest extent the law allows, we are not liable for indirect, incidental, special, or consequential damages, including lost credential data, missed renewal deadlines, inaccurate compliance calculations, or credentialing problems based on app data. Where liability cannot be excluded, it is capped at the amount you paid us in the twelve months before the claim, which during the free beta is zero.",
+        "The app is provided as is, without warranty of any kind, express or implied. To the fullest extent the law allows, we are not liable for indirect, incidental, special, or consequential damages, including lost credential data, missed renewal deadlines, inaccurate compliance calculations, or credentialing problems based on app data. Where liability cannot be excluded, it is capped at the amount you paid us in the twelve months before the claim, which during the free beta is zero."
       ],
     },
     {
       title: "11. Ending the relationship",
       blocks: [
-        "You can stop any time: export, delete your data from More > Data Rights, and email us to close the account. We may suspend or end access for breach of these terms or if the beta ends, and will give notice and time to export where we can.",
+        "You can stop any time: export, delete your data from More > Data Rights, and email us to close the account. We may suspend or end access for breach of these terms or if the beta ends, and will give notice and time to export where we can."
       ],
     },
     {
       title: "12. Changes to these terms",
       blocks: [
-        "We may change these terms. The date at the top moves and material changes are announced in the app. Continued use after a change is acceptance.",
+        "We may change these terms. The date at the top moves and material changes are announced in the app. Continued use after a change is acceptance."
       ],
     },
     {
       title: "13. Governing law",
       blocks: [
-        "These terms are governed by the laws of the State of California, without regard to conflict-of-law rules.",
+        "These terms are governed by the laws of the State of California, without regard to conflict-of-law rules."
       ],
     },
     {
       title: "14. Contact",
       blocks: [
-        `**${LEGAL_CONTACT}**. ${LEGAL_OPERATOR}.`,
+        `**${LEGAL_CONTACT}**. CredentialDOMD is operated by ${LEGAL_OPERATOR}.`
       ],
     },
   ],

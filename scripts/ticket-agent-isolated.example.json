@@ -1,0 +1,13 @@
+{
+  "repository": "/Users/ew/Projects/CredentialDOMD",
+  "stateDirectory": "/Users/ew/Library/Application Support/CredentialDOMD/ticket-worker",
+  "dockerBinary": "/opt/homebrew/bin/docker",
+  "image": "credentialdomd-ticket-worker@sha256:REPLACE_WITH_REVIEWED_IMAGE_DIGEST",
+  "claudeBinary": "/usr/local/bin/claude",
+  "anthropicKeychainService": "CredentialDOMD Ticket Worker API",
+  "providerProjectBudgetConfirmed": false,
+  "maxCallBudgetUsd": 2,
+  "maxDailyReservationUsd": 12,
+  "timeoutSeconds": 600,
+  "sendReplies": false
+}

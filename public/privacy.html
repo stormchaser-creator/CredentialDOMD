@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy | CredentialDoMD</title>
-<meta name="description" content="Privacy Policy for CredentialDoMD, the physician credential tracker. Last updated September 2, 2026.">
+<meta name="description" content="Privacy Policy for CredentialDoMD, the physician credential tracker. Last updated September 18, 2026.">
 <meta name="robots" content="index,follow">
-<link rel="canonical" href="https://credentialdomd.com/app/privacy">
+<link rel="canonical" href="https://credentialdomd.com/privacy">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2310b981'/><rect x='12.2' y='6' width='7.7' height='20' rx='2' fill='white'/><rect x='6' y='12.2' width='20' height='7.7' rx='2' fill='white'/></svg>">
 <link rel="apple-touch-icon" href="/app/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -94,7 +94,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
       <a href="/#features">Features</a>
       <a href="/#faq">FAQ</a>
       <a href="/app/">Sign in</a>
-      <a href="/#early-access" class="btn-primary">Get Early Access</a>
+      <a href="/#join" class="btn-primary">Get Early Access</a>
     </div>
   </div>
 </nav>
@@ -102,9 +102,9 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 <main>
   <div class="section-label">Legal</div>
   <h1>Privacy Policy</h1>
-  <div class="updated">Last updated September 2, 2026</div>
+  <div class="updated">Last updated September 18, 2026</div>
   <div class="intro">
-    <p>CredentialDOMD, operated by Eric Whitney, DO. This policy says what the app collects, where it lives, which companies touch it, and how you get it back or delete it. Questions go to support@credentialdomd.com.</p>
+    <p>CredentialDOMD is operated by Eric Whitney, DO, A Professional Corporation. This policy says what the app collects, where it lives, which companies touch it, and how you get it back or delete it. Questions go to support@credentialdomd.com.</p>
     <p>CredentialDOMD is in free beta. Features, storage layout, and this policy will change as the product matures. The date above tells you which version you are reading.</p>
   </div>
 
@@ -128,8 +128,8 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 <section>
 <h2>3. Where it is stored</h2>
 <ul>
-  <li><strong>On your device.</strong> Browser storage holds a cache so the app opens and reads offline; it syncs when you are online. Sign out when you finish on a shared computer, because that cache belongs to whoever opens the app there next.</li>
-  <li><strong>Supabase, US region.</strong> A Postgres database holds your records, and a private Storage bucket holds uploaded document files in a folder per user. Row-level security ties every row and every file to your user id. Traffic is encrypted with TLS and Supabase encrypts data at rest.</li>
+  <li><strong>On your device.</strong> Browser storage holds a cache associated with the signed-in account so records can open offline and sync when you are online. Cached records and private notes are not separately encrypted by the app. Protect access to your device and browser, and sign out when you finish on a shared computer. Export any local private notes you need before signing out.</li>
+  <li><strong>Supabase, US region.</strong> A Postgres database holds your records, and a private Storage bucket holds uploaded document files in a folder per user. Account access policies are designed to limit access to the appropriate account. The operator has administrative access for support and operations. Traffic is encrypted with TLS and Supabase encrypts data at rest.</li>
   <li><strong>Monthly backups.</strong> Unless you turn them off in More &gt; Data &amp; Backup, once a month the server builds a ZIP of your records and your uploaded documents, keeps it in a separate private bucket only you can reach, and emails you when it is ready. The email carries no link to the file. You download it from More &gt; Data &amp; Backup while signed in, through a link that works for 15 minutes, and the server keeps the three most recent months. The archive contains no private vault notes and no AI keys, because neither is ever on the server.</li>
   <li><strong>The private vault.</strong> On this device only, never synced. See section 5.</li>
 </ul>
@@ -137,19 +137,18 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 
 <section>
 <h2>4. AI features</h2>
-<p>Two AI companies receive data from the app, and only when you use an AI feature. Document scanning, CME import, work-log dictation, CPT lookup, and statement and row parsing send the document images, PDFs, and dictated text you give them to Google's Gemini API. The assistant (Vera), case dictation, and the CPT coder send your question or dictation to Anthropic's Claude API; for the assistant that also includes a summary of your records (the same fields you see in the app, including the license, DEA, and NPI numbers you entered) and any document you attach to the conversation. When Claude is unavailable (the daily limit is reached, or an attachment is a type Claude cannot read), those three fall back to Gemini.</p>
-<p>By default both run under shared keys that CredentialDOMD holds on the server: your request goes from your browser to our server, which forwards it to Google or Anthropic under that key and returns the answer. The server records the time, the provider, the model called, the size of the text sent, and whether it succeeded, so it can apply a per-user daily limit; it does not keep the content of the request, and those usage rows are deleted after 90 days.</p>
-<p>You may add your own Google Gemini key, an Anthropic key, or both in Settings. Those keys stay on your device and are never stored in the database. With your own key the request goes straight from your browser to that provider under your key, the shared daily limit does not apply, and you are responsible for the key and any charges on it.</p>
-<p>Either way, what you submit is handled under Google's or Anthropic's terms, not ours. Anthropic deletes API inputs and outputs within 30 days and does not use them to train its models. Google's Gemini API terms govern what is sent to Gemini; if you use your own key, the terms attached to that key apply. Dictation first uses your browser's built-in speech recognition to produce a transcript, which in Chrome means Google processes the audio.</p>
-<p>AI output is a draft: review it before you rely on it.</p>
+<p>AI features can send content to Google’s Gemini API or Anthropic’s Claude API. Scanning and import features send the text, images or PDFs supplied for that task. Dictation sends the transcript. Vera uses Gemini by default and can use Claude when selected and available; the assistant request includes your question, conversation context, a summary of your records and any attachment. Other coding or dictation features may use either provider, depending on the feature and settings, with Gemini fallback when applicable.</p>
+<p>Approved accounts can use shared keys held on the server. Your request passes through our server to the provider. The server records usage metadata such as provider, model, token counts, time and success or failure for usage controls and cost tracking. Separately, assistant activity logs are available to the operator as described below.</p>
+<p>You may add your own Gemini key, an Anthropic key, or both in Settings. These keys are stored on the device rather than in the cloud database. Requests using your key go directly to that provider, and you are responsible for charges and the terms attached to the key. Your own key is optional.</p>
+<p>Submitted content is processed under the relevant provider’s terms. Dictation also uses the browser’s speech-recognition service, which may process audio outside the device. Keep patient identifiers out of all AI inputs. Review AI output before saving or relying on it.</p>
 </section>
 
 <section>
-<h2>5. No patient information, by design</h2>
-<p>CredentialDOMD is built for your professional data, not your patients'. Do not upload patient records (operative notes, progress notes, discharge summaries, face sheets, chart printouts) and do not type patient identifiers (names, medical record numbers, dates of birth, addresses, phone numbers) into any synced field or document. Upload the credential itself: the license, the certificate, the agreement, the lab slip.</p>
-<p>The app screens uploads and refuses a document that reads as a patient record, and the AI features are instructed to omit identifiers. That is a safety net, not a substitute for your judgment.</p>
-<p><strong>The one exception is the private note on a work or case entry.</strong> It lives in the private vault in your browser, is never uploaded, never sent to an AI provider, and never printed on an invoice or shared packet. It exists so you can recognize which patient a billed call concerned. It does not follow you to another device unless you export and restore it from Data &amp; Backup.</p>
-<p><strong>Because the app holds no PHI, we make no HIPAA compliance claim and do not offer a business associate agreement (BAA), on any plan, now or in the future.</strong> If your group requires a BAA before staff can use a tool, this is not that tool.</p>
+<h2>5. Patient information and private notes</h2>
+<p>CredentialDOMD is intended for your professional records. Do not upload patient charts or put patient identifiers such as names, medical record numbers, dates of birth, addresses or phone numbers into synced fields, attachments, support tickets, chats or dictated text.</p>
+<p>Document screening and AI instructions are limited safeguards. They can miss identifiers and do not guarantee that information is removed before processing by the server or an AI provider.</p>
+<p><strong>The private note field on a work or case entry uses separate browser storage.</strong> It is excluded from normal cloud sync, AI requests, invoices, shared packets and cloud backups. It is not separately encrypted by the app. You can manually export and restore those notes through Data &amp; Backup; the exported file is readable. Signing out, clearing browser storage or losing the device can remove the local copy. A local note does not protect information you copy, dictate or submit elsewhere.</p>
+<p><strong>We make no HIPAA compliance claim and do not offer a business associate agreement (BAA).</strong> Do not use the service for a workflow requiring a BAA. Read Security and data handling (credentialdomd.com/security) for practical details.</p>
 </section>
 
 <section>
@@ -165,14 +164,14 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
   <li><strong>Telegram</strong>: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram.</li>
 </ul>
 <p>The register lookups (NPPES, CMS provider data, NLM Clinical Tables and PubMed) run the other way from the rest of this list. They are reads: the app asks a public government register what it already publishes about you, keyed on your NPI or your name, and shows you the answer to accept or ignore. Nothing you have stored in the app is sent to those registers, and they are never written to.</p>
-<p>We do not sell your data and do not share it with anyone not on this list. Share and Send compose an email or text message on your device; we do not send it for you and keep no copy.</p>
+<p>We do not sell your data. Sharing can use your device’s share, email or text controls. Where you choose the server email option, selected files and recipient details pass through our server and email provider, and the app records a share history. Check the recipients and files before sending.</p>
 </section>
 
 <section>
 <h2>7. Who can see it</h2>
 <ul>
   <li><strong>You</strong>, in the app.</li>
-  <li><strong>The operator</strong>, Eric Whitney, DO, has administrative access to the database and storage for support, debugging, and abuse prevention, and reads tickets, feedback, and the assistant log. Tickets and feedback may be triaged and acted on with AI tooling. Credential data is opened only when needed to run the service.</li>
+  <li><strong>The service administrator</strong>, Eric Whitney, DO, acts for Eric Whitney, DO, A Professional Corporation and has administrative access to the database and storage for support, debugging, and abuse prevention, and reads tickets, feedback, and the assistant log. Tickets and feedback may be triaged and acted on with AI tooling. Credential data is opened only when needed to run the service.</li>
   <li><strong>The companies in section 6</strong>, to the extent needed to provide their service.</li>
   <li><strong>Anyone you choose to share</strong> a credential or packet with.</li>
   <li><strong>Authorities</strong>, if we are legally required to disclose.</li>
@@ -213,7 +212,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 
 <section>
 <h2>12. Contact</h2>
-<p><strong>support@credentialdomd.com</strong>. CredentialDOMD, operated by Eric Whitney, DO.</p>
+<p><strong>support@credentialdomd.com</strong>. CredentialDOMD is operated by Eric Whitney, DO, A Professional Corporation.</p>
 </section>
 
   <div class="doc-switch">
@@ -230,8 +229,8 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
       <div class="footer-copy">&copy; 2026 CredentialDOMD. All rights reserved.</div>
     </div>
     <div class="footer-links">
-      <a href="/app/privacy">Privacy Policy</a>
-      <a href="/app/terms">Terms of Service</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Service</a>
       <a href="mailto:support@credentialdomd.com">Contact</a>
       <a href="mailto:support@credentialdomd.com">Support</a>
     </div>
