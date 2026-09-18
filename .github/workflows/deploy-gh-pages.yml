@@ -1,15 +1,8 @@
 name: Deploy to GitHub Pages
 
-# Auto-deploys credentialdomd.com on every push to main.
-# - Marketing landing (landing/index.html)        → gh-pages root /index.html
-# - State landing pages (landing/states/*.html)   → gh-pages /states/
-# - React SPA (npm run build → dist/)             → gh-pages /app/
-# - SEO files (public/sitemap.xml, robots.txt)    → gh-pages root
-#
-# Preserves: CNAME, .nojekyll, dr-whitney-headshot.jpg, docs/, dist/ (legacy),
-# anything else already in gh-pages that this workflow doesn't touch.
-#
-# Manual deploy: Actions tab → Deploy to GitHub Pages → Run workflow.
+# Publishes the reviewed app and public routes from one packaged artifact.
+# Billing, support automation and private invitations remain off by default.
+# Existing legacy docs and the public portrait remain on gh-pages.
 
 on:
   push:
@@ -23,6 +16,12 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.js'
+      - 'scripts/package-site.mjs'
+      - 'scripts/build-credential-portal.mjs'
+      - 'scripts/build-help.mjs'
+      - 'scripts/sw-precache.mjs'
+      - 'scripts/root-sw-retirement.js'
+      - 'supabase/functions/_shared/billingCatalog.mjs'
       - '.github/workflows/deploy-gh-pages.yml'
   workflow_dispatch: {}
 
@@ -53,15 +52,15 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: src/package-lock.json
 
       - name: Install deps
         working-directory: src
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
-      - name: Build React app with /app/ base path
+      - name: Build the app and public site
         working-directory: src
         env:
           # Supabase anon key + URL — public-safe, but stored as repo secrets
@@ -78,33 +77,21 @@ jobs:
           #   GitHub → Settings → Secrets and variables → Actions →
           #   New repository secret → name VITE_CLERK_PUBLISHABLE_KEY
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-        run: npm run build -- --base=/app/
+          VITE_SUPPORT_OPERATIONS_ENABLED: "false"
+          VITE_CREDENTIAL_PORTAL_ENABLED: "false"
+        run: |
+          node scripts/build-help.mjs --check
+          npm run build:site
 
       - name: Sync build artifacts to gh-pages
         run: |
           set -euo pipefail
 
-          # Marketing landing page → gh-pages root
-          cp src/landing/index.html gh-pages/index.html
-
-          # 50 state landing pages → gh-pages /states
-          rm -rf gh-pages/states
-          if [ -d src/landing/states ]; then
-            cp -R src/landing/states gh-pages/states
-          fi
-
-          # React SPA build → gh-pages /app
-          rm -rf gh-pages/app
-          mkdir gh-pages/app
-          cp -R src/dist/. gh-pages/app/
-
-          # SEO files at root
-          cp src/public/sitemap.xml gh-pages/sitemap.xml
-          cp src/public/robots.txt gh-pages/robots.txt
-
-          # GitHub Pages essentials (force, in case overwritten)
-          echo 'credentialdomd.com' > gh-pages/CNAME
-          touch gh-pages/.nojekyll
+          # Replace only the routes owned by package-site; retain legacy assets.
+          for route in app states locums security privacy terms help credential-access knowledge; do
+            rm -rf "gh-pages/$route"
+          done
+          cp -R src/site-dist/. gh-pages/
 
       - name: Commit and push if changed
         working-directory: gh-pages
