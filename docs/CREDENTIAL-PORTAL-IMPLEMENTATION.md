@@ -1,0 +1,92 @@
+# Private credential recipient access — implementation and activation boundary
+
+**Status:** implemented for review and synthetic testing; disabled by default. No migration has been applied to a live database, no email sent, no credential provisioned, and no function deployed by this work. This feature does not change paid membership or beta access.
+
+## Intended experience
+
+An active physician chooses up to ten already-synced documents and one exact recipient email. The server mails a seven-day private invitation. Opening that link or a mail scanner fetching it consumes nothing. The recipient explicitly requests a fresh six-digit code at the invited address. Successful code verification consumes the invitation exactly once and creates a thirty-minute session. A forwarded link alone is insufficient. Email comparison trims whitespace and folds ASCII case; it never strips `+tags`, guesses aliases, or trusts editable physician email as identity.
+
+The recipient sees only selected document metadata and can request its bytes. The physician can revoke at any time. Revocation rejects every later access and is rechecked after each storage fetch. Bytes already delivered cannot be recalled. No event claims a human actually viewed a document.
+
+## Endpoint contract
+
+Endpoint: `POST /functions/v1/credential-portal`. JSON request. Rejects unknown fields. No query-string tokens, searches, arbitrary storage paths, client owner IDs, redirect URLs or permission flags. All responses include `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`. GET returns 405 without reading authentication or changing state. CORS permits only `https://credentialdomd.com`.
+
+Owner actions use `Authorization: Bearer <Clerk JWT>`:
+
+| Action | Body fields in addition to `action` | Response |
+| --- | --- | --- |
+| `create` | `recipientEmail`, `documentIds` (1–10 unique UUIDs), `requestId` (fresh UUID for this submission) | 201/200 `{invite:{id,recipientEmail,createdAt,expiresAt,status,deliveryState,documentCount,audit}}` |
+| `list` | none | 200 `{invites:[...]}`; latest 100 owned invitations, with recent audit events |
+| `revoke` | `inviteId` | 200 `{revoked:true}`; repeated owner revocation is harmless |
+
+`requestId` makes a lost creation response retryable. Reusing it with different recipient/documents returns 409. The owner never receives the invite token from the API. `deliveryState` distinguishes pending/sending/sent/unknown/failed/suppressed; **sent means provider acceptance, not recipient delivery**. Unknown must never display “delivered.”
+
+Recipient link: `https://credentialdomd.com/credential-access/#invite=<token>`. The static UI must capture then immediately remove the fragment with `history.replaceState`, keep token/code/session only in memory, and contain no analytics, remote document viewer, support widget, third-party script, persistence or service-worker caching. A page reload loses the session. The private page must not be in a sitemap or crawler index.
+
+| Action | Body fields | Authentication / response |
+| --- | --- | --- |
+| `request-code` | `inviteToken`, `email` | No session; generic 202 `{message:"If this invitation is available, a code has been sent."}` for unknown, wrong-email, expired, redeemed, revoked or rate-limited invitations |
+| `verify` | `inviteToken`, `email`, `code` | 200 `{sessionToken,expiresAt,documents:[{id,name,mimeType,sizeBytes}]}`; generic 401 on failure |
+| `documents` | none | Memory bearer session; selected available metadata only |
+| `view` | `documentId` | Memory bearer session; verified bytes, inline only for magic-checked PDF/PNG/JPEG or valid UTF-8 plain text |
+| `download` | `documentId` | Memory bearer session; attachment bytes as `application/octet-stream` |
+
+HTML, SVG, office documents, unknown formats and MIME/magic mismatches always force attachment. The UI must respect `Content-Disposition`, isolate allowed previews in a sandboxed iframe/object URL, revoke object URLs when closed, and never place file contents into HTML. Download must use POST with the bearer header, not a URL containing the session. No storage signed URL is issued. Client object URLs must be treated as transient file access, not persisted links.
+
+If the successful verification response is lost, the invitation remains consumed: the raw session token is intentionally unrecoverable. Ask the physician for a new invitation. An already verified recipient does not need the original link or another code during that memory session.
+
+## Identity and document boundaries
+
+The dedicated owner verifier uses Clerk JWKS, fixed configured issuer, RS256, required `sub`/`exp`/`iat`, and at most one-hour token age. If present, authorized-party claim must match the app origin. Only the verified subject selects a profile. Email and `isAdmin` never grant owner access. The handler rechecks that profile's current `auth_user_id`; creation and recipient access require current active membership. A revoked owner may still list/revoke their existing invitations.
+
+Every chosen ID must be an owned `documents` row with a non-null canonical storage path exactly `<verified Clerk subject>/<that document UUID>`. No prefix-only validation or fallback path is used. Unsynced documents are refused. Files are streamed into bounded memory: at most 10 MiB each and 30 MiB total per invitation. Creation stores SHA-256 of actual bytes plus selected name/MIME/path/size. The original storage object is not copied or claimed immutable. Every later file request checks current ownership, subject, path and metadata, fetches the current bytes, compares its digest/size, then checks access again before response preparation. Replaced documents require a new invitation. Deletions remove that selection through its FK; they never substitute another file.
+
+The trust boundary includes the configured Supabase project, private documents bucket, and server-only service key. Existing unrelated mail-routing/security findings are not silently fixed or imported here.
+
+## Tokens, OTP and encrypted delivery design
+
+Invite and session tokens use 32 cryptographically random bytes (256 bits), encoded as 43 URL-safe characters. Their tables store only SHA-256 digests. Six-digit codes use unbiased rejection sampling. OTP MACs use a dedicated server secret and bind the invitation ID, random challenge version and code. Database disclosure of an OTP MAC alone does not permit six-digit offline guessing without that secret.
+
+`CREDENTIAL_PORTAL_SECRET` must be a separately provisioned 32-byte secret encoded as unpadded base64url. It is not a provider key, Supabase key, Clerk secret, or browser value. No real key was generated by this implementation. HKDF-SHA256 derives distinct AES-GCM outbox and HMAC keys, with fixed versioned purpose labels. AES-GCM uses a fresh random 96-bit nonce and the outbox ID as authenticated associated data, so swapping ciphertext between rows fails authentication.
+
+**Explicit exception to digest-only token storage:** the short-lived mail outbox necessarily holds the original invite URL/code inside encrypted email payloads so a timed-out send can be retried identically. No raw URL, token, OTP or provider key is persisted in plaintext. The server decrypts only a claimed row while sending. Recipient email remains ordinary private invitation data; encryption is for delivery secrets, not a claim that all database metadata is encrypted.
+
+Successful mail requires a nonempty bounded provider acceptance ID; malformed success remains unknown. Successful or permanently rejected mail wipes ciphertext immediately. Exhausting the attempt budget preserves unknown rather than inventing a definitive failure. Revocation, redemption and obsolete challenge versions suppress pending payloads. Invitation mail expires after 23 hours; OTP mail expires after ten minutes or invitation expiry, whichever comes first. A private pruning task erases expired payloads while preserving their uncertainty, clears old OTP MACs and removes expired sessions. It uses invitation-first locks in bounded batches of 100, skipping busy rows. Historical invitations/audit are retained at most 90 days beyond invitation expiry. Current schema's private audit is for the physician's access history, not public analytics.
+
+Resend requests use `docs@credentialdomd.com`, fixed subjects/plain-text templates, no attachments, and `Idempotency-Key: credential-portal:<outbox UUID>`. Unknown outcomes retain the exact encrypted body and same key. A fencing lease prevents two workers from completing the same claim; retries are spaced at least 60 seconds with at most five provider attempts per outbox. The 23-hour mail window stays within Resend's documented 24-hour key retention. A definitive 400/401/403/404/422 is failed; timeouts, ambiguous replies, conflicts, 429 and 5xx remain unknown. There is no automatic assumption of “not sent.”
+
+Retry an unknown invitation send with the original owner creation `requestId`. A repeated recipient code request retries the same uncertain challenge until resolved/expired; a successful later resend creates a fresh version. There is no autonomous outbox sender yet. The UI must preserve an outstanding owner request ID until its outcome is known and present unknown/failed states honestly. If its memory is lost, the owner can revoke the invitation and explicitly create another.
+
+## Atomic database controls
+
+Migration: `supabase/migrations/20260918091000_credential_portal.sql`. All new tables enable RLS with no anonymous/authenticated grants or policies. New functions are security invoker, public/anonymous/authenticated execution is revoked, and only service role can invoke them. The Edge handler supplies verified identity, never a client-selected owner.
+
+- Invitation creation and its encrypted outbox row commit together; per-owner request ID is unique.
+- Creation locks the owner and permits 20 invitations per UTC database day. A cheap preflight rejects already-exhausted quotas before storage reads; the transaction remains the authoritative concurrent limit.
+- OTP claim locks the invitation. Five sends per invitation, 60 seconds between fresh codes, five code emails per normalized-recipient hourly bucket, fifty per owner hourly bucket.
+- Wrong verification attempts are limited to five for the whole invitation, including across resends. Concurrent requests cannot reset/increase this budget.
+- Successful verification, marking the invitation consumed, and inserting its single session are one transaction. Twelve simultaneous successful attempts produce exactly one session.
+- Session expiry is at most thirty minutes and never beyond invitation expiry. Up to 100 access requests per session; owner revocation and owner identity/status changes invalidate future requests.
+- Mail claims are fenced; revocation suppresses mail still in the database. A request already accepted by the email provider cannot be recalled, but its revoked link will fail.
+
+Audit event `document_response_prepared` means validated bytes were prepared for a response, with intended action and byte count. It is not a delivery acknowledgement, download-completion proof, or human-view/read receipt. `documents_listed` records metadata listing. No IP, user agent, token, code, patient content or public tracking event is recorded.
+
+## Validation and remaining activation prerequisites
+
+Run `node --test tests/credential-portal/integration.test.mjs`. It starts a private Unix-socket PostgreSQL 17 instance, applies the exact migration twice, runs synthetic two-physician/two-recipient handler tests with fake mail/storage, and removes the cluster. Set `PG_BIN` to the PostgreSQL executable directory if needed. No provider credentials/network are loaded by these tests.
+
+The suite covers ownership/traversal, exact mailbox binding, cross-recipient isolation, single-use concurrent redemption, five-attempt lockout, send spacing, code versions, encrypted idempotent retry, file mutation, revocation during fetch, expiry, request quotas, role denial, safe MIME handling, bounded input and non-consuming GETs. This is synthetic handler/real-SQL validation, not a live Clerk/Resend/Storage deployment test.
+
+Before activation:
+
+1. Independently review source and adversarial tests; exercise a staging Supabase project with synthetic files and two controlled recipient mailboxes, including genuine Clerk JWT verification, expired/tampered JWTs, wrong issuer and wrong authorized party.
+2. Check actual profile/documents schema against the migration, apply it only to that approved environment, and verify private bucket access. Do not apply any other security branch automatically.
+3. Provision the dedicated portal secret through the platform secret store. Review rotation: retain the previous key only in a deliberate migration, or revoke pending invitations/challenges/outbox rows before replacing it. Session digests survive rotation but outstanding OTPs do not.
+4. Verify the docs@ sending domain and disable both open and click tracking for that domain. Review provider retention and ensure Edge/access/error logging never captures request bodies, Authorization headers, fragments or decrypted email. Only then attest `CREDENTIAL_PORTAL_PRIVACY_READY=true`.
+5. Configure correct `CLERK_ISSUER`, `SUPABASE_URL`, service-role key and existing `RESEND_API_KEY`; deploy this one function with gateway JWT verification disabled because it accepts both Clerk JWTs and opaque recipient sessions. Its own verifier is mandatory.
+6. Install a private schedule invoking `credential_portal_prune` (for example every five minutes), monitor sanitized delivery states, and establish an operator recovery process for unknown/exhausted sends. No public retry/prune endpoint is provided.
+7. Ship the private static page with no-store/no-referrer/noindex, strict CSP, no external analytics or persistent token/session storage, safe previews and no service-worker caching. Verify a fresh code, successful download, expiry, revocation, changed-file refusal and scanner behavior in the actual browser. See `CREDENTIAL-PORTAL-RECIPIENT-UI.md` for the local PDF renderer and browser limitations. The site packager generates Cloudflare Pages `_headers`, but current GitHub Pages hosting does not enforce that file. Verify the actual response headers through an authorized hosting/proxy configuration before enabling invitations.
+8. Only after these integration checks pass change the code-level `enabled:false` and set `CREDENTIAL_PORTAL_ENABLED=true`. Both gates must pass. The owner and recipient UI gates must also be deliberately enabled. They remain off in this work.
+
+Provider references: [Resend idempotency](https://resend.com/docs/dashboard/emails/idempotency-keys), [Resend domain tracking controls](https://resend.com/changelog/update-click-open-tracking-via-api), [Supabase authenticated downloads](https://supabase.com/docs/guides/storage/serving/downloads).

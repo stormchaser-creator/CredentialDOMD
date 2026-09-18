@@ -81,6 +81,15 @@ self.addEventListener("fetch", (event) => {
 
   // Skip non-GET and cross-origin API calls (don't cache these)
   if (request.method !== "GET") return;
+  // A legacy root-scoped worker must not replace private access with the app
+  // shell offline or cache recipient-facing resources.
+  const requestUrl = new URL(request.url);
+  if (requestUrl.origin === self.location.origin && /^\/credential-access(?:\/|\.html$|$)/.test(requestUrl.pathname)) {
+    event.respondWith(fetch(request, { cache: "no-store" }).catch(() => new Response("Private credential access requires an internet connection.", {
+      status: 503, headers: { "Cache-Control": "no-store", "Content-Type": "text/plain", "Referrer-Policy": "no-referrer" },
+    })));
+    return;
+  }
   if (request.url.includes("generativelanguage.googleapis.com")) return;
   if (request.url.includes("npiregistry.cms.hhs.gov")) return;
   if (request.url.includes("supabase.co")) return;

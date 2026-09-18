@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
@@ -11,6 +11,7 @@ import { leadNoteLabel } from "../../utils/adminLabels";
 import { waitlistView, leadState } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
+import { loadAdminSupportThread } from "../../utils/adminSupportThread";
 
 /**
  * AdminDashboard — gated to admin emails only.
@@ -18,6 +19,11 @@ import TicketAttachments from "../shared/TicketAttachments";
  * views (created in supabase-tracking-migration.sql).
  */
 export default function AdminDashboard() {
+  const { user } = useApp();
+  return <AdminDashboardContent key={user?.id || "signed-out"} />;
+}
+
+function AdminDashboardContent() {
   const { theme: T, user, data, userIdRef, updateSettings } = useApp();
   const [tab, setTab] = useState("tickets");
   const [tickets, setTickets] = useState([]);
@@ -53,6 +59,17 @@ export default function AdminDashboard() {
   const [newCategory, setNewCategory] = useState("feature_request");
   const [creating, setCreating] = useState(false);
   const [newAttachment, setNewAttachment] = useState([]); // [{ data: dataURL, name }]
+  const threadGeneration = useRef(0);
+  const activeTicketId = useRef(null);
+  useEffect(() => () => { threadGeneration.current += 1; activeTicketId.current = null; }, []);
+  const currentThread = (ticketId) => {
+    const generation = threadGeneration.current;
+    return () => activeTicketId.current === ticketId && threadGeneration.current === generation;
+  };
+  const closeTicketDetail = () => {
+    threadGeneration.current += 1; activeTicketId.current = null;
+    setOpenTicket(null); setThread([]); setAttachmentUrls([]); setReplyUrls({}); setBusy(false);
+  };
 
   const isAdmin = isAdminUser(user);
 
@@ -63,22 +80,31 @@ export default function AdminDashboard() {
 
   // Signed links for every screenshot on the thread (the ticket's own plus one
   // per reply), one round trip through ticket-attachment-url.
-  const loadAttachmentUrls = async (t, msgs) => {
+  const loadAttachmentUrls = async (t, msgs, isCurrent) => {
     const onTicket = t.context_payload?.attachment_path || t.context_payload?.attachment_paths?.length;
     if (!onTicket && !msgs.some((m) => m.attachment_path || m.attachment_paths?.length)) return;
     const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
-    if (res.error) { setTicketMsg(await edgeErrorMessage(res.error, "Could not open the screenshot.")); return; }
+    if (!isCurrent()) return;
+    if (res.error) {
+      const message = await edgeErrorMessage(res.error, "Could not open the screenshot.");
+      if (isCurrent()) setTicketMsg(message);
+      return;
+    }
     setAttachmentUrls(linksFor(res.data?.urls ?? res.data?.url));
     setReplyUrls(res.data?.replies || {});
   };
 
   // Tap a ticket → read it, see the whole thread, answer it, change its state.
   const openTicketDetail = async (t) => {
+    threadGeneration.current += 1; activeTicketId.current = t.id;
+    const isCurrent = currentThread(t.id);
     setOpenTicket(t); setReply(""); setReplyAttachment([]); setTicketMsg("");
-    setAttachmentUrls([]); setReplyUrls({});
-    const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
+    setThread([]); setBusy(false); setAttachmentUrls([]); setReplyUrls({});
+    const { data, error: threadError } = await loadAdminSupportThread(supabase, t.id);
+    if (!isCurrent()) return;
     setThread(data || []);
-    await loadAttachmentUrls(t, data || []);
+    if (threadError) { setTicketMsg("Could not load the conversation. Reopen this ticket to try again."); return; }
+    await loadAttachmentUrls(t, data || [], isCurrent);
   };
 
   const createTicket = async () => {
@@ -107,31 +133,36 @@ export default function AdminDashboard() {
   // gate. A ticket Eric filed himself needs no approval and shows no button:
   // filing it was the approval.
   const setAgentApproved = async (t, approved) => {
+    const isCurrent = currentThread(t.id);
     const { error: e2 } = await supabase.from("support_tickets")
       .update({ agent_approved_at: approved ? new Date().toISOString() : null })
       .eq("id", t.id);
+    if (!isCurrent()) { await refreshTickets(); return; }
     if (e2) { setTicketMsg(e2.message); return; }
     setTicketMsg(approved
       ? "Released to the agent. It will pick this up on its next run."
       : "Approval withdrawn. The agent will not touch this.");
     await refreshTickets();
+    if (!isCurrent()) return;
     setOpenTicket((cur) => (cur && cur.id === t.id
       ? { ...cur, agent_approved_at: approved ? new Date().toISOString() : null }
       : cur));
   };
 
   const setArchived = async (t, archived) => {
+    const isCurrent = currentThread(t.id);
     const { error: e2 } = await supabase.from("support_tickets")
       .update({ archived_at: archived ? new Date().toISOString() : null })
       .eq("id", t.id);
-    if (e2) { setTicketMsg(e2.message); return; }
-    setOpenTicket(null);
+    if (e2) { if (isCurrent()) setTicketMsg(e2.message); return; }
+    if (isCurrent()) closeTicketDetail();
     await refreshTickets();
   };
 
   // One tap: mark resolved and archive, instead of two separate trips into the ticket.
   const resolveAndArchive = async () => {
     if (!openTicket) return;
+    const isCurrent = currentThread(openTicket.id);
     const body = reply.trim();
     setBusy(true); setTicketMsg("");
     try {
@@ -146,18 +177,20 @@ export default function AdminDashboard() {
         .update({ archived_at: new Date().toISOString() })
         .eq("id", openTicket.id);
       if (e2) throw new Error(e2.message);
+      if (!isCurrent()) { await refreshTickets(); return; }
       setReply(""); setReplyAttachment([]);
       setTicketMsg("Resolved and archived.");
       await refreshTickets();
-      setTimeout(() => setOpenTicket(null), 900);
+      setTimeout(() => { if (isCurrent()) closeTicketDetail(); }, 900);
     } catch (e2) {
-      setTicketMsg(e2.message);
+      if (isCurrent()) setTicketMsg(e2.message);
     }
-    setBusy(false);
+    if (isCurrent()) setBusy(false);
   };
 
   const sendReply = async (newStatus) => {
     if (!openTicket) return;
+    const isCurrent = currentThread(openTicket.id);
     const body = reply.trim();
     if (!body && !newStatus && !replyAttachment.length) { setTicketMsg("Write a reply first."); return; }
     setBusy(true); setTicketMsg("");
@@ -172,17 +205,20 @@ export default function AdminDashboard() {
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
-      const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
+      if (!isCurrent()) { await refreshTickets(); return; }
+      const { data, error: threadError } = await loadAdminSupportThread(supabase, openTicket.id);
+      if (!isCurrent()) return;
       setThread(data || []);
       setReply(""); setReplyAttachment([]);
-      setTicketMsg(newStatus ? `Marked ${newStatus.replace("_", " ")}.` : "Reply sent.");
+      setTicketMsg(threadError ? "Your reply was saved, but the conversation could not refresh. Reopen this ticket to check it." : newStatus ? `Marked ${newStatus.replace("_", " ")}.` : "Reply sent.");
       await refreshTickets();
-      await loadAttachmentUrls(openTicket, data || []);
-      if (newStatus === "resolved" || newStatus === "closed") setTimeout(() => setOpenTicket(null), 900);
+      if (!isCurrent()) return;
+      await loadAttachmentUrls(openTicket, data || [], isCurrent);
+      if (newStatus === "resolved" || newStatus === "closed") setTimeout(() => { if (isCurrent()) closeTicketDetail(); }, 900);
     } catch (e2) {
-      setTicketMsg(e2.message);
+      if (isCurrent()) setTicketMsg(e2.message);
     }
-    setBusy(false);
+    if (isCurrent()) setBusy(false);
   };
 
   // The panel loaded once per app session, so every number aged until the
@@ -382,7 +418,7 @@ export default function AdminDashboard() {
       {tab === "ai" && !loading && <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} />}
 
       {/* Tap a ticket → read it, answer it, close it */}
-      <Modal open={!!openTicket} onClose={() => setOpenTicket(null)} title={openTicket?.subject || "Ticket"}>
+      <Modal open={!!openTicket} onClose={closeTicketDetail} title={openTicket?.subject || "Ticket"}>
         {openTicket && (
           <>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
@@ -411,7 +447,7 @@ export default function AdminDashboard() {
                     border: `1px solid ${T.border}`,
                   }}>
                     <div style={{ fontSize: 10, fontWeight: 800, color: m.is_admin_reply ? T.accent : T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
-                      {m.is_admin_reply ? "You" : m.author_email || "User"} · {new Date(m.created_at).toLocaleString()}
+                      {m.support_display_label || "Reply"} · {new Date(m.created_at).toLocaleString()}
                     </div>
                     <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
                     {Boolean(m.attachment_path || m.attachment_paths?.length) && (linksFor(replyUrls[m.id]).length ? (

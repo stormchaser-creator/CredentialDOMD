@@ -1,15 +1,10 @@
 /**
  * LocumDashboard — top-level Locum tier view.
  *
- * Sub-tabs:
- *   1. Work       — call timer + time log
- *   2. Contracts  — facility agreements
- *   3. Deductions — 1099 expense ledger + export
- * (The multi-state license matrix lives under Credentials — it is core
- * multi-license tracking, not locum-specific.)
- *
- * Visible only when subscription tier === "locum". Solo/Free/Practice users
- * who land here get a friendly upsell card.
+ * Work, RVUs, schedule, invoices, contracts, expenses and to-do tools.
+ * The multi-state license matrix lives under Credentials.
+ * useSubscription grants the locum tier during the invite-only beta.
+ * Other tiers see the planned offer; this page never starts checkout.
  */
 
 import { useEffect, useState } from "react";
@@ -22,6 +17,7 @@ import Schedule from "./Schedule";
 import Invoices from "./Invoices";
 import RVULog from "./RVULog";
 import { BASE_KEYS, lsSet } from "../../../utils/storageScope";
+import { BILLING_CATALOG } from "../../../../supabase/functions/_shared/billingCatalog.mjs";
 
 const SUBTABS = [
   { id: "work", label: "Work" },
@@ -97,23 +93,24 @@ function UpgradeCard({ T }) {
         borderRadius: 14, padding: "20px 18px",
       }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 6 }}>
-          Locum tier required
+          Practice tools
         </div>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
-          The Locum add-on ($10/mo on top of Core) unlocks the multi-state license matrix, hospital
-          rotation tracker, and 1099 deduction memo export. Built for physicians
-          who hold 2+ state licenses and work locum or rotating assignments.
+          Core + Locum is planned at ${BILLING_CATALOG.offers.core_locum.unitAmount / 100} per year
+          in total and includes contracts, work logs, invoices, payment tracking and expenses.
+          Billing is off. Invited beta accounts have access; if these tools are missing from
+          your beta account, use Get help.
         </p>
-        <button
-          onClick={() => window.location.hash = "#pricing"}
+        <a
+          href="/locums"
           style={{
             padding: "10px 16px", borderRadius: 10, border: "none",
             backgroundColor: T.accent, color: "#fff",
-            fontSize: 12, fontWeight: 700, cursor: "pointer",
+            fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-block", textDecoration: "none",
           }}
         >
-          See Locum tier features
-        </button>
+          See the locum workflow
+        </a>
       </div>
     </div>
   );

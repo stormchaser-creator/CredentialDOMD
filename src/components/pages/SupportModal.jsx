@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { edgeErrorMessage } from "../../utils/edgeError";
@@ -6,6 +6,7 @@ import { supabase } from "../../lib/supabase";
 import { ScreenshotAttach } from "../shared";
 import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
+import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam } from "../../utils/supportOperationsClient";
 
 const CATEGORIES = [
   { id: "bug",             label: "Bug / something broken" },
@@ -65,8 +66,31 @@ function timeAgo(iso) {
  * Either side can attach one screenshot to a ticket or to a reply; the thread
  * renders them through signed links from ticket-attachment-url.
  */
-export default function SupportModal({ open, onClose, contextPage, initialTab = "new" }) {
+export default function SupportModal(props) {
+  const { user } = useApp();
+  // Remount the account's private conversation state on sign-in changes.
+  return <SupportModalContent key={user?.id || "signed-out"} {...props} />;
+}
+
+export function SupportMessage({ message: m, theme: T, ownProfileId, urls }) {
+  const fromTeam = supportMessageFromTeam(m);
+  return <div style={{ padding: "9px 11px", borderRadius: 10, backgroundColor: fromTeam ? (T.accentDim || "rgba(59,130,246,0.12)") : T.input, border: `1px solid ${T.border}` }}>
+    <div style={{ fontSize: 10, fontWeight: 800, color: fromTeam ? T.accent : T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
+      {supportActorLabel(m, ownProfileId)} {"·"} {new Date(m.created_at).toLocaleString()}
+    </div>
+    <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.5 }}>{m.body}</div>
+    {Boolean(m.has_attachments || m.attachment_path || m.attachment_paths?.length) && (linksFor(urls).length ? <TicketAttachments urls={linksFor(urls)} size={160} /> : <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>File attached</div>)}
+  </div>;
+}
+
+function SupportModalContent({ open, onClose, contextPage, initialTab = "new" }) {
   const { theme: T, user, isDesktop } = useApp();
+  const operations = useMemo(() => createSupportOperationsClient({ accountId: user?.id }), [user?.id]);
+  const listRequest = useRef(0);
+  const threadRequest = useRef(0);
+  const actionRequest = useRef(0);
+  const closeTimer = useRef(null);
+  const [ownProfileId, setOwnProfileId] = useState(null);
   const [tab, setTab] = useState(initialTab);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -89,6 +113,8 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [openTicket, setOpenTicket] = useState(null);
   const [thread, setThread] = useState([]);
   const [threadLoading, setThreadLoading] = useState(false);
+  const [beforeMessageId, setBeforeMessageId] = useState(null);
+  const [earlierLoading, setEarlierLoading] = useState(false);
   const [reply, setReply] = useState("");
   const [replyAttachment, setReplyAttachment] = useState([]); // [{ data: dataURL, name }]
   const [replying, setReplying] = useState(false);
@@ -96,17 +122,42 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const [showArchived, setShowArchived] = useState(false);
   const [resolving, setResolving] = useState(false);
 
-  useEffect(() => { if (open) setTab(initialTab); }, [open, initialTab]);
+  const restoreCreateDraft = useCallback(() => {
+    const saved = SUPPORT_OPERATIONS_ENABLED ? operations.createDraft() : null;
+    if (!saved) return;
+    setSubject(saved.subject || ""); setBody(saved.body || "");
+    setCategory(saved.category || "other"); setPriority(saved.priority || "normal");
+  }, [operations]);
+  useEffect(() => {
+    if (open) { setTab(initialTab); if (SUPPORT_OPERATIONS_ENABLED) restoreCreateDraft(); }
+  }, [open, initialTab, restoreCreateDraft]);
+  useEffect(() => () => {
+    listRequest.current++; threadRequest.current++; actionRequest.current++;
+    clearTimeout(closeTimer.current);
+  }, [open]);
 
   const loadTickets = async () => {
     if (!supabase || !user?.id) return;
+    const requestId = ++listRequest.current;
+    const current = () => requestId === listRequest.current;
     setTicketsLoading(true); setTicketsError("");
     try {
+      if (SUPPORT_OPERATIONS_ENABLED) {
+        const pendingBefore = operations.createDraft();
+        const rows = await operations.list();
+        if (current()) {
+          setTickets(rows);
+          if (pendingBefore && !operations.createDraft()) { setSubject(""); setBody(""); setCategory("other"); setPriority("normal"); }
+        }
+        return;
+      }
       // RLS on support_tickets is owner-or-admin; filter to this profile so an admin
       // sees only their own tickets here (the admin queue lives in Admin > Tickets).
       const { data: profile } = await supabase
         .from("profiles").select("id").eq("auth_user_id", user.id).maybeSingle();
+      if (!current()) return;
       if (!profile) { setTickets([]); return; }
+      setOwnProfileId(profile.id);
       const { data: rows, error: e1 } = await supabase
         .from("support_tickets")
         .select("id, subject, body, status, created_at, updated_at, archived_at, context_payload")
@@ -136,11 +187,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         if (grp) return grp;
         return new Date(b.last_message_at) - new Date(a.last_message_at);
       });
-      setTickets(withMeta);
+      if (current()) setTickets(withMeta);
     } catch (e) {
-      setTicketsError(e.message || "Could not load your tickets.");
+      if (current()) setTicketsError(e.message || "Could not load your tickets.");
     } finally {
-      setTicketsLoading(false);
+      if (current()) setTicketsLoading(false);
     }
   };
 
@@ -153,47 +204,96 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   // used to leave the screenshot silently absent, which reads as "the upload
   // was lost" when the file is fine and the link call is what broke. Say so
   // instead.
-  const loadAttachmentUrls = async (t, msgs) => {
-    const onTicket = t.context_payload?.attachment_path || t.context_payload?.attachment_paths?.length;
-    if (!onTicket && !msgs.some((m) => m.attachment_path || m.attachment_paths?.length)) return;
+  const loadAttachmentUrls = async (t, msgs, current = () => true) => {
+    const onTicket = t.has_attachments || t.context_payload?.attachment_path || t.context_payload?.attachment_paths?.length;
+    if (!onTicket && !msgs.some((m) => m.has_attachments || m.attachment_path || m.attachment_paths?.length)) return;
     const res = await supabase.functions.invoke("ticket-attachment-url", { body: { ticket_id: t.id } });
-    if (res.error) { setReplyMsg(await edgeErrorMessage(res.error, "Could not open the attachment.")); return; }
+    if (!current()) return;
+    if (res.error) { const message = await edgeErrorMessage(res.error, "Could not open the attachment."); if (current()) setReplyMsg(message); return; }
     setAttachmentUrls(linksFor(res.data?.urls ?? res.data?.url));
     setReplyUrls(res.data?.replies || {});
   };
 
   const openThread = async (t) => {
-    setOpenTicket(t); setThread([]); setReply(""); setReplyAttachment([]); setReplyMsg("");
+    const requestId = ++threadRequest.current;
+    const current = () => requestId === threadRequest.current;
+    setOpenTicket(t); setThread([]); setReply(SUPPORT_OPERATIONS_ENABLED ? operations.replyDraft(t.id)?.body || "" : ""); setReplyAttachment([]); setReplyMsg("");
+    setReplying(false); setResolving(false);
+    setBeforeMessageId(null); setEarlierLoading(false);
     setAttachmentUrls([]); setReplyUrls({});
     setThreadLoading(true);
-    const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
-    setThread(data || []);
-    setThreadLoading(false);
-    await loadAttachmentUrls(t, data || []);
+    try {
+      if (SUPPORT_OPERATIONS_ENABLED) {
+        const result = await operations.read(t.id);
+        if (!current()) return;
+        setOpenTicket(result.ticket); setThread(result.messages); setBeforeMessageId(result.before_message_id);
+        setReply(operations.replyDraft(t.id)?.body || "");
+        await loadAttachmentUrls(result.ticket, result.messages, current);
+      } else {
+        const { data, error } = await supabase.from("ticket_thread").select("*").eq("ticket_id", t.id);
+        if (error) throw error;
+        if (!current()) return;
+        setThread(data || []);
+        await loadAttachmentUrls(t, data || [], current);
+      }
+    } catch (e) { if (current()) setReplyMsg(e.message || "Could not load this ticket."); }
+    finally { if (current()) setThreadLoading(false); }
+  };
+
+  const leaveThread = () => { threadRequest.current++; actionRequest.current++; setOpenTicket(null); };
+  const loadEarlier = async () => {
+    if (!openTicket || !beforeMessageId || earlierLoading) return;
+    const requestId = threadRequest.current;
+    const current = () => requestId === threadRequest.current;
+    setEarlierLoading(true);
+    try {
+      const result = await operations.read(openTicket.id, beforeMessageId);
+      if (!current()) return;
+      setThread(existing => [...result.messages, ...existing].filter((m, i, rows) => rows.findIndex(row => row.id === m.id) === i));
+      setBeforeMessageId(result.before_message_id);
+      await loadAttachmentUrls(result.ticket, result.messages, current);
+    } catch (e) { if (current()) setReplyMsg(e.message || "Could not load earlier replies."); }
+    finally { if (current()) setEarlierLoading(false); }
   };
 
   const sendReply = async () => {
     const text = reply.trim();
-    if (!openTicket || (text.length < 1 && !replyAttachment.length)) return;
+    if (!openTicket || replying || threadLoading || (text.length < 1 && (SUPPORT_OPERATIONS_ENABLED || !replyAttachment.length))) return;
+    const requestId = threadRequest.current;
+    const current = () => requestId === threadRequest.current;
     setReplying(true); setReplyMsg("");
     try {
-      const res = await supabase.functions.invoke("reply-ticket", {
+      if (SUPPORT_OPERATIONS_ENABLED) await operations.reply({ ticketId: openTicket.id, body: text });
+      else {
+        const res = await supabase.functions.invoke("reply-ticket", {
         body: {
           ticket_id: openTicket.id, body: text,
           ...attachmentsPayload(replyAttachment),
         },
-      });
-      if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not send the reply."));
-      const { data } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
-      setThread(data || []);
+        });
+        if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not send the reply."));
+      }
+      if (!current()) return;
       setReply(""); setReplyAttachment([]);
-      setReplyMsg("Sent.");
+      setReplyMsg("Reply received.");
       loadTickets();
-      await loadAttachmentUrls(openTicket, data || []);
+      try {
+        if (SUPPORT_OPERATIONS_ENABLED) {
+          const result = await operations.read(openTicket.id);
+          if (!current()) return;
+          setOpenTicket(result.ticket); setThread(result.messages); setBeforeMessageId(result.before_message_id);
+          await loadAttachmentUrls(result.ticket, result.messages, current);
+        } else {
+          const { data, error } = await supabase.from("ticket_thread").select("*").eq("ticket_id", openTicket.id);
+          if (error) throw error;
+          if (!current()) return;
+          setThread(data || []); await loadAttachmentUrls(openTicket, data || [], current);
+        }
+      } catch { if (current()) setReplyMsg("Reply received. Reopen the ticket to refresh the conversation."); }
     } catch (e) {
-      setReplyMsg(e.message || "Failed to send");
+      if (current()) setReplyMsg(e.message || "Could not confirm your reply. Try again.");
     } finally {
-      setReplying(false);
+      if (current()) setReplying(false);
     }
   };
 
@@ -206,6 +306,8 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   const markResolved = async () => {
     if (!openTicket) return;
     if (!window.confirm("Mark this ticket resolved? You can still reply later if it comes back.")) return;
+    const requestId = threadRequest.current;
+    const current = () => requestId === threadRequest.current;
     setResolving(true); setReplyMsg("");
     try {
       const { error } = await supabase.from("support_tickets")
@@ -215,21 +317,25 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         })
         .eq("id", openTicket.id);
       if (error) throw error;
+      if (!current()) return;
       setOpenTicket((t) => (t ? { ...t, status: "resolved", archived_at: new Date().toISOString() } : t));
       loadTickets();
     } catch (e) {
-      setReplyMsg(e.message || "Could not mark this resolved.");
+      if (current()) setReplyMsg(e.message || "Could not mark this resolved.");
     } finally {
-      setResolving(false);
+      if (current()) setResolving(false);
     }
   };
 
   const reset = useCallback(() => {
+    listRequest.current++; threadRequest.current++; actionRequest.current++;
+    clearTimeout(closeTimer.current);
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
     setDone(false); setError("");
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
     setAttachment([]); setReplyAttachment([]); setAttachmentUrls([]); setReplyUrls({});
     setShowArchived(false);
+    setSubmitting(false); setReplying(false); setThreadLoading(false); setBeforeMessageId(null);
   }, []);
 
   const close = useCallback(() => { onClose(); reset(); }, [onClose, reset]);
@@ -258,6 +364,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   if (!open) return null;
 
   const submit = async () => {
+    if (submitting) return;
     // Feedback shouldn't demand a subject line, derive one from the message
     const subj = subject.trim() || body.trim().slice(0, 80);
     if (subj.length < 3) { setError("Tell us a bit more first."); return; }
@@ -265,8 +372,12 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     if (!supabase) { setError("App not connected to backend."); return; }
 
     setSubmitting(true); setError("");
+    const requestId = ++actionRequest.current;
+    const current = () => requestId === actionRequest.current;
     try {
-      const res = await supabase.functions.invoke("create-ticket", {
+      if (SUPPORT_OPERATIONS_ENABLED) await operations.create({ subject: subj, body: body.trim(), category, priority });
+      else {
+        const res = await supabase.functions.invoke("create-ticket", {
         body: {
           subject: subj,
           body: body.trim(),
@@ -275,14 +386,16 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
           context_page: contextPage || window.location.pathname,
           ...attachmentsPayload(attachment),
         },
-      });
-      if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not file the ticket."));
+        });
+        if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not file the ticket."));
+      }
+      if (!current()) return;
       setDone(true);
-      setTimeout(() => { onClose(); reset(); }, 2600);
+      closeTimer.current = setTimeout(() => { if (current()) { onClose(); reset(); } }, 2600);
     } catch (e) {
-      setError(e.message || "Failed to submit");
+      if (current()) setError(e.message || "Could not confirm receipt. Try again.");
     } finally {
-      setSubmitting(false);
+      if (current()) setSubmitting(false);
     }
   };
 
@@ -291,9 +404,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
     backgroundColor: T.input, border: `1px solid ${T.inputBorder || T.border}`,
     color: T.text, fontSize: 16, outline: "none", boxSizing: "border-box",
   };
+  const pendingCreate = SUPPORT_OPERATIONS_ENABLED && operations.createDraft();
+  const pendingReply = SUPPORT_OPERATIONS_ENABLED && openTicket && operations.replyDraft(openTicket.id);
 
   const tabBtn = (id, label) => (
-    <button key={id} onClick={() => { setTab(id); setOpenTicket(null); }} style={{
+    <button key={id} disabled={submitting} onClick={() => { setTab(id); leaveThread(); if (SUPPORT_OPERATIONS_ENABLED && id === "new") restoreCreateDraft(); }} style={{
       flex: 1, padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
       backgroundColor: tab === id ? T.card : "transparent",
       color: tab === id ? T.text : T.textMuted, fontSize: 13, fontWeight: 700,
@@ -307,24 +422,26 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         Help & feedback
       </h2>
       <p style={{ margin: "0 0 16px", fontSize: 13, color: T.textMuted }}>
-        Bug, question, or just a thought. It goes to Eric Whitney, DO, and he answers personally.
-        Replies arrive by email at {user?.email || "your account address"} and here under Your tickets.
+        Send a bug report, question, or suggestion. Follow the conversation under Your tickets.
+        Automated replies are labeled. Email updates depend on a verified address and successful delivery.
       </p>
+      {pendingCreate && <p role="status" style={{ fontSize: 12, color: T.textMuted }}>Your previous submission has not been confirmed. Its text is saved below so you can retry the same request. You can also check Your tickets.</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Category</label>
-        <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
+        <select value={category} disabled={submitting || !!pendingCreate} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
           {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
 
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Priority</label>
-        <select value={priority} onChange={(e) => setPriority(e.target.value)} style={inputStyle}>
+        <select value={priority} disabled={submitting || !!pendingCreate} onChange={(e) => setPriority(e.target.value)} style={inputStyle}>
           {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
 
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Subject</label>
         <input
           value={subject}
+          disabled={submitting || !!pendingCreate}
           onChange={(e) => setSubject(e.target.value)}
           placeholder="Short summary (optional)"
           maxLength={200}
@@ -334,13 +451,18 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>What happened</label>
         <textarea
           value={body}
+          disabled={submitting || !!pendingCreate}
+          maxLength={10000}
           onChange={(e) => setBody(e.target.value)}
           placeholder="As much detail as helps: steps, error messages, what you expected."
           style={{ ...inputStyle, minHeight: 120, resize: "vertical", fontFamily: "inherit" }}
         />
 
-        <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Screenshot (optional)</label>
-        <ScreenshotAttach value={attachment} onChange={setAttachment} />
+        {!SUPPORT_OPERATIONS_ENABLED && <>
+          <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Screenshot (optional)</label>
+          <ScreenshotAttach value={attachment} onChange={setAttachment} />
+        </>}
+        {SUPPORT_OPERATIONS_ENABLED && <p style={{ margin: 0, fontSize: 12, color: T.textMuted }}>Please describe the issue in text. Attachments are not available here yet.</p>}
       </div>
 
       {error && (
@@ -362,7 +484,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
             cursor: submitting || body.trim().length < 10 ? "not-allowed" : "pointer",
           }}
         >
-          {submitting ? "Sending..." : "Send ticket"}
+          {submitting ? "Sending..." : pendingCreate ? "Retry same ticket" : "Send ticket"}
         </button>
         <button
           onClick={close}
@@ -403,7 +525,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       <p style={{ margin: "0 0 14px", fontSize: 13, color: T.textMuted }}>
         {showArchived
           ? "Resolved tickets you closed out. Still open for a reply if it comes back."
-          : "Everything you have sent, with Eric's replies. New replies also land in your email."}
+          : "Your requests and replies. Open a ticket to add details or check for an update."}
       </p>
       {ticketsLoading && <div style={{ fontSize: 13, color: T.textMuted, padding: "12px 0" }}>Loading...</div>}
       {ticketsError && <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600, padding: "8px 0" }}>{ticketsError}</div>}
@@ -432,7 +554,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               )}
             </div>
             <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 3 }}>
-              {t.last_from_admin ? "Reply from Eric " : "Last message "}{timeAgo(t.last_message_at)}
+              Last message {timeAgo(t.last_message_at)}
             </div>
           </button>
         ))}
@@ -447,11 +569,11 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
   };
 
   // A reply can be text, a screenshot, or both.
-  const canSend = !replying && (reply.trim().length > 0 || replyAttachment.length > 0);
+  const canSend = !replying && !threadLoading && (reply.trim().length > 0 || (!SUPPORT_OPERATIONS_ENABLED && replyAttachment.length > 0));
 
   const renderThread = () => (
     <>
-      <button onClick={() => setOpenTicket(null)} style={{
+      <button onClick={leaveThread} style={{
         background: "none", border: "none", padding: 0, marginBottom: 8, cursor: "pointer",
         color: T.accent, fontSize: 13, fontWeight: 700,
       }}>{"←"} All tickets</button>
@@ -466,6 +588,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
       </div>
 
       {threadLoading && <div style={{ fontSize: 13, color: T.textMuted }}>Loading...</div>}
+      {beforeMessageId && <button onClick={loadEarlier} disabled={earlierLoading} style={{ padding: "8px 0", background: "none", border: "none", color: T.accent, cursor: "pointer" }}>{earlierLoading ? "Loading earlier replies..." : "Show earlier replies"}</button>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {openTicket.body && (
           <div style={{ padding: "9px 11px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
@@ -476,23 +599,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
             <TicketAttachments urls={attachmentUrls} size={160} />
           </div>
         )}
-        {thread.map((m) => (
-          <div key={m.id} style={{
-            padding: "9px 11px", borderRadius: 10,
-            backgroundColor: m.is_admin_reply ? (T.accentDim || "rgba(59,130,246,0.12)") : T.input,
-            border: `1px solid ${T.border}`,
-          }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: m.is_admin_reply ? T.accent : T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>
-              {m.is_admin_reply ? "Eric" : "You"} {"·"} {new Date(m.created_at).toLocaleString()}
-            </div>
-            <div style={{ fontSize: 13, color: T.text, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
-            {Boolean(m.attachment_path || m.attachment_paths?.length) && (linksFor(replyUrls[m.id]).length ? (
-              <TicketAttachments urls={linksFor(replyUrls[m.id])} size={160} />
-            ) : (
-              <div style={{ marginTop: 6, fontSize: 11.5, color: T.textDim }}>File attached</div>
-            ))}
-          </div>
-        ))}
+        {thread.map(m => <SupportMessage key={m.id} message={m} theme={T} ownProfileId={ownProfileId} urls={replyUrls[m.id]} />)}
         {!threadLoading && thread.length === 0 && (
           <div style={{ fontSize: 12.5, color: T.textMuted, padding: "6px 0" }}>
             No replies yet.
@@ -502,20 +609,23 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
 
       <textarea
         value={reply}
+        disabled={replying || threadLoading || !!pendingReply}
+        maxLength={10000}
         onChange={(e) => setReply(e.target.value)}
         placeholder="Add to this ticket"
         style={{ ...inputStyle, minHeight: 80, marginTop: 12, resize: "vertical", fontFamily: "inherit" }}
       />
-      <ScreenshotAttach value={replyAttachment} onChange={setReplyAttachment} style={{ marginTop: 8 }} />
-      {replyMsg && <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: replyMsg === "Sent." ? T.accent : "#ef4444" }}>{replyMsg}</div>}
+      {pendingReply && <p role="status" style={{ fontSize: 12, color: T.textMuted }}>Your previous reply has not been confirmed. Retry the saved reply using the same request.</p>}
+      {!SUPPORT_OPERATIONS_ENABLED && <ScreenshotAttach value={replyAttachment} onChange={setReplyAttachment} style={{ marginTop: 8 }} />}
+      {replyMsg && <div role="status" style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: replyMsg.startsWith("Reply received.") ? T.accent : "#ef4444" }}>{replyMsg}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <button onClick={sendReply} disabled={!canSend} style={{
           flex: 1, padding: "12px", borderRadius: 10, border: "none",
           backgroundColor: canSend ? T.accent : T.textDim,
           color: "#fff", fontSize: 14, fontWeight: 700,
           cursor: canSend ? "pointer" : "not-allowed",
-        }}>{replying ? "Sending..." : "Send reply"}</button>
-        <button onClick={() => setOpenTicket(null)} style={{
+        }}>{replying ? "Sending..." : pendingReply ? "Retry same reply" : "Send reply"}</button>
+        <button onClick={leaveThread} style={{
           padding: "12px 18px", borderRadius: 10,
           border: `1px solid ${T.border}`, backgroundColor: "transparent",
           color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
@@ -557,7 +667,7 @@ export default function SupportModal({ open, onClose, contextPage, initialTab = 
               Ticket received.
             </div>
             <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>
-              Replies arrive by email at {user?.email || "your account address"} and here under Your tickets.
+              Your request is saved. Follow replies and add details under Your tickets.
             </div>
           </div>
         ) : (

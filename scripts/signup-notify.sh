@@ -1,8 +1,8 @@
 #!/bin/zsh
 # Signup notifier — iMessages Eric when anyone new hits the waitlist,
 # founding signups, or creates an app profile, and when a physician files a
-# support ticket or replies on one (non-admin authors only, so Eric's own
-# tickets and the ticket agent's replies stay quiet). Runs from gui-domain
+# support ticket or replies on one (non-admin profile authors only, so Eric's
+# own tickets and service-actor replies stay quiet). Runs from gui-domain
 # launchd every 10 minutes (only gui launchd can read the keychain).
 STATE="$HOME/.credentialdomd-signup-notify"
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || exit 0
@@ -23,7 +23,8 @@ union all select 'TICKET', coalesce(p.name,''), coalesce(p.email,''), left(coale
   where t.created_at > '$SINCE' and not public.is_admin(t.user_id)
 union all select 'TICKET REPLY', coalesce(p.name,''), coalesce(p.email,''), left(coalesce(t.subject,''),40) || ': ' || left(regexp_replace(m.body, '\s+', ' ', 'g'),80), m.created_at
   from support_messages m join support_tickets t on t.id = m.ticket_id left join profiles p on p.id = m.author_id
-  where m.created_at > '$SINCE' and not public.is_admin(m.author_id)
+  where m.created_at > '$SINCE' and m.author_id is not null
+    and (to_jsonb(m)->>'support_actor_id') is null and not public.is_admin(m.author_id)
 union all select 'CLIENT ERROR', coalesce(p.name, e.auth_user_id, 'signed-out'), coalesce(p.email,''), e.kind || ': ' || left(regexp_replace(e.message, '\s+', ' ', 'g'),90), e.created_at
   from client_errors e left join profiles p on p.auth_user_id = e.auth_user_id
   where e.created_at > '$SINCE'

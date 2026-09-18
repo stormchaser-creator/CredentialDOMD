@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:site": "vite build --base=/app/ && node scripts/package-site.mjs",
+    "dev": "node scripts/build-credential-portal.mjs && vite",
+    "build": "node scripts/build-credential-portal.mjs && vite build",
+    "build:site": "node scripts/build-credential-portal.mjs && vite build --base=/app/ && node scripts/package-site.mjs",
+    "build:portal": "node scripts/build-credential-portal.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -19,6 +20,7 @@
     "jspdf-autotable": "^5.0.8",
     "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
+    "pdfjs-dist": "6.3.289",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "xlsx": "^0.18.5"

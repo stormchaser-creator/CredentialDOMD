@@ -14,6 +14,7 @@ import StatusBadge from "./components/shared/StatusBadge";
 import ComplianceRing from "./components/shared/ComplianceRing";
 import { cat1BucketLabel } from "./constants/creditEquivalence";
 import { ShareModal } from "./components/features";
+import CredentialPortalLauncher from "./components/features/CredentialPortalModal.jsx";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
 import { CaseDictate } from "./components/features";
@@ -1917,6 +1918,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <div>
         <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Quick Share</h2>
         <p style={{ margin: "0 0 14px", fontSize: 14, color: T.textMuted }}>Search and send any credential.</p>
+        <CredentialPortalLauncher />
         <div style={{ position: "relative", marginBottom: 12 }}>
           <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: T.textDim }}><SearchIcon /></div>
           <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search credentials..." data-desk-search="" style={{
