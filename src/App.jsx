@@ -49,7 +49,8 @@ import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
-import { isNonExpiring, mailtoHref } from "./utils/helpers";
+import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
+import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen, supabase } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
@@ -483,6 +484,35 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   }, [offlineMode]);
   const closeShare = useCallback(() => { setShareItem(null); setShareSection(null); }, []);
   const logShare = useCallback((entry) => addItem("shareLog", { ...entry, id: entry.id || crypto.randomUUID() }), [addItem]);
+
+  // Send several peer references at once instead of one share sheet per
+  // reference — the same one-share-carries-everything shape as the document
+  // packet send, just as a text list since references have no files.
+  const shareManyReferences = useCallback(async (refs) => {
+    if (offlineMode) { window.alert("You're offline. Sharing needs a connection. Try again once you're back online."); return; }
+    if (!refs.length) return;
+    const sName = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
+    const { full, text } = referenceSharePayload(refs);
+    let method = "share";
+    if (navigator.share) {
+      try { await navigator.share({ title: `Peer references — ${sName} (${refs.length})`, text }); }
+      catch (err) {
+        if (err?.name !== "AbortError") window.alert("Sharing did not complete. Try again or use Vera's Copy draft button.");
+        return;
+      }
+    } else {
+      try {
+        if (!await copyToClipboard(full)) throw new Error("Copy failed");
+      } catch { window.alert("Copy did not complete. Use Vera's reference draft to select and copy the text."); return; }
+      method = "copy";
+      window.alert("The reference list has been copied. Paste it into an email or text.");
+    }
+    addItem("shareLog", {
+      id: generateId(), itemId: null, itemName: `Peer references (${refs.length})`,
+      section: "peerReferences", method, recipient: "",
+      sentAt: new Date().toISOString(),
+    });
+  }, [data.settings, offlineMode, addItem]);
 
   const linkedDocs = useMemo(() => {
     if (!shareItem || !shareSection) return [];
@@ -2105,7 +2135,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </button>
           </div>
         )}
-        <CrudSection title="Peer References" sectionKey="peerReferences" {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
+        <CrudSection title="Peer References" sectionKey="peerReferences" {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
       </>);
     }
     if (sub === "malpracticeHistory") {

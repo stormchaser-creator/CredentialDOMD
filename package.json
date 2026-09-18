@@ -8,6 +8,7 @@
     "build": "node scripts/build-credential-portal.mjs && vite build",
     "build:site": "node scripts/build-credential-portal.mjs && vite build --base=/app/ && node scripts/package-site.mjs",
     "build:portal": "node scripts/build-credential-portal.mjs",
+    "test:references": "node --experimental-vm-modules scripts/reference-draft.test.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
