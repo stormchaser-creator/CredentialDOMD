@@ -62,6 +62,8 @@ export const DEFAULT_DATA = {
   travelDocs: [],     // [{ id, type, name, provider, number, expirationDate, notes }]
   memberships: [],    // [{ id, organization, role, startDate, endDate, notes }]
   malpracticeHistory: [],
+  answerBank: [],     // [{ id, question, questionVersion, answer, scope, scopeDetail, confirmationDate, source, explanation, notes }] — reusable, dated credentialing-questionnaire answers
+  identityVault: [],  // [{ id, label, legalFirstName, legalMiddleName, legalLastName, suffix, fullDob (secret), ssn (secret), source, verifiedDate, notes }] — protected application-identity fields, encrypted via secretBox
   travelExpenses: [], // [{ id, date, category, description, amount, taxYear }]
   taxPayments: [],    // [{ id, date, quarter, taxYear, jurisdiction, amount, method, notes }]
   scheduleDays: [],   // [{ id, contractId, date, kind, expected, note }] — kind "vacation" marks a day off (no contract/expected), note says why

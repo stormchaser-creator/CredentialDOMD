@@ -147,6 +147,14 @@ function getSectionFacts(item, section) {
     a("Expires", formatDate(item.expirationDate));
   } else if (section === "professionalPhotos") {
     a("Date Taken", formatDate(item.dateTaken));
+  } else if (section === "answerBank") {
+    a("Answer", item.answer); a("Confirmed", formatDate(item.confirmationDate));
+    a("Scope", item.scope); a("Source", item.source);
+  } else if (section === "identityVault") {
+    // Deliberately not the encrypted fields (SSN, full DOB, legal name) —
+    // this text feeds Send/email, and this record is never meant to travel
+    // that way. Only non-sensitive record metadata is listed.
+    a("Record Label", item.label); a("Verified Date", formatDate(item.verifiedDate));
   }
 
   return facts;
@@ -293,6 +301,10 @@ export function describeItem(item, physicianName, sectionKey) {
       return join(t(item.type) || "Health record", notMe(item.name) || t(item.provider));
     case "malpracticeHistory":
       return join(t(item.outcome) || "Claim", t(item.facility) || t(item.state));
+    case "answerBank":
+      return join((t(item.question) || "Answer").slice(0, 70), t(item.answer));
+    case "identityVault":
+      return t(item.label) || "Protected Identity";
     case "memberships":
       // Organization leads — role-first made every card read "Member — …"
       return join(t(item.organization), t(item.role)) || "Membership";
