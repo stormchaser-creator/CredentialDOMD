@@ -12,7 +12,7 @@ import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../utils/deskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
-import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon } from "../shared/Icons";
+import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon } from "../shared/Icons";
 import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -85,7 +85,7 @@ function isShown(f, form) {
   return typeof f.show === "function" ? !!f.show(form) : true;
 }
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
   const { data, setData, addItem, theme: T , user, isDesktop } = useApp();
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
@@ -418,6 +418,15 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   // Optional category tabs (e.g. Licenses: Medical / DEA / Board / Life
   // Support) — mixed record types in one flat list are unreadable.
   const [catFilter, setCatFilter] = useState("all");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const toggleSelected = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
   const categorize = (item) => {
     if (!filterTabs) return "all";
     const hit = filterTabs.find(t => t.match(item));
@@ -525,14 +534,52 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>{title}</h2>
-        <button onClick={openAdd} style={{
-          display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 16px",
-          borderRadius: 12, border: "none", fontSize: 14, fontWeight: 600,
-          cursor: "pointer", backgroundColor: T.accent, color: "#fff",
-        }}>
-          <PlusIcon /> Add
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {onShareMany && items.length > 0 && (
+            <button onClick={() => { setSelectMode(m => !m); setSelectedIds(new Set()); }} style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 16px",
+              borderRadius: 12, border: `1px solid ${T.border}`, fontSize: 14, fontWeight: 600,
+              cursor: "pointer", backgroundColor: "transparent", color: T.textMuted,
+            }}>
+              {selectMode ? "Cancel" : "Select"}
+            </button>
+          )}
+          <button onClick={openAdd} style={{
+            display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 16px",
+            borderRadius: 12, border: "none", fontSize: 14, fontWeight: 600,
+            cursor: "pointer", backgroundColor: T.accent, color: "#fff",
+          }}>
+            <PlusIcon /> Add
+          </button>
+        </div>
       </div>
+
+      {selectMode && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+          marginBottom: 10, padding: "10px 14px", borderRadius: 12,
+          backgroundColor: T.card, border: `1px solid ${T.border}`,
+        }}>
+          <span style={{ fontSize: 13, color: T.textMuted }}>
+            {selectedIds.size} selected
+          </span>
+          <button
+            disabled={selectedIds.size === 0}
+            onClick={() => {
+              onShareMany(shownItems.filter(i => selectedIds.has(i.id)));
+              setSelectMode(false); setSelectedIds(new Set());
+            }}
+            style={{
+              padding: "8px 16px", borderRadius: 10, border: "none", fontSize: 13, fontWeight: 700,
+              cursor: selectedIds.size === 0 ? "default" : "pointer",
+              backgroundColor: selectedIds.size === 0 ? T.border : T.accent,
+              color: selectedIds.size === 0 ? T.textMuted : "#fff",
+            }}
+          >
+            Send {selectedIds.size > 0 ? `(${selectedIds.size})` : ""}
+          </button>
+        </div>
+      )}
 
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit" : "Add"}>
         {contactImport && (
@@ -1077,13 +1124,23 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   All records
                 </div>
               )}
-              <div onClick={() => setViewItem(item)} style={{
+              <div onClick={() => selectMode ? toggleSelected(item.id) : setViewItem(item)} style={{
                 backgroundColor: T.card, border: `1px solid ${needsReview ? T.danger : T.border}`,
                 borderRadius: 14, padding: "14px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
                 boxShadow: T.shadow1, cursor: "pointer",
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                  {selectMode && (
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                      border: `2px solid ${selectedIds.has(item.id) ? T.accent : T.border}`,
+                      backgroundColor: selectedIds.has(item.id) ? T.accent : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+                    }}>
+                      {selectedIds.has(item.id) && <CheckIcon />}
+                    </div>
+                  )}
                   {needsReview ? <StatusDot color="red" /> : item.expirationDate ? <StatusDot color={color} /> : null}
                   <div style={{ minWidth: 0 }}>
                     {/* The green TYPE always leads \u2014 it is the card's header.
@@ -1139,14 +1196,16 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                           : "Needs review — tap edit to add expiration date, issued date, and verify details"}
                       </div>
                     )}
-                    {renderExtra && <div onClick={(e) => e.stopPropagation()}>{renderExtra(item)}</div>}
+                    {!selectMode && renderExtra && <div onClick={(e) => e.stopPropagation()}>{renderExtra(item)}</div>}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                  <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
-                  <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
-                  <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
-                </div>
+                {!selectMode && (
+                  <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                    <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
+                    <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
+                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
+                  </div>
+                )}
               </div>
               </div>
             );

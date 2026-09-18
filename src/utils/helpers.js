@@ -88,26 +88,9 @@ export function daysUntil(dateStr) {
   return Math.ceil((new Date(dateStr) - new Date()) / MS_PER_DAY);
 }
 
-export function buildCredentialText(item, section, settings) {
-  const lines = [];
-  const name = settings.name || "Dr.";
-  const deg = settings.degreeType || "";
-  const div = "\u2500".repeat(36);
-
-  lines.push("CREDENTIAL VERIFICATION", div);
-  lines.push("Physician: " + name + (deg ? ", " + deg : ""));
-  if (settings.npi) lines.push("NPI: " + settings.npi);
-  if (settings.specialties?.length) {
-    const names = settings.specialties.map(id => {
-      const parts = id.split(":");
-      return parts[parts.length - 1];
-    });
-    lines.push("Specialty: " + names.join(", "));
-  }
-  lines.push("Degree: " + (deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine"));
-  lines.push(div, describeItem(item, settings.name, section), "");
-
-  const a = (k, v) => { if (v) lines.push(k + ": " + v); };
+function getSectionFacts(item, section) {
+  const facts = [];
+  const a = (k, v) => { if (v) facts.push([k, v]); };
 
   if (section === "licenses") {
     a("Type", item.type); a("License #", item.licenseNumber); a("State", item.state);
@@ -165,6 +148,30 @@ export function buildCredentialText(item, section, settings) {
     a("Date Taken", formatDate(item.dateTaken));
   }
 
+  return facts;
+}
+
+export function buildCredentialText(item, section, settings) {
+  const lines = [];
+  const name = settings.name || "Dr.";
+  const deg = settings.degreeType || "";
+  const div = "\u2500".repeat(36);
+
+  lines.push("CREDENTIAL VERIFICATION", div);
+  lines.push("Physician: " + name + (deg ? ", " + deg : ""));
+  if (settings.npi) lines.push("NPI: " + settings.npi);
+  if (settings.specialties?.length) {
+    const names = settings.specialties.map(id => {
+      const parts = id.split(":");
+      return parts[parts.length - 1];
+    });
+    lines.push("Specialty: " + names.join(", "));
+  }
+  lines.push("Degree: " + (deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine"));
+  lines.push(div, describeItem(item, settings.name, section), "");
+
+  for (const [k, v] of getSectionFacts(item, section)) lines.push(k + ": " + v);
+
   if (item.notes) lines.push("", "Notes: " + item.notes);
   lines.push("", div, "Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString());
   return lines.join("\n");
@@ -175,17 +182,29 @@ export function buildCredentialText(item, section, settings) {
  * files are attached, promotes the FIRST LINE of text to the subject, and
  * strips every line break — so this must be ONE flowing paragraph whose
  * opening words read as a subject. The formatted letter goes to the
- * clipboard alongside (see ShareModal.doShare).
+ * clipboard alongside (see ShareModal.doShare). Broken into short sentences
+ * (physician, then facts, then provenance) instead of one semicolon-joined
+ * run-on — and skips the item summary line since it only restates fields
+ * already listed in the facts below.
  */
 export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
-  const facts = buildCredentialText(item, section, settings)
-    .split("\n")
-    .map(l => l.trim())
-    .filter(l => l && !/^\u2500+$/.test(l) && l !== "CREDENTIAL VERIFICATION");
-  return "Credential verification: " + facts.join("; ") + ". "
-    + (note ? note.trim().replace(/\s+/g, " ") + " " : "")
-    + (hasDocs ? "Supporting documentation is attached. " : "")
-    + "A formatted copy of this verification is on the sender's clipboard for pasting if preferred.";
+  const deg = settings.degreeType || "";
+  const specialties = settings.specialties?.length
+    ? settings.specialties.map(id => {
+        const parts = id.split(":");
+        return parts[parts.length - 1];
+      }).join(", ")
+    : "";
+  const physician = (settings.name || "Dr.") + (deg ? ", " + deg : "")
+    + (settings.npi ? " (NPI " + settings.npi + ")" : "")
+    + (specialties ? ", " + specialties : "");
+  const facts = getSectionFacts(item, section).map(([k, v]) => k + ": " + v).join("; ");
+
+  return "Credential verification from " + physician + ". " + facts + "."
+    + (note ? " " + note.trim().replace(/\s+/g, " ") : "")
+    + (hasDocs ? " Supporting documentation is attached." : "")
+    + " Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString() + "."
+    + " A formatted copy of this verification is on the sender's clipboard for pasting if preferred.";
 }
 
 export function buildEmailSubject(item, section, settings) {
