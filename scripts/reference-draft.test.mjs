@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
-import { buildReferenceDraft, buildReferenceText, buildAssistantHistory, archivedReferenceActions, referenceSelection, resolveReferenceSelection } from "../src/utils/referenceDraft.js";
+import { buildReferenceDraft, buildReferenceText, buildAssistantHistory, archivedReferenceActions, referenceSelection, resolveReferenceSelection, referenceSharePayload } from "../src/utils/referenceDraft.js";
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, mailtoHref } from "../src/utils/helpers.js";
 
 const refs = ["Alice Example", "Brenda Example", "Chris Example", "Excluded One", "Excluded Two"].map((name, i) => ({
@@ -19,6 +19,11 @@ for (const ref of refs.slice(0, 3)) for (const key of ["name", "email", "phone",
 for (const ref of refs.slice(3)) assert.ok(!draft.text.includes(ref.name) && !draft.text.includes(ref.email));
 assert.ok(draft.text.includes("\n\n"));
 assert.ok(!/PRIVATE|NPI|clipboard|CREDENTIAL VERIFICATION/.test(draft.text));
+const bulk = referenceSharePayload(draft.selected);
+assert.equal(bulk.full, draft.text);
+for (const ref of draft.selected) assert.ok(bulk.text.includes(ref.email) && bulk.text.includes(ref.phone));
+for (const ref of refs.slice(3)) assert.ok(!bulk.text.includes(ref.email));
+assert.ok(!/PRIVATE|NPI|clipboard/.test(bulk.text));
 assert.equal(buildReferenceDraft(refs, { referenceIds: [] }).text, "");
 assert.deepEqual(buildReferenceDraft(refs.slice(1), action).unavailableIds, ["ref-0"]);
 assert.equal(buildReferenceDraft([{ ...refs[0], phone: "" }], { referenceIds: ["ref-0"] }).missingContacts.length, 1);

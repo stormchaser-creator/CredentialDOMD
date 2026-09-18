@@ -10,9 +10,11 @@ Exclusions carry forward across long conversations, dismissed cards and restored
 
 Individual reference copy/email/text now contain the reference's contact block, without the physician's NPI, generic credential verification boilerplate, private notes or clipboard instructions. Native share keeps concise one-line reference facts for the existing iOS Mail behavior; actual iOS native share has not been exercised in this desktop session.
 
+Integrated on top of the ticket worker's `6b8f3f5d` multiple-reference sharing change, preserving its selection UI and ordinary credential formatting. Its new native multi-share summary omitted contact details; the combined repair now uses the same local reference formatter for every selected reference and logs no successful share after cancellation or failure. Desktop copy fallback is reported as copy, not sent.
+
 ## Validation
 - `node --experimental-vm-modules scripts/reference-draft.test.mjs`: synthetic records, exact contact content, exclusions, empty/stale/incomplete selections, long history, dismissed/archive history, reference and ordinary credential formatting, email body, and intercepted Gemini/Anthropic request bodies.
-- Scoped ESLint and `git diff --check`: clean.
+- Scoped ESLint for the reference modules/components and `git diff --check`: clean. App.jsx retains 2 existing errors/1 warning (baseline main had 6/1); the modified sharing block has no lint findings.
 - Production `npm run build:site`: passes (existing bundle-size/SDK warnings).
 - Local Chrome UI: inclusion checkbox updates draft and email body; excluded records absent; Copy reports success. No real contact data or emails used in tests.
 - Independent Codex reviewer found/fixed exclusion lifetime and response-race issues; subsequent review found no blockers.

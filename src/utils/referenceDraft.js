@@ -60,6 +60,14 @@ export function buildReferenceDraft(references, action) {
   };
 }
 
+export function referenceSharePayload(references) {
+  return {
+    full: references.map(buildReferenceText).join("\n\n"),
+    // Native iOS Mail flattens newlines; each reference remains self-contained.
+    text: references.map((ref, i) => `${i + 1}. ${buildReferenceText(ref).replace(/\n/g, "; ")}`).join(". "),
+  };
+}
+
 // Only selection IDs enter provider-bound history, preserving exclusions.
 export function buildAssistantHistory(messages) {
   const current = latestReferenceSelection(messages);

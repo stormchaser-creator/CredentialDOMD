@@ -49,6 +49,7 @@ import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { isAdminUser } from "./lib/admin";
 import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
+import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen, supabase } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
@@ -490,37 +491,24 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (offlineMode) { window.alert("You're offline. Sharing needs a connection. Try again once you're back online."); return; }
     if (!refs.length) return;
     const sName = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
-    const npi = data.settings?.npi;
-    const full = [
-      "To whom it may concern,",
-      "",
-      `Please find ${refs.length} peer reference${refs.length === 1 ? "" : "s"} for ${sName}${npi ? ` (NPI ${npi})` : ""} below.`,
-      "",
-      ...refs.flatMap((r, i) => [
-        `${i + 1}. ${r.name}${r.degree ? ", " + r.degree : ""}`,
-        ...(r.specialty ? [`   Specialty: ${r.specialty}`] : []),
-        ...(r.institution ? [`   Institution: ${r.institution}`] : []),
-        ...(r.relationship ? [`   Relationship: ${r.relationship}`] : []),
-        ...(r.email ? [`   Email: ${r.email}`] : []),
-        ...(r.phone ? [`   Phone: ${r.phone}`] : []),
-        "",
-      ]),
-      `Sent via CredentialDOMD · ${new Date().toLocaleDateString()}`,
-    ].join("\n");
-    const blurb = `Peer references for ${sName}${npi ? ` (NPI ${npi})` : ""}, ${refs.length} reference${refs.length === 1 ? "" : "s"}: `
-      + refs.map((r, i) => `${i + 1}. ${r.name}${r.degree ? ", " + r.degree : ""}${r.institution ? " — " + r.institution : ""}`).join("; ")
-      + ". A formatted list is on the sender's clipboard for pasting if preferred.";
-
-    await copyToClipboard(full);
+    const { full, text } = referenceSharePayload(refs);
+    let method = "share";
     if (navigator.share) {
-      try { await navigator.share({ title: `Peer references — ${sName} (${refs.length})`, text: blurb }); }
-      catch (err) { if (err?.name !== "AbortError") window.alert("Sharing failed. The list is on your clipboard to paste instead."); }
+      try { await navigator.share({ title: `Peer references — ${sName} (${refs.length})`, text }); }
+      catch (err) {
+        if (err?.name !== "AbortError") window.alert("Sharing did not complete. Try again or use Vera's Copy draft button.");
+        return;
+      }
     } else {
-      window.alert("This browser can't open the share sheet. The list has been copied — paste it into an email or text.");
+      try {
+        if (!await copyToClipboard(full)) throw new Error("Copy failed");
+      } catch { window.alert("Copy did not complete. Use Vera's reference draft to select and copy the text."); return; }
+      method = "copy";
+      window.alert("The reference list has been copied. Paste it into an email or text.");
     }
     addItem("shareLog", {
       id: generateId(), itemId: null, itemName: `Peer references (${refs.length})`,
-      section: "peerReferences", method: "share", recipient: "",
+      section: "peerReferences", method, recipient: "",
       sentAt: new Date().toISOString(),
     });
   }, [data.settings, offlineMode, addItem]);
