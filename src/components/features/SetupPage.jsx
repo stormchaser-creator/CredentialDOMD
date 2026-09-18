@@ -1,8 +1,9 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { STATES, STATE_NAMES } from "../../constants/states";
 import { generateId, downscalePhoto } from "../../utils/helpers";
+import Modal from "../shared/Modal";
 import { isDea, ladderState, TIER2_COPY, evidenceQueue, runIntro } from "../../utils/setupTasks";
 import { generateCredentialZip, downloadBlob, packetDocuments, packetSummary, packetSummaryLine, packetPendingLine } from "../../utils/credentialExport";
 import { FREE_BETA_LABEL } from "../../constants/beta";
@@ -425,6 +426,126 @@ function PacketDrawer({ task, onOpenSection }) {
  * guarantee (a desktop browser shows a file picker instead), so the upload
  * button is always there next to it.
  */
+// The headshot's frame is a square, same as a hospital ID photo — CROP_FRAME
+// is the on-screen viewport side length and CROP_OUT is the pixel size of
+// the square image it produces. Pan is a drag on the image; zoom is a
+// slider, because pinch-to-zoom is unreliable across the camera/file-picker
+// mix of devices this flow has to work on.
+const CROP_FRAME = 280;
+const CROP_OUT = 640;
+
+function HeadshotCropModal({ src, onCancel, onConfirm }) {
+  const { theme: T } = useApp();
+  const imgRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [natural, setNatural] = useState({ w: 0, h: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null);
+
+  const baseScale = natural.w && natural.h ? CROP_FRAME / Math.min(natural.w, natural.h) : 1;
+  const scale = baseScale * zoom;
+  const dispW = natural.w * scale;
+  const dispH = natural.h * scale;
+
+  const clamp = (p, w, h) => ({
+    x: Math.min(0, Math.max(CROP_FRAME - w, p.x)),
+    y: Math.min(0, Math.max(CROP_FRAME - h, p.y)),
+  });
+
+  useEffect(() => {
+    if (!natural.w) return;
+    setPos(clamp({ x: (CROP_FRAME - dispW) / 2, y: (CROP_FRAME - dispH) / 2 }, dispW, dispH));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [natural.w, natural.h]);
+
+  const onImgLoad = () => {
+    const el = imgRef.current;
+    if (!el) return;
+    setNatural({ w: el.naturalWidth, h: el.naturalHeight });
+    setReady(true);
+  };
+
+  const onZoom = (next) => {
+    setZoom(next);
+    const s = baseScale * next;
+    setPos((p) => clamp(p, natural.w * s, natural.h * s));
+  };
+
+  const startDrag = (clientX, clientY) => {
+    dragRef.current = { startX: clientX, startY: clientY, origin: pos };
+  };
+  const moveDrag = (clientX, clientY) => {
+    if (!dragRef.current) return;
+    const { startX, startY, origin } = dragRef.current;
+    setPos(clamp({ x: origin.x + (clientX - startX), y: origin.y + (clientY - startY) }, dispW, dispH));
+  };
+  const endDrag = () => { dragRef.current = null; };
+
+  const confirm = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = CROP_OUT;
+    canvas.height = CROP_OUT;
+    const ctx = canvas.getContext("2d");
+    const sx = -pos.x / scale;
+    const sy = -pos.y / scale;
+    const sSide = CROP_FRAME / scale;
+    ctx.drawImage(imgRef.current, sx, sy, sSide, sSide, 0, 0, CROP_OUT, CROP_OUT);
+    onConfirm(canvas.toDataURL("image/jpeg", 0.9));
+  };
+
+  return (
+    <Modal open onClose={onCancel} title="Position your headshot" width={420}>
+      <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
+        Drag to reposition, use the slider to zoom. The frame is exactly what gets saved.
+      </div>
+      <div
+        onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+        onMouseMove={(e) => { if (dragRef.current) moveDrag(e.clientX, e.clientY); }}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+        onTouchMove={(e) => moveDrag(e.touches[0].clientX, e.touches[0].clientY)}
+        onTouchEnd={endDrag}
+        style={{
+          width: CROP_FRAME, height: CROP_FRAME, margin: "0 auto", borderRadius: 12,
+          overflow: "hidden", position: "relative", backgroundColor: T.border,
+          cursor: dragRef.current ? "grabbing" : "grab", touchAction: "none",
+        }}
+      >
+        <img
+          ref={imgRef}
+          src={src}
+          alt=""
+          onLoad={onImgLoad}
+          draggable={false}
+          style={{
+            position: "absolute", left: pos.x, top: pos.y, width: dispW, height: dispH,
+            maxWidth: "none", visibility: ready ? "visible" : "hidden", userSelect: "none",
+          }}
+        />
+      </div>
+      <input
+        type="range" min={1} max={3} step={0.01} value={zoom}
+        onChange={(e) => onZoom(Number(e.target.value))}
+        style={{ width: "100%", marginTop: 14 }}
+      />
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button onClick={onCancel} style={{
+          flex: 1, padding: "12px 16px", borderRadius: 12, border: `1px solid ${T.border}`,
+          backgroundColor: "transparent", color: T.text, fontSize: 14.5, fontWeight: 700,
+          cursor: "pointer", fontFamily: "inherit",
+        }}>Cancel</button>
+        <button onClick={confirm} disabled={!ready} style={{
+          flex: 1, padding: "12px 16px", borderRadius: 12, border: "none",
+          backgroundColor: T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800,
+          cursor: ready ? "pointer" : "wait", fontFamily: "inherit",
+        }}>Use this photo</button>
+      </div>
+    </Modal>
+  );
+}
+
 function HeadshotDrawer({ onOpenSection }) {
   const { data, updateSettings, theme: T } = useApp();
   const s = data.settings || {};
@@ -432,6 +553,7 @@ function HeadshotDrawer({ onOpenSection }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [cropSrc, setCropSrc] = useState(null);
 
   const onPhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -446,7 +568,7 @@ function HeadshotDrawer({ onOpenSection }) {
         r.onerror = () => rej(new Error("Could not read that photo."));
         r.readAsDataURL(file);
       });
-      updateSettings({ profilePhoto: await downscalePhoto(dataUrl) });
+      setCropSrc(dataUrl);
     } catch {
       // A HEIC from an older iPhone is the usual cause: the browser cannot
       // redraw it, so say what to do instead of failing silently.
@@ -454,6 +576,11 @@ function HeadshotDrawer({ onOpenSection }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const onCropped = async (croppedDataUrl) => {
+    setCropSrc(null);
+    updateSettings({ profilePhoto: await downscalePhoto(croppedDataUrl) });
   };
 
   const button = (label, onClick, primary) => (
@@ -501,6 +628,10 @@ function HeadshotDrawer({ onOpenSection }) {
         border: `1px solid ${T.border}`, backgroundColor: "transparent",
         color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
       }}>Keep several under Professional Photo</button>
+
+      {cropSrc && (
+        <HeadshotCropModal src={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={onCropped} />
+      )}
     </div>
   );
 }
