@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security and data handling | CredentialDoMD</title>
+  <meta name="description" content="Where CredentialDoMD stores your professional records, how local private notes work, and what AI providers receive when you use a feature.">
+  <link rel="canonical" href="https://credentialdomd.com/security">
+  <meta property="og:title" content="Security and data handling | CredentialDoMD">
+  <meta property="og:description" content="Cloud records, local private notes and AI requests: understand where your data goes.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://credentialdomd.com/security">
+  <meta name="theme-color" content="#0a1014">
+  <style>
+    :root { color-scheme: dark; --bg: #0a1014; --card: #101b22; --text: #eef4f2; --muted: #a2b6b3; --line: #21363f; --accent: #34d399; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    a { color: var(--accent); text-underline-offset: 4px; }
+    a:hover { color: #a7f3d0; }
+    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+    nav, main, footer { max-width: 1100px; margin: auto; padding: 24px; }
+    nav { display: flex; justify-content: space-between; align-items: center; gap: 20px; border-bottom: 1px solid var(--line); }
+    .brand { color: var(--text); font-weight: 800; font-size: 20px; text-decoration: none; }
+    .brand span { color: var(--accent); }
+    .links { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+    .links a { font-size: 14px; }
+    .eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: .12em; font-size: 12px; font-weight: 700; }
+    header { max-width: 780px; padding: 52px 0 32px; }
+    h1 { font-size: clamp(34px, 5vw, 56px); line-height: 1.1; letter-spacing: -.035em; margin: 16px 0 22px; }
+    h2 { font-size: 25px; line-height: 1.25; letter-spacing: -.02em; margin: 0 0 16px; }
+    h3 { font-size: 19px; line-height: 1.3; margin: 8px 0 12px; }
+    p { margin: 0 0 16px; }
+    .lead { color: var(--muted); font-size: 19px; }
+    .updated, .detail { color: var(--muted); font-size: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+    .card p { color: var(--muted); }
+    .card p:last-child { margin-bottom: 0; }
+    .number { color: var(--accent); font-weight: 800; font-size: 13px; }
+    section { margin: 44px 0; scroll-margin-top: 20px; }
+    .reading { max-width: 800px; }
+    .notice { padding: 24px; border-left: 3px solid var(--accent); background: var(--card); border-radius: 0 12px 12px 0; }
+    li { margin: 10px 0; color: var(--muted); }
+    li strong { color: var(--text); }
+    .button { display: inline-block; background: var(--accent); color: #0a1014; font-weight: 750; padding: 12px 22px; border-radius: 10px; text-decoration: none; }
+    .button:hover { background: #a7f3d0; color: #0a1014; }
+    footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; padding-bottom: 40px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } nav { align-items: flex-start; flex-direction: column; } header { padding-top: 32px; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <nav aria-label="Main navigation">
+    <a class="brand" href="/">Credential<span>DoMD</span></a>
+    <div class="links">
+      <a href="/locums">For Locums</a>
+      <a href="/security" aria-current="page">Security</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/app/">Sign in</a>
+    </div>
+  </nav>
+  <main>
+    <header>
+      <div class="eyebrow">Security and data handling</div>
+      <h1>Know where your data goes.</h1>
+      <p class="lead">Your cloud records, private notes on this device and requests to AI services have different paths. Here is what each one means when you use CredentialDoMD.</p>
+      <p class="updated">Updated September 18, 2026 &middot; Invite-only beta</p>
+    </header>
+
+    <section aria-label="Three places your data can go">
+      <div class="grid">
+        <article class="card">
+          <div class="number">01 &middot; CLOUD RECORDS</div>
+          <h3>Your professional file</h3>
+          <p>Credentials, contracts, work records and invoices sync to Supabase. Uploaded documents use private file storage. Clerk manages sign-in.</p>
+          <p>Account access rules are designed to separate users&rsquo; records. The operator has administrative access to run the service and provide support.</p>
+        </article>
+        <article class="card">
+          <div class="number">02 &middot; ON THIS DEVICE</div>
+          <h3>Private notes</h3>
+          <p>The separate private note field on a work or case entry stays in this browser. It is excluded from normal cloud sync, invoices, AI requests and cloud backups.</p>
+          <p>Private notes are readable browser data and are not separately encrypted by the app. Protect your device and browser account.</p>
+        </article>
+        <article class="card">
+          <div class="number">03 &middot; AI REQUESTS</div>
+          <h3>Content you submit</h3>
+          <p>Scanning, dictation and assistant features send content to Google&rsquo;s Gemini API or Anthropic&rsquo;s Claude API. Vera uses Gemini by default; Claude is an optional selection.</p>
+          <p>The assistant can include your question, a summary of your records, conversation context and any attachment. Review what you submit.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="reading notice" id="patient-information">
+      <h2>Keep patient identifiers out of uploads and AI inputs.</h2>
+      <p>CredentialDoMD is intended for physician credentials and professional administration. Do not put patient names, medical record numbers or other patient identifiers into synced fields, attachments, support tickets, chats or dictated text.</p>
+      <p>Document screening and AI instructions can miss identifiers. They do not guarantee that information is removed before it reaches a server or AI provider. A separate local note also does not protect content you paste or dictate elsewhere.</p>
+      <p><strong>We make no HIPAA compliance claim and do not offer a business associate agreement (BAA).</strong> Do not use the service for a workflow that requires a BAA.</p>
+    </section>
+
+    <section class="reading" id="ai">
+      <h2>Using AI does not require your own API key.</h2>
+      <p>Approved beta accounts can use the service&rsquo;s shared AI access, subject to availability and usage limits. Those service keys stay on the server. The server forwards your request to the selected provider.</p>
+      <p>You can optionally add your own Gemini or Anthropic key in Settings. It is kept on this device; requests using it go directly to that provider, and any provider charges belong to you. Provider handling terms apply to submitted content in either route.</p>
+      <p>Dictation may also use your browser&rsquo;s speech-recognition service. Review AI output before saving credential details, billing entries or codes.</p>
+    </section>
+
+    <section class="reading" id="device">
+      <h2>Local storage needs its own care.</h2>
+      <ul>
+        <li><strong>Protect access to the device.</strong> Offline records and private notes use browser storage. Someone with access to your unlocked browser or its data may be able to read them.</li>
+        <li><strong>Private notes do not follow you automatically.</strong> Use the separate private-note export and restore controls in Data &amp; Backup to move them. The downloaded file is readable, so store it somewhere private.</li>
+        <li><strong>Keep a copy before signing out.</strong> Signing out, clearing browser data or losing the device can remove local notes. Cloud backups do not include them.</li>
+        <li><strong>Keep exports private.</strong> Credential files and record exports can contain sensitive professional and identity information. Check the contents and recipient before sharing.</li>
+      </ul>
+    </section>
+
+    <section class="reading" id="access">
+      <h2>Who can access cloud information?</h2>
+      <p>CredentialDoMD is operated by Eric Whitney, DO, A Professional Corporation. Eric Whitney, DO administers the service for the corporation.</p>
+      <p>You can access your account records. The operator can access cloud records for support, debugging and operating the service. Support tickets, attachments, feedback and assistant activity logs are available to the operator and may be handled with AI tooling.</p>
+      <p>Service providers process information needed for the features you use. Sending a document packet shares the selected files with your chosen recipient. See the <a href="/privacy">Privacy Policy</a> for the provider list, sharing, exports and deletion.</p>
+      <p class="detail">This page describes current behavior and its limits. It is not a security certification or a guarantee that every vulnerability has been eliminated.</p>
+    </section>
+
+    <section class="reading card" id="contact">
+      <h2>Report a security concern.</h2>
+      <p>Email <a href="mailto:support@credentialdomd.com">support@credentialdomd.com</a> with a description and steps to reproduce. Leave patient information, passwords and API keys out of the message.</p>
+      <a class="button" href="/#join">Request beta access</a>
+      <p class="detail" style="margin-top: 14px;">Invite-only beta. No card required. Billing is not open.</p>
+    </section>
+  </main>
+  <footer>
+    <p>&copy; 2026 CredentialDoMD</p>
+    <div class="links"><a href="/">Home</a><a href="/locums">For Locums</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div>
+  </footer>
+</body>
+</html>
