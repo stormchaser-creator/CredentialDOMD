@@ -1,0 +1,7 @@
+Agreement to reviewed rates
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Open Practice, then Contracts. The Agreements screen holds the terms used for billing. Add the facility, recipient and dates, then the rate types your agreement actually uses. Check the billing increment, any stipend coverage and overage terms. These fields drive your invoices, so compare them with the agreement before using them. Select the reviewed agreement in Work.
+
+Illustrative agreement and rates; not market-rate advice.

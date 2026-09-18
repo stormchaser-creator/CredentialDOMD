@@ -1,0 +1,7 @@
+Share a credential document
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Open a license and choose Share. Review the linked document and check that it is the file you mean to send. Choose Email with attachments, enter the recipient, and read the message. In this demonstration, sending is simulated and no email leaves the computer. In the live app, check the recipient and selected documents before you send. This tutorial does not demonstrate real email delivery.
+
+Demo document and recipient. Any sending result is simulated.

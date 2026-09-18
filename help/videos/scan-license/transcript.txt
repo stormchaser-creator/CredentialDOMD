@@ -1,0 +1,7 @@
+Scan a license
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Add on your phone and Documents on your desktop open Smart Scan. Upload the license and wait for its review card. Check the type, number, state and dates against the original; fix anything that is wrong before saving. If analysis fails, check Documents first. The file may already be saved, ready to file when AI access is available.
+
+Demo analysis result. Real Smart Scan uploads are sent to AI.

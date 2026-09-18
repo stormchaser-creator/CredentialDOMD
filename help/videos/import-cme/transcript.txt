@@ -1,0 +1,7 @@
+Transcript import
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Import a transcript from CME Credits. Choose a supported file or paste text. If prompted, match the columns, then review the selected rows. Duplicates begin unticked. Check dates, hours and credit types and correct missing fields. Nothing enters the log until you add the batch. Afterward, link individual certificates from Documents if you need them.
+
+Demo import. No direct CE Broker or ACCME account connection.

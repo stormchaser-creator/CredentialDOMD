@@ -1,0 +1,7 @@
+Backup and device move
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Export a copy from Data & Backup. Private work notes stay in this browser, so export those when moving devices. These files contain readable data; the app does not encrypt them. Sign in on the new device for synced records and restore your notes file. Check the result before clearing the old browser or signing out.
+
+Demo files only. Readable backups must be kept private.

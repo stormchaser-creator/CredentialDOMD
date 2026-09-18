@@ -1,0 +1,7 @@
+Partial then full payment
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+When money arrives, find the invoice and record the amount and date received. A partial payment leaves the remaining balance open. Record the next installment when it arrives. This is your payment ledger; payments are entered by you, not imported automatically from a bank. Writing off a balance is different from receiving money.
+
+Demo ledger entries. No money moves and no bank is connected.
