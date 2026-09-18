@@ -4,21 +4,23 @@ import { readFile, access } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderHelp, validateHelp } from './build-help.mjs';
+import { loadVideoCatalog } from './help-videos.mjs';
 import { STATE_REQS } from '../src/constants/stateRequirements.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = file => readFile(resolve(root, file), 'utf8');
 const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
 const html = await read('landing/help.html');
+const videos = await loadVideoCatalog(root);
 
-test('product knowledge has evidence, bounded use and twelve complete journeys', async () => {
+test('product knowledge has evidence, bounded use and fourteen complete journeys', async () => {
   validateHelp(help);
-  assert.equal(help.articles.length, 12);
+  assert.equal(help.articles.length, 14);
   for (const article of help.articles) {
     assert.ok(article.steps.length >= 4, article.id);
     for (const ref of article.sourceRefs) await access(resolve(root, ref));
   }
-  for (const id of ['scan-license', 'scan-cme', 'import-cme', 'locum-contract', 'locum-work', 'locum-invoice', 'locum-payment', 'get-help']) {
+  for (const id of ['scan-license', 'scan-cme', 'import-cme', 'locum-contract', 'locum-work', 'locum-invoice', 'locum-payment', 'get-help','share-references','share-documents']) {
     assert.ok(help.articles.some(article => article.id === id), id);
   }
   assert.match(help.verifiedScope, /not a live delivery check/);
@@ -26,10 +28,15 @@ test('product knowledge has evidence, bounded use and twelve complete journeys',
 });
 
 test('reviewed content and public page cannot drift', () => {
-  assert.equal(html, renderHelp(help));
+  assert.equal(html, renderHelp(help, videos));
   for (const article of help.articles) assert.ok(html.includes(`id="${article.id}"`));
-  assert.doesNotMatch(html, /<video\b|<iframe\b|\.mp4|\.webm/);
-  assert.match(html, /Videos are not available yet/);
+  if (videos) {
+    assert.equal((html.match(/<video\b/g)||[]).length,videos.tutorials.length);
+    assert.doesNotMatch(html,/Videos are not available yet/);
+  } else {
+    assert.doesNotMatch(html, /<video\b|<iframe\b|\.mp4|\.webm/);
+    assert.match(html, /Videos are not available yet/);
+  }
 });
 
 test('guide validation rejects duplicate IDs, missing evidence and broken relationships', () => {
@@ -62,6 +69,10 @@ test('help links have existing destinations and use real app entry instead of fi
   const routes = { '/': 'landing/index.html', '/app/': 'index.html', '/locums': 'landing/locums.html', '/security': 'landing/security.html', '/privacy': 'landing/privacy.html', '/terms': 'landing/terms.html' };
   for (const [, href] of html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)) {
     if (href.startsWith('#')) assert.ok(ids.has(href.slice(1)), href);
+    else if (href.startsWith('/help/videos/')) {
+      assert.ok(videos);
+      await access(resolve(root,'landing/help-videos',href.slice('/help/videos/'.length)));
+    }
     else if (href.startsWith('mailto:')) assert.equal(href, 'mailto:support@credentialdomd.com');
     else { assert.ok(routes[href], href); await access(resolve(root, routes[href])); }
   }
@@ -91,4 +102,15 @@ test('Ohio app, public page and email guide retain the same conditional source m
   const cmeHelp = help.articles.find(article => article.id === 'review-cme');
   assert.match(cmeHelp.notes.join(' '), /explicit conditional-rule pilot/);
   assert.match(cmeHelp.steps.join(' '), /Not sure/);
+});
+
+test('sharing guides are authored once with source evidence and support policy',()=>{
+ for(const id of ['share-references','share-documents']){
+  const article=help.articles.find(a=>a.id===id);assert.ok(article);
+  assert.ok(article.sourceRefs.length>=4);assert.ok(article.usePolicy.allowed.length);assert.ok(article.usePolicy.escalate.length);assert.ok(article.usePolicy.limits.length);
+  const changed=structuredClone(help);changed.articles.find(a=>a.id===id).summary='Single-source changed summary '+id;
+  assert.ok(renderHelp(changed).includes('Single-source changed summary '+id));
+ }
+ assert.match(help.articles.find(a=>a.id==='share-references').steps[0],/Ask Vera/);
+ assert.match(help.articles.find(a=>a.id==='share-documents').availability,/configured delivery/);
 });

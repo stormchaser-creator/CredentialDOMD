@@ -1,0 +1,7 @@
+CME certificate
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Upload your CME certificate, then review it as a CME Credit. Match the completion date, hours, category and provider to the certificate. Add topics that reflect the actual course. Save, then check the entry in CME Credits. A topic tag helps the calculator organize hours; it does not prove that a board accepts this course.
+
+Demo certificate. Review AI output; course acceptance is not verified.

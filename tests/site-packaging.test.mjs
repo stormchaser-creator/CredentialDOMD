@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import vm from "node:vm";
 import { packageSite } from "../scripts/package-site.mjs";
+import { renderHelp } from "../scripts/build-help.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pages = ["index", "locums", "security", "privacy", "terms", "help", "credential-access"];
@@ -30,6 +31,10 @@ async function siteFixture(t) {
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
   ]);
+  // Keep this route/worker fixture independent of optional release media.
+  // Video hash/copy/review behavior has its own synthetic fixture suite.
+  const help = JSON.parse(await read(resolve(root, "public/knowledge/credentialdo-help.json")));
+  await writeFile(resolve(root, "landing/help.html"), renderHelp(help));
   // Generate vendor bytes only in the isolated fixture, including on a fresh
   // checkout where ignored vendor output has not been generated yet.
   await symlink(resolve(sourceRoot, "node_modules"), resolve(root, "node_modules"), "dir");

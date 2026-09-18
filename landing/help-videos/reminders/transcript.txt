@@ -1,0 +1,7 @@
+Reminder expectations
+
+Demonstration records only. No real messages, payments or AI requests occur.
+
+Check your email and reminder settings. Email expiration digests depend on the service's scheduled check and mail delivery. Browser alerts need permission and an open app on this device. Automatic texts are not sending, and the email digest currently does not include CME-hour shortfalls. Review Action Required and use Get help if an expected email is missing.
+
+No delivery is demonstrated. Automatic texts are not sending.

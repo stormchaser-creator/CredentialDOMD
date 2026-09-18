@@ -3,6 +3,8 @@
 import { cp, mkdir, readdir, readFile, rm, writeFile, access } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadVideoCatalog, copyVideoAssets } from './help-videos.mjs';
+import { renderHelp } from './build-help.mjs';
 
 export async function packageSite(root, legacyDir) {
   const output = resolve(root, 'site-dist');
@@ -15,6 +17,9 @@ export async function packageSite(root, legacyDir) {
     await access(resolve(root, `landing/${page}.html`));
   }
   await access(resolve(root, 'scripts/root-sw-retirement.js'));
+  const videoCatalog = await loadVideoCatalog(root);
+  const help = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-help.json'), 'utf8'));
+  if (await readFile(resolve(root, 'landing/help.html'), 'utf8') !== renderHelp(help, videoCatalog)) throw Error('Help page is stale or advertises unreviewed videos; run node scripts/build-help.mjs');
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   await cp(resolve(root, 'dist'), resolve(output, 'app'), { recursive: true });
@@ -37,6 +42,7 @@ export async function packageSite(root, legacyDir) {
   }
   await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true });
   await cp(resolve(root, 'public/knowledge'), resolve(output, 'knowledge'), { recursive: true });
+  await copyVideoAssets(root, output, videoCatalog);
   await mkdir(resolve(output, 'states'), { recursive: true });
   for (const name of await readdir(resolve(root, 'landing/states'))) {
     if (name.endsWith('.html')) await cp(resolve(root, 'landing/states', name), resolve(output, 'states', name));
