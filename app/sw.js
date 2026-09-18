@@ -1,7 +1,7 @@
-// 20260918T1732-2c28f87 is replaced at build time (see stampBuildId in vite.config.js).
+// 20260918T1813-dfcb6f2 is replaced at build time (see stampBuildId in vite.config.js).
 // Because the id changes every deploy, this file's bytes change every deploy,
 // which is what makes the browser fire `updatefound` and install the new SW.
-const BUILD_ID = "20260918T1732-2c28f87";
+const BUILD_ID = "20260918T1813-dfcb6f2";
 const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
@@ -16,7 +16,7 @@ const PRECACHE_URLS = [
   "./manifest.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
-  "./assets/index-BLE5HbKn.js",
+  "./assets/index-D-PgX2Eb.js",
   "./assets/index-e27L_yud.css"
 ];
 
@@ -81,6 +81,15 @@ self.addEventListener("fetch", (event) => {
 
   // Skip non-GET and cross-origin API calls (don't cache these)
   if (request.method !== "GET") return;
+  // A legacy root-scoped worker must not replace private access with the app
+  // shell offline or cache recipient-facing resources.
+  const requestUrl = new URL(request.url);
+  if (requestUrl.origin === self.location.origin && /^\/credential-access(?:\/|\.html$|$)/.test(requestUrl.pathname)) {
+    event.respondWith(fetch(request, { cache: "no-store" }).catch(() => new Response("Private credential access requires an internet connection.", {
+      status: 503, headers: { "Cache-Control": "no-store", "Content-Type": "text/plain", "Referrer-Policy": "no-referrer" },
+    })));
+    return;
+  }
   if (request.url.includes("generativelanguage.googleapis.com")) return;
   if (request.url.includes("npiregistry.cms.hhs.gov")) return;
   if (request.url.includes("supabase.co")) return;

@@ -1,0 +1,29 @@
+/sw.js
+  Cache-Control: no-cache
+/app/sw.js
+  Cache-Control: no-cache
+/app/version.json
+  Cache-Control: no-store
+/app/index.html
+  Cache-Control: no-cache
+
+/credential-access
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Content-Type-Options: nosniff
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-PhkkJvVbXiKN6V2cO8Y1liCK/0lvAFYbaDo7QcTYIOs='; style-src 'self'; connect-src 'self' https://hkpnnsjcwprrwobmpqyy.supabase.co; worker-src 'self'; frame-src blob:; img-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
+
+/credential-access.html
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Content-Type-Options: nosniff
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-PhkkJvVbXiKN6V2cO8Y1liCK/0lvAFYbaDo7QcTYIOs='; style-src 'self'; connect-src 'self' https://hkpnnsjcwprrwobmpqyy.supabase.co; worker-src 'self'; frame-src blob:; img-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
+
+/credential-access/*
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex, nofollow, noarchive
+  X-Content-Type-Options: nosniff
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-PhkkJvVbXiKN6V2cO8Y1liCK/0lvAFYbaDo7QcTYIOs='; style-src 'self'; connect-src 'self' https://hkpnnsjcwprrwobmpqyy.supabase.co; worker-src 'self'; frame-src blob:; img-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
