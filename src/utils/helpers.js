@@ -1,6 +1,7 @@
 // Extension spelled out so pure-node test scripts can import this module
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
+import { buildReferenceText } from "./referenceDraft.js";
 
 export const MS_PER_DAY = 86400000;
 
@@ -152,6 +153,7 @@ function getSectionFacts(item, section) {
 }
 
 export function buildCredentialText(item, section, settings) {
+  if (section === "peerReferences") return buildReferenceText(item);
   const lines = [];
   const name = settings.name || "Dr.";
   const deg = settings.degreeType || "";
@@ -188,6 +190,9 @@ export function buildCredentialText(item, section, settings) {
  * already listed in the facts below.
  */
 export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
+  if (section === "peerReferences") {
+    return [note?.trim().replace(/\s+/g, " "), buildReferenceText(item).replace(/\n/g, "; "), hasDocs ? "Supporting documentation is attached." : ""].filter(Boolean).join(" ");
+  }
   const deg = settings.degreeType || "";
   const specialties = settings.specialties?.length
     ? settings.specialties.map(id => {
@@ -208,6 +213,7 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
 }
 
 export function buildEmailSubject(item, section, settings) {
+  if (section === "peerReferences") return `Professional reference: ${item.name || "Reference"}`;
   const label = item.name || item.type || item.title || item.category || "Credential";
   const physician = settings.name || "Physician";
   return `Credential Verification: ${label} - ${physician}`;
@@ -318,15 +324,15 @@ export function describeItem(item, physicianName, sectionKey) {
 }
 
 export async function copyToClipboard(text) {
-  try { await navigator.clipboard.writeText(text); }
+  try { await navigator.clipboard.writeText(text); return true; }
   catch {
     const ta = document.createElement("textarea");
     ta.value = text;
     ta.style.cssText = "position:fixed;left:-9999px";
     document.body.appendChild(ta);
     ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
+    try { return document.execCommand("copy"); }
+    finally { document.body.removeChild(ta); }
   }
 }
 

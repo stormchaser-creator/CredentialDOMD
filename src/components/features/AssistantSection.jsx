@@ -4,6 +4,8 @@ import { searchRecords, findSection } from "./HomeSearch";
 import { useInputStyle } from "../shared/useInputStyle";
 import { generateId } from "../../utils/helpers";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
+import { archivedReferenceActions, buildAssistantHistory, latestReferenceSelection, resolveReferenceSelection } from "../../utils/referenceDraft.js";
+import ReferenceDraftCard from "./ReferenceDraftCard.jsx";
 import { buildExport, makeSpreadsheetFile } from "../../utils/exportData";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { supabase } from "../../lib/supabase";
@@ -15,10 +17,9 @@ import { checkStorageQuota } from "../../utils/storageQuota";
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
 
-// What an archived conversation keeps: the words. Action cards, attachments,
-// and retry state are live-thread machinery — they don't belong in a record.
+// Keep words and reference selection IDs; never persist generated contact text.
 const slimForArchive = (msgs) =>
-  msgs.map(m => ({ id: m.id, role: m.role, text: m.text || "", attachName: m.attachName || undefined }));
+  msgs.map(m => ({ id: m.id, role: m.role, text: m.text || "", attachName: m.attachName || undefined, actions: archivedReferenceActions(m.actions) }));
 
 /**
  * The Assistant — chat with your credential file. Ask anything about your
@@ -163,8 +164,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     }
     setBusy(true);
     try {
-      const history = [...msgs.filter(x => x.id !== userMsg.id && !x.failed), userMsg]
-        .map(m => ({ role: m.role, text: m.text }));
+      const history = buildAssistantHistory([...msgs.filter(x => x.id !== userMsg.id), userMsg]);
       const snapshot = buildSnapshot(data, allTrackedStates);
       const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, anthropicKey: data.settings.anthropicApiKey, attachment: att });
       // Deterministic honesty net: if the reply CLAIMS the developer will
@@ -220,7 +220,11 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       if (explicitAtt?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record")) {
         modelMsg.sourceAttach = { dataUrl: explicitAtt.dataUrl, name: explicitAtt.name };
       }
-      setMsgs(m => [...m, modelMsg]);
+      // Resolve against the latest state: checkbox edits made while Vera was
+      // answering must take precedence over the older request's selection.
+      // The card stores IDs only; contact text is derived locally at render.
+      setMsgs(m => [...m, { ...modelMsg, actions: (modelMsg.actions || []).map(a => a.kind === "draft_references"
+        ? { kind: "draft_references", ...resolveReferenceSelection(a, latestReferenceSelection(m)) } : a) }]);
       logToCloud(explicitAtt ? "document" : "chat", text, result.reply.slice(0, 300));
       failedMapRef.current.delete(userMsg.id);
     } catch (e2) {
@@ -229,7 +233,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       setErr(e2.message);
     }
     setBusy(false);
-  }, [input, attachment, msgs, data, allTrackedStates, logToCloud]);
+  }, [input, attachment, msgs, data, allTrackedStates, logToCloud, navigate]);
 
   // Home search hands Vera a first question; ask it once, then clear the seed.
   const seededRef = useRef(null);
@@ -419,7 +423,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     } catch (e3) {
       if (e3?.name !== "AbortError") markAction(msgId, idx, { error: e3.message });
     }
-  }, [msgs, addItem, editItem, data, logToCloud, markAction]);
+  }, [msgs, addItem, editItem, data, logToCloud, markAction, userIdRef]);
 
   const dismissAction = useCallback((msgId, idx) => {
     setMsgs(m => m.map(msg => msg.id === msgId
@@ -544,7 +548,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                 }}>Try again</button>
               </div>
             )}
-            {(m.actions || []).filter(a => !a.dismissed).map((a, i) => (
+            {(m.actions || []).map((a, i) => a.dismissed ? null : a.kind === "draft_references" ? (
+              <ReferenceDraftCard key={i} action={a} references={data.peerReferences || []} theme={T}
+                onChange={patch => markAction(m.id, i, patch)} onDismiss={() => dismissAction(m.id, i)} />
+            ) : (
               <div key={i} style={{
                 marginTop: 6, padding: "10px 12px", borderRadius: 12,
                 border: `1px solid ${a.done ? (T.success || "#22c55e") : T.accent}`,

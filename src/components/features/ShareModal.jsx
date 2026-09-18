@@ -28,7 +28,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const physician = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "the physician";
   const hasDocs = (linkedDocs?.length ?? 0) > 0;
   // A letter-shaped body — recipients are credentialing staff, not the app.
-  const full = [
+  const full = section === "peerReferences" ? [note.trim(), credText].filter(Boolean).join("\n\n") : [
     "To whom it may concern,",
     "",
     note || `Please find the credential verification for ${physician} below${hasDocs ? ", with supporting documentation attached" : ""}.`,
