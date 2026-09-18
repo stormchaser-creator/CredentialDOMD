@@ -82,6 +82,10 @@ function Modal({ open, onClose, title, children, width }) {
         padding: keyboardOpen
           ? "calc(env(safe-area-inset-top, 0px) + 8px) 0 8px"
           : "calc(env(safe-area-inset-top, 0px) + 16px) 0 calc(env(safe-area-inset-bottom, 0px) + 16px)",
+        // Backstop: if the card + padding above ever add up to more than the
+        // visible viewport, let the overlay itself scroll instead of
+        // silently clipping whatever sits at the bottom of the card.
+        overflowY: "auto",
       }}
     >
       <div
@@ -90,7 +94,16 @@ function Modal({ open, onClose, title, children, width }) {
         style={{
           backgroundColor: T.modalBg, borderRadius: 16,
           width: "calc(100% - 24px)", maxWidth,
-          maxHeight: vvh != null ? `calc(${vvh}px - env(safe-area-inset-top, 0px) - 20px)` : "100%",
+          // Must mirror the overlay padding above (16+16 with no keyboard,
+          // 8+8 with one) or the card can run taller than what's actually
+          // visible with no way to reach the rest — this is what silently
+          // clipped the bottom of the card (often the primary button) when
+          // no keyboard was open.
+          maxHeight: vvh != null
+            ? (keyboardOpen
+                ? `calc(${vvh}px - env(safe-area-inset-top, 0px) - 16px)`
+                : `calc(${vvh}px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px)`)
+            : "100%",
           display: "flex", flexDirection: "column",
           boxShadow: T.shadow3 || "0 12px 24px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04)",
           border: `1px solid ${T.border}`,
