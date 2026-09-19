@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
@@ -16,6 +16,9 @@ const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pages = ["index", "locums", "security", "privacy", "terms", "help", "cme", "credential-access"];
 const read = path => readFile(path, "utf8");
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+// Include default images and responsive candidates advertised by the real
+// homepage, independently of the packager's asset allowlist.
+const homepageImagePaths = html => [...new Set(html.match(/\/images\/[a-zA-Z0-9._-]+\.webp/g) || [])];
 
 async function siteFixture(t) {
   const root = await mkdtemp(resolve(tmpdir(), "credentialdo-packaging-"));
@@ -33,8 +36,11 @@ async function siteFixture(t) {
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
     cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
+    cp(resolve(sourceRoot, "landing/images"), resolve(root, "landing/images"), { recursive: true }),
   ]);
-  // Keep this route/worker fixture independent of optional release media.
+  await writeFile(resolve(root, "landing/images/unreviewed.webp"), "not a reviewed runtime image");
+  await writeFile(resolve(root, "landing/images/source-original.png"), "source originals must not ship");
+  // Keep this route/worker fixture independent of optional release videos.
   // Video hash/copy/review behavior has its own synthetic fixture suite.
   const help = JSON.parse(await read(resolve(root, "public/knowledge/credentialdo-help.json")));
   await writeFile(resolve(root, "landing/help.html"), renderHelp(help));
@@ -87,6 +93,16 @@ test("site package keeps public help/CME, private routes, declared assets and di
   assert.equal(await read(resolve(output, "organization-logo.svg")), await read(resolve(root, "public/organization-logo.svg")));
   for (const file of ["support-nav.css", "support-nav.js"]) {
     assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
+  }
+  const imagePaths = homepageImagePaths(await read(resolve(output, "index.html")));
+  assert.equal(imagePaths.length, 7, "all reviewed responsive homepage images must be advertised");
+  assert.deepEqual((await readdir(resolve(output, "images"))).sort(), imagePaths.map(path => path.slice("/images/".length)).sort(),
+    "package only referenced runtime images, excluding unreviewed files and source originals");
+  for (const path of imagePaths) {
+    const source = await readFile(resolve(root, "landing", path.slice(1)));
+    assert.equal(source.subarray(0, 4).toString(), "RIFF");
+    assert.equal(source.subarray(8, 12).toString(), "WEBP");
+    assert.deepEqual(await readFile(resolve(output, path.slice(1))), source, `preserve exact reviewed image bytes: ${path}`);
   }
   for (const { id } of WATCH_PAGES) {
     await assert.rejects(read(resolve(output, 'help', id, 'index.html')), { code: 'ENOENT' });
@@ -189,6 +205,25 @@ test("stale CME page or missing required CME asset preserves the previous packag
   await rm(resolve(root, "public/cme-assets/cme.mjs"));
   await assert.rejects(packageSite(root), { code: "ENOENT" });
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
+});
+
+test("each missing homepage image fails before replacing the previous package", async t => {
+  const root = await siteFixture(t);
+  const output = await packageSite(root);
+  const imagePaths = homepageImagePaths(await read(resolve(output, "index.html")));
+  const previousFiles = ["index.html", "app/index.html", "app/sw.js", "sw.js", "_headers", ...imagePaths.map(path => path.slice(1))];
+  const previousHashes = await Promise.all(previousFiles.map(async path => sha256(await readFile(resolve(output, path)))));
+  await writeFile(resolve(output, "previous-artifact-sentinel.txt"), "previous reviewed artifact");
+  for (const path of imagePaths) {
+    const sourcePath = resolve(root, "landing", path.slice(1));
+    const bytes = await readFile(sourcePath);
+    await rm(sourcePath);
+    await assert.rejects(packageSite(root), { code: "ENOENT", path: sourcePath });
+    assert.equal(await read(resolve(output, "previous-artifact-sentinel.txt")), "previous reviewed artifact", path);
+    assert.deepEqual(await Promise.all(previousFiles.map(async file => sha256(await readFile(resolve(output, file))))), previousHashes,
+      `missing ${path} must preserve the prior pages, workers, headers and every image`);
+    await writeFile(sourcePath, bytes);
+  }
 });
 
 function loadWorker(source, { pathname = "/sw.js", scope = "/", offline = false } = {}) {

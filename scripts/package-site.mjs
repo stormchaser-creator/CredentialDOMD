@@ -11,6 +11,12 @@ import { renderWatchPages, addWatchPagesToSitemap } from './watch-pages.mjs';
 const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
 const cmeAssets = ['cme.css', 'cme.mjs'];
 const supportNavAssets = ['support-nav.css', 'support-nav.js'];
+// Reviewed runtime images only; source originals and provenance stay out of the site.
+const landingImages = [
+  'physician-life-v3-600.webp', 'physician-life-v3-1200.webp',
+  'physician-colleagues-v3-600.webp', 'physician-colleagues-v3-1200.webp',
+  'physician-learning-v3-600.webp', 'eric-whitney-120.webp', 'eric-whitney-400.webp',
+];
 
 export async function packageSite(root, legacyDir) {
   const output = resolve(root, 'site-dist');
@@ -22,6 +28,7 @@ export async function packageSite(root, legacyDir) {
   for (const page of publicPages) {
     await access(resolve(root, `landing/${page}.html`));
   }
+  for (const name of landingImages) await access(resolve(root, 'landing/images', name));
   await access(resolve(root, 'scripts/root-sw-retirement.js'));
   const videoCatalog = await loadVideoCatalog(root);
   const help = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-help.json'), 'utf8'));
@@ -54,6 +61,8 @@ export async function packageSite(root, legacyDir) {
     }
   }
   for (const name of supportNavAssets) await cp(resolve(root, 'public', name), resolve(output, name));
+  await mkdir(resolve(output, 'images'), { recursive: true });
+  for (const name of landingImages) await cp(resolve(root, 'landing/images', name), resolve(output, 'images', name));
   await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true });
   await cp(resolve(root, 'public/knowledge'), resolve(output, 'knowledge'), { recursive: true });
   await mkdir(resolve(output, 'cme-assets'), { recursive: true });
