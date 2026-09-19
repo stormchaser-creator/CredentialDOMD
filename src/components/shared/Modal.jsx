@@ -75,7 +75,14 @@ function Modal({ open, onClose, title, children, width }) {
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, backgroundColor: T.overlay,
-        display: "flex", alignItems: keyboardOpen ? "flex-start" : "center",
+        // Always flex-start, never "center": when the card's content is
+        // tall enough to hit maxHeight, align-items: center measures the
+        // centering offset off the item's un-clamped intrinsic height, not
+        // its clamped rendered height — it shoves the (correctly-sized)
+        // card mostly below the fold instead of just failing to center it.
+        // Confirmed the same bug hits justify-content: center and margin:
+        // auto centering too; flex-start is the only alignment that doesn't.
+        display: "flex", alignItems: "flex-start",
         justifyContent: "center", zIndex: 1000,
         // Installed-PWA pages draw under the iPhone status bar — keep the
         // card (and its ✕) below the clock/battery via the safe-area inset
