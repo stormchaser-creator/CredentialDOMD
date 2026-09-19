@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadVideoCatalog, copyVideoAssets } from './help-videos.mjs';
 import { renderHelp } from './build-help.mjs';
 import { renderCme } from './build-cme.mjs';
+import { renderWatchPages, addWatchPagesToSitemap } from './watch-pages.mjs';
 
 const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
 const cmeAssets = ['cme.css', 'cme.mjs'];
@@ -24,6 +25,8 @@ export async function packageSite(root, legacyDir) {
   const videoCatalog = await loadVideoCatalog(root);
   const help = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-help.json'), 'utf8'));
   if (await readFile(resolve(root, 'landing/help.html'), 'utf8') !== renderHelp(help, videoCatalog)) throw Error('Help page is stale or advertises unreviewed videos; run node scripts/build-help.mjs');
+  const watchPages = renderWatchPages(help, videoCatalog);
+  const sitemap = addWatchPagesToSitemap(await readFile(resolve(root, 'public/sitemap.xml'), 'utf8'), watchPages);
   const cme = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-cme.json'), 'utf8'));
   const states = JSON.parse(await readFile(resolve(root, 'landing/states/states-data.json'), 'utf8'));
   if (await readFile(resolve(root, 'landing/cme.html'), 'utf8') !== renderCme(cme, states)) throw Error('CME page is stale; run node scripts/build-cme.mjs');
@@ -53,6 +56,12 @@ export async function packageSite(root, legacyDir) {
   await mkdir(resolve(output, 'cme-assets'), { recursive: true });
   for (const name of cmeAssets) await cp(resolve(root, 'public/cme-assets', name), resolve(output, 'cme-assets', name));
   await copyVideoAssets(root, output, videoCatalog);
+  for (const page of watchPages) {
+    await mkdir(resolve(output, 'help', page.id), { recursive: true });
+    await writeFile(resolve(output, 'help', page.id, 'index.html'), page.html);
+  }
+  // Only pages with verified media enter the published sitemap.
+  await writeFile(resolve(output, 'sitemap.xml'), sitemap);
   await mkdir(resolve(output, 'states'), { recursive: true });
   for (const name of await readdir(resolve(root, 'landing/states'))) {
     if (name.endsWith('.html')) await cp(resolve(root, 'landing/states', name), resolve(output, 'states', name));

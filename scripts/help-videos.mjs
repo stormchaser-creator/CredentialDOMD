@@ -5,6 +5,14 @@ import {resolve, dirname} from 'node:path';
 export const VIDEO_IDS = new Set(['first-license','scan-license','scan-cme','import-cme','review-cme','locum-contract','locum-work','locum-invoice','locum-payment','reminders','get-help','backup-data','share-references','share-documents']);
 export const VIDEO_FILES = Object.freeze({video:'tutorial.mp4',poster:'poster.jpg',captions:'captions.vtt',transcript:'transcript.txt'});
 export const videoHref = (id, kind) => `/help/videos/${id}/${VIDEO_FILES[kind]}`;
+// Only these reviewed tutorials receive dedicated watch pages. Dates describe
+// substantive page edits, not video upload times or regulatory verification.
+export const WATCH_PAGES = Object.freeze([
+  Object.freeze({ id: 'locum-invoice', title: 'How to create a locum tenens invoice', updatedAt: '2026-09-19' }),
+  Object.freeze({ id: 'import-cme', title: 'How to import a CME transcript', updatedAt: '2026-09-19' }),
+  Object.freeze({ id: 'review-cme', title: 'How to review your CME progress', updatedAt: '2026-09-19' }),
+]);
+export const watchHref = id => WATCH_PAGES.some(page => page.id === id) ? `/help/${id}/` : null;
 
 export function validateVideoCatalog(catalog) {
   if (!catalog || catalog.schemaVersion !== 1 || catalog.status !== 'approved_for_publication' || !Array.isArray(catalog.tutorials) || !catalog.tutorials.length) throw Error('Video catalog must contain approved tutorials');

@@ -4,7 +4,7 @@ import { readFile, access } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderHelp, validateHelp } from './build-help.mjs';
-import { loadVideoCatalog } from './help-videos.mjs';
+import { loadVideoCatalog, watchHref } from './help-videos.mjs';
 import { STATE_REQS } from '../src/constants/stateRequirements.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -72,6 +72,9 @@ test('help links have existing destinations and use real app entry instead of fi
     else if (href.startsWith('/help/videos/')) {
       assert.ok(videos);
       await access(resolve(root,'landing/help-videos',href.slice('/help/videos/'.length)));
+    }
+    else if (href.startsWith('/help/')) {
+      assert.ok(videos?.tutorials.some(video => watchHref(video.id) === href), href);
     }
     else if (href.startsWith('mailto:')) assert.equal(href, 'mailto:support@credentialdomd.com');
     else { assert.ok(routes[href], href); await access(resolve(root, routes[href])); }
