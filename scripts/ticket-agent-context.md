@@ -218,3 +218,40 @@ flag for history collection or internal follow-through. Existing approval gates,
 the shared runner lock, two-target bound, one-hour continuation cooldown and
 three-attempt limit remain in force. A source-only checkout or commit does not run
 the worker. The isolated runner still requires its separate reviewed installation.
+
+### September 19 release compatibility check
+
+The reviewed runtime was integrated onto the current application source without
+changing its runtime files. The 26 Node regressions, 43 approval checks, 34
+temporary-PostgreSQL checks, 28 full-host checks and installed-CLI mock contract
+all passed again on the integrated source.
+
+Read-only production query planning accepted the five exact collector query
+forms plus the reply insertion and timestamp update shapes. `EXPLAIN` ran
+without `ANALYZE`, inside read-only transactions; it did not select customer
+contents, execute a write or send a notification. The existing approval,
+ticket-update and reply-notification triggers were present and enabled. This
+checks schema compatibility, not delivery or every possible production policy.
+
+One wholly synthetic request to the actual provider using the existing OAuth
+authentication and configured model returned structured output accepted by the
+trusted host validator. Tools, MCP servers, hooks, browser integration, user
+settings and session persistence were disabled; no customer evidence or
+communication was involved. The check required normal CLI mode: this installed
+CLI's `--bare` mode explicitly excludes OAuth. It used a 60-second timeout and a
+$0.50 request budget. This establishes current authentication/model/output
+compatibility, not the quality of future customer investigations.
+
+The installed launch agent was inspected read-only and runs hourly at minute 17
+against the main checkout. Its schedule was not changed. To activate, acquire the
+same worker lock while merging and synchronizing the reviewed source into that
+checkout, then release only the lock owned by that release. Do not manually
+invoke the worker as a delivery test: doing so may process approved real tickets.
+Observe the next scheduled run's exit status and bounded operational summaries.
+
+For rollback, reacquire the shared lock and revert the support release commit in
+the scheduled checkout through the normal reviewed source-release path. Preserve
+the private case records: the previous worker ignores them, and removing them
+would discard follow-through history. Do not replay messages or delete published
+replies. The application release and staged isolated runner need no separate
+database migration for this support-context change.
