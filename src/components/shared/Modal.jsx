@@ -127,7 +127,12 @@ function Modal({ open, onClose, title, children, width }) {
             <CloseIcon />
           </button>
         </div>
-        <div style={{ padding: "16px 20px 24px", overflowY: "auto", overflowX: "hidden", flex: 1, WebkitOverflowScrolling: "touch" }}>{children}</div>
+        {/* minHeight: 0 overrides the flex item's default min-height:auto,
+            which otherwise sizes this div to its content instead of the
+            available space — the card would grow past maxHeight with no
+            internal scrollbar, leaving only the flaky overlay-level backstop
+            (unreliable with the centered, no-keyboard layout above). */}
+        <div style={{ padding: "16px 20px 24px", overflowY: "auto", overflowX: "hidden", flex: 1, minHeight: 0, WebkitOverflowScrolling: "touch" }}>{children}</div>
       </div>
     </div>
   );
