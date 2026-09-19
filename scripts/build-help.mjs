@@ -155,11 +155,13 @@ export function renderHelp(input, videoCatalog = null) {
     @media(max-width:700px) { .wrap { padding:0 18px; } .topnav { align-items:flex-start; flex-direction:column; gap:6px; } header { padding:36px 0 28px; } .orientation { grid-template-columns:1fr; gap:10px; } .orientation a { padding:16px; } article > details > summary { padding:18px 14px; gap:10px; } .guide-body { padding:0 18px 20px; } .support { padding:20px; } .lead { font-size:18px; } }
     @media print { .topnav, .actions, .orientation, .searchbox, .filters, footer { display:none; } body { color:#111; background:white; } article { break-inside:avoid; } }
   </style>
+  <link rel="stylesheet" href="/support-nav.css">
+  <script src="/support-nav.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to help</a>
   <div class="wrap">
-    <nav class="topnav" aria-label="Main navigation"><a class="brand" href="/">Credential<span>DoMD</span></a><div class="navlinks"><a href="/cme/">CME resources</a><a href="/locums">Locum tools</a><a href="/security">Data handling</a><a href="/app/">Open app</a></div></nav>
+    <nav class="topnav" aria-label="Main navigation"><a class="brand" href="/">Credential<span>DoMD</span></a><div class="navlinks"><a href="/states/">License Guides</a><a href="/cme/">CME resources</a><a href="/locums">Practice &amp; Locums</a><details class="support-menu"><summary>Support</summary><div class="support-links"><a href="/help/" aria-current="page">Help &amp; videos</a><a href="/#faq">FAQ</a><a href="/security">Security &amp; data handling</a></div></details><a href="/app/">Open app</a></div></nav>
     <main id="main">
       <header><div class="eyebrow">Help center</div><h1>Help with your next step.</h1><p class="lead">Add a license, make sense of your CME log, or take locum work through to a recorded payment. Start with the task in front of you.</p><div class="actions"><a class="button" href="/app/">Open CredentialDoMD</a><a href="#get-help">Find your support ticket</a></div><p class="updated">${videos.length ? `${videos.length} video walkthroughs with transcripts` : "Written walkthroughs"} · Updated ${e(help.updatedAt)}${videos.length ? " · Demo data only." : " · Videos are not available yet."}</p></header>
       <nav class="orientation" aria-label="Choose a starting point"><a href="#first-license"><strong>I’m getting started</strong><span>Add your first license and its document.</span></a><a href="#import-cme"><strong>I’m organizing CME</strong><span>Import credits and review what counts.</span></a><a href="#locum-contract"><strong>I’m tracking locum work</strong><span>Agreement → work → invoice → payment.</span></a></nav>

@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { BILLING_CATALOG } from '../supabase/functions/_shared/billingCatalog.mjs';
+import { BILLING_CATALOG, PUBLIC_BILLING_POLICY, getPublicBillingOffer } from '../supabase/functions/_shared/billingCatalog.mjs';
 import { FREE_BETA } from '../src/constants/beta.js';
 import { TIERS, getPublicTiers, priceFor, PUBLIC_BILLING_ENABLED } from '../src/utils/pricingEngine.js';
 
@@ -16,18 +16,22 @@ test('only two canonical annual founding offers are ever public', () => {
     assert.deepEqual(offers.map(o => o.id), ['core', 'core_locum']);
     assert.deepEqual(offers.map(o => o.tier), ['founding', 'locum']);
     for (const offer of offers) {
-      assert.equal(offer.annualCents, BILLING_CATALOG.offers[offer.id].unitAmount);
-      assert.equal(offer.membership, 'founding');
-      assert.equal(offer.trialDays, 0);
+      assert.equal(offer.annualCents, getPublicBillingOffer(offer.id).unitAmount);
+      assert.equal(offer.membership, 'annual');
+      assert.equal(offer.practiceTrialDays, offer.id === 'core' ? 30 : 0);
+      assert.equal(offer.trialAutoCharges, false);
       assert.equal(offer.billingCadence, 'annual_only');
       assert.equal(offer.features, TIERS[offer.tier].features);
     }
   }
-  assert.deepEqual(getPublicTiers().map(o => o.annualCents), [14900, 24500]);
+  assert.deepEqual(getPublicTiers().map(o => o.annualCents), [9900, 24500]);
+  assert.deepEqual(getPublicTiers('earlybird').map(o => o.annualCents), [14900, 24500]);
+  assert.deepEqual(getPublicTiers('standard').map(o => o.annualCents), [19900, 24500]);
+  for (const id of Object.keys(TIERS)) assert.equal(priceFor(id).display, 'Existing account');
 });
 test('canonical prices never become rounded monthly equivalents', () => {
   for (const cadence of ['annual', 'monthly']) {
-    assert.equal(priceFor('core', cadence).display, '$149');
+    assert.equal(priceFor('core', cadence).display, '$99');
     assert.equal(priceFor('core_locum', cadence).display, '$245');
     assert.equal(priceFor('core', cadence).perInterval, '/year');
     assert.equal(priceFor('core_locum', cadence).perInterval, '/year');
@@ -42,6 +46,8 @@ test('legacy entitlement IDs and feature bundles remain intact; launch stays off
   assert.equal(TIERS.group.features, 'all_group');
   assert.equal(TIERS.enterprise.features, 'all_enterprise');
   assert.equal(PUBLIC_BILLING_ENABLED, false);
+  assert.equal(BILLING_CATALOG.newSalesEnabled, false);
+  assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled, false);
   assert.deepEqual(FREE_BETA, { active: true, endsOn: null });
 });
 
@@ -63,9 +69,9 @@ try {
       globalThis.__foundingPricingContext = { theme: {}, plan: 'locum', isFreeBeta, isDevMode, isDesktop: true,
         checkout: () => { throw Error('Must not call checkout'); } };
       const html = renderToStaticMarkup(React.createElement(PricingModal, { open: true, onClose() {} }));
-      assert.match(html, /\$149/);
+      assert.match(html, /\$99/);
       assert.match(html, /\$245/);
-      assert.equal((html.match(/\/year/g) || []).length, 2);
+      assert.ok((html.match(/\/year/g) || []).length >= 2);
       assert.match(html, /planned annual prices/);
       assert.match(html, /Billing is off/);
       assert.equal((html.match(/<button/g) || []).length, 1, 'only the Close button remains');

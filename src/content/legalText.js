@@ -12,7 +12,7 @@
  * **double asterisks** mark bold. Plain text only, no HTML.
  */
 
-export const LEGAL_UPDATED = "September 18, 2026";
+export const LEGAL_UPDATED = "September 19, 2026";
 // Technical data-handling statements reconciled with the app on September 18.
 // Operator identity confirmed against the merchant business settings and formation record on September 18.
 export const PRIVACY_UPDATED = "September 18, 2026";
@@ -159,9 +159,14 @@ export const TERMS = {
   ],
   sections: [
     {
-      title: "1. Beta status",
+      title: "1. Membership, beta and planned pricing",
       blocks: [
-        "CredentialDOMD is in beta. It is free while the beta lasts. If paid plans launch, you will be told in advance and nothing will be charged without your agreement. Features may change, be renamed, or be removed. There is no uptime guarantee and no service-level commitment; export a backup regularly."
+        "CredentialDOMD is in an invite-only beta and billing is off. Paid membership has not launched. You will receive the applicable price and terms before choosing a paid membership; nothing will be charged without your agreement.",
+        "People who already had registered accounts when our membership policy changed on September 19, 2026 receive Credential and Practice free for life. Being on the waitlist without a registered account does not qualify for this lifetime membership.",
+        "The planned Credential founding offer for eligible waitlist members has been lowered to $99 per year. The planned early-bird price is $149 per year and the standard price is $199 per year. Founding and early-bird members keep their annual rate while their membership stays active. We will identify the available offer and eligibility before purchase; these phases do not create a published deadline or reservation by themselves.",
+        "The full Credential + Practice package is $245 per year, with no founding or early-bird discount on that package.",
+        "At paid launch, a new Credential membership will include 30 days of Practice access at no additional cost. That Practice access ends unless you explicitly choose to purchase the full package. The trial never converts into a paid Practice membership automatically, and there is no Practice charge to cancel or opt out of. Trial expiry does not cancel your Credential membership or delete your Practice records; existing records remain available to read and export.",
+        "Features may change, be renamed, or be removed. There is no uptime guarantee and no service-level commitment; export a backup regularly."
       ],
     },
     {
@@ -222,7 +227,7 @@ export const TERMS = {
     {
       title: "11. Ending the relationship",
       blocks: [
-        "You can stop any time: export, delete your data from More > Data Rights, and email us to close the account. We may suspend or end access for breach of these terms or if the beta ends, and will give notice and time to export where we can."
+        "You can stop any time: export, delete your data from More > Data Rights, and email us to close the account. We may suspend or end access for breach of these terms, and will give notice and time to export where we can. Ending the beta does not remove an existing member's free lifetime membership."
       ],
     },
     {

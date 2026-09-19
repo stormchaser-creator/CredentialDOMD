@@ -1,8 +1,11 @@
-/** Owner-approved annual bundles. Billing stays off until a separate launch decision. */
+// Historical settlement/bootstrap catalog; not the current public sales policy.
+// Keep these v1 price identifiers recognizable until a reviewed billing cutover.
+export { PUBLIC_BILLING_POLICY, CREDENTIAL_PRICE_PHASES, getPublicBillingOffer, getPublicBillingOffers } from './accessPolicy.mjs';
 export const BILLING_CATALOG = Object.freeze({
   version: '2026-09-founding-v1',
   app: 'credentialdomd',
   billingEnabled: false,
+  newSalesEnabled: false, // Old checkout cannot sell $149 after the public $99 policy changes.
   offers: Object.freeze({
     core: Object.freeze({
       id: 'core', name: 'Core', unitAmount: 14900, currency: 'usd', interval: 'year',
