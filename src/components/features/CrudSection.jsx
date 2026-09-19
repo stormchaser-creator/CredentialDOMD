@@ -585,26 +585,18 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         {contactImport && (
           <div style={{ marginBottom: 14 }}>
             {!isContactPickerSupported() && (
-              // This phone has no live picker, so the buttons below are not
-              // the address book. Said up front, before the tap, because a
-              // description sitting under the button read as "this is a bug"
-              // (support ticket 350f8467).
-              //
-              // The email route is first because it is the only one that uses
-              // the iPhone share sheet, which is what was asked for: iOS has
-              // no Contact Picker API and Safari ignores Web Share Target, so
-              // Mail is the only entry in that sheet that can reach this app.
               <div style={{ fontSize: 11.5, color: T.textDim, marginBottom: 8, lineHeight: 1.45 }}>
-                Your phone will not hand a contact straight to a web page, so there are three ways in.
-                <div style={{ marginTop: 4 }}>
-                  <b style={{ color: T.textMuted }}>From the share sheet:</b> Contacts, the person, Share Contact, then
-                  Mail, and send it to <b style={{ color: T.accent }}>{CONTACT_EMAIL}</b> from the address on your
-                  account. The reference is written for you and you get a reply naming who was added. Several people at
-                  once works: share them all in one email.
-                </div>
-                <div style={{ marginTop: 4 }}>
-                  <b style={{ color: T.textMuted }}>Right now:</b> copy the contact (or their email signature) and tap
-                  Paste a contact. Or Share Contact, Save to Files, then pick the saved card below.
+                <b style={{ color: T.textMuted }}>On iPhone: save the contact, then import it.</b>
+                <ol style={{ margin: "4px 0 8px", paddingLeft: 20 }}>
+                  <li>Open the person in Contacts and tap Share Contact.</li>
+                  <li>Choose Save to Files and save the contact card.</li>
+                  <li>Return here, tap Import a saved contact file (.vcf), and choose that file.</li>
+                </ol>
+                Review the name, phone, email and relationship before saving. The import button opens Files, not your address book.
+                <div style={{ marginTop: 6 }}>
+                  <b style={{ color: T.textMuted }}>Other options:</b> Paste a contact or email signature below.
+                  You can also share a contact by Mail to <b style={{ color: T.accent }}>{CONTACT_EMAIL}</b>
+                  {" "}from your verified forwarding address.
                 </div>
               </div>
             )}
@@ -618,19 +610,19 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   {"📇"} Import from Contacts
                 </button>
               )}
-              <button onClick={handlePasteContact} style={{
-                display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
-                borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600,
-                cursor: "pointer", backgroundColor: T.accentDim, color: T.accent,
-              }}>
-                {"\u{1F4CB}"} Paste a contact
-              </button>
               <button onClick={() => vcfRef.current?.click()} style={{
                 display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
                 borderRadius: 10, border: `1px solid ${T.accent}`, fontSize: 13, fontWeight: 600,
                 cursor: "pointer", backgroundColor: "transparent", color: T.accent,
               }}>
                 {"📇"} Import a saved contact file (.vcf)
+              </button>
+              <button onClick={handlePasteContact} style={{
+                display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px",
+                borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600,
+                cursor: "pointer", backgroundColor: T.accentDim, color: T.accent,
+              }}>
+                {"\u{1F4CB}"} Paste a contact
               </button>
               <input ref={vcfRef} type="file" accept=".vcf,text/vcard,text/x-vcard" style={{ display: "none" }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleVcfFile(f); e.target.value = ""; }} />
