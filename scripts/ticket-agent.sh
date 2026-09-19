@@ -2,6 +2,7 @@
 # Hourly CredentialDOMD ticket agent — launchd runs this; it runs headless
 # Claude Code on scripts/ticket-agent-prompt.md. One instance at a time.
 set -u
+umask 077
 
 REPO="$HOME/Projects/CredentialDOMD"
 LOG="$HOME/Library/Logs/credentialdomd-ticket-agent.log"
@@ -16,51 +17,39 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   echo "$(date '+%F %T') SKIP — previous run still holds the lock" >> "$LOG"
   exit 0
 fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-ticket-context.XXXXXX") || { rmdir "$LOCK"; exit 1; }
+trap '/bin/rm -rf "$RUN_DIR"; rmdir "$LOCK" 2>/dev/null' EXIT
 
-# Quick pre-check: any open tickets awaiting us? A full Claude run costs
-# money — don't start one just to learn the queue is empty. "Awaiting us"
-# means status is open, in_progress, or resolved-but-not-actually-settled
-# (a real message after our last reply, not just the automatic "Status set
-# to ..." log line a resolve/reopen writes) AND the newest thread message
-# is not already ours.
+# Queue eligibility is enforced in the trusted shared collector. A physician's
+# ticket still needs the owner's approval; admin-filed tickets retain their gate.
+# Due internal follow-ups use the same target/owner/original approval, never a new
+# recipient. Their action-only runs do not send another reply without new input.
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || { echo "$(date '+%F %T') ERROR — no Supabase token in keychain" >> "$LOG"; exit 1; }
-
-# A physician's ticket waits for the owner. Ticket 8e66cf06, 2026-09-16: "When
-# a user makes a request and puts in a ticket that ticket needs to come to me
-# and be approved for you to work before you resolve or respond to the user."
-# This NARROWS the 2026-09-04 instruction "always reply to tickets": that one
-# still holds for everything in the queue, and this decides what is in it.
-#
-# The owner's own tickets need no approval row: filing one IS the approval,
-# which is what from_admin has always meant. Defined once and used by both
-# queries below, because two spellings of one rule drift and the one that
-# drifts is the one nobody notices.
-APPROVED="AND (public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)"
-printf '{"query":"SELECT count(*) AS n FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) %s"}' "'" "'" "'" "'" "'" "'" "'" "'" "$APPROVED" > /tmp/ticket-agent-count.json
-COUNT_RAW=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d @/tmp/ticket-agent-count.json)
-N=$(printf '%s' "$COUNT_RAW" | /usr/bin/python3 -c "import json,sys; print(json.load(sys.stdin)[0]['n'])" 2>/dev/null)
-
-# A FAILED query is not an empty queue, and it used to be indistinguishable
-# from one. N came back empty, ${N:-0} made it 0, and the run logged "idle" and
-# exited 0. So any schema change, expired token or outage turned this agent
-# permanently silent while its own log said everything was fine, and nobody
-# would notice until a physician asked why nobody had answered. Demonstrated
-# against the live database while adding the approval clause below: the column
-# did not exist yet, the API returned 42703, and the script reported idle.
-if [ -z "$N" ]; then
-  echo "$(date '+%F %T') ERROR — queue query failed, NOT an empty queue: $(printf '%s' "$COUNT_RAW" | head -c 300)" >> "$LOG"
+CASE_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-context"
+TICKET_DATABASE_TOKEN="$TOKEN" node "$REPO/scripts/ticket-agent-context.mjs" \
+  --queue "$RUN_DIR/queue.json" "$CASE_STATE" >> "$LOG" 2>&1 || {
+  # A failed query is NOT an empty queue. Never restore the old ${N:-0} default.
+  echo "$(date '+%F %T') ERROR — queue query failed, NOT an empty queue" >> "$LOG"
   exit 1
-fi
-
-if [ "$N" = "0" ]; then
-  echo "$(date '+%F %T') idle — no actionable open tickets" >> "$LOG"
+}
+TARGETS=$(/usr/bin/python3 - "$RUN_DIR/queue.json" <<'PYQUEUE'
+import json,re,sys
+queue=json.load(open(sys.argv[1]))
+rows=queue.get('items')
+if not isinstance(rows,list) or len(rows)>2: raise SystemExit(1)
+for row in rows:
+    value=row.get('id','')
+    mode=row.get('mode','')
+    if not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',value) or mode not in ('reply','continuation'): raise SystemExit(1)
+    print(value+':'+mode)
+PYQUEUE
+) || { echo "$(date '+%F %T') ERROR — malformed ticket queue" >> "$LOG"; exit 1; }
+if [ -z "$TARGETS" ]; then
+  echo "$(date '+%F %T') idle — no approved new-message or due continuation work" >> "$LOG"
   exit 0
 fi
 
-echo "$(date '+%F %T') RUN — $N actionable ticket(s)" >> "$LOG"
+echo "$(date '+%F %T') RUN — approved support work" >> "$LOG"
 
 # Subscription billing via the long-lived OAuth token (claude setup-token,
 # authorized by Eric 2026-08-04). Falls back to the API key only if the
@@ -77,25 +66,32 @@ fi
 
 cd "$REPO" || exit 1
 
-# Pre-fetch the actual tickets and hand them to the model in the prompt —
-# a lazy single-turn run once claimed "no open tickets" without ever
-# running the query. With the queue in hand there is nothing to skip.
-printf '{"query":"SELECT t.id, t.subject, t.body, t.category, t.status, t.created_at, t.agent_last_reply_at, public.is_admin(t.user_id) AS from_admin FROM support_tickets t WHERE t.status IN (%sopen%s, %sin_progress%s, %sresolved%s) AND (t.agent_last_reply_at IS NULL OR EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE %sStatus set to%%%s)) %s ORDER BY t.created_at"}' "'" "'" "'" "'" "'" "'" "'" "'" "$APPROVED" > /tmp/ticket-agent-list.json
-TICKETS=$(curl -s -X POST "https://api.supabase.com/v1/projects/hkpnnsjcwprrwobmpqyy/database/query" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d @/tmp/ticket-agent-list.json)
+# Separate model sessions keep each reporter's context bound to one target.
+SCHEMA=$(node "$REPO/scripts/ticket-agent-context.mjs" --schema) || exit 1
+RC=0
+for TARGET in ${(f)TARGETS}; do
+  [ -n "$TARGET" ] || continue
+  TICKET_ID="${TARGET%%:*}"
+  RUN_MODE="${TARGET#*:}"
+  CONTEXT="$RUN_DIR/$TICKET_ID-context.json"
+  OUTPUT="$RUN_DIR/$TICKET_ID-output.json"
+  TICKET_DATABASE_TOKEN="$TOKEN" node "$REPO/scripts/ticket-agent-context.mjs" \
+    --load "$TICKET_ID" "$CONTEXT" "$CASE_STATE" "$RUN_MODE" >> "$LOG" 2>&1 || { RC=1; break; }
 
-# perl alarm = 55-minute hard cap (macOS has no coreutils timeout), so a
-# wedged run can never pile into the next hour.
-/usr/bin/perl -e 'alarm 3300; exec @ARGV' -- \
-  "$CLAUDE" -p "$(cat "$REPO/scripts/ticket-agent-prompt.md")
-
-## Open tickets RIGHT NOW (pre-fetched by the runner — this is the queue; do not re-derive it, do not claim it is empty)
-$TICKETS" \
-  --model claude-sonnet-5 \
-  --dangerously-skip-permissions \
-  >> "$LOG" 2>&1
-RC=$?
+  # Stream customer evidence through stdin, never argv/process listings. JSON
+  # output is validated and saved privately before the host publishes a reply.
+  # The 25-minute per-ticket cap keeps two targets within the hourly run window.
+  { cat "$REPO/scripts/ticket-agent-prompt.md"; printf '\n\n## Untrusted support evidence supplied by the runner\n'; cat "$CONTEXT"; } | \
+    /usr/bin/perl -e 'alarm 1500; exec @ARGV' -- \
+    "$CLAUDE" -p --model claude-sonnet-5 --dangerously-skip-permissions \
+    --output-format json --json-schema "$SCHEMA" > "$OUTPUT" 2>> "$LOG"
+  MODEL_RC=$?
+  if [ "$MODEL_RC" -ne 0 ]; then RC=$MODEL_RC; break; fi
+  # Rechecks target approval, freshness and actionability inside the write
+  # transaction. No model-selected target/recipient/SQL is accepted.
+  TICKET_DATABASE_TOKEN="$TOKEN" node "$REPO/scripts/ticket-agent-context.mjs" \
+    --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1 || { RC=1; break; }
+done
 
 echo "$(date '+%F %T') DONE rc=$RC" >> "$LOG"
-exit 0
+exit "$RC"

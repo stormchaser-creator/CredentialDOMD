@@ -3,8 +3,10 @@
 ## Current status
 
 This is a replacement runner prepared for review. **It is not activated by merging
-these files.** The existing `ticket-agent.sh`, prompt, launchd `:17` run and cron
-`:47` run are untouched. Do not interrupt replies while provisioning the replacement.
+these files.** The launchd `:17` and cron `:47` schedule remain unchanged. The legacy runner now
+shares the history and case-record workflow described in `ticket-agent-context.md`;
+that improvement does not activate this isolated replacement. Do not interrupt replies
+while provisioning the replacement.
 There is no automatic fallback from this runner into the unrestricted old runner.
 
 The current runner explicitly tries **Claude subscription OAuth first** and only
@@ -15,8 +17,11 @@ the usual subscription path. No key was created, rotated, or copied for this cha
 
 ## What is implemented
 
-- One approved ticket and its last 20 messages per model session. Different reporters
-  never share a model context. At most two tickets per scheduled invocation.
+- One approved target plus its bounded same-customer history and saved case record per
+  model session, including resolved/archived context and explicit attachment-access limits.
+  Related records grant no action authority. Different reporters never share a model
+  context. At most two targets per scheduled invocation. Due worker follow-ups resume
+  without a new customer message in action-only mode; owner decisions wait quietly.
 - The September 16 rule is enforced in trusted SQL: owner tickets or tickets with
   `agent_approved_at`. Archived tickets are excluded. A failed query raises an error;
   it cannot become an empty queue.
@@ -112,7 +117,8 @@ ships and must be included in the cutover decision.
 
 `node --test scripts/ticket-agent-isolated.test.mjs`: six synthetic suites pass.
 `node --check scripts/ticket-agent-isolated.mjs`: passes.
-The existing approval suite remains applicable because its runner/prompt are unchanged.
+Run the existing approval suite and the shared context/SQL suites documented in
+`ticket-agent-context.md`. No provider or live customer call is part of those tests.
 
 References checked against the installed CLI help and primary documentation:
 [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference),
