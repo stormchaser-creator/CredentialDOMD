@@ -3,7 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadVideoCatalog, validateVideoCatalog, videoHref } from './help-videos.mjs';
+import { loadVideoCatalog, validateVideoCatalog, videoHref, watchHref } from './help-videos.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -61,7 +61,7 @@ export function renderHelp(input, videoCatalog = null) {
         <details>
           <summary><span class="number">${String(index + 1).padStart(2, '0')}</span><span><span class="category">${e(article.category)}</span><strong>${e(article.title)}</strong><span class="description">${e(article.summary)}</span></span><span class="chevron" aria-hidden="true">+</span></summary>
           <div class="guide-body">
-            <p class="availability">${e(article.availability)}</p>${videoById.has(article.id)?"\n            "+renderVideo(videoById.get(article.id)):""}
+            <p class="availability">${e(article.availability)}</p>${videoById.has(article.id)?"\n            "+renderVideo(videoById.get(article.id)):""}${videoById.has(article.id) && watchHref(article.id) ? `\n            <p><a href="${e(watchHref(article.id))}">Open this video guide on its own page</a></p>` : ''}
             <ol>${article.steps.map(step => `<li>${e(step)}</li>`).join('')}</ol>
             <div class="notes"><h3>Good to know</h3><ul>${article.notes.map(note => `<li>${e(note)}</li>`).join('')}</ul></div>
             <p class="outcome"><strong>You’re done when:</strong> ${e(article.success)}</p>

@@ -10,6 +10,7 @@ import vm from "node:vm";
 import { packageSite } from "../scripts/package-site.mjs";
 import { renderHelp } from "../scripts/build-help.mjs";
 import { renderCme } from "../scripts/build-cme.mjs";
+import { loadVideoCatalog, WATCH_PAGES } from "../scripts/help-videos.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pages = ["index", "locums", "security", "privacy", "terms", "help", "cme", "credential-access"];
@@ -28,7 +29,7 @@ async function siteFixture(t) {
   await writeFile(resolve(root, "landing/states/example.html"), "<!doctype html><title>Synthetic state guide</title>");
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
-    ...["robots.txt", "sitemap.xml", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
+    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
     cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
@@ -82,6 +83,12 @@ test("site package keeps public help/CME, private routes, declared assets and di
   assert.equal(await read(resolve(output, "_redirects")), "/app/privacy /privacy 302\n/app/terms /terms 302\n");
   assert.doesNotMatch(await read(resolve(output, "sitemap.xml")), /credential-access/);
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/cme\/<\/loc>/);
+  assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/help<\/loc>/);
+  assert.equal(await read(resolve(output, "organization-logo.svg")), await read(resolve(root, "public/organization-logo.svg")));
+  for (const { id } of WATCH_PAGES) {
+    await assert.rejects(read(resolve(output, 'help', id, 'index.html')), { code: 'ENOENT' });
+    assert.ok(!(await read(resolve(output, 'sitemap.xml'))).includes(`https://credentialdomd.com/help/${id}/`));
+  }
   assert.equal(await read(resolve(output, "knowledge/credentialdo-help.json")), await read(resolve(root, "public/knowledge/credentialdo-help.json")));
   assert.equal(await read(resolve(output, "knowledge/credentialdo-cme.json")), await read(resolve(root, "public/knowledge/credentialdo-cme.json")));
   for (const file of ["cme.css", "cme.mjs"]) assert.equal(await read(resolve(output, "cme-assets", file)), await read(resolve(root, "public/cme-assets", file)));
@@ -119,6 +126,39 @@ test("site package keeps public help/CME, private routes, declared assets and di
     assert.equal(rules.get(route).get("Content-Security-Policy"), `${csp}; frame-ancestors 'none'`);
   }
   for (const route of ["/sw.js", "/app/sw.js"]) assert.equal(rules.get(route).get("Cache-Control"), "no-cache");
+});
+
+test('packaged watch pages resolve their media, canonical, related guides and sitemap entries', async t => {
+  const root = await siteFixture(t);
+  // These existing reviewed assets are hash-checked by the real packaging path;
+  // no synthetic media or unreviewed file is published to the site.
+  await cp(resolve(sourceRoot, 'landing/help-videos'), resolve(root, 'landing/help-videos'), { recursive: true });
+  const catalog = await loadVideoCatalog(root);
+  const help = JSON.parse(await read(resolve(root, 'public/knowledge/credentialdo-help.json')));
+  await writeFile(resolve(root, 'landing/help.html'), renderHelp(help, catalog));
+  const output = await packageSite(root);
+  const sitemap = await read(resolve(output, 'sitemap.xml'));
+  for (const { id } of WATCH_PAGES) {
+    const html = await read(resolve(output, 'help', id, 'index.html'));
+    const canonical = `https://credentialdomd.com/help/${id}/`;
+    assert.ok(html.includes(`<link rel="canonical" href="${canonical}">`));
+    assert.equal(sitemap.split(`<loc>${canonical}</loc>`).length - 1, 1);
+    for (const [, path] of html.matchAll(/(?:src|poster|href)="(\/help\/videos\/[^"#]+)"/g)) {
+      await readFile(resolve(output, path.slice(1)));
+    }
+    for (const [, path] of html.matchAll(/href="(\/help\/[a-z-]+\/)"/g)) {
+      await read(resolve(output, path.slice(1), 'index.html'));
+    }
+    assert.ok((await read(resolve(output, 'help/index.html'))).includes(`href="/help/${id}/"`));
+    assert.match(html, /id="main"/);
+  }
+  const home = await read(resolve(output, 'index.html'));
+  const organization = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+    .map(match => JSON.parse(match[1])).find(item => item['@type'] === 'Organization');
+  const logo = new URL(organization.logo);
+  assert.equal(logo.origin, 'https://credentialdomd.com');
+  assert.equal(logo.pathname, '/organization-logo.svg');
+  assert.match(await read(resolve(output, logo.pathname.slice(1))), /width="192" height="192"/);
 });
 
 test("invalid app base or missing retirement script preserves the previous package", async t => {
