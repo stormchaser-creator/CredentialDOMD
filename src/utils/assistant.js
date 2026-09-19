@@ -1,7 +1,8 @@
 import { ohioCmeContext } from "./conditionalCme.js";
+import { calculationEvidence, jurisdictionEvidence, renewalEvidence, savedReferenceContext, evidenceForTurn, EVIDENCE_INSTRUCTIONS } from "./assistantEvidence.js";
+import { loadVeraSources, sourceCheckReceipt } from "./veraSourcesClient.js";
 import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 import { complianceFor, findStateLicense } from "./compliance";
-import { RENEWAL_INFO } from "../constants/renewalInfo";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
 import { CPT_DESCS } from "../constants/cptDescs";
 import { CME_PROVIDERS } from "../constants/cmeProviders";
@@ -21,9 +22,8 @@ import { geminiCall, proxyErrorMessage, anthropicAvailable, anthropicClientFor, 
 // Gemini Flash supplies the Gemini route and the fallback from Anthropic.
 // JSON mode keeps proposed actions in the app's existing approval contract.
 
-// The app's vetted CME directory (links re-checked by the app) — the ONLY
-// sources the assistant may recommend. An AI's remembered links go stale;
-// these don't.
+// Saved directory entries are discovery links, not current course verification.
+// Activity price, availability and accepted credit must be checked at the source.
 const PROVIDER_DIGEST = CME_PROVIDERS.map(p =>
   `${p.name} | ${p.url} | ${p.pricing} | ${(p.accreditation || []).join(" + ")}${p.aoaNote ? ` | NOTE: ${p.aoaNote}` : ""} | ${(p.description || "").slice(0, 90)}`
 ).join("\n");
@@ -46,9 +46,11 @@ export const SECTION_FIELDS = {
 
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
 export function buildSnapshot(data, allTrackedStates = []) {
+  const today = new Date().toISOString().slice(0, 10);
   const short = (arr, f) => (arr || []).slice(0, 40).map(f);
   const cmeByState = {};
   for (const st of allTrackedStates) {
+    if (!jurisdictionEvidence(st, data.settings.degreeType)) continue;
     try {
       const comp = complianceFor(data, st);
       const lic = findStateLicense(data.licenses, st);
@@ -57,6 +59,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
         renewal: lic?.expirationDate || null, daysLeft: comp.daysLeft,
         unmetTopics: comp.topicResults.filter(t => !t.met).map(t => t.topic),
         assessmentStatus: comp.assessmentStatus,
+        evidence: calculationEvidence(comp, data.settings.degreeType, today),
         pendingApplicability: comp.conditionalTopics.filter(t => t.applicability === "unknown").map(t => ({ topic: t.topic, condition: t.condition.description })),
         ...(st === "OH" ? { verifiedRuleContext: ohioCmeContext(comp) } : {}),
       };
@@ -104,7 +107,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
     .map(e => ({ date: e.date, type: e.type, billedMin: e.billedMin, desc: (e.description || "").slice(0, 60), invoiced: !!e.invoiceId }));
 
   return {
-    today: new Date().toISOString().slice(0, 10),
+    today,
     physician: {
       name: data.settings.name, degree: data.settings.degreeType, npi: data.settings.npi,
       states: allTrackedStates, specialties: data.settings.specialties,
@@ -114,15 +117,9 @@ export function buildSnapshot(data, allTrackedStates = []) {
     privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate })),
     insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate })),
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
-    // Researched renewal logistics for the states this physician holds, so a
-    // "how do I renew" answer can be a real walkthrough with real links.
-    renewalInfo: Object.fromEntries(
-      allTrackedStates.filter(st => RENEWAL_INFO[st]).map(st => {
-        const r = RENEWAL_INFO[st];
-        return [st, { board: r.board, portal: r.portalUrl, cycle: r.cycle, due: r.due, fee: r.fee, steps: (r.steps || []).slice(0, 6), guide: r.guideUrl }];
-      })
-    ),
-    deaRenewal: { portal: "https://www.deadiversion.usdoj.gov/online_forms_apps.html", cycle: "3 years", fee: "$888" },
+    referenceEvidence: savedReferenceContext(allTrackedStates, data.settings.degreeType),
+    renewalInfo: Object.fromEntries(allTrackedStates.map(st => [st, renewalEvidence(st, data.settings.degreeType)]).filter(([, value]) => value)),
+    deaRenewal: { portal: "https://www.deadiversion.usdoj.gov/online_forms_apps.html", fee: null, feeStatus: "current_amount_not_verified", currentVerification: "not_performed" },
     cme: short(data.cme, x => ({ id: x.id, title: x.title, hours: x.hours, category: x.category, date: x.date, provider: x.provider })),
     healthRecords: short(data.healthRecords, h => ({ id: h.id, category: h.category, name: h.name, result: h.result, value: h.resultValue, expires: h.expirationDate })),
     screenings: short(data.screenings, s => ({ id: s.id, name: s.name, result: s.result, reported: s.reportDate, expires: s.expirationDate })),
@@ -236,14 +233,14 @@ gaps (e.g. scan the diploma with the + button; the MMR titer shows NOT immune �
 series + re-titer will be needed, not just a copy). Documents with onDevice=false can still
 be sent — the app fetches them from the cloud when possible.
 
-RENEWALS: when asked how to renew a license, DEA registration, or anything expiring,
-answer as a WALKTHROUGH, not a summary: numbered steps from renewalInfo (or the
-generic board process when steps are missing), the fee and deadline when present,
-and ALWAYS the direct links: the state's portal URL, and the guide URL for the
-full steps and pitfalls. For DEA use deaRenewal. Cross-reference the physician's
-own license record (number, expiration) in the walkthrough. If renewalInfo lacks
-their state, say the app's state guide is the place to check and link
-https://credentialdomd.com/states/. Never invent a fee or deadline.
+${EVIDENCE_INSTRUCTIONS}
+
+RENEWALS: give a numbered walkthrough using renewalInfo's generic checklist,
+the appropriate board/portal link, and the app guide as supplementary guidance.
+For DEA use deaRenewal. Refer to the expiration as the date in the saved license
+record, not a live board determination. If a route is missing, use the supplied
+FSMB board directory and https://credentialdomd.com/states/ to help find it.
+Never invent or reuse an unverified current fee or deadline.
 
 NAVIGATION: when the user asks to see, open, go to, show, or "take me to" a record or a
 section ("take me to RUHS privileges", "open my DEA", "show the Penrose contract"),
@@ -345,22 +342,15 @@ CLINICAL BILLING QUESTIONS — the global surgical package is REAL MONEY and REA
   minus one year through today). NEVER say the app can't export or point them at manual
   copy-paste — this action is exactly that feature.
 
-FINDING CME (when asked "find me CME for X"): recommend ONLY from the VETTED PROVIDER
-DIRECTORY below — the app verifies these links; never suggest a source or URL that is
-not in it. Match the recommendation to the SPECIFIC gap:
-- AOA Category 1-A can ONLY come from AOA-accredited sponsors delivering live or
-  interactive CME. ACCME-accredited AMA PRA Category 1 credit maps to AOA Category 2
-  (2-A when live or real-time interactive, 2-B when on demand, journal-type or home
-  study). It is never 1-A and never 1-B on its own, so it CANNOT close a Category 1
-  gap in a state that names AOA 1-A or 1-B (California's 20 hours, Arizona, Washington,
-  New Mexico). Never tell a DO that AMA PRA Category 1 will satisfy one of those.
-  The one route that converts it is the AOA's "Formal Request for AOA Category 1-B
-  Credit for Non-Osteopathic Programs", which the CCME grants for live allopathic
-  specialty programs when no equivalent osteopathic course content exists; home study
-  is excluded and approval is not guaranteed.
-- For gaps that accept any category (like an AOBS total-hours gap, since AOBS publishes
-  no Category 1-A minimum), free ACCME platforms work fine and say so.
-- For state topic mandates, match the provider's topics to the mandate.
+FINDING CME (when asked "find me CME for X"): use the saved provider directory and
+referenceEvidence.generalSources as discovery links. Their descriptions are stored
+guidance, not a current course check. Match the recommendation to the SPECIFIC saved gap:
+- Keep AMA PRA and AOA categories distinct. Use the linked AMA/AOA credit policies and
+  the activity's credit statement; do not promise equivalence or state acceptance from
+  a provider name alone. Identify the jurisdiction, degree and required category first.
+- For topic mandates, suggest appropriate search sources and tell the physician what
+  topic, hours, modality and credit statement to check. Do not claim a listed course
+  closes the gap without course-level evidence and applicability.
 - The Ohio verifiedRuleContext in cmeSummary.byState.OH is a deterministic rule pilot,
   checked against the linked Ohio code. Use its applicability conditions and citations
   before generic remembered rules. Unknown pain-clinic applicability is a question to
@@ -369,7 +359,7 @@ not in it. Match the recommendation to the SPECIFIC gap:
   Topic tags do not establish board approval or addiction-course content.
 - Point them to Credentials → Find CME for the full filterable directory.
 
-VETTED PROVIDER DIRECTORY (name | url | pricing | accreditation | note):
+SAVED PROVIDER DIRECTORY (historical descriptions; not live verification; name | url | saved pricing | accreditation | note):
 ${PROVIDER_DIGEST}
 
 KNOWN SECTION FIELDS:
@@ -382,16 +372,16 @@ ${JSON.stringify(SECTION_FIELDS)}`;
 //      physician's states that only changes when their states change, and
 //      the largest single part of a big snapshot.
 //   3. The snapshot itself, which changes when a record changes.
-const renewalBlock = (renewalInfo) => `RENEWAL INFO (renewalInfo) for this physician's states, from the app's researched state guides:
-${JSON.stringify(renewalInfo || {})}`;
+const renewalBlock = (renewalInfo, referenceEvidence) => `SAVED PUBLIC REFERENCES (not a live check; some jurisdictions may only have been mentioned in the question):
+${JSON.stringify({ renewalInfo: renewalInfo || {}, referenceEvidence: referenceEvidence || {} })}`;
 
 const snapshotBlock = (snapshot) => `USER DATA SNAPSHOT (renewalInfo is in the block above):
 ${JSON.stringify(snapshot)}`;
 
 /** [static, renewal, snapshot] texts; both model paths read the same words. */
 export function systemBlocks(snapshot) {
-  const { renewalInfo, ...rest } = snapshot || {};
-  return [SYSTEM_STATIC, renewalBlock(renewalInfo), snapshotBlock(rest)];
+  const { renewalInfo, referenceEvidence, ...rest } = snapshot || {};
+  return [SYSTEM_STATIC, renewalBlock(renewalInfo, referenceEvidence), snapshotBlock(rest)];
 }
 
 const SYSTEM = (snapshot) => systemBlocks(snapshot).join("\n\n");
@@ -407,6 +397,7 @@ function parseAssistantJson(raw) {
     return {
       reply: parsed.reply || "…",
       actions: Array.isArray(parsed.actions) ? parsed.actions.filter(a => a && a.kind) : [],
+      sourceCitations: Array.isArray(parsed.sourceCitations) ? parsed.sourceCitations.slice(0, 6) : [],
     };
   } catch {
     // Model answered in plain text — still useful
@@ -425,6 +416,16 @@ function parseAssistantJson(raw) {
  * anthropicKey pair; both shapes route the same way.
  */
 export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, attachment, settings }) {
+  // Local public-reference selection only. No chat, snapshot or attachment is
+  // passed to a search service, and selection does not add a saved license.
+  snapshot = evidenceForTurn(snapshot, history);
+  const publicSources = await loadVeraSources(history, snapshot);
+  snapshot.currentPublicEvidence = publicSources;
+  if (publicSources.mode === 'official_page_excerpts') snapshot.referenceEvidence.liveRetrieval = 'fixed_official_page_excerpts';
+  const withSources = result => {
+    const { sourceCitations, ...answer } = result;
+    return { ...answer, sourceEvidence: sourceCheckReceipt(publicSources, sourceCitations, answer.reply) };
+  };
   const s = settings || { apiKey, anthropicApiKey: anthropicKey };
   const ownOpusKey = !!s.anthropicApiKey;
   let note = null; // one line atop the reply when Gemini took a turn meant for Opus
@@ -434,7 +435,7 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
   const wantsOpus = s.assistantModel === "opus";
   if (wantsOpus && anthropicAvailable(s) && claudeCanRead(attachment)) {
     try {
-      return await anthropicTurn({ history, snapshot, settings: s, attachment });
+      return withSources(await anthropicTurn({ history, snapshot, settings: s, attachment }));
     } catch (e) {
       const A = anthropicSdk(); // set by anthropicClientFor() before any request ran
       const refused = anthropicErrorMessage(e); // the proxy, not Anthropic, said no
@@ -471,7 +472,7 @@ export async function assistantTurn({ history, snapshot, apiKey, anthropicKey, a
   // attachment type (HEIC and friends): Gemini takes the turn instead.
   const result = await geminiTurn({ history, snapshot, apiKey: s.apiKey, attachment });
   if (note) result.reply = `${note}\n\n${result.reply || ""}`.trim();
-  return result;
+  return withSources(result);
 }
 
 // Claude accepts these attachment types; anything else (HEIC from the iPhone

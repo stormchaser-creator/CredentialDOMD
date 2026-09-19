@@ -32,7 +32,7 @@ const api = {
   anthropicSdk: () => null,
   AI_MESSAGES: { budget: "Synthetic budget reached" },
 };
-const context = vm.createContext({ console, AbortController, setTimeout, clearTimeout });
+const context = vm.createContext({ console, URL, AbortController, setTimeout, clearTimeout });
 const modules = new Map();
 const transport = new vm.SyntheticModule(Object.keys(api), function () {
   for (const [name, value] of Object.entries(api)) this.setExport(name, value);

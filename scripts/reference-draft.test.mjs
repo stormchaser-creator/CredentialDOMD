@@ -62,7 +62,7 @@ assert.equal(dismissed[0].dismissed, true);
 assert.ok(buildAssistantHistory([{ role: "model", text: "Draft", actions: dismissed }, { role: "user", text: "Try again" }]).at(-1).text.includes('"ref-4"'));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sandbox = vm.createContext({ console, Date, AbortController, setTimeout, clearTimeout });
+const sandbox = vm.createContext({ console, URL, Date, AbortController, setTimeout, clearTimeout });
 const modules = new Map();
 const captured = [];
 const response = JSON.stringify({ reply: "Review your reference draft below.", actions: [action] });

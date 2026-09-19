@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
 import { AsclepiusIcon } from "../shared/Icons";
+import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
 
 /**
  * Auth landing page — wraps Clerk's hosted <SignIn /> / <SignUp /> components
@@ -69,7 +70,9 @@ function AuthPage() {
     window.location.hash.includes("sign-up") ? "signup" : "signin"
   ); // "signin" | "signup"
   const widgetRef = useRef(null);
-  useOneTapEmailCode(widgetRef, mode === "signin");
+  // Once optional SMS is configured, preserve Clerk's actual method picker.
+  // Do not auto-select email or advertise text to accounts without a phone.
+  useOneTapEmailCode(widgetRef, mode === "signin" && !SMS_SIGN_IN_ENABLED);
   const T = THEMES.light;
 
   // Clerk's own footer links ("Don't have an account? Sign up" / "Already
@@ -177,8 +180,7 @@ function AuthPage() {
                     boxShadow: T.shadow2,
                     borderRadius: 16,
                   },
-                  // "Email me a sign-in code instead" as a full-width button
-                  // right under the password field, not a small text link.
+                  // Keep the alternate sign-in method easy to find.
                   alternativeMethodsBlockButton: { width: "100%", justifyContent: "center", padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.accent}`, fontWeight: 700 },
                   footerActionLink: { fontWeight: 700 },
                 },
