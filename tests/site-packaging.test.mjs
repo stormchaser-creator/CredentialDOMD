@@ -9,9 +9,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import vm from "node:vm";
 import { packageSite } from "../scripts/package-site.mjs";
 import { renderHelp } from "../scripts/build-help.mjs";
+import { renderCme } from "../scripts/build-cme.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const pages = ["index", "locums", "security", "privacy", "terms", "help", "credential-access"];
+const pages = ["index", "locums", "security", "privacy", "terms", "help", "cme", "credential-access"];
 const read = path => readFile(path, "utf8");
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -27,14 +28,19 @@ async function siteFixture(t) {
   await writeFile(resolve(root, "landing/states/example.html"), "<!doctype html><title>Synthetic state guide</title>");
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
-    ...["robots.txt", "sitemap.xml", "credential-access", "knowledge"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
+    ...["robots.txt", "sitemap.xml", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
+    cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
   ]);
   // Keep this route/worker fixture independent of optional release media.
   // Video hash/copy/review behavior has its own synthetic fixture suite.
   const help = JSON.parse(await read(resolve(root, "public/knowledge/credentialdo-help.json")));
   await writeFile(resolve(root, "landing/help.html"), renderHelp(help));
+  const cme = JSON.parse(await read(resolve(root, "public/knowledge/credentialdo-cme.json")));
+  const states = JSON.parse(await read(resolve(root, "landing/states/states-data.json")));
+  await writeFile(resolve(root, "landing/cme.html"), renderCme(cme, states));
+  await writeFile(resolve(root, "public/cme-assets/unreviewed.js"), "// not a declared CME asset\n");
   // Generate vendor bytes only in the isolated fixture, including on a fresh
   // checkout where ignored vendor output has not been generated yet.
   await symlink(resolve(sourceRoot, "node_modules"), resolve(root, "node_modules"), "dir");
@@ -58,7 +64,7 @@ function headerRules(text) {
   return rules;
 }
 
-test("site package keeps public help, private routes, PDF assets and distinct workers intact", async t => {
+test("site package keeps public help/CME, private routes, declared assets and distinct workers intact", async t => {
   const root = await siteFixture(t);
   const output = await packageSite(root);
   for (const page of pages) {
@@ -75,7 +81,11 @@ test("site package keeps public help, private routes, PDF assets and distinct wo
   assert.match(await read(resolve(output, "404.html")), /Page not found/);
   assert.equal(await read(resolve(output, "_redirects")), "/app/privacy /privacy 302\n/app/terms /terms 302\n");
   assert.doesNotMatch(await read(resolve(output, "sitemap.xml")), /credential-access/);
+  assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/cme\/<\/loc>/);
   assert.equal(await read(resolve(output, "knowledge/credentialdo-help.json")), await read(resolve(root, "public/knowledge/credentialdo-help.json")));
+  assert.equal(await read(resolve(output, "knowledge/credentialdo-cme.json")), await read(resolve(root, "public/knowledge/credentialdo-cme.json")));
+  for (const file of ["cme.css", "cme.mjs"]) assert.equal(await read(resolve(output, "cme-assets", file)), await read(resolve(root, "public/cme-assets", file)));
+  await assert.rejects(read(resolve(output, "cme-assets/unreviewed.js")), { code: "ENOENT" });
 
   const config = await import(pathToFileURL(resolve(output, "credential-access/portal.mjs")).href);
   assert.equal(config.PORTAL_CONFIG.enabled, false, "this release must keep private access disabled");
@@ -120,6 +130,20 @@ test("invalid app base or missing retirement script preserves the previous packa
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
   await writeFile(resolve(root, "dist/index.html"), '<script src="/app/assets/synthetic.js"></script>');
   await rm(resolve(root, "scripts/root-sw-retirement.js"));
+  await assert.rejects(packageSite(root), { code: "ENOENT" });
+  assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
+});
+
+test("stale CME page or missing required CME asset preserves the previous package", async t => {
+  const root = await siteFixture(t);
+  await mkdir(resolve(root, "site-dist"));
+  await writeFile(resolve(root, "site-dist/sentinel.txt"), "previous reviewed artifact");
+  const cmePage = await read(resolve(root, "landing/cme.html"));
+  await writeFile(resolve(root, "landing/cme.html"), cmePage + "\n<!-- stale manual change -->\n");
+  await assert.rejects(packageSite(root), /CME page is stale/);
+  assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
+  await writeFile(resolve(root, "landing/cme.html"), cmePage);
+  await rm(resolve(root, "public/cme-assets/cme.mjs"));
   await assert.rejects(packageSite(root), { code: "ENOENT" });
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
 });

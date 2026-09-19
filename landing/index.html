@@ -301,7 +301,7 @@ nav {
 
 .nav-links {
   display: flex;
-  gap: 32px;
+  gap: 24px;
   align-items: center;
 }
 
@@ -1701,6 +1701,8 @@ footer {
    RESPONSIVE
    ========================================= */
 @media (max-width: 1024px) {
+  .nav-links { display: none; }
+  .mobile-menu-btn { display: block; }
   .hero .container {
     grid-template-columns: 1fr;
     gap: 48px;
@@ -1938,6 +1940,8 @@ footer {
     </a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="/states/">License Guides</a>
+      <a href="/cme/">CME</a>
       <a href="/locums">For Locums</a>
       <a href="/security">Security</a>
       <a href="/help">Help</a>
@@ -1983,6 +1987,12 @@ footer {
       <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">
         <span>Invite-only &middot; no card &middot; no charges during beta</span>
         <a href="#how-it-works" style="white-space: nowrap;">See how it works &rarr;</a>
+      </div>
+
+      <div aria-label="Free public resources" style="display:flex;flex-wrap:wrap;gap:8px 20px;margin:22px 0;font-size:14px;">
+        <a href="/states/">License renewal guides &rarr;</a>
+        <a href="/cme/">CME resources &rarr;</a>
+        <a href="/help/">How-to videos &rarr;</a>
       </div>
 
       <div class="hero-trust">
@@ -2866,56 +2876,56 @@ footer {
         Free renewal guides
       </div>
       <h2 class="section-title">Medical license renewal, by state</h2>
-      <p class="section-subtitle" style="max-width: 640px; margin: 0 auto 8px;">Real deadlines, fees, CME totals, and the exact board portal to renew at. Researched from each state medical board and kept current. No sign-up needed.</p>
+      <p class="section-subtitle" style="max-width: 640px; margin: 0 auto 8px;">Start with our state guides, then confirm your own dates and requirements with your board. No sign-up needed.</p>
     </div>
     <div class="states-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 32px;">
         <a class="state-card" href="/states/california">
           <span class="state-card-name">California</span>
-          <span class="state-card-meta">$1,206 fee · 50 CME · due January</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/texas">
           <span class="state-card-name">Texas</span>
-          <span class="state-card-meta">$491 fee · 48 CME · due February</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/florida">
           <span class="state-card-name">Florida</span>
-          <span class="state-card-meta">$355 fee · 40 CME · due January</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/new-york">
           <span class="state-card-name">New York</span>
-          <span class="state-card-meta">$600 fee · CME varies</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/pennsylvania">
           <span class="state-card-name">Pennsylvania</span>
-          <span class="state-card-meta">$360 fee · 100 CME · due October</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/ohio">
           <span class="state-card-name">Ohio</span>
-          <span class="state-card-meta">$305 fee · 50 CME · due May</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/illinois">
           <span class="state-card-name">Illinois</span>
-          <span class="state-card-meta">$543 fee · 150 CME · due July</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/michigan">
           <span class="state-card-name">Michigan</span>
-          <span class="state-card-meta">$314 fee · 150 CME</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/north-carolina">
           <span class="state-card-name">North Carolina</span>
-          <span class="state-card-meta">$250 fee · 60 CME</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/georgia">
           <span class="state-card-name">Georgia</span>
-          <span class="state-card-meta">$230 fee · 40 CME</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/new-jersey">
           <span class="state-card-name">New Jersey</span>
-          <span class="state-card-meta">$580 fee · 100 CME · due June</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
         <a class="state-card" href="/states/washington">
           <span class="state-card-name">Washington</span>
-          <span class="state-card-meta">$996 fee · 200 CME</span>
+          <span class="state-card-meta">Renewal steps and board sources</span>
         </a>
     </div>
     <div style="text-align: center; margin-top: 28px;">
@@ -2956,6 +2966,7 @@ footer {
       </div>
       <div class="footer-links">
         <a href="/states/">License Renewal by State</a>
+        <a href="/cme/">CME Resources</a>
         <a href="/locums">For Locums</a>
         <a href="/security">Security</a>
         <a href="/privacy">Privacy Policy</a>
@@ -3162,7 +3173,7 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
 
 <!-- Mobile nav styles (injected to keep CSS section clean) -->
 <style>
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .nav-links {
     display: none;
     position: fixed;
@@ -3174,6 +3185,8 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
     -webkit-backdrop-filter: blur(20px);
     flex-direction: column;
     padding: 24px;
+    max-height: calc(100dvh - 68px);
+    overflow-y: auto;
     gap: 16px;
     border-bottom: 1px solid var(--border);
     z-index: 999;
