@@ -1165,7 +1165,24 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       )}
 
       {/* Manual entry modal */}
-      <Modal open={showManual} onClose={() => setShowManual(false)} title={manual.editId ? (manual.type === "CallDay" ? "Edit call coverage" : "Edit entry") : "Log past time"}>
+      <Modal open={showManual} onClose={() => setShowManual(false)} title={manual.editId ? (manual.type === "CallDay" ? "Edit call coverage" : "Edit entry") : "Log past time"}
+        footer={(
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+            {(() => {
+              const invalid = manual.type === "CallDay"
+                ? (!manual.date || !manual.start)
+                : (!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end)));
+              return (
+                <button onClick={() => saveManual(false)} disabled={invalid} style={{
+                  flex: 1, padding: "14px", borderRadius: 12, border: "none",
+                  background: invalid ? T.border : "linear-gradient(135deg, #10b981, #059669)",
+                  color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
+                }}>{manual.editId ? "Save changes" : "Log it"}</button>
+              );
+            })()}
+          </div>
+        )}>
         {(timeContracts.length > 1 || (manual.editId && manual.contractId && !timeContracts.some(c => c.id === manual.contractId))) && (
           <Field label="Contract">
             {/* Only time-priced contracts — the day-rate agreement logs days
@@ -1281,22 +1298,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             </div>
           )}
         </Field>
-
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <button onClick={() => setShowManual(false)} style={{ padding: "14px 18px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-          {(() => {
-            const invalid = manual.type === "CallDay"
-              ? (!manual.date || !manual.start)
-              : (!manual.date || (!parseInt(manual.durationMin, 10) && !(manual.start && manual.end)));
-            return (
-              <button onClick={() => saveManual(false)} disabled={invalid} style={{
-                flex: 1, padding: "14px", borderRadius: 12, border: "none",
-                background: invalid ? T.border : "linear-gradient(135deg, #10b981, #059669)",
-                color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer",
-              }}>{manual.editId ? "Save changes" : "Log it"}</button>
-            );
-          })()}
-        </div>
       </Modal>
 
       {/* Invoice preview modal */}
