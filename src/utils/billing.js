@@ -231,7 +231,6 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
     const priorMin = all
       .filter(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date)
       .reduce((s2, e) => s2 + effMin(e), 0);
-    const stipendBilled = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date);
     const dayMin = day.reduce((s2, e) => s2 + effMin(e), 0);
     totalMin += dayMin;
 
@@ -240,6 +239,14 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
     // billed it (persisted at send time). Invoices from before that stamp
     // existed fall back to re-deriving from the invoiced entries.
     const stamped = (invoicesList || []).filter(inv => inv.contractId === c.id && inv.dayOverMin && inv.dayOverMin[date] != null);
+    // The stored coverage line proves the stipend was billed even if its
+    // work-log marker was deleted. A zero overage stamp is valid, but a
+    // stamp alone can also belong to orientation or additional-work invoices.
+    // Legacy invoices still use their invoiced work-log rows as the fallback.
+    const stipendBilled = stamped.some(inv => Array.isArray(inv.lines) && inv.lines.some(line =>
+      line && line.date === date && line.label === "On-call coverage (daily total)"
+      && Number.isFinite(line.amount) && line.amount > 0))
+      || all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date);
     const legacyInvoiced = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date
       && !stamped.some(inv => (inv.entryIds || []).includes(e.id)));
     const billedOver = stamped.reduce((s2, inv) => s2 + (inv.dayOverMin[date] || 0), 0)
