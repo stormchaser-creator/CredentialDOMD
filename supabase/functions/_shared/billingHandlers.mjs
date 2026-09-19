@@ -69,6 +69,9 @@ export function createBillingHandlers(deps, catalog = BILLING_CATALOG) {
     return customer.id;
   }
   const checkout = http(async req => {
+    // The old founding checkout is retired for new sales. Reconciliation and
+    // cancellation remain separate; a pricing-policy cutover needs its own review.
+    if (catalog.newSalesEnabled !== true) fail(503, 'new_sales_not_ready');
     const livemode = mode();
     const profile = await member(req);
     const input = await body(req, ['offerId']);
@@ -140,7 +143,8 @@ export function createBillingHandlers(deps, catalog = BILLING_CATALOG) {
     const supported = ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed'];
     if (!supported.includes(event.type)) return reply(200, { received: true }, false);
     const object = event.data.object;
-    const subscriptionId = event.type.startsWith('customer.subscription.') ? object.id : objectId(object.subscription);
+    const invoiceSubscription = object.parent?.type === 'subscription_details' ? object.parent.subscription_details?.subscription : null;
+    const subscriptionId = event.type.startsWith('customer.subscription.') ? object.id : objectId(object.subscription) || (event.type.startsWith('invoice.') ? objectId(invoiceSubscription) : null);
     if (!subscriptionId || (event.type.startsWith('checkout.') && object.mode !== 'subscription')) return reply(200, { received: true }, false);
     // Identify the server-bound account before taking its reconciliation
     // lease. A second provider read under that lease is the authoritative

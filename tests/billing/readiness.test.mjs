@@ -4,7 +4,7 @@ import { BILLING_CATALOG, assertCatalogPrice, entitlementFromRow, validateBillin
 import { bootstrapCatalog, parseOptions, stripeRequest } from '../../scripts/create-stripe-products.mjs';
 import { createBillingHandlers } from '../../supabase/functions/_shared/billingHandlers.mjs';
 
-const enabledCatalog = { ...BILLING_CATALOG, billingEnabled: true };
+const enabledCatalog = { ...BILLING_CATALOG, billingEnabled: true, newSalesEnabled: true };
 function fixture() {
   const calls = [];
   const profile = { id: 'member-a', auth_user_id: 'user_member_a', access_status: 'active', founding_number: 7 };
@@ -205,5 +205,21 @@ test('oversized chunked webhook and checkout bodies are canceled before full buf
     const req = new Request('https://functions.example/billing', { method: 'POST', body: stream, duplex: 'half', headers: { 'stripe-signature': 'synthetic' } });
     assert.equal((await createBillingHandlers(f.deps, enabledCatalog)[name](req)).status, 413);
     assert.equal(canceled, true); assert.equal(f.calls.length, 0);
+  }
+});
+
+
+test('retired checkout remains closed even if the historical settlement switch is enabled', async () => {
+  const f = fixture();
+  const response = await createBillingHandlers(f.deps, { ...BILLING_CATALOG, billingEnabled: true }).checkout(request());
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, 'new_sales_not_ready');
+  assert.equal(f.calls.length, 0);
+});
+test('old and Basil invoice subscription shapes both reconcile current state', async () => {
+  for (const object of [{subscription:'sub_a'}, {parent:{type:'subscription_details',subscription_details:{subscription:'sub_a'}}}]) {
+    const f=fixture(); f.event.type='invoice.paid'; f.event.data.object=object;
+    assert.equal((await createBillingHandlers(f.deps, enabledCatalog).webhook(webhookRequest())).status,200);
+    assert.ok(f.calls.some(c=>c[0]==='apply'));
   }
 });

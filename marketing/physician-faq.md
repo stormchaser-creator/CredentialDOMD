@@ -1,6 +1,6 @@
 # CredentialDoMD — Physician FAQ
 
-Updated September 18, 2026. Billing remains off during the invite-only beta.
+Updated September 19, 2026. Billing remains off during the invite-only beta.
 
 ## Who is CredentialDoMD for?
 
@@ -24,7 +24,15 @@ The current workflow builds invoices from your reviewed contract terms and work 
 
 ## Can I use it now, and what will it cost?
 
-Access is by invitation. The beta is free, with no card required, and billing is not open. Planned founding membership is **$149/year for Core** or **$245/year total for Core + Locum**. Joining the beta does not start a paid subscription. There is no permanent free tier; a paid plan will require your choice when billing opens.
+Access is by invitation. The beta is free, with no card required, and billing is not open. The **founding Credential offer has been lowered to $99/year** for eligible waitlist members, from the previously planned $149/year. Planned early-bird Credential is **$149/year**, and planned standard Credential is **$199/year**. Founding and early-bird annual rates stay the same while membership remains active. **Credential + Practice is $245/year total** for all new paid members. Your offer and eligibility will be shown before you choose to pay.
+
+## Will the Practice trial charge me automatically?
+
+Credential customers will receive a free 30-day Practice trial. It ends without a charge. Continuing Practice requires an explicit purchase; your Credential membership continues. Billing is off today, so no trial countdown starts from reviewing these planned offers.
+
+## What happens to existing registered accounts?
+
+Under the planned lifetime-access policy, accounts already registered when the policy was announced will keep Credential and Practice free for life. A waitlist entry alone does not qualify. Account eligibility will be confirmed before billing opens.
 
 ## Do I need to buy an AI API key?
 
@@ -50,7 +58,7 @@ Cached records and local work logging are available after signing in on that dev
 
 ## Can my practice manager use it for our whole group?
 
-The current launch is for individual founding members. Group workflows are not a promised feature of the individual launch. Contact support about your needs before choosing a tool for a whole practice.
+The planned Credential and Credential + Practice memberships are for one physician. Group workflows are not a promised feature of the individual launch. Contact support about your needs before choosing a tool for a whole practice.
 
 ## Does it replace CAQH or my accountant?
 

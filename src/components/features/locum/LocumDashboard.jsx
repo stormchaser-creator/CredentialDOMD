@@ -17,7 +17,7 @@ import Schedule from "./Schedule";
 import Invoices from "./Invoices";
 import RVULog from "./RVULog";
 import { BASE_KEYS, lsSet } from "../../../utils/storageScope";
-import { BILLING_CATALOG } from "../../../../supabase/functions/_shared/billingCatalog.mjs";
+import { MEMBERSHIP_COPY } from "../../../content/membershipCopy";
 
 const SUBTABS = [
   { id: "work", label: "Work" },
@@ -96,10 +96,12 @@ function UpgradeCard({ T }) {
           Practice tools
         </div>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
-          Core + Locum is planned at ${BILLING_CATALOG.offers.core_locum.unitAmount / 100} per year
-          in total and includes contracts, work logs, invoices, payment tracking and expenses.
-          Billing is off. Invited beta accounts have access; if these tools are missing from
-          your beta account, use Get help.
+          {MEMBERSHIP_COPY.fullPackage} Practice includes contracts, work logs, invoices,
+          payment tracking and expenses. {MEMBERSHIP_COPY.practiceTrial}
+        </p>
+        <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
+          Billing is off. Invited beta accounts have access; if these tools are missing
+          from your beta account, use Get help.
         </p>
         <a
           href="/locums"

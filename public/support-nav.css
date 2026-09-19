@@ -1,0 +1,16 @@
+.support-menu { position: relative; }
+.support-menu > summary { list-style: none; cursor: pointer; color: var(--text-secondary, #b1c3bb); font-size: 14px; font-weight: 500; padding: 8px 0; }
+.support-menu > summary::-webkit-details-marker { display: none; }
+.support-menu > summary::after { content: "⌄"; margin-left: 6px; }
+.support-menu > summary:focus-visible, .support-links a:focus-visible { outline: 2px solid var(--emerald, #34d399); outline-offset: 4px; border-radius: 3px; }
+.support-links { position: absolute; top: 100%; right: 0; z-index: 1001; display: flex; flex-direction: column; gap: 2px; min-width: 200px; padding: 10px 16px; border: 1px solid var(--border, #294338); border-radius: 10px; background: var(--bg-card, #13221c); box-shadow: 0 10px 30px #0005; }
+.support-links a { display: block; padding: 8px 0; white-space: nowrap; text-decoration: none; color: var(--text-secondary, #b1c3bb); }
+.support-links a:hover { color: var(--text, #eef7f2); }
+@media (max-width: 1024px) {
+  .nav-links .support-menu { width: 100%; }
+  .nav-links .support-menu > summary { font-size: 16px; }
+  .nav-links .support-links { position: static; margin-top: 8px; box-shadow: none; }
+}
+@media (max-width: 700px) {
+  .navlinks .support-links { right: auto; left: 0; }
+}
