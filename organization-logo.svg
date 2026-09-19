@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="192" height="192">
+<rect width="32" height="32" rx="7" fill="#10b981"/>
+<g transform="translate(0 0) scale(1.0)"><g fill="#ffffff">
+  <circle cx="16" cy="6.4" r="2"/>
+  <circle cx="14.55" cy="6.55" r="0.7" fill="#10b981"/><circle cx="17.45" cy="6.55" r="0.7" fill="#10b981"/>
+  <rect x="14.6" y="8.5" width="2.8" height="4.4" rx="1.4"/>
+  <rect x="15.3" y="12.6" width="1.4" height="14.6" rx="0.7"/>
+  <rect x="15" y="15.6" width="2" height="0.7" rx="0.35" fill="#10b981"/><rect x="15" y="18.2" width="2" height="0.7" rx="0.35" fill="#10b981"/><rect x="15" y="20.8" width="2" height="0.7" rx="0.35" fill="#10b981"/><rect x="15" y="23.4" width="2" height="0.7" rx="0.35" fill="#10b981"/>
+  <ellipse cx="9.2" cy="10.6" rx="7.4" ry="2.1" transform="rotate(-24 9.2 10.6)"/>
+  <ellipse cx="22.8" cy="10.6" rx="7.4" ry="2.1" transform="rotate(24 22.8 10.6)"/>
+  <ellipse cx="10" cy="17.4" rx="6.1" ry="1.9" transform="rotate(8 10 17.4)"/>
+  <ellipse cx="22" cy="17.4" rx="6.1" ry="1.9" transform="rotate(-8 22 17.4)"/>
+</g></g>
+</svg>
