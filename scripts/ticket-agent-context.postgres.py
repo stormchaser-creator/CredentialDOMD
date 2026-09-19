@@ -35,16 +35,16 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         assert query.startswith('begin read only; ') and query.endswith('; rollback;')
         inner=query[len('begin read only; '):-len('; rollback;')]
         return json.loads(sql("begin read only; select coalesce(json_agg(x),'[]'::json) from ("+inner+") x; rollback;"))
-    def reply(version=VERSION):return js(f"replySQL({{id:'{T}',owner_id:'{A}',updated_at:'{version}'}},'Your earlier answer is recorded.')")
+    def reply(version=VERSION):return js(f"replySQL({{id:'{T}',owner_id:'{A}',updated_at:'{version}',approval:{{from_admin:false,approved_at:'{approved_at}'}}}},'Your earlier answer is recorded.')")
     try:
         sql(f"""
-        create table profiles(id uuid primary key);
+        create table profiles(id uuid primary key,is_admin boolean default false);
         create table support_tickets(id uuid primary key,user_id uuid references profiles(id),subject text,body text,status text,created_at timestamptz,updated_at timestamptz,archived_at timestamptz,agent_last_reply_at timestamptz,agent_approved_at timestamptz,context_payload jsonb);
         create table support_messages(id uuid primary key,ticket_id uuid references support_tickets(id),author_id uuid references profiles(id),body text,is_admin_reply boolean,created_at timestamptz,attachment_path text,attachment_paths text[]);
-        create function is_admin(uuid) returns boolean language sql stable as $$select false$$;
+        create function is_admin(uuid) returns boolean language sql stable as $$select coalesce((select is_admin from profiles where id=$1),false)$$;
         create function bump_ticket() returns trigger language plpgsql as $$begin update support_tickets set updated_at=now() where id=new.ticket_id;return new;end$$;
         create trigger bump after insert on support_messages for each row execute function bump_ticket();
-        insert into profiles values('{A}'),('{B}');
+        insert into profiles(id) values('{A}'),('{B}');
         insert into support_tickets values
           ('{T}','{A}','References','Question about contact import','open','2026-09-01','{VERSION}',null,null,now(),'{{}}'),
           ('{R}','{A}','Add button','Earlier related report','resolved','2026-09-01','{VERSION}',now(),now(),null,'{{}}'),
@@ -61,16 +61,29 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('other customer excluded',all(x['id']!=X for x in history))
         page=rows(js(f"historySQL('{A}',{{id:'{R}',created_at:'2026-09-01T00:00:00Z'}})"))
         check('equal-timestamp cursor advances by ID without duplicates',[x['id'] for x in page]==[U])
-        messages=rows(js(f"messagesSQL('{R}')"))
+        message_query=js(f"messagesSQL('{R}','{A}')")
+        envelope=rows(message_query)
+        check('message page explicitly binds its current owner and ticket',len(envelope)==1 and envelope[0]['context_owner_id']==A and envelope[0]['context_ticket_id']==R)
+        messages=envelope[0]['messages']
         check('customer confirmation and old support claim both retained',len(messages)==2 and messages[0]['is_admin_reply'] is False and messages[1]['is_admin_reply'] is True)
         check('legacy schema without service-actor columns reads safely',messages[0]['support_actor_id'] is None)
         check('attachment reference retained without signing or downloading',messages[1]['attachment_path']==f'tickets/{R}/proof.pdf')
+        check('empty owned thread has a real envelope',rows(js(f"messagesSQL('{U}','{A}')"))[0]['messages']==[])
+        # The history snapshot above recorded A; transfer before the next message read.
+        sql(f"update support_tickets set user_id='{B}' where id='{R}';insert into support_messages values('30000000-0000-4000-8000-000000000003','{R}','{B}','Private post-transfer follow-up',false,now(),null,null)")
+        check('reassignment between history and message fetch withholds the entire page',rows(message_query)==[])
+        check('the new owner can read its current thread',rows(js(f"messagesSQL('{R}','{B}')"))[0]['messages'][-1]['body']=='Private post-transfer follow-up')
+        sql(f"delete from support_messages where id='30000000-0000-4000-8000-000000000003';update support_tickets set user_id='{A}' where id='{R}'")
         approved_at=target[0]['agent_approved_at']
         pending={'target_id':T,'owner_id':A,'approval':{'from_admin':False,'approved_at':approved_at}}
         continuation=js('continuationSQL('+json.dumps(pending)+')')
         sql(f"update support_tickets set agent_last_reply_at=now() where id='{T}'")
         check('stamped ticket with no new customer message leaves reply queue',all(x['id']!=T for x in rows(js('queueSQL()'))))
         check('same approved open case remains eligible for internal continuation',len(rows(continuation))==1)
+        check('quiet continuation explicitly reports no awaiting input',rows(continuation)[0]['awaiting_reply'] is False)
+        sql(f"insert into support_messages values('30000000-0000-4000-8000-000000000004','{T}','{A}','New customer input',false,now(),null,null)")
+        check('continuation query detects new input independent of the limited main queue',rows(continuation)[0]['awaiting_reply'] is True)
+        sql(f"delete from support_messages where id='30000000-0000-4000-8000-000000000004';update support_tickets set updated_at='{VERSION}' where id='{T}'")
         sql(f"update support_tickets set user_id='{B}' where id='{T}'")
         check('changed recipient suppresses saved continuation',rows(continuation)==[])
         check('changed recipient cannot receive a captured reply even without version bump',sql(reply())=='')
@@ -80,13 +93,15 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('archived target suppresses continuation',rows(continuation)==[])
         sql(f"update support_tickets set archived_at=null,agent_approved_at=agent_approved_at+interval '1 second' where id='{T}'")
         check('a different approval does not revive an old internal continuation',rows(continuation)==[])
+        sql(f"update support_tickets set agent_last_reply_at=null where id='{T}'")
+        check('reapproval without an updated_at bump withholds the earlier reply',sql(reply())=='')
         sql(f"update support_tickets set agent_approved_at='{approved_at}',agent_last_reply_at=null where id='{T}'")
         sql(f"update support_tickets set agent_approved_at=null where id='{T}'")
         check('withdrawn approval suppresses continuation',rows(continuation)==[])
         check('withdrawn approval prevents reply',sql(reply())=='')
         sql(f"update support_tickets set agent_approved_at=now(),updated_at='2026-09-19T12:01:00Z' where id='{T}'")
         check('newer target input prevents stale reply',sql(reply())=='')
-        sql(f"update support_tickets set updated_at='{VERSION}' where id='{T}'")
+        sql(f"update support_tickets set updated_at='{VERSION}',agent_approved_at='{approved_at}' where id='{T}'")
         result=sql(reply());check('current approved target can receive exactly one reply',len(result)==36)
         stored=json.loads(sql(f"select row_to_json(x) from (select body,author_id from support_messages where id='{result}')x"))
         check('legacy-compatible reply explicitly labels automation',stored['body'].startswith('CredentialDO Support · Automated\n\n'))
@@ -95,6 +110,10 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('same stale envelope cannot duplicate reply',sql(reply())=='')
         check('related context never gets a new reply',sql(f"select count(*) from support_messages where ticket_id='{R}'")=='2')
         check('no other customer changed',sql(f"select count(*) from support_messages where ticket_id='{X}'")=='0')
+        admin_reply=js(f"replySQL({{id:'{X}',owner_id:'{B}',updated_at:'{VERSION}',approval:{{from_admin:true,approved_at:null}}}},'Synthetic admin-owned reply.')")
+        check('lost admin status cannot fall back to an unrelated nonnull approval',sql(admin_reply)=='')
+        sql(f"update profiles set is_admin=true where id='{B}';update support_tickets set agent_approved_at=null where id='{X}'")
+        check('still-admin filing can receive a normal reply without explicit approval',len(sql(admin_reply))==36)
         print(f'{len(checks)} synthetic PostgreSQL checks passed')
         for name in checks:print('  ok '+name)
     finally:

@@ -25,6 +25,11 @@ and 750 KB of source records per target. Individual ticket/message text is cappe
 `history_complete=false` and identifies what was omitted. It does not mean “no
 history”. Questions are withheld while coverage is incomplete; internal retrieval
 follow-through must be recorded. A changed target during collection is also marked.
+Each message page binds the captured customer and ticket in the same database
+statement as the message read. An explicit owner envelope distinguishes a genuinely
+empty thread from a ticket reassigned or deleted after history selection; the latter
+stops collection before any model call. These paginated reads are not one historical
+database snapshot: unrelated edits during collection can still require another pass.
 
 Only attachment paths are collected, never file contents or signed URLs. Every
 entry starts with `access: not_loaded`; paths outside the ticket folder are flagged.
@@ -77,8 +82,11 @@ No customer histories or raw evidence are written into the repository.
 
 Legacy publication now uses the existing trusted `replySQL` helper instead of asking
 the model to construct SQL or choose a recipient. Target row lock, captured version,
-actionability and approval are rechecked before insertion/stamping. New input or
-withdrawn approval withholds the reply; the saved draft remains available. Related
+actionability and the captured approval are rechecked before insertion/stamping.
+The approval timestamp is compared separately from `updated_at`: withdrawing and
+reapproving a ticket cannot authorize a reply begun under the previous approval.
+An originally admin-filed target must still belong to the same, still-admin profile.
+New input or changed approval withholds the reply; the saved draft remains available. Related
 context is never a publication target. Existing status-open behavior is preserved.
 `publication: not_confirmed` intentionally prevents treating a saved draft as proof of
 successful delivery. Customer publication is not an exactly-once queue; the separate internal continuation
@@ -98,7 +106,11 @@ gates, and does not silently disable current customer replies.
 A saved promise has an executable follow-through path. Each run merges the approved
 new-message queue with due internal work from the private case records. At most two
 targets run; if both queues have work, each receives a slot. New customer input wins
-for the same target. No related ticket is promoted merely by being read.
+for the same target, including when it falls outside the first two new-message
+queue rows. Each due candidate reports its own awaiting-input state. Input arriving
+after queue selection promotes that run to normal reply mode when its context is
+loaded, without consuming an internal continuation attempt. No related ticket is
+promoted merely by being read.
 
 `support_worker` means routine investigation, fixes, existing authorized attachment
 review or verification. `support_owner` means an actual human decision or permission,
@@ -135,7 +147,7 @@ files and probes at most 20 due candidates per run; bounds fail or defer explici
 Run without production access or provider calls:
 
 ```sh
-node --test scripts/ticket-agent-context.test.mjs scripts/ticket-agent-isolated.test.mjs
+node --test scripts/ticket-agent-context.test.mjs scripts/ticket-agent-context-races.test.mjs scripts/ticket-agent-isolated.test.mjs
 node scripts/ticket-approval.test.mjs
 python3 scripts/ticket-agent-context.postgres.py
 zsh -n scripts/ticket-agent.sh
@@ -147,12 +159,18 @@ The PostgreSQL test requires Homebrew PostgreSQL 17 and creates an isolated synt
 stops it in `finally`. It exercises the exact SQL against a legacy-shaped schema:
 related resolved/archived history, customer isolation, same-time pagination, optional
 actor columns, approval withdrawal, stale input, a real after-insert ticket trigger,
-one guarded reply, unchanged related tickets and the automated body label.
+one guarded reply, unchanged related tickets and the automated body label. It also
+checks transfer between history/message reads, empty owned threads, new-input
+state independent of the limited queue, reapproval without a ticket-version bump,
+and loss of original admin authority without fallback to a different approval.
 
 The Node regression reproduces an Add-button confirmation in a related resolved
 conversation, >20 older messages, pages sharing timestamps, incomplete retrieval,
 cross-customer/misbound records, unread attachments, wrong confirmation provenance,
 invalid references, repeated questions and durable memory surviving a later summary.
+Four new race regressions failed against `6058280` before the repair: related-ticket
+reassignment, new input outside the first two queue rows, new input between queue
+selection/context loading, and missing approval-epoch binding at publication.
 Continuation regressions cover no-new-message work, owner waits, crash reservations,
 approval suppression, fair bounded scheduling, no publication, and explicit completion.
 Existing approval and isolated worker permission/budget tests remain required.
@@ -161,3 +179,12 @@ Before rollout, use synthetic tickets with the installed CLI to verify its struc
 result format and run the full guarded host path in a nonproduction database. The
 provider/model was not called by these tests. Independently review release claims;
 no parser can establish that a model actually performed the tests it describes.
+
+## Installation effect
+
+Normal legacy replies remain enabled. Installing these scripts in the existing
+scheduled checkout changes the next worker run; there is no separate activation
+flag for history collection or internal follow-through. Existing approval gates,
+the shared runner lock, two-target bound, one-hour continuation cooldown and
+three-attempt limit remain in force. A source-only checkout or commit does not run
+the worker. The isolated runner still requires its separate reviewed installation.

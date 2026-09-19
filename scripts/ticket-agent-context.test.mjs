@@ -10,7 +10,7 @@ const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const owner = uuid(9000), targetId = uuid(1);
 const ticket = (n, extra = {}) => ({ id: uuid(n), user_id: owner, subject: `Issue ${n}`, body: 'User report',
   created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-19T00:00:00Z', status: 'open', archived_at: null,
-  from_admin: false, agent_approved_at: '2026-09-18T00:00:00Z', ...extra });
+  from_admin: false, agent_approved_at: '2026-09-18T00:00:00Z', awaiting_reply: false, ...extra });
 const message = (n, ticketId = targetId, extra = {}) => ({ id: uuid(n + 1000), ticket_id: ticketId,
   author_id: owner, is_admin_reply: false, body: `Message ${n}`, created_at: '2026-09-18T00:00:00Z', ...extra });
 function fixtureQuery(tickets, messages, { target = tickets[0], corrupt = null } = {}) {
@@ -19,6 +19,15 @@ function fixtureQuery(tickets, messages, { target = tickets[0], corrupt = null }
     calls.push(sql);
     assert.match(sql, /^begin read only;/);
     assert.match(sql, /rollback;$/);
+    if (sql.includes('AS context_owner_id')) {
+      const id = /WHERE t.id='([^']+)'/.exec(sql)?.[1];
+      assert.ok(sql.includes(`t.user_id='${owner}'::uuid`));
+      const rows = messages.filter(m => m.ticket_id === id);
+      const after = /\(m.created_at,m.id\)>\([^]*,'([^']+)'::uuid\)/.exec(sql)?.[1];
+      const start = after ? rows.findIndex(m => m.id === after) + 1 : 0;
+      const page = rows.slice(start, start + 50);
+      return [{ context_ticket_id: id, context_owner_id: owner, messages: corrupt ? corrupt(page) : page }];
+    }
     if (sql.includes('FROM support_tickets t WHERE t.id=')) return target ? [target] : [];
     if (sql.includes('FROM support_tickets t WHERE t.user_id=')) {
       assert.ok(sql.includes(`t.user_id='${owner}'::uuid`));
@@ -26,12 +35,7 @@ function fixtureQuery(tickets, messages, { target = tickets[0], corrupt = null }
       const start = after ? tickets.findIndex(t => t.id === after) + 1 : 0;
       return tickets.slice(start, start + 25);
     }
-    const id = /WHERE m.ticket_id='([^']+)'/.exec(sql)?.[1];
-    if (!id) throw Error('Unexpected query');
-    const rows = messages.filter(m => m.ticket_id === id);
-    const after = /\(m.created_at,m.id\)>\([^]*,'([^']+)'::uuid\)/.exec(sql)?.[1];
-    const start = after ? rows.findIndex(m => m.id === after) + 1 : 0;
-    return corrupt ? corrupt(rows.slice(start, start + 50)) : rows.slice(start, start + 50);
+    throw Error('Unexpected query');
   };
   return { query, calls };
 }
@@ -158,7 +162,7 @@ test('read cursors bind UUID and timestamps as data; target gates do not leak in
   const sql = historySQL(owner, { id: uuid(5), created_at: "2026-09-01'; DELETE FROM x;--" });
   assert.doesNotMatch(sql, /DELETE FROM/);
   assert.match(sql, /ORDER BY t.created_at,t.id LIMIT 25/);
-  assert.match(messagesSQL(targetId), /ORDER BY m.created_at,m.id LIMIT 50/);
+  assert.match(messagesSQL(targetId, owner), /ORDER BY m.created_at,m.id LIMIT 50/);
   assert.match(targetSQL(targetId), /public.is_admin\(t.user_id\) OR t.agent_approved_at IS NOT NULL/);
   assert.match(targetSQL(targetId), /t.archived_at IS NULL/);
   assert.doesNotMatch(targetSQL(targetId, true), /t.archived_at IS NULL/);
@@ -220,7 +224,7 @@ test('continuation is suppressed when original approval or open-ticket eligibili
     assert.match(sql, new RegExp(`t.user_id='${owner}'`));
     assert.match(sql, /t.agent_approved_at=convert_from/);
     assert.match(sql, /t.status IN \('open','in_progress'\) AND t.archived_at IS NULL/);
-    assert.doesNotMatch(sql, /agent_last_reply_at IS NULL/);
+    assert.match(sql, /AS awaiting_reply/);
     assert.deepEqual((await collectQueue(makeQuery([], false), directory, { now: START + HOUR })).items, []);
     assert.equal((await current()).continuation.state, 'suppressed');
     await assert.rejects(loadQueuedContext(makeQuery(), { id: targetId, mode: 'continuation' }, directory, { now: START + HOUR }), /not due/);

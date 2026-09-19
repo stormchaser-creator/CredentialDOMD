@@ -25,11 +25,15 @@ export function queueSQL(includeArchived = false) {
     WHERE ${APPROVED} AND ${AWAITING}${includeArchived ? '' : ' AND t.archived_at IS NULL'}
     ORDER BY t.created_at,t.id LIMIT 2`);
 }
+export function approvalSQL(approval) {
+  if (typeof approval?.from_admin !== 'boolean') throw Error('Captured approval is required');
+  if (approval.from_admin) return 'public.is_admin(t.user_id)';
+  if (typeof approval.approved_at !== 'string' || !Number.isFinite(Date.parse(approval.approved_at))) throw Error('Original approval timestamp is required');
+  return `t.agent_approved_at=${literal(approval.approved_at)}::timestamptz`;
+}
 export function continuationSQL(record) {
-  const approval = record.approval?.from_admin === true ? 'public.is_admin(t.user_id)' :
-    `t.agent_approved_at=${literal(record.approval?.approved_at || '')}::timestamptz`;
-  if (record.approval?.from_admin !== true && !Number.isFinite(Date.parse(record.approval?.approved_at))) throw Error('Continuation lacks original approval');
-  return readOnly(`SELECT ${FIELDS} FROM support_tickets t WHERE t.id='${id(record.target_id)}'::uuid
+  const approval = approvalSQL(record.approval);
+  return readOnly(`SELECT ${FIELDS},(${AWAITING}) AS awaiting_reply FROM support_tickets t WHERE t.id='${id(record.target_id)}'::uuid
     AND t.user_id='${id(record.owner_id)}'::uuid AND ${APPROVED} AND ${approval}
     AND t.status IN ('open','in_progress') AND t.archived_at IS NULL`);
 }
@@ -42,15 +46,20 @@ export function historySQL(ownerId, cursor = null) {
   return readOnly(`SELECT ${FIELDS} FROM support_tickets t WHERE t.user_id='${id(ownerId)}'::uuid
     ${after} ORDER BY t.created_at,t.id LIMIT 25`);
 }
-export function messagesSQL(ticketId, cursor = null) {
+export function messagesSQL(ticketId, ownerId, cursor = null) {
   const after = cursor ? `AND (m.created_at,m.id)>(${literal(cursor.created_at)}::timestamptz,'${id(cursor.id)}'::uuid)` : '';
-  return readOnly(`SELECT m.id,m.ticket_id,m.author_id,m.created_at,left(m.body,12000) AS body,
+  // Ownership and message contents are read in the same statement snapshot. The
+  // envelope distinguishes an empty owned thread from a deleted/reassigned ticket.
+  return readOnly(`SELECT t.id AS context_ticket_id,t.user_id AS context_owner_id,
+    coalesce((SELECT json_agg(page ORDER BY page.created_at,page.id) FROM (
+    SELECT m.id,m.ticket_id,m.author_id,m.created_at,left(m.body,12000) AS body,
     length(m.body)>12000 AS body_truncated,m.is_admin_reply,
     public.is_admin(m.author_id) AS recorded_author_is_admin,
     to_jsonb(m)->>'support_actor_id' AS support_actor_id,to_jsonb(m)->>'support_job_id' AS support_job_id,
     to_jsonb(m)->'attachment_path' AS attachment_path,to_jsonb(m)->'attachment_paths' AS attachment_paths
-    FROM support_messages m WHERE m.ticket_id='${id(ticketId)}'::uuid
-    ${after} ORDER BY m.created_at,m.id LIMIT 50`);
+    FROM support_messages m WHERE m.ticket_id=t.id
+    ${after} ORDER BY m.created_at,m.id LIMIT 50) page),'[]'::json) AS messages
+    FROM support_tickets t WHERE t.id='${id(ticketId)}'::uuid AND t.user_id='${id(ownerId)}'::uuid`);
 }
 export function actorLabel(message, ownerId) {
   if (message.author_id === null && message.support_actor_id === '00000000-0000-4000-8000-000000000018' && UUID.test(message.support_job_id || '')) return 'recorded_service_actor';
@@ -75,8 +84,9 @@ export async function loadContext(query, ticketId, options = {}) {
   const target = targets[0]; id(target.user_id);
   if (target.id !== ticketId || typeof target.from_admin !== 'boolean' || (!target.from_admin && !target.agent_approved_at)) throw Error('Unusable target authority');
   if (pending && target.user_id !== pending.owner_id) throw Error('Continuation owner mismatch');
+  if (pending && typeof target.awaiting_reply !== 'boolean') throw Error('Unusable continuation input state');
   const context = { version: 1, target_id: ticketId, target_version: target.updated_at,
-    run_mode: pending ? 'continuation' : 'reply',
+    run_mode: pending && !target.awaiting_reply ? 'continuation' : 'reply',
     approval: { from_admin: target.from_admin, approved_at: target.agent_approved_at },
     owner_id: target.user_id, action_scope: [ticketId], history_complete: true,
     limitations: [], tickets: [], attachments: [], prior_reviews: [],
@@ -99,7 +109,10 @@ export async function loadContext(query, ticketId, options = {}) {
       context.tickets.push(ticket); context.attachments.push(...attachments(row, row.id));
       let messageCursor = null;
       while (true) {
-        const messages = await query(messagesSQL(row.id, messageCursor));
+        const envelopes = await query(messagesSQL(row.id, target.user_id, messageCursor));
+        if (envelopes.length !== 1 || envelopes[0].context_ticket_id !== row.id || envelopes[0].context_owner_id !== target.user_id) throw Error('Message-page ownership changed or unavailable');
+        const messages = envelopes[0].messages;
+        if (!Array.isArray(messages)) throw Error('Unusable message page');
         if (messages.length > 50) throw Error('Unexpected message page');
         for (const message of messages) {
           id(message.id);
@@ -275,8 +288,9 @@ export async function collectQueue(query, directory, { includeArchived = false, 
       await writePrivate(path.join(directory, `${record.target_id}.json`), JSON.stringify(record, null, 2));
       continue;
     }
-    if (rows.length !== 1 || rows[0].id !== record.target_id || rows[0].user_id !== record.owner_id) throw Error('Continuation authority mismatch');
-    continuations.push({ id: record.target_id, mode: 'continuation' });
+    if (rows.length !== 1 || rows[0].id !== record.target_id || rows[0].user_id !== record.owner_id || typeof rows[0].awaiting_reply !== 'boolean') throw Error('Continuation authority mismatch');
+    // This target may have fresh input beyond the first two new-message rows.
+    continuations.push({ id: record.target_id, mode: rows[0].awaiting_reply ? 'reply' : 'continuation' });
   }
   return { items: [...incoming.slice(0, 2 - continuations.length).map(t => ({ id: t.id, mode: 'reply' })), ...continuations], attention };
 }
@@ -291,7 +305,7 @@ export async function loadQueuedContext(query, item, directory, options = {}) {
         !Number.isFinite(Date.parse(state.due_at)) || Date.parse(state.due_at) > now) throw Error('Continuation not due');
   }
   const context = await loadContext(query, item.id, { ...options, continuation: pending });
-  if (pending) {
+  if (pending && context.run_mode === 'continuation') {
     // Reserve before model launch; crashes and invalid output still consume a bounded attempt.
     pending.continuation.attempts++;
     pending.continuation.due_at = new Date(now + COOLDOWN_MS).toISOString();
@@ -352,7 +366,7 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   assertReplyMode(context);
   await saveReview(directory, context, result, sourceRevision);
   const { replySQL } = await import('./ticket-agent-isolated.mjs');
-  const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version }, result.reply, { includeArchived }));
+  const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, result.reply, { includeArchived }));
   return { kind: rows.length === 1 ? 'reply_stored' : 'reply_withheld' };
 }
 export async function databaseQuery(query) {

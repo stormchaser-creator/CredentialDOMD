@@ -9,7 +9,8 @@ const config = {
   anthropicKeychainService: 'CredentialDOMD Ticket Worker API', providerProjectBudgetConfirmed: true,
   maxCallBudgetUsd: 2, maxDailyReservationUsd: 12, timeoutSeconds: 600, sendReplies: false,
 };
-const ticket = { id: '11111111-2222-4333-8444-555555555555', updated_at: '2026-09-18T12:00:00Z' };
+const ticket = { id: '11111111-2222-4333-8444-555555555555', owner_id: '11111111-2222-4333-8444-555555555556',
+  updated_at: '2026-09-18T12:00:00Z', approval: { from_admin: false, approved_at: '2026-09-18T00:00:00Z' } };
 const context = { tickets: [{ id: ticket.id, messages: [] }], history_complete: true, prior_reviews: [], attachments: [] };
 const assessment = {
   acceptance_criteria: [{ requirement: 'Identify bounded fix', state: 'open', evidence_ids: [ticket.id] }],
@@ -77,6 +78,10 @@ test('host broker enforces approval, queue scope, freshness and open status', ()
   assert.doesNotMatch(replySQL(ticket, 'Reply', { includeArchived: true }), /t.archived_at IS NULL/);
   assert.throws(() => replySQL({ ...ticket, id: "';drop table x" }, 'Reply'));
   assert.throws(() => replySQL({ ...ticket, updated_at: 'invalid' }, 'Reply'));
+  assert.throws(() => replySQL({ ...ticket, owner_id: undefined }, 'Reply'));
+  assert.throws(() => replySQL({ ...ticket, approval: undefined }, 'Reply'));
+  assert.throws(() => replySQL({ ...ticket, approval: { from_admin: 'true' } }, 'Reply'));
+  assert.throws(() => replySQL({ ...ticket, approval: { from_admin: false, approved_at: null } }, 'Reply'));
 });
 test('durable reservations do not silently reset malformed accounting or exceed daily cap', () => {
   let ledger = { version: 1, reservations: {} };

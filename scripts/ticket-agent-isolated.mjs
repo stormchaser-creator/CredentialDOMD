@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { collectQueue, loadQueuedContext, queueSQL, ensureState, saveReview, finishRun, validateAssessment, RESULT_SCHEMA } from './ticket-agent-context.mjs';
+import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, RESULT_SCHEMA } from './ticket-agent-context.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT = 'hkpnnsjcwprrwobmpqyy';
@@ -71,8 +71,9 @@ function sqlText(s) {
 }
 export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   if (!/^[a-f0-9-]{36}$/.test(ticket.id)) throw Error('Invalid ticket id');
-  if (ticket.owner_id && !/^[a-f0-9-]{36}$/.test(ticket.owner_id)) throw Error('Invalid ticket owner');
+  if (!/^[a-f0-9-]{36}$/.test(ticket.owner_id || '')) throw Error('Invalid ticket owner');
   if (typeof ticket.updated_at !== 'string' || !Number.isFinite(Date.parse(ticket.updated_at))) throw Error('Invalid ticket version');
+  const approval = approvalSQL(ticket.approval);
   if (typeof reply !== 'string' || !reply.trim() || reply.length > 4000 || reply.includes('\0')) throw Error('Invalid reply');
   // The row lock + version comparison prevents stale answers from stamping over a newer
   // message or withdrawn approval. Statements are sequential inside one transaction:
@@ -88,9 +89,9 @@ export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   DECLARE target record;
   BEGIN
     SELECT t.id, t.user_id INTO target FROM support_tickets t WHERE t.id = '${ticket.id}'::uuid
-      ${ticket.owner_id ? `AND t.user_id = '${ticket.owner_id}'::uuid` : ''}
+      AND t.user_id = '${ticket.owner_id}'::uuid
       AND t.updated_at = ${sqlText(ticket.updated_at)}::timestamptz
-      AND ${awaiting} AND ${APPROVED} FOR UPDATE;
+      AND ${awaiting} AND ${APPROVED} AND ${approval} FOR UPDATE;
     IF NOT FOUND THEN RETURN; END IF;
     INSERT INTO support_messages (id, ticket_id, author_id, body, is_admin_reply, created_at)
       VALUES ('${messageId}'::uuid, target.id, target.user_id, ${sqlText(labeledReply)}, true, now());
