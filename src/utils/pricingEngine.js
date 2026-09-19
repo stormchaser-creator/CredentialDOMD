@@ -4,7 +4,7 @@
  * comes only from billingCatalog; old tier prices are not current sales offers.
  */
 
-import { BILLING_CATALOG, getBillingOffer } from "../../supabase/functions/_shared/billingCatalog.mjs";
+import { PUBLIC_BILLING_POLICY, getPublicBillingOffer, getPublicBillingOffers } from "../../supabase/functions/_shared/billingCatalog.mjs";
 
 import {
   FOUNDING_COHORT_CAP,
@@ -251,15 +251,18 @@ export function getOrderedTiers() {
 }
 
 /** Exactly the two approved annual founding offers, independent of cohort counts. */
-export function getPublicTiers() {
-  return Object.values(BILLING_CATALOG.offers).map(offer => ({
+export function getPublicTiers(phase = PUBLIC_BILLING_POLICY.pricePhase) {
+  // Old callers supplied a cohort count; it never chooses a price or grants eligibility.
+  const pricePhase = typeof phase === 'string' ? phase : PUBLIC_BILLING_POLICY.pricePhase;
+  return getPublicBillingOffers(pricePhase).map(offer => ({
+    ...offer,
     id: offer.id,
     tier: offer.tier,
     name: offer.name,
     annualCents: offer.unitAmount,
     billingCadence: "annual_only",
-    trialDays: 0,
-    membership: "founding",
+    trialDays: offer.practiceTrialDays,
+    membership: "annual",
     audience: offer.id === "core"
       ? "Credential management for one physician."
       : "Credential management plus tools for your locum work.",
@@ -269,20 +272,20 @@ export function getPublicTiers() {
       "CME tracking and renewal reminders",
       "Document scanning, credential packets and CV tools",
       "Vera, the in-app assistant",
-      "Founding membership",
+      "30-day Practice trial; no automatic charge",
     ] : [
-      "Everything in Core",
+      "Everything in Credential",
       "Contracts, scheduling and invoices",
       "Agency remittance reconciliation",
       "Travel expenses and receipts",
       "RVU coding, case logs and billing forecasts",
-      "Founding membership",
+      "Full package at $245/year; no discount",
     ],
     cta: "Choose this annual plan",
   }));
 }
 
-export const PUBLIC_BILLING_ENABLED = BILLING_CATALOG.billingEnabled;
+export const PUBLIC_BILLING_ENABLED = PUBLIC_BILLING_POLICY.billingEnabled && PUBLIC_BILLING_POLICY.checkoutEnabled;
 
 export function annualMonthlyEquivalent(tierId) {
   const t = TIERS[tierId];
@@ -306,49 +309,17 @@ export function formatPrice(cents) {
  * @param {"monthly" | "annual"} cadence
  * @returns {{ display: string, perInterval: string, secondaryLine: string|null }}
  */
-export function priceFor(tierId, cadence = "annual") {
-  const offer = getBillingOffer(tierId);
+export function priceFor(tierId, cadence = "annual", phase = PUBLIC_BILLING_POLICY.pricePhase) {
+  void cadence; // Current public offers are annual regardless of an old caller's cadence.
+  const offer = getPublicBillingOffer(tierId, phase);
   if (offer) return {
     display: formatPrice(offer.unitAmount),
     perInterval: "/year",
-    secondaryLine: "Annual founding membership",
+    secondaryLine: offer.priceLockedWhileActive ? "Annual rate locked while membership stays active" : "Annual membership",
   };
-  const t = TIERS[tierId];
-  if (!t) return { display: "—", perInterval: "", secondaryLine: null };
-
-  if (t.id === "free") {
-    return { display: "$0", perInterval: "/mo", secondaryLine: "Forever free" };
-  }
-  if (t.id === "resident") {
-    return { display: "Free", perInterval: "", secondaryLine: "with verification" };
-  }
-  if (t.id === "enterprise") {
-    return { display: "Contact sales", perInterval: "", secondaryLine: "Custom contract" };
-  }
-
-  if (t.billingCadence === "annual_only") {
-    const monthlyEq = annualMonthlyEquivalent(t.id);
-    return {
-      display: formatPrice(monthlyEq),
-      perInterval: "/provider/mo",
-      secondaryLine: "billed annually",
-    };
-  }
-
-  if (cadence === "annual") {
-    const monthlyEq = t.monthlyEquivalentAnnualCents ?? annualMonthlyEquivalent(t.id);
-    return {
-      display: formatPrice(monthlyEq),
-      perInterval: "/mo",
-      secondaryLine: `${formatPrice(t.annualCents)} billed annually`,
-    };
-  }
-
-  return {
-    display: formatPrice(t.monthlyCents),
-    perInterval: "/mo",
-    secondaryLine: null,
-  };
+  // Entitlement IDs remain valid, but their old free/monthly/team prices are
+  // not new sales offers. Do not accidentally advertise those through this API.
+  return { display: TIERS[tierId] ? "Existing account" : "—", perInterval: "", secondaryLine: null };
 }
 
 /**
