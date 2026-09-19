@@ -21,6 +21,7 @@ import { generateAlerts, buildNotificationMessage, fireBrowserNotification, comp
 import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, describeAiBudget, useAnthropicAvailable } from "../../utils/aiClient";
 import { CODER_MODELS } from "../../utils/cptCoder";
 import FoundingMemberBadge from "../shared/FoundingMemberBadge";
+import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
 import {
   addProblem, normalizeAddress, pendingLine, resendBlockedReason,
@@ -172,13 +173,13 @@ function SettingsSection({ onUpgrade }) {
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Current Plan</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: "#fff" }}>
-              {isFreeBeta && !hasSubscription ? "Free beta" : isLifetime ? "Founding Lifetime" : isPractice ? "Clinic" : isPro ? "Pro" : "Free"}
+              {isFreeBeta && !hasSubscription ? "Free beta" : isLifetime ? "Lifetime access" : isPractice ? "Clinic" : isPro ? (plan === "locum" ? "Credential + Practice" : "Credential") : "No paid membership"}
             </div>
             {isFreeBeta && !hasSubscription && (
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>All features on. No card, nothing to cancel.</div>
             )}
             {!isFreeBeta && isLifetime && (
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>Paid once. Nothing renews.</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>Credential and Practice at no charge. No subscription to renew.</div>
             )}
           </div>
           {!isPro && !isFreeBeta && (
@@ -192,6 +193,7 @@ function SettingsSection({ onUpgrade }) {
             </button>
           )}
         </div>
+        {isFreeBeta && !hasSubscription && <p style={{ fontSize: 12, lineHeight: 1.6, color: "rgba(255,255,255,0.85)", margin: "8px 0 0" }}>{MEMBERSHIP_COPY.lifetimePolicy}</p>}
         {isPro && hasSubscription && (
           <button onClick={() => manage()} style={{
             padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.25)",

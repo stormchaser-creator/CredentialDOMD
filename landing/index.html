@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CredentialDoMD | From locums contract to paid, with credentials in one place</title>
-<meta name="description" content="Review your locums contract rates, log the work, build invoices and track payments. Keep licenses, DEA registrations and CME alongside your business records. Invite-only beta.">
+<title>CredentialDoMD | Credentials, licenses and CME for every physician</title>
+<meta name="description" content="Organize your medical licenses, DEA registrations, CME and professional documents in one place. Built for MDs and DOs, with optional Practice tools for contracts, work logs and invoices. Invite-only beta.">
 <meta name="keywords" content="physician credential tracker, medical license renewal, DEA renewal reminder, locum tenens credentialing, CME tracker, hospital privileges, board certification">
 
 <!-- Canonical -->
@@ -14,8 +14,8 @@
 <meta name="google-site-verification" content="oOvY112WjVU0IZcRGgx9cbKIpe1CFoiXG7bXDgK4sX4">
 
 <!-- Open Graph -->
-<meta property="og:title" content="CredentialDoMD | From locums contract to paid, with credentials in one place">
-<meta property="og:description" content="From signed locums contract to work log, invoice and payment tracking, with physician credentials and CME in the same app. Built by a practicing neurosurgeon.">
+<meta property="og:title" content="CredentialDoMD | Credentials, licenses and CME for every physician">
+<meta property="og:description" content="Your licenses, CME, certifications and professional documents, organized for the next renewal or credentialing request. For MDs and DOs, with optional Practice and locums tools.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://credentialdomd.com/">
 <meta property="og:image" content="https://credentialdomd.com/og-image.png">
@@ -1927,6 +1927,8 @@ footer {
 @media (max-width: 1024px) { .workflow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .workflow-grid, .launch-plan-grid { grid-template-columns: 1fr; } }
 </style>
+<link rel="stylesheet" href="/support-nav.css">
+<script src="/support-nav.js" defer></script>
 </head>
 
 <body>
@@ -1938,18 +1940,23 @@ footer {
       <div class="logo-mark">D</div>
       <div class="logo-text">Credential<span>DOMD</span></div>
     </a>
-    <div class="nav-links">
-      <a href="#features">Features</a>
+    <div class="nav-links" id="primary-nav">
+      <a href="#features">Credentials</a>
       <a href="/states/">License Guides</a>
       <a href="/cme/">CME</a>
-      <a href="/locums">For Locums</a>
-      <a href="/security">Security</a>
-      <a href="/help">Help</a>
-      <a href="#faq">FAQ</a>
+      <a href="/locums">Practice &amp; Locums</a>
+      <details class="support-menu">
+        <summary>Support</summary>
+        <div class="support-links">
+          <a href="/help/">Help &amp; videos</a>
+          <a href="#faq">FAQ</a>
+          <a href="/security">Security &amp; data handling</a>
+        </div>
+      </details>
       <a href="/app/">Sign in</a>
       <a href="#join" class="btn-primary nav-cta">Request Beta Access</a>
     </div>
-    <button class="mobile-menu-btn" aria-label="Open menu" onclick="document.querySelector('.nav-links').classList.toggle('mobile-open')">
+    <button class="mobile-menu-btn" data-nav-toggle aria-label="Open menu" aria-controls="primary-nav" aria-expanded="false">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 6h16M4 12h16M4 18h16"/>
       </svg>
@@ -1965,13 +1972,14 @@ footer {
 
   <div class="container">
     <div class="hero-content">
-      <div class="badge hero-badge">Invite-Only Founding Beta &middot; Free During Beta</div>
+      <div class="badge hero-badge">For MDs and DOs &middot; Free invite-only beta</div>
 
-      <h1>Your locums work, <span class="highlight">from contract to paid.</span></h1>
+      <h1>Your medical credentials, <span class="highlight">organized.</span></h1>
 
       <p class="hero-subtitle">
-        Review your contract rates. Log the work. Build an invoice and track what gets paid. Keep your licenses, DEA registrations, CME, and privileges in the same app, built by a practicing neurosurgeon.
+        Keep licenses, DEA registrations, CME, certifications and privileges in one place. Review renewal dates, organize documents and prepare your records to share. Built for every physician, whether you work at one practice or across many.
       </p>
+      <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px;">Need to manage contracts, work logs or invoices too? Add the optional <a href="/locums">Practice tools</a>.</p>
 
       <form class="wl-form" id="join" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
         <input type="email" aria-label="Email address" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
@@ -2000,8 +2008,8 @@ footer {
           <svg width="20" height="20" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <p class="trust-text">
-          <strong>Dr. Eric Whitney, DO, neurosurgeon and founder, runs his own licenses, CME, call logs, and invoices through it every day.</strong>
-          <br>Built around real hospital assignments and a physician&rsquo;s own records.
+          <strong>Built by Dr. Eric Whitney, DO, a practicing neurosurgeon who uses it for his own credentials.</strong>
+          <br>Start with your professional record. Add Practice tools when you need them.
         </p>
       </div>
     </div>
@@ -2128,29 +2136,29 @@ footer {
           <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M12 3l9.5 16.5H2.5L12 3z"/></svg>
           The Credentialing Problem
         </div>
-        <h2 class="section-title">You are managing 15+ documents across multiple states, hospitals, and insurance panels.</h2>
-        <p class="section-subtitle">Every one of them has a different expiration date. A different renewal process. A different consequence for lapsing. And right now, you are tracking all of it in spreadsheets, email reminders, and memory.</p>
+        <h2 class="section-title">Your licenses, CME and professional record belong together.</h2>
+        <p class="section-subtitle">A renewal, a new hospital appointment or a credentialing request starts with the same records. Keep the dates, documents and supporting details organized so you can review what is ready and what needs attention.</p>
 
         <div class="problem-callout">
-          <p>"Right now, something in your credentialing file is expiring. Do you know what it is?"</p>
+          <p>One state or several. Employed, independent or working locums. Your credentials stay with you.</p>
         </div>
       </div>
 
       <div class="problem-stats animate-on-scroll">
         <div class="problem-stat-card">
-          <div class="problem-stat-number red">90&ndash;120 days</div>
-          <div class="problem-stat-label">Insurance panel re-credentialing after a lapse</div>
-          <div class="problem-stat-desc">A missed renewal is not a paperwork problem. It is weeks of work you cannot bill while the re-credentialing queue clears.</div>
+          <div class="problem-stat-number">Dates</div>
+          <div class="problem-stat-label">See the next renewal</div>
+          <div class="problem-stat-desc">Review the expiration dates saved for your licenses, DEA registrations, certifications and privileges.</div>
         </div>
         <div class="problem-stat-card">
-          <div class="problem-stat-number amber">$75 / $150</div>
-          <div class="problem-stat-label">Texas's late-renewal penalty ladder</div>
-          <div class="problem-stat-desc">Boards escalate. Texas fines late renewals; after one year expired, Texas requires a full new license application.</div>
+          <div class="problem-stat-number">CME</div>
+          <div class="problem-stat-label">Keep credits and evidence together</div>
+          <div class="problem-stat-desc">Organize your activities, categories and certificates, then review progress against your saved license cycle and the app&rsquo;s sources.</div>
         </div>
         <div class="problem-stat-card">
-          <div class="problem-stat-number">0</div>
-          <div class="problem-stat-label">Margin for error</div>
-          <div class="problem-stat-desc">Licenses, DEA registrations, boards, privileges, panels, CME. Each on its own cycle, each with its own consequence for lapsing.</div>
+          <div class="problem-stat-number">Files</div>
+          <div class="problem-stat-label">Prepare for the next request</div>
+          <div class="problem-stat-desc">Find your documents, update your CV and review the records you choose to share with a hospital or employer.</div>
         </div>
       </div>
     </div>
@@ -2165,7 +2173,7 @@ footer {
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
         Credential Health Score
       </div>
-      <h2 class="section-title">Know your number.<br>Improve it. Sleep at night.</h2>
+      <h2 class="section-title">See what needs your attention.</h2>
       <p class="section-subtitle">Your Credential Health Score summarizes the records and dates you have saved. Use it to spot items to review; it does not confirm board approval or independently verify your compliance.</p>
     </div>
 
@@ -2181,7 +2189,7 @@ footer {
         <circle class="score-fill" cx="120" cy="120" r="100"/>
         <text class="score-number" x="108" y="118" text-anchor="middle" dominant-baseline="middle">88</text>
         <text class="score-percent" x="142" y="108" text-anchor="start" dominant-baseline="middle">%</text>
-        <text class="score-label" x="120" y="148" text-anchor="middle">Compliant</text>
+        <text class="score-label" x="120" y="148" text-anchor="middle">Saved record</text>
       </svg>
     </div>
 
@@ -2206,33 +2214,33 @@ footer {
 <section class="how-it-works" id="how-it-works">
   <div class="container">
     <div class="animate-on-scroll">
-      <div class="section-label">Your locums workflow</div>
-      <h2 class="section-title">Follow the work from the agreement to the payment.</h2>
-      <p class="section-subtitle">One record you can check at each step, across your agencies and assignments.</p>
+      <div class="section-label">Start with your credentials</div>
+      <h2 class="section-title">From scattered documents to an organized record.</h2>
+      <p class="section-subtitle">Start with one license. Add the rest when you are ready.</p>
     </div>
     <div class="steps-grid workflow-grid">
       <div class="step-card animate-on-scroll">
         <div class="step-number">1</div>
-        <h3 class="step-title">Review the contract</h3>
-        <p class="step-desc">Upload the agreement. Check the extracted rates, included hours, overage and billing terms before saving.</p>
+        <h3 class="step-title">Add a license</h3>
+        <p class="step-desc">Enter the details or upload the document. Review the number, state and dates before saving.</p>
       </div>
       <div class="step-card animate-on-scroll">
         <div class="step-number">2</div>
-        <h3 class="step-title">Log the work</h3>
-        <p class="step-desc">Record shifts and calls against that contract. See the stipend and additional time applied to your entries.</p>
+        <h3 class="step-title">Organize your CME</h3>
+        <p class="step-desc">Add certificates or import a transcript. Check the hours, categories and dates against your evidence.</p>
       </div>
       <div class="step-card animate-on-scroll">
         <div class="step-number">3</div>
-        <h3 class="step-title">Build the invoice</h3>
-        <p class="step-desc">Review itemized work and contract-based totals, then export the invoice for your agency.</p>
+        <h3 class="step-title">Review what is due</h3>
+        <p class="step-desc">Use saved expiration dates and CME progress to identify items to review. Confirm your requirements with the issuing board.</p>
       </div>
       <div class="step-card animate-on-scroll">
         <div class="step-number">4</div>
-        <h3 class="step-title">Reconcile payments</h3>
-        <p class="step-desc">Record each payment, including partials. Compare it with your invoice and see the remaining balance.</p>
+        <h3 class="step-title">Prepare and share</h3>
+        <p class="step-desc">Build your CV or a credential packet. Review the selected records and recipient before sharing.</p>
       </div>
     </div>
-    <p style="margin-top: 28px;"><a href="/locums">Explore the locums workflow &rarr;</a></p>
+    <p style="margin-top: 28px;"><a href="/help/">Watch the credential and CME guides &rarr;</a></p>
   </div>
 </section>
 
@@ -2242,10 +2250,10 @@ footer {
     <div class="animate-on-scroll">
       <div class="section-label">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        Everything You Need
+        Your professional record
       </div>
-      <h2 class="section-title">The credentials behind every assignment.</h2>
-      <p class="section-subtitle">Track licenses, DEA registrations, board certifications, CME and hospital privileges alongside the contracts and invoices they support.</p>
+      <h2 class="section-title">Credential tools for every physician.</h2>
+      <p class="section-subtitle">Keep licenses, DEA registrations, board certifications, CME and hospital privileges together, through renewals, new appointments and changes in your career.</p>
     </div>
 
     <div class="features-grid">
@@ -2254,8 +2262,8 @@ footer {
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="14" r="3"/></svg>
         </div>
         <h3 class="feature-title">AI Document Scanner</h3>
-        <p class="feature-desc">Snap a photo of any license, DEA card, board certificate, insurance COI, or vaccine card. The AI reads it, pulls every field, and files it in the right place for your one-tap approval.</p>
-        <div class="feature-value"><span>Example:</span> a photo of your state license files itself (number, issue date, expiration) in about ten seconds.</div>
+        <p class="feature-desc">Upload a license, DEA registration, board certificate or other professional document. Review the extracted details against the original before saving them to your record.</p>
+        <div class="feature-value"><span>Example:</span> check the license number, issue date and expiration date prepared from your uploaded state license.</div>
       </div>
 
       <div class="feature-card animate-on-scroll">
@@ -2263,25 +2271,17 @@ footer {
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
         </div>
         <h3 class="feature-title">AI Assistant</h3>
-        <p class="feature-desc">Chat with your own file. Ask what is expiring, hand it a document that fits no standard form (nothing gets dropped), or paste an agency's request. Nothing changes without your approval.</p>
-        <div class="feature-value"><span>Example:</span> paste a credentialing checklist and it bundles the nine documents you have into one send and lists exactly what is missing.</div>
+        <p class="feature-desc">Ask Vera about your saved records or use a credentialing request to prepare a draft. Review proposed changes, selected documents and recipients before approving them.</p>
+        <div class="feature-value"><span>Example:</span> prepare a response to a hospital&rsquo;s credentialing checklist, then check it against your documents.</div>
       </div>
+
 
       <div class="feature-card animate-on-scroll">
         <div class="feature-icon">
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
         </div>
-        <h3 class="feature-title">AI RVU Coder</h3>
-        <p class="feature-desc">Dictate what you did ("C3-4 posterior laminectomy as the assistant") and get CPT codes with work RVUs, add-on levels, and modifiers from a CMS-grounded catalog. Your case log builds itself.</p>
-        <div class="feature-value"><span>Example:</span> a one-level TLIF dictation returns the fusion, cage, and instrumentation codes with the assistant modifier pre-selected.</div>
-      </div>
-
-      <div class="feature-card animate-on-scroll">
-        <div class="feature-icon">
-          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-        </div>
-        <h3 class="feature-title">CME Compliance Engine</h3>
-        <p class="feature-desc">Cycle-aware CME tracking anchored to each license's renewal date, with the real state rules built in: category minimums, topic mandates, MD vs DO requirements, and the DEA MATE Act.</p>
+        <h3 class="feature-title">CME Tracking &amp; Review</h3>
+        <p class="feature-desc">Organize credits by date, category and topic. Review progress against your saved license cycle and the app&rsquo;s rule sources, including MD and DO categories. Confirm which requirements apply with your board.</p>
         <div class="feature-value"><span>Example:</span> Review your saved renewal dates, credit categories, and the source behind your CME progress.</div>
       </div>
 
@@ -2289,8 +2289,8 @@ footer {
         <div class="feature-icon">
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         </div>
-        <h3 class="feature-title">Multi-State License Matrix</h3>
-        <p class="feature-desc">Hold licenses in three states? One view shows every license, DEA registration, renewal date, and CME standing side by side, with each state's rules applied independently.</p>
+        <h3 class="feature-title">Licenses in One State or Many</h3>
+        <p class="feature-desc">Keep your licenses, DEA registrations, saved renewal dates and CME progress together. Add another state when your work takes you there.</p>
         <div class="feature-value"><span>Example:</span> adding a new state license automatically starts tracking that state's CME requirements on your Home screen.</div>
       </div>
 
@@ -2298,8 +2298,8 @@ footer {
         <div class="feature-icon">
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
         </div>
-        <h3 class="feature-title">Alerts That Escalate</h3>
-        <p class="feature-desc">Expiration alerts sharpen as deadlines approach, across licenses, certifications, TB tests, and CME cycles. One tap builds a renewal packet: transcript plus certificates, ready to share.</p>
+        <h3 class="feature-title">Renewal Reminders</h3>
+        <p class="feature-desc">Review Action Required for your saved credential dates and choose reminder settings. Keep your own calendar for critical deadlines and check your records for missing dates.</p>
         <div class="feature-value"><span>Example:</span> a record saved without an expiration date gets flagged immediately. Undated credentials are how lapses happen.</div>
       </div>
 
@@ -2308,8 +2308,177 @@ footer {
           <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5"/><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         </div>
         <h3 class="feature-title">Health Records &amp; Screenings</h3>
-        <p class="feature-desc">Titers with lab values and reference ranges, TB tests, drug screens with chain of custody, vaccine series, and background screenings with per-search status. Everything agencies ask for.</p>
-        <div class="feature-value"><span>Example:</span> a measles titer that comes back non-immune is flagged the day the report lands, not the week an assignment needs it.</div>
+        <p class="feature-desc">Organize your own vaccination, TB test and screening documents alongside your professional credentials. Review the evidence a hospital or employer asks you to provide.</p>
+        <div class="feature-value"><span>Example:</span> find your saved occupational-health document when preparing a credentialing packet.</div>
+      </div>
+
+
+
+
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h3 class="feature-title">CV &amp; Credential Exports</h3>
+        <p class="feature-desc">Prepare a formatted CV from your professional record and export credential information for your own review and records.</p>
+        <div class="feature-value"><span>Example:</span> review your education, work history and licenses together before sharing your CV.</div>
+      </div>
+
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3 class="feature-title">Your Records on Your Phone</h3>
+        <p class="feature-desc">Add the app to your home screen and open previously downloaded records offline. Sync, AI features and sign-in need a connection. Review the data-handling guide before uploading sensitive material.</p>
+        <div class="feature-value"><span>Example:</span> look up a license number already saved on your device while away from a reliable connection.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Testimonials section intentionally omitted: zero attributable customer reviews. Per
+     Architecture D §4.5: empty social proof is worse than none. Restore when there is at
+     least one named, photo-verifiable physician quote. -->
+
+
+<!-- ============ SEE IT IN ACTION ============ -->
+<section style="padding: 90px 0; background: var(--bg-elevated);" id="in-action">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center; margin-bottom: 48px;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        See It In Action
+      </div>
+      <h2 class="section-title">See your professional record in action.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Illustrative demos of app workflows, using example data. These are not live account screenshots.</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; align-items: start;">
+
+      <!-- Moment 1: CME command center -->
+      <div class="animate-on-scroll" style="text-align: center;">
+        <div class="phone-mockup" style="width: 100%; max-width: 320px; margin: 0 auto;">
+          <div class="phone-screen" style="padding: 18px 14px;">
+            <div style="text-align: left;">
+              <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">CME REVIEW &middot; EXAMPLE</div>
+              <div style="margin-top: 10px; background: var(--bg-elevated); border: 1px solid var(--amber); border-radius: 12px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                  <span style="font-size: 15px; font-weight: 800; color: var(--text);">Saved license</span>
+                  <span style="font-size: 13px; font-weight: 700; color: var(--amber);">Review dates</span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Check your saved renewal cycle</div>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;">
+                  <span style="font-size: 10px; font-weight: 700; color: var(--amber); background: rgba(245,158,11,0.12); padding: 3px 8px; border-radius: 10px;">Topic requirements</span>
+                  <span style="font-size: 10px; font-weight: 700; color: var(--red); background: rgba(239,68,68,0.12); padding: 3px 8px; border-radius: 10px;">Credit categories</span>
+                </div>
+                <div style="margin-top: 8px; font-size: 11px; font-weight: 700; color: var(--emerald); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; display: inline-block;">&#128228; Renewal packet</div>
+              </div>
+              <div style="margin-top: 8px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                  <span style="font-size: 15px; font-weight: 800; color: var(--text);">CME records</span>
+                  <span style="font-size: 13px; font-weight: 700; color: var(--emerald);">Review credits</span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Check dates, categories, and supporting files</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <h3 style="margin: 18px 0 6px; font-size: 17px; font-weight: 800; color: var(--text);">Your CME, per state, counted down</h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55; max-width: 320px; margin: 0 auto;">Review progress against your saved license dates and the app’s rule sources. Confirm that the rules apply to you, then organize your supporting records for renewal.</p>
+      </div>
+
+      <!-- Moment 3: assistant packet -->
+      <div class="animate-on-scroll" style="text-align: center;">
+        <div class="phone-mockup" style="width: 100%; max-width: 320px; margin: 0 auto;">
+          <div class="phone-screen" style="padding: 18px 14px;">
+            <div style="text-align: left;">
+              <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ASSISTANT</div>
+              <div style="margin-top: 10px; margin-left: 24px; background: var(--emerald); border-radius: 12px; padding: 9px 12px; font-size: 12px; color: #fff; line-height: 1.45;">
+                The agency needs my diploma, all state licenses, DEA certs, titers, TB test, and drug screen&hellip;
+              </div>
+              <div style="margin-top: 8px; margin-right: 24px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; font-size: 12px; color: var(--text); line-height: 1.45;">
+                Found 9 of 11. Ready to send them as one packet with a cover note.
+              </div>
+              <div style="margin-top: 8px; margin-right: 24px; background: var(--bg-elevated); border: 1px solid var(--emerald); border-radius: 12px; padding: 10px 12px;">
+                <div style="font-size: 9.5px; font-weight: 800; color: var(--emerald); letter-spacing: 0.5px;">SEND PACKET &middot; 9 DOCUMENTS</div>
+                <div style="font-size: 12px; color: var(--text); margin-top: 3px;">Licenses (CO, CA) &middot; DEA &times;2 &middot; board cert &middot; titers &middot; TB &middot; drug screen &middot; driver license</div>
+                <div style="font-size: 10.5px; font-weight: 700; color: var(--amber); margin-top: 4px;">Missing from your file: diploma &middot; ACLS card</div>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                  <div style="flex: 1; background: var(--emerald); border-radius: 8px; padding: 7px; text-align: center; font-size: 11.5px; font-weight: 800; color: #fff;">Approve</div>
+                  <div style="border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 11.5px; font-weight: 700; color: var(--text-muted);">Dismiss</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <h3 style="margin: 18px 0 6px; font-size: 17px; font-weight: 800; color: var(--text);">Prepare your credential paperwork</h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55; max-width: 320px; margin: 0 auto;">Use a hospital or employer&rsquo;s checklist to prepare a draft from your saved record. Review the selected documents, missing items and recipient before sending.</p>
+      </div>
+
+      <!-- Moment 2: stipend day -->
+      <div class="animate-on-scroll" style="text-align: center;">
+        <div class="phone-mockup" style="width: 100%; max-width: 320px; margin: 0 auto;">
+          <div class="phone-screen" style="padding: 18px 14px;">
+            <div style="text-align: left;">
+              <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">WORK LOG</div>
+              <div style="margin-top: 10px; background: rgba(16,185,129,0.12); border: 1px solid var(--emerald); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; font-weight: 700; color: var(--text);">
+                Stipend day &middot; 5h 15m of 8h used &middot; 2h 45m left
+              </div>
+              <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                  <div style="font-size: 13px; font-weight: 800; color: var(--text);">Sat, Jul 25 <span style="font-size: 9px; color: var(--emerald); letter-spacing: 0.4px;">STIPEND DAY</span></div>
+                  <div style="font-size: 10.5px; color: var(--text-muted);">7h 15m logged &middot; first 8h in the stipend</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 15px; font-weight: 800; color: var(--emerald);">$4,000.00</div>
+                  <div style="font-size: 9px; color: var(--text-muted);">day total</div>
+                </div>
+              </div>
+              <div style="margin-top: 8px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="font-size: 12.5px; font-weight: 700; color: var(--text);">Rounding</div>
+                  <div style="font-size: 10.5px; color: var(--text-muted);">7:00 AM&ndash;12:00 PM &middot; 300 min</div>
+                </div>
+                <span style="font-size: 11px; font-weight: 800; color: var(--emerald);">included</span>
+              </div>
+              <div style="margin-top: 6px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="font-size: 12.5px; font-weight: 700; color: var(--text);">Patient care: Consult</div>
+                  <div style="font-size: 10.5px; color: var(--text-muted);">4:00 PM&ndash;4:15 PM &middot; 15 min</div>
+                </div>
+                <span style="font-size: 11px; font-weight: 800; color: var(--emerald);">included</span>
+              </div>
+              <div style="margin-top: 10px; background: linear-gradient(135deg, #10b981, #059669); border-radius: 12px; padding: 12px; text-align: center; font-size: 13.5px; font-weight: 800; color: #fff;">
+                &#128222; Got a call: start timer
+              </div>
+            </div>
+          </div>
+        </div>
+        <h3 style="margin: 18px 0 6px; font-size: 17px; font-weight: 800; color: var(--text);">Optional Practice: contract-based work logs</h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55; max-width: 320px; margin: 0 auto;">The countdown shows your stipend hours in real time. Every entry lands in the right quarter-hour block, and the day header always shows what the day is worth.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ OPTIONAL PRACTICE TOOLS ============ -->
+<section class="features" id="practice-tools">
+  <div class="container">
+    <div class="animate-on-scroll">
+      <div class="section-label">Optional Practice tools</div>
+      <h2 class="section-title">Manage the business side when you need it.</h2>
+      <p class="section-subtitle">Add contracts, work logs, invoices and payment tracking to your credential record. Practice is an optional addition for physicians managing independent work or locum assignments.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card animate-on-scroll">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        </div>
+        <h3 class="feature-title">AI RVU Coder</h3>
+        <p class="feature-desc">Dictate what you did ("C3-4 posterior laminectomy as the assistant") and get CPT codes with work RVUs, add-on levels, and modifiers from a CMS-grounded catalog. Your case log builds itself.</p>
+        <div class="feature-value"><span>Example:</span> a one-level TLIF dictation returns the fusion, cage, and instrumentation codes with the assistant modifier pre-selected.</div>
       </div>
 
       <div class="feature-card animate-on-scroll">
@@ -2347,25 +2516,8 @@ footer {
         <p class="feature-desc">Say what you did in plain language. The AI codes it against official CMS values (procedures, consults, progress notes) and keeps daily, monthly, and all-time wRVU totals.</p>
         <div class="feature-value"><span>Example:</span> "placed an EVD and saw two consults" comes back coded with CPT codes and work RVUs, ready to save.</div>
       </div>
-
-      <div class="feature-card animate-on-scroll">
-        <div class="feature-icon">
-          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        </div>
-        <h3 class="feature-title">CV, Exports &amp; 1099 Deductions</h3>
-        <p class="feature-desc">Generate a formatted CV from your credential data. Export everything as CSV or PDF. A deduction ledger auto-collects your licensing and credentialing costs for tax season.</p>
-        <div class="feature-value"><span>Example:</span> license fees, DEA renewals, and CME costs flow into a Schedule&nbsp;C-ready export for your CPA.</div>
-      </div>
-
-      <div class="feature-card animate-on-scroll">
-        <div class="feature-icon">
-          <svg width="24" height="24" fill="none" stroke="var(--emerald)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
-        <h3 class="feature-title">Offline, Private, Yours</h3>
-        <p class="feature-desc">Installs on your phone like a native app and works with zero signal, then syncs across devices when you are back online. Row-level security means your data is isolated to your account.</p>
-        <div class="feature-value"><span>Example:</span> pull up your license number in a hospital basement with no reception. It is all still there.</div>
-      </div>
     </div>
+    <p style="margin-top: 28px;"><a href="/locums">Explore Practice for locum work &rarr;</a></p>
   </div>
 </section>
 
@@ -2509,132 +2661,6 @@ footer {
   </div>
 </section>
 
-<!-- Testimonials section intentionally omitted: zero attributable customer reviews. Per
-     Architecture D §4.5: empty social proof is worse than none. Restore when there is at
-     least one named, photo-verifiable physician quote. -->
-
-
-<!-- ============ SEE IT IN ACTION ============ -->
-<section style="padding: 90px 0; background: var(--bg-elevated);" id="in-action">
-  <div class="container">
-    <div class="animate-on-scroll" style="text-align: center; margin-bottom: 48px;">
-      <div class="section-label" style="justify-content: center;">
-        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        See It In Action
-      </div>
-      <h2 class="section-title">Three ways to organize your work.</h2>
-      <p class="section-subtitle" style="margin: 0 auto;">Illustrative demos of app workflows, using example data. These are not live account screenshots.</p>
-    </div>
-
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; align-items: start;">
-
-      <!-- Moment 1: CME command center -->
-      <div class="animate-on-scroll" style="text-align: center;">
-        <div class="phone-mockup" style="width: 100%; max-width: 320px; margin: 0 auto;">
-          <div class="phone-screen" style="padding: 18px 14px;">
-            <div style="text-align: left;">
-              <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">CME REVIEW &middot; EXAMPLE</div>
-              <div style="margin-top: 10px; background: var(--bg-elevated); border: 1px solid var(--amber); border-radius: 12px; padding: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                  <span style="font-size: 15px; font-weight: 800; color: var(--text);">Saved license</span>
-                  <span style="font-size: 13px; font-weight: 700; color: var(--amber);">Review dates</span>
-                </div>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Check your saved renewal cycle</div>
-                <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;">
-                  <span style="font-size: 10px; font-weight: 700; color: var(--amber); background: rgba(245,158,11,0.12); padding: 3px 8px; border-radius: 10px;">Topic requirements</span>
-                  <span style="font-size: 10px; font-weight: 700; color: var(--red); background: rgba(239,68,68,0.12); padding: 3px 8px; border-radius: 10px;">Credit categories</span>
-                </div>
-                <div style="margin-top: 8px; font-size: 11px; font-weight: 700; color: var(--emerald); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; display: inline-block;">&#128228; Renewal packet</div>
-              </div>
-              <div style="margin-top: 8px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                  <span style="font-size: 15px; font-weight: 800; color: var(--text);">CME records</span>
-                  <span style="font-size: 13px; font-weight: 700; color: var(--emerald);">Review credits</span>
-                </div>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Check dates, categories, and supporting files</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <h3 style="margin: 18px 0 6px; font-size: 17px; font-weight: 800; color: var(--text);">Your CME, per state, counted down</h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55; max-width: 320px; margin: 0 auto;">Review progress against your saved license dates and the app’s rule sources. Confirm that the rules apply to you, then organize your supporting records for renewal.</p>
-      </div>
-
-      <!-- Moment 2: stipend day -->
-      <div class="animate-on-scroll" style="text-align: center;">
-        <div class="phone-mockup" style="width: 100%; max-width: 320px; margin: 0 auto;">
-          <div class="phone-screen" style="padding: 18px 14px;">
-            <div style="text-align: left;">
-              <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">WORK LOG</div>
-              <div style="margin-top: 10px; background: rgba(16,185,129,0.12); border: 1px solid var(--emerald); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; font-weight: 700; color: var(--text);">
-                Stipend day &middot; 5h 15m of 8h used &middot; 2h 45m left
-              </div>
-              <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
-                <div>
-                  <div style="font-size: 13px; font-weight: 800; color: var(--text);">Sat, Jul 25 <span style="font-size: 9px; color: var(--emerald); letter-spacing: 0.4px;">STIPEND DAY</span></div>
-                  <div style="font-size: 10.5px; color: var(--text-muted);">7h 15m logged &middot; first 8h in the stipend</div>
-                </div>
-                <div style="text-align: right;">
-                  <div style="font-size: 15px; font-weight: 800; color: var(--emerald);">$4,000.00</div>
-                  <div style="font-size: 9px; color: var(--text-muted);">day total</div>
-                </div>
-              </div>
-              <div style="margin-top: 8px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                  <div style="font-size: 12.5px; font-weight: 700; color: var(--text);">Rounding</div>
-                  <div style="font-size: 10.5px; color: var(--text-muted);">7:00 AM&ndash;12:00 PM &middot; 300 min</div>
-                </div>
-                <span style="font-size: 11px; font-weight: 800; color: var(--emerald);">included</span>
-              </div>
-              <div style="margin-top: 6px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                  <div style="font-size: 12.5px; font-weight: 700; color: var(--text);">Patient care: Consult</div>
-                  <div style="font-size: 10.5px; color: var(--text-muted);">4:00 PM&ndash;4:15 PM &middot; 15 min</div>
-                </div>
-                <span style="font-size: 11px; font-weight: 800; color: var(--emerald);">included</span>
-              </div>
-              <div style="margin-top: 10px; background: linear-gradient(135deg, #10b981, #059669); border-radius: 12px; padding: 12px; text-align: center; font-size: 13.5px; font-weight: 800; color: #fff;">
-                &#128222; Got a call: start timer
-              </div>
-            </div>
-          </div>
-        </div>
-        <h3 style="margin: 18px 0 6px; font-size: 17px; font-weight: 800; color: var(--text);">A call day that bills itself</h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55; max-width: 320px; margin: 0 auto;">The countdown shows your stipend hours in real time. Every entry lands in the right quarter-hour block, and the day header always shows what the day is worth.</p>
-      </div>
-
-      <!-- Moment 3: assistant packet -->
-      <div class="animate-on-scroll" style="text-align: center;">
-        <div class="phone-mockup" style="width: 100%; max-width: 320px; margin: 0 auto;">
-          <div class="phone-screen" style="padding: 18px 14px;">
-            <div style="text-align: left;">
-              <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ASSISTANT</div>
-              <div style="margin-top: 10px; margin-left: 24px; background: var(--emerald); border-radius: 12px; padding: 9px 12px; font-size: 12px; color: #fff; line-height: 1.45;">
-                The agency needs my diploma, all state licenses, DEA certs, titers, TB test, and drug screen&hellip;
-              </div>
-              <div style="margin-top: 8px; margin-right: 24px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; font-size: 12px; color: var(--text); line-height: 1.45;">
-                Found 9 of 11. Ready to send them as one packet with a cover note.
-              </div>
-              <div style="margin-top: 8px; margin-right: 24px; background: var(--bg-elevated); border: 1px solid var(--emerald); border-radius: 12px; padding: 10px 12px;">
-                <div style="font-size: 9.5px; font-weight: 800; color: var(--emerald); letter-spacing: 0.5px;">SEND PACKET &middot; 9 DOCUMENTS</div>
-                <div style="font-size: 12px; color: var(--text); margin-top: 3px;">Licenses (CO, CA) &middot; DEA &times;2 &middot; board cert &middot; titers &middot; TB &middot; drug screen &middot; driver license</div>
-                <div style="font-size: 10.5px; font-weight: 700; color: var(--amber); margin-top: 4px;">Missing from your file: diploma &middot; ACLS card</div>
-                <div style="display: flex; gap: 6px; margin-top: 8px;">
-                  <div style="flex: 1; background: var(--emerald); border-radius: 8px; padding: 7px; text-align: center; font-size: 11.5px; font-weight: 800; color: #fff;">Approve</div>
-                  <div style="border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 11.5px; font-weight: 700; color: var(--text-muted);">Dismiss</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <h3 style="margin: 18px 0 6px; font-size: 17px; font-weight: 800; color: var(--text);">An assistant that ships the paperwork</h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55; max-width: 320px; margin: 0 auto;">Paste the agency's checklist. It matches every item against your file, bundles what you have into one send, and tells you exactly what is missing. Nothing moves without your approval.</p>
-      </div>
-
-    </div>
-  </div>
-</section>
-
 <!-- ============ EARLY ACCESS ============ -->
 <section class="pricing" id="early-access">
   <div class="container">
@@ -2644,7 +2670,7 @@ footer {
         Early Access
       </div>
       <h2 class="section-title">Be first in line when we open the doors.</h2>
-      <p class="section-subtitle" style="margin-left: auto; margin-right: auto;">CredentialDOMD is being tested in the field right now, on real hospital assignments, real contracts, and real invoices. Leave your email and you will be the first to know when it opens, with founding-member perks for the earliest names on the list.</p>
+      <p class="section-subtitle" style="margin-left: auto; margin-right: auto;">CredentialDOMD is being tested by physicians organizing their licenses, CME and professional records. Join the list for an invitation and details of the planned Credential offers. Optional Practice tools are available for physicians who also manage contracts and invoices.</p>
     </div>
 
     <div class="animate-on-scroll" style="max-width: 560px; margin: 36px auto 0;">
@@ -2675,22 +2701,25 @@ footer {
   <div class="container">
     <div class="animate-on-scroll" style="text-align: center; margin-bottom: 32px;">
       <div class="section-label">Founding membership</div>
-      <h2 class="section-title">Planned annual pricing. Free during the invite beta.</h2>
+      <h2 class="section-title">Founding Credential offer lowered to $99/year.</h2>
       <p class="section-subtitle" style="margin: 0 auto;">Billing is not open. No card is required for beta access, and joining the list does not start a paid subscription.</p>
     </div>
     <div class="launch-plan-grid">
       <article class="feature-card animate-on-scroll">
-        <h3 class="feature-title">Core</h3>
-        <p class="launch-price">$149<span> / year, planned</span></p>
+        <h3 class="feature-title">Credential</h3>
+        <p class="launch-price">$99<span> / year, planned founding offer</span></p>
+        <p class="feature-desc">For eligible waitlist founding members. The previously planned founding price was $149/year. Your $99 annual rate stays the same while your membership remains active.</p>
         <p class="feature-desc">Your physician credentials, documents, CME tracking and renewal organization.</p>
+        <p class="feature-desc" style="margin-top: 12px;">Planned early-bird price: $149/year, also held while membership remains active. Planned standard price: $199/year. Your offer and eligibility will be shown before you choose to pay.</p>
       </article>
       <article class="feature-card animate-on-scroll">
-        <h3 class="feature-title">Core + Locum</h3>
+        <h3 class="feature-title">Credential + Practice</h3>
         <p class="launch-price">$245<span> / year, planned total</span></p>
-        <p class="feature-desc">Everything in Core, plus contracts, work logs, invoices, payment tracking and locums finance tools.</p>
+        <p class="feature-desc">Everything in Credential, plus contracts, work logs, invoices, payment tracking and locums finance tools. The full package is $245/year for all new paid members.</p>
+        <p class="feature-desc" style="margin-top: 12px;">Credential customers will receive a free 30-day Practice trial. It ends without a charge. Continuing Practice requires an explicit purchase; your Credential membership continues.</p>
       </article>
     </div>
-    <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);">Founding memberships only at launch. We will ask you to choose a paid plan when billing opens.</p>
+    <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);">Planned lifetime-access policy: accounts already registered when this policy was announced will keep Credential and Practice free for life. A waitlist entry alone does not qualify. Account eligibility will be confirmed before billing opens.</p>
     <p style="text-align: center; margin-top: 16px;"><a href="#join" class="btn-primary">Request beta access</a></p>
   </div>
 </section>
@@ -2967,7 +2996,7 @@ footer {
       <div class="footer-links">
         <a href="/states/">License Renewal by State</a>
         <a href="/cme/">CME Resources</a>
-        <a href="/locums">For Locums</a>
+        <a href="/locums">Practice &amp; Locums</a>
         <a href="/security">Security</a>
         <a href="/privacy">Privacy Policy</a>
         <a href="/help">Help center</a>

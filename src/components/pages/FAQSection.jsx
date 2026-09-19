@@ -1,10 +1,7 @@
 import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { AsclepiusIcon } from "../shared/Icons";
-import { BILLING_CATALOG } from "../../../supabase/functions/_shared/billingCatalog.mjs";
-
-const coreAnnual = BILLING_CATALOG.offers.core.unitAmount / 100;
-const locumAnnual = BILLING_CATALOG.offers.core_locum.unitAmount / 100;
+import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
 
 const FAQ_DATA = [
   {
@@ -12,11 +9,11 @@ const FAQ_DATA = [
     items: [
       {
         q: "Is CredentialDOMD free right now?",
-        a: "Yes. The app is in beta and free while the beta lasts; billing is switched off. The plan names below describe what pricing is expected to look like later. If paid plans launch you will hear about it in advance, and nothing is charged without your agreement.",
+        a: "Yes. The invite beta is free and billing is off. The prices below describe the planned launch. You will hear about it in advance, and nothing is charged without your agreement.",
       },
       {
-        q: "Is there a permanent free plan?",
-        a: "The current free access is an invite-only beta. CredentialDoMD is preparing two annual founding-member bundles; there is no permanent free plan or automatic upgrade.",
+        q: "What happens to existing registered accounts?",
+        a: MEMBERSHIP_COPY.lifetimePolicy,
       },
       {
         q: "When will paid plans start?",
@@ -24,19 +21,23 @@ const FAQ_DATA = [
       },
       {
         q: "Can I deduct CredentialDoMD on my taxes?",
-        a: "Core + Locum includes an expense ledger and an export for your tax professional. Ask them whether a subscription or any recorded expense is deductible in your circumstances.",
+        a: "Practice includes an expense ledger and an export for your tax professional. Ask them whether a subscription or any recorded expense is deductible in your circumstances.",
       },
       {
-        q: "What are the planned founding-member prices?",
-        a: `Core is planned at $${coreAnnual} per physician per year. Core + Locum is planned at $${locumAnnual} per physician per year. Billing is off; these are future annual offers, with no monthly plan or automatic conversion.`,
+        q: "What are the planned annual prices?",
+        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.foundingChange} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.fullPackage} ${MEMBERSHIP_COPY.billingOff}`,
       },
       {
-        q: "What does Core + Locum add?",
-        a: "Core covers credentials, CME tracking, document scans, credential packets, CVs and the assistant. Core + Locum adds contracts, work logs, invoices, payment tracking and locums finance tools. Review extracted contract rates before using them, and record payments to track the remaining balance.",
+        q: "What does Practice add?",
+        a: "Credential covers credentials, CME tracking, document scans, credential packets, CVs and the assistant. Practice adds contracts, work logs, invoices, payment tracking and locums finance tools. Review extracted contract rates before using them, and record payments to track the remaining balance.",
+      },
+      {
+        q: "Will the Practice trial charge me automatically?",
+        a: `${MEMBERSHIP_COPY.practiceTrial} Billing remains off today; no trial countdown or charge starts from reading these plans.`,
       },
       {
         q: "Are group plans available?",
-        a: "The prepared launch offer has two individual annual founding-member bundles. Group and enterprise plans are not offered for purchase.",
+        a: "The planned Credential and Credential + Practice memberships are for one physician. Group and enterprise plans are not offered for purchase.",
       },
       {
         q: "Can I cancel anytime?",

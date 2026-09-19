@@ -25,7 +25,7 @@
 <meta name="twitter:description" content="Built and used by a practicing neurosurgeon who works locums. Free beta, every feature on, no card.">
 <meta name="twitter:image" content="https://credentialdomd.com/og-image.png">
 
-<!-- Schema.org SoftwareApplication (no price: pricing is being finalized) -->
+<!-- Schema.org SoftwareApplication (no purchase offer while billing is off) -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -117,7 +117,7 @@
       "name": "What does it cost?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "The invite beta is free with no card required. Planned founding membership is $149/year for Core or $245/year total for Core + Locum. Billing is not open, and joining the beta does not start a paid subscription."
+        "text": "Billing is off and the invite beta is free, with no card required. Planned Credential pricing is $99/year for eligible waitlist founding members, lowered from the previously planned $149/year founding offer; $149/year for early-bird members; and $199/year standard. The $99 and $149 annual rates stay the same while membership remains active. Credential + Practice is $245/year total for all new paid members. Credential customers will receive a free 30-day Practice trial that ends without a charge; continuing Practice requires an explicit purchase. Under the planned lifetime-access policy, accounts already registered when the policy was announced will keep both products free for life. Waitlist entries alone do not qualify; account eligibility will be confirmed before billing opens."
       }
     },
     {
@@ -2208,6 +2208,8 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
 
 /* ---------- RESPONSIVE ---------- */
 @media (max-width: 1024px) {
+  .nav-links { display: none; }
+  .mobile-menu-btn { display: block; }
   .locums-hero { padding: 120px 0 70px; }
   .locums-hero .container { grid-template-columns: 1fr; gap: 44px; }
   .locums-hero .hero-subtitle { max-width: 100%; }
@@ -2222,6 +2224,8 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
   .setup-list li { padding: 18px 18px; gap: 14px; }
 }
 </style>
+<link rel="stylesheet" href="/support-nav.css">
+<script src="/support-nav.js" defer></script>
 
 </head>
 
@@ -2234,15 +2238,23 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
       <div class="logo-mark">D</div>
       <div class="logo-text">Credential<span>DOMD</span></div>
     </a>
-    <div class="nav-links">
-      <a href="/#features">Features</a>
-      <a href="/locums" class="current" aria-current="page">For Locums</a>
-      <a href="/security">Security</a>
-      <a href="#faq">FAQ</a>
+    <div class="nav-links" id="primary-nav">
+      <a href="/#features">Credentials</a>
+      <a href="/states/">License Guides</a>
+      <a href="/cme/">CME</a>
+      <a href="/locums" class="current" aria-current="page">Practice &amp; Locums</a>
+      <details class="support-menu">
+        <summary>Support</summary>
+        <div class="support-links">
+          <a href="/help/">Help &amp; videos</a>
+          <a href="#faq">FAQ</a>
+          <a href="/security">Security &amp; data handling</a>
+        </div>
+      </details>
       <a href="/app/">Sign in</a>
       <a href="#beta" class="btn-primary nav-cta">Get Early Access</a>
     </div>
-    <button class="mobile-menu-btn" aria-label="Open menu" onclick="document.querySelector('.nav-links').classList.toggle('mobile-open')">
+    <button class="mobile-menu-btn" data-nav-toggle aria-label="Open menu" aria-controls="primary-nav" aria-expanded="false">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 6h16M4 12h16M4 18h16"/>
       </svg>
@@ -3435,7 +3447,9 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
 
     <div class="beta-card animate-on-scroll">
       <h3>Request access</h3>
-      <p style="margin-bottom: 22px;">One email when your invite is ready. Paid pricing is being finalized, and every beta member sees the number before anything is ever charged.</p>
+      <p style="margin-bottom: 16px;">One email when your invite is ready. Billing is off. Planned Credential + Practice membership is $245/year total for all new paid members.</p>
+      <p style="margin-bottom: 16px;">Founding Credential offer lowered to $99/year for eligible waitlist members, from the previously planned $149/year. Early-bird Credential is planned at $149/year; standard Credential is planned at $199/year. The $99 and $149 annual rates stay the same while membership remains active.</p>
+      <p style="margin-bottom: 22px;">Credential customers will receive a free 30-day Practice trial. It ends without a charge, and continuing Practice requires an explicit purchase. Your offer and eligibility will be shown before you choose to pay.</p>
       <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
         <input type="email" aria-label="Email address" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
@@ -3520,7 +3534,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
           <span class="faq-toggle">+</span>
         </button>
         <div class="faq-answer"><div class="faq-answer-inner">
-          The invite beta is free with no card required. Planned founding membership is $149/year for Core or $245/year total for Core + Locum. Billing is not open, and joining the beta does not start a paid subscription.
+          Billing is off and the invite beta is free, with no card required. Planned Credential pricing is $99/year for eligible waitlist founding members, lowered from the previously planned $149/year founding offer; $149/year for early-bird members; and $199/year standard. The $99 and $149 annual rates stay the same while membership remains active. Credential + Practice is $245/year total for all new paid members. Credential customers will receive a free 30-day Practice trial that ends without a charge; continuing Practice requires an explicit purchase. Under the planned lifetime-access policy, accounts already registered when the policy was announced will keep both products free for life. Waitlist entries alone do not qualify; account eligibility will be confirmed before billing opens.
         </div></div>
       </div>
 
@@ -3798,7 +3812,7 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
 
 <!-- Mobile nav styles (injected to keep CSS section clean) -->
 <style>
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .nav-links {
     display: none;
     position: fixed;
@@ -3810,6 +3824,8 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
     -webkit-backdrop-filter: blur(20px);
     flex-direction: column;
     padding: 24px;
+    max-height: calc(100dvh - 68px);
+    overflow-y: auto;
     gap: 16px;
     border-bottom: 1px solid var(--border);
     z-index: 999;
