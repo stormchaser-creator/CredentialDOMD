@@ -1927,6 +1927,49 @@ footer {
 .launch-price span { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
 @media (max-width: 1024px) { .workflow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .workflow-grid, .launch-plan-grid { grid-template-columns: 1fr; } }
+
+/* Physician imagery stays inside the existing page layout. Natural image
+   proportions preserve faces; captions sit below, never over the photograph. */
+.physician-scene img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.physician-scene figcaption {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hero-visual.physician-hero {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  max-height: none;
+  margin-inline: auto;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.physician-hero figcaption { text-align: center; }
+.cme-scene { width: 100%; max-width: 280px; margin: 20px auto 0; }
+.renewal-intro { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 40px; align-items: center; }
+.founder-portrait { display: block; height: auto; flex-shrink: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.hero-trust .founder-portrait { width: 48px; }
+.locum-cta.founder-quote { display: flex; align-items: center; gap: 20px; text-align: left; }
+.founder-quote .founder-portrait { width: 80px; }
+@media (max-width: 1024px) {
+  .hero-visual.physician-hero { max-width: 320px; }
+}
+@media (max-width: 768px) {
+  .renewal-intro { grid-template-columns: 1fr; gap: 24px; }
+  .renewal-intro .physician-scene { width: 100%; max-width: 360px; margin-inline: auto; }
+}
+@media (max-width: 480px) {
+  .locum-cta.founder-quote { flex-direction: column; align-items: flex-start; gap: 16px; }
+}
 </style>
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
@@ -2005,9 +2048,7 @@ footer {
       </div>
 
       <div class="hero-trust">
-        <div class="trust-avatar">
-          <svg width="20" height="20" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
+        <img class="founder-portrait" src="/images/eric-whitney-120.webp" alt="Dr. Eric Whitney" width="120" height="180" decoding="async">
         <p class="trust-text">
           <strong>Built by <a href="https://drericwhitney.com" style="text-decoration: underline; text-underline-offset: 3px;">Dr. Eric Whitney, DO</a>, a practicing neurosurgeon who uses it for his own credentials.</strong>
           <br>Start with your professional record. Add Practice tools when you need them.
@@ -2015,116 +2056,10 @@ footer {
       </div>
     </div>
 
-    <div class="hero-visual">
-      <div class="phone-mockup">
-        <div class="phone-screen">
-          <div class="phone-notch"></div>
-          <div class="phone-status-bar">
-            <span>9:41</span>
-            <span>&#9679;&#9679;&#9679;</span>
-          </div>
-          <div class="phone-dashboard">
-            <div class="phone-greeting">Good morning,</div>
-            <div class="phone-name">Doctor</div>
-
-            <!-- Compliance Ring -->
-            <div class="compliance-ring-container">
-              <svg class="ring-svg" viewBox="0 0 72 72">
-                <circle class="ring-track" cx="36" cy="36" r="30"/>
-                <circle class="ring-fill" cx="36" cy="36" r="30"/>
-                <text class="ring-text" x="36" y="34" text-anchor="middle" dominant-baseline="middle">88</text>
-                <text class="ring-label-text" x="36" y="46" text-anchor="middle">Score</text>
-              </svg>
-              <div class="ring-details">
-                <div class="ring-title">Credential Health</div>
-                <div class="ring-stats">
-                  <div class="ring-stat"><div class="dot dot-green"></div>12 Active</div>
-                  <div class="ring-stat"><div class="dot dot-amber"></div>2 Expiring</div>
-                  <div class="ring-stat"><div class="dot dot-red"></div>1 Expired</div>
-                  <div class="ring-stat"><div class="dot dot-blue"></div>1 Pending</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Credential Items -->
-            <div class="phone-section-label">Action Required</div>
-
-            <div class="phone-credential">
-              <div class="cred-left">
-                <div class="cred-icon cred-icon-amber">
-                  <svg width="14" height="14" fill="var(--amber)" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M12 2L2 22h20L12 2z"/></svg>
-                </div>
-                <div>
-                  <div class="cred-name">DEA Registration</div>
-                  <div class="cred-detail">Expires in 14 days</div>
-                </div>
-              </div>
-              <div class="cred-status status-expiring">Expiring</div>
-            </div>
-
-            <div class="phone-credential">
-              <div class="cred-left">
-                <div class="cred-icon cred-icon-red">
-                  <svg width="14" height="14" fill="var(--red)" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6" stroke="#fff" stroke-width="2"/></svg>
-                </div>
-                <div>
-                  <div class="cred-name">BLS Certification</div>
-                  <div class="cred-detail">Expired 3 days ago</div>
-                </div>
-              </div>
-              <div class="cred-status status-expired">Expired</div>
-            </div>
-
-            <div class="phone-credential">
-              <div class="cred-left">
-                <div class="cred-icon cred-icon-green">
-                  <svg width="14" height="14" fill="var(--emerald)" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                </div>
-                <div>
-                  <div class="cred-name">TX Medical License</div>
-                  <div class="cred-detail">Expires Dec 2026</div>
-                </div>
-              </div>
-              <div class="cred-status status-active">Active</div>
-            </div>
-
-            <!-- Tab Bar -->
-            <div class="phone-tabbar">
-              <div class="phone-tab active">
-                <span class="phone-tab-icon">
-                  <svg width="18" height="18" fill="var(--emerald)" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>
-                </span>
-                Home
-              </div>
-              <div class="phone-tab">
-                <span class="phone-tab-icon">
-                  <svg width="18" height="18" fill="none" stroke="var(--text-muted)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                </span>
-                Creds
-              </div>
-              <div class="phone-tab">
-                <span class="phone-tab-icon">
-                  <svg width="18" height="18" fill="none" stroke="var(--text-muted)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
-                </span>
-                Add
-              </div>
-              <div class="phone-tab">
-                <span class="phone-tab-icon">
-                  <svg width="18" height="18" fill="none" stroke="var(--text-muted)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                </span>
-                Docs
-              </div>
-              <div class="phone-tab">
-                <span class="phone-tab-icon">
-                  <svg width="18" height="18" fill="none" stroke="var(--text-muted)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                </span>
-                Profile
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <figure class="hero-visual physician-hero physician-scene">
+      <img src="/images/physician-life-v3-600.webp" srcset="/images/physician-life-v3-600.webp 600w, /images/physician-life-v3-1200.webp 1122w" sizes="(max-width: 352px) calc(100vw - 32px), (max-width: 1024px) 320px, 400px" alt="" width="1122" height="1402" fetchpriority="high">
+      <figcaption>AI-generated physician scene.</figcaption>
+    </figure>
   </div>
 </section>
 
@@ -2284,6 +2219,10 @@ footer {
         <h3 class="feature-title">CME Tracking &amp; Review</h3>
         <p class="feature-desc">Organize credits by date, category and topic. Review progress against your saved license cycle and the app&rsquo;s rule sources, including MD and DO categories. Confirm which requirements apply with your board.</p>
         <div class="feature-value"><span>Example:</span> Review your saved renewal dates, credit categories, and the source behind your CME progress.</div>
+        <figure class="physician-scene cme-scene">
+          <img src="/images/physician-learning-v3-600.webp" alt="" width="600" height="400" loading="lazy" decoding="async">
+          <figcaption>AI-generated physician scene.</figcaption>
+        </figure>
       </div>
 
       <div class="feature-card animate-on-scroll">
@@ -2654,7 +2593,8 @@ footer {
           </div>
         </div>
 
-        <div class="locum-cta">
+        <div class="locum-cta founder-quote">
+          <img class="founder-portrait" src="/images/eric-whitney-120.webp" srcset="/images/eric-whitney-120.webp 120w, /images/eric-whitney-400.webp 400w" sizes="80px" alt="Dr. Eric Whitney" width="400" height="600" loading="lazy" decoding="async">
           <p>"I work these contracts myself. A week of call (stipends, call backs, orientation) becomes <strong>one accurate PDF invoice in two taps.</strong>"<br><span style="font-size: 13px; color: var(--text-muted);"><a href="https://drericwhitney.com" style="text-decoration: underline; text-underline-offset: 3px;">Dr. Eric Whitney, DO</a>, neurosurgeon and founder</span></p>
         </div>
       </div>
@@ -2900,13 +2840,19 @@ footer {
 <!-- ============ FINAL CTA ============ -->
 <section class="renewal-states" id="renewal-states" style="padding: 90px 0; background: var(--bg-elevated);">
   <div class="container">
-    <div class="animate-on-scroll">
-      <div class="section-label">
-        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
-        Free renewal guides
+    <div class="animate-on-scroll renewal-intro">
+      <div>
+        <div class="section-label">
+          <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+          Free renewal guides
+        </div>
+        <h2 class="section-title">Medical license renewal, by state</h2>
+        <p class="section-subtitle" style="max-width: 640px; margin: 0 auto 8px;">Start with our state guides, then confirm your own dates and requirements with your board. No sign-up needed.</p>
       </div>
-      <h2 class="section-title">Medical license renewal, by state</h2>
-      <p class="section-subtitle" style="max-width: 640px; margin: 0 auto 8px;">Start with our state guides, then confirm your own dates and requirements with your board. No sign-up needed.</p>
+      <figure class="physician-scene">
+        <img src="/images/physician-colleagues-v3-600.webp" srcset="/images/physician-colleagues-v3-600.webp 600w, /images/physician-colleagues-v3-1200.webp 1200w" sizes="(max-width: 392px) calc(100vw - 32px), 360px" alt="" width="1200" height="800" loading="lazy" decoding="async">
+        <figcaption>AI-generated physician scene.</figcaption>
+      </figure>
     </div>
     <div class="states-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 32px;">
         <a class="state-card" href="/states/california">
