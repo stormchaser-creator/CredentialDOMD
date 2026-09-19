@@ -7,6 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, RESULT_SCHEMA } from './ticket-agent-context.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT = 'hkpnnsjcwprrwobmpqyy';
@@ -15,21 +16,8 @@ export const AWAITING = `t.archived_at IS NULL AND t.status IN ('open', 'in_prog
   AND (t.agent_last_reply_at IS NULL OR EXISTS (
     SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id
       AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE 'Status set to%'))`;
-export const QUEUE_SQL = `SELECT t.id, t.subject, t.body, t.category, t.updated_at,
-  public.is_admin(t.user_id) AS from_admin,
-  coalesce((SELECT json_agg(recent ORDER BY recent.created_at) FROM (
-    SELECT left(m.body, 8000) AS body, m.created_at, m.is_admin_reply
-    FROM support_messages m WHERE m.ticket_id = t.id
-    ORDER BY m.created_at DESC LIMIT 20) recent), '[]'::json) AS thread
-  FROM support_tickets t WHERE ${AWAITING} AND ${APPROVED}
-  ORDER BY t.created_at LIMIT 2`;
-const SCHEMA = {
-  type: 'object', additionalProperties: false,
-  properties: { reply: { type: 'string', minLength: 1, maxLength: 4000 },
-    summary: { type: 'string', minLength: 1, maxLength: 4000 },
-    needs_owner_review: { type: 'boolean' } },
-  required: ['reply', 'summary', 'needs_owner_review'],
-};
+export const QUEUE_SQL = queueSQL();
+const SCHEMA = RESULT_SCHEMA;
 const SETTINGS = {
   permissions: {
     defaultMode: 'dontAsk', disableBypassPermissionsMode: 'disable',
@@ -81,38 +69,41 @@ function secret(service, label = false) {
 function sqlText(s) {
   return `convert_from(decode('${Buffer.from(s, 'utf8').toString('hex')}', 'hex'), 'UTF8')`;
 }
-export function replySQL(ticket, reply) {
+export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   if (!/^[a-f0-9-]{36}$/.test(ticket.id)) throw Error('Invalid ticket id');
+  if (!/^[a-f0-9-]{36}$/.test(ticket.owner_id || '')) throw Error('Invalid ticket owner');
   if (typeof ticket.updated_at !== 'string' || !Number.isFinite(Date.parse(ticket.updated_at))) throw Error('Invalid ticket version');
+  const approval = approvalSQL(ticket.approval);
   if (typeof reply !== 'string' || !reply.trim() || reply.length > 4000 || reply.includes('\0')) throw Error('Invalid reply');
   // The row lock + version comparison prevents stale answers from stamping over a newer
   // message or withdrawn approval. Statements are sequential inside one transaction:
   // support_messages has an AFTER INSERT trigger that also updates the ticket row.
   // A data-modifying CTE that updates that same row again is unsafe here.
+  // Legacy rows require a profile author. Keep storage compatibility until the
+  // reviewed support-job actor is installed; the body identifies automation and
+  // must never present this profile ID as a human author. No actor is fabricated.
+  const labeledReply = `CredentialDO Support · Automated\n\n${reply}`;
+  const awaiting = includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;
   const messageId = randomUUID();
   return `DO $ticket_broker$
   DECLARE target record;
   BEGIN
     SELECT t.id, t.user_id INTO target FROM support_tickets t WHERE t.id = '${ticket.id}'::uuid
+      AND t.user_id = '${ticket.owner_id}'::uuid
       AND t.updated_at = ${sqlText(ticket.updated_at)}::timestamptz
-      AND ${AWAITING} AND ${APPROVED} FOR UPDATE;
+      AND ${awaiting} AND ${APPROVED} AND ${approval} FOR UPDATE;
     IF NOT FOUND THEN RETURN; END IF;
     INSERT INTO support_messages (id, ticket_id, author_id, body, is_admin_reply, created_at)
-      VALUES ('${messageId}'::uuid, target.id, target.user_id, ${sqlText(reply)}, true, now());
+      VALUES ('${messageId}'::uuid, target.id, target.user_id, ${sqlText(labeledReply)}, true, now());
     UPDATE support_tickets SET status = 'open', updated_at = now(), agent_last_reply_at = now()
       WHERE id = target.id;
   END $ticket_broker$;
   SELECT id FROM support_messages WHERE id = '${messageId}'::uuid`;
 
 }
-export function validateResult(result) {
-  const out = result?.structured_output;
-  if (result?.is_error || !out || Object.keys(out).sort().join(',') !== 'needs_owner_review,reply,summary') throw Error('Unusable model result');
-  for (const name of ['reply', 'summary']) {
-    if (typeof out[name] !== 'string' || !out[name].trim() || out[name].length > 4000 || out[name].includes('\0')) throw Error('Invalid model response');
-  }
-  if (typeof out.needs_owner_review !== 'boolean') throw Error('Invalid review flag');
-  return out;
+export function validateResult(result, context) {
+  if (result?.is_error || !result?.structured_output) throw Error('Unusable model result');
+  return validateAssessment(result.structured_output, context, { isolated: true });
 }
 export function reserveBudget(ledger, day, amount, limit) {
   if (!ledger || ledger.version !== 1 || !ledger.reservations || typeof ledger.reservations !== 'object' || Array.isArray(ledger.reservations)) throw Error('Invalid budget ledger');
@@ -192,7 +183,11 @@ export async function main(argv = process.argv.slice(2)) {
   let containerName;
   try {
     const databaseToken = secret('Supabase CLI', true);
-    const tickets = await dbQuery(databaseToken, QUEUE_SQL);
+    const caseDirectory = path.join(c.stateDirectory, 'cases');
+    await ensureState(caseDirectory);
+    const queue = await collectQueue(query => dbQuery(databaseToken, query), caseDirectory);
+    const tickets = queue.items;
+    if (queue.attention.length) console.error(`ATTENTION: stalled internal work requires operational review: ${queue.attention.join(', ')}`);
     if (!tickets.length) { console.log('idle: no approved actionable tickets'); return; }
     const apiKey = secret(c.anthropicKeychainService);
     if (!apiKey) throw Error('Dedicated ticket-worker key missing');
@@ -203,7 +198,7 @@ export async function main(argv = process.argv.slice(2)) {
     const prompt = await fs.readFile(path.join(HERE, 'ticket-agent-isolated-prompt.md'), 'utf8');
     for (const ticket of tickets) {
       // A per-ticket process prevents one reporter's data entering another's context.
-      if (!/^[a-f0-9-]{36}$/.test(ticket.id) || typeof ticket.from_admin !== 'boolean' || !Array.isArray(ticket.thread)) throw Error('Malformed ticket queue');
+      const context = await loadQueuedContext(query => dbQuery(databaseToken, query), ticket, caseDirectory);
       const day = new Date().toISOString().slice(0, 10);
       ledger = reserveBudget(ledger, day, c.maxCallBudgetUsd, c.maxDailyReservationUsd);
       // Reserve before launch. No refund after crashes, unknown provider outcomes, or retries.
@@ -214,19 +209,22 @@ export async function main(argv = process.argv.slice(2)) {
       const sha = await snapshot(c.repository, workspace);
       await fs.cp(workspace, path.join(runDirectory, 'baseline'), { recursive: true });
       containerName = `credentialdomd-ticket-${randomUUID()}`;
-      const input = JSON.stringify({ ticket: { ...ticket, body: String(ticket.body ?? '').slice(0, 24000), subject: String(ticket.subject ?? '').slice(0, 500) } });
+      const input = JSON.stringify({ support_context: context });
+      await writePrivate(path.join(runDirectory, 'context.json'), input);
       const output = command(c.dockerBinary, containerArgs(c, workspace, containerName, prompt), {
         input, timeout: c.timeoutSeconds * 1000,
         env: { PATH: '/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin', HOME: os.homedir(), ANTHROPIC_API_KEY: apiKey },
       });
       command(c.dockerBinary, ['rm', '-f', containerName]); containerName = undefined;
-      const result = validateResult(JSON.parse(output));
+      const result = validateResult(JSON.parse(output), context);
       // Never execute model-produced code. These source files are review artifacts only.
       await writePrivate(path.join(runDirectory, 'review.json'), JSON.stringify({ ticketId: ticket.id, sourceRevision: sha, ...result }, null, 2));
-      if (c.sendReplies) {
-        const posted = await dbQuery(databaseToken, replySQL(ticket, result.reply));
-        console.log(posted.length === 1 ? 'Reply posted; ticket left open' : 'Reply withheld: ticket changed or approval was withdrawn');
-      } else console.log('Draft prepared; sending is disabled');
+      if (context.run_mode === 'continuation' || c.sendReplies) {
+        console.log(JSON.stringify(await finishRun(query => dbQuery(databaseToken, query), caseDirectory, context, result, { sourceRevision: sha })));
+      } else {
+        await saveReview(caseDirectory, context, result, sha);
+        console.log('Draft prepared; sending is disabled');
+      }
       console.log(`Review artifacts: ${runDirectory}`);
     }
   } finally {
