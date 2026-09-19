@@ -150,6 +150,8 @@ Run without production access or provider calls:
 node --test scripts/ticket-agent-context.test.mjs scripts/ticket-agent-context-races.test.mjs scripts/ticket-agent-isolated.test.mjs
 node scripts/ticket-approval.test.mjs
 python3 scripts/ticket-agent-context.postgres.py
+python3 scripts/ticket-agent-hostpath.test.py
+python3 scripts/ticket-agent-cli-contract.test.py
 zsh -n scripts/ticket-agent.sh
 node --check scripts/ticket-agent-context.mjs
 node --check scripts/ticket-agent-isolated.mjs
@@ -175,10 +177,38 @@ Continuation regressions cover no-new-message work, owner waits, crash reservati
 approval suppression, fair bounded scheduling, no publication, and explicit completion.
 Existing approval and isolated worker permission/budget tests remain required.
 
-Before rollout, use synthetic tickets with the installed CLI to verify its structured
-result format and run the full guarded host path in a nonproduction database. The
-provider/model was not called by these tests. Independently review release claims;
-no parser can establish that a model actually performed the tests it describes.
+The full-host test runs a private copy of the legacy shell with only its fixed
+repository, log, lock, CLI and case-state paths substituted. Synthetic credential
+and model shims replace Keychain/provider access; the actual Node entry points,
+schema checks, context collector and generated publication SQL run unchanged.
+Every fetch is replaced by an adapter to a temporary PostgreSQL database over an
+owner-only Unix socket with TCP disabled. There is no network fallback. Its 28
+checks include normal replies, two separate customer sessions, resolved history,
+approval withdrawal/reapproval, stale input, changed ownership, invalid model
+output, repeated answered questions, database failure, quiet follow-through,
+new-input promotion, and owner-decision waits. It does not exercise launchd or
+provider authentication. PostgreSQL startup may require local process permissions
+that permit shared memory; the database is always stopped in `finally`.
+
+The installed-CLI contract test is separate from the full-host model shim. On
+2026-09-19 it exercised Claude Code **2.1.221** at the legacy runner's configured
+path, with the real support JSON Schema and one synthetic streaming response from
+an ephemeral loopback mock API. The actual CLI produced the expected top-level
+`structured_output`, which passed the trusted host assessment validator. The test
+uses a fake key, an environment allowlist, `--bare`, empty settings/MCP/tools and
+no session persistence. An OS profile denies network access except that specific
+loopback port and denies Keychain reads/command execution. A negative socket
+probe confirms unlisted destinations are denied. If the OS profile cannot apply,
+the test stops before starting a model session; never retry it unrestricted.
+
+These reproducible tests complete the local synthetic host/output-contract checks.
+No real provider, customer data, production database, credential lookup, scheduler
+or live worker is involved. Real API/OAuth authentication, provider model
+availability, normal-mode CLI customizations and actual model answer quality are
+not tested. The installed CLI uses additional isolation flags for this test;
+its output contract is exercised, not every production CLI behavior. Independently
+review release claims: no parser can establish that a model actually performed
+the product tests it describes.
 
 ## Installation effect
 
