@@ -22,6 +22,7 @@ import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusS
 import { CODER_MODELS } from "../../utils/cptCoder";
 import FoundingMemberBadge from "../shared/FoundingMemberBadge";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
+import SignInMethodsCard from "./SignInMethodsCard";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
 import {
   addProblem, normalizeAddress, pendingLine, resendBlockedReason,
@@ -204,6 +205,8 @@ function SettingsSection({ onUpgrade }) {
           </button>
         )}
       </div>
+
+      <SignInMethodsCard theme={T} />
 
       {/* Profile */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>

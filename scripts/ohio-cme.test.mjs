@@ -76,7 +76,7 @@ eq(standing.needsAction[0].item.needsConfirmation, true, "Home action identifies
 // Load actual assistant and transcript modules. Stub network transport only;
 // pure calculations and source data are the production modules.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sandbox = vm.createContext({ console, Date, AbortController, setTimeout, clearTimeout });
+const sandbox = vm.createContext({ console, URL, Date, AbortController, setTimeout, clearTimeout });
 const modules = new Map();
 const transportNames = ["geminiCall", "proxyErrorMessage", "anthropicAvailable", "anthropicClientFor", "anthropicErrorMessage", "anthropicSdk", "AI_MESSAGES"];
 const transport = new vm.SyntheticModule(transportNames, function () {

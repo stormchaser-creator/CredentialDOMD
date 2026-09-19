@@ -6,6 +6,7 @@ import { generateId } from "../../utils/helpers";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
 import { archivedReferenceActions, buildAssistantHistory, latestReferenceSelection, resolveReferenceSelection } from "../../utils/referenceDraft.js";
 import ReferenceDraftCard from "./ReferenceDraftCard.jsx";
+import VeraSourceReceipt from "./VeraSourceReceipt.jsx";
 import { buildExport, makeSpreadsheetFile } from "../../utils/exportData";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { supabase } from "../../lib/supabase";
@@ -19,7 +20,7 @@ import { checkStorageQuota } from "../../utils/storageQuota";
 
 // Keep words and reference selection IDs; never persist generated contact text.
 const slimForArchive = (msgs) =>
-  msgs.map(m => ({ id: m.id, role: m.role, text: m.text || "", attachName: m.attachName || undefined, actions: archivedReferenceActions(m.actions) }));
+  msgs.map(m => ({ id: m.id, role: m.role, text: m.text || "", attachName: m.attachName || undefined, actions: archivedReferenceActions(m.actions), sourceEvidence: m.sourceEvidence }));
 
 /**
  * The Assistant — chat with your credential file. Ask anything about your
@@ -214,7 +215,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           result.reply = `${result.reply || ""}\n\nI could not find that record. Try the search box on Home, or tell me the exact name.`.trim();
         }
       }
-      const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions };
+      const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions, sourceEvidence: result.sourceEvidence };
       // Keep the file with the proposal so Approve can save it to Files too —
       // only for documents the user just attached, never the implicit re-send.
       if (explicitAtt?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record")) {
@@ -537,6 +538,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
             }}>
               {m.attachName && <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 4 }}>📎 {m.attachName}</div>}
               {m.text}
+              {m.role === "model" && <VeraSourceReceipt evidence={m.sourceEvidence} />}
             </div>
             {m.failed && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
@@ -695,6 +697,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                   }}>
                     {m.attachName && <div style={{ fontSize: 11.5, opacity: 0.85, marginBottom: 3 }}>{"📎"} {m.attachName}</div>}
                     {m.text}
+              {m.role === "model" && <VeraSourceReceipt evidence={m.sourceEvidence} />}
                   </div>
                 </div>
               ))}
