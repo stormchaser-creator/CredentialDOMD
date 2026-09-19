@@ -1290,7 +1290,7 @@ const CMEP_SKIP = /^(official transcript|published\b|\d+ of \d+$|\d{3} michigan 
  * M/D/YYYY. Columns are separated by 2+ spaces or a tab. Within a row, a
  * chunk that starts with a number followed by a credit word is a credit
  * line: AMA PRA credits give the hours; board points and MOC credit types go
- * to notes (and stand in for hours when the row has no AMA PRA line). Text
+ * to notes; a MOC-only row leaves CME hours blank for review. Text
  * chunks after the title are the provider, with earlier extras treated as a
  * wrapped title.
  */

@@ -56,7 +56,7 @@ test('packaging refuses modified video bytes or stale advertised players before 
  const root=await fixture(t);
  for(const path of ['dist','scripts','public/knowledge','site-dist'])await mkdir(resolve(root,path),{recursive:true});
  await writeFile(resolve(root,'dist/index.html'),'<script src="/app/assets/test.js"></script>');
- for(const page of ['index','locums','security','privacy','terms','help','credential-access'])await writeFile(resolve(root,`landing/${page}.html`),'synthetic');
+ for(const page of ['index','locums','security','privacy','terms','help','cme','credential-access'])await writeFile(resolve(root,`landing/${page}.html`),'synthetic');
  await writeFile(resolve(root,'scripts/root-sw-retirement.js'),'synthetic');
  await writeFile(resolve(root,'public/knowledge/credentialdo-help.json'),JSON.stringify(help));
  await writeFile(resolve(root,'site-dist/keep.txt'),'previous package');

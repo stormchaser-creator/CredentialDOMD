@@ -29,7 +29,7 @@ import { useAiAvailable } from "../../utils/aiClient";
  */
 
 const SRC_CEBROKER = { id: "cebroker-pdf", label: "CE Broker CE Report (PDF)", verified: true, note: "Layout read directly. The CE Report prints no certificate number and no AMA credit category, so every row is set to AMA PRA Category 1 for you to confirm. Course and provider numbers are kept in Notes." };
-const SRC_CMEP = { id: "cmepassport-pdf", label: "ACCME CME Passport transcript (PDF)", verified: true, note: "Layout read directly from the ACCME transcript. Board MOC points and credit types are kept in Notes; rows with MOC points but no AMA PRA credits use the points as hours." };
+const SRC_CMEP = { id: "cmepassport-pdf", label: "ACCME CME Passport transcript (PDF)", verified: true, note: "Layout read directly from the ACCME transcript. Board MOC points and credit types are kept in Notes; rows with only MOC points leave CME hours blank for review." };
 const SRC_AI = { id: "ai", label: "AI-structured transcript", verified: false, note: "Rows were structured by the AI reader from the document text. Check dates and hours against the original before adding." };
 const SRC_LINES = { id: "lines", label: "Text, read line by line", verified: false, note: "Each line with a date became a row; hours are the number next to a credit word, the longest remaining text is the title. Check every row." };
 

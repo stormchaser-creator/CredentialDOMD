@@ -66,7 +66,7 @@ test('product prose renders as text, not executable markup', () => {
 
 test('help links have existing destinations and use real app entry instead of fictional routes', async () => {
   const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
-  const routes = { '/': 'landing/index.html', '/app/': 'index.html', '/locums': 'landing/locums.html', '/security': 'landing/security.html', '/privacy': 'landing/privacy.html', '/terms': 'landing/terms.html' };
+  const routes = { '/': 'landing/index.html', '/app/': 'index.html', '/cme/': 'landing/cme.html', '/locums': 'landing/locums.html', '/security': 'landing/security.html', '/privacy': 'landing/privacy.html', '/terms': 'landing/terms.html' };
   for (const [, href] of html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)) {
     if (href.startsWith('#')) assert.ok(ids.has(href.slice(1)), href);
     else if (href.startsWith('/help/videos/')) {
