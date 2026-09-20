@@ -122,6 +122,15 @@ test('HTML, oversized and unexpected error responses cannot claim success or exp
     await assert.rejects(f.client.review(target), e => e.code === 'lifetime_grant_unavailable' && !e.message.includes('private_provider'));
   }
 });
+test('actual protected endpoint refusals have actionable safe messages and cannot claim a grant', async () => {
+  for (const [code, message] of [['feature_disabled', /not available yet/], ['verified_primary_required', /verified primary email/],
+    ['subscription_renews', /turn off renewal/], ['checkout_pending', /open or unconfirmed checkout/],
+    ['review_changed', /review the account again/], ['billing_proof_expired', /billing check expired/],
+    ['legacy_billing_unresolved', /billing needs review/], ['billing_identity_unavailable', /Billing ownership/], ['invalid_reason', /10 and 500/]]) {
+    const f = setup(); f.response = () => Response.json({ error: code, providerDebug: 'synthetic-private-details' }, { status: 409 });
+    await assert.rejects(f.client.review(target), error => error.code === code && message.test(error.message) && !error.message.includes('private-details'));
+  }
+});
 test('review rejects a different profile, subject, unverified mailbox or untyped billing/grant permission', async () => {
   for (const alter of [r => r.target.profileId = grantId, r => r.target.clerkSubject = 'user_other', r => r.target.verifiedPrimaryEmail = '',
     r => r.lifetime.credential = 'true', r => r.canGrant = 'true', r => r.billing.hasExistingSubscription = 'false', r => r.expiresAt = 'invalid']) {

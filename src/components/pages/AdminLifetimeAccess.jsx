@@ -72,6 +72,7 @@ function LifetimeAccessForTarget({ accountId, target, theme: T, onClose, onGrant
         {result ? <div role="status">
           <p><strong>Credential and Practice are free for life for this account.</strong></p>
           <p>No card, checkout, subscription, or email was created.</p>
+          <p>The member can refresh their app to load the new access.</p>
           <p style={{ fontSize: 12, color: T.textMuted }}>Recorded {new Date(result.grantedAt).toLocaleString()}. Grant: {result.grantId}</p>
         </div> : bothLifetime ? <p role="status">This account already has Credential and Practice free for life. No new grant is needed.</p> : <>
           {(review.lifetime.credential || review.lifetime.practice) && <p>Existing lifetime access is preserved. This grant adds lifetime access for both products.</p>}
