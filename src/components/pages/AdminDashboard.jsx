@@ -12,9 +12,10 @@ import { waitlistView, leadState } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
+import AdminLifetimeAccess from "./AdminLifetimeAccess";
 
 /**
- * AdminDashboard — gated to admin emails only.
+ * AdminDashboard — displayed for server-verified administrators only.
  * Reads from `admin_feedback_recent`, `admin_tickets_open`, `admin_signups_daily`
  * views (created in supabase-tracking-migration.sql).
  */
@@ -827,6 +828,7 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [showTest, setShowTest] = useState(false);
+  const [lifetimeTarget, setLifetimeTarget] = useState(null);
 
   const refresh = async () => {
     const [pr, ba] = await Promise.all([
@@ -897,6 +899,10 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
 
   return (
     <div>
+      <div style={{ ...card, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Give someone free lifetime access</div>
+        <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 0" }}>Have them create and verify an account at credentialdomd.com/app/ first. Creating an account requires no card. Then choose “Give free lifetime access” on their account below to review the verified identity and record your reason. This does not send an email.</p>
+      </div>
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 6 }}>Invite a physician</div>
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>Invitation emails are on hold for owner review of the exact message and recipient list. An invitation request will not send email or change access while held.</div>
@@ -986,10 +992,15 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
               {u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
               {u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
               {u.access_status === "revoked" && chip("Back to pending", T.textDim, () => setAccess(u, "pending"), false)}
+              {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
+                && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
             </div>
           </div>
         );
       })}
+      {lifetimeTarget && <AdminLifetimeAccess target={lifetimeTarget} onClose={() => setLifetimeTarget(null)} onGranted={result => {
+        setUsers(rows => rows.map(row => row.id === result.target.profileId && row.auth_user_id === result.target.clerkSubject ? { ...row, access_status: "active" } : row));
+      }} />}
     </div>
   );
 }
