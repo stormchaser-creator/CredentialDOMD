@@ -316,3 +316,22 @@ test('cancellation portal uses its protected endpoint and refuses every other re
     await assert.rejects(setup({fetchImpl:async()=>Response.json({url})}).client.portal(), unavailable);
   }
 });
+
+test('late resume quote and checkout responses cannot cross an account or session switch', async () => {
+  for (const action of ['quote','checkout']) {
+    const response=deferred();
+    const f=setup({fetchImpl:()=>response.promise});
+    const result=action==='quote' ? f.client.quote({offerId:'core'}) : f.client.checkout(consent);
+    await setImmediate();
+    f.switchSession({user:{id:'user_synthetic_b'},getToken:async()=> 'different-synthetic-token'});
+    response.resolve(Response.json(action==='quote' ? quoteFixture() : {url:'https://checkout.stripe.com/c/pay/synthetic'}));
+    await assert.rejects(result, unavailable);
+  }
+});
+
+test('resume owner, offer, expiry and pending refusals return errors without a payment URL', async () => {
+  for (const error of ['checkout_owner_mismatch','checkout_offer_already_selected','quote_expired','checkout_pending']) {
+    const f=setup({fetchImpl:async()=>Response.json({error},{status:409})});
+    await assert.rejects(f.client.checkout(consent), failure=>failure.code===error);
+  }
+});

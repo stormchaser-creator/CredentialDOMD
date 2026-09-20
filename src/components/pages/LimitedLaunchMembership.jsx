@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { createLimitedLaunchClient } from "../../utils/limitedLaunchClient.js";
 import { readLaunchInvitation, clearLaunchInvitation } from "../../utils/launchInvitation.js";
+import { accessAuthority, canReviewBillingOffer } from "../../utils/limitedLaunchAccess.js";
 
 const messages = {
   free_beta_active: "Your free beta is still active. No payment is required. You can review a membership after it ends.",
@@ -14,6 +15,9 @@ const messages = {
   subscription_already_exists: "You already have a subscription. A second purchase cannot start here.",
   quote_expired: "This offer has expired. Review a fresh offer and confirm its terms before continuing.",
   quote_consent_required: "Review the displayed terms and confirm them before continuing.",
+  checkout_offer_already_selected: "Your saved checkout has different terms. It could not be resumed; no new checkout was started.",
+  checkout_owner_mismatch: "This saved checkout could not be verified for your account. No payment page was opened.",
+  checkout_pending: "Your checkout is still being checked. Please try again shortly.",
 };
 const messageFor = error => messages[error?.code] || "Membership could not be updated. Your saved records have not changed. Please try again.";
 
@@ -36,6 +40,7 @@ function MembershipForAccount({ accountId, onActivated }) {
   const access = limitedLaunch.access;
   const button = { border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 9, padding: "11px 14px", cursor: busy ? "wait" : "pointer" };
   const current = turn => request.current === turn && window.Clerk?.user?.id === accountId;
+  const currentlyPermitted = offerId => canReviewBillingOffer(accessAuthority.state(accountId), offerId);
   const activate = async () => {
     if (busy || !invitation || access?.invitationActivationEnabled !== true) return;
     const turn = ++request.current;
@@ -52,17 +57,17 @@ function MembershipForAccount({ accountId, onActivated }) {
     finally { if (current(turn)) setBusy(false); }
   };
   const review = async offerId => {
-    if (busy || access?.billingEnabled !== true || access?.checkoutEligible !== true) return;
+    if (busy || !currentlyPermitted(offerId)) return;
     const turn = ++request.current;
     setBusy(true); setMessage(null); setConsent(false); setQuote(null);
     try {
       const result = await client.quote({ offerId, ...(invitation ? { invitationToken: invitation } : {}) });
-      if (current(turn)) setQuote(result);
+      if (current(turn) && currentlyPermitted(offerId)) setQuote(result);
     } catch (error) { if (current(turn)) setMessage(messageFor(error)); }
     finally { if (current(turn)) setBusy(false); }
   };
   const purchase = async () => {
-    if (busy || !quote || !consent) return;
+    if (busy || !quote || !consent || !currentlyPermitted(quote.offerId)) return;
     if (Date.parse(quote.expiresAt) <= Date.now()) {
       setConsent(false); setMessage(messages.quote_expired); return;
     }
@@ -70,7 +75,7 @@ function MembershipForAccount({ accountId, onActivated }) {
     setBusy(true); setMessage(null);
     try {
       const result = await client.checkout({ quoteId: quote.quoteId, consentHash: quote.consentHash, consent: true });
-      if (current(turn)) window.location.assign(result.url);
+      if (current(turn) && currentlyPermitted(quote.offerId)) window.location.assign(result.url);
     } catch (error) {
       if (current(turn)) {
         setConsent(false); setMessage(messageFor(error));
@@ -81,6 +86,8 @@ function MembershipForAccount({ accountId, onActivated }) {
   if (!limitedLaunch.enabled) return null;
   const lifetime = access?.lifetime.credential || access?.lifetime.practice;
   const beta = access?.freeBeta?.state === "active";
+  const resumeOffer = access?.checkoutResumeAvailable === true ? access.checkoutResumeOfferId : null;
+  const permittedQuote = !!quote && canReviewBillingOffer(access, quote.offerId);
   return <section style={{ color: T.text, lineHeight: 1.6 }} aria-label="Membership">
     <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Your membership</h2>
     {message && <p role="status">{message}</p>}
@@ -94,13 +101,18 @@ function MembershipForAccount({ accountId, onActivated }) {
             </div>}
             {access?.accessStatus === "pending" && !invitation && <p>Open your personal invitation link and sign in with its verified email address. Account approval and payment eligibility are checked securely.</p>}
             {invitation && access?.invitationActivationEnabled !== true && <p>Invitation activation is not open yet. Please check again later.</p>}
-            <p>Paid membership is optional. {access?.billingEnabled && access?.checkoutEligible ? "Review the exact offer before choosing to pay." : "An eligible membership offer is not available for this account right now."}</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <button style={button} disabled={busy || !access?.billingEnabled || !access?.checkoutEligible} onClick={() => review("core")}>Review Credential offer</button>
-              <button style={button} disabled={busy || !access?.billingEnabled || !access?.checkoutEligible} onClick={() => review("core_locum")}>Review Credential + Practice offer</button>
-            </div>
+            {resumeOffer ? <>
+              <p>You have an unfinished {resumeOffer === "core" ? "Credential" : "Credential + Practice"} checkout. Review its current terms and confirm them before returning to payment.</p>
+              <button style={button} disabled={busy || !canReviewBillingOffer(access, resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>
+            </> : <>
+              <p>Paid membership is optional. {access?.billingEnabled && access?.checkoutEligible ? "Review the exact offer before choosing to pay." : "An eligible membership offer is not available for this account right now."}</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <button style={button} disabled={busy || !canReviewBillingOffer(access, "core")} onClick={() => review("core")}>Review Credential offer</button>
+                <button style={button} disabled={busy || !canReviewBillingOffer(access, "core_locum")} onClick={() => review("core_locum")}>Review Credential + Practice offer</button>
+              </div>
+            </>}
           </>}
-    {quote && !lifetime && !beta && <section style={{ marginTop: 20, padding: 16, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12 }}>
+    {permittedQuote && !lifetime && !beta && <section style={{ marginTop: 20, padding: 16, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12 }}>
       <h3 style={{ margin: "0 0 8px" }}>{quote.name}</h3>
       <p><strong>{new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(quote.annualCents / 100)} per year</strong></p>
       <p style={{ whiteSpace: "pre-wrap" }}>{quote.consentText}</p>

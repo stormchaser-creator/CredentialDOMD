@@ -41,9 +41,12 @@ export function validateAccessSnapshot(value) {
   if (value.accessStatus !== "active" && scopes.some(scope => operations.some(op => value.capabilities[scope][op]))) {
     throw new Error("Membership information could not be verified.");
   }
-  for (const flag of ["checkoutEligible", "invitationActivationEnabled"]) {
+  for (const flag of ["checkoutEligible", "checkoutResumeAvailable", "invitationActivationEnabled"]) {
     if (value[flag] !== undefined && typeof value[flag] !== "boolean") throw new Error("Membership information could not be verified.");
   }
+  if (value.checkoutResumeAvailable === true
+    ? value.billingEnabled !== true || !["core", "core_locum"].includes(value.checkoutResumeOfferId)
+    : value.checkoutResumeOfferId != null) throw new Error("Checkout resume information could not be verified.");
   if (value.pricePhase != null && !["founding", "earlybird", "standard"].includes(value.pricePhase)) throw new Error("Membership information could not be verified.");
   if (value.freeBeta !== undefined) {
     const beta = value.freeBeta;
@@ -54,6 +57,16 @@ export function validateAccessSnapshot(value) {
     }
   }
   return structuredClone(value);
+}
+
+/** Resume permits only the server's saved offer; it never grants product access. */
+export function canReviewBillingOffer(access, offerId) {
+  if (!access || access.needsRefresh || access.billingEnabled !== true
+    || !["core", "core_locum"].includes(offerId) || !["active", "pending"].includes(access.accessStatus)
+    || access.purchasedOfferId || access.lifetime?.credential || access.lifetime?.practice
+    || access.freeBeta?.state === "active") return false;
+  if (access.checkoutResumeAvailable === true) return access.checkoutResumeOfferId === offerId;
+  return access.checkoutEligible === true;
 }
 
 /** Use elapsed time since receipt, so a physician's clock does not set a trial's end. */

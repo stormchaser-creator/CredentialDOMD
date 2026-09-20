@@ -18,6 +18,14 @@ No email, invitation, provider notification, customer grant, or payment was issu
 - Show purchase controls only when protected server fields allow them. Display the exact server offer and consent text. `limited-checkout` receives only the quote ID, consent hash, and explicit boolean consent. An expired or replaced quote requires another review and confirmation.
 - Use the protected `limited-customer-portal` for existing subscriptions, including from the paused-access screen. The limited-launch cancellation page never invokes the legacy deletion countdown or reactivation write.
 
+## Saved checkout resume follow-up
+
+The client consumes the backend `43691f6b` contract: optional `checkoutResumeAvailable` and `checkoutResumeOfferId`. A true resume flag requires billing enabled and exactly `core` or `core_locum`; false or absent cannot carry an actionable offer ID. Resume grants no Credential or Practice capability.
+
+When new-purchase eligibility is false but an owned incomplete checkout can be resumed, the screen shows one **Resume checkout** action for that saved offer. It requests a fresh `billing-quote`, displays the exact terms, and resets consent. The existing `limited-checkout({quoteId, consentHash, consent:true})` flow remains unchanged. The server verifies and returns the saved checkout; the client does not create an alternative subscription or substitute another offer.
+
+Review, quote refresh, purchase, and redirect all recheck the exact offer against current account access. Expired offers, ownership/offer conflicts, pending backend work, stale membership, and late responses do not bypass consent or open a payment page. Six synthetic follow-up tests cover the optional contract, both saved offers, blocked alternatives, initial consent state, account switches, stale responses, and backend refusals.
+
 ## Known activation blockers
 
 1. **Persistence races remain unresolved.** Initial guards cover collection CRUD, upload, bulk sync, tombstones, and replay admission, but a write already waiting on asynchronous work can outlive its account or entitlement. Queued writes, document operations, replay retries, and replay queue reconciliation need the separately reviewed owner-pinning changes. Do not interpret the local guards as a replacement for server authorization.
@@ -29,7 +37,7 @@ No email, invitation, provider notification, customer grant, or payment was issu
 
 ## Validation
 
-The access, transport, invitation, and rendered-screen suite contains 40 passing synthetic tests. It covers server-time expiry, lifetime/paid overlap, failed refreshes, identity changes, document relinking, atomic restore preflight, transport deadlines/body bounds, invitation privacy, offer/consent validation, strict Stripe hosts, read-only records/exports, and disabled sales controls. These tests perform no provider or customer requests.
+The initial access, transport, invitation, and rendered-screen foundation passed 40 synthetic tests, with additional resume tests described above. It covers server-time expiry, lifetime/paid overlap, failed refreshes, identity changes, document relinking, atomic restore preflight, transport deadlines/body bounds, invitation privacy, offer/consent validation, strict Stripe hosts, read-only records/exports, and disabled sales controls. These tests perform no provider or customer requests.
 
 Both the default-OFF and explicitly enabled production builds pass. New client modules pass targeted ESLint. Existing modified modules retain their prior lint findings, with no additional findings relative to the base commit. Separate persistence regression evidence must be read alongside these passing checks; it is not an activation pass.
 

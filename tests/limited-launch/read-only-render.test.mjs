@@ -71,3 +71,16 @@ test('server-disabled sales render review buttons disabled and no checkout conse
   assert.match(html, /disabled=""[^>]*>Review Credential offer/);
   assert.doesNotMatch(html, /type="checkbox"|Continue to secure payment/);
 });
+
+test('each saved offer renders only Resume checkout and requires a fresh quote before consent', () => {
+  for (const offerId of ['core','core_locum']) {
+    const value=fixture(); globalThis.__limitedLaunchRenderFixture=value;
+    Object.assign(value.limitedLaunch.access,{accessStatus:'active',billingEnabled:true,checkoutEligible:false,checkoutResumeAvailable:true,checkoutResumeOfferId:offerId});
+    const html=render(Membership);
+    assert.match(html, /Resume checkout/);
+    assert.doesNotMatch(html, /disabled=""[^>]*>Resume checkout/);
+    assert.doesNotMatch(html, /Review Credential offer|Review Credential \+ Practice offer|type="checkbox"|Continue to secure payment/);
+    value.limitedLaunch.access.needsRefresh=true;
+    assert.match(render(Membership), /disabled=""[^>]*>Resume checkout/);
+  }
+});

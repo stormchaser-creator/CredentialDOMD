@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange } from '../../src/utils/limitedLaunchAccess.js';
+import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange, canReviewBillingOffer } from '../../src/utils/limitedLaunchAccess.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 
 const t = Date.parse('2026-09-19T12:00:00Z');
@@ -145,4 +145,49 @@ test('registered original document scope protects persistence and unknown deleti
   assert.equal(authority.allowsMutation('documents',{id:'unknown'}),false);
   authority.reset('user_b');
   assert.equal(authority.allowsMutation('documents',{id:'doc',linkedTo:'licenses:one'}),false);
+});
+
+test('resume validates its optional flag and exact offer pair without granting product access', () => {
+  for (const offerId of ['core', 'core_locum']) {
+    const snapshot = fixture();
+    snapshot.purchasedOfferId = null; snapshot.billingEnabled = true; snapshot.checkoutEligible = false;
+    snapshot.checkoutResumeAvailable = true; snapshot.checkoutResumeOfferId = offerId;
+    snapshot.capabilities.credential.write = false; snapshot.capabilities.practice.write = false;
+    const checked = validateAccessSnapshot(snapshot);
+    assert.equal(canReviewBillingOffer(checked, offerId), true);
+    assert.equal(canReviewBillingOffer(checked, offerId === 'core' ? 'core_locum' : 'core'), false);
+    assert.deepEqual(checked.capabilities, snapshot.capabilities);
+    // Even conflicting new-purchase eligibility cannot open an alternative while resuming.
+    checked.checkoutEligible = true;
+    assert.equal(canReviewBillingOffer(checked, offerId === 'core' ? 'core_locum' : 'core'), false);
+  }
+  assert.doesNotThrow(() => validateAccessSnapshot(fixture()));
+  assert.doesNotThrow(() => validateAccessSnapshot({...fixture(), checkoutResumeAvailable:false, checkoutResumeOfferId:null}));
+});
+
+test('malformed resume fields and disabled billing cannot authorize a saved offer', () => {
+  const base = {...fixture(), purchasedOfferId:null, billingEnabled:true, checkoutEligible:false};
+  for (const patch of [
+    {checkoutResumeAvailable:'true',checkoutResumeOfferId:'core'},
+    {checkoutResumeAvailable:true,checkoutResumeOfferId:null},
+    {checkoutResumeAvailable:true,checkoutResumeOfferId:'enterprise'},
+    {checkoutResumeAvailable:false,checkoutResumeOfferId:'core'},
+    {checkoutResumeOfferId:'core'},
+    {checkoutResumeAvailable:true,checkoutResumeOfferId:'core',billingEnabled:false},
+  ]) assert.throws(() => validateAccessSnapshot({...base,...patch}), /could not be verified/);
+});
+
+test('resume stops on stale membership, paid/lifetime/beta status, revocation, or account switch', () => {
+  const base = {...fixture(),purchasedOfferId:null,billingEnabled:true,checkoutEligible:false,checkoutResumeAvailable:true,checkoutResumeOfferId:'core'};
+  for (const patch of [
+    {needsRefresh:true}, {billingEnabled:false}, {accessStatus:'revoked'}, {purchasedOfferId:'core'},
+    {lifetime:{credential:true,practice:true}}, {freeBeta:{state:'active'}},
+  ]) assert.equal(canReviewBillingOffer({...base,...patch},'core'),false);
+  let actor='user_a';
+  const authority=createAccessAuthority({enabled:true,currentAccount:()=>actor,now:()=>0});
+  authority.reset(actor); authority.accept(actor,base);
+  assert.equal(canReviewBillingOffer(authority.state(actor),'core'),true);
+  actor='user_b';
+  assert.equal(canReviewBillingOffer(authority.state('user_a'),'core'),false);
+  assert.equal(authority.accept('user_a',base),false);
 });
