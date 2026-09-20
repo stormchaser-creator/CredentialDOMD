@@ -51,6 +51,7 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 
 ## Sign-in experience approved September 20, 2026
 
+- “Beta” describes the product's early release stage while bugs are worked out; it is not a separate account type, login, or pricing tier. Access is separately determined by approved lifetime grants, paid membership, or the protected historical waitlist's 30-day free trial honoring earlier advertising. Do not make all early-release users free or charge the protected trial automatically.
 - Present one email-first sign-in flow for everyone. Do not ask people to choose beta setup versus regular login or expose internal account-migration details as separate actions.
 - Let the authentication provider guide existing and new identities through the required verification/setup. Preserve verified-email account continuity, existing records and access behind that single flow. A simple reminder to use the existing account email is sufficient.
 - This UI requirement does not waive identity verification, change password requirements, enable billing, or authorize paid SMS.
