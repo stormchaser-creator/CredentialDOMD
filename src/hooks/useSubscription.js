@@ -333,7 +333,7 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
       isPro: limitedLaunch.access?.capabilities.credential.read === true,
       isPractice: false, isDevMode: false,
       isPaid: !!limitedLaunch.access?.purchasedOfferId,
-      hasSubscription: !!limitedLaunch.access?.purchasedOfferId,
+      hasSubscription: !!(limitedLaunch.access?.purchasedOfferId || limitedLaunch.access?.scheduledMembership),
       isLifetime: limitedLaunch.access?.lifetime.credential === true && limitedLaunch.access?.lifetime.practice === true,
       isFreeBeta: limitedLaunch.access?.freeBeta?.state === "active",
       isTrialing: limitedLaunch.access?.practiceTrial.state === "active",

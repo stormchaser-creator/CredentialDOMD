@@ -422,3 +422,31 @@ test('a delayed initialization acknowledgment is rejected after a same-account s
   switchSession({ user: { id: 'user_synthetic_a' } }); response.resolve(Response.json(initializationFixture()));
   await assert.rejects(pending, unavailable);
 });
+
+
+test('active-beta quote requires complete zero-now timing and server-pinned original end', async () => {
+  for (const offerId of ['core', 'core_locum']) {
+    const quote = { ...quoteFixture(offerId, offerId === 'core' ? 'founding' : 'standard'),
+      paymentTiming: 'after_beta', paymentAtCheckout: false, amountDueNowCents: 0,
+      betaEndsAt: '2030-10-20T12:00:00.000123+00:00', firstChargeAt: '2030-10-20T12:00:01Z' };
+    const { client } = setup({ fetchImpl: async () => Response.json(quote) });
+    assert.deepEqual(await client.quote({ offerId }), quote);
+    for (const patch of [
+      { paymentAtCheckout: true }, { amountDueNowCents: quote.annualCents }, { firstChargeAt: null },
+      { betaEndsAt: null }, { firstChargeAt: '2030-10-20T12:00:00Z' },
+      { firstChargeAt: '2030-10-20T12:00:00.500Z' }, { firstChargeAt: '2030-10-20T12:00:02Z' },
+      { paymentTiming: 'now' }, { paymentTiming: 'unknown' },
+    ]) {
+      const broken = setup({ fetchImpl: async () => Response.json({ ...quote, ...patch }) }).client;
+      await assert.rejects(broken.quote({ offerId }), unavailable);
+    }
+  }
+});
+
+test('ordinary explicit-now quote pins full charge and cannot carry a hidden deferred date', async () => {
+  const quote = { ...quoteFixture(), paymentTiming: 'now', amountDueNowCents: 9900, betaEndsAt: null, firstChargeAt: null };
+  assert.deepEqual(await setup({ fetchImpl: async () => Response.json(quote) }).client.quote({ offerId: 'core' }), quote);
+  for (const patch of [{ amountDueNowCents: 0 }, { betaEndsAt: '2030-10-20T12:00:00Z' }, { paymentAtCheckout: false }]) {
+    await assert.rejects(setup({ fetchImpl: async () => Response.json({ ...quote, ...patch }) }).client.quote({ offerId: 'core' }), unavailable);
+  }
+});

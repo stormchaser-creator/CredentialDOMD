@@ -2,9 +2,10 @@ import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { generateCredentialZip, downloadBlob } from "../../utils/credentialExport";
 import { supabase } from "../../lib/supabase";
+import { scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 
 function CancellationPage() {
-  const { data, theme: T, user, userIdRef, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
+  const { data, theme: T, userIdRef, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
   const [reactivating, setReactivating] = useState(false);
@@ -16,7 +17,7 @@ function CancellationPage() {
   const nothingToCancel = !data.settings?.cancelledAt && (isFreeBeta || !hasSubscription);
 
   // Calculate days remaining from cancelled_at stored in profile
-  const { daysLeft, deletionDate, cancelledAt } = useMemo(() => {
+  const { daysLeft, deletionDate } = useMemo(() => {
     const ca = data.settings?.cancelledAt;
     if (!ca) return { daysLeft: 7, deletionDate: null, cancelledAt: null };
     const cancelled = new Date(ca);
@@ -68,8 +69,11 @@ function CancellationPage() {
 
   if (limitedLaunch.enabled) return <section style={{ color: T.text, maxWidth: 520, margin: "0 auto" }}>
     <h1 style={{ fontSize: 22 }}>Membership and cancellation</h1>
-    <p style={{ color: T.textMuted, lineHeight: 1.6 }}>A free beta or Practice trial does not charge automatically and does not require cancellation. You can keep viewing and exporting saved records after it ends.</p>
-    {hasSubscription ? <>
+    <p style={{ color: T.textMuted, lineHeight: 1.6 }}>A free beta does not enroll you in payment automatically. If you explicitly chose a scheduled paid membership, manage that purchase below. The included Practice trial never adds a charge automatically. Your saved records remain available to view and export.</p>
+    {limitedLaunch.access?.scheduledMembership ? <>
+      <p>{scheduledMembershipCopy(limitedLaunch.access.scheduledMembership)}</p>
+      <button onClick={manage}>Manage scheduled membership</button>
+    </> : hasSubscription ? <>
       <p>Manage renewal or cancel your paid subscription in the secure billing portal. Your saved records remain available for viewing and export after membership ends.</p>
       <button onClick={manage}>Manage paid subscription</button>
     </> : <p>No active paid subscription was found.</p>}

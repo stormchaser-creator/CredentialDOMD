@@ -1,6 +1,7 @@
 import { LIMITED_LAUNCH_ACCESS_ENABLED, validateAccessSnapshot } from "./limitedLaunchAccess.js";
 import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from "../../supabase/functions/_shared/accessPolicy.mjs";
 import { isLaunchInvitationToken } from "./launchInvitation.js";
+import { isPinnedBetaChargeDate } from "./membershipTiming.js";
 
 const ENV = import.meta.env || {};
 const SAFE_ERROR_CODES = new Set([
@@ -38,11 +39,21 @@ function validateQuote(value, offerId) {
   if (!expected || value.name !== expected.name || value.annualCents !== expected.annualCents
     || value.currency !== "usd" || value.interval !== "year" || value.pricePhase !== expected.pricePhase
     || value.priceLockedWhileActive !== expected.priceLockedWhileActive || value.practiceTrialDays !== expected.practiceTrialDays
-    || value.trialAutoCharges !== false || value.paymentAtCheckout !== true || value.checkoutEnabled !== true
+    || value.trialAutoCharges !== false || value.checkoutEnabled !== true
     || !uuid(value.quoteId) || !date(value.expiresAt) || !hash(value.consentHash)
     || typeof value.consentVersion !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.consentVersion)
     || typeof value.consentText !== "string" || !value.consentText.trim() || value.consentText.length > 8192
     || unsafeText(value.consentText)) throw unavailable();
+  // Older immediate-charge quotes remain valid. A deferred purchase requires
+  // the complete server-pinned window; never infer a new beta end in the browser.
+  if (value.paymentTiming === "after_beta") {
+    if (value.paymentAtCheckout !== false || value.amountDueNowCents !== 0
+      || !isPinnedBetaChargeDate(value.betaEndsAt, value.firstChargeAt)) throw unavailable();
+  } else if (value.paymentTiming === "now") {
+    if (value.paymentAtCheckout !== true || value.amountDueNowCents !== value.annualCents
+      || value.betaEndsAt !== null || value.firstChargeAt !== null) throw unavailable();
+  } else if (value.paymentTiming !== undefined || value.paymentAtCheckout !== true
+    || value.amountDueNowCents !== undefined || value.betaEndsAt !== undefined || value.firstChargeAt !== undefined) throw unavailable();
   return structuredClone(value);
 }
 

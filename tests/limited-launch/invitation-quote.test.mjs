@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { createLimitedLaunchClient } from '../../src/utils/limitedLaunchClient.js';
 import { createAccessAuthority, canReviewBillingOffer } from '../../src/utils/limitedLaunchAccess.js';
 import { readLaunchInvitation } from '../../src/utils/launchInvitation.js';
+import { quoteMatchesBetaWindow } from '../../src/utils/membershipTiming.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 import { LIMITED_LAUNCH } from '../../supabase/functions/_shared/limitedLaunchCatalog.mjs';
 import { createLimitedLaunchHandlers } from '../../supabase/functions/_shared/limitedLaunchHandlers.mjs';
@@ -50,7 +51,7 @@ function fixture({ invitationEnabled = false, renderedInvitationEnabled = invita
       },
       createPreview: async (_id, _subject, _live, offerId) => ({
         id: '10000000-0000-4000-8000-000000000002', offer_id: offerId,
-        price_phase: offerId === 'core' ? 'earlybird' : 'standard', expires_at: '2026-09-20T12:10:00Z',
+        price_phase: offerId === 'core' ? 'earlybird' : 'standard', annual_cents: offerId === 'core' ? 14900 : 24500, expires_at: '2026-09-20T12:10:00Z',
         consent_version: 'synthetic-v1', consent_hash: 'a'.repeat(64), consent_text: 'Synthetic annual membership consent.',
       }),
     },
@@ -65,7 +66,7 @@ function fixture({ invitationEnabled = false, renderedInvitationEnabled = invita
   });
   const output = { quote: null, message: null };
   const context = { busy: false, invitation, client, accountId, accessAuthority: authority,
-    access: { ...snapshot, invitationActivationEnabled: renderedInvitationEnabled }, request: { current: 0 },
+    access: { ...snapshot, invitationActivationEnabled: renderedInvitationEnabled }, request: { current: 0 }, quoteMatchesBetaWindow,
     currentlyPermitted: offerId => canReviewBillingOffer(authority.state(accountId), offerId), current: () => true,
     setBusy() {}, setConsent() {}, setMessage: value => { output.message = value; }, setQuote: value => { output.quote = value; }, messageFor: error => error.code,
   };

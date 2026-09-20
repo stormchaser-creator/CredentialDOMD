@@ -58,6 +58,19 @@ export function validateAccessSnapshot(value) {
       throw new Error("Free beta information could not be verified.");
     }
   }
+  if (value.scheduledMembership != null) {
+    const scheduled = value.scheduledMembership;
+    if (!scheduled || !["core", "core_locum"].includes(scheduled.offerId)
+      || !date(scheduled.startsAt) || Date.parse(scheduled.startsAt) % 1000
+      || value.checkoutEligible === true || value.purchasedOfferId != null || scheduled.currency !== "usd" || scheduled.interval !== "year"
+      || !["scheduled", "payment_pending", "canceling"].includes(scheduled.status)
+      || typeof scheduled.cancelAtPeriodEnd !== "boolean" || typeof scheduled.firstChargeCanceled !== "boolean"
+      || (scheduled.firstChargeCanceled && !scheduled.cancelAtPeriodEnd)
+      || (scheduled.status === "canceling") !== scheduled.cancelAtPeriodEnd
+      || !(scheduled.offerId === "core" ? [9900, 14900, 19900] : [24500]).includes(scheduled.annualCents)) {
+      throw new Error("Scheduled membership information could not be verified.");
+    }
+  }
   return structuredClone(value);
 }
 
@@ -66,7 +79,7 @@ export function canReviewBillingOffer(access, offerId) {
   if (!access || access.needsRefresh || access.billingEnabled !== true
     || !["core", "core_locum"].includes(offerId) || !["active", "pending"].includes(access.accessStatus)
     || access.purchasedOfferId || access.lifetime?.credential || access.lifetime?.practice
-    || access.freeBeta?.state === "active") return false;
+    || access.scheduledMembership) return false;
   if (access.checkoutResumeAvailable === true) return access.checkoutResumeOfferId === offerId;
   return access.checkoutEligible === true;
 }

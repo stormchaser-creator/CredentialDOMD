@@ -177,11 +177,11 @@ test('malformed resume fields and disabled billing cannot authorize a saved offe
   ]) assert.throws(() => validateAccessSnapshot({...base,...patch}), /could not be verified/);
 });
 
-test('resume stops on stale membership, paid/lifetime/beta status, revocation, or account switch', () => {
+test('resume stops on stale membership, paid/lifetime/scheduled status, revocation, or account switch', () => {
   const base = {...fixture(),purchasedOfferId:null,billingEnabled:true,checkoutEligible:false,checkoutResumeAvailable:true,checkoutResumeOfferId:'core'};
   for (const patch of [
     {needsRefresh:true}, {billingEnabled:false}, {accessStatus:'revoked'}, {purchasedOfferId:'core'},
-    {lifetime:{credential:true,practice:true}}, {freeBeta:{state:'active'}},
+    {lifetime:{credential:true,practice:true}}, {scheduledMembership:{offerId:'core'}},
   ]) assert.equal(canReviewBillingOffer({...base,...patch},'core'),false);
   let actor='user_a';
   const authority=createAccessAuthority({enabled:true,currentAccount:()=>actor,now:()=>0});
