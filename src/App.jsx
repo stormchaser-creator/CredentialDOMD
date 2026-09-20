@@ -59,7 +59,6 @@ import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen, supabase } from "./lib/supabase";
-import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut, useAuth, useUser } from "@clerk/clerk-react";
 import { evaluateOfflineFallback, probeNetwork, CLERK_LOAD_TIMEOUT_MS } from "./utils/offlineSession";
@@ -2400,7 +2399,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             boxShadow: T.shadow1,
           }}>
             <span style={{ fontSize: 20 }}>{"\u2699\ufe0f"}</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Settings</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: T.text, flex: 1 }}>Profile &amp; settings</span>
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>
 
@@ -2692,7 +2691,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ fontSize: 17, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>{pageTitle}</div>
-                    {tab === "home" && (data.settings.isFoundingMember || data.settings.foundingNumber) && <FoundingMemberBadge size="small" number={data.settings.foundingNumber} />}
                   </div>
                   {tab === "home" && data.settings.name && (
                     <div style={{ fontSize: 12, color: T.textMuted }}>{data.settings.name}{data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}</div>
@@ -2738,7 +2736,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <div style={isDesktop ? { zoom: fontZoom, ...deskStickyVars } : { paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
         {tab === "home" && <NotificationBanner onOpenCenter={() => setNotifCenterOpen(true)} onGoSettings={() => { setTab("more"); setSubPage("settings"); }} />}
         {tab === "home" && <AdminMessageCard />}
-        <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}><LaunchAccessNotice onReviewOffers={() => setShowPricing(true)} />{renderContent()}</div>
+        <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}>
+          {/* Routine membership details belong in the profile. A failed access
+              check still needs an explanation while changes are paused. */}
+          {(!limitedLaunch.access || limitedLaunch.error || limitedLaunch.access.needsRefresh) && <LaunchAccessNotice />}
+          {renderContent()}
+        </div>
       </div>
     </>
   );

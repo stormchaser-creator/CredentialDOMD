@@ -158,7 +158,7 @@ function SettingsSection({ onUpgrade }) {
 
   return (
     <div>
-      <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Settings</h2>
+      <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 700, color: T.text }}>Profile &amp; settings</h2>
 
       {/* Your plan: moved out of More, which opened on a billing card
           before anything a physician came to do. */}

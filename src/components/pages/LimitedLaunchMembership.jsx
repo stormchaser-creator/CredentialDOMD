@@ -117,7 +117,12 @@ function MembershipForAccount({ accountId, onActivated }) {
         {beta && <p>Your original free beta still ends on {membershipDate(access.freeBeta.endsAt)}. Your account and saved records stay the same.</p>}
         <button style={button} onClick={manage}>Manage scheduled membership</button>
       </div>
-        : access?.purchasedOfferId ? <div><p>Your {access.purchasedOfferId === "core" ? "Credential" : "Credential + Practice"} membership is active. Your saved records and exports remain available.</p><button style={button} onClick={manage}>Manage paid subscription</button></div>
+        : access?.purchasedOfferId ? <div>
+          <p>Your {access.purchasedOfferId === "core" ? "Credential" : "Credential + Practice"} membership is active. Your saved records and exports remain available.</p>
+          {access.purchasedOfferId === "core" && access.practiceTrial.state === "active" && <p>Your Practice trial runs until {membershipDate(access.practiceTrial.endsAt)}. It does not charge automatically. Your Credential membership continues separately.</p>}
+          {access.purchasedOfferId === "core" && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>; we will review the options and charges with you before any billing change.</p>}
+          <button style={button} onClick={manage}>Manage paid subscription</button>
+        </div>
           : <>
             {beta && <p>Your free beta is active until {membershipDate(access.freeBeta.endsAt)}. No card is required to keep this beta, and it will not charge automatically. {betaCanReview ? "You may choose a paid membership now with no charge before your original beta ends; its paid year starts at that original end date. Review the exact date and terms below. Keep using this account; your saved records stay in place." : "Your original beta end date has not changed. A paid offer is not available right now."}</p>}
             {!beta && invitation && access?.invitationActivationEnabled === true && <div style={{ marginBottom: 18 }}>

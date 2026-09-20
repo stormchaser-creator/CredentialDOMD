@@ -56,3 +56,8 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 - Existing users must sign in, never recreate their account. Provision any missing production login identity through the reviewed reserved-email continuity procedure, then require normal mailbox verification before reconnecting the original profile. Keep approved access and saved records behind the single email entry; do not substitute a renamed signup screen.
 - Keep the source Clerk development instance and sealed identities intact until every real continuity member is bound. The sealed manifest includes the excluded synthetic identity; a reviewed import subset does not change its digest. Never manually verify imported mailboxes, copy sessions, or use editable profile email as ownership proof.
 - This UI requirement does not waive identity verification, change password requirements, enable billing, or authorize paid SMS.
+
+## Membership display approved September 20, 2026
+
+- Keep routine membership status, lifetime access and founding-member badges on Profile & settings. Do not repeat them across dashboards or everyday workspaces.
+- Preserve actionable access-error messages and explanations where a feature is read-only. Keep trial dates, renewal terms and membership management available in the profile and intentional purchase flows.
