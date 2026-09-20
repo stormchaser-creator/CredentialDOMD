@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CredentialDOMD | Credentials, licenses and CME for every physician</title>
-<meta name="description" content="Organize your medical licenses, DEA registrations, CME and professional documents in one place. Built for MDs and DOs, with optional Practice tools for contracts, work logs and invoices. Early-bird Credential signup is open at $149/year. Early release; card required at checkout.">
+<meta name="description" content="Organize your medical licenses, DEA registrations, CME and professional documents in one place. Built for MDs and DOs, with optional Practice tools for contracts, work logs and invoices. Credential: $99/year for the first 100 paid founding members, then $149 early-bird and $199 standard. Check availability in the app. Early release; card required at checkout.">
 <meta name="keywords" content="physician credential tracker, medical license renewal, DEA renewal reminder, locum tenens credentialing, CME tracker, hospital privileges, board certification">
 
 <!-- Canonical -->
@@ -59,7 +59,7 @@
 }
 </script>
 
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"When can I use it?","acceptedAnswer":{"@type":"Answer","text":"Early-bird signup is open. New members can choose Credential for $149/year, with that annual rate locked while membership remains active. Paid membership requires a card at checkout. Review your offer before choosing to pay. The $99/year founding Credential offer is reserved for eligible earlier waitlist members and individually confirmed founding members, with that annual rate locked for life while their membership remains active."}},{"@type":"Question","name":"Can my practice manager use this for our whole group?","acceptedAnswer":{"@type":"Answer","text":"Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"When can I use it?","acceptedAnswer":{"@type":"Answer","text":"Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement. Founding Credential is $99/year for the first 100 paid founding members, with that annual rate locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay."}},{"@type":"Question","name":"Can my practice manager use this for our whole group?","acceptedAnswer":{"@type":"Answer","text":"Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised."}}]}</script>
 
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. -->
 <script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:document.referrer}))</script>
@@ -2001,7 +2001,7 @@ footer {
         </div>
       </details>
       <a href="/app/">Sign in</a>
-      <a class="btn-primary nav-cta" href="/app/">Sign up · $149/year</a>
+      <a class="btn-primary nav-cta" href="/app/"><span data-membership-action>Membership signup</span></a>
     </div>
     <button class="mobile-menu-btn" data-nav-toggle aria-label="Open menu" aria-controls="primary-nav" aria-expanded="false">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2019,7 +2019,7 @@ footer {
 
   <div class="container">
     <div class="hero-content">
-      <div class="badge hero-badge">For MDs and DOs · Early-bird membership</div>
+      <div class="badge hero-badge">For MDs and DOs · <span data-membership-phase>Membership options</span></div>
 
       <h1>Your medical credentials, <span class="highlight">organized.</span></h1>
 
@@ -2028,9 +2028,9 @@ footer {
       </p>
       <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px;">Need to manage contracts, work logs or invoices too? Add the optional <a href="/locums">Practice tools</a>.</p>
 
-      <p style="font-size:14px;color:var(--text-secondary);line-height:1.6;">CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.</p>
+      <p style="font-size:14px;color:var(--text-secondary);line-height:1.6;">CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve. <span data-membership-status role="status" aria-live="polite">Check availability in app.</span></p>
       <p style="font-size:14px;color:var(--text-secondary);line-height:1.6;margin-bottom:20px;">Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.</p>
-      <div id="join" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;"><a class="btn-primary" href="/app/" style="padding:15px 24px;font-size:16px;text-align:center;">Sign up: Credential $149/year</a></div>
+      <div id="join" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;"><a class="btn-primary" href="/app/" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>Review membership offers</span></a></div>
       <div class="wl-msg" role="status" aria-live="polite" aria-atomic="true" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
       <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">
         <span>Early release · Card required at checkout</span>
@@ -2604,15 +2604,15 @@ footer {
     <div class="animate-on-scroll" style="text-align: center;">
       <div class="section-label" style="justify-content: center;">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-Early-bird signup      </div>
-      <h2 class="section-title">Early-bird signup</h2>
-      <p class="section-subtitle" style="margin-left: auto; margin-right: auto;">Create your account, then review your eligible offer. Early-bird Credential is $149/year; Credential + Practice is $245/year total. Creating an account does not charge you.</p>
+<span data-membership-heading>Membership signup</span>      </div>
+      <h2 class="section-title"><span data-membership-heading>Membership signup</span></h2>
+      <p class="section-subtitle" style="margin-left: auto; margin-right: auto;">Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement. Credential + Practice is $245/year total at first purchase. The full package has no founding or early-bird discount.</p>
     </div>
 
     <div class="animate-on-scroll" style="max-width: 560px; margin: 36px auto 0;">
-      <div id="waitlist-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;"><a class="btn-primary" href="/app/" style="padding:15px 24px;font-size:16px;text-align:center;">Sign up: Credential $149/year</a></div>
+      <div id="waitlist-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;"><a class="btn-primary" href="/app/" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>Review membership offers</span></a></div>
       <div id="waitlist-msg" class="wl-msg" role="status" aria-live="polite" aria-atomic="true" style="margin-top: 14px; font-size: 14.5px; font-weight: 600; text-align: center; min-height: 22px;"></div>
-      <p style="margin-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center;">Create your account, then review your eligible offer. Early-bird Credential is $149/year; Credential + Practice is $245/year total. Creating an account does not charge you.</p>
+      <p style="margin-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center;">Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement. Credential + Practice is $245/year total at first purchase. The full package has no founding or early-bird discount.</p>
     </div>
   </div>
 </section>
@@ -2622,16 +2622,16 @@ Early-bird signup      </div>
   <div class="container">
     <div class="animate-on-scroll" style="text-align: center; margin-bottom: 32px;">
       <div class="section-label">Founding membership</div>
-      <h2 class="section-title">Early-bird Credential: $149/year, locked while membership remains active.</h2>
-      <p class="section-subtitle" style="margin: 0 auto;">Early-bird signup is open. New members can choose Credential for $149/year, with that annual rate locked while membership remains active. Paid membership requires a card at checkout. Review your offer before choosing to pay.</p>
+      <h2 class="section-title"><span data-membership-headline>Check the current Credential offer</span></h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement.</p>
     </div>
     <div class="launch-plan-grid">
       <article class="feature-card animate-on-scroll">
         <h3 class="feature-title">Credential</h3>
-        <p class="launch-price">$149<span> / year, early-bird Credential</span></p>
-        <p class="feature-desc">The $99/year founding Credential offer is reserved for eligible earlier waitlist members and individually confirmed founding members, with that annual rate locked for life while their membership remains active.</p>
+        <p class="launch-price"><b data-membership-price>Check in app</b><span data-membership-price-label> / annual Credential membership</span></p>
+        <p class="feature-desc">Founding Credential is $99/year for the first 100 paid founding members, with that annual rate locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay. The $99/year founding offer replaces the previously planned $149/year founding price; this is not a claim about a previous selling price.</p>
         <p class="feature-desc">Your physician credentials, documents, CME tracking and renewal organization.</p>
-        <p class="feature-desc" style="margin-top: 12px;">The founding offer applies to Credential. Early-bird Credential is $149/year; standard Credential is $199/year. The early-bird annual rate also stays the same while membership remains active.</p>
+        <p class="feature-desc" style="margin-top: 12px;">After the 100 paid founding memberships, early-bird Credential is $149/year, followed by standard Credential at $199/year. The early-bird annual rate also stays the same while membership remains active.</p>
       </article>
       <article class="feature-card animate-on-scroll">
         <h3 class="feature-title">Credential + Practice</h3>
@@ -2642,7 +2642,7 @@ Early-bird signup      </div>
     </div>
     <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);">Eligible people who signed up under the earlier free-beta wording receive 30 days free with no card, starting when they first activate their account with a verified email address. The app shows the exact end date; signing in again does not restart those 30 days. You may opt in to $99/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription. Your first charge is scheduled for your original beta end date, when your paid year starts. Choosing early does not charge you early or start a new trial. You keep the same account and saved records. If you never opt in, there is no automatic charge and nothing to cancel. Paid membership renews annually unless canceled.</p>
     <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);">Existing accounts eligible under the announced lifetime-access policy keep Credential and Practice free for life. A waitlist entry alone does not qualify for lifetime access. Account eligibility must be confirmed before asking an existing member to pay.</p>
-    <p style="text-align: center; margin-top: 16px;"><a class="btn-primary" href="/app/">Sign up · $149/year</a></p>
+    <p style="text-align: center; margin-top: 16px;"><a class="btn-primary" href="/app/"><span data-membership-action>Membership signup</span></a></p>
   </div>
 </section>
 
@@ -2682,7 +2682,7 @@ Early-bird signup      </div>
         </button>
         <div class="faq-answer">
           <div class="faq-answer-inner">
-            Early-bird signup is open. New members can choose Credential for $149/year, with that annual rate locked while membership remains active. Paid membership requires a card at checkout. Review your offer before choosing to pay. The $99/year founding Credential offer is reserved for eligible earlier waitlist members and individually confirmed founding members, with that annual rate locked for life while their membership remains active.
+            Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement. Founding Credential is $99/year for the first 100 paid founding members, with that annual rate locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay.
           </div>
         </div>
       </div>
@@ -2896,15 +2896,15 @@ Early-bird signup      </div>
     <div class="animate-on-scroll">
       <div class="section-label" style="justify-content: center;">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-Early-bird signup      </div>
+<span data-membership-heading>Membership signup</span>      </div>
       <h2 class="section-title">What in your credentialing file expires next? If you have to look it up, that is the problem.</h2>
-      <p class="section-subtitle">Create your account, then review your eligible offer. Early-bird Credential is $149/year; Credential + Practice is $245/year total. Creating an account does not charge you.</p>
+      <p class="section-subtitle">Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement. Credential + Practice is $245/year total at first purchase. The full package has no founding or early-bird discount.</p>
 
       <div class="final-cta-buttons">
-        <a class="btn-primary" style="padding: 18px 40px; font-size: 17px;" href="/app/">Sign up · $149/year <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+        <a class="btn-primary" style="padding: 18px 40px; font-size: 17px;" href="/app/"><span data-membership-action>Membership signup</span> <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
       </div>
 
-      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">Create your account, then review your eligible offer. Early-bird Credential is $149/year; Credential + Practice is $245/year total. Creating an account does not charge you.</p>
+      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement. Credential + Practice is $245/year total at first purchase. The full package has no founding or early-bird discount.</p>
     </div>
   </div>
 </section>
@@ -2933,9 +2933,9 @@ Early-bird signup      </div>
 </footer>
 
 <!-- Sticky mobile CTA: appears after the hero scrolls out of view, dismissible -->
-<div class="sticky-cta" id="sticky-cta" role="region" aria-label="Early-bird signup">
+<div class="sticky-cta" id="sticky-cta" role="region" aria-label="Membership signup">
   <span class="sticky-cta-text">Early release · Card required at checkout</span>
-  <a class="btn-primary" href="/app/">Sign up · $149/year</a>
+  <a class="btn-primary" href="/app/"><span data-membership-action>Membership signup</span></a>
   <button type="button" class="sticky-cta-close" aria-label="Dismiss">&times;</button>
 </div>
 
@@ -3079,5 +3079,6 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
 }
 </style>
 
+<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>

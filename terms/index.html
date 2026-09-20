@@ -94,7 +94,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
       <a href="/#features">Features</a>
       <a href="/#faq">FAQ</a>
       <a href="/app/">Sign in</a>
-      <a class="btn-primary" href="/app/">Sign up · $149/year</a>
+      <a class="btn-primary" href="/app/"><span data-membership-action>Membership signup</span></a>
     </div>
   </div>
 </nav>
@@ -112,7 +112,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
 <p>CredentialDOMD offers paid membership in an early release. Features and workflows are still being refined. You will see the applicable price and renewal terms before choosing a membership, and a card is required at paid checkout. Nothing will be charged without your agreement.</p>
 <p>People who already had registered accounts when our membership policy changed on September 19, 2026 receive Credential and Practice free for life. Being on the waitlist without a registered account does not qualify for this lifetime membership.</p>
 <p>Eligible people who signed up under the earlier free-beta wording receive 30 days free with no card, starting when they first activate their account with a verified email address. The app shows the exact end date; signing in again does not restart those 30 days. You may opt in to $99 per year Credential during the beta by adding a card and explicitly agreeing to the annual subscription. Your first charge is scheduled for your original beta end date, when your paid year starts. Choosing early does not charge you early or start a new trial. You keep the same account and saved records. If you never opt in, there is no automatic charge and nothing to cancel. Paid membership renews annually unless canceled. If an unfinished checkout is completed after the original beta end date, the first charge is collected when checkout completes; the paid year still starts at that original beta end date. Beta expiry does not delete your account or records; saved records remain available to read and export.</p>
-<p>Eligible founding members get Credential for $99 per year. The early-bird price is $149 per year and the standard price is $199 per year. Founding and early-bird members keep their annual rate for life while their membership stays active. We will identify the available offer and eligibility before purchase; these phases do not create a published deadline or reservation by themselves.</p>
+<p>The first 100 paid founding members get Credential for $99 per year. After those founding memberships, the early-bird price is $149 per year, followed by the standard price of $199 per year. Founding and early-bird members keep their annual rate for life while their membership remains continuously active. The available offer and eligibility are confirmed before purchase; creating an account or viewing an offer does not reserve a founding place. Protected historical founding offers remain honored within the 100-member founding allocation.</p>
 <p>Credential + Practice is $245 per year total at first purchase. The full package has no founding or early-bird discount.</p>
 <p>New paid Credential members receive a separate 30-day Practice trial when their first annual payment is confirmed. It ends without an added charge. Continuing Practice requires an explicit purchase. Existing Credential members should contact support@credentialdomd.com to review options for adding Practice; no change or charge will occur without their agreement. The paid Credential membership continues, and existing Practice records remain available to read and export.</p>
 <p>Features may change, be renamed, or be removed. There is no uptime guarantee and no service-level commitment; export a backup regularly.</p>
@@ -207,5 +207,6 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
   </div>
 </footer>
 
+<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>

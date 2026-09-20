@@ -94,7 +94,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
       <a href="/#features">Features</a>
       <a href="/#faq">FAQ</a>
       <a href="/app/">Sign in</a>
-      <a class="btn-primary" href="/app/">Sign up · $149/year</a>
+      <a class="btn-primary" href="/app/"><span data-membership-action>Membership signup</span></a>
     </div>
   </div>
 </nav>
@@ -237,5 +237,6 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
   </div>
 </footer>
 
+<script type="module" src="/membership-offer.js" data-membership-endpoint="https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/public-membership-offer"></script>
 </body>
 </html>
