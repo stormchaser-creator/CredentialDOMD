@@ -15,6 +15,7 @@
 
 /* global __APP_BUILD_ID__ */
 import { Component, createElement } from "react";
+import { redactLaunchInvitation } from "../utils/launchInvitation.js";
 
 const ENDPOINT = import.meta.env.VITE_SUPABASE_URL
   ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/report-error`
@@ -43,13 +44,23 @@ export function setErrorUser(id) {
 }
 
 function scrub(s) {
-  return String(s).replace(SECRET_RE, "[redacted]");
+  return redactLaunchInvitation(s).replace(SECRET_RE, "[redacted]");
 }
 
 function clip(s, max) {
   if (s == null) return null;
-  const t = String(s);
+  // Scrub before truncation as well as at report boundaries, so truncation
+  // cannot split an invitation or another credential before it is recognized.
+  const t = scrub(s);
   return t.length > max ? t.slice(0, max) + "…" : t;
+}
+
+function scrubExtra(extra) {
+  if (!extra || typeof extra !== "object") return {};
+  return JSON.parse(JSON.stringify(extra, (key, value) => {
+    if (key.toLowerCase() === "launch_invite") return "[redacted]";
+    return typeof value === "string" ? scrub(value) : value;
+  }));
 }
 
 function describe(err) {
@@ -117,7 +128,7 @@ export function reportError(err, kind = "error", extra = undefined) {
       user_agent: clip(typeof navigator !== "undefined" ? navigator.userAgent : "", 300),
       build: BUILD,
       auth_user_id: currentUserId,
-      extra: extra && typeof extra === "object" ? extra : {},
+      extra: scrubExtra(extra),
     };
     if (import.meta.env.DEV) {
       // Visible in dev, but do not spam the live table from localhost.
@@ -165,7 +176,11 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error("CredentialDOMD crashed:", error, info);
+    const details = describe(error);
+    console.error("CredentialDOMD crashed:", {
+      message: scrub(clip(details.message, MAX_MESSAGE)), stack: scrub(clip(details.stack, MAX_STACK)),
+      componentStack: scrub(clip(info?.componentStack, 1500)),
+    });
     reportError(error, "react", {
       componentStack: info && info.componentStack ? clip(info.componentStack, 1500) : undefined,
     });

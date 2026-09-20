@@ -2,6 +2,19 @@ const FRAGMENT_KEY = "launch_invite";
 const STORAGE_KEY = "credentialdomd.launch_invitation";
 export const isLaunchInvitationToken = token => typeof token === "string" && /^[A-Za-z0-9_-]{43,128}$/.test(token);
 
+// Recognize URL-encoded keys/separators too. Even malformed invitations must
+// be redacted, so reporting does not depend on token length or validity.
+const reportKey = [...FRAGMENT_KEY].map(character => `(?:${character}|%${character.charCodeAt(0).toString(16)})`).join("");
+const reportValue = new RegExp(
+  `(^|[^A-Za-z0-9_%]|%(?:3f|26|23|20|22|27|28))(${reportKey}(?:["']|%22|%27)?(?:\\s|%20)*(?:=|:|%3d|%3a)(?:\\s|%20)*(?:["']|%22|%27)?)(?:(?!%(?:26|23|20|09|0a|0d|22|27|3c|3e|29))[^\\s&#"'<>\\\\()])+`,
+  "gi",
+);
+
+/** Redact only invitation values; retain unrelated URL parameters and text. */
+export function redactLaunchInvitation(value) {
+  return String(value).replace(reportValue, "$1$2[redacted]");
+}
+
 function sessionStorage() {
   try { return globalThis.window?.sessionStorage; }
   catch { return null; }

@@ -26,6 +26,12 @@ When new-purchase eligibility is false but an owned incomplete checkout can be r
 
 Review, quote refresh, purchase, and redirect all recheck the exact offer against current account access. Expired offers, ownership/offer conflicts, pending backend work, stale membership, and late responses do not bypass consent or open a payment page. Six synthetic follow-up tests cover the optional contract, both saved offers, blocked alternatives, initial consent state, account switches, stale responses, and backend refusals.
 
+## Invitation diagnostics follow-up
+
+Error reports and React console diagnostics redact invitation values, including encoded or malformed values, before clipping messages, stacks, URLs, and nested extra fields. Existing API-secret scrubbing remains in place. If browser history cleanup fails, the invitation is discarded from pending session storage and diagnostics still redact its URL. Invitation capture and redemption behavior are unchanged.
+
+Eight additional synthetic tests cover failed history cleanup, encoded and quoted keys, clipping boundaries, filename and nested extra fields, beacon/fetch delivery, development and React console output, and ordinary report deduplication and limits. They use synthetic strings and fake transports.
+
 ## Known activation blockers
 
 1. **Persistence races remain unresolved.** Initial guards cover collection CRUD, upload, bulk sync, tombstones, and replay admission, but a write already waiting on asynchronous work can outlive its account or entitlement. Queued writes, document operations, replay retries, and replay queue reconciliation need the separately reviewed owner-pinning changes. Do not interpret the local guards as a replacement for server authorization.
