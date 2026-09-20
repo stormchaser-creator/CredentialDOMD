@@ -6,13 +6,10 @@
 // the physician signs up and is activated (migration
 // 20260902g_founding_members.sql), not from the order of the waitlist.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
+import { launchEmailReviewHold } from "../_shared/launchEmailReview.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const SECRET = Deno.env.get("WELCOME_HOOK_SECRET")!;
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
 
 const welcomeText = (first: string) => `Hi ${first},
 
@@ -34,6 +31,10 @@ https://credentialdomd.com`;
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("method", { status: 405 });
   if (req.headers.get("x-hook-secret") !== SECRET) return new Response("auth", { status: 401 });
+  // The lead was already saved by waitlist_signup. Holding its email must not
+  // stamp welcomed_at, consume a send attempt, or discard the saved lead.
+  const hold = launchEmailReviewHold("welcome");
+  if (hold) return new Response(JSON.stringify(hold), { status: 409, headers: { "Content-Type": "application/json" } });
   let record: Record<string, unknown> = {};
   try { record = (await req.json()).record || {}; } catch { /* bad body */ }
   const email = String(record.email || "").trim();
@@ -58,6 +59,7 @@ Deno.serve(async (req) => {
   });
   const body = await r.text();
   if (r.ok && id) {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { error: upErr } = await supabase
       .from("early_access_leads")
       .update({ welcomed_at: new Date().toISOString() })

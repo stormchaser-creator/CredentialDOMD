@@ -19,6 +19,10 @@ const db = { from(table) {
   return q;
 } };
 globalThis.__inviteTest = {
+  // Exercise dormant consent guards independently of the unconditional release
+  // hold. Production never receives this adapter; launch-email-review tests use
+  // the real hold and assert zero writes/provider calls for every invitation.
+  launchEmailReviewHold: () => null,
   serve: fn => { handler = fn; },
   clerkProfile: async () => scenario.signedOut ? null : ({ isAdmin: !scenario.nonAdmin, profileId: "admin", db }),
   Deno: { env: { get: () => "test-value" } },
@@ -26,7 +30,7 @@ globalThis.__inviteTest = {
 };
 let source = readFileSync(new URL("../supabase/functions/send-invite/index.ts", import.meta.url), "utf8");
 source = source.replace(/^import .*;\n/gm, "");
-source = "const { serve, clerkProfile, Deno, fetch } = globalThis.__inviteTest;\n" + source;
+source = "const { serve, clerkProfile, Deno, fetch, launchEmailReviewHold } = globalThis.__inviteTest;\n" + source;
 const js = transformSync(source, { loader: "ts", format: "esm" }).code;
 await import("data:text/javascript;base64," + Buffer.from(js).toString("base64"));
 async function check(config, body, status, sent) {

@@ -8,6 +8,7 @@
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { launchEmailReviewHold } from "../_shared/launchEmailReview.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const APP_URL = "https://credentialdomd.com/app/";
@@ -67,6 +68,11 @@ serve(async (req) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || /[%_*\\]/.test(email)) {
     return json(400, { error: "Invalid email" });
   }
+
+  // Must precede beta_access inserts, profile activation, and provider calls.
+  // Admin access and resend:true do not approve content or recipients.
+  const hold = launchEmailReviewHold("invitation");
+  if (hold) return json(409, hold);
 
   const db = who.db;
   const { data: leads, error: leadError } = await db.from("early_access_leads")
