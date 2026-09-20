@@ -49,7 +49,7 @@ test('both views retain the active-membership rate condition and distinct earlie
     const view = publicLaunchPresentation({ enabled, signupHref: '/signup/' });
     assert.equal(view.brand, 'credentialdomd');
     assert.match(view.earlyRelease, /less polished/);
-    assert.match(view.founderParticipation, /Vera/);
+    assert.match(view.founderParticipation, /In the app, ask VERA for help/);
     assert.match(view.founderParticipation, /support tickets/);
     assert.match(view.foundingRate, /\$99\/year/);
     assert.match(view.foundingRate, /while (?:their )?membership remains active/);

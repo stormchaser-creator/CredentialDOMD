@@ -59,7 +59,7 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
       ? 'Founding signup is open. Paid membership requires a card at checkout. Review your offer before choosing to pay.'
       : 'Checkout is not open. Join the waitlist for your invitation and membership details. A waitlist request does not create a paid account or charge you; future paid access requires a card at checkout.',
     earlyRelease: 'credentialdomd is an early release. Some workflows are less polished, and the app will continue to evolve.',
-    founderParticipation: 'Founding members help shape what comes next. Use Vera to get help with the app and share feedback, and use in-app support tickets to report problems or request improvements. Review a ticket before sending it.',
+    founderParticipation: 'Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.',
     foundingRate: enabled
       ? 'Eligible founding members get Credential for $99/year, a discounted annual rate locked for life while their membership remains active.'
       : 'The planned founding Credential offer is $99/year for eligible founding members, with that annual rate locked for life while membership remains active.',

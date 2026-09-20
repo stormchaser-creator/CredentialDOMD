@@ -21,7 +21,7 @@ New copy uses **credentialdomd**, with plan names **Credential** and **Practice*
 - Main paid link: **Sign up as a founding member**; compact navigation: **Founding signup**.
 - Availability: “Founding signup is open. Paid membership requires a card at checkout. Review your offer before choosing to pay.”
 - Early release: “credentialdomd is an early release. Some workflows are less polished, and the app will continue to evolve.”
-- Participation: “Founding members help shape what comes next. Use Vera to get help with the app and share feedback, and use in-app support tickets to report problems or request improvements. Review a ticket before sending it.” This refers to in-app Vera; the public CME website search remains a website resource search.
+- Participation: “Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.” This refers to in-app Vera; the public CME website search remains a website resource search.
 - Founding rate: “Eligible founding members get Credential for $99/year, a discounted annual rate locked for life while their membership remains active.”
 - Early-bird Credential: $149/year, also locked while active. Standard Credential: $199/year. These are offer phases, not claims about a previously charged standard price.
 - Credential + Practice: $245/year total, with **no founding or early-bird discount** on the full package.
