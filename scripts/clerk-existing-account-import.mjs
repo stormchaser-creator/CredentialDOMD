@@ -167,7 +167,8 @@ export function buildExistingAccountImportPlan({ review, manifest, sourceSnapsho
     if (existing) {
       const targetIdentity = identity(existing);
       const reservedOrVerified = targetIdentity && (targetIdentity.primary.verification?.status === 'verified'
-        || (targetIdentity.primary.reserved === true && targetIdentity.primary.verification?.status === 'unverified'));
+        || (targetIdentity.primary.reserved === true && (targetIdentity.primary.verification === null
+          || targetIdentity.primary.verification?.status === 'unverified')));
       if (!targetIdentity || targetIdentity.email !== email || !reservedOrVerified
         || !markerMatches(existing.private_metadata?.credentialdomd_continuity, marker(review, sourceSubject))) holds.add('existing_target_requires_review');
       if (account?.state === 'bound' && targetIdentity?.primary.verification?.status !== 'verified') holds.add('bound_target_not_verified');

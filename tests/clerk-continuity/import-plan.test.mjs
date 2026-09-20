@@ -143,6 +143,12 @@ for (const verified of [false, true]) test(`exact ${verified ? 'verified' : 'res
   const entry = result.entries.find(item => item.targetSubject === target.id);
   assert.equal(entry.action, 'skip_existing'); assert.equal(entry.emailVerified, verified); assert.equal(entry.payload, undefined);
 });
+test('reserved target with explicit null verification safely skips without claiming verification', () => {
+  const input = fixture(), target = existingTarget(input); target.email_addresses[0].verification = null;
+  const result = plan(input); assert.equal(result.readyForReview, true); assert.equal(result.counts.existing, 1);
+  assert.equal(result.entries.find(entry => entry.targetSubject === target.id).emailVerified, false);
+  target.email_addresses[0].reserved = false; mustHold(input, 'existing_target_requires_review');
+});
 for (const [name, change, code] of [
   ['external ID differs', t => { t.external_id = 'user_Another'; }, 'target_mailbox_conflict'],
   ['external ID absent', t => { t.external_id = null; }, 'target_mailbox_conflict'],
