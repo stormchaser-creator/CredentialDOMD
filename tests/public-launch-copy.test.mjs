@@ -4,13 +4,18 @@ import { readFile } from 'node:fs/promises';
 import { renderHelp } from '../scripts/build-help.mjs';
 import { loadVideoCatalog } from '../scripts/help-videos.mjs';
 import { fileURLToPath } from 'node:url';
+import { renderPublicLaunch, publicLaunchHelp } from '../scripts/public-launch-render.mjs';
+import { PUBLIC_LAUNCH_MODE } from '../src/content/publicLaunch.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = file => readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+const off = { enabled: false, signupHref: null };
 
 for (const page of ['index', 'locums']) {
-  test(`${page}: public paid invitation, promised beta, and lifetime exception are distinct`, async () => {
-    const html = await read(`landing/${page}.html`);
+  test(`${page}: explicit OFF template keeps future paid invitation and earlier promises distinct`, async () => {
+    const source = await read(`landing/${page}.html`);
+    const html = renderPublicLaunch(source, page === 'index' ? 'home' : 'locums', off);
+    assert.equal(html, source);
     assert.match(html, /Checkout is not open/);
     assert.match(html, /card required at checkout/);
     assert.match(html, /Joining the waitlist does not (?:create a paid account or charge you|charge you or create a paid account)/);
@@ -27,6 +32,23 @@ for (const page of ['index', 'locums']) {
     const meta = [...html.matchAll(/<meta\b[^>]*>/g)].map(match => match[0]).join('\n');
     assert.doesNotMatch(meta, /free beta|no card/i);
   });
+  test(`${page}: production copy offers $149 signup and preserves protected earlier promises`, async () => {
+    assert.equal(PUBLIC_LAUNCH_MODE.enabled, true);
+    const html = renderPublicLaunch(await read(`landing/${page}.html`), page === 'index' ? 'home' : 'locums');
+    assert.match(html, /href="\/app\/"/);
+    assert.match(html, /Sign up: Credential \$149\/year/);
+    assert.match(html, /card (?:is )?required at checkout/i);
+    assert.match(html, /\$99\/year founding Credential offer is reserved for eligible earlier waitlist members/);
+    assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
+    assert.match(html, /signing in again does not restart those 30 days/);
+    assert.match(html, /requires an explicit \$99\/year Credential purchase; there is no automatic charge/);
+    assert.match(html, /separate 30-day Practice trial/);
+    assert.match(html, /Continuing Practice requires an explicit purchase/);
+    assert.match(html, /keep Credential and Practice free for life/);
+    assert.match(html, /waitlist entry alone does not qualify for lifetime access/);
+    assert.match(html, /\$245\/year total/);
+    assert.doesNotMatch(html, /Checkout is not open|invitation will confirm eligibility|<form\b[^>]*class="[^"]*wl-form/i);
+  });
 }
 test('locums visible cost answer and FAQ structured data are identical', async () => {
   const html = await read('landing/locums.html');
@@ -38,15 +60,23 @@ test('locums visible cost answer and FAQ structured data are identical', async (
   assert.match(cost, /earlier free-beta offer/);
   assert.match(cost, /card required at checkout/);
 });
-test('regenerated help retains content and distinguishes current beta from paid Practice trial', async () => {
+test('OFF help fixture is unchanged and production help presents verified beta and separate Practice trial', async () => {
   const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
   const html = await read('landing/help.html');
   const videos = await loadVideoCatalog(root);
   assert.equal(renderHelp(help, videos), html);
+  assert.strictEqual(publicLaunchHelp(help, off), help);
+  assert.equal(renderPublicLaunch(html, 'help', off), html);
   const availability = help.articles.find(article => article.id === 'locum-contract').availability;
   assert.match(availability, /existing invited beta users/);
   assert.match(availability, /new paid Credential members/);
   assert.match(availability, /Earlier free-beta signups/);
   assert.match(html, /Card required at future paid checkout/);
   assert.doesNotMatch(html, /Free invite-only beta/);
+  const activeHelp = publicLaunchHelp(help);
+  const active = renderPublicLaunch(renderHelp(activeHelp, videos), 'help');
+  assert.match(activeHelp.articles.find(article => article.id === 'locum-contract').availability, /first activate their account with a verified email address/);
+  assert.match(active, /href="\/app\/"/);
+  assert.match(active, /separate 30-day Practice trial/);
+  assert.doesNotMatch(active, /Card required at future paid checkout|Their invitation will confirm/);
 });

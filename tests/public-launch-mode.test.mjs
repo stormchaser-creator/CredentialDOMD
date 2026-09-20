@@ -2,16 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PUBLIC_LAUNCH_MODE, REQUIRED_LAUNCH_SURFACES, WIRED_LAUNCH_SURFACES, assertPublicLaunchReady, publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
 
-test('production mode stays off and exposes only the existing waitlist action', () => {
-  assert.equal(PUBLIC_LAUNCH_MODE.enabled, false);
-  assert.equal(PUBLIC_LAUNCH_MODE.signupHref, null);
+test('production mode opens protected app signup without collecting a waitlist request', () => {
+  assert.equal(PUBLIC_LAUNCH_MODE.enabled, true);
+  assert.equal(PUBLIC_LAUNCH_MODE.signupHref, '/app/');
   assert.deepEqual(WIRED_LAUNCH_SURFACES, REQUIRED_LAUNCH_SURFACES);
   assert.doesNotThrow(() => assertPublicLaunchReady());
   const view = publicLaunchPresentation();
+  assert.equal(view.mode, 'founding-signup');
+  assert.deepEqual(view.primaryAction, {
+    kind: 'navigation', label: 'Sign up: Credential $149/year', shortLabel: 'Sign up · $149/year', href: '/app/', collectEmail: false,
+  });
+  assert.equal(view.guideCapture.forceGuideOnly, true);
+  assert.equal(view.guideCapture.showWaitlistChoice, false);
+  assert.match(view.availability, /signup is open/);
+  assert.match(view.availability, /card at checkout/);
+  assert.doesNotMatch(view.availability, /Checkout is not open/);
+});
+
+test('explicit OFF fixture preserves the waitlist action and optional guide choice', () => {
+  const off = { enabled: false, signupHref: null };
+  assert.doesNotThrow(() => assertPublicLaunchReady(off));
+  const view = publicLaunchPresentation(off);
   assert.equal(view.mode, 'waitlist');
   assert.equal(view.primaryAction.kind, 'waitlist-request');
   assert.equal(view.primaryAction.href, '/#join');
+  assert.equal(view.primaryAction.collectEmail, true);
   assert.equal(view.guideCapture.showWaitlistChoice, true);
+  assert.equal(view.guideCapture.forceGuideOnly, false);
+  assert.equal(view.guideCapture.signupHref, null);
   assert.match(view.availability, /Checkout is not open/);
 });
 

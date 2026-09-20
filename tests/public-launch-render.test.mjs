@@ -4,7 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { renderPublicLaunch, publicLaunchHelp, publicLaunchCostAnswer } from '../scripts/public-launch-render.mjs';
-import { publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
+import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
 import { renderHelp } from '../scripts/build-help.mjs';
 import { renderWatchPages } from '../scripts/watch-pages.mjs';
 import { loadVideoCatalog } from '../scripts/help-videos.mjs';
@@ -15,14 +15,32 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 // This route is an offline fixture, not a claim that signup is deployed.
 const paid = { enabled: true, signupHref: '/signup/' };
+const off = { enabled: false, signupHref: null };
 const scripts = html => [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/g)].map(match => match[0]);
 const assets = html => [...html.matchAll(/(?:src|poster)="([^"]+)"/g)].map(match => match[1]);
 const jsonLd = html => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(match => JSON.parse(match[1]));
 
-test('default mode leaves source HTML bytes, waitlist fields and widget choices intact', async () => {
+test('explicit OFF mode leaves source HTML bytes, waitlist fields and widget choices intact', async () => {
   for (const [path, surface] of [['index', 'home'], ['locums', 'locums'], ['help', 'help'], ['cme', 'cme'], ['states/ohio', 'state-guides'], ['states/index', 'state-index'], ['terms', 'legal-navigation']]) {
     const html = await read(`landing/${path}.html`);
-    assert.equal(renderPublicLaunch(html, surface), html, path);
+    assert.equal(renderPublicLaunch(html, surface, off), html, path);
+  }
+});
+
+test('production defaults render every packaged surface with the real app signup route', async () => {
+  assert.deepEqual(PUBLIC_LAUNCH_MODE, { enabled: true, signupHref: '/app/' });
+  for (const [path, surface] of [['index', 'home'], ['locums', 'locums'], ['help', 'help'], ['cme', 'cme'], ['states/ohio', 'state-guides'], ['states/index', 'state-index'], ['terms', 'legal-navigation']]) {
+    // The packager first compiles the mode-specific help knowledge; raw authored
+    // help intentionally remains the OFF fixture and must not bypass that step.
+    const html = surface === 'help'
+      ? renderHelp(publicLaunchHelp(JSON.parse(await read('public/knowledge/credentialdo-help.json'))), await loadVideoCatalog(root))
+      : await read(`landing/${path}.html`);
+    const output = renderPublicLaunch(html, surface);
+    assert.equal(output, renderPublicLaunch(html, surface, { enabled: true, signupHref: '/app/' }), path);
+    assert.match(output, /data-public-launch="founding-signup"/, path);
+    assert.match(output, /href="\/app\/"/, path);
+    assert.doesNotMatch(output, /href="\/signup\/"|href="\/#join"|<!-- public-launch:/, path);
+    assert.doesNotMatch(output, /<form\b[^>]*class="[^"]*\bwl-form\b|<fieldset\b[^>]*class="guide-choice"/, path);
   }
 });
 
@@ -177,21 +195,31 @@ test('paid rendering rejects missing or stray slots and current legal contradict
   assert.throws(() => renderPublicLaunch(home.replace(/<!-- public-launch:form -->[\s\S]*?<!-- \/public-launch:form -->/, ''), 'home', paid), /Incomplete home migration: form/);
   assert.throws(() => renderPublicLaunch(home + '<a href="/#join">Join the waitlist</a>', 'home', paid), /Unmigrated public launch wording/);
   assert.throws(() => renderPublicLaunch(home + '<!-- public-launch:unknown -->x<!-- /public-launch:unknown -->', 'home', paid), /Unknown public launch slot/);
-  const terms = await read('landing/terms.html');
-  assert.throws(() => renderPublicLaunch(terms, 'legal-navigation', paid), /Unmigrated public launch wording.*billing is off/i);
+  const staleTerms = renderLegalPages(off)['terms.html'];
+  assert.throws(() => renderPublicLaunch(staleTerms, 'legal-navigation', paid), /Unmigrated public launch wording.*billing is off/i);
+  const currentTerms = await read('landing/terms.html');
+  assert.doesNotThrow(() => renderPublicLaunch(currentTerms, 'legal-navigation'));
 });
 
-test('public and in-app legal documents share the mode and change only approved commercial passages', async () => {
-  const off = getLegalDocuments();
-  assert.strictEqual(PRIVACY, off.privacy);
-  assert.strictEqual(TERMS, off.terms);
+test('public and in-app legal documents use production defaults and retain an explicit OFF fixture', async () => {
+  const prior = getLegalDocuments(off);
+  const current = getLegalDocuments();
+  assert.deepEqual(PRIVACY, current.privacy);
+  assert.deepEqual(TERMS, current.terms);
+  assert.match(prior.terms.sections[0].blocks[0], /billing is off/);
+  assert.match(current.terms.sections[0].blocks[0], /paid membership in an early release/);
+  assert.doesNotMatch(JSON.stringify(current.terms), /billing is off|Paid membership has not launched/);
   const on = getLegalDocuments(paid);
+  assert.deepEqual(on, current, 'alternate reviewed signup route does not change legal terms');
+  assert.equal(on.privacy.updated, 'September 20, 2026');
+  assert.equal(on.terms.updated, 'September 20, 2026');
   const privacy = structuredClone(on.privacy);
   privacy.intro[1] = privacy.intro[1].replace('is in early release.', 'is in free beta.');
-  assert.deepEqual(privacy, off.privacy, 'privacy changes only release description');
+  privacy.updated = prior.privacy.updated;
+  assert.deepEqual(privacy, prior.privacy, 'mode changes only release description and publication date');
   for (let i = 0; i < on.terms.sections.length; i++) {
     const section = on.terms.sections[i];
-    const old = off.terms.sections[i];
+    const old = prior.terms.sections[i];
     if (i === 0) {
       assert.equal(section.title, '1. Membership, early release and pricing');
       assert.equal(section.blocks[1], old.blocks[1], 'existing September 19 lifetime promise');
@@ -207,7 +235,7 @@ test('public and in-app legal documents share the mode and change only approved 
     else if (i === 9) assert.equal(section.blocks[0], old.blocks[0].replace(', which during the free beta is zero', ''));
     else assert.deepEqual(section, old, old.title);
   }
-  assert.deepEqual(on.terms.intro, off.terms.intro, 'legal operator and acceptance unchanged');
+  assert.deepEqual(on.terms.intro, prior.terms.intro, 'legal operator and acceptance unchanged');
   assert.ok(on.terms.intro[0].includes(LEGAL_OPERATOR));
   const sourcePages = renderLegalPages();
   const paidPages = renderLegalPages(paid);
@@ -220,4 +248,17 @@ test('public and in-app legal documents share the mode and change only approved 
   }
   assert.match(paidPages['terms.html'], /requires an explicit \$99 per year Credential purchase/);
   assert.match(paidPages['privacy.html'], /is in early release/);
+});
+
+test('both legal modes retain factual device-storage and AI-provider disclosures', () => {
+  for (const mode of [off, PUBLIC_LAUNCH_MODE]) {
+    const { privacy, terms } = getLegalDocuments(mode);
+    const privacyText = JSON.stringify(privacy);
+    const termsText = JSON.stringify(terms);
+    assert.match(privacyText, /Cached records and private notes are not separately encrypted by the app/);
+    assert.match(privacyText, /Gemini API or Anthropic’s Claude API/);
+    assert.match(privacyText, /Signing out, clearing browser storage or losing the device can remove the local copy/);
+    assert.match(termsText, /not separately encrypted by the app, and manual exports are readable files/);
+    assert.doesNotMatch(privacyText + termsText, /private (?:vault|notes).*end-to-end encrypted/i);
+  }
 });
