@@ -153,7 +153,7 @@ function emailHtml(state: string, s: Guide) {
   }
 
   parts.push(`<p style="margin:26px 0 0;color:#1a1a1a;">This page, with the same information: ${A(s.guide)}</p>`);
-  parts.push(`<p style="margin:18px 0 0;color:#1a1a1a;">About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. The beta is free and invite-only at ${A("https://credentialdomd.com", "credentialdomd.com")} if you want a look.</p>`);
+  parts.push(`<p style="margin:18px 0 0;color:#1a1a1a;">About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. See current membership details at ${A("https://credentialdomd.com", "credentialdomd.com")}.</p>`);
   parts.push(`<p style="margin:18px 0 0;color:#1a1a1a;">Eric Whitney, DO<br>CredentialDOMD</p>`);
   parts.push(`<p style="margin:24px 0 0;font-size:12px;color:#777;">You asked for this guide on the ${esc(state)} renewal page. It is a single email, not a list; if you'd rather hear nothing further from CredentialDOMD, reply with the word stop and that's the end of it.</p>`);
 
@@ -204,7 +204,7 @@ function emailText(state: string, s: Guide) {
   }
   rule();
   L.push(`This page, with the same information: ${s.guide}`, "");
-  L.push("About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. The beta is free and invite-only at https://credentialdomd.com if you want a look.", "");
+  L.push("About the sender: CredentialDOMD is the app I built to track my own licenses, CME, and credentialing paperwork, and I use it in practice as a neurosurgeon every day. See current membership details at https://credentialdomd.com.", "");
   L.push("Eric Whitney, DO", "CredentialDOMD", "");
   L.push(`You asked for this guide on the ${state} renewal page. It is a single email, not a list; if you'd rather hear nothing further from CredentialDOMD, reply with the word stop and that's the end of it.`);
   return L.join("\n");
