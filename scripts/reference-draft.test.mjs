@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
-import { buildReferenceDraft, buildReferenceText, buildAssistantHistory, archivedReferenceActions, referenceSelection, resolveReferenceSelection, referenceSharePayload } from "../src/utils/referenceDraft.js";
+import { buildReferenceDraft, buildReferenceText, buildAssistantHistory, archivedReferenceActions, referenceSelection, resolveReferenceSelection, referenceSharePayload, referenceSentences } from "../src/utils/referenceDraft.js";
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, mailtoHref } from "../src/utils/helpers.js";
 
 const refs = ["Alice Example", "Brenda Example", "Chris Example", "Excluded One", "Excluded Two"].map((name, i) => ({
@@ -32,7 +32,8 @@ assert.equal(buildReferenceText({ name: "Alice Example, MD", degree: "MD", email
 
 const settings = { name: "Synthetic Physician", degreeType: "DO", npi: "9999999999", apiKey: "PRIVATE-KEY" };
 assert.equal(buildCredentialText(refs[0], "peerReferences", settings), buildReferenceText(refs[0]));
-assert.equal(buildCredentialBlurb(refs[0], "peerReferences", settings, false, ""), buildReferenceText(refs[0]).replace(/\n/g, "; "));
+assert.equal(buildCredentialBlurb(refs[0], "peerReferences", settings, false, ""), referenceSentences(refs[0]));
+assert.ok(!buildCredentialBlurb(refs[0], "peerReferences", settings, false, "").includes("; "));
 assert.ok(buildCredentialBlurb(refs[0], "peerReferences", settings, true, "Hello").includes("Hello Alice"));
 assert.equal(buildEmailSubject(refs[0], "peerReferences", settings), "Professional reference: Alice Example");
 const mail = new URL(mailtoHref("", "Professional references", draft.text));

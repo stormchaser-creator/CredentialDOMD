@@ -47,6 +47,15 @@ export function buildReferenceText(item = {}) {
   return lines.join("\n");
 }
 
+// Flattens the line-per-field reference text into period-joined sentences,
+// for share paths (native share, iOS Mail) that collapse newlines into one
+// paragraph — reads as "Name, Degree. Specialty: X. Institution: Y." instead
+// of a semicolon-joined run-on line.
+export function referenceSentences(item = {}) {
+  return buildReferenceText(item).split("\n").map(l => l.trim()).filter(Boolean)
+    .map(l => /[.!?]$/.test(l) ? l : `${l}.`).join(" ");
+}
+
 export function buildReferenceDraft(references, action) {
   const selection = referenceSelection(action);
   const byId = new Map((references || []).map(ref => [ref.id, ref]));
@@ -63,8 +72,9 @@ export function buildReferenceDraft(references, action) {
 export function referenceSharePayload(references) {
   return {
     full: references.map(buildReferenceText).join("\n\n"),
-    // Native iOS Mail flattens newlines; each reference remains self-contained.
-    text: references.map((ref, i) => `${i + 1}. ${buildReferenceText(ref).replace(/\n/g, "; ")}`).join(". "),
+    // Native iOS Mail flattens newlines; each reference remains self-contained
+    // and reads as short sentences instead of a semicolon-joined run-on line.
+    text: references.map((ref, i) => `${i + 1}. ${referenceSentences(ref)}`).join(" "),
   };
 }
 

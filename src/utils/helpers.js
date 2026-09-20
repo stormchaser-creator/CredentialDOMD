@@ -1,7 +1,7 @@
 // Extension spelled out so pure-node test scripts can import this module
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
-import { buildReferenceText } from "./referenceDraft.js";
+import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
 
 export const MS_PER_DAY = 86400000;
 
@@ -194,12 +194,14 @@ export function buildCredentialText(item, section, settings) {
  * opening words read as a subject. The formatted letter goes to the
  * clipboard alongside (see ShareModal.doShare). Broken into short sentences
  * (physician, then facts, then provenance) instead of one semicolon-joined
- * run-on — and skips the item summary line since it only restates fields
- * already listed in the facts below.
+ * run-on — each fact is its own period-terminated sentence, not a "; "-joined
+ * list, so it still reads as separate statements once line breaks are gone —
+ * and skips the item summary line since it only restates fields already
+ * listed in the facts below.
  */
 export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
   if (section === "peerReferences") {
-    return [note?.trim().replace(/\s+/g, " "), buildReferenceText(item).replace(/\n/g, "; "), hasDocs ? "Supporting documentation is attached." : ""].filter(Boolean).join(" ");
+    return [note?.trim().replace(/\s+/g, " "), referenceSentences(item), hasDocs ? "Supporting documentation is attached." : ""].filter(Boolean).join(" ");
   }
   const deg = settings.degreeType || "";
   const specialties = settings.specialties?.length
@@ -211,9 +213,10 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
   const physician = (settings.name || "Dr.") + (deg ? ", " + deg : "")
     + (settings.npi ? " (NPI " + settings.npi + ")" : "")
     + (specialties ? ", " + specialties : "");
-  const facts = getSectionFacts(item, section).map(([k, v]) => k + ": " + v).join("; ");
+  const facts = getSectionFacts(item, section)
+    .map(([k, v]) => `${k}: ${v}${/[.!?]$/.test(String(v).trim()) ? "" : "."}`).join(" ");
 
-  return "Credential verification from " + physician + ". " + facts + "."
+  return "Credential verification from " + physician + ". " + facts
     + (note ? " " + note.trim().replace(/\s+/g, " ") : "")
     + (hasDocs ? " Supporting documentation is attached." : "")
     + " Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString() + "."
