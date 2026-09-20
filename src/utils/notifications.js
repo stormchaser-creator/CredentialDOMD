@@ -96,7 +96,9 @@ export function buildNotificationMessage(data, alerts) {
   const lines = [];
   lines.push(`CredentialDOMD Alert for ${name}${deg ? `, ${deg}` : ""}`);
   lines.push(`Report generated: ${fmtDate(now)}`);
-  lines.push("\u2550".repeat(27));
+  // ASCII rule, not a box-drawing glyph: Mail renders "\u2550" in a wide symbol
+  // font that wraps onto its own line on an iPhone (see invoiceCover.js TEXT_RULE).
+  lines.push("-".repeat(30));
 
   if (alerts.expired.length > 0) {
     lines.push("", `\u26a0 EXPIRED (${alerts.expired.length}):`);
@@ -125,7 +127,7 @@ export function buildNotificationMessage(data, alerts) {
     });
   }
 
-  lines.push("", "\u2550".repeat(27));
+  lines.push("", "-".repeat(30));
 
   const freqLabel = alerts.effectiveFreqDays === 1 ? "daily"
     : `every ${alerts.effectiveFreqDays} day${alerts.effectiveFreqDays > 1 ? "s" : ""}`;

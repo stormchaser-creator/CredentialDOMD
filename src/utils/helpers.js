@@ -170,7 +170,9 @@ export function buildCredentialText(item, section, settings) {
   const lines = [];
   const name = settings.name || "Dr.";
   const deg = settings.degreeType || "";
-  const div = "\u2500".repeat(36);
+  // ASCII, not a box-drawing glyph: Mail renders "\u2500" in a wide symbol font
+  // that wraps onto its own line on an iPhone (see invoiceCover.js TEXT_RULE).
+  const div = "-".repeat(30);
 
   lines.push("CREDENTIAL VERIFICATION", div);
   lines.push("Physician: " + name + (deg ? ", " + deg : ""));
