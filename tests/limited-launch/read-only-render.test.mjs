@@ -54,6 +54,18 @@ test('expired Credential remains readable and its archive excludes Practice reco
   assert.match(html, /Saved license/); assert.doesNotMatch(html, /SAVED-001|Saved agreement.pdf/);
 });
 
+test('paid Credential with expired Practice gives an honest support path without an unavailable checkout', () => {
+  const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch.access, { purchasedOfferId: 'core', accessStatus: 'active', practiceTrial: {state: 'expired'}, freeBeta: {state: 'none'} });
+  value.limitedLaunch.access.capabilities.credential = capability(true);
+  const html = render(Notice, {onReviewOffers() {}});
+  assert.match(html, /Your Practice trial has ended/);
+  assert.match(html, /Credential membership continues/);
+  assert.match(html, /Saved Practice records remain available to read and export/);
+  assert.match(html, /href="mailto:support@credentialdomd.com"/);
+  assert.doesNotMatch(html, /Review membership options|review an offer and choose/);
+});
+
 test('free beta and lifetime notices describe different entitlements without offering a purchase', () => {
   const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;
   value.limitedLaunch.access.freeBeta = {state:'active',endsAt:'2026-10-01T00:00:00Z'};

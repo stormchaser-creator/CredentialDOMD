@@ -27,6 +27,9 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
   } else if (access.practiceTrial.state === "active") {
     title = "Your Practice trial";
     copy = `Practice access until ${until(access.practiceTrial.endsAt)}. Practice does not charge automatically. Your Credential membership continues separately.`;
+  } else if (access.purchasedOfferId === "core" && !access.capabilities.practice.write) {
+    title = access.practiceTrial.state === "expired" ? "Your Practice trial has ended" : "Your Credential membership continues";
+    copy = "Your Credential membership continues. Saved Practice records remain available to read and export. Contact support about adding Practice; we will review the available options and charges with you before any billing change.";
   } else if (!access.capabilities.credential.write || !access.capabilities.practice.write) {
     title = access.freeBeta?.state === "expired" ? "Your free beta has ended" : "Saved records are available";
     copy = "You can keep viewing and exporting saved records. To make changes to features outside your membership, review an offer and choose whether to purchase.";
@@ -38,5 +41,6 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
     {(!access || limitedLaunch.error || access.needsRefresh) && <button onClick={limitedLaunch.refresh}>Check again</button>}
     {access?.scheduledMembership && onReviewOffers && <button onClick={onReviewOffers}>Review scheduled membership</button>}
     {canOffer && onReviewOffers && <button onClick={onReviewOffers}>Review membership options</button>}
+    {access?.purchasedOfferId === "core" && !access.capabilities.practice.write && <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about Practice</a>}
   </aside>;
 }
