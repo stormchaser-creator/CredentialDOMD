@@ -35,8 +35,8 @@ const page = (doc, other) => `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${esc(doc.title)} | CredentialDoMD</title>
-<meta name="description" content="${esc(doc.title)} for CredentialDoMD, the physician credential tracker. Last updated ${esc(doc.updated)}.">
+<title>${esc(doc.title)} | CredentialDOMD</title>
+<meta name="description" content="${esc(doc.title)} for CredentialDOMD, the physician credential tracker. Last updated ${esc(doc.updated)}.">
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="https://credentialdomd.com/${doc.slug}">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2310b981'/><rect x='12.2' y='6' width='7.7' height='20' rx='2' fill='white'/><rect x='6' y='12.2' width='20' height='7.7' rx='2' fill='white'/></svg>">

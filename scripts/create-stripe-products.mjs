@@ -25,7 +25,7 @@ export async function bootstrapCatalog({ options, catalog = BILLING_CATALOG, sec
   for (const offer of Object.values(catalog.offers)) {
     let product = await request('GET', `/products/${offer.productId}`, null, null, true);
     if (!product) product = await request('POST', '/products', {
-      id: offer.productId, name: `CredentialDoMD ${offer.name}`, description: 'Annual membership for activated founding physicians.',
+      id: offer.productId, name: `CredentialDOMD ${offer.name}`, description: 'Annual membership for activated founding physicians.',
       'metadata[app]': catalog.app, 'metadata[offer_id]': offer.id, 'metadata[membership]': 'founding',
     }, `${catalog.version}:${options.mode}:product:${offer.id}`);
     if (product.id !== offer.productId || !product.active || product.livemode !== livemode || product.metadata?.app !== catalog.app || product.metadata?.offer_id !== offer.id || product.metadata?.membership !== 'founding') throw new Error('Existing Stripe product conflicts with the catalog');

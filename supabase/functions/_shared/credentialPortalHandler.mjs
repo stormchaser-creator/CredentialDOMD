@@ -139,7 +139,7 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
         const invite = await deps.store.inviteByToken(tokenDigest, email);
         if (!invite) return json(202, genericCodeResponse);
         const code = otp(), version = crypto.randomUUID(), mailId = crypto.randomUUID();
-        const encrypted = await deps.crypto.seal(mailId, { to: email, subject: 'Your private credential access code', text: `Your CredentialDo verification code is ${code}.\n\nIt expires in 10 minutes. Use it only on the private credential invitation page. Never share this code. If you did not request it, ignore this email.` });
+        const encrypted = await deps.crypto.seal(mailId, { to: email, subject: 'Your private credential access code', text: `Your CredentialDOMD verification code is ${code}.\n\nIt expires in 10 minutes. Use it only on the private credential invitation page. Never share this code. If you did not request it, ignore this email.` });
         const result = await deps.store.claimOtp({ tokenDigest, email, version, otpDigest: await deps.crypto.otpDigest(invite.id, version, code), mailId, encrypted, recipientLimitKey: await deps.crypto.recipientLimitKey(email) });
         await deliver(result.mailId);
         return json(202, genericCodeResponse);

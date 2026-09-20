@@ -92,7 +92,7 @@ context is never a publication target. Existing status-open behavior is preserve
 successful delivery. Customer publication is not an exactly-once queue; the separate internal continuation
 queue below never retries a reply.
 
-Every new legacy-compatible body starts **CredentialDO Support · Automated**. It does
+Every new legacy-compatible body starts **CredentialDOMD Support · Automated**. It does
 not impersonate Eric or sign as the physician. The legacy schema still requires a
 profile author and the established compatibility helper still stores the ticket owner
 there; this is a known metadata limitation, not a new secure actor identity. Do not

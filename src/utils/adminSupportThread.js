@@ -7,7 +7,7 @@ const SUPPORT_ACTOR_ID = "00000000-0000-4000-8000-000000000018";
 export function adminSupportActorLabel(message, protectedMetadata = false) {
   if (protectedMetadata && message.author_id === null &&
       message.support_actor_id === SUPPORT_ACTOR_ID && message.support_job_id) {
-    return "CredentialDO Support · Automated";
+    return "CredentialDOMD Support · Automated";
   }
   return "Reply";
 }

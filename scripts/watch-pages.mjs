@@ -20,12 +20,12 @@ export function renderWatchPages(help, catalog) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${e(page.title)} | CredentialDoMD</title>
-  <meta name="description" content="${e(article.summary)} Watch the short CredentialDoMD tutorial, with captions, transcript and written steps.">
+  <title>${e(page.title)} | CredentialDOMD</title>
+  <meta name="description" content="${e(article.summary)} Watch the short CredentialDOMD tutorial, with captions, transcript and written steps.">
   <link rel="canonical" href="${canonical}">
   <meta name="theme-color" content="#0a1014">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="${e(page.title)} | CredentialDoMD">
+  <meta property="og:title" content="${e(page.title)} | CredentialDOMD">
   <meta property="og:description" content="${e(article.summary)}">
   <meta property="og:url" content="${canonical}">
   <meta property="og:image" content="https://credentialdomd.com/help/videos/${page.id}/poster.jpg">
@@ -67,7 +67,7 @@ export function renderWatchPages(help, catalog) {
 <body>
   <a class="skip" href="#main">Skip to the video guide</a>
   <div class="wrap">
-    <nav class="topnav" aria-label="Main navigation"><a class="brand" href="/">CredentialDoMD</a><div class="navlinks"><a href="/help">All guides</a><a href="/cme/">CME resources</a><a href="/locums">Locum tools</a></div></nav>
+    <nav class="topnav" aria-label="Main navigation"><a class="brand" href="/">CredentialDOMD</a><div class="navlinks"><a href="/help">All guides</a><a href="/cme/">CME resources</a><a href="/locums">Locum tools</a></div></nav>
     <main id="main">
       <header><div class="eyebrow">Video guide · ${e(article.category)}</div><h1>${e(page.title)}</h1><p class="lead">${e(article.summary)}</p></header>
       ${renderVideo(videos.get(page.id))}
@@ -76,9 +76,9 @@ export function renderWatchPages(help, catalog) {
       <p><strong>You’re done when:</strong> ${e(article.success)}</p>
       <p class="updated">Written guide reviewed ${e(article.updatedAt)}. This walkthrough uses synthetic demo data.</p>
       <nav class="related" aria-label="Related guides">${article.related.map(id => `<a href="${e(videos.has(id) && watchHref(id) ? watchHref(id) : `/help#${id}`)}">${e(articles.get(id).title)}</a>`).join('')}</nav>
-      <section class="next" aria-labelledby="next-heading"><p><!-- public-launch:early-release -->credentialdomd is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p><p><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p><h2 id="next-heading">Organize your own records</h2><p><!-- public-launch:availability -->credentialdomd membership opens by invitation. Billing is not open. A card is required at future paid checkout. Join the waitlist, or open the app if you already have access.<!-- /public-launch:availability --></p><div class="actions"><!-- public-launch:cta --><a class="button" href="/#join">Request early access</a><!-- /public-launch:cta --><a href="/app/">Open the app</a></div></section>
+      <section class="next" aria-labelledby="next-heading"><p><!-- public-launch:early-release -->CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p><p><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p><h2 id="next-heading">Organize your own records</h2><p><!-- public-launch:availability -->CredentialDOMD membership opens by invitation. Billing is not open. A card is required at future paid checkout. Join the waitlist, or open the app if you already have access.<!-- /public-launch:availability --></p><div class="actions"><!-- public-launch:cta --><a class="button" href="/#join">Request early access</a><!-- /public-launch:cta --><a href="/app/">Open the app</a></div></section>
     </main>
-    <footer><a href="/help">All help guides</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/security">Security & data handling</a><p>CredentialDoMD · Tools for organizing physician credentials and locum work.</p></footer>
+    <footer><a href="/help">All help guides</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/security">Security & data handling</a><p>CredentialDOMD · Tools for organizing physician credentials and locum work.</p></footer>
   </div>
 </body>
 </html>

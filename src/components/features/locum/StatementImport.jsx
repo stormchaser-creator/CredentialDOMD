@@ -4,6 +4,7 @@ import Modal from "../../shared/Modal";
 import { generateId } from "../../../utils/helpers";
 import { analyzeStatement, categorizeStatementRows } from "../../../utils/documentScanner";
 import { aiAvailable } from "../../../utils/aiClient";
+import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
 import * as XLSX from "xlsx";
 
 /**
@@ -338,7 +339,7 @@ function StatementImport({ open, onClose }) {
                     width: "100%", marginTop: 6, padding: "7px 10px", borderRadius: 8, fontSize: 12.5,
                     border: `1px solid ${T.border}`, backgroundColor: T.card, color: T.text, appearance: "auto",
                   }}>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {CATEGORIES.map(c => <option key={c} value={c}>{deductionCategoryLabel(c)}</option>)}
                   </select>
                 )}
                 {r.include && BILLABLE_CATEGORY[r.category] && (

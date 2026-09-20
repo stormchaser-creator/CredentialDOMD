@@ -59,8 +59,8 @@ export function supportDependencies() {
       const response=await fetch('https://api.resend.com/emails', {
         method:'POST', signal:AbortSignal.timeout(20000),
         headers:{ Authorization:`Bearer ${key}`,'Content-Type':'application/json','Idempotency-Key':envelope.idempotency_key },
-        body:JSON.stringify({ from:'CredentialDO Support <support@credentialdomd.com>',to:[envelope.recipient],reply_to:'support@credentialdomd.com',
-          subject:envelope.subject,text:`${envelope.body}\n\nCredentialDO Support\nhttps://credentialdomd.com/app/#support`,tags:[{name:'support_outbox',value:envelope.id}] }),
+        body:JSON.stringify({ from:'CredentialDOMD Support <support@credentialdomd.com>',to:[envelope.recipient],reply_to:'support@credentialdomd.com',
+          subject:envelope.subject,text:`${envelope.body}\n\nCredentialDOMD Support\nhttps://credentialdomd.com/app/#support`,tags:[{name:'support_outbox',value:envelope.id}] }),
       });
       const payload=await response.json().catch(()=>null);
       return resendOutcome(response,payload);

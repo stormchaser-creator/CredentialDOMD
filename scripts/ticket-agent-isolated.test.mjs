@@ -73,7 +73,7 @@ test('host broker enforces approval, queue scope, freshness and open status', ()
   assert.match(sql, /agent_last_reply_at = now\(\)/);
   assert.ok(!sql.includes('DROP TABLE'));
   assert.ok(!sql.includes("SET status = 'resolved'"));
-  assert.ok(sql.includes(Buffer.from('CredentialDO Support · Automated').toString('hex')));
+  assert.ok(sql.includes(Buffer.from('CredentialDOMD Support · Automated').toString('hex')));
   assert.match(sql, /t.archived_at IS NULL/);
   assert.doesNotMatch(replySQL(ticket, 'Reply', { includeArchived: true }), /t.archived_at IS NULL/);
   assert.throws(() => replySQL({ ...ticket, id: "';drop table x" }, 'Reply'));

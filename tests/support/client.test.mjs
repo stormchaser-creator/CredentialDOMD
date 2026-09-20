@@ -86,6 +86,6 @@ test('read result must match the requested ticket and identity does not trust le
   assert.equal(supportActorLabel({is_admin_reply:true,author_email:'eric@example.invalid'}),'Reply');
   assert.equal(supportActorLabel({author_id:id,is_admin_reply:false},id),'You');
   assert.equal(supportActorLabel({author_id:id,is_admin_reply:true},id),'Reply');
-  assert.equal(supportActorLabel({identity_source:'support-operations',actor_kind:'automated'}),'CredentialDO Support · Automated');
+  assert.equal(supportActorLabel({identity_source:'support-operations',actor_kind:'automated'}),'CredentialDOMD Support · Automated');
   assert.equal(supportActorLabel({identity_source:'support-operations',actor_kind:'support'}),'Support team');
 });

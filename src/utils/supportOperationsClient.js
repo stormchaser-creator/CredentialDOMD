@@ -3,7 +3,7 @@ export const SUPPORT_OPERATIONS_ENABLED = import.meta.env?.VITE_SUPPORT_OPERATIO
 
 export function supportActorLabel(message, ownProfileId = null) {
   if (message.identity_source === "support-operations") {
-    return ({ automated: "CredentialDO Support · Automated", support: "Support team", you: "You", account: "Reply on your ticket", unknown: "Reply" })[message.actor_kind] || "Reply";
+    return ({ automated: "CredentialDOMD Support · Automated", support: "Support team", you: "You", account: "Reply on your ticket", unknown: "Reply" })[message.actor_kind] || "Reply";
   }
   // Historical agents sometimes wrote under the ticket owner's ID. An admin flag
   // alone is not proof that Eric, or any particular human, wrote the message.
