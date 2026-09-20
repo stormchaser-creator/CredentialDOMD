@@ -1,16 +1,16 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { SignIn, SignUp } from "@clerk/clerk-react";
+import { SignIn } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
 import { AsclepiusIcon } from "../shared/Icons";
 import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
 
 /**
- * Auth landing page — wraps Clerk's hosted <SignIn /> / <SignUp /> components
+ * Auth landing page — wraps Clerk's unified <SignIn withSignUp /> component
  * inside the CredentialDOMD shell (logo, brand chrome, footer).
  *
  * Clerk owns email+password, magic links, OAuth, password reset, and account
- * verification, so this file only needs to handle the brand wrapper and the
- * sign-in / sign-up tab toggle.
+ * verification. This file provides the brand wrapper and maps old entry links
+ * to the same flow without rewriting Clerk verification routes.
  *
  * Routing: the app is served at /app/ on gh-pages and has no React Router,
  * so we use Clerk's `routing="hash"` mode which keeps everything inside the
@@ -24,8 +24,9 @@ import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
 // automatically once the pk_live_ key ships. Cutover steps: PRODUCTION-CUTOVER.md.
 const IS_DEV_CLERK_INSTANCE =
   (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? "").startsWith("pk_test_");
-// Explain the one-time production sign-in setup only during coordinated continuity.
-const CLERK_CONTINUITY_ENABLED = import.meta.env.VITE_CLERK_CONTINUITY_ENABLED === "true";
+// Only these old app-owned markers are aliases. Provider routes such as
+// #/verify-email and #/factor-one belong to Clerk and must stay untouched.
+const isLegacyEntry = hash => hash === "#sign-in" || hash === "#sign-up";
 
 const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
   ? {
@@ -68,29 +69,22 @@ function useOneTapEmailCode(containerRef, enabled) {
 }
 
 function AuthPage() {
-  const [mode, setMode] = useState(() =>
-    window.location.hash.includes("sign-up") ? "signup" : "signin"
-  ); // "signin" | "signup"
+  // Delay the widget for an old app-owned marker until it is normalized, so
+  // Clerk never mounts on an unsupported route. Normal provider steps mount as-is.
+  const [entry, setEntry] = useState(() => ({ ready: !isLegacyEntry(window.location.hash), version: 0 }));
   const widgetRef = useRef(null);
-  // Once optional SMS is configured, preserve Clerk's actual method picker.
-  // Do not auto-select email or advertise text to accounts without a phone.
-  useOneTapEmailCode(widgetRef, mode === "signin" && !SMS_SIGN_IN_ENABLED);
+  useOneTapEmailCode(widgetRef, entry.ready && !SMS_SIGN_IN_ENABLED);
   const T = THEMES.light;
 
-  // Clerk's own footer links ("Don't have an account? Sign up" / "Already
-  // have an account? Sign in") navigate to #sign-up / #sign-in. The card
-  // shown is controlled by our tab state, so mirror those hash changes into
-  // it — otherwise the links change the URL but nothing on screen.
   useEffect(() => {
     const onHashChange = () => {
-      const h = window.location.hash;
-      if (h.includes("sign-up")) {
-        setMode("signup");
-        // Clear the marker so Clerk's hash router starts clean.
-        history.replaceState(null, "", window.location.pathname + window.location.search);
-      } else if (h.includes("sign-in")) {
-        setMode("signin");
-        history.replaceState(null, "", window.location.pathname + window.location.search);
+      if (isLegacyEntry(window.location.hash)) {
+        history.replaceState(history.state, "", window.location.pathname + window.location.search);
+        // replaceState emits no hashchange. A fresh widget deterministically
+        // resets Clerk even if its router observed the old entry marker first.
+        setEntry(previous => ({ ready: true, version: previous.version + 1 }));
+      } else {
+        setEntry(previous => previous.ready ? previous : { ...previous, ready: true });
       }
     };
     onHashChange();
@@ -132,79 +126,18 @@ function AuthPage() {
           </p>
         </div>
 
-        {CLERK_CONTINUITY_ENABLED && (
-          <section aria-labelledby="returning-beta-heading" style={{
-            marginBottom: 16, padding: "14px 16px", borderRadius: 10,
-            backgroundColor: T.card, border: `1px solid ${T.border}`,
-            color: T.textMuted, fontSize: 13, lineHeight: 1.6,
-          }}>
-            <h2 id="returning-beta-heading" style={{
-              margin: "0 0 6px", color: T.text, fontSize: 14, fontWeight: 700,
-            }}>Returning from the beta?</h2>
-            <p style={{ margin: 0 }}>
-              Our sign-in system changed. Set up your sign-in once using the verified primary email
-              from your original beta account.
-            </p>
-            <p style={{ margin: "6px 0 0" }}>
-              After we verify the match, we reconnect your saved records and existing access.
-              No card or new membership purchase is needed for sign-in setup.
-            </p>
-            <p style={{ margin: "6px 0 0" }}>Your beta password wasn’t transferred.</p>
-            {mode === "signin" && (
-              <button
-                type="button"
-                onClick={() => setMode("signup")}
-                style={{
-                  width: "100%", minHeight: 44, marginTop: 12, padding: "10px 12px",
-                  color: T.accent, backgroundColor: T.card, border: `1px solid ${T.accent}`,
-                  borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer",
-                }}
-              >
-                Set up my existing beta sign-in
-              </button>
-            )}
-          </section>
-        )}
-
-        {/* Mode toggle */}
-        <div style={{
-          display: "flex", gap: 0, marginBottom: 16,
-          backgroundColor: T.input, borderRadius: 10, padding: 3,
-        }}>
-          <button
-            onClick={() => setMode("signin")}
-            style={{
-              flex: 1, padding: "10px 0", fontSize: 14, fontWeight: 700,
-              color: mode === "signin" ? T.accent : T.textMuted,
-              backgroundColor: mode === "signin" ? T.card : "transparent",
-              border: "none", borderRadius: 8, cursor: "pointer",
-              transition: "all 0.2s",
-              boxShadow: mode === "signin" ? T.shadow1 : "none",
-            }}
-          >
-            Sign In
-          </button>
-          <button
-            onClick={() => setMode("signup")}
-            style={{
-              flex: 1, padding: "10px 0", fontSize: 14, fontWeight: 700,
-              color: mode === "signup" ? T.accent : T.textMuted,
-              backgroundColor: mode === "signup" ? T.card : "transparent",
-              border: "none", borderRadius: 8, cursor: "pointer",
-              transition: "all 0.2s",
-              boxShadow: mode === "signup" ? T.shadow1 : "none",
-            }}
-          >
-            Create Account
-          </button>
-        </div>
+        <p style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
+          Already have an account? Use the same email address.
+        </p>
 
         {/* Clerk widget */}
         <div ref={widgetRef} style={{ display: "flex", justifyContent: "center" }}>
-          {mode === "signin" ? (
+          {entry.ready && (
             <SignIn
+              key={entry.version}
               routing="hash"
-              signUpUrl="#sign-up"
+              withSignUp
+              signUpFallbackRedirectUrl="/app/"
               fallbackRedirectUrl="/app/"
               appearance={{
                 elements: {
@@ -219,30 +152,6 @@ function AuthPage() {
                   // Keep the alternate sign-in method easy to find.
                   alternativeMethodsBlockButton: { width: "100%", justifyContent: "center", padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.accent}`, fontWeight: 700 },
                   footerActionLink: { fontWeight: 700 },
-                },
-                variables: {
-                  colorPrimary: "#10b981",
-                  colorText: T.text,
-                  colorBackground: T.card,
-                  borderRadius: "12px",
-                },
-              }}
-            />
-          ) : (
-            <SignUp
-              routing="hash"
-              signInUrl="#sign-in"
-              fallbackRedirectUrl="/app/"
-              appearance={{
-                elements: {
-                  rootBox: { width: "100%" },
-                  ...HIDE_SOCIAL_ELEMENTS,
-                  card: {
-                    backgroundColor: T.card,
-                    border: `1px solid ${T.border}`,
-                    boxShadow: T.shadow2,
-                    borderRadius: 16,
-                  },
                 },
                 variables: {
                   colorPrimary: "#10b981",

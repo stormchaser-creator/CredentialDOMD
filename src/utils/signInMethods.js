@@ -4,6 +4,7 @@ export const SMS_SIGN_IN_ENABLED = import.meta.env?.VITE_SMS_SIGN_IN_ENABLED ===
 
 export const SIGN_IN_LOCALIZATION = {
   signIn: {
+    start: { titleCombined: "Welcome to CredentialDOMD", subtitleCombined: "Enter your email to continue" },
     password: {
       actionLink: SMS_SIGN_IN_ENABLED ? "Use a sign-in code instead" : "Email me a sign-in code instead",
       subtitle: SMS_SIGN_IN_ENABLED
