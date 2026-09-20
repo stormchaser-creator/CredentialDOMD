@@ -116,14 +116,14 @@ function validateEnrollment(value) {
   return structuredClone(value);
 }
 
-/** A fresh default Clerk token, pinned to one signed-in account and one session. */
+/** A fresh Clerk token, pinned to one signed-in account and one session. */
 export function createLimitedLaunchClient({
   accountId, enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
   url = ENV.VITE_SUPABASE_URL, anonKey = ENV.VITE_SUPABASE_ANON_KEY,
   getSession = () => globalThis.window?.Clerk?.session,
   fetchImpl = globalThis.fetch, timeoutMs = 9000,
 } = {}) {
-  async function request(endpoint, body = {}) {
+  async function request(endpoint, body = {}, tokenOptions) {
     if (!enabled || !accountId || !url || !anonKey) throw unavailable();
     const session = getSession();
     const sameSession = () => getSession() === session && session?.user?.id === accountId;
@@ -138,7 +138,7 @@ export function createLimitedLaunchClient({
       timer = setTimeout(() => { controller.abort(); cancelBody(); reject(unavailable()); }, timeoutMs);
     });
     try {
-      const token = await Promise.race([session.getToken(), deadline]);
+      const token = await Promise.race([tokenOptions ? session.getToken(tokenOptions) : session.getToken(), deadline]);
       if (!token || !sameSession() || controller.signal.aborted) throw unavailable();
       response = await Promise.race([fetchImpl(`${url}/functions/v1/${endpoint}`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, apikey: anonKey, "Content-Type": "application/json" },
@@ -179,7 +179,12 @@ export function createLimitedLaunchClient({
     },
     async bootstrap() { return validateEnrollment(await request("bootstrap-launch-access")); },
     async portal() { return validatePortal(await request("limited-customer-portal")); },
-    async entitlements() { return validateAccessSnapshot(await request("billing-entitlements")); },
+    async entitlements() {
+      // This endpoint forwards the caller's JWT to the subject-only PostgREST
+      // snapshot. Use the existing template's authenticated database role;
+      // other Edge endpoints authenticate the default Clerk token themselves.
+      return validateAccessSnapshot(await request("billing-entitlements", {}, { template: "supabase" }));
+    },
     async quote(input) {
       if (!fields(input, ["offerId", "invitationToken"]) || !["core", "core_locum"].includes(input.offerId)
         || (input.invitationToken != null && !isLaunchInvitationToken(input.invitationToken))) throw unavailable("invalid_request");

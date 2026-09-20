@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { createLimitedLaunchClient } from '../../src/utils/limitedLaunchClient.js';
 import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from '../../supabase/functions/_shared/accessPolicy.mjs';
+import { createAccessPolicyHandler } from '../../supabase/functions/_shared/accessPolicyHandler.mjs';
 
 const unavailable = /Membership information could not load/;
 const deferred = () => {
@@ -35,12 +36,12 @@ function setup(overrides = {}) {
   return { client, session, switchSession: value => { current = value; } };
 }
 
-test('transport uses a default Clerk token and a private uncached POST', async () => {
+test('entitlements uses the authenticated Supabase template token and a private uncached POST', async () => {
   let request, tokenArgs;
   const { client, session } = setup({ fetchImpl: async (...args) => { request = args; return Response.json(fixture()); } });
   session.getToken = async (...args) => { tokenArgs = args; return 'synthetic-auth-token'; };
   assert.deepEqual(await client.entitlements(), fixture());
-  assert.deepEqual(tokenArgs, []);
+  assert.deepEqual(tokenArgs, [{ template: 'supabase' }]);
   const [url, options] = request;
   assert.equal(url, 'https://membership.invalid/functions/v1/billing-entitlements');
   assert.equal(options.method, 'POST');
@@ -50,6 +51,36 @@ test('transport uses a default Clerk token and a private uncached POST', async (
   assert.equal(options.cache, 'no-store');
   assert.equal(options.redirect, 'error');
   assert.equal(options.body, '{}');
+});
+
+test('the actual entitlement handler receives the caller token with the authenticated database role', async () => {
+  const tokenCalls = [], forwardedTokens = [];
+  const handler = createAccessPolicyHandler({
+    authenticate: async () => ({ id: 'synthetic-profile', auth_user_id: 'user_SyntheticA', access_status: 'active' }),
+    readOwnSnapshot: async request => {
+      const token = request.headers.get('authorization');
+      forwardedTokens.push(token);
+      if (token !== 'Bearer synthetic-role-authenticated') throw Error('Synthetic anonymous database role denied');
+      return fixture();
+    },
+  }, { ...PUBLIC_BILLING_POLICY, enforcementEnabled: true });
+  const { client, session } = setup({ fetchImpl: (url, options) => handler(new Request(url, options)) });
+  session.getToken = async (...args) => {
+    tokenCalls.push(args);
+    return args[0]?.template === 'supabase' ? 'synthetic-role-authenticated' : 'synthetic-default-without-role';
+  };
+  assert.deepEqual(await client.entitlements(), fixture());
+  assert.deepEqual(tokenCalls, [[{ template: 'supabase' }]]);
+  assert.deepEqual(forwardedTokens, ['Bearer synthetic-role-authenticated']);
+});
+
+test('a failed Supabase template token does not retry with an anonymous default token', async () => {
+  const tokenCalls = []; let requests = 0;
+  const { client, session } = setup({ fetchImpl: () => { requests++; } });
+  session.getToken = async (...args) => { tokenCalls.push(args); throw Error('Synthetic token rejection'); };
+  await assert.rejects(client.entitlements(), unavailable);
+  assert.deepEqual(tokenCalls, [[{ template: 'supabase' }]]);
+  assert.equal(requests, 0);
 });
 
 test('disabled access performs no session lookup, token request, or fetch', async () => {
@@ -176,6 +207,23 @@ test('a stalled body read reaches the deadline and aborts the request', async ()
 const syntheticInvitation = 'synthetic_only_launch_token_A1b2c3d4e5f6g7h8j9k0';
 const syntheticUuid = '00000000-0000-4000-8000-000000000001';
 const consent = { quoteId: syntheticUuid, consentHash: 'a'.repeat(64), consent: true };
+
+test('all other membership endpoints retain default Clerk tokens', async () => {
+  const calls = [], endpoints = [];
+  const { client, session } = setup({ fetchImpl: async url => {
+    endpoints.push(new URL(url).pathname.split('/').pop());
+    return Response.json({ error: 'unauthorized' }, { status: 401 });
+  } });
+  session.getToken = async (...args) => { calls.push(args); return 'synthetic-default'; };
+  for (const action of [() => client.initializeProfile(), () => client.bootstrap(), () => client.portal(),
+    () => client.quote({ offerId: 'core' }), () => client.checkout(consent),
+    () => client.activateInvitation({ invitationToken: syntheticInvitation })]) {
+    await assert.rejects(action(), error => error.code === 'unauthorized');
+  }
+  assert.deepEqual(calls, [[], [], [], [], [], []]);
+  assert.deepEqual(endpoints, ['initialize-clerk-profile', 'bootstrap-launch-access', 'limited-customer-portal',
+    'billing-quote', 'limited-checkout', 'activate-billing-invitation']);
+});
 function quoteFixture(offerId = 'core', phase = 'founding') {
   const offer = getPublicBillingOffer(offerId, phase);
   return {
@@ -411,12 +459,15 @@ const initializationFixture = (bound = true) => ({ schemaVersion: 1, state: boun
 
 test('identity initializer sends only an empty body and accepts exact authenticated current or bound receipts', async () => {
   for (const bound of [true, false]) {
-    let request;
+    let request, tokenArgs;
     const receipt = initializationFixture(bound);
-    const { client } = setup({ fetchImpl: async (...args) => { request = args; return Response.json(receipt); } });
+    const { client, session } = setup({ fetchImpl: async (...args) => { request = args; return Response.json(receipt); } });
+    session.getToken = async (...args) => { tokenArgs = args; return 'synthetic-default-token'; };
     assert.deepEqual(await client.initializeProfile(), receipt);
     assert.ok(request[0].endsWith('/initialize-clerk-profile'));
     assert.equal(request[1].body, '{}');
+    assert.deepEqual(tokenArgs, []);
+    assert.equal(request[1].headers.Authorization, 'Bearer synthetic-default-token');
   }
 });
 test('identity receipt cannot redirect account ownership, profile UUID, issuer, or legacy namespace', async () => {
