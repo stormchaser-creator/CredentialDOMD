@@ -43,7 +43,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     return result === undefined ? (typeof fallback === 'function' ? fallback(...args) : fallback) : result;
   };
   const context = {
-    offlineMode: offline, window, userIdRef, dataOwnerRef, dataLoadGeneration, dataRef,
+    offlineMode: offline, window, userIdRef, dataOwnerRef, dataLoadGeneration, dataRef, cacheWriteGeneration: { current: 0 },
     user: { id: ownerA }, useCallback: callback => callback, accessAuthority: { enabled: false },
     DEFAULT_DATA: { settings: {}, documents: [], licenses: [] }, COLLECTION_KEYS: ['licenses', 'documents'], WIPE_SEEN_KEY: 'synthetic-wipe',
     getActiveUserId: () => actor,
@@ -258,7 +258,7 @@ function cacheFixture() {
   const dataOwnerRef = { current: ownerA }, dataLoadGeneration = { current: 1 };
   const window = { Clerk: { user: { id: ownerA } } };
   const context = {
-    data, dataOwnerRef, dataLoadGeneration, window, user: { id: ownerA }, loaded: true, offlineMode: false,
+    data, dataOwnerRef, dataLoadGeneration, cacheWriteGeneration: { current: 0 }, window, user: { id: ownerA }, loaded: true, offlineMode: false,
     getActiveUserId: () => actor,
     useRef: value => ({ current: value }), useEffect: callback => { context.cleanup = callback(); },
     setTimeout: callback => { scheduled.push(callback); return scheduled.length; }, clearTimeout() {},

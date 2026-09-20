@@ -1,62 +1,103 @@
-import { useState, memo, Fragment } from "react";
+import { useState, useRef, memo, Fragment } from "react";
 import { useApp } from "../../context/AppContext";
-import { deleteAllData, requestAccountDeletion, supabase, clearDeviceKeys } from "../../lib/supabase";
+import { deleteAllData, requestAccountDeletion, clearDeviceKeys } from "../../lib/supabase";
 import { purgeUserStorage } from "../../utils/storageScope";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "../../constants/defaults";
 import { PRIVACY, TERMS, LEGAL_CONTACT } from "../../content/legalText";
 
 function LegalSection({ page }) {
-  const { data, resetAfterAccountDeletion, userIdRef, user, theme: T } = useApp();
+  const { data, beginAccountDeletion, resetAfterAccountDeletion, theme: T } = useApp();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const deletionOwnerRef = useRef(null);
+  const deletionBusyRef = useRef(false);
+
+  const setDeleteConfirmation = (show) => {
+    if (deletionBusyRef.current) return;
+    deletionOwnerRef.current = null;
+    setDeleteInput("");
+    if (show) {
+      try { deletionOwnerRef.current = beginAccountDeletion(); }
+      catch (error) { setShowDeleteConfirm(false); window.alert(error.message); return; }
+    }
+    setShowDeleteConfirm(show);
+  };
 
   // Permanently delete all user data
   const handleDeleteAllData = async () => {
-    if (deleteInput !== "DELETE" || deleting) return;
+    if (deleteInput !== "DELETE" || deleting || deletionBusyRef.current) return;
+    const owner = deletionOwnerRef.current;
+    if (!owner) return;
+    try { owner.check(); } catch { setDeleteConfirmation(false); return; }
+    const theme = data.settings.theme;
+    deletionBusyRef.current = true;
     setDeleting(true);
     // Clear everything this account keeps on the device: the file, the private
     // vault, the Assistant transcript, timers (localStorage + Capacitor), and
     // the device-key slot (AI keys + the portal password lock code).
-    purgeUserStorage(user?.id).catch(() => {});
-    clearDeviceKeys(user?.id);
-    if (userIdRef?.current) {
-      // 1. The client-side purge, everything RLS lets this browser reach:
-      //    uploaded document files first (deleteAllData only covers the
-      //    tables), then the rows. Awaited so the server pass below sees an
-      //    account that is already mostly empty, and so this much is done
-      //    even if that pass cannot get through.
-      const sub = window.Clerk?.user?.id;
-      try {
-        if (supabase && sub) {
-          // Page through the folder: a single list() caps at 1,000 objects, so a
-          // document-heavy account would leave the overflow behind.
-          for (let offset = 0; ; offset += 1000) {
-            const { data: objs } = await supabase.storage.from("documents").list(sub, { limit: 1000, offset });
-            if (!objs || objs.length === 0) break;
-            const paths = objs.map(o => `${sub}/${o.name}`);
-            if (paths.length) await supabase.storage.from("documents").remove(paths);
-            if (objs.length < 1000) break;
+    try {
+      owner.start();
+      await purgeUserStorage(owner.accountId).catch(() => {});
+      owner.check();
+      clearDeviceKeys(owner.accountId);
+      if (owner.profileId && owner.db) {
+        // 1. The client-side purge, everything RLS lets this browser reach:
+        //    uploaded document files first (deleteAllData only covers the
+        //    tables), then the rows. Awaited so the server pass below sees an
+        //    account that is already mostly empty, and so this much is done
+        //    even if that pass cannot get through.
+        const sub = owner.accountId;
+        try {
+          if (sub) {
+            // Page through the folder: a single list() caps at 1,000 objects, so a
+            // document-heavy account would leave the overflow behind.
+            for (let offset = 0; ; offset += 1000) {
+              owner.check();
+              const { data: objs } = await owner.db.storage.from("documents").list(sub, { limit: 1000, offset });
+              owner.check();
+              if (!objs || objs.length === 0) break;
+              const paths = objs.map(o => `${sub}/${o.name}`);
+              if (paths.length) {
+                owner.check();
+                await owner.db.storage.from("documents").remove(paths);
+                owner.check();
+              }
+              if (objs.length < 1000) break;
+            }
           }
+          owner.check();
+          await deleteAllData(owner.profileId, owner);
+          owner.check();
+        } catch { owner.check(); /* Same-owner failures may continue to the server pass. */ }
+        // 2. The server finishes what the browser cannot reach: tickets and
+        //    screenshots, the assistant log, feedback, backups, usage rows, the
+        //    tombstone ledger, and the profile row itself. If the function is
+        //    unreachable the client purge above stands.
+        try {
+          owner.check();
+          await requestAccountDeletion(owner);
+          owner.check();
+        } catch (err) {
+          owner.check();
+          console.warn("CredentialDOMD: server-side deletion did not run; the on-device purge stands:", err.message);
         }
-        await deleteAllData(userIdRef.current);
-      } catch { /* best effort; the server pass covers what this missed */ }
-      // 2. The server finishes what the browser cannot reach: tickets and
-      //    screenshots, the assistant log, feedback, backups, usage rows, the
-      //    tombstone ledger, and the profile row itself. If the function is
-      //    unreachable the client purge above stands.
-      try {
-        await requestAccountDeletion();
-      } catch (err) {
-        console.warn("CredentialDOMD: server-side deletion did not run; the on-device purge stands:", err.message);
       }
+      // Reset from the canonical defaults so every collection key exists (the old
+      // hand-built object dropped locum/tax/travel collections and crashed adds).
+      owner.check();
+      resetAfterAccountDeletion({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme } }, owner);
+      deletionOwnerRef.current = null;
+      setShowDeleteConfirm(false);
+      setDeleteInput("");
+    } catch (error) {
+      // A changed identity stops the remaining phases; never retarget or reset
+      // the newly selected account. Already-dispatched owner requests may finish.
+      if (error.code !== "membership_account_changed") console.warn("CredentialDOMD: data deletion stopped:", error.message);
+    } finally {
+      deletionBusyRef.current = false;
+      setDeleting(false);
     }
-    // Reset from the canonical defaults so every collection key exists (the old
-    // hand-built object dropped locum/tax/travel collections and crashed adds).
-    resetAfterAccountDeletion({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme: data.settings.theme } });
-    setShowDeleteConfirm(false);
-    setDeleteInput("");
-    setDeleting(false);
   };
 
   if (page === "privacy") return <LegalDoc doc={PRIVACY} T={T} />;
@@ -65,7 +106,7 @@ function LegalSection({ page }) {
     <DataRights
       T={T}
       showDeleteConfirm={showDeleteConfirm}
-      setShowDeleteConfirm={setShowDeleteConfirm}
+      setShowDeleteConfirm={setDeleteConfirmation}
       deleteInput={deleteInput}
       setDeleteInput={setDeleteInput}
       handleDeleteAllData={handleDeleteAllData}
@@ -196,9 +237,9 @@ function DataRights({ T, showDeleteConfirm, setShowDeleteConfirm, deleteInput, s
                 fontSize: 14, fontWeight: 700, cursor: deleteInput === "DELETE" && !deleting ? "pointer" : "default",
               }}>{deleting ? "Deleting..." : "Confirm Delete"}</button>
             </div>
-            <button onClick={() => { setShowDeleteConfirm(false); setDeleteInput(""); }} style={{
+            <button disabled={deleting} onClick={() => setShowDeleteConfirm(false)} style={{
               marginTop: 8, padding: "6px 0", width: "100%", border: "none",
-              backgroundColor: "transparent", color: T.textDim, fontSize: 11, cursor: "pointer",
+              backgroundColor: "transparent", color: T.textDim, fontSize: 11, cursor: deleting ? "default" : "pointer",
             }}>Cancel</button>
           </div>
         )}

@@ -52,7 +52,7 @@ function accountChangedError() {
 
 // Each write keeps its initiating identity through token minting, fetch, and
 // follow-up requests. A shared client would obtain the *new* session's token.
-function writeContext(authUserId = getActiveUserId() || clerkSub()) {
+function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = true } = {}) {
   const accountId = authUserId;
   const activeId = getActiveUserId();
   const clerkId = clerkSub();
@@ -66,7 +66,7 @@ function writeContext(authUserId = getActiveUserId() || clerkSub()) {
   };
   guard();
   const owner = { accountId, guard, check: guard, db: null };
-  if (supabase) owner.db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  if (supabase && cloud) owner.db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     accessToken: async () => {
       owner.check();
       if (!session) throw new Error("The signed-in session is unavailable.");
@@ -854,34 +854,74 @@ export async function listTombstones(userId) {
 }
 
 // ─── Delete all user data ────────────────────────────────────
-export async function deleteAllData(userId) {
-  if (!supabase || !userId) return;
+const deletionContexts = new WeakSet();
+
+// Capture once when the owner opens confirmation. Data rights do not depend
+// on paid membership; the caller also pins its displayed profile/load generation.
+export function createDataDeletionContext(authUserId, profileId, { offline = false, isCurrent, onStart } = {}) {
+  const owner = writeContext(authUserId, { cloud: !offline && !!profileId });
+  owner.profileId = profileId || null;
+  const guard = owner.guard;
+  owner.check = () => {
+    guard();
+    if (isCurrent && !isCurrent()) throw accountChangedError();
+  };
+  let started = false;
+  owner.start = () => {
+    owner.check();
+    if (!started) {
+      onStart?.();
+      started = true;
+    }
+    owner.check();
+  };
+  owner.check();
+  deletionContexts.add(owner);
+  return Object.freeze(owner);
+}
+
+function assertDeletionContext(owner, profileId = owner?.profileId) {
+  if (!owner || !deletionContexts.has(owner) || owner.profileId !== profileId) throw accountChangedError();
+  owner.check();
+}
+
+export function isCurrentDataDeletionContext(owner) {
+  try { assertDeletionContext(owner); return true; }
+  catch { return false; }
+}
+
+export async function deleteAllData(userId, owner) {
+  assertDeletionContext(owner, userId);
+  if (!owner.db || !userId) return;
   // Tombstone every id BEFORE deleting: deleted_items is not in TABLE_MAP, so
   // it survives the wipe. Without this, another device holding a stale cache
   // re-uploads everything on its next self-heal and the wipe undoes itself.
   const PAGE = 1000;
   for (const [key, table] of Object.entries(TABLE_MAP)) {
     for (let start = 0; ; start += PAGE) {
-      const { data: rows, error } = await supabase
+      const { data: rows, error } = await writeRequest(owner, () => owner.db
         .from(table)
         .select("id")
         .eq("user_id", userId)
-        .range(start, start + PAGE - 1);
+        .range(start, start + PAGE - 1));
+      owner.check();
       if (error || !rows || rows.length === 0) break;
-      await supabase.from("deleted_items").upsert(
+      await writeRequest(owner, () => owner.db.from("deleted_items").upsert(
         rows.map((r) => ({ item_id: r.id, user_id: userId, collection: key })),
         { onConflict: "item_id" }
-      );
+      ));
+      owner.check();
       if (rows.length < PAGE) break;
     }
   }
   // Delete from all collection tables
   const deletes = Object.values(TABLE_MAP).map((table) =>
-    supabase.from(table).delete().eq("user_id", userId)
+    writeRequest(owner, () => owner.db.from(table).delete().eq("user_id", userId))
   );
   await Promise.all(deletes);
+  owner.check();
   // Reset profile (keep the row but clear fields)
-  const { error: profileErr } = await supabase
+  const { error: profileErr } = await writeRequest(owner, () => owner.db
     .from("profiles")
     .update({
       // Derived from the sync map, so a column added to SETTINGS_TO_PROFILE
@@ -900,7 +940,8 @@ export async function deleteAllData(userId) {
       cme_verification_results: "{}", cme_verification_alerted: false,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", userId);
+    .eq("id", userId));
+  owner.check();
   if (profileErr) console.error("profile reset failed:", profileErr.message);
 }
 
@@ -912,16 +953,19 @@ export async function deleteAllData(userId) {
 // rows, usage and error rows, the tombstone ledger, and the profile row
 // itself reduced to an id. The client purge runs first so the account is
 // emptied even when this call cannot get through.
-export async function requestAccountDeletion() {
-  if (!supabase) throw new Error("No cloud connection");
+export async function requestAccountDeletion(owner) {
+  assertDeletionContext(owner);
+  if (!owner.db || !owner.profileId) throw new Error("No cloud profile connection");
   // dry_run false is explicit on purpose: the function treats a missing flag
   // as a dry run and deletes nothing.
-  const res = await supabase.functions.invoke("delete-account", { body: { dry_run: false } });
+  const res = await writeRequest(owner, () => owner.db.functions.invoke("delete-account", { body: { dry_run: false } }));
+  owner.check();
   if (res.error) {
     // invoke() reports every non-2xx as the same generic sentence; the
     // useful text is in the response body.
     let msg = "";
     try { msg = (await res.error.context?.json())?.error || ""; } catch { /* not JSON */ }
+    owner.check();
     throw new Error(msg || res.error.message || "The server-side deletion did not finish.");
   }
   return res.data;

@@ -27,6 +27,8 @@ import {
   recordTombstone,
   listTombstones,
   replayPendingOps,
+  createDataDeletionContext,
+  isCurrentDataDeletionContext,
   COLLECTION_KEYS,
 } from "../lib/supabase";
 
@@ -458,14 +460,17 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // Persist to localStorage on change (debounced backup), under the key of
   // the account the data was loaded for.
   const saveTimer = useRef(null);
+  const cacheWriteGeneration = useRef(0);
   useEffect(() => {
     if (!loaded) return;
     clearTimeout(saveTimer.current);
     const owner = dataOwnerRef.current;
     const generation = dataLoadGeneration.current;
+    const cacheGeneration = cacheWriteGeneration.current;
     saveTimer.current = setTimeout(() => {
       if (owner && dataOwnerRef.current === owner && getActiveUserId() === owner
-        && dataLoadGeneration.current === generation) saveData(data, owner);
+        && dataLoadGeneration.current === generation
+        && cacheWriteGeneration.current === cacheGeneration) saveData(data, owner);
     }, 300);
     return () => clearTimeout(saveTimer.current);
   }, [data, loaded]);
@@ -497,9 +502,35 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return true;
   }, [user?.id, offlineMode]);
   // Account deletion is an explicit data-rights operation, independent of membership.
-  const resetAfterAccountDeletion = useCallback((next) => {
+  const beginAccountDeletion = useCallback(() => {
+    const accountId = user?.id;
+    const profileId = userIdRef.current;
+    let generation = dataLoadGeneration.current;
+    const isCurrent = () => dataOwnerRef.current === accountId && getActiveUserId() === accountId
+      && userIdRef.current === profileId && dataLoadGeneration.current === generation;
+    if (!accountId || !isCurrent()) throw new Error("Wait for your account to finish loading before deleting its data.");
+    const onStart = () => {
+      // Invalidate queued cache callbacks and earlier loads before the purge.
+      // Only this already-validated deletion advances with the new generation.
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      cacheWriteGeneration.current += 1;
+      generation = ++dataLoadGeneration.current;
+    };
+    return createDataDeletionContext(accountId, profileId, { offline: offlineMode, isCurrent, onStart });
+  }, [user?.id, offlineMode]);
+  const resetAfterAccountDeletion = useCallback((next, owner) => {
+    if (!isCurrentDataDeletionContext(owner)) return false;
+    if (dataOwnerRef.current !== owner.accountId || getActiveUserId() !== owner.accountId) return false;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    cacheWriteGeneration.current += 1;
     dataRef.current = next;
-    setData(next);
+    setData(before => {
+      if (!isCurrentDataDeletionContext(owner)) return before;
+      return dataOwnerRef.current === owner.accountId && getActiveUserId() === owner.accountId ? next : before;
+    });
+    return true;
   }, []);
 
   // Billing is a network surface: offline it fails with a clear message
@@ -601,7 +632,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [onNavigate]);
 
   const value = useMemo(() => ({
-    data, setData: guardedSetData, resetAfterAccountDeletion, loaded, loadedFrom, theme, toggleTheme, isDesktop,
+    data, setData: guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, loaded, loadedFrom, theme, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
     allTrackedStates, navigate, userIdRef,
     // Auth
@@ -610,7 +641,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
     isLifetime, limitedLaunch, canWriteCredential, canWritePractice,
-  }), [guardedSetData, resetAfterAccountDeletion, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
