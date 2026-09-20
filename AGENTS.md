@@ -48,3 +48,9 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 - Use authoritative server pricing and capacity for the website, app and checkout. Viewing an offer or creating an account does not reserve a place. Never silently replace $99 consent with a $149 purchase. If all places are held but fewer than 100 are paid, show temporary unavailability. A paid founding place is not replenished after cancellation or refund.
 - Keep the owner's approved pause on new checkout until production identity and real-account acceptance checks pass. Source code, deployed code, enabled policy and verified customer behavior are separate states.
 - The owner chose to keep email login for now. Do not purchase Clerk Pro or enable paid SMS without a new owner instruction.
+
+## Sign-in experience approved September 20, 2026
+
+- Present one email-first sign-in flow for everyone. Do not ask people to choose beta setup versus regular login or expose internal account-migration details as separate actions.
+- Let the authentication provider guide existing and new identities through the required verification/setup. Preserve verified-email account continuity, existing records and access behind that single flow. A simple reminder to use the existing account email is sufficient.
+- This UI requirement does not waive identity verification, change password requirements, enable billing, or authorize paid SMS.
