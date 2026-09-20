@@ -9,6 +9,7 @@ import { foundingFromProfile } from "../utils/founding.js";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
 import { createContinuityBinding, recoverContinuity, PRODUCTION_CLERK_ISSUER } from "../utils/continuityRecovery.js";
 import { getLockCode, saveLockCode, configureSecretContinuity } from "../utils/secretBox.js";
+import { profileInitializationError } from "../utils/profileIssueDiagnostics.js";
 
 // The typeof guard is the same one src/constants/defaults.js carries, and for
 // the same reason: this module owns redactForExport, which the export paths and
@@ -745,6 +746,7 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
   if (CLERK_CONTINUITY_ENABLED) {
     const session = globalThis.window?.Clerk?.session;
     const authenticatedAt = Date.now();
+    let stage = "initialize";
     try {
       // This endpoint authenticates the production JWT and resolves legacy
       // identity server-side before it may create an ordinary fresh profile.
@@ -753,10 +755,12 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
       initializedProfileId = receipt.profileId;
       configureSecretContinuity(null);
       if (receipt.continuity) {
+        stage = "binding";
         const binding = createContinuityBinding(receipt, { subject: userId, issuer: PRODUCTION_CLERK_ISSUER,
           session, authenticatedAt, isCurrent: () => {
             try { owner.check(); return globalThis.window?.Clerk?.session === session; } catch { return false; }
           } });
+        stage = "recovery";
         let recovered;
         try { recovered = await recoverContinuity(binding); }
         catch (error) {
@@ -766,27 +770,33 @@ export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
           recovered = { state: "complete", conflicts: [] };
         }
         owner.check();
-        if (recovered.state !== "complete" || recovered.conflicts.length) throw new Error("continuity_recovery_conflict");
+        if (recovered.state !== "complete" || recovered.conflicts.length) {
+          const error = new Error("continuity_recovery_conflict");
+          error.code = "continuity_recovery_conflict";
+          throw error;
+        }
+        stage = "binding";
         configureSecretContinuity(binding);
       }
     } catch (cause) {
       owner.check();
-      const error = new Error("Your account identity could not be verified. Your existing records have not changed.");
-      error.code = "continuity_initialization_failed";
-      error.cause = cause;
-      error.recoveryConflict = cause?.message === "continuity_recovery_conflict";
-      throw error;
+      throw profileInitializationError(stage, cause);
     }
   }
   const lookup = () => writeRequest(owner, () => owner.db.from("profiles")
     .select("*").eq("auth_user_id", userId).maybeSingle());
-  const existing = await lookup();
+  let existing;
+  try { existing = await lookup(); }
+  catch (cause) {
+    owner.check();
+    if (initializedProfileId) throw profileInitializationError("profile", cause);
+    throw cause;
+  }
   owner.check();
   // A failed read is not permission to create another account.
   if (initializedProfileId && (existing.error || existing.data?.id !== initializedProfileId || existing.data?.auth_user_id !== userId)) {
-    const error = new Error("Your existing account could not be loaded. Please try again.");
-    error.code = "continuity_initialization_failed";
-    throw error;
+    const cause = existing.error || { code: existing.data ? "profile_mismatch" : "profile_missing" };
+    throw profileInitializationError("profile", cause, existing.status);
   }
   if (existing.error) throw new Error("Your account could not be loaded. Please try again.");
   if (existing.data) return existing.data;

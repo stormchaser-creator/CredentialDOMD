@@ -9,6 +9,8 @@ import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage,
 import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
 import { configureSecretContinuity } from "../utils/secretBox.js";
+import { profileSupportReference } from "../utils/profileIssueDiagnostics.js";
+import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
@@ -403,9 +405,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         dataOwnerRef.current = null;
         userIdRef.current = null;
         setProfileOwner(null);
-        setProfileIssue({ accountId: authUserId, message: err.recoveryConflict
+        const supportReference = profileSupportReference(err);
+        // Report only the allowlisted reference, never the underlying error.
+        reportError(`Account load stopped (${supportReference}).`);
+        setProfileIssue({ accountId: authUserId, supportReference, message: (err.recoveryConflict
           ? "An existing device copy needs a recovery review. Your saved data has not been overwritten. Please contact support."
-          : "Your account identity could not be verified. Your existing records have not changed. Reload to try again." });
+          : "Your account identity could not be verified. Your existing records have not changed. Reload to try again.")
+          + ` Support reference: ${supportReference}.` });
         setData(DEFAULT_DATA);
         setLoadedFrom(null);
         setLoaded(true);

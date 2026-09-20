@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { transformSync } from 'esbuild';
 import { createClient } from '@supabase/supabase-js';
 import { createAccessAuthority, allowsSettingsChange, membershipWriteError } from '../../src/utils/limitedLaunchAccess.js';
+import { profileInitializationError, profileSupportReference } from '../../src/utils/profileIssueDiagnostics.js';
 
 const source = await readFile(new URL('../../src/lib/supabase.js', import.meta.url), 'utf8');
 const code = transformSync(source, { loader: 'js', format: 'cjs', define: {
@@ -40,8 +41,9 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false, c
     '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data' },
     '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { return { initializeProfile: () => f.initializeProfile() }; } },
+    '../utils/profileIssueDiagnostics.js': { profileInitializationError },
     '../utils/continuityRecovery.js': { PRODUCTION_CLERK_ISSUER: 'https://clerk.credentialdomd.com',
-      createContinuityBinding: (receipt, context) => { f.bindingContext = context; return receipt; },
+      createContinuityBinding: (receipt, context) => { f.bindingContext = context; if (f.bind) return f.bind(receipt); return receipt; },
       recoverContinuity: binding => f.recover(binding) },
     '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {}, configureSecretContinuity: binding => { f.configured = binding; } },
     '../utils/founding.js': { foundingFromProfile: () => ({}) },
@@ -370,6 +372,41 @@ test('retired local migration still opens the canonical cloud account without re
   assert.equal(profile.id, continuityReceipt.profileId);
   assert.equal(f.configured, continuityReceipt);
   assert.equal(f.values.size, 0);
+  assert.deepEqual(f.requests.map(r => r.method), ['GET']);
+});
+
+for (const [stage, code, expected] of [
+  ['initialize', 'unauthorized', 'ID-INIT-UNAUTHORIZED-H401'],
+  ['binding', 'continuity_invalid_receipt', 'ID-BIND-INVALID_RECEIPT'],
+  ['recovery', 'continuity_digest_failed', 'ID-RECOVER-DIGEST_FAILED'],
+  ['recovery', 'continuity_storage_unavailable', 'ID-RECOVER-STORAGE_UNAVAILABLE'],
+  ['recovery', 'untrusted-private-message@example.test', 'ID-RECOVER-UNKNOWN'],
+]) test(`failed ${stage}/${code} preserves only the safe support reference`, async () => {
+  const f = fixture({ continuity: true });
+  const fail = () => { const error = Error('Private provider body and stored data'); error.code = code; if (stage === 'initialize') error.httpStatus = 401; throw error; };
+  f.initializeProfile = stage === 'initialize' ? fail : async () => continuityReceipt;
+  f.bind = stage === 'binding' ? fail : undefined;
+  f.recover = stage === 'recovery' ? fail : async () => ({ state: 'complete', conflicts: [] });
+  await assert.rejects(f.api.ensureProfile('user_syntheticA'), error => {
+    assert.equal(profileSupportReference(error), expected);
+    assert.equal(JSON.stringify(error).includes('Private'), false);
+    assert.equal(JSON.stringify(error).includes('@example.test'), false);
+    assert.equal(error.cause, undefined);
+    return error.code === 'continuity_initialization_failed';
+  });
+  assert.equal(f.requests.length, 0);
+});
+
+test('a successful initializer followed by a denied profile read reports its separate stage and status', async () => {
+  const f = fixture({ continuity: true });
+  f.initializeProfile = async () => continuityReceipt;
+  f.recover = async () => ({ state: 'complete', conflicts: [] });
+  f.onRequest = () => Response.json({ code: '42501', message: 'Private database detail' }, { status: 403 });
+  await assert.rejects(f.api.ensureProfile('user_syntheticA'), error => {
+    assert.equal(profileSupportReference(error), 'ID-PROFILE-42501-H403');
+    assert.equal(JSON.stringify(error).includes('Private'), false);
+    return true;
+  });
   assert.deepEqual(f.requests.map(r => r.method), ['GET']);
 });
 

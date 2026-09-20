@@ -59,6 +59,22 @@ test('disabled access performs no session lookup, token request, or fetch', asyn
   assert.equal(calls, 0);
 });
 
+test('initializer diagnostics retain HTTP status without provider error text', async () => {
+  for (const [status, body, code] of [
+    [401, { error: 'unauthorized', message: 'private@example.test' }, 'unauthorized'],
+    [503, { error: 'private@example.test' }, 'membership_information_unavailable'],
+    [200, { invalid: 'private@example.test' }, 'continuity_unavailable'],
+  ]) {
+    const { client } = setup({ fetchImpl: async () => Response.json(body, { status }) });
+    await assert.rejects(client.initializeProfile(), error => {
+      assert.equal(error.httpStatus, status);
+      assert.equal(error.code, code);
+      assert.equal(JSON.stringify(error).includes('private@example.test'), false);
+      return true;
+    });
+  }
+});
+
 test('timeout while waiting for the token rejects without starting a late fetch', async () => {
   const token = deferred();
   let fetches = 0;

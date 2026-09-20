@@ -16,12 +16,13 @@ const SAFE_ERROR_CODES = new Set([
   "checkout_needs_reconciliation", "invalid_request", "request_too_large",
 ]);
 class LimitedLaunchClientError extends Error {
-  constructor(code) {
+  constructor(code, httpStatus) {
     super("Membership information could not load. Your saved records have not changed.");
     this.code = SAFE_ERROR_CODES.has(code) ? code : "membership_information_unavailable";
+    this.httpStatus = Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? httpStatus : null;
   }
 }
-const unavailable = code => new LimitedLaunchClientError(code);
+const unavailable = (code, httpStatus) => new LimitedLaunchClientError(code, httpStatus);
 const object = value => value && typeof value === "object" && !Array.isArray(value);
 const uuid = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 const hash = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -159,13 +160,23 @@ export function createLimitedLaunchClient({
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
       const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
       if (!sameSession() || controller.signal.aborted) throw unavailable();
-      if (!response.ok) throw unavailable(value?.error);
+      if (!response.ok) throw unavailable(value?.error, response.status);
       return value;
-    } catch (error) { throw error instanceof LimitedLaunchClientError ? error : unavailable(); }
+    } catch (error) {
+      if (error instanceof LimitedLaunchClientError) {
+        if (error.httpStatus === null && Number.isInteger(response?.status) && response.status >= 100 && response.status <= 599) error.httpStatus = response.status;
+        throw error;
+      }
+      throw unavailable(undefined, response?.status);
+    }
     finally { clearTimeout(timer); controller.abort(); cancelBody(); }
   }
   return {
-    async initializeProfile() { return validateProfileInitialization(await request("initialize-clerk-profile"), accountId); },
+    async initializeProfile() {
+      const value = await request("initialize-clerk-profile");
+      try { return validateProfileInitialization(value, accountId); }
+      catch (error) { throw unavailable(error?.code, 200); }
+    },
     async bootstrap() { return validateEnrollment(await request("bootstrap-launch-access")); },
     async portal() { return validatePortal(await request("limited-customer-portal")); },
     async entitlements() { return validateAccessSnapshot(await request("billing-entitlements")); },

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import { profileSupportReference, profileInitializationError } from '../../src/utils/profileIssueDiagnostics.js';
 
 // Execute the actual provider functions with synthetic dependencies. Extracting
 // this contiguous function block avoids mounting Clerk/React or making requests;
@@ -47,6 +48,8 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     user: { id: ownerA }, useCallback: callback => callback, accessAuthority: { enabled: false, suspendWrites: () => calls.push({ name: 'suspendWrites' }) },
     DEFAULT_DATA: { settings: {}, documents: [], licenses: [] }, COLLECTION_KEYS: ['licenses', 'documents'], WIPE_SEEN_KEY: 'synthetic-wipe',
     getActiveUserId: () => actor,
+    profileSupportReference,
+    reportError: (...args) => record('reportError', args),
     ensureProfile: asyncDependency('ensureProfile', { id: 'profileA' }),
     replayPendingOps: asyncDependency('replayPendingOps'),
     loadFromSupabase: asyncDependency('loadFromSupabase', () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, documents: [], licenses: [] })),
@@ -306,6 +309,20 @@ test('failed production identity initialization never hydrates or replays a poss
   assert.equal(f.refs.dataOwnerRef.current, null);
   assert.equal(f.named('suspendWrites').length, 1);
   assert.match(f.named('setProfileIssue')[0].value.message, /recovery review/);
+});
+
+test('identity failure displays and reports only an allowlisted support reference', async () => {
+  const f = fixture();
+  f.handlers.ensureProfile = async () => { throw profileInitializationError('recovery', {
+    code: 'continuity_digest_failed', message: 'private@example.test secret stored document',
+  }); };
+  await f.api.loadDataForUser(ownerA);
+  const issue = f.named('setProfileIssue')[0].value;
+  assert.equal(issue.supportReference, 'ID-RECOVER-DIGEST_FAILED');
+  assert.match(issue.message, /Support reference: ID-RECOVER-DIGEST_FAILED\./);
+  assert.deepEqual(f.named('reportError')[0].args, ['Account load stopped (ID-RECOVER-DIGEST_FAILED).']);
+  assert.equal(JSON.stringify(issue).includes('private@example.test'), false);
+  for (const name of ['loadData', 'replayPendingOps', 'loadFromSupabase', 'saveData']) assert.equal(f.named(name).length, 0);
 });
 
 
