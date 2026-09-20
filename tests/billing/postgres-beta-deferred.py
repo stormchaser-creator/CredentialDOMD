@@ -68,11 +68,25 @@ with tempfile.TemporaryDirectory(prefix='beta-deferred-',dir='/private/tmp') as 
    create table fixture_continuity(profile_id uuid,current_subject text,evidence_subject text);
    create function continuity_owns_subject(pid uuid,current_subject text,evidence_subject text) returns boolean language sql stable security definer set search_path=public,pg_temp as $$select exists(select 1 from profiles p where p.id=pid and p.auth_user_id=current_subject) and (current_subject=evidence_subject or exists(select 1 from fixture_continuity f where f.profile_id=pid and f.current_subject=$2 and f.evidence_subject=$3))$$;
    create function continuity_lifetime_source(uuid,text) returns jsonb language sql stable as $$select null::jsonb$$;
-   create function account_is_closed(uuid) returns boolean language sql stable as $$select false$$;
+   create table account_tombstones(profile_id uuid primary key);
    create table app_admins(profile_id uuid primary key);
   """)
-  names=['20260918_founding_billing_readiness.sql','20260919183000_access_policy_foundation.sql','20260919213000_limited_launch_billing.sql','20260919233000_limited_paid_purchase_history.sql','20260920220000_self_service_signup.sql','20260920221000_continuity_access_evidence.sql','20260921010000_admin_lifetime_access.sql','20260921020000_beta_deferred_billing.sql']
+  # Reproduce the live direct-default EXECUTE grants and load the actual helper.
+  sql('alter default privileges in schema public grant execute on functions to anon,authenticated,service_role')
+  mailbox=(ROOT/'supabase/migrations/20260918a_mailbox_account_events.sql').read_text()
+  start=mailbox.index('create or replace function public.account_is_closed(p_profile uuid)')
+  end=mailbox.index('grant execute on function public.account_is_closed(uuid) to postgres, service_role;',start)+len('grant execute on function public.account_is_closed(uuid) to postgres, service_role;')
+  sql(mailbox[start:end])
+  original_probe=sql("select pg_get_functiondef('public.account_is_closed(uuid)'::regprocedure)").stdout
+  for who in ['anon','authenticated']:
+   check(who+' default direct EXECUTE reproduces the pre-fix closure probe',service(f"select account_is_closed('{pid(999)}')",who).stdout.strip()=='f')
+  names=['20260918_founding_billing_readiness.sql','20260919183000_access_policy_foundation.sql','20260919213000_limited_launch_billing.sql','20260919233000_limited_paid_purchase_history.sql','20260920220000_self_service_signup.sql','20260920221000_continuity_access_evidence.sql','20260921010000_admin_lifetime_access.sql','20260921015000_restrict_closed_account_probe.sql','20260921020000_beta_deferred_billing.sql']
   for name in names[:-1]: sql((ROOT/'supabase/migrations'/name).read_text())
+  for who in ['anon','authenticated']:
+   check(who+' cannot directly execute the arbitrary-profile closure probe after hardening',service(f"select account_is_closed('{pid(999)}')",who,ok=False).returncode!=0)
+  sql(f"insert into account_tombstones values('{pid(998)}');insert into profiles(id,auth_user_id,access_status,deleted_at) values('{pid(997)}','user_DeletedProbe','revoked',now())")
+  check('service retains open, tombstoned and soft-deleted closure checks',service(f"select not account_is_closed('{pid(999)}') and account_is_closed('{pid(998)}') and account_is_closed('{pid(997)}')").stdout.strip()=='t')
+  check('closure permission hardening preserves the exact helper body',sql("select pg_get_functiondef('public.account_is_closed(uuid)'::regprocedure)").stdout==original_probe)
   security_catalog="select jsonb_build_object('tables',(select jsonb_agg(jsonb_build_array(c.relname,c.relrowsecurity,c.relforcerowsecurity,c.relacl::text) order by c.relname) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r'),'policies',(select coalesce(jsonb_agg(to_jsonb(p) order by p.tablename,p.policyname),'[]'::jsonb) from pg_policies p where schemaname='public'))"
   security_before=sql(security_catalog).stdout
   migration=(ROOT/'supabase/migrations/20260921020000_beta_deferred_billing.sql').read_text()
@@ -191,6 +205,6 @@ with tempfile.TemporaryDirectory(prefix='beta-deferred-',dir='/private/tmp') as 
   sql(f"update billing_subscriptions set subscription_id='sub_Newer11',status='active',cancel_at_period_end=false where profile_id='{pid(11)}'")
   a=args(11,c11,'evt_HistoricalTerminal',status='canceled',period=yearend,cancel=True);settle(c11,a)
   check('historical terminal event cannot overwrite current cancellation flag',sql(f"select subscription_id='sub_Newer11' and not cancel_at_period_end from billing_subscriptions where profile_id='{pid(11)}'").stdout.strip()=='t')
-  print(json.dumps({'result':'PASS','count':len(checks),'migrationSHA256':hashlib.sha256(migration.encode()).hexdigest(),'checks':checks,'limits':'Synthetic private PostgreSQL only. Identity-continuity/account-closure helper stubs; actual billing/access/eligibility/snapshot SQL. No Stripe or live-provider behavior asserted.'},indent=2))
+  print(json.dumps({'result':'PASS','count':len(checks),'migrationSHA256':hashlib.sha256(migration.encode()).hexdigest(),'checks':checks,'limits':'Synthetic private PostgreSQL only. Identity-continuity helpers are stubs; actual account-closure/billing/access/eligibility/snapshot SQL. No Stripe or live-provider behavior asserted.'},indent=2))
  finally:
   r=run(BIN/'pg_ctl','-D',base/'data','-m','fast','-w','stop');assert r.returncode==0,r.stderr
