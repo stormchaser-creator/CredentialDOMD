@@ -120,3 +120,12 @@ test('existing invitation path stays intact while launch access is OFF', async (
   assert.equal(context.result.access, 'pending');
   assert.deepEqual(calls, [['claim'], ['legacy', 'active']]);
 });
+
+
+test('identity initialization failure overrides an earlier active membership and cached profile', () => {
+  const context = { useState: () => ['active', () => {}], useCallback: fn => fn,
+    limitedLaunch: { enabled: true, access: { accessStatus: 'active' }, initializationError: 'Synthetic recovery failure', refresh() {} },
+    offlineMode: false, user: { id: 'user_synthetic' }, data: { settings: { accessStatus: 'active' } } };
+  vm.runInNewContext(gateCode, context);
+  assert.equal(context.result.access, null);
+});

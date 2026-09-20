@@ -44,7 +44,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
   };
   const context = {
     offlineMode: offline, window, userIdRef, dataOwnerRef, dataLoadGeneration, dataRef, cacheWriteGeneration: { current: 0 },
-    user: { id: ownerA }, useCallback: callback => callback, accessAuthority: { enabled: false },
+    user: { id: ownerA }, useCallback: callback => callback, accessAuthority: { enabled: false, suspendWrites: () => calls.push({ name: 'suspendWrites' }) },
     DEFAULT_DATA: { settings: {}, documents: [], licenses: [] }, COLLECTION_KEYS: ['licenses', 'documents'], WIPE_SEEN_KEY: 'synthetic-wipe',
     getActiveUserId: () => actor,
     ensureProfile: asyncDependency('ensureProfile', { id: 'profileA' }),
@@ -304,6 +304,7 @@ test('failed production identity initialization never hydrates or replays a poss
   await f.api.loadDataForUser(ownerA);
   for (const name of ['loadData', 'readCachedData', 'replayPendingOps', 'loadFromSupabase', 'saveData', 'bulkSync']) assert.equal(f.named(name).length, 0, name);
   assert.equal(f.refs.dataOwnerRef.current, null);
+  assert.equal(f.named('suspendWrites').length, 1);
   assert.match(f.named('setProfileIssue')[0].value.message, /recovery review/);
 });
 

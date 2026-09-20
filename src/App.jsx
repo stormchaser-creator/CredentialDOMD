@@ -460,7 +460,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const launchAccessEnabled = limitedLaunch.enabled, refreshLaunchAccess = limitedLaunch.refresh;
   // The protected membership snapshot is the only online access decision in
   // launch mode. Never run the historical invitation-grant RPC in this mode.
-  const access = limitedLaunch.enabled
+  const access = limitedLaunch.initializationError ? null : limitedLaunch.enabled
     ? (offlineMode ? (data.settings?.accessStatus === "active" ? "active" : "pending") : limitedLaunch.access?.accessStatus ?? (data.settings?.accessStatus === "active" ? "active" : null))
     : legacyAccess;
   const recheckAccess = useCallback(async () => {

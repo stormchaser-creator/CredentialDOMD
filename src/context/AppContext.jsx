@@ -399,6 +399,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       if (["continuity_initialization_failed", "continuity_retirement_unavailable"].includes(err.code)) {
         // An unresolved legacy identity must never hydrate/replay destination
         // storage or silently become a fresh profile. Preserve every disk copy.
+        accessAuthority.suspendWrites();
         dataOwnerRef.current = null;
         userIdRef.current = null;
         setProfileOwner(null);
