@@ -69,6 +69,7 @@ test('help links have existing destinations and use real app entry instead of fi
   const routes = { '/': 'landing/index.html', '/#faq': 'landing/index.html', '/help/': 'landing/help.html', '/states/': 'landing/states/index.html', '/app/': 'index.html', '/cme/': 'landing/cme.html', '/locums': 'landing/locums.html', '/security': 'landing/security.html', '/privacy': 'landing/privacy.html', '/terms': 'landing/terms.html' };
   for (const [, href] of html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)) {
     if (href.startsWith('#')) assert.ok(ids.has(href.slice(1)), href);
+    else if (href === '/#join') assert.match(await read('landing/index.html'), /\bid="join"/);
     else if (Object.hasOwn(routes, href)) await access(resolve(root, routes[href]));
     else if (href.startsWith('/help/videos/')) {
       assert.ok(videos);

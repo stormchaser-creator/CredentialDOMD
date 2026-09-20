@@ -24,7 +24,8 @@ test('exactly three dedicated pages present one reviewed video, unique metadata 
     assert.ok(page.html.includes(`Written guide reviewed ${article.updatedAt}`));
     assert.ok(page.html.includes('Synthetic data; no live messages or payments.'));
     assert.match(page.html, /<track kind="captions"/);
-    assert.match(page.html, /Billing is off/);
+    assert.match(page.html, /Billing is not open/);
+    assert.match(page.html, /card is required at future paid checkout/);
     assert.match(page.html, /href="\/#join"/);
     assert.doesNotMatch(page.html, /<script\b|\bautoplay\b|<iframe\b|VideoObject|uploadDate/);
     assert.ok(page.html.includes(catalog.tutorials.find(video => video.id === page.id).transcriptText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')));
