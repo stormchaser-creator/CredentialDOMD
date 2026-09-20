@@ -52,13 +52,13 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     const output = renderPublicLaunch(source, surface, paid);
     assert.doesNotMatch(output, /<form\b[^>]*\bclass="[^"]*wl-form/);
     assert.doesNotMatch(output, /type="email"/);
-    assert.ok((output.match(/href="\/signup\/"/g) || []).length >= 4);
-    assert.match(output, />Review membership offers<\/span><\/a>/);
+    assert.ok((output.match(/href="\/signup\/"/g) || []).length >= (surface === 'home' ? 3 : 4));
+    assert.match(output, />Create your account<\/span><\/a>/);
     assert.match(output, /Founding Credential is \$99\/year for the first 100 paid founding members/);
     assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
     if (surface === 'home') {
-      assert.match(output, /data-membership-headline>Check the current Credential offer<\/span>/);
-      assert.match(output, /<b data-membership-price>Check in app<\/b><span data-membership-price-label> \/ annual Credential membership<\/span>/);
+      assert.match(output, /data-membership-headline>First 100 paid founding memberships: \$99\/year<\/span>/);
+      assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label> \/ year, founding rate for the first 100 paid members<\/span>/);
       assert.match(output, /data-membership-phase>Membership options<\/span>/);
       assert.doesNotMatch(output, /\$149<span>/);
     }
@@ -72,6 +72,24 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     assert.deepEqual(assets(output), assets(source), 'preserve physician photos and all runtime sources');
     assert.match(output, /href="\/app\/"/, 'existing sign-in remains available');
   }
+});
+
+test('home shows founding policy before sign-in and its offer buttons lead to public pricing', async () => {
+  const output = renderPublicLaunch(await read('landing/index.html'), 'home');
+  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
+  const nav = output.slice(output.indexOf('<nav>'), output.indexOf('</nav>'));
+  for (const html of [hero, nav]) {
+    assert.match(html, /href="#planned-pricing"[^>]*><span data-membership-review-action>/);
+    assert.doesNotMatch(html, /Review membership offers|Check membership offers/);
+  }
+  assert.match(hero, /Founding offer: \$99\/year for the first 100 paid members/);
+  assert.match(hero, /locked for life while membership remains active/);
+  assert.match(hero, /availability is not confirmed/);
+  const core = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
+  assert.match(core, /data-membership-price>\$99/);
+  assert.match(core, /data-membership-status/);
+  assert.match(core, /href="\/app\/"[^>]*><span data-membership-action>Create your account/);
+  assert.ok(core.indexOf('data-membership-price') < core.indexOf('href="/app/"'));
 });
 
 test('locums visible cost and structured data share the same active offer and exceptions', async () => {
@@ -98,7 +116,7 @@ test('home signup and team FAQs use current offers in visible answers and struct
     assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);
   }
   const available = faq.mainEntity.find(item => item.name === 'When can I use it?').acceptedAnswer.text;
-  assert.match(available, /review the available membership offer/);
+  assert.match(available, /Compare the plans here, then create your account/);
   assert.match(available, /\$99\/year/);
   assert.match(available, /Founding Credential is \$99\/year for the first 100 paid founding members/);
   const teams = faq.mainEntity.find(item => item.name.includes('practice manager')).acceptedAnswer.text;

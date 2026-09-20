@@ -53,10 +53,10 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
     brand: 'CredentialDOMD',
     mode: enabled ? 'founding-signup' : 'waitlist',
     primaryAction: Object.freeze(enabled
-      ? { kind: 'navigation', label: 'Review membership offers', shortLabel: 'Membership signup', href: signupHref, collectEmail: false }
+      ? { kind: 'navigation', label: 'Create your account', shortLabel: 'Create your account', href: signupHref, collectEmail: false }
       : { kind: 'waitlist-request', label: 'Join the waitlist', shortLabel: 'Join the waitlist', href: '/#join', collectEmail: true }),
     availability: enabled
-      ? 'Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement.'
+      ? 'Compare the plans here, then create your account. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed before payment; creating an account does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.'
       : 'Checkout is not open. Join the waitlist for your invitation and membership details. A waitlist request does not create a paid account or charge you; future paid access requires a card at checkout.',
     earlyRelease: 'CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.',
     teamAvailability: 'Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
@@ -69,10 +69,10 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
       ? 'After the 100 paid founding memberships, early-bird Credential is $149/year, followed by standard Credential at $199/year.'
       : 'Planned early-bird Credential is $149/year; planned standard Credential is $199/year. These are launch prices, not claims about a previous selling price.',
     earlyBirdRateLock: 'The early-bird annual rate also stays the same while membership remains active.',
-    signupHeading: 'Membership signup',
-    publicRateHeadline: 'Check the current Credential offer',
-    publicPrice: 'Check in app',
-    publicPriceLabel: ' / annual Credential membership',
+    signupHeading: 'Create your account',
+    publicRateHeadline: 'First 100 paid founding memberships: $99/year',
+    publicPrice: '$99',
+    publicPriceLabel: ' / year, founding rate for the first 100 paid members',
     fullPackage: 'Credential + Practice is $245/year total at first purchase. The full package has no founding or early-bird discount.',
     refundGuarantee: 'No-hassle 100% money-back guarantee: request a full refund of your most recent annual membership payment, including a renewal payment, at any time. There is no request deadline or prorating. This covers your most recent annual payment, not all payments from past years. Request through Get help in the app or support@credentialdomd.com. You do not need to delete your account, saved records or reports to request a refund.',
     promisedBeta: enabled

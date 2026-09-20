@@ -7,7 +7,7 @@ import { useApp } from "../../context/AppContext";
  * @param {number} size — diameter in px (default 140)
  * @param {number} stroke — stroke width (default 10)
  * @param {string} label — text below the number (default "Compliant")
- * @param {boolean} pending — show neutral confirmation state instead of a percentage
+ * @param {boolean} pending — keep a neutral color while CME questions remain; the percentage still describes deadline status
  */
 function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Compliant", pending = false }) {
   const { theme: T } = useApp();
@@ -18,17 +18,18 @@ function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Complia
 
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = pending ? circumference : circumference - (animatedPercent / 100) * circumference;
+  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const offset = circumference - (animatedPercent / 100) * circumference;
 
   // Animate stroke on mount/change
   useEffect(() => {
-    const timer = setTimeout(() => setAnimatedPercent(Math.min(100, Math.max(0, percent))), 80);
+    const timer = setTimeout(() => setAnimatedPercent(safePercent), 80);
     return () => clearTimeout(timer);
-  }, [percent]);
+  }, [safePercent]);
 
   // Count-up number animation
   useEffect(() => {
-    const target = Math.min(100, Math.max(0, percent));
+    const target = safePercent;
     const duration = 800;
     const start = performance.now();
     const from = displayNum;
@@ -43,16 +44,20 @@ function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Complia
 
     rafRef.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [percent]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [safePercent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gradient colors based on percentage
-  const gradStart = pending ? T.textMuted : percent >= 80 ? "#10b981" : percent >= 50 ? "#f59e0b" : "#ef4444";
-  const gradEnd   = pending ? T.textMuted : percent >= 80 ? "#34d399" : percent >= 50 ? "#fbbf24" : "#f87171";
+  const neutral = pending || !Number.isFinite(percent);
+  const gradStart = neutral ? T.textMuted : safePercent >= 80 ? "#10b981" : safePercent >= 50 ? "#f59e0b" : "#ef4444";
+  const gradEnd   = neutral ? T.textMuted : safePercent >= 80 ? "#34d399" : safePercent >= 50 ? "#fbbf24" : "#f87171";
   const trackColor = T.input;
 
   return (
-    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={safePercent}
+      aria-valuetext={`${safePercent}% of tracked deadline checks have no alert${pending ? "; CME questions still need answers" : ""}. This is not CME completion.`}
+      style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       <svg
+        aria-hidden="true"
         width={size}
         height={size}
         style={{ transform: "rotate(-90deg)", filter: `drop-shadow(0 0 6px ${gradStart}40)` }}
@@ -97,10 +102,10 @@ function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Complia
           fontFeatureSettings: "'tnum'",
           fontVariantNumeric: "tabular-nums",
         }}>
-          {pending ? "?" : `${displayNum}%`}
+          {`${displayNum}%`}
         </div>
         <div style={{ fontSize: Math.round(size * 0.09), fontWeight: 600, color: T.textMuted, marginTop: 3 }}>
-          {pending ? "Confirm CME" : label}
+          {label}
         </div>
       </div>
     </div>

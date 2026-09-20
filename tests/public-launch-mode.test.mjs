@@ -10,11 +10,11 @@ test('production mode opens protected app signup without collecting a waitlist r
   const view = publicLaunchPresentation();
   assert.equal(view.mode, 'founding-signup');
   assert.deepEqual(view.primaryAction, {
-    kind: 'navigation', label: 'Review membership offers', shortLabel: 'Membership signup', href: '/app/', collectEmail: false,
+    kind: 'navigation', label: 'Create your account', shortLabel: 'Create your account', href: '/app/', collectEmail: false,
   });
   assert.equal(view.guideCapture.forceGuideOnly, true);
   assert.equal(view.guideCapture.showWaitlistChoice, false);
-  assert.match(view.availability, /review the available membership offer/);
+  assert.match(view.availability, /Compare the plans here, then create your account/);
   assert.match(view.availability, /card at checkout/);
   assert.doesNotMatch(view.availability, /Checkout is not open/);
 });
@@ -52,7 +52,7 @@ test('paid preview is navigation, and guide delivery cannot imply paid or waitli
   assert.equal(view.guideCapture.signupIsSeparateNavigation, true);
   assert.equal(view.guideCapture.submitLabel, 'Email me the guide');
   assert.match(view.guideCapture.note, /does not create an account/);
-  assert.match(view.primaryAction.label, /Review membership offers/);
+  assert.match(view.primaryAction.label, /Create your account/);
   assert.match(view.availability, /Founding Credential is \$99\/year for the first 100 paid founding members/);
   assert.match(view.foundingRate, /first 100 paid founding members/);
   assert.match(view.promisedBeta, /first activate their account with a verified email address/);
@@ -101,7 +101,7 @@ test('public signup cannot embed an invitation bearer token or any nonempty frag
 test('founding marketing states the paid cap without claiming live availability or a signup reservation', () => {
   const view = publicLaunchPresentation();
   assert.match(view.availability, /first 100 paid founding members/);
-  assert.match(view.availability, /Availability is confirmed in the app before payment/);
+  assert.match(view.availability, /Availability is confirmed before payment/);
   assert.match(view.availability, /does not reserve a place/);
   assert.match(view.foundingRate, /membership remains continuously active/);
   assert.match(view.rateComparison, /After the 100 paid founding memberships.*\$149.*\$199/);

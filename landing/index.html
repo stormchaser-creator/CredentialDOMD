@@ -2001,7 +2001,7 @@ footer {
         </div>
       </details>
       <a href="/app/">Sign in</a>
-      <!-- public-launch:cta --><a href="#join" class="btn-primary nav-cta">Join the Waitlist</a><!-- /public-launch:cta -->
+      <!-- public-launch:cta --><a href="#join" class="btn-primary nav-cta" data-public-offer-link>Join the Waitlist</a><!-- /public-launch:cta -->
     </div>
     <button class="mobile-menu-btn" data-nav-toggle aria-label="Open menu" aria-controls="primary-nav" aria-expanded="false">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2028,9 +2028,10 @@ footer {
       </p>
       <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px;">Need to manage contracts, work logs or invoices too? Add the optional <a href="/locums">Practice tools</a>.</p>
 
+      <!-- public-launch:hero-offer --><p style="font-size:22px;font-weight:700;">Planned founding offer: $99/year for eligible founding members.</p><!-- /public-launch:hero-offer -->
       <p style="font-size:14px;color:var(--text-secondary);line-height:1.6;"><!-- public-launch:early-release -->CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p>
       <p style="font-size:14px;color:var(--text-secondary);line-height:1.6;margin-bottom:20px;"><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p>
-      <!-- public-launch:form --><form class="wl-form" id="join" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+      <!-- public-launch:form --><form class="wl-form" id="join" data-public-offer-link style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
         <input type="email" aria-label="Email address" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 220px; padding: 15px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
@@ -2643,7 +2644,7 @@ footer {
 </section>
 
 <!-- ============ PLANNED FOUNDING PRICING ============ -->
-<section id="planned-pricing" style="padding: 80px 0; background: var(--bg-elevated);">
+<section id="planned-pricing" style="padding: 80px 0; background: var(--bg-elevated); scroll-margin-top: 90px;">
   <div class="container">
     <div class="animate-on-scroll" style="text-align: center; margin-bottom: 32px;">
       <div class="section-label">Founding membership</div>
@@ -2656,6 +2657,8 @@ footer {
         <p class="launch-price"><!-- public-launch:founding-price -->$99<span> / year, planned founding offer</span><!-- /public-launch:founding-price --></p>
         <p class="feature-desc"><!-- public-launch:founding-rate -->For eligible waitlist founding members. The previously planned founding price was $149/year. Your $99 annual rate stays the same while your membership remains active.<!-- /public-launch:founding-rate --></p>
         <p class="feature-desc">Your physician credentials, documents, CME tracking and renewal organization.</p>
+        <p data-membership-status role="status" aria-live="polite" style="font-size:14px;color:var(--text-secondary);line-height:1.5;">Checkout availability is not confirmed. Creating an account does not reserve a founding place.</p>
+        <p style="margin-top:16px;"><!-- public-launch:cta --><a href="#join" class="btn-primary">Join the waitlist</a><!-- /public-launch:cta --></p>
         <p class="feature-desc" style="margin-top: 12px;"><!-- public-launch:rate-comparison -->Planned early-bird price: $149/year, also held while membership remains active. Planned standard price: $199/year. Your offer and eligibility will be shown before you choose to pay.<!-- /public-launch:rate-comparison --></p>
       </article>
       <article class="feature-card animate-on-scroll">
@@ -2667,7 +2670,6 @@ footer {
     </div>
     <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);"><!-- public-launch:promised-beta --><strong>Signed up under our earlier free-beta offer?</strong> We will honor 30 days free with no card, then an optional $99/year Credential membership. There is no automatic charge; you must choose to pay to continue. Your invitation will confirm eligibility and when the 30 days start.<!-- /public-launch:promised-beta --></p>
     <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);"><!-- public-launch:lifetime-exception -->Planned lifetime-access policy: accounts already registered when this policy was announced will keep Credential and Practice free for life. A waitlist entry alone does not qualify. Account eligibility will be confirmed before billing opens.<!-- /public-launch:lifetime-exception --></p>
-    <p style="text-align: center; margin-top: 16px;"><!-- public-launch:cta --><a href="#join" class="btn-primary">Join the waitlist</a><!-- /public-launch:cta --></p>
   </div>
 </section>
 

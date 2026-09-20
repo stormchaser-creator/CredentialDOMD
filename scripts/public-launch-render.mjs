@@ -36,6 +36,7 @@ function navigation(fallback, view) {
   if (!anchor) throw Error('A launch CTA slot must contain exactly one anchor');
   const attrs = anchor[2].replace(/\s+href="[^"]*"/, '').replace(/\s+aria-label="[^"]*"/, '');
   const icon = anchor[3].match(/<svg\b[\s\S]*?<\/svg>/)?.[0] || '';
+  if (/\bdata-public-offer-link\b/.test(attrs)) return `${anchor[1]}<a${attrs} href="#planned-pricing"><span data-membership-review-action>See membership plans</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
   return `${anchor[1]}<a${attrs} href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
 }
 
@@ -44,11 +45,12 @@ function signupInsteadOfForm(fallback, view) {
   if (!form || !/class="[^"]*\bwl-form\b/.test(form[1])) throw Error('A signup slot must contain a waitlist form');
   const id = form[1].match(/\bid="([^"]*)"/)?.[1];
   const style = form[1].match(/\bstyle="([^"]*)"/)?.[1];
+  if (/\bdata-public-offer-link\b/.test(form[1])) return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="#planned-pricing" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-review-action>See membership plans</span></a></div>`;
   return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a></div>`;
 }
 
 const minimumSlots = {
-  home: { cta: 4, form: 2, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1 },
+  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1 },
   locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 3 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
@@ -73,6 +75,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
     if (slot === 'cta') return navigation(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
+    if (slot === 'hero-offer') return '<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">Founding offer: $99/year for the first 100 paid members</p><p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>';
     if (slot === 'guide-consent') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note)} <a href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span></a></p>`;
     if (slot === 'home-faq-json') {
       const schema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: homeFaq.map(answer => ({
@@ -119,7 +122,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
     if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
     if (slot === 'audience-badge') return 'For MDs and DOs · <span data-membership-phase>Membership options</span>';
-    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Check availability in app.</span>' : '');
+    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Checkout availability is not confirmed. Creating an account does not reserve a founding place.</span>' : '');
   });
   for (const [slot, count] of Object.entries(minimumSlots[surface])) {
     if ((counts[slot] || 0) < count) throw Error(`Incomplete ${surface} migration: ${slot} needs ${count} slots`);

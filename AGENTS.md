@@ -46,6 +46,7 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 - The first 100 paid Credential/Core founding memberships are $99/year. After those 100, early-bird Credential is $149/year; standard Credential is later $199/year. Founding and early-bird annual rates remain locked while membership stays continuously active. Do not advertise $149 as the current founding offer or restrict all $99 offers to the waitlist.
 - The four reviewed eligible historical $99 promises reserve places within the 100. Lifetime accounts and the $245/year Credential + Practice package do not consume paid $99 Core places. Legacy profile founding numbers are not a paid-member counter.
 - Use authoritative server pricing and capacity for the website, app and checkout. Viewing an offer or creating an account does not reserve a place. Never silently replace $99 consent with a $149 purchase. If all places are held but fewer than 100 are paid, show temporary unavailability. A paid founding place is not replenished after cancellation or refund.
+- Show the founding price and terms on the public website before sign-in. A checkout pause changes purchase availability, not the known price. Preserve the stated $99/first-100 policy when live availability cannot be confirmed, and label availability separately; never replace the price with a request to log in to see it.
 - Keep the owner's approved pause on new checkout until production identity and real-account acceptance checks pass. Source code, deployed code, enabled policy and verified customer behavior are separate states.
 - The owner chose to keep email login for now. Do not purchase Clerk Pro or enable paid SMS without a new owner instruction.
 
@@ -61,3 +62,8 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 
 - Keep routine membership status, lifetime access and founding-member badges on Profile & settings. Do not repeat them across dashboards or everyday workspaces.
 - Preserve actionable access-error messages and explanations where a feature is read-only. Keep trial dates, renewal terms and membership management available in the profile and intentional purchase flows.
+
+## Dashboard CME guidance
+
+- An unanswered CME applicability question must identify the missing information and provide a direct action to review it. Missing MD/DO selection belongs in Profile & settings; conditional requirements belong with the affected state's CME details.
+- Keep the tracked-standing ring's numeric deadline score visible. Explain its meaning and show unanswered questions separately. Do not change compliance calculations, presume an exemption, or treat a deadline score as proof that all CME requirements are complete.

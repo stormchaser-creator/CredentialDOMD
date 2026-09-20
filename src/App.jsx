@@ -971,6 +971,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
     const cmeSummary = cmeReviewSummary(stateComps);
+    const reviewCmeState = (st) => setCmeDetail({ st });
+    const openCmeProfile = () => { setTab("more"); setSubPage("settings"); };
+    const openCmeLicenses = () => { setTab("credentials"); setSubPage("licenses"); };
     const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && credStats.undated === 0;
     // What is holding the ring below 100, listed where the number is, each
     // line a tap to the record that fixes it. One renderer for both heroes.
@@ -984,7 +987,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             : days === 0 ? "expires today" : `${days} day${days === 1 ? "" : "s"} left`;
           const color = item.needsConfirmation ? T.textMuted : days != null && days < 0 ? T.danger : T.warning;
           const go = () => {
-            if (isCme) { setTab("credentials"); setSubPage("cme"); return; }
+            if (isCme) { reviewCmeState(item.state); return; }
             setTab("credentials"); setSubPage(item._sec);
             setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" });
           };
@@ -1001,7 +1004,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {standing.needsAction.length > max && (
           <div style={{ fontSize: 12, color: T.textMuted }}>and {standing.needsAction.length - max} more below</div>
         )}
-        <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>{standing.good} of {standing.total} tracked items have no deadline alert</div>
       </div>
     );
     // Subtle gradient glow behind the ring, shared by both hero cards
@@ -1015,7 +1017,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     );
     const phoneHero = (
       <div style={{
-        display: "flex", alignItems: "center", gap: 20,
+        display: "flex", alignItems: "center", flexWrap: "wrap", gap: 20,
         backgroundColor: T.card, borderRadius: 16, padding: "20px 24px",
         marginBottom: 16, boxShadow: T.shadow1,
         position: "relative", overflow: "hidden",
@@ -1050,9 +1052,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.undated} with no expiration date</span>
               </div>
             )}
-            <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} theme={T} />
-            {needsActionList(4)}
           </div>
+        </div>
+        <div style={{ flexBasis: "100%", minWidth: 0 }}>
+          <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} standing={standing} onReviewState={reviewCmeState} onOpenProfile={openCmeProfile} onOpenLicenses={openCmeLicenses} theme={T} />
+          {needsActionList(4)}
         </div>
       </div>
     );
@@ -1091,7 +1095,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               </div>
             ))}
           </div>
-          <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} theme={T} />
+          <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} standing={standing} onReviewState={reviewCmeState} onOpenProfile={openCmeProfile} onOpenLicenses={openCmeLicenses} theme={T} />
           {needsActionList(6)}
         </div>
       </div>

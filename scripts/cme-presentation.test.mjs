@@ -5,7 +5,7 @@ import { writeFile, unlink, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { computeCompliance } from '../src/utils/compliance.js';
+import { computeCompliance, standingScore } from '../src/utils/compliance.js';
 import { CA_GERIATRIC_FIELD, OHIO_PAIN_CLINIC_FIELD } from '../src/utils/conditionalCme.js';
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview } from '../src/utils/cmePresentation.js';
 import { jurisdictionEvidence } from '../src/utils/assistantEvidence.js';
@@ -64,6 +64,49 @@ try {
     const comp = ca({}, '');
     assert.match(cmeAssessmentLabel(comp), /Confirm MD or DO.*provisional/);
     assert.deepEqual(cmeReviewSummary([{ st: 'CA', comp }]), { records: [], confirmation: ['CA'] });
+  });
+  test('dashboard actions open the affected state questions, missing degree, and missing license separately', () => {
+    const calls = [];
+    const license = { id: 'ca', type: 'State Medical License', state: 'CA', expirationDate: expiry };
+    const renderActions = stateComps => collect(Summary({ stateComps, theme: {},
+      onReviewState: st => calls.push(['state', st]), onOpenProfile: () => calls.push(['profile']), onOpenLicenses: () => calls.push(['licenses']),
+    }), 'button');
+    const before = ca();
+    const original = structuredClone(before);
+    const [question] = renderActions([{ st: 'CA', comp: before, lic: license }]);
+    assert.match(question.props.children.join(''), /CA: confirm Geriatric Medicine/);
+    assert.equal(question.props.type, 'button');
+    question.props.onClick();
+    assert.deepEqual(calls, [['state', 'CA']]);
+    assert.deepEqual(before, original, 'opening the questions never answers them');
+
+    const [degree] = renderActions([{ st: 'CA', comp: ca({}, ''), lic: license }]);
+    assert.match(degree.props.children.join(''), /choose MD or DO in Profile/);
+    degree.props.onClick();
+    const [missingLicense] = renderActions([{ st: 'CA', comp: ca(), lic: null }]);
+    assert.match(missingLicense.props.children.join(''), /medical license/);
+    missingLicense.props.onClick();
+    const [records] = renderActions([{ st: 'CA', comp: ca({ [CA_GERIATRIC_FIELD]: 'Yes' }), lic: license }]);
+    assert.match(records.props.children.join(''), /review recorded CME/);
+    records.props.onClick();
+    assert.deepEqual(calls, [['state', 'CA'], ['profile'], ['licenses'], ['state', 'CA']]);
+  });
+  test('unanswered applicability preserves a numeric deadline score without claiming CME completion', () => {
+    const comp = ca();
+    const near = { ...comp, daysLeft: 20 };
+    const items = [{ id: 'license', expirationDate: '2028-01-31' }];
+    const standing = standingScore({ items, stateComps: [{ st: 'CA', comp: near }], now: new Date('2026-09-20') });
+    assert.equal(standing.percent, 50);
+    assert.equal(near.fullyCompliant, false);
+    const html = renderToStaticMarkup(React.createElement(Summary, {
+      stateComps: [{ st: 'CA', comp: near }], standing, theme: {},
+    }));
+    assert.match(html, /1 of 2 tracked deadline checks have no alert/);
+    assert.match(html, /deadline status, not CME completion/);
+    assert.match(html, /An unanswered question does not mean you are missing CME hours/);
+    const far = standingScore({ items, stateComps: [{ st: 'CA', comp: { ...comp, daysLeft: 400 } }], now: new Date('2026-09-20') });
+    assert.equal(far.percent, 100, 'no deadline alert is different from completion');
+    assert.equal(comp.fullyCompliant, false, 'a numeric ring does not change the assessment');
   });
   test('mixed state summary separates gap, applicability and expiry independently', () => {
     const stateComps = [{ st: 'CA', comp: ca({ [CA_GERIATRIC_FIELD]: 'Yes' }) }, { st: 'OH', comp: oh() }];

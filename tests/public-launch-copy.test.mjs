@@ -36,7 +36,7 @@ for (const page of ['index', 'locums']) {
     assert.equal(PUBLIC_LAUNCH_MODE.enabled, true);
     const html = renderPublicLaunch(await read(`landing/${page}.html`), page === 'index' ? 'home' : 'locums');
     assert.match(html, /href="\/app\/"/);
-    assert.match(html, /Review membership offers/);
+    assert.match(html, /Create your account/);
     assert.match(html, /card (?:is )?required at checkout/i);
     assert.match(html, /Founding Credential is \$99\/year for the first 100 paid founding members/);
     assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
