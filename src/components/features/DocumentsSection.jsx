@@ -92,7 +92,7 @@ function DocumentsSection() {
     const title = `Credential packet — ${sName} (${docs.length} documents)`;
     // iOS Mail promotes the first text line to the subject and strips
     // newlines — share a flowing blurb, formatted letter to the clipboard.
-    const blurb = `Credential packet for ${sName}${data.settings?.npi ? " (NPI " + data.settings.npi + ")" : ""}, ${docs.length} document${docs.length === 1 ? "" : "s"} attached: ${docs.map((d, i) => `${i + 1}. ${d.name}`).join("; ")}. A formatted cover letter is on the sender's clipboard for pasting. Sent via CredentialDOMD.`;
+    const blurb = `Credential packet for ${sName}${data.settings?.npi ? " (NPI " + data.settings.npi + ")" : ""}, ${docs.length} document${docs.length === 1 ? "" : "s"} attached: ${docs.map((d, i) => `${i + 1}. ${d.name}.`).join(" ")} A formatted cover letter is on the sender's clipboard for pasting. Sent via CredentialDOMD.`;
     try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ }
 
     if (navigator.share && navigator.canShare?.({ files })) {
