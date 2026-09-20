@@ -70,7 +70,6 @@ ok("a bare * is refused", !isEmailShaped("*@hospital.org"));
 // ── refuseAdd: every refusal, in order ──────────────────────────────────────
 const base = {
   email: "name@hospital.org",
-  ownProfileEmail: "name@gmail.com",
   ownRowVerified: null,
   usedByAnotherAccount: false,
   pendingCount: 0,
@@ -83,9 +82,19 @@ eq("a work address on a gmail account is allowed", refuseAdd(base), null);
 eq("malformed is refused", code({ email: "not-an-address" }), "invalid");
 eq("our own inbox domain is refused", code({ email: "docs@credentialdomd.com" }), "own_domain");
 eq("a subdomain of our inbox domain is refused", code({ email: "x@mail.credentialdomd.com" }), "own_domain");
-eq("the account's own email is refused, not duplicated", code({ email: "name@gmail.com" }), "own_profile_email");
-eq("case does not defeat the own-email check", code({ email: "name@gmail.com", ownProfileEmail: "NAME@Gmail.com" }), "own_profile_email");
-eq("another account's address is refused", code({ usedByAnotherAccount: true }), "other_account");
+// The transition rule (2026-09-15). Confirming the address already on your own
+// profile is the ONE safe path a current user has, because inbound routing
+// stopped reading profiles.email: the address on the profile proves nothing,
+// and receiving the link is the proof. It used to be refused as
+// own_profile_email on the grounds that mail from it already reached you,
+// which stopped being true the same day.
+eq("the account's own profile email is confirmable", code({ email: "name@gmail.com" }), null);
+// The caller normalizes before these rules run, so the case-folding question
+// is asked of normalizeEmail, which is what handleAdd actually applies.
+eq("so is the same address typed in another case", code({ email: normalizeEmail("NAME@Gmail.com") }), null);
+ok("own_profile_email is gone from the add path",
+  ["name@gmail.com", "name@hospital.org", normalizeEmail("NAME@Gmail.com")].every((email) => code({ email }) !== "own_profile_email"));
+eq("another account's PROVEN address is still refused", code({ usedByAnotherAccount: true }), "other_account");
 eq("another account's address is a 409", status({ usedByAnotherAccount: true }), 409);
 eq("this account already confirmed it", code({ ownRowVerified: true }), "already_verified");
 eq("this account already has it pending", code({ ownRowVerified: false }), "already_pending");
@@ -103,19 +112,25 @@ eq("ownership is checked before any limit",
 ok("the other-account message does not distinguish profile email from verified address",
   refuseAdd({ ...base, usedByAnotherAccount: true }).message === "That address is already in use by another CredentialDOMD account.");
 
-// ── The four address rules, on their own ────────────────────────────────────
+// ── The three address rules, on their own ───────────────────────────────────
 // refuseAdd and refuseResend both run these. They are exported separately
 // because resend has to apply them to an address it did not receive: the one
-// already stored on the row.
+// already stored on the row. There were four until 2026-09-15; the own-profile
+// -email rule is the one that went.
 const claim = (over) => (refuseAddressClaim({
-  email: "name@hospital.org", ownProfileEmail: "name@gmail.com", usedByAnotherAccount: false, ...over,
+  email: "name@hospital.org", usedByAnotherAccount: false, ...over,
 }) || { code: null }).code;
 eq("a work address passes the claim rules", claim({}), null);
 eq("malformed fails them", claim({ email: "not-an-address" }), "invalid");
 eq("our own inbox domain fails them", claim({ email: "docs@credentialdomd.com" }), "own_domain");
-eq("the account's own email fails them", claim({ email: "name@gmail.com" }), "own_profile_email");
-eq("an address another account holds fails them", claim({ usedByAnotherAccount: true }), "other_account");
-// refuseAdd is these four and then the rest, so they must answer identically.
+eq("the account's own email passes them now", claim({ email: "name@gmail.com" }), null);
+eq("an address another account has PROVEN fails them", claim({ usedByAnotherAccount: true }), "other_account");
+// usedByAnotherAccount is now computed from proven claims only: a row somebody
+// else confirmed by challenge, or somebody else's profiles.verified_email. A
+// typed profiles.email no longer feeds it, which is what stops one account
+// reserving a mailbox it cannot read. That wiring lives in
+// forwarding-address/index.ts heldByAnotherAccount; the flag itself is here.
+// refuseAdd is these three and then the rest, so they must answer identically.
 for (const over of [{}, { email: "not-an-address" }, { email: "docs@credentialdomd.com" },
   { email: "name@gmail.com" }, { usedByAnotherAccount: true }]) {
   eq(`refuseAdd defers to the claim rules for ${JSON.stringify(over)}`, code(over), claim(over));
@@ -145,7 +160,7 @@ eq("the other-account message matches the one refuseAdd already uses",
 const NOW = Date.parse("2026-09-03T12:00:00.000Z");
 const rfacts = {
   found: true, verified: false, lastSentAt: null, sendsLast24h: 0, nowMs: NOW,
-  email: "name@hospital.org", ownProfileEmail: "name@gmail.com", usedByAnotherAccount: false,
+  email: "name@hospital.org", usedByAnotherAccount: false,
 };
 const rcode = (over) => (refuseResend({ ...rfacts, ...over }) || { code: null }).code;
 eq("a resend with no prior send is allowed", rcode({}), null);
@@ -165,7 +180,7 @@ eq("a resend refuses a malformed stored address", rcode({ email: "not-an-address
 eq("a resend refuses a stored address with an ilike wildcard", rcode({ email: "chief*@hospital.org" }), "invalid");
 eq("a resend refuses a stored address on our own inbox domain", rcode({ email: "docs@credentialdomd.com" }), "own_domain");
 eq("a resend refuses a stored address on a subdomain of our inbox domain", rcode({ email: "x@mail.credentialdomd.com" }), "own_domain");
-eq("a resend refuses a stored address that is the account's own email", rcode({ email: "name@gmail.com" }), "own_profile_email");
+eq("a resend to the account's own profile email is allowed now", rcode({ email: "name@gmail.com" }), null);
 eq("a resend refuses a stored address another account verified", rcode({ usedByAnotherAccount: true }), "other_account");
 // Order: a row that is not the caller's is refused before the address is looked
 // at, so resend cannot be used to ask questions about somebody else's row.

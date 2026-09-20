@@ -71,7 +71,9 @@
  *     back live under "Try again" and a second tap mailed the credentialer
  *     the whole packet twice, the second send holding the only record. Now
  *     the row is completed as replied with no reply_email_id, the share_log
- *     row is written so the hourly cap counts it, and the response is 502
+ *     row is written so the physician has a record of it (the hourly cap no
+ *     longer counts share_log; the reservation was taken before the send, so
+ *     an unconfirmed send is already counted), and the response is 502
  *     "The send could not be confirmed" naming the Replied tab. email-inbound
  *     treats its acknowledgement the same way (the stamp stays on a throw).
  *     The hand-built path does not claim: a row already 'replied' is exactly
@@ -92,7 +94,25 @@
  * message_id, attachments pulled from Storage bucket "documents" with the
  * service role. Caps: 10 files, 25 MB total after base64 (extras skipped and
  * reported), subject 200 chars, text 5000 chars, 30 sends per hour per user
- * (share_log rows with method = 'email').
+ * (reservations in public.send_reservations, see below).
+ *
+ * The hourly cap counts a ledger the sender cannot edit. It used to count
+ * share_log rows with method = 'email', and share_log's only policy,
+ * share_log_owner, is FOR ALL to authenticated on the caller's own rows, so
+ * DELETE is included: the account the cap bounds could delete its own
+ * share_log rows through PostgREST and the next count started at zero. The
+ * count now runs against public.send_reservations, which has RLS on, no
+ * policy and no grants, so only the service role writes or reads it. The
+ * count and the insert are one statement inside reserve_send() behind a
+ * per-user advisory lock, so two taps arriving together cannot both pass the
+ * boundary. share_log is unchanged and stays the physician-facing history.
+ * A genuine over-cap answer refuses with 429 and code send_cap_reached. A
+ * reservation that could not be taken at all (migration not applied, RPC
+ * error) ALSO refuses, with 429, code send_ledger_unavailable and a
+ * Retry-After: nothing was fetched, claimed or mailed, so the caller can just
+ * try again. An earlier version sent anyway on that branch, which made "break
+ * the ledger" the cheapest route to an unmetered send budget over our sending
+ * domain; see sendReservationVerdict.
  *
  * Side effects on success: document_requests -> status 'replied', replied_at,
  * reply_email_id, doc_ids (when request_id given); share_log row always. On
@@ -100,10 +120,12 @@
  * completed after the send; a refused send puts them back, an unconfirmed
  * one completes them with reply_email_id null.
  *
- * No test script drives this function (it needs Clerk, Storage and Resend);
- * the rules it shares with the app live in _shared/requestFlow.ts and are
- * tested there. The text-only rule above is exercised by the app's
- * "Send reply (nothing to attach)" button.
+ * No test script drives the whole function (it needs Clerk, Storage and
+ * Resend); the rules it shares with the app live in _shared/requestFlow.ts and
+ * are tested there. The throttle's two decisions are pure and exported
+ * (sendWindowStart, sendReservationVerdict) and scripts/send-throttle.test.mjs
+ * imports THIS file for them. The text-only rule above is exercised by the
+ * app's "Send reply (nothing to attach)" button.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -121,7 +143,12 @@ const MAX_FILES = 10;
 const MAX_TOTAL_B64_BYTES = 25 * 1024 * 1024;
 const MAX_SUBJECT = 200;
 const MAX_TEXT = 5000;
-const SENDS_PER_HOUR = 30;
+export const SENDS_PER_HOUR = 30;
+// The window the cap counts over. The boundary is computed here rather than
+// with now() in SQL so the arithmetic is testable, and because the old
+// share_log count compared sent_at against exactly this value: nothing about
+// the window changes, only which table the rows are counted in.
+export const SEND_WINDOW_MS = 60 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']{2,}$/;
 // The approve path's cover note when the proposal carries none. Same words
@@ -135,13 +162,140 @@ function recipientProblem(to: string): string | null {
   return null;
 }
 
+/**
+ * The instant the send window opens, as an ISO string: a reservation at or
+ * after it counts against the cap, one before it does not. Passed to
+ * reserve_send as p_since.
+ *
+ * Exported and pure because it is half of the throttle and the other half is
+ * a SQL statement no unit test can run. A bad boundary here is a cap that
+ * counts the wrong hour, which is exactly the kind of thing that looks right
+ * in review and is wrong in production.
+ */
+export function sendWindowStart(now: number | string | Date = Date.now(), windowMs: number = SEND_WINDOW_MS): string {
+  const raw = now instanceof Date ? now.getTime() : typeof now === "number" ? now : Date.parse(String(now));
+  const base = Number.isFinite(raw) ? raw : Date.now();
+  const span = Number.isFinite(windowMs) && windowMs > 0 ? windowMs : SEND_WINDOW_MS;
+  return new Date(base - span).toISOString();
+}
+
+/**
+ * Read reserve_send's answer.
+ *
+ * Three outcomes:
+ *
+ *   reserved        a row came back. The caller is under the cap; send.
+ *   over cap        the RPC ran and returned NO row (null, or an empty array
+ *                   for a client shape that wraps scalars). The count and the
+ *                   insert happened in one statement, so "no row" IS the
+ *                   over-cap answer and there is no second number to disagree
+ *                   with it. 429, as before.
+ *   unavailable     the RPC itself failed: the migration has not been applied
+ *                   so the function or the table is missing, PostgREST has not
+ *                   reloaded its schema, the call threw.
+ *
+ * THE THIRD ONE USED TO SEND ANYWAY, and that was wrong. The reasoning was
+ * that this function is how a physician answers a credentialer holding up a
+ * start date, so a throttle failing on its own plumbing should not become a
+ * physician who cannot answer their email. But the throttle is not a comfort
+ * feature. It bounds how much mail one account can send over our sending
+ * domain with a physician's name in the From: header, and Clerk sign-up is
+ * open, so "signed in" is not a trust boundary. Fail-open means the cheapest
+ * way to get an unlimited send budget is to make the ledger unavailable, which
+ * is a smaller thing to arrange than it sounds: this branch fires on a missing
+ * migration, and it fires on every RPC error, including ones a caller can
+ * provoke.
+ *
+ * The honest answer to "our ledger is down" is not yes, and it is not a
+ * permanent no either. It is a refusal with a code and a Retry-After: the send
+ * did not happen, nothing was charged, nothing was mailed, and trying again in
+ * a minute is likely to work. That keeps the failure visible to the operator
+ * (this is also the shape of "the migration has not been applied yet") instead
+ * of hiding it behind traffic that went out unmetered.
+ *
+ * The status is 429 rather than 503, and it was 503 for one day. Two reasons
+ * it moved. A 503 from an edge function is also what the platform answers
+ * when the function itself did not boot, so a caller cannot tell "this
+ * function refused you" from "this function is not there"; a 429 with a
+ * Retry-After is unambiguously a refusal this code wrote. And the batch that
+ * added this refusal added a matching one to ai-proxy, where 503 is the exact
+ * status an already-installed PWA bundle reads as "the shared key is not
+ * configured" and acts on by switching the feature off for good. One rule
+ * across both, "a refusal that clears by itself is never a 503", is worth
+ * more than each function reasoning about its own callers. The code in the
+ * body, not the status, is what a client should branch on.
+ *
+ * `send` is the only field the handler branches on for whether to continue;
+ * `status`, `code` and `error` are what it answers with. Kept pure (it takes
+ * the { data, error } object, not the client) so all three are testable
+ * without a database, and so scripts/send-throttle.test.mjs can assert the
+ * thing that matters most: on this branch the provider is never called.
+ */
+export const SEND_CAP_CODE = "send_cap_reached";
+export const SEND_LEDGER_UNAVAILABLE_CODE = "send_ledger_unavailable";
+
+export interface ReservationVerdict {
+  /** Continue with the send. False means answer with status/code and stop. */
+  send: boolean;
+  overCap: boolean;
+  /** The ledger could not answer. Distinct from over-cap on purpose. */
+  infrastructure: boolean;
+  status: number;
+  code: string;
+  /** What the caller is told. Empty when the send proceeds. */
+  error: string;
+  /** What the log records. Never shown to the caller. */
+  why: string;
+  /** Seconds to wait before retrying; set on the ledger refusal only. */
+  retryAfter: number | null;
+}
+
+const LEDGER_UNAVAILABLE: Omit<ReservationVerdict, "why"> = {
+  send: false,
+  overCap: false,
+  infrastructure: true,
+  status: 429,
+  code: SEND_LEDGER_UNAVAILABLE_CODE,
+  error: "The send could not be recorded just now, so nothing was sent. Try again in a minute.",
+  retryAfter: 60,
+};
+
+export function sendReservationVerdict(
+  result: { data?: unknown; error?: unknown } | null | undefined,
+): ReservationVerdict {
+  if (!result) return { ...LEDGER_UNAVAILABLE, why: "no result from reserve_send" };
+  if (result.error) {
+    const e = result.error as { message?: unknown };
+    const why = typeof e?.message === "string" && e.message ? e.message : String(result.error);
+    return { ...LEDGER_UNAVAILABLE, why };
+  }
+  const data = result.data;
+  // An empty array and a null are the same answer: the INSERT ... SELECT
+  // matched nothing because the window was full.
+  if (data == null || (Array.isArray(data) && data.length === 0)) {
+    return {
+      send: false, overCap: true, infrastructure: false,
+      status: 429, code: SEND_CAP_CODE,
+      error: `Send limit reached (${SENDS_PER_HOUR} emails per hour). Try again later.`,
+      why: "at or over the hourly cap", retryAfter: null,
+    };
+  }
+  return {
+    send: true, overCap: false, infrastructure: false,
+    status: 200, code: "reserved", error: "", why: "reserved", retryAfter: null,
+  };
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+const json = (status: number, body: unknown, extraHeaders?: Record<string, string>) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json", ...(extraHeaders ?? {}) },
+  });
 
 /** Header-safe display text: no line breaks, quotes or angle brackets. */
 function cleanHeaderText(s: string | null | undefined, max = 80): string {
@@ -316,11 +470,18 @@ serve(async (req) => {
   try {
     // Sender identity.
     const { data: prof, error: pErr } = await db.from("profiles")
-      .select("id, name, degree_type, email, auth_user_id")
+      .select("id, name, degree_type, email, verified_email, auth_user_id")
       .eq("id", who.profileId).maybeSingle();
     if (pErr) throw pErr;
     if (!prof) return json(401, { error: "Not signed in" });
     const physEmail = String(prof.email ?? "").trim().toLowerCase();
+    // The mailbox the sign-in provider verified. profiles.email is typed in
+    // Settings and is often not the address the physician actually reads mail
+    // at; verified_email is the one clerk-webhook stamped and the one
+    // email-inbound routes on, so it is just as much "their own address" as
+    // the profile email and the confirmed forwarding rows. It belongs in the
+    // own-address set below. See the note there.
+    const verifiedEmail = String(prof.verified_email ?? "").trim().toLowerCase();
     if (!EMAIL_RE.test(physEmail)) return json(400, { error: "Add your email in Settings first" });
     const name = cleanHeaderText(prof.name);
     const degree = cleanHeaderText(prof.degree_type, 20);
@@ -374,6 +535,20 @@ serve(async (req) => {
       if (fErr) throw fErr;
       const ownAddresses = new Set(((fwdRows ?? []) as { email: string | null }[])
         .map((r) => String(r.email ?? "").trim().toLowerCase()).filter(Boolean));
+      // The provider-verified mailbox is one of the physician's own addresses
+      // and was missing from this set. email-inbound already folds it into the
+      // matching set it suppresses acknowledgements on (index.ts, `if
+      // (profile.verified_email) own.add(...)`); the symmetric guard here was
+      // not updated when verified_email became a first-class mailbox, and it
+      // is the COMMON case, not an exotic one: migration 20260915d measured
+      // five of six live accounts getting their only proven mailbox from the
+      // Clerk stamp. Without this line a physician who mails themselves a
+      // credentialing checklist from their hospital account and forwards it in
+      // from a confirmed clinic address passes the test below, and Approve
+      // mails the DEA, licence and CV packet back to their own inbox while
+      // stamping the request 'replied'. The credentialer gets nothing and the
+      // app shows the request answered.
+      if (verifiedEmail) ownAddresses.add(verifiedEmail);
       if (to === physEmail || (forwardedBy && to === forwardedBy) || ownAddresses.has(to)) {
         return json(400, { error: "The requester's address was not found in the forwarded email. Open the request and enter it under Requester's email." });
       }
@@ -394,14 +569,44 @@ serve(async (req) => {
       request = { id: row.id, message_id: row.message_id ?? null, original_message_id: row.original_message_id ?? null };
     }
 
-    // Rate cap: 30 email sends per hour per user, counted in share_log.
-    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { count: sentRecently, error: cErr } = await db.from("share_log")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", who.profileId).eq("method", "email").gte("sent_at", since);
-    if (cErr) throw cErr;
-    if ((sentRecently ?? 0) >= SENDS_PER_HOUR) {
-      return json(429, { error: `Send limit reached (${SENDS_PER_HOUR} emails per hour). Try again later.` });
+    // Rate cap: 30 email sends per hour per user. The reservation is taken
+    // here, before a single byte is fetched and before the row is claimed,
+    // and it is taken from public.send_reservations, which the physician
+    // cannot read, write or delete. The old count ran against share_log,
+    // whose only policy is FOR ALL to authenticated on the caller's own rows,
+    // so the account the cap bounds could delete the rows it was counted from
+    // and start the hour over. reserve_send counts and inserts in one
+    // statement behind a per-user advisory lock, so two taps at the boundary
+    // cannot both pass.
+    //
+    // A refusal further down (documents gone, Resend refused) keeps its
+    // reservation. That is what a ledger of attempts means, and handing the
+    // caller a way to give a reservation back is the hole this closes.
+    let reservation: { data?: unknown; error?: unknown };
+    try {
+      reservation = await db.rpc("reserve_send", {
+        p_user: who.profileId,
+        p_limit: SENDS_PER_HOUR,
+        p_since: sendWindowStart(),
+      });
+    } catch (e) {
+      reservation = { error: e };
+    }
+    const verdict = sendReservationVerdict(reservation);
+    if (!verdict.send) {
+      if (verdict.infrastructure) {
+        // Visible on purpose. The most likely cause is
+        // 20260915e_send_reservations.sql not being applied yet, and a
+        // deployment ordering mistake should look like a loud refusal in the
+        // log rather than like unmetered mail going out. The log is where it
+        // is loud; the answer to the caller is a plain retryable 429.
+        console.error(`send throttle: reservation unavailable, refusing: ${verdict.why}`);
+      }
+      // Nothing has been fetched, claimed or mailed at this point: the
+      // reservation is taken before the documents are read and long before
+      // Resend is called, so a refusal here costs the provider nothing.
+      return json(verdict.status, { error: verdict.error, code: verdict.code },
+        verdict.retryAfter ? { "Retry-After": String(verdict.retryAfter) } : undefined);
     }
 
     // The request being answered, when any. Must be the caller's. (The

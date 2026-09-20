@@ -4,9 +4,11 @@
  * Four routes, decided by the local part of the address the message was sent to:
  *
  *   cme@credentialdomd.com   Certificate intake by email forwarding.
- *     Sender must match a profile: lower(profiles.email) = lower(from), or a
+ *     Sender must match a mailbox the account has PROVED it can read: a
  *     CONFIRMED row in forwarding_addresses (the physician added the address in
- *     More > Settings > Email and opened the link sent to it). Every
+ *     More > Settings > Email and opened the link sent to it), or
+ *     profiles.verified_email, which only the Clerk webhook writes. The typed
+ *     profiles.email is not a match and no longer routes anything. Every
  *     PDF / image attachment is copied into the `documents` Storage bucket at
  *     <auth_user_id>/<doc id> and a `documents` row is written with
  *     type = "cme-certificate-inbox" and no linked_to, so the app shows it under
@@ -17,9 +19,9 @@
  *
  *   docs@ | requests@ | packets@credentialdomd.com   Document requests.
  *     A credentialer asked the physician for documents; the physician forwards
- *     that email here from the address on their profile, or from any address
- *     they have confirmed as a forwarding address, and that forward is the
- *     last thing they type. Same sender matching and authentication as cme@.
+ *     that email here from a mailbox the account has proved it can read, and
+ *     that forward is the last thing they type. Same sender matching and
+ *     authentication as cme@.
  *     The ORIGINAL requester (From:), subject and body are parsed out of the
  *     forwarded text (Gmail / Outlook / Apple Mail header blocks) and a
  *     `document_requests` row is written; PDF / image attachments (the
@@ -109,6 +111,7 @@
 
 import { Webhook } from "https://esm.sh/svix@1.40.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
+import { accessWriteDecision } from "../_shared/accessWrite.mjs";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { parseVCards, isVCardAttachment, looksLikeVCardText, type VCardContact } from "../_shared/vcard.ts";
 import { buildProposal, catalogueFromRows } from "../_shared/requestPacket.ts";
@@ -117,6 +120,10 @@ import { buildProposal, catalogueFromRows } from "../_shared/requestPacket.ts";
 // confirmation subject); the bare name would have resolved to that string
 // at the ack's call site and thrown.
 import { ackAllowed, ackText, authEvidence, physicianSummaryText, replySubject as replySubjectFor, senderAuthFailure, senderPositivelyAuthenticated, type AuthEvidence, type Proposal } from "../_shared/requestFlow.ts";
+// The routing decision and the rules that hand a mailbox to an account are two
+// halves of one property: a mailbox routes mail only to the account that proved
+// it can read it. They live in one file so they cannot drift apart, and that
+// file is the one of the pair with no Deno dependency, so node can test it.
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -260,8 +267,9 @@ type Route = "cme" | "docs" | "contacts" | "forward";
 interface MatchedProfile {
   id: string;
   auth_user_id: string;
-  email: string | null;
+  email: string | null;          // profiles.email: displayed and replied to, never matched on
   access_status: string | null;
+  verified_email: string | null; // the identity provider's verified mailbox, or null
 }
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -505,69 +513,125 @@ async function countSince(minutes: number, apply: (q: AnyQuery) => AnyQuery = (q
 // ─── Shared by the physician routes (cme@, docs@) ─────────────────────────────
 
 /**
- * Sender -> profile, in two passes. This function decides whose account
- * receives a forwarded credentialing document, attachments and all, so the
- * order of the passes is the whole security question.
+ * Sender -> account. This function decides whose account receives a forwarded
+ * credentialing document, attachments and all, so what counts as a match is
+ * the whole security question.
  *
- * PROVEN FIRST. forwarding_addresses is checked before profiles.email, because
- * the two claims are not equally good. A forwarding address is usable only
- * after somebody opened a link sent to that mailbox and pressed Confirm, so it
- * is evidence of control. profiles.email is a text box in Settings: a physician
- * types it, nobody checks it, and migration 20260819_lock_access_status
- * deliberately left the column editable by its owner (the identity lock freezes
- * auth_user_id and access_status, not email).
+ * PROVEN ONLY. Two lookups feed the decision and both are evidence that the
+ * account can READ the mailbox:
  *
- * While the typed address won, that asymmetry was a takeover: an account that
- * typed name@hospital.org into its own profile outranked the account that had
- * confirmed name@hospital.org by reading the mailbox, and the forwarded mail
- * went to the one that typed it. Confirmed now wins, and profiles.email is a
- * fallback for the ordinary case where nobody registered anything.
+ *   1. A confirmed row in forwarding_addresses. Somebody opened a link sent to
+ *      that mailbox and pressed Confirm.
+ *   2. profiles.verified_email. The identity provider says the address is
+ *      verified for this account; only clerk-webhook writes the column, and
+ *      migration 20260915d locks it against every user token.
  *
- * The other half of that fix lives in the database: profiles.email carries a
- * unique index on lower(email) (migration 20260903e), so a second account
- * cannot even hold a copy of an address the first one typed.
+ * profiles.email was the second pass until 2026-09-15 and is now read for
+ * nothing here. Ordering forwarding_addresses ahead of it (2026-09-03) fixed
+ * only the collision case. The rest stayed open: the unique index on
+ * lower(profiles.email) is PARTIAL, so any address no profile currently held
+ * was free to type into your own Settings, and typing it was enough. The
+ * genuine physician later forwards a real credential document from that
+ * mailbox, SPF, DKIM and DMARC all pass because the mail IS genuine, this
+ * function picks the account that typed the address, storeAsDocuments writes
+ * the file under that account's auth_user_id, and documents_owner RLS hands
+ * the victim's document to the person who typed. That is disclosure, not a
+ * misfile, and sender authentication cannot help: it proves the mailbox sent
+ * the mail, never that the account we chose owns the mailbox.
  *
- * Only verified_at rows count in pass 1, and a verified address is unique
- * across accounts (partial unique index), so pass 1 matches at most one
- * account. Both passes filter ilike results down to an exact lowercased match:
- * ilike folds more than case, and this decides where a document lands.
+ * No match returns null, which is the unregistered reply. Failing closed is
+ * the point: there is no third pass that guesses. Two accounts both holding
+ * proof is also null, for the same reason and more so: see inboundMatch.
+ *
+ * Both lookups filter ilike results down to an exact lowercased match, because
+ * ilike folds more than case and this decides where a document lands. The
+ * choosing itself is inboundMatch in the forwarding-address lib, which
+ * is pure so scripts/inbound-routing.test.mjs can run every case in node, and
+ * which lives beside the claim rules so the two cannot drift apart.
  */
-async function matchProfile(from: string): Promise<MatchedProfile | null> {
-  const confirmed = await profilesByIds(async () => {
-    const { data: addrs, error } = await db.from("forwarding_addresses")
-      .select("user_id, email, verified_at")
-      .ilike("email", ilikeLiteral(from))
-      .not("verified_at", "is", null)
-      .limit(5);
-    if (error) throw new Error(`forwarding address lookup: ${error.message}`);
-    const owners = ((addrs ?? []) as { user_id: string; email: string | null; verified_at: string | null }[])
-      .filter((a) => (a.email ?? "").trim().toLowerCase() === from && a.verified_at)
-      .map((a) => a.user_id);
-    if (owners.length === 0) return [];
-    const { data: rows, error: pErr } = await db.from("profiles")
-      .select("id, auth_user_id, email, access_status").in("id", owners).limit(5);
-    if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
-    return (rows ?? []) as ProfileLookupRow[];
-  });
-  if (confirmed) return confirmed;
+type ProfileLookupRow = {
+  id: string;
+  auth_user_id: string | null;
+  email: string | null;
+  access_status: string | null;
+  verified_email: string | null;
+  deleted_at: string | null;
+};
 
-  return await profilesByIds(async () => {
-    const { data: rows, error } = await db.from("profiles")
-      .select("id, auth_user_id, email, access_status")
-      .ilike("email", ilikeLiteral(from))
-      .limit(5);
-    if (error) throw new Error(`profile lookup: ${error.message}`);
-    return ((rows ?? []) as ProfileLookupRow[]).filter((p) => (p.email ?? "").trim().toLowerCase() === from);
-  });
+// deleted_at is selected so the read below can refuse a tombstoned profile.
+// delete-account revokes the mailbox claim terminally, so this should never
+// fire; it is here because "should never" is how verified_email was missed by
+// the deletion path in the first place.
+const PROFILE_COLUMNS = "id, auth_user_id, email, access_status, verified_email, deleted_at";
+
+async function matchProfile(from: string): Promise<MatchedProfile | null> {
+  const address = bareAddress(from);
+  if (!address) return null;
+
+  // ONE row, by primary key. This used to load two candidate sets, a confirmed
+  // forwarding_addresses set and a profiles.verified_email set, and then decide
+  // between them; when they disagreed it refused, which was correct and was
+  // also the symptom. The disagreement itself was reachable: the two writers
+  // that maintain the invariant checked each other across separate
+  // transactions with no shared lock and no index spanning the two tables, so
+  // an account could end up holding each kind of proof and every forward from
+  // that mailbox was refused for BOTH of them, permanently and silently.
+  //
+  // public.mailbox_claims has the address as its PRIMARY KEY, so "two accounts
+  // hold this mailbox" is not a state that can exist. There is nothing here to
+  // adjudicate any more: the row says who, or there is no row.
+  const { data, error } = await db.from("mailbox_claims")
+    .select("address, profile_id, proof, terminal_at")
+    .eq("address", address)
+    .maybeSingle();
+  if (error) throw new Error(`mailbox claim lookup: ${error.message}`);
+
+  const claim = (data ?? null) as { profile_id: string | null; proof: string | null; terminal_at: string | null } | null;
+  // No row, a revoked row (profile_id null), or a terminal one: nobody routes
+  // this address. The sender gets the unregistered reply, which is the only
+  // safe answer and the one a person can act on.
+  if (!claim || !claim.profile_id || claim.terminal_at) return null;
+
+  const { data: row, error: pErr } = await db.from("profiles")
+    .select(PROFILE_COLUMNS)
+    .eq("id", claim.profile_id)
+    // Belt and braces: delete-account revokes the claim terminally, so a
+    // tombstoned profile should never be reachable from here at all.
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
+  const p = (row ?? null) as ProfileLookupRow | null;
+  if (!p) {
+    console.warn(`inbound: claim on an address points at profile ${claim.profile_id}, which is gone or deleted. Refusing.`);
+    return null;
+  }
+  // storeAsDocuments writes to `${auth_user_id}/${docId}`; without one there
+  // is no Storage prefix to write into.
+  if (!p.auth_user_id || !String(p.auth_user_id).trim()) return null;
+
+  return {
+    id: p.id,
+    auth_user_id: p.auth_user_id as string,
+    email: p.email,
+    access_status: p.access_status,
+    verified_email: p.verified_email,
+  };
 }
 
-type ProfileLookupRow = { id: string; auth_user_id: string | null; email: string | null; access_status: string | null };
+// Refuse recognized intake before retrieving content, attachments or sending
+// any reply. Support forwarding does not call this product-write guard.
+async function intakeRefusal(profile: MatchedProfile | null, ledgerId: string, route: string): Promise<Response | null> {
+  if (!profile) return null;
+  const access = await accessWriteDecision(db, profile.id, profile.auth_user_id, "credential");
+  if (access.allowed) return null;
+  if (access.status === 503) throw new Error("access policy unavailable");
+  await finish(ledgerId, "done", access.error, { profile_id: profile.id });
+  return json({ ok: true, route, result: access.error });
+}
 
-/** An account with access wins over one without, same rule for both passes. */
-async function profilesByIds(load: () => Promise<ProfileLookupRow[]>): Promise<MatchedProfile | null> {
-  const profiles = (await load()).filter((p) => p.auth_user_id) as MatchedProfile[];
-  profiles.sort((a, b) => (a.access_status === "active" ? 0 : 1) - (b.access_status === "active" ? 0 : 1));
-  return profiles[0] ?? null;
+async function assertIntakeWrite(profile: MatchedProfile) {
+  const access = await accessWriteDecision(db, profile.id, profile.auth_user_id, "credential");
+  if (!access.allowed) throw new Error(access.error);
 }
 
 function replyThreading(messageId: string): Record<string, string> {
@@ -719,6 +783,7 @@ async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], do
     if (have.has(`${f.filename}|${f.bytes.byteLength}`)) { duplicates++; continue; }
     const docId = crypto.randomUUID();
     const path = `${profile.auth_user_id}/${docId}`; // app: documentStoragePath(docId) = <clerk sub>/<doc id>
+    await assertIntakeWrite(profile);
     const up = await db.storage.from(STORAGE_BUCKET).upload(path, f.bytes, { contentType: f.content_type, upsert: false });
     if (up.error) {
       console.error(`storage upload failed for ${path}: ${up.error.message}`);
@@ -764,13 +829,15 @@ async function handleCme(ledgerId: string, emailId: string, from: string, subjec
   }
 
   const profile = await matchProfile(from);
+  const refusal = await intakeRefusal(profile, ledgerId, "cme");
+  if (refusal) return refusal;
   const replySubject = `Re: ${(subject || "your certificate").slice(0, 150)}`;
   const replyHeaders = replyThreading(messageId);
   const email = await getReceivedEmail(emailId, "cid");
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account. Forward from the email on your account, or add this address in Settings and open the link we send here to confirm it.
+      `This address is not confirmed for a CredentialDOMD account. Add it in the app under More > Settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
 
 Open the app: ${APP_URL} (More > Settings > Email)
 
@@ -836,6 +903,8 @@ async function handleContacts(ledgerId: string, emailId: string, from: string, s
   }
 
   const profile = await matchProfile(from);
+  const refusal = await intakeRefusal(profile, ledgerId, "contacts");
+  if (refusal) return refusal;
   const replySubject = `Re: ${(subject || "the contact you sent").slice(0, 150)}`;
   const replyHeaders = replyThreading(messageId);
   const email = await getReceivedEmail(emailId, "cid");
@@ -851,7 +920,7 @@ async function handleContacts(ledgerId: string, emailId: string, from: string, s
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "contacts", email, from, FROM_CONTACTS, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account, so the contact was not added. Send it from the email on your account, or add this address in Settings and open the link we send here to confirm it.
+      `This address is not confirmed for a CredentialDOMD account, so the contact was not added. Add it in the app under More > Settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
 
 Open the app: ${APP_URL} (More > Settings > Email)
 
@@ -904,6 +973,7 @@ https://credentialdomd.com`);
       created_at: now,
       updated_at: now,
     }));
+    await assertIntakeWrite(profile);
     const { error } = await db.from("peer_references").insert(rows);
     if (error) {
       console.error(`contacts: peer_references insert failed for ${profile.id}: ${error.message}`);
@@ -1191,6 +1261,8 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
   }
 
   const profile = await matchProfile(from);
+  const refusal = await intakeRefusal(profile, ledgerId, "docs");
+  if (refusal) return refusal;
   const replySubject = `Re: ${(subject || "your document request").slice(0, 150)}`;
   const replyHeaders = replyThreading(messageId);
   const email = await getReceivedEmail(emailId, "cid");
@@ -1208,7 +1280,7 @@ async function handleDocsRequest(ledgerId: string, emailId: string, from: string
 
   if (!profile) {
     return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders,
-      `This address is not registered to a CredentialDOMD account. Forward the request from the email on your account, or add this address in Settings (More > Settings > Email) and open the link we send here to confirm it.
+      `This address is not confirmed for a CredentialDOMD account. Add it in the app under More > Settings > Email and open the link we send here: opening that link is what proves you read this mailbox. Typing the address on your profile is not enough, and never was.
 
 Open the app: ${APP_URL}
 
@@ -1251,6 +1323,7 @@ https://credentialdomd.com`);
   const { files, skipped } = await downloadAttachments(emailId, acceptCertificateLike);
   const { stored, failed } = await storeAsDocuments(profile, files, REQUEST_DOC_TYPE);
 
+  await assertIntakeWrite(profile);
   const { data: reqRow, error: rErr } = await db.from("document_requests").insert({
     user_id: profile.id,
     from_addr: fromAddr,
@@ -1270,7 +1343,12 @@ https://credentialdomd.com`);
   // Who the physician is, for the cover note's signature and the ack. A
   // failed read keeps the request and turns the ack off for this message: an
   // acknowledgement with no name on it is not something to send a credentialer.
+  // The physician's own mailboxes: the confirmed forwarding rows, plus the
+  // provider-verified one on the profile. ackAllowed uses this set to refuse
+  // acknowledging the physician themselves, and the verified mailbox belongs in
+  // it for the same reason the confirmed ones do.
   const own = await verifiedAddresses(profile.id);
+  if (profile.verified_email) own.add(profile.verified_email.trim().toLowerCase());
   const profileEmail = (profile.email ?? "").trim().toLowerCase() || from;
   let phys: PhysicianDetails = { name: "", degree: "", email: profileEmail, replyTo: profileEmail, ackRequests: false };
   try {

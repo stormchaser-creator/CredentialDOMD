@@ -9,14 +9,21 @@
  * tickets/<ticket_id>/ using the service-role client (bypasses the
  * documents_owner storage RLS, which otherwise requires the caller's own
  * Clerk sub as path prefix) and its storage path recorded in
- * context_payload.attachment_path — the only way an admin (a different
+ * context_payload.attachment_path. The only way an admin (a different
  * caller) can later reach it is via a signed URL from ticket-attachment-url.
+ *
+ * context_payload.attachment_path and .attachment_paths are written by this
+ * function and by nothing else. Whatever the caller sends under those two
+ * names is stripped before the insert (stripServerOnlyPayloadKeys): they
+ * name a file in a private bucket that the reader signs with the service
+ * role, and a caller who could name it could name somebody else's document.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
-import { ATTACHMENT_BUCKET, parseAttachment, ticketScreenshotPath , parseAttachments, ticketScreenshotPathAt } from "../_shared/ticketAttachment.ts";
+import { admitActiveAccount } from "../_shared/admission.ts";
+import { ATTACHMENT_BUCKET, parseAttachment, ticketScreenshotPath , parseAttachments, ticketScreenshotPathAt, stripServerOnlyPayloadKeys } from "../_shared/ticketAttachment.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,14 +65,11 @@ serve(async (req) => {
     // so "who may write here" has to be the same question as "who may use the
     // app". Nobody legitimate loses anything: an account that is not active
     // sees the invite-only screen, which has no way to open a ticket at all.
-    if (!user.isAdmin) {
-      const { data: prof } = await user.db.from("profiles")
-        .select("access_status").eq("id", user.profileId).maybeSingle();
-      if (prof?.access_status !== "active") {
-        return new Response(JSON.stringify({ error: "This account does not have access yet." }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    const admission = await admitActiveAccount(user);
+    if (!admission.allowed) {
+      return new Response(JSON.stringify({ error: admission.error }), {
+        status: admission.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const body = await req.json();
@@ -103,7 +107,16 @@ serve(async (req) => {
       });
     }
 
-    const contextPayload = { ...(body.context_payload || {}) };
+    /**
+     * The caller's context is kept; the two attachment keys in it are not.
+     * This line used to be `{ ...(body.context_payload || {}) }`, which
+     * copied whatever the caller sent straight onto the row, including a
+     * storage key of their choosing. ticket-attachment-url then signed that
+     * key with the service-role client against the bucket that also holds
+     * every physician's own documents. The server sets both keys itself,
+     * below, once an object it uploaded actually exists.
+     */
+    const contextPayload = stripServerOnlyPayloadKeys(body.context_payload);
 
     const { data, error } = await user.db
       .from("support_tickets")

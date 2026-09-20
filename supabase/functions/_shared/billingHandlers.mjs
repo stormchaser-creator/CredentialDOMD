@@ -21,9 +21,9 @@ export function createBillingHandlers(deps, catalog = BILLING_CATALOG) {
   };
   async function member(req, requireFounding = true) {
     const identity = await deps.authenticate(req);
-    if (!identity?.profileId) fail(401, 'unauthorized');
+    if (!identity?.profileId || !identity.clerkSubject) fail(401, 'unauthorized');
     const profile = await deps.store.profile(identity.profileId);
-    if (!profile || profile.id !== identity.profileId || typeof profile.auth_user_id !== 'string' || !profile.auth_user_id.startsWith('user_')) fail(401, 'profile_unavailable');
+    if (!profile || profile.id !== identity.profileId || profile.auth_user_id !== identity.clerkSubject || typeof profile.auth_user_id !== 'string' || !profile.auth_user_id.startsWith('user_')) fail(401, 'profile_unavailable');
     if (requireFounding && (profile.access_status !== 'active' || !Number.isInteger(profile.founding_number) || profile.founding_number < 1 || profile.founding_number > 100)) fail(403, 'founding_membership_required');
     return profile;
   }

@@ -218,7 +218,35 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   for (const { table, column } of USER_TABLES) await deleteRows(db, table, column, userId);
   await unresolvedErrors(db, authUserId, userId, true);
 
-  // 4. The profile becomes a tombstone. The service-role JWT passes the
+  // 4. Every mailbox this account routed is closed TERMINALLY, before the
+  //    profile is tombstoned, in ONE transaction.
+  //
+  //    Terminally, not merely released: a provider event for this account can
+  //    already be in flight, and an ordering rule can only refuse an event
+  //    that LOSES a comparison. Deletion is recorded as a fact so no event,
+  //    however new, reopens the address.
+  //
+  //    One call, and that is the repair. The first version walked the claims
+  //    this account held and revoked them one at a time, which meant a claim
+  //    created between the read and the writes survived, and a CONFIRMED-only
+  //    claim was missed entirely by the webhook's version of the same walk.
+  //    apply_account_mailbox closes every claim the account holds, of either
+  //    kind, under the profile lock.
+  //
+  //    Runs BEFORE the tombstone so a failure leaves the account intact and
+  //    the run retryable, rather than half-erased with live routing.
+  {
+    const { data, error: mErr } = await db.rpc("apply_account_mailbox", {
+      p_profile: userId, p_event_ms: Date.now(), p_address: null, p_terminal: true,
+    });
+    if (mErr) throw new Error(`could not close the account's mailboxes: ${mErr.message}`);
+    const outcome = (data as { outcome?: string } | null)?.outcome;
+    if (outcome !== "terminal") {
+      throw new Error(`mailboxes did not close for deletion (${outcome}); refusing to tombstone with live routing`);
+    }
+  }
+
+  // 5. The profile becomes a tombstone. The service-role JWT passes the
   //    profiles_lock_identity trigger for email; auth_user_id is immutable.
   const now = new Date().toISOString();
   const { error } = await db.from("profiles").update(tombstonePatch(now)).eq("id", userId);

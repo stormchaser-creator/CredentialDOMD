@@ -15,6 +15,26 @@
  * verifying against the dev issuer: the app loads, each of the 16 Clerk-authed
  * functions returns 401, and nothing says why. Unset is now loud and fails
  * closed. scripts/deploy-clerk-functions.sh checks it before deployment.
+ *
+ * ADMIN IS MEMBERSHIP, NOT AN ADDRESS. Until 2026-09-15 this file decided
+ * isAdmin by testing an email against a hardcoded allowlist, and the email it
+ * tested fell back to profiles.email whenever the token carried no email
+ * claim. Both halves of that were wrong at once. jwtVerify below checks the
+ * ISSUER only: there is no audience and no template marker, so a DEFAULT Clerk
+ * session token (getToken() with no template) is signed by the same JWKS,
+ * passes verification, and carries no email claim at all. The fallback then
+ * reached for profiles.email, a column its own owner edits: migration
+ * 20260819_lock_access_status froze auth_user_id and access_status and
+ * deliberately left email editable, and two of the three allowlisted addresses
+ * were held by no profile, so the unique index on lower(email) added in
+ * 20260903e was not in the way either. Clerk signup is open on the dev
+ * instance, so anyone who could sign up could set their profile email to an
+ * allowlisted address and come back an admin. isAdmin is now exactly what
+ * public.is_admin() is and what every RLS policy already trusts: a row in
+ * app_admins keyed to this profile id, reached from the VERIFIED sub. The
+ * allowlist is gone rather than kept as a bootstrap path, because the single
+ * app_admins row that exists today already belongs to the founder's profile,
+ * so there is nothing left for a bootstrap to rescue.
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -32,17 +52,63 @@ function getJwks() {
   return jwks;
 }
 
-const ADMIN_EMAILS = new Set([
-  "admin@credentialdomd.com",
-  "drericwhitney@gmail.com",
-  "stormchaser@elryx.com",
-]);
-
 export interface ClerkProfile {
-  profileId: string;      // profiles.id — what user_id/author_id columns store
+  profileId: string;      // profiles.id, what user_id/author_id columns store
+  clerkSubject: string;  // verified JWT subject, pinned across later profile reads
+  /**
+   * A label for logs and for addressing mail, never a credential. It is the
+   * verified claim when Clerk sent one and profiles.email otherwise, and
+   * profiles.email is user-editable. Nothing may authorize on this string.
+   */
   email: string;
   isAdmin: boolean;
   db: SupabaseClient;     // service-role client (RLS already enforced here in code)
+}
+
+/**
+ * True only if the app_admins lookup actually produced a membership row.
+ *
+ * Accepts every shape the PostgREST client can hand back, because the shape is
+ * exactly where this could regress silently. `.maybeSingle()` returns an object
+ * or null; drop that one call and the same query returns an ARRAY, and an empty
+ * array is truthy, so a plain `!!rows` would promote every signed-in physician
+ * to admin the moment somebody edited the query. An error from the lookup
+ * leaves data null and lands here as not-admin, which is the safe direction: a
+ * transient database failure denies an admin screen, it never grants one.
+ */
+export function adminFromMembership(rows: unknown): boolean {
+  if (!rows) return false;
+  if (Array.isArray(rows)) return rows.some((row) => !!row);
+  return true;
+}
+
+/**
+ * The display label described on ClerkProfile.email. The verified claim wins
+ * when Clerk sent one; profiles.email is the fallback so mail and log lines
+ * still read sensibly for a default session token, which carries no email.
+ */
+export function displayEmail(claimEmail: unknown, profileEmail: unknown): string {
+  const claim = typeof claimEmail === "string" ? claimEmail.trim() : "";
+  const stored = typeof profileEmail === "string" ? profileEmail.trim() : "";
+  return (claim || stored).toLowerCase();
+}
+
+/**
+ * The whole identity decision, with no I/O in it, so the rule that admin comes
+ * from membership and never from an address is testable on its own and cannot
+ * quietly grow an `|| someAllowlist.has(email)` back onto the end.
+ */
+export function resolveIdentity(
+  profileId: string,
+  claimEmail: unknown,
+  profileEmail: unknown,
+  adminRows: unknown,
+): { profileId: string; email: string; isAdmin: boolean } {
+  return {
+    profileId,
+    email: displayEmail(claimEmail, profileEmail),
+    isAdmin: adminFromMembership(adminRows),
+  };
 }
 
 export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
@@ -56,7 +122,7 @@ export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
   try {
     const { payload } = await jwtVerify(token, getJwks(), { issuer: ISSUER });
     sub = (payload.sub as string) || "";
-    claimEmail = (payload.email as string) || "";
+    claimEmail = typeof payload.email === "string" ? payload.email : "";
   } catch (err) {
     // Distinct from the no-profile branch below on purpose. After a Clerk
     // cutover the dominant failure is a perfectly valid production token whose
@@ -80,15 +146,20 @@ export async function clerkProfile(req: Request): Promise<ClerkProfile | null> {
     return null;
   }
 
-  // The verified JWT claim wins over profiles.email, which is a field the user
-  // edits and which nothing reverts: migration 20260819_lock_access_status
-  // removed the trigger that used to put a user's email back, on purpose, and
-  // the identity lock it left behind freezes auth_user_id and access_status
-  // only. So this is not a second lock, it is the only one. What the column
-  // does have, since 20260903e, is a unique index on lower(email), which stops
-  // two accounts holding the same address; it does not stop an account holding
-  // an address it never proved it can read, which is why the sender matcher in
-  // email-inbound puts confirmed forwarding addresses ahead of this column.
-  const email = (claimEmail || data.email || "").toLowerCase();
-  return { profileId: data.id, email, isAdmin: ADMIN_EMAILS.has(email), db };
+  // Membership keyed to the profile the verified sub resolved to. app_admins
+  // has RLS on with an admin-only SELECT policy, and this client is the service
+  // role, which carries BYPASSRLS and a SELECT grant, so the read returns the
+  // row. send-ticket-reply already re-checks an author against this same table
+  // the same way. An error here is left to fall through as not-admin; see
+  // adminFromMembership.
+  const { data: adminRow, error: adminError } = await db
+    .from("app_admins")
+    .select("profile_id")
+    .eq("profile_id", data.id)
+    .maybeSingle();
+  if (adminError) {
+    console.error(`clerkAuth: app_admins lookup failed for profile ${data.id}: ${adminError.message}. Treating as not admin.`);
+  }
+
+  return { ...resolveIdentity(data.id, claimEmail, data.email, adminRow), clerkSubject: sub, db };
 }

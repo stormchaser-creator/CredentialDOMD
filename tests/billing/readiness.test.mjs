@@ -21,7 +21,7 @@ function fixture() {
     checkout: { sessions: { create: async (...args) => { calls.push(['checkout', ...args]); return { id: 'cs_test_a', livemode: false, url: 'https://checkout.stripe.com/c/test' }; } } },
     billingPortal: { configurations: { retrieve: async () => ({ active: true, livemode: false, features: { subscription_update: { enabled: false }, subscription_cancel: { enabled: true }, payment_method_update: { enabled: true } } }) }, sessions: { create: async args => { calls.push(['portal', args]); return { url: 'https://billing.stripe.com/p/test' }; } } },
   };
-  const deps = { mode: 'test', portalConfigurationId: 'bpc_synthetic', now: () => 1800000000000, authenticate: async () => ({ profileId: profile.id }), stripe: () => stripe,
+  const deps = { mode: 'test', portalConfigurationId: 'bpc_synthetic', now: () => 1800000000000, authenticate: async () => ({ profileId: profile.id, clerkSubject: 'user_member_a' }), stripe: () => stripe,
     verifyEvent: async () => structuredClone(event),
     store: {
       profile: async () => structuredClone(profile), account: async () => structuredClone(account), accountByCustomer: async () => structuredClone(account),
@@ -86,6 +86,13 @@ test('checkout authenticates Clerk identity and requires an active numbered foun
     const response = await createBillingHandlers(f.deps, enabledCatalog).checkout(request());
     assert.ok([401, 403].includes(response.status)); assert.equal(f.calls.length, 0);
   }
+});
+test('legacy billing rejects a profile rebound after verified authentication', async () => {
+  const f = fixture(); f.profile.auth_user_id = 'user_changed';
+  const h = createBillingHandlers(f.deps, enabledCatalog);
+  assert.equal((await h.checkout(request())).status, 401);
+  assert.equal((await h.portal(request({}))).status, 401);
+  assert.deepEqual(f.calls, []);
 });
 test('checkout rejects forged price, app, profile, metadata and redirect parameters', async () => {
   for (const patch of [{ priceId: 'price_other' }, { app: 'fluoropath' }, { profileId: 'victim' }, { metadata: { profile_id: 'victim' } }, { successUrl: 'https://evil.example' }, { offerId: 'free' }]) {

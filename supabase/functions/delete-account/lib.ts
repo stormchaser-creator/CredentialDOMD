@@ -150,6 +150,20 @@ export const PROFILE_TOMBSTONE_PATCH: Record<string, null | false> = {
   // identity and contact
   name: null,
   email: null,
+  // The verified mailbox, and it is not merely contact detail: it is a LIVE
+  // ROUTING PERMISSION. email-inbound files a forwarded credentialing document
+  // into whichever account holds it. The forwarding_addresses rows are deleted
+  // outright by the sweep below, so before migration 20260915d added this
+  // column, deleting an account removed every way mail could still reach it.
+  // That column arrived without the deletion path being taught about it, which
+  // left exactly one input that survived: mail forwarded from that mailbox
+  // after deletion would still be filed under the deleted user's storage
+  // prefix, against a profile the physician asked us to erase. Nulling the
+  // timestamp and the ordering watermark with it, so a replayed provider event
+  // cannot walk the address back in either.
+  verified_email: null,
+  verified_email_at: null,
+  verified_email_event_ms: null,
   npi: null,
   degree_type: null,
   primary_state: null,

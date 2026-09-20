@@ -10,6 +10,7 @@ const {
   ticketScreenshotPath, replyScreenshotPath,
   parseAttachments, ticketScreenshotPathAt, replyScreenshotPathAt, attachmentPathsOf,
   MAX_ATTACHMENTS, ATTACHMENT_COUNT_ERROR, ATTACHMENT_TOTAL_ERROR, MAX_TOTAL_ATTACHMENT_BYTES,
+  isTicketAttachmentPath, stripServerOnlyPayloadKeys, SERVER_ONLY_PAYLOAD_KEYS, ATTACHMENT_EXTS,
 } = await import("../supabase/functions/_shared/ticketAttachment.ts");
 
 let pass = 0, fail = 0;
@@ -154,6 +155,131 @@ eq("a row with neither", attachmentPathsOf({}), []);
 eq("null does not throw", attachmentPathsOf(null), []);
 eq("a null inside the array is dropped",
   attachmentPathsOf({ attachment_paths: ["a.png", null, ""] }), ["a.png"]);
+
+// ── Signing a path: it has to be THIS ticket's ────────────────────────────
+// ticket-attachment-url owns the ticket check and used to stop there: it
+// signed whatever key the row carried, with the service-role client, into
+// the private "documents" bucket that also holds every physician's own
+// uploads at "<clerk sub>/<uuid>". The path column has a second writer,
+// because RLS lets any signed-in caller insert a ticket row and update their
+// own straight through PostgREST, and Clerk sign-up is open. So a caller
+// could point their own ticket at another account's document and be handed a
+// signed link to it. These are the cases that have to fail.
+const T = "9f3c1b2a-77aa-4f5e-9d31-0c4b6e5a1234";   // a ticket the caller owns
+const OTHER = "1a2b3c4d-5566-4777-8899-aabbccddeeff"; // somebody else's ticket
+const M = "5e4d3c2b-1a09-4876-b543-210fedcba987";     // a reply on T
+const M2 = "77778888-9999-4aaa-8bbb-ccccddddeeee";    // a different reply on T
+const yes = (name, path, tid, mid) => ok(name, isTicketAttachmentPath(path, tid, mid) === true);
+const no  = (name, path, tid, mid) => ok(name, isTicketAttachmentPath(path, tid, mid) === false);
+
+// The four shapes this system writes, checked through the writers themselves
+// so the validator cannot drift from the keys actually in the bucket.
+yes("the ticket's first screenshot", ticketScreenshotPathAt(T, "png", 0), T);
+yes("the ticket's second", ticketScreenshotPathAt(T, "jpg", 1), T);
+yes("the ticket's fifth", ticketScreenshotPathAt(T, "pdf", 4), T);
+yes("a reply's first", replyScreenshotPathAt(T, M, "png", 0), T, M);
+yes("a reply's second", replyScreenshotPathAt(T, M, "heic", 1), T, M);
+yes("the legacy single-screenshot key", ticketScreenshotPath(T, "png"), T);
+yes("the legacy single-reply key", replyScreenshotPath(T, M, "jpg"), T, M);
+
+// The same four keys, offered up on somebody else's ticket. This is the
+// attack: own a ticket, name a file that is not yours.
+no("first screenshot, wrong ticket", ticketScreenshotPathAt(T, "png", 0), OTHER);
+no("second screenshot, wrong ticket", ticketScreenshotPathAt(T, "jpg", 1), OTHER);
+no("fifth screenshot, wrong ticket", ticketScreenshotPathAt(T, "pdf", 4), OTHER);
+no("reply's first, wrong ticket", replyScreenshotPathAt(T, M, "png", 0), OTHER, M);
+no("reply's second, wrong ticket", replyScreenshotPathAt(T, M, "heic", 1), OTHER, M);
+
+// A reply key has to name the row it came off, not a sibling on the thread.
+no("a reply key signed for the wrong message", replyScreenshotPathAt(T, M, "png", 0), T, M2);
+no("...including its indexed sibling", replyScreenshotPathAt(T, M, "png", 1), T, M2);
+no("a reply key with no message id given", replyScreenshotPathAt(T, M, "png", 0), T);
+no("a ticket key offered for a message row", ticketScreenshotPathAt(T, "png", 0), T, M);
+no("an empty message id is not 'no message id'", replyScreenshotPathAt(T, M, "png", 0), T, "");
+
+// Path tricks. WHATWG URL parsing collapses dot segments, so a key that reads
+// as one thing resolves as another once the service role fetches it; this is
+// the same failure _shared/storagePath.ts was written for.
+no("traversal out of the ticket folder", `tickets/${T}/../${OTHER}/screenshot.png`, T);
+no("traversal inside the replies folder", `tickets/${T}/replies/../../${OTHER}/screenshot.png`, T, M);
+no("a double slash", `tickets/${T}//screenshot.png`, T);
+no("a leading slash", `/tickets/${T}/screenshot.png`, T);
+no("an absolute url", `https://example.com/tickets/${T}/screenshot.png`, T);
+no("a storage api url", `https://x.supabase.co/storage/v1/object/documents/tickets/${T}/screenshot.png`, T);
+no("a percent-encoded dot segment", `tickets/${T}/%2e%2e/${OTHER}/screenshot.png`, T);
+no("backslashes instead of slashes", `tickets\\${T}\\screenshot.png`, T);
+no("a trailing newline", `tickets/${T}/screenshot.png\n`, T);
+no("a leading space", ` tickets/${T}/screenshot.png`, T);
+no("a ticket id that is itself a traversal", `tickets/../${OTHER}/screenshot.png`, "..");
+
+// A physician's own document lives at "<clerk sub>/<uuid>" in this same
+// bucket. That is the file the hole was reaching.
+no("a bare document key", "user_2abcDEF123/44444444-4444-4444-8444-444444444444.pdf", T);
+no("a document key under the ticket folder name", `tickets/user_2abcDEF123/44444444-4444-4444-8444-444444444444.pdf`, T);
+no("another account's whole prefix", "user_2abcDEF123/", T);
+
+// Nothing and nonsense.
+no("an empty string", "", T);
+no("null", null, T);
+no("undefined", undefined, T);
+no("a number", 42, T);
+no("an object", { path: `tickets/${T}/screenshot.png` }, T);
+no("a good path with no ticket id", ticketScreenshotPathAt(T, "png", 0), null);
+no("a good path with an empty ticket id", ticketScreenshotPathAt(T, "png", 0), "");
+
+// The leaf itself: only what the writer produces.
+no("a ticket id that is only a prefix of the real one", `tickets/${T}9/screenshot.png`, T);
+no("a stem that only starts with screenshot", `tickets/${T}/screenshotx.png`, T);
+no("an extension the uploader refuses", `tickets/${T}/screenshot.svg`, T);
+no("an html extension", `tickets/${T}/screenshot.html`, T);
+no("no extension at all", `tickets/${T}/screenshot`, T);
+no("an uppercase extension", `tickets/${T}/screenshot.PNG`, T);
+no("a double extension", `tickets/${T}/screenshot.png.svg`, T);
+no("index 0", `tickets/${T}/screenshot-0.png`, T);
+no("index 1, which the writer never emits", `tickets/${T}/screenshot-1.png`, T);
+no("a zero-padded index", `tickets/${T}/screenshot-02.png`, T);
+no("a three-digit index", `tickets/${T}/screenshot-100.png`, T);
+no("a folder below the ticket", `tickets/${T}/deep/screenshot.png`, T);
+no("a folder below replies", `tickets/${T}/replies/deep/${M}.png`, T, M);
+no("a reply key missing the replies folder", `tickets/${T}/${M}.png`, T, M);
+no("the wrong top-level folder", `documents/${T}/screenshot.png`, T);
+
+// Every type the uploader accepts produces a key this validator accepts:
+// MIME_EXT is the one list, so the writer and the reader cannot drift.
+for (const ext of ATTACHMENT_EXTS) {
+  yes(`.${ext} is signable on a ticket`, ticketScreenshotPathAt(T, ext, 0), T);
+  yes(`.${ext} is signable on a reply`, replyScreenshotPathAt(T, M, ext, 1), T, M);
+}
+ok("the signable extensions are exactly MIME_EXT's values",
+  [...ATTACHMENT_EXTS].sort().join(",") === [...new Set(Object.values(MIME_EXT))].sort().join(","));
+
+// ── create-ticket no longer copies caller-supplied attachment keys ─────────
+// The insert used to be `{ ...(body.context_payload || {}) }`, which let the
+// caller name the file the reader would later sign. The server sets both
+// keys itself once it has uploaded an object.
+const sent = {
+  attachment_path: "user_2abcDEF123/44444444-4444-4444-8444-444444444444.pdf",
+  attachment_paths: [`tickets/${OTHER}/screenshot.png`],
+  page: "/app/licenses",
+  browser: "Safari 18",
+  nested: { a: 1 },
+};
+const kept = stripServerOnlyPayloadKeys(sent);
+ok("attachment_path is stripped", !("attachment_path" in kept));
+ok("attachment_paths is stripped", !("attachment_paths" in kept));
+eq("both keys are the whole strip list", SERVER_ONLY_PAYLOAD_KEYS.slice().sort(), ["attachment_path", "attachment_paths"]);
+eq("the rest of the context survives", kept, { page: "/app/licenses", browser: "Safari 18", nested: { a: 1 } });
+ok("a nested object is kept by reference, not flattened", kept.nested === sent.nested);
+ok("the caller's object is not mutated", sent.attachment_path !== undefined && sent.attachment_paths.length === 1);
+eq("no context payload is an empty object", stripServerOnlyPayloadKeys(undefined), {});
+eq("null is an empty object", stripServerOnlyPayloadKeys(null), {});
+eq("a string does not spread into indexed keys", stripServerOnlyPayloadKeys("tickets/x"), {});
+eq("an array is an empty object", stripServerOnlyPayloadKeys(["a", "b"]), {});
+eq("a number is an empty object", stripServerOnlyPayloadKeys(7), {});
+eq("a payload of only those two keys comes back empty",
+  stripServerOnlyPayloadKeys({ attachment_path: "x", attachment_paths: ["y"] }), {});
+ok("what create-ticket then writes is signable",
+  isTicketAttachmentPath(ticketScreenshotPathAt(T, "png", 0), T) === true);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
