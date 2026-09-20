@@ -142,11 +142,27 @@ function AuthPage() {
               margin: "0 0 6px", color: T.text, fontSize: 14, fontWeight: 700,
             }}>Returning from the beta?</h2>
             <p style={{ margin: 0 }}>
-              Use the verified primary email from your original beta sign-in account.
-              If Sign In can’t find your account, choose Create Account once and verify that same email.
-              We can reconnect your saved beta records after verifying the account match.
+              Our sign-in system changed. Set up your sign-in once using the verified primary email
+              from your original beta account.
+            </p>
+            <p style={{ margin: "6px 0 0" }}>
+              After we verify the match, we reconnect your saved records and existing access.
+              No card or new membership purchase is needed for sign-in setup.
             </p>
             <p style={{ margin: "6px 0 0" }}>Your beta password wasn’t transferred.</p>
+            {mode === "signin" && (
+              <button
+                type="button"
+                onClick={() => setMode("signup")}
+                style={{
+                  width: "100%", minHeight: 44, marginTop: 12, padding: "10px 12px",
+                  color: T.accent, backgroundColor: T.card, border: `1px solid ${T.accent}`,
+                  borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Set up my existing beta sign-in
+              </button>
+            )}
           </section>
         )}
 

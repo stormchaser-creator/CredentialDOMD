@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
-async function compile(continuityFlag) {
+async function compile(continuityFlag, reactRuntime = React) {
   const bundled = await build({
     entryPoints: [`${root}src/components/pages/AuthPage.jsx`],
     bundle: true, write: false, format: 'cjs', platform: 'node', jsx: 'automatic',
@@ -33,7 +33,8 @@ async function compile(continuityFlag) {
     } }],
   });
   const mod = { exports: {} };
-  new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(require, mod, mod.exports);
+  const load = name => name === 'react' ? reactRuntime : require(name);
+  new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(load, mod, mod.exports);
   return mod.exports.default;
 }
 
@@ -49,12 +50,14 @@ for (const flag of [undefined, 'false', 'TRUE', 'true']) {
         assert.match(html, /data-routing="hash"/);
         assert.ok(html.includes(`data-other-mode="${otherMode}"`));
         assert.match(html, /data-fallback="\/app\/"/);
-        assert.equal((html.match(/<button\b/g) || []).length, 2, 'no extra auth action or new account-creation behavior');
+        const showSetupAction = flag === 'true' && widget === 'SignIn';
+        assert.equal((html.match(/<button\b/g) || []).length, showSetupAction ? 3 : 2);
         if (flag === 'true') {
           assert.match(html, /aria-labelledby="returning-beta-heading"/);
-          assert.match(html, /verified primary email from your original beta sign-in account/);
-          assert.match(html, /choose Create Account once and verify that same email/);
-          assert.match(html, /saved beta records after verifying the account match/);
+          assert.match(html, /verified primary email from your original beta account/);
+          assert.match(html, /After we verify the match, we reconnect your saved records and existing access/);
+          assert.match(html, /No card or new membership purchase is needed for sign-in setup/);
+          assert.equal(html.includes('Set up my existing beta sign-in'), showSetupAction);
           assert.match(html, /beta password wasn’t transferred/);
           assert.ok(html.indexOf('Returning from the beta?') < html.indexOf('data-clerk-widget='));
         } else {
@@ -67,3 +70,44 @@ for (const flag of [undefined, 'false', 'TRUE', 'true']) {
     }
   });
 }
+
+test('returning-beta action opens the same signup widget as Create Account and Sign In remains available', async () => {
+  let mode;
+  const Page = await compile('true', {
+    ...React,
+    useState(initial) {
+      if (mode === undefined) mode = initial();
+      return [mode, next => { mode = next; }];
+    },
+    useRef: () => ({ current: null }),
+    useEffect() {},
+  });
+  const previousWindow = globalThis.window;
+  globalThis.window = { location: { hash: '' } };
+  try {
+    const render = () => Page.type();
+    const click = label => {
+      let button;
+      const visit = node => {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'button' && node.props.children === label) button = node;
+        React.Children.forEach(node.props?.children, visit);
+      };
+      visit(render());
+      assert.ok(button, `Missing action: ${label}`);
+      button.props.onClick();
+    };
+    assert.match(renderToStaticMarkup(render()), /data-clerk-widget="SignIn"/);
+    click('Set up my existing beta sign-in');
+    const existingSetup = renderToStaticMarkup(render());
+    assert.match(existingSetup, /data-clerk-widget="SignUp"/);
+    assert.doesNotMatch(existingSetup, /Set up my existing beta sign-in/);
+    click('Sign In');
+    assert.match(renderToStaticMarkup(render()), /data-clerk-widget="SignIn"/);
+    click('Create Account');
+    assert.equal(renderToStaticMarkup(render()), existingSetup, 'ordinary signup uses the same unchanged Clerk widget');
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
