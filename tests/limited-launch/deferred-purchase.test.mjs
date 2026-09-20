@@ -90,6 +90,49 @@ function find(tree, predicate) {
 const textOf = node => renderToStaticMarkup(node).replace(/<[^>]+>/g, '');
 const button = (f, label) => find(f.render(), n => n.type === 'button' && textOf(n).includes(label));
 
+test('new public founding entry follows server availability and never offers existing members a second purchase', () => {
+  const f = fixture();
+  f.context.limitedLaunch.access.freeBeta = {state:'none',startsAt:null,endsAt:null,autoCharges:false};
+  assert.match(f.html(), /first 100 paid founding members/);
+  assert.match(f.html(), /does not reserve a founding place/);
+  assert.match(f.html(), /\$245\/year total at first purchase/);
+  f.context.limitedLaunch.access.pricePhase = 'earlybird';
+  assert.doesNotMatch(f.html(), /first 100 paid founding members|\$99/);
+  f.context.limitedLaunch.access.lifetime = {credential:true,practice:true};
+  assert.match(f.html(), /No payment is required/);
+  assert.doesNotMatch(f.html(), /Review Credential offer|first 100 paid/);
+  f.context.limitedLaunch.access.lifetime = {credential:false,practice:false};
+  f.context.limitedLaunch.access.purchasedOfferId = 'core';
+  assert.doesNotMatch(f.html(), /Review Credential offer|first 100 paid/);
+});
+
+test('founding capacity refusals clear consent and require a fresh explicit review with no automatic price change', async () => {
+  for (const code of ['founding_capacity_pending', 'quote_expired']) {
+    const f = fixture();
+    f.context.limitedLaunch.access.freeBeta = {state:'none',startsAt:null,endsAt:null,autoCharges:false};
+    const immediate = phase => ({...quoteFor(),...getPublicBillingOffer('core',phase),paymentTiming:'now',paymentAtCheckout:true,
+      amountDueNowCents:getPublicBillingOffer('core',phase).annualCents,betaEndsAt:null,firstChargeAt:null});
+    f.client.quote = async () => { f.calls.push(['quote']); return immediate('founding'); };
+    f.client.checkout = async () => { f.calls.push(['checkout']); throw Object.assign(Error('Synthetic capacity refusal'), {code}); };
+    await button(f, 'Review Credential offer').props.onClick();
+    assert.match(f.html(), /viewing this offer does not reserve a place/);
+    find(f.render(), n => n.type === 'input').props.onChange({target:{checked:true}});
+    await button(f, 'Continue to secure payment').props.onClick();
+    assert.equal(Boolean(find(f.render(), n => n.type === 'input')), false);
+    assert.deepEqual(f.redirects, []);
+    assert.deepEqual(f.calls, [['quote'],['checkout']], 'no automatic retry or higher-price request');
+    if (code === 'founding_capacity_pending') assert.match(f.html(), /temporarily unavailable/);
+    else {
+      f.context.limitedLaunch.access.pricePhase = 'earlybird';
+      f.client.quote = async () => immediate('earlybird');
+      await button(f, 'Review Credential offer').props.onClick();
+      assert.match(f.html(), /\$149\.00 per year/);
+      assert.equal(find(f.render(), n => n.type === 'input').props.checked, false);
+      assert.equal(button(f, 'Continue to secure payment').props.disabled, true);
+    }
+  }
+});
+
 test('eligible beta can review both same-account offers; no quote or purchase is automatic', async () => {
   const f = fixture(), before = JSON.stringify(f.context.data);
   assert.match(f.html(), /same account|Keep using this account/);

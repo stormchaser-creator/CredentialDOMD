@@ -16,8 +16,8 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 // This route is an offline fixture, not a claim that signup is deployed.
 const paid = { enabled: true, signupHref: '/signup/' };
 const off = { enabled: false, signupHref: null };
-const scripts = html => [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/g)].map(match => match[0]);
-const assets = html => [...html.matchAll(/(?:src|poster)="([^"]+)"/g)].map(match => match[1]);
+const scripts = html => [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/g)].map(match => match[0]).filter(script => !script.includes('src="/membership-offer.js"'));
+const assets = html => [...html.matchAll(/(?:src|poster)="([^"]+)"/g)].map(match => match[1]).filter(path => path !== '/membership-offer.js');
 const jsonLd = html => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(match => JSON.parse(match[1]));
 
 test('explicit OFF mode leaves source HTML bytes, waitlist fields and widget choices intact', async () => {
@@ -38,6 +38,8 @@ test('production defaults render every packaged surface with the real app signup
     const output = renderPublicLaunch(html, surface);
     assert.equal(output, renderPublicLaunch(html, surface, { enabled: true, signupHref: '/app/' }), path);
     assert.match(output, /data-public-launch="founding-signup"/, path);
+    assert.equal((output.match(/src="\/membership-offer\.js"/g) || []).length, 1, path);
+    assert.match(output, /data-membership-action/, path);
     assert.match(output, /href="\/app\/"/, path);
     assert.doesNotMatch(output, /href="\/signup\/"|href="\/#join"|<!-- public-launch:/, path);
     assert.doesNotMatch(output, /<form\b[^>]*class="[^"]*\bwl-form\b|<fieldset\b[^>]*class="guide-choice"/, path);
@@ -51,17 +53,18 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     assert.doesNotMatch(output, /<form\b[^>]*\bclass="[^"]*wl-form/);
     assert.doesNotMatch(output, /type="email"/);
     assert.ok((output.match(/href="\/signup\/"/g) || []).length >= 4);
-    assert.match(output, />Sign up: Credential \$149\/year<\/a>/);
-    assert.match(output, /\$99\/year founding Credential offer is reserved for eligible earlier waitlist members/);
+    assert.match(output, />Review membership offers<\/span><\/a>/);
+    assert.match(output, /Founding Credential is \$99\/year for the first 100 paid founding members/);
     assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
     if (surface === 'home') {
-      assert.match(output, /Early-bird Credential: \$149\/year/);
-      assert.match(output, /\$149<span> \/ year, early-bird Credential<\/span>/);
-      assert.doesNotMatch(output, /\$99<span>/);
+      assert.match(output, /data-membership-headline>Check the current Credential offer<\/span>/);
+      assert.match(output, /<b data-membership-price>Check in app<\/b><span data-membership-price-label> \/ annual Credential membership<\/span>/);
+      assert.match(output, /data-membership-phase>Membership options<\/span>/);
+      assert.doesNotMatch(output, /\$149<span>/);
     }
     assert.match(output, /less polished/);
     assert.match(output, /support tickets/);
-    assert.match(output, /locked for life while their membership remains active/);
+    assert.match(output, /locked for life while membership remains continuously active/);
     assert.match(output, /no founding or early-bird discount/);
     assert.match(output, /earlier free-beta wording/);
     assert.match(output, /30 days free with no card/);
@@ -95,9 +98,9 @@ test('home signup and team FAQs use current offers in visible answers and struct
     assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);
   }
   const available = faq.mainEntity.find(item => item.name === 'When can I use it?').acceptedAnswer.text;
-  assert.match(available, /Early-bird signup is open/);
-  assert.match(available, /\$149\/year/);
-  assert.match(available, /\$99\/year founding Credential offer is reserved for eligible earlier waitlist members/);
+  assert.match(available, /review the available membership offer/);
+  assert.match(available, /\$99\/year/);
+  assert.match(available, /Founding Credential is \$99\/year for the first 100 paid founding members/);
   const teams = faq.mainEntity.find(item => item.name.includes('practice manager')).acceptedAnswer.text;
   assert.match(teams, /on the roadmap and are not currently available/);
   assert.match(teams, /support@credentialdomd.com/);
@@ -201,7 +204,10 @@ test('help compilation adds refund request terms and updates Practice availabili
       assert.deepEqual(article.audience, ['physicians with active Credential access']);
       assert.match(article.availability, /signed-in account with active Credential access/);
       assert.match(article.availability, /NPI lookup needs a connection/);
-      assert.deepEqual({ ...article, availability: old.availability, audience: old.audience }, old);
+      assert.deepEqual(article.notes.slice(0, -2), old.notes);
+      assert.equal(article.notes.at(-2), publicLaunchPresentation(paid).availability);
+      assert.equal(article.notes.at(-1), publicLaunchPresentation(paid).rateComparison);
+      assert.deepEqual({ ...article, notes: old.notes, availability: old.availability, audience: old.audience }, old);
     } else if (article.id === 'locum-contract') {
       assert.match(article.availability, /separate 30-day Practice trial/);
       assert.deepEqual({ ...article, availability: old.availability }, old);
@@ -277,7 +283,7 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[2], /first charge is scheduled for your original beta end date, when your paid year starts/);
       assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
       assert.match(section.blocks[3], /\$99.*\$149.*\$199/);
-      assert.match(section.blocks[3], /for life while their membership stays active/);
+      assert.match(section.blocks[3], /for life while their membership remains continuously active/);
       assert.equal(section.blocks[4], publicLaunchPresentation(paid).fullPackage.replace('$245/year', '$245 per year'));
       assert.match(section.blocks[4], /at first purchase/);
       assert.equal(section.blocks[5], publicLaunchPresentation(paid).practiceTrial);

@@ -2,6 +2,8 @@
 
 The client option is **off by default**. This source change does not enable Clerk SMS, buy a plan, send a message, create/relink users, or change authentication permissions. `VITE_SMS_SIGN_IN_ENABLED` must equal the string `true` at build time; missing, `false`, or any other value preserves the existing email-code interface. The current GitHub Pages workflow leaves this optional setting absent, which keeps it off.
 
+**September 20, 2026 owner decision: keep email login for now.** The optional SMS instructions below remain future reference, not an activation task.
+
 ## What changes after configuration
 
 - The alternate-method action becomes **Use a sign-in code instead**. Clerk displays the methods available for that account. Our old email auto-click helper is disabled so the choice remains visible; email/password remains available.
@@ -11,7 +13,7 @@ The client option is **off by default**. This source change does not enable Cler
 
 ## Configure and verify before enabling the client
 
-Use the Clerk application and instance that already serve the deployed app. The current invite beta uses an existing development instance. Keep those identities; do not move to the separate production instance to add SMS. Verify the frontend instance and configured backend issuer without changing identity infrastructure. No instance IDs, keys, or user inventory belong in this public runbook.
+Use the Clerk production instance that now serves the deployed app following the September 20, 2026 identity-continuity release. Optional SMS remains off. Preserve the verified primary email required to reconnect original beta accounts; add and verify a phone on the same account after signing in. Do not switch back to the development instance or create a second account to add SMS. Verify the frontend instance and configured backend issuer without changing identity infrastructure. No instance IDs, keys, or user inventory belong in this public runbook.
 
 1. **Environment and allowance:** development supports phone authentication without a paid production upgrade. Clerk's current test documentation exempts US SMS from the development monthly allowance; other non-exempt SMS deliveries have a 20-message monthly allowance. Country/provider rate and abuse limits still apply; this is not an unlimited-delivery guarantee. For a future production rollout, SMS needs a paid plan: current pricing lists Pro at $20/month billed annually and US/Canada SMS at $0.01/message. Confirm the actual quote and obtain approval for any purchase. Production cutover is separate work that must preserve existing account identity and records.
 2. **User & authentication > Phone:** review the combined provider behavior before saving. In the current development dashboard, selecting **Sign-in with phone** also selected **Sign-up with phone**; **Require phone number** stayed off and the SMS verification factor was on. Independent phone sign-in with phone sign-up off has not been established. Keep activation blocked until a reviewed enrollment and sign-up test proves the existing required email and email verification remain enforced, phone-only accounts cannot bypass invitation/access checks, and existing identities are preserved. Keep password choices and unrelated authentication settings intact. Do not enable required SMS MFA: it is a second factor, not this optional alternative.

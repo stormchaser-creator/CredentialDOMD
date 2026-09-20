@@ -9,23 +9,23 @@ const FAQ_DATA = [
     items: [
       {
         q: "Is CredentialDOMD free right now?",
-        a: "Yes. The invite beta is free and billing is off. The prices below describe the planned launch. You will hear about it in advance, and nothing is charged without your agreement.",
+        a: `${MEMBERSHIP_COPY.availability} ${MEMBERSHIP_COPY.promisedBeta} ${MEMBERSHIP_COPY.lifetimePolicy}`,
       },
       {
         q: "What happens to existing registered accounts?",
         a: MEMBERSHIP_COPY.lifetimePolicy,
       },
       {
-        q: "When will paid plans start?",
-        a: "No paid launch date is set. Billing remains off while checkout, account migration and launch preparation are completed. You will receive advance notice and must agree before any charge.",
+        q: "How do I start a paid membership?",
+        a: MEMBERSHIP_COPY.availability,
       },
       {
         q: "Can I deduct CredentialDOMD on my taxes?",
         a: "Practice includes an expense ledger and an export for your tax professional. Ask them whether a subscription or any recorded expense is deductible in your circumstances.",
       },
       {
-        q: "What are the planned annual prices?",
-        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.foundingChange} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.fullPackage} ${MEMBERSHIP_COPY.billingOff}`,
+        q: "What are the annual membership prices?",
+        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.foundingChange} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.fullPackage}`,
       },
       {
         q: "What does Practice add?",
@@ -33,15 +33,15 @@ const FAQ_DATA = [
       },
       {
         q: "Will the Practice trial charge me automatically?",
-        a: `${MEMBERSHIP_COPY.practiceTrial} Billing remains off today; no trial countdown or charge starts from reading these plans.`,
+        a: MEMBERSHIP_COPY.practiceTrial,
       },
       {
         q: "Are group plans available?",
-        a: "The planned Credential and Credential + Practice memberships are for one physician. Group and enterprise plans are not offered for purchase.",
+        a: "Credential and Credential + Practice memberships are for one physician. Group and enterprise plans are not offered for purchase.",
       },
       {
         q: "Can I cancel anytime?",
-        a: "There is no paid subscription to cancel during the beta. Renewal and cancellation terms will be shown before any future purchase.",
+        a: "Use Manage paid subscription to review and cancel renewal. If you chose a purchase during your historical free beta, use Manage scheduled membership before the first charge date to avoid that charge. If you never opted in, there is no charge and nothing to cancel. Your saved records remain available to read and export.",
       },
       {
         q: "Do you store my documents securely?",

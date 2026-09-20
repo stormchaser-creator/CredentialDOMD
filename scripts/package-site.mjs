@@ -8,12 +8,12 @@ import { renderHelp } from './build-help.mjs';
 import { renderCme } from './build-cme.mjs';
 import { renderWatchPages, addWatchPagesToSitemap } from './watch-pages.mjs';
 import { PUBLIC_LAUNCH_MODE, assertPublicLaunchReady } from '../src/content/publicLaunch.mjs';
-import { renderPublicLaunch, publicLaunchHelp } from './public-launch-render.mjs';
+import { renderPublicLaunch, publicLaunchHelp, publicMembershipEndpoint } from './public-launch-render.mjs';
 import { renderLegalPages } from './generate-legal-pages.mjs';
 
 const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
 const cmeAssets = ['cme.css', 'cme.mjs'];
-const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js'];
+const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js', 'membership-offer.js'];
 // Reviewed runtime images only; source originals and provenance stay out of the site.
 const landingImages = [
   'physician-life-v3-600.webp', 'physician-life-v3-1200.webp',
@@ -21,9 +21,11 @@ const landingImages = [
   'physician-learning-v3-600.webp', 'eric-whitney-120.webp', 'eric-whitney-400.webp',
 ];
 
-export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MODE) {
+export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MODE, { supabaseUrl = process.env.VITE_SUPABASE_URL } = {}) {
   // Paid marketing must never ship with only some CTAs/forms migrated.
   assertPublicLaunchReady(launchMode);
+  const liveOffer = { offerEndpoint: launchMode.enabled ? publicMembershipEndpoint(supabaseUrl) : null };
+  if (launchMode.enabled && !liveOffer.offerEndpoint) throw Error('Paid launch requires VITE_SUPABASE_URL for public offer status');
   const output = resolve(root, 'site-dist');
   // Refuse an incomplete build before removing the previous packaged output.
   const entryHtml = await readFile(resolve(root, 'dist/index.html'), 'utf8');
@@ -56,11 +58,11 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
     const source = await readFile(resolve(root, `landing/${page}.html`), 'utf8');
     if (legalSource[`${page}.html`] && source !== legalSource[`${page}.html`]) throw Error('Legal page is stale; run node scripts/generate-legal-pages.mjs');
     const html = legalOutput[`${page}.html`] || (page === 'help' && launchMode.enabled ? renderHelp(publishedHelp, videoCatalog) : source);
-    pageOutput.set(page, surfaces[page] ? renderPublicLaunch(html, surfaces[page], launchMode) : html);
+    pageOutput.set(page, surfaces[page] ? renderPublicLaunch(html, surfaces[page], launchMode, liveOffer) : html);
   }
   const stateOutput = new Map();
   for (const name of await readdir(resolve(root, 'landing/states'))) {
-    if (name.endsWith('.html')) stateOutput.set(name, renderPublicLaunch(await readFile(resolve(root, 'landing/states', name), 'utf8'), name === 'index.html' ? 'state-index' : 'state-guides', launchMode));
+    if (name.endsWith('.html')) stateOutput.set(name, renderPublicLaunch(await readFile(resolve(root, 'landing/states', name), 'utf8'), name === 'index.html' ? 'state-index' : 'state-guides', launchMode, liveOffer));
   }
   if (launchMode.enabled) {
     const expected = ['index.html', ...states.states.map(state => `${state.slug}.html`)];
@@ -68,7 +70,7 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
       throw Error('Paid launch requires the state index and all 51 state guides');
     }
   }
-  const watchOutput = watchPages.map(page => ({ ...page, html: renderPublicLaunch(page.html, 'watch-pages', launchMode) }));
+  const watchOutput = watchPages.map(page => ({ ...page, html: renderPublicLaunch(page.html, 'watch-pages', launchMode, liveOffer) }));
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   await cp(resolve(root, 'dist'), resolve(output, 'app'), { recursive: true });

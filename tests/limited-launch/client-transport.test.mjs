@@ -283,7 +283,7 @@ test('invalid invitation inputs and disabled endpoints perform no network calls'
 });
 
 test('known backend refusals preserve only safe codes; unknown details and thrown transport errors stay generic', async () => {
-  for (const code of ['quote_expired', 'invitation_required', 'verified_invitation_email_required', 'lifetime_access_already_granted']) {
+  for (const code of ['quote_expired', 'founding_capacity_pending', 'invitation_required', 'verified_invitation_email_required', 'lifetime_access_already_granted']) {
     const { client } = setup({ fetchImpl: async () => Response.json({ error: code, detail: 'synthetic-private-detail' }, { status: 409 }) });
     await assert.rejects(client.quote({ offerId: 'core' }), error => {
       assert.equal(error.code, code);

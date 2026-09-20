@@ -12,7 +12,7 @@ const SAFE_ERROR_CODES = new Set([
   "invitation_unavailable", "invitation_required", "invitation_activation_disabled",
   "quote_expired", "quote_consent_required", "billing_account_unavailable", "billing_account_mismatch",
   "subscription_already_exists", "checkout_owner_mismatch", "checkout_offer_already_selected",
-  "checkout_unavailable", "checkout_pending", "quote_mismatch", "catalog_unavailable",
+  "checkout_unavailable", "checkout_pending", "founding_capacity_pending", "quote_mismatch", "catalog_unavailable",
   "checkout_needs_reconciliation", "invalid_request", "request_too_large",
 ]);
 class LimitedLaunchClientError extends Error {

@@ -1,7 +1,16 @@
 import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-export const publicLaunchCostAnswer = view => [view.availability, view.foundingRate, view.rateComparison, view.earlyBirdRateLock,
+export function publicMembershipEndpoint(supabaseUrl) {
+  if (!supabaseUrl) return null;
+  const url = new URL(supabaseUrl);
+  if (url.protocol !== 'https:' || !/^[a-z0-9]+\.supabase\.co$/.test(url.hostname)
+    || url.port || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+    throw Error('Public offer status requires the reviewed Supabase origin');
+  }
+  return `${url.origin}/functions/v1/public-membership-offer`;
+}
+export const publicLaunchCostAnswer = view => [view.availability, view.foundingRate, view.foundingChange, view.rateComparison, view.earlyBirdRateLock,
   view.fullPackage, view.promisedBeta, view.practiceTrial, view.lifetimeException, view.refundGuarantee].join(' ');
 
 export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
@@ -12,6 +21,7 @@ export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
   if (!setup) throw Error('Missing signup availability in public help');
   setup.audience = ['physicians with active Credential access'];
   setup.availability = 'A signed-in account with active Credential access. NPI lookup needs a connection.';
+  setup.notes.push(view.availability, view.rateComparison);
   const practice = copy.articles.find(article => article.id === 'locum-contract');
   if (!practice) throw Error('Missing Practice availability in public help');
   practice.availability = [view.practiceTrial, view.promisedBeta, view.lifetimeException].join(' ');
@@ -26,7 +36,7 @@ function navigation(fallback, view) {
   if (!anchor) throw Error('A launch CTA slot must contain exactly one anchor');
   const attrs = anchor[2].replace(/\s+href="[^"]*"/, '').replace(/\s+aria-label="[^"]*"/, '');
   const icon = anchor[3].match(/<svg\b[\s\S]*?<\/svg>/)?.[0] || '';
-  return `${anchor[1]}<a${attrs} href="${escapeHtml(view.primaryAction.href)}">${escapeHtml(view.primaryAction.shortLabel)}${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
+  return `${anchor[1]}<a${attrs} href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
 }
 
 function signupInsteadOfForm(fallback, view) {
@@ -34,7 +44,7 @@ function signupInsteadOfForm(fallback, view) {
   if (!form || !/class="[^"]*\bwl-form\b/.test(form[1])) throw Error('A signup slot must contain a waitlist form');
   const id = form[1].match(/\bid="([^"]*)"/)?.[1];
   const style = form[1].match(/\bstyle="([^"]*)"/)?.[1];
-  return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="padding:15px 24px;font-size:16px;text-align:center;">${escapeHtml(view.primaryAction.label)}</a></div>`;
+  return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a></div>`;
 }
 
 const minimumSlots = {
@@ -49,7 +59,7 @@ const minimumSlots = {
 };
 
 /** Only explicit marketing slots change. Off mode is byte-for-byte unchanged. */
-export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
+export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { offerEndpoint = null } = {}) {
   const view = publicLaunchPresentation(mode);
   if (!mode.enabled) return html;
   if (!minimumSlots[surface]) throw Error(`Unknown public launch surface: ${surface}`);
@@ -63,7 +73,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
     if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
     if (slot === 'cta') return navigation(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
-    if (slot === 'guide-consent') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note)} <a href="${escapeHtml(view.primaryAction.href)}">${escapeHtml(view.primaryAction.shortLabel)}</a></p>`;
+    if (slot === 'guide-consent') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note)} <a href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span></a></p>`;
     if (slot === 'home-faq-json') {
       const schema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: homeFaq.map(answer => ({
         '@type': 'Question', name: answer.name, acceptedAnswer: { '@type': 'Answer', text: answer.text },
@@ -80,21 +90,21 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
       return `${match[1]}\n${JSON.stringify(json, null, 2).replace(/</g, '\\u003c')}\n${match[3]}`;
     }
     if (slot === 'faq-cost') return escapeHtml(publicLaunchCostAnswer(view));
-    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Early-bird Credential signup is open at $149/year. Early release; card required at checkout.');
-    if (slot === 'founding-price') return `${escapeHtml(view.publicPrice)}<span>${escapeHtml(view.publicPriceLabel)}</span>`;
+    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Credential: $99/year for the first 100 paid founding members, then $149 early-bird and $199 standard. Check availability in the app. Early release; card required at checkout.');
+    if (slot === 'founding-price') return `<b data-membership-price>${escapeHtml(view.publicPrice)}</b><span data-membership-price-label>${escapeHtml(view.publicPriceLabel)}</span>`;
     if (slot === 'full-price') return '$245<span> / year total</span>';
     if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
     const text = {
       'availability': view.availability,
       'faq-availability': homeFaq[0].text,
       'faq-teams': homeFaq[1].text,
-      'invitation-copy': 'Create your account, then review your eligible offer. Early-bird Credential is $149/year; Credential + Practice is $245/year total. Creating an account does not charge you.',
+      'invitation-copy': `${view.availability} ${view.fullPackage}`,
       'signup-heading': view.signupHeading,
       'signup-label': view.primaryAction.label,
       'signup-trust': 'Early release · Card required at checkout',
-      'audience-badge': 'For MDs and DOs · Early-bird membership',
+      'audience-badge': 'For MDs and DOs · Membership options',
       'founding-headline': view.publicRateHeadline,
-      'founding-rate': view.foundingRate,
+      'founding-rate': `${view.foundingRate} ${view.foundingChange}`,
       'rate-comparison': `${view.rateComparison} ${view.earlyBirdRateLock}`,
       'full-package': `${view.fullPackage} ${view.refundGuarantee}`,
       'practice-trial': view.practiceTrial,
@@ -102,11 +112,14 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
       'lifetime-exception': view.lifetimeException,
       'early-release': view.earlyRelease,
       'participation': view.founderParticipation,
-      'footer-mode': `${view.brand} · Early release. Early-bird Credential signup is open at $149/year; paid membership requires a card at checkout.`,
+      'footer-mode': `${view.brand} · Early release. ${view.availability}`,
       'guide-product': 'Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.',
     }[slot];
     if (text === undefined) throw Error(`Unknown public launch slot: ${slot}`);
-    return escapeHtml(text);
+    if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
+    if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
+    if (slot === 'audience-badge') return 'For MDs and DOs · <span data-membership-phase>Membership options</span>';
+    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Check availability in app.</span>' : '');
   });
   for (const [slot, count] of Object.entries(minimumSlots[surface])) {
     if ((counts[slot] || 0) < count) throw Error(`Incomplete ${surface} migration: ${slot} needs ${count} slots`);
@@ -124,5 +137,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
     throw Error(`Unmigrated waitlist form/consent in ${surface}`);
   }
   return output.replace(/<html\b/, '<html data-public-launch="founding-signup"')
-    .replace(/aria-label="Join the waitlist"/g, 'aria-label="Early-bird signup"');
+    .replace(/aria-label="Join the waitlist"/g, 'aria-label="Membership signup"')
+    .replace("connect-src 'none'", offerEndpoint ? `connect-src ${escapeHtml(offerEndpoint)}` : "connect-src 'none'")
+    .replace('</body>', `<script type="module" src="/membership-offer.js"${offerEndpoint ? ` data-membership-endpoint="${escapeHtml(offerEndpoint)}"` : ''}></script>\n</body>`);
 }

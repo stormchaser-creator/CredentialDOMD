@@ -10,11 +10,11 @@ test('production mode opens protected app signup without collecting a waitlist r
   const view = publicLaunchPresentation();
   assert.equal(view.mode, 'founding-signup');
   assert.deepEqual(view.primaryAction, {
-    kind: 'navigation', label: 'Sign up: Credential $149/year', shortLabel: 'Sign up · $149/year', href: '/app/', collectEmail: false,
+    kind: 'navigation', label: 'Review membership offers', shortLabel: 'Membership signup', href: '/app/', collectEmail: false,
   });
   assert.equal(view.guideCapture.forceGuideOnly, true);
   assert.equal(view.guideCapture.showWaitlistChoice, false);
-  assert.match(view.availability, /signup is open/);
+  assert.match(view.availability, /review the available membership offer/);
   assert.match(view.availability, /card at checkout/);
   assert.doesNotMatch(view.availability, /Checkout is not open/);
 });
@@ -52,9 +52,9 @@ test('paid preview is navigation, and guide delivery cannot imply paid or waitli
   assert.equal(view.guideCapture.signupIsSeparateNavigation, true);
   assert.equal(view.guideCapture.submitLabel, 'Email me the guide');
   assert.match(view.guideCapture.note, /does not create an account/);
-  assert.match(view.primaryAction.label, /Credential \$149\/year/);
-  assert.match(view.availability, /New members can choose Credential for \$149\/year/);
-  assert.match(view.foundingRate, /reserved for eligible earlier waitlist members/);
+  assert.match(view.primaryAction.label, /Review membership offers/);
+  assert.match(view.availability, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+  assert.match(view.foundingRate, /first 100 paid founding members/);
   assert.match(view.promisedBeta, /first activate their account with a verified email address/);
   assert.match(view.promisedBeta, /does not restart those 30 days/);
   assert.doesNotMatch(view.promisedBeta, /invitation will confirm/);
@@ -76,7 +76,7 @@ test('both views retain the active-membership rate condition and distinct earlie
     assert.match(view.founderParticipation, /In the app, ask VERA for help/);
     assert.match(view.founderParticipation, /support tickets/);
     assert.match(view.foundingRate, /\$99\/year/);
-    assert.match(view.foundingRate, /while (?:their )?membership remains active/);
+    assert.match(view.foundingRate, /while (?:their )?membership remains (?:continuously )?active/);
     assert.match(view.fullPackage, /\$245\/year/);
     assert.match(view.fullPackage, /no founding or early-bird discount/);
     assert.match(view.promisedBeta, /earlier free-beta wording/);
@@ -96,4 +96,15 @@ test('public signup cannot embed an invitation bearer token or any nonempty frag
     assert.throws(() => publicLaunchPresentation(mode), /without query data or fragments/);
   }
   assert.equal(publicLaunchPresentation({ enabled: true, signupHref: '/signup/' }).primaryAction.href, '/signup/');
+});
+
+test('founding marketing states the paid cap without claiming live availability or a signup reservation', () => {
+  const view = publicLaunchPresentation();
+  assert.match(view.availability, /first 100 paid founding members/);
+  assert.match(view.availability, /Availability is confirmed in the app before payment/);
+  assert.match(view.availability, /does not reserve a place/);
+  assert.match(view.foundingRate, /membership remains continuously active/);
+  assert.match(view.rateComparison, /After the 100 paid founding memberships.*\$149.*\$199/);
+  assert.match(view.foundingChange, /previously planned \$149/);
+  assert.doesNotMatch(JSON.stringify(view), /\d+ (?:spots?|places?|memberships?) (?:left|remaining)|signup is open|reserved for eligible earlier waitlist members/i);
 });

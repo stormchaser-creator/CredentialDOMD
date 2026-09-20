@@ -35,7 +35,7 @@ async function siteFixture(t) {
   await writeFile(resolve(root, "landing/states/example.html"), "<!doctype html><title>Synthetic state guide</title>");
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
-    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
+    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
     cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
@@ -98,7 +98,7 @@ test("site package keeps public help/CME, private routes, declared assets and di
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/cme\/<\/loc>/);
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/help<\/loc>/);
   assert.equal(await read(resolve(output, "organization-logo.svg")), await read(resolve(root, "public/organization-logo.svg")));
-  for (const file of ["support-nav.css", "support-nav.js", "waitlist-signup.js"]) {
+  for (const file of ["support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js"]) {
     assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
   }
   for (const page of ["index.html", "locums.html"]) {
@@ -213,10 +213,11 @@ test('paid mode packages all public signup surfaces while retaining guide-only r
   }
   // Synthetic route for offline rendering only; no provider/auth/checkout is enabled.
   const before = new Map(await Promise.all(pages.map(async page => [page, await read(resolve(root, `landing/${page}.html`))])));
-  const output = await packageSite(root, undefined, { enabled: true, signupHref: '/signup/' });
+  const output = await packageSite(root, undefined, { enabled: true, signupHref: '/signup/' }, {supabaseUrl:'https://synthetic.supabase.co'});
   for (const page of ['index', 'locums', 'help', 'cme', 'privacy', 'terms', 'security']) {
     const html = await read(resolve(output, `${page}.html`));
     assert.match(html, /data-public-launch="founding-signup"/);
+    assert.ok(html.includes('data-membership-endpoint="https://synthetic.supabase.co/functions/v1/public-membership-offer"'));
     assert.match(html, /href="\/signup\/"/);
     assert.doesNotMatch(html, /<form\b[^>]*\bclass="[^"]*wl-form/);
     assert.equal(await read(resolve(root, `landing/${page}.html`)), before.get(page), 'paid rendering does not mutate source');
@@ -225,6 +226,7 @@ test('paid mode packages all public signup surfaces while retaining guide-only r
   assert.equal(statePages.length, 52);
   for (const name of statePages) {
     const html = await read(resolve(output, 'states', name));
+    assert.ok(html.includes('data-membership-endpoint="https://synthetic.supabase.co/functions/v1/public-membership-offer"'));
     assert.match(html, /href="\/signup\/"/);
     assert.doesNotMatch(html, /<input\b[^>]*name="waitlist"/);
   }
@@ -251,22 +253,25 @@ test('paid launch refuses incomplete URL, stale legal content, missing widgets o
   await mkdir(resolve(root, 'site-dist'));
   await writeFile(resolve(root, 'site-dist/sentinel.txt'), 'previous reviewed artifact');
   const paid = { enabled: true, signupHref: '/signup/' };
+  const publicConfig = {supabaseUrl:'https://synthetic.supabase.co'};
   const preserved = async () => assert.equal(await read(resolve(root, 'site-dist/sentinel.txt')), 'previous reviewed artifact');
   await assert.rejects(packageSite(root, undefined, { enabled: true, signupHref: null }), /reviewed signup destination/);
+  await preserved();
+  await assert.rejects(packageSite(root, undefined, paid, {supabaseUrl:null}), /requires VITE_SUPABASE_URL/);
   await preserved();
   const termsPath = resolve(root, 'landing/terms.html');
   const terms = await read(termsPath);
   await writeFile(termsPath, terms + '<p>Stale legal policy</p>');
-  await assert.rejects(packageSite(root, undefined, paid), /Legal page is stale/);
+  await assert.rejects(packageSite(root, undefined, paid, publicConfig), /Legal page is stale/);
   await preserved();
   await writeFile(termsPath, terms);
   const guidePath = resolve(root, 'landing/states/ohio.html');
   const guide = await read(guidePath);
   await writeFile(guidePath, guide.replace(/<!-- public-launch:guide-consent -->[\s\S]*?<!-- \/public-launch:guide-consent -->/, ''));
-  await assert.rejects(packageSite(root, undefined, paid), /Incomplete state-guides migration: guide-consent/);
+  await assert.rejects(packageSite(root, undefined, paid, publicConfig), /Incomplete state-guides migration: guide-consent/);
   await preserved();
   await rm(guidePath);
-  await assert.rejects(packageSite(root, undefined, paid), /all 51 state guides/);
+  await assert.rejects(packageSite(root, undefined, paid, publicConfig), /all 51 state guides/);
   await preserved();
 });
 
@@ -293,6 +298,15 @@ test("missing invitation controller preserves the previous package", async t => 
   await rm(missingPath);
   await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), { code: "ENOENT", path: missingPath });
   assert.equal(await read(resolve(output, "waitlist-signup.js")), previous);
+  assert.equal(await read(resolve(output, "previous-artifact-sentinel.txt")), "previous reviewed artifact");
+});
+
+test("missing public-offer controller preserves the previous package", async t => {
+  const root = await siteFixture(t);
+  const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE);
+  await writeFile(resolve(output, "previous-artifact-sentinel.txt"), "previous reviewed artifact");
+  await rm(resolve(root, "public/membership-offer.js"));
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), {code:"ENOENT"});
   assert.equal(await read(resolve(output, "previous-artifact-sentinel.txt")), "previous reviewed artifact");
 });
 

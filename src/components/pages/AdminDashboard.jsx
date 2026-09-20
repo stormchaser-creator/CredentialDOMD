@@ -4,7 +4,6 @@ import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { isAdminUser } from "../../lib/admin";
 import { Modal, ScreenshotAttach } from "../shared";
-import { FOUNDING_COHORT_CAP } from "../../utils/pricingConstants";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
 import { leadNoteLabel } from "../../utils/adminLabels";
@@ -945,7 +944,7 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
       ))}
 
       <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
-        Founding members: {foundingCount} of {FOUNDING_COHORT_CAP} (signed up and activated)
+        Legacy founding badges: {foundingCount} (separate from paid founding memberships)
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
         Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty test account{hiddenCount === 1 ? "" : "s"}</button>}

@@ -32,13 +32,13 @@ for (const page of ['index', 'locums']) {
     const meta = [...html.matchAll(/<meta\b[^>]*>/g)].map(match => match[0]).join('\n');
     assert.doesNotMatch(meta, /free beta|no card/i);
   });
-  test(`${page}: production copy offers $149 signup and preserves protected earlier promises`, async () => {
+  test(`${page}: production copy offers capped $99 founding signup and preserves protected earlier promises`, async () => {
     assert.equal(PUBLIC_LAUNCH_MODE.enabled, true);
     const html = renderPublicLaunch(await read(`landing/${page}.html`), page === 'index' ? 'home' : 'locums');
     assert.match(html, /href="\/app\/"/);
-    assert.match(html, /Sign up: Credential \$149\/year/);
+    assert.match(html, /Review membership offers/);
     assert.match(html, /card (?:is )?required at checkout/i);
-    assert.match(html, /\$99\/year founding Credential offer is reserved for eligible earlier waitlist members/);
+    assert.match(html, /Founding Credential is \$99\/year for the first 100 paid founding members/);
     assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
     assert.match(html, /signing in again does not restart those 30 days/);
     assert.match(html, /opt in to \$99\/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription/);

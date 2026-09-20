@@ -4,6 +4,7 @@ import { createLimitedLaunchClient } from "../../utils/limitedLaunchClient.js";
 import { readLaunchInvitation, clearLaunchInvitation } from "../../utils/launchInvitation.js";
 import { accessAuthority, canReviewBillingOffer } from "../../utils/limitedLaunchAccess.js";
 import { membershipDate, membershipPrice, quoteMatchesBetaWindow, scheduledMembershipCopy } from "../../utils/membershipTiming.js";
+import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 
 const messages = {
   signup_disabled: "New membership enrollment is not open yet. Please check again later.",
@@ -22,6 +23,7 @@ const messages = {
   checkout_offer_already_selected: "Your saved checkout has different terms. It could not be resumed; no new checkout was started.",
   checkout_owner_mismatch: "This saved checkout could not be verified for your account. No payment page was opened.",
   checkout_pending: "Your checkout is still being checked. Please try again shortly.",
+  founding_capacity_pending: "Founding checkout is temporarily unavailable while existing checkouts are resolved. Your account and saved records have not changed. Please check again shortly.",
 };
 const messageFor = error => messages[error?.code] || "Membership could not be updated. Your saved records have not changed. Please try again.";
 
@@ -90,7 +92,7 @@ function MembershipForAccount({ accountId, onActivated }) {
     } catch (error) {
       if (current(turn)) {
         setConsent(false); setMessage(messageFor(error));
-        if (error.code === "quote_expired") setQuote(null);
+        if (["quote_expired", "founding_capacity_pending"].includes(error.code)) setQuote(null);
       }
     } finally { if (current(turn)) setBusy(false); }
   };
@@ -131,6 +133,7 @@ function MembershipForAccount({ accountId, onActivated }) {
               <button style={button} disabled={busy || !canReviewBillingOffer(access, resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>
             </> : <>
               <p>Choose whether to purchase a membership. {access?.billingEnabled && access?.checkoutEligible ? "Review the exact offer before choosing to pay." : "An eligible membership offer is not available for this account right now."}</p>
+              {!beta && <p>{access?.pricePhase === "founding" ? `${MEMBERSHIP_COPY.credentialPrices} Creating an account or viewing an offer does not reserve a founding place.` : "Your available Credential offer is checked securely before you choose to pay."} {MEMBERSHIP_COPY.fullPackage}</p>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <button style={button} disabled={busy || !canReviewBillingOffer(access, "core")} onClick={() => review("core")}>Review Credential offer</button>
                 <button style={button} disabled={busy || !canReviewBillingOffer(access, "core_locum")} onClick={() => review("core_locum")}>Review Credential + Practice offer</button>
@@ -149,7 +152,7 @@ function MembershipForAccount({ accountId, onActivated }) {
         {quote.offerId === "core" && <p>Your included 30 days of Practice access begin when the first annual payment is confirmed. Practice does not upgrade or add a charge automatically.</p>}
       </div>}
       <p style={{ whiteSpace: "pre-wrap" }}>{quote.consentText}</p>
-      <p style={{ color: T.textMuted, fontSize: 12 }}>Offer available until {new Date(quote.expiresAt).toLocaleString()}. Refreshing an offer requires a new confirmation.</p>
+      <p style={{ color: T.textMuted, fontSize: 12 }}>This review expires at {new Date(quote.expiresAt).toLocaleString()}. {quote.offerId === "core" && quote.pricePhase === "founding" && "Founding availability is checked again when you continue; viewing this offer does not reserve a place. "}Refreshing an offer requires a new confirmation.</p>
       <label style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} />
         <span>{deferredResumeAfterBeta ? `I choose to complete this saved purchase and authorize the annual payment now for the paid year starting on ${membershipDate(quote.firstChargeAt)}, followed by the renewal terms above.` : quote.paymentTiming === "after_beta" ? `I choose this paid membership and authorize the first annual charge on ${membershipDate(quote.firstChargeAt)}, or when Checkout completes if later, followed by the renewal terms above. There is no charge before that date.` : "I have reviewed this offer and agree to the payment and renewal terms above."}</span>

@@ -53,25 +53,26 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
     brand: 'CredentialDOMD',
     mode: enabled ? 'founding-signup' : 'waitlist',
     primaryAction: Object.freeze(enabled
-      ? { kind: 'navigation', label: 'Sign up: Credential $149/year', shortLabel: 'Sign up · $149/year', href: signupHref, collectEmail: false }
+      ? { kind: 'navigation', label: 'Review membership offers', shortLabel: 'Membership signup', href: signupHref, collectEmail: false }
       : { kind: 'waitlist-request', label: 'Join the waitlist', shortLabel: 'Join the waitlist', href: '/#join', collectEmail: true }),
     availability: enabled
-      ? 'Early-bird signup is open. New members can choose Credential for $149/year, with that annual rate locked while membership remains active. Paid membership requires a card at checkout. Review your offer before choosing to pay.'
+      ? 'Create your account to review the available membership offer. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed in the app before payment; creating an account or viewing an offer does not reserve a place. New paid membership requires a card at checkout. Nothing is charged without your agreement.'
       : 'Checkout is not open. Join the waitlist for your invitation and membership details. A waitlist request does not create a paid account or charge you; future paid access requires a card at checkout.',
     earlyRelease: 'CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.',
     teamAvailability: 'Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
     founderParticipation: 'Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.',
     foundingRate: enabled
-      ? 'The $99/year founding Credential offer is reserved for eligible earlier waitlist members and individually confirmed founding members, with that annual rate locked for life while their membership remains active.'
+      ? 'Founding Credential is $99/year for the first 100 paid founding members, with that annual rate locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay.'
       : 'The planned founding Credential offer is $99/year for eligible founding members, with that annual rate locked for life while membership remains active.',
+    foundingChange: 'The $99/year founding offer replaces the previously planned $149/year founding price; this is not a claim about a previous selling price.',
     rateComparison: enabled
-      ? 'The founding offer applies to Credential. Early-bird Credential is $149/year; standard Credential is $199/year.'
+      ? 'After the 100 paid founding memberships, early-bird Credential is $149/year, followed by standard Credential at $199/year.'
       : 'Planned early-bird Credential is $149/year; planned standard Credential is $199/year. These are launch prices, not claims about a previous selling price.',
     earlyBirdRateLock: 'The early-bird annual rate also stays the same while membership remains active.',
-    signupHeading: 'Early-bird signup',
-    publicRateHeadline: 'Early-bird Credential: $149/year, locked while membership remains active.',
-    publicPrice: '$149',
-    publicPriceLabel: ' / year, early-bird Credential',
+    signupHeading: 'Membership signup',
+    publicRateHeadline: 'Check the current Credential offer',
+    publicPrice: 'Check in app',
+    publicPriceLabel: ' / annual Credential membership',
     fullPackage: 'Credential + Practice is $245/year total at first purchase. The full package has no founding or early-bird discount.',
     refundGuarantee: 'No-hassle 100% money-back guarantee: request a full refund of your most recent annual membership payment, including a renewal payment, at any time. There is no request deadline or prorating. This covers your most recent annual payment, not all payments from past years. Request through Get help in the app or support@credentialdomd.com. You do not need to delete your account, saved records or reports to request a refund.',
     promisedBeta: enabled
