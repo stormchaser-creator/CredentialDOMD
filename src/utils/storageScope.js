@@ -14,6 +14,7 @@
  * adoptLegacyStorage() and then removed.
  */
 import { STORAGE_KEY } from "../constants/defaults.js";
+import { clearSupportTextDrafts } from "./supportTextDrafts.js";
 
 export const BASE_KEYS = {
   data: STORAGE_KEY,                       // the whole file (mirror of the cloud)
@@ -158,6 +159,9 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
   // A real server wipe may preserve a private vault but must still prevent
   // recovery. Ordinary involuntary sign-out uses keepVault:true without this.
   if (!keepVault || retireRecovery) retireContinuityRecovery(userId);
+  // Session expiry keeps this account's text for re-sign-in. Deliberate
+  // sign-out/deletion removes it; screenshots are never stored here.
+  if (!keepVault || retireRecovery) clearSupportTextDrafts(userId);
   for (const [name, base] of Object.entries(BASE_KEYS)) {
     if (name === "vault" && keepVault) continue;
     lsRemove(base, userId);

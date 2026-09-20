@@ -6,6 +6,7 @@ import { supabase } from "../../lib/supabase";
 import { ScreenshotAttach } from "../shared";
 import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
+import { createSupportTextDrafts, supportReceiptConfirmed, supportSubmissionError } from "../../utils/supportTextDrafts";
 import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam } from "../../utils/supportOperationsClient";
 
 const CATEGORIES = [
@@ -86,6 +87,9 @@ export function SupportMessage({ message: m, theme: T, ownProfileId, urls }) {
 function SupportModalContent({ open, onClose, contextPage, initialTab = "new" }) {
   const { theme: T, user, isDesktop } = useApp();
   const operations = useMemo(() => createSupportOperationsClient({ accountId: user?.id }), [user?.id]);
+  const drafts = useMemo(() => createSupportTextDrafts({ accountId: user?.id }), [user?.id]);
+  const [createDraftSaved, setCreateDraftSaved] = useState(null);
+  const [replyDraftSaved, setReplyDraftSaved] = useState(null);
   const listRequest = useRef(0);
   const threadRequest = useRef(0);
   const actionRequest = useRef(0);
@@ -123,18 +127,44 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
   const [resolving, setResolving] = useState(false);
 
   const restoreCreateDraft = useCallback(() => {
-    const saved = SUPPORT_OPERATIONS_ENABLED ? operations.createDraft() : null;
-    if (!saved) return;
+    const saved = SUPPORT_OPERATIONS_ENABLED ? operations.createDraft() : drafts.read();
+    if (!saved && SUPPORT_OPERATIONS_ENABLED) return;
+    setCreateDraftSaved(saved ? true : null);
+    if (!saved) { setSubject(""); setBody(""); setCategory("other"); setPriority("normal"); return; }
     setSubject(saved.subject || ""); setBody(saved.body || "");
     setCategory(saved.category || "other"); setPriority(saved.priority || "normal");
-  }, [operations]);
+  }, [operations, drafts]);
   useEffect(() => {
-    if (open) { setTab(initialTab); if (SUPPORT_OPERATIONS_ENABLED) restoreCreateDraft(); }
+    if (open) { setTab(initialTab); restoreCreateDraft(); }
   }, [open, initialTab, restoreCreateDraft]);
   useEffect(() => () => {
     listRequest.current++; threadRequest.current++; actionRequest.current++;
     clearTimeout(closeTimer.current);
   }, [open]);
+
+  // Save on edits, never on close/unmount: an old component must not restore
+  // text after an explicit account purge or overwrite a newer draft.
+  const saveCreateDraft = (patch = {}) => {
+    if (SUPPORT_OPERATIONS_ENABLED) return null;
+    const result = drafts.save({ subject, body, category, priority, ...patch });
+    setCreateDraftSaved(result.saved ? (result.draft ? true : null) : false);
+    return result.draft?.revision || null;
+  };
+  const saveReplyDraft = (text) => {
+    if (SUPPORT_OPERATIONS_ENABLED || !openTicket) return null;
+    const result = drafts.save({ body: text }, openTicket.id);
+    setReplyDraftSaved(result.saved ? (result.draft ? true : null) : false);
+    return result.draft?.revision || null;
+  };
+  const discardCreateDraft = () => {
+    if (!drafts.clear()) { setCreateDraftSaved(false); return; }
+    setCreateDraftSaved(null);
+    setSubject(""); setBody(""); setCategory("other"); setPriority("normal"); setError("");
+  };
+  const discardReplyDraft = () => {
+    if (!drafts.clear(openTicket.id)) { setReplyDraftSaved(false); return; }
+    setReplyDraftSaved(null); setReply(""); setReplyMsg("");
+  };
 
   const loadTickets = async () => {
     if (!supabase || !user?.id) return;
@@ -217,7 +247,9 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
   const openThread = async (t) => {
     const requestId = ++threadRequest.current;
     const current = () => requestId === threadRequest.current;
-    setOpenTicket(t); setThread([]); setReply(SUPPORT_OPERATIONS_ENABLED ? operations.replyDraft(t.id)?.body || "" : ""); setReplyAttachment([]); setReplyMsg("");
+    const saved = SUPPORT_OPERATIONS_ENABLED ? operations.replyDraft(t.id) : drafts.read(t.id);
+    setReplyDraftSaved(saved ? true : null);
+    setOpenTicket(t); setThread([]); setReply(saved?.body || ""); setReplyAttachment([]); setReplyMsg("");
     setReplying(false); setResolving(false);
     setBeforeMessageId(null); setEarlierLoading(false);
     setAttachmentUrls([]); setReplyUrls({});
@@ -259,8 +291,11 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
   const sendReply = async () => {
     const text = reply.trim();
     if (!openTicket || replying || threadLoading || (text.length < 1 && (SUPPORT_OPERATIONS_ENABLED || !replyAttachment.length))) return;
+    const session = window.Clerk?.session;
+    if (!SUPPORT_OPERATIONS_ENABLED && (!session || window.Clerk?.user?.id !== user?.id)) { setReplyMsg("Sign in to this account before sending. Your text has not been sent."); return; }
     const requestId = threadRequest.current;
-    const current = () => requestId === threadRequest.current;
+    const current = () => requestId === threadRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
+    const savedRevision = saveReplyDraft(reply);
     setReplying(true); setReplyMsg("");
     try {
       if (SUPPORT_OPERATIONS_ENABLED) await operations.reply({ ticketId: openTicket.id, body: text });
@@ -271,10 +306,12 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
           ...attachmentsPayload(replyAttachment),
         },
         });
-        if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not send the reply."));
+        if (res.error) throw res.error;
+        if (!supportReceiptConfirmed(res.data)) throw new Error("The server did not confirm this reply.");
+        if (savedRevision) drafts.clear(openTicket.id, savedRevision);
       }
       if (!current()) return;
-      setReply(""); setReplyAttachment([]);
+      setReply(""); setReplyAttachment([]); setReplyDraftSaved(null);
       setReplyMsg("Reply received.");
       loadTickets();
       try {
@@ -291,7 +328,8 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         }
       } catch { if (current()) setReplyMsg("Reply received. Reopen the ticket to refresh the conversation."); }
     } catch (e) {
-      if (current()) setReplyMsg(e.message || "Could not confirm your reply. Try again.");
+      const message = SUPPORT_OPERATIONS_ENABLED ? e.message || "Could not confirm your reply. Try again." : await supportSubmissionError(e);
+      if (current()) setReplyMsg(message);
     } finally {
       if (current()) setReplying(false);
     }
@@ -332,6 +370,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     clearTimeout(closeTimer.current);
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
     setDone(false); setError("");
+    setCreateDraftSaved(null); setReplyDraftSaved(null);
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
     setAttachment([]); setReplyAttachment([]); setAttachmentUrls([]); setReplyUrls({});
     setShowArchived(false);
@@ -371,9 +410,12 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     if (body.trim().length < 10)   { setError("Tell us a bit more, at least 10 characters."); return; }
     if (!supabase) { setError("App not connected to backend."); return; }
 
+    const session = window.Clerk?.session;
+    if (!SUPPORT_OPERATIONS_ENABLED && (!session || window.Clerk?.user?.id !== user?.id)) { setError("Sign in to this account before sending. Your text has not been sent."); return; }
+    const savedRevision = saveCreateDraft();
     setSubmitting(true); setError("");
     const requestId = ++actionRequest.current;
-    const current = () => requestId === actionRequest.current;
+    const current = () => requestId === actionRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
     try {
       if (SUPPORT_OPERATIONS_ENABLED) await operations.create({ subject: subj, body: body.trim(), category, priority });
       else {
@@ -387,13 +429,16 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
           ...attachmentsPayload(attachment),
         },
         });
-        if (res.error) throw new Error(await edgeErrorMessage(res.error, "Could not file the ticket."));
+        if (res.error) throw res.error;
+        if (!supportReceiptConfirmed(res.data)) throw new Error("The server did not confirm this ticket.");
+        if (savedRevision) drafts.clear("create", savedRevision);
       }
       if (!current()) return;
       setDone(true);
       closeTimer.current = setTimeout(() => { if (current()) { onClose(); reset(); } }, 2600);
     } catch (e) {
-      if (current()) setError(e.message || "Could not confirm receipt. Try again.");
+      const message = SUPPORT_OPERATIONS_ENABLED ? e.message || "Could not confirm receipt. Try again." : await supportSubmissionError(e);
+      if (current()) setError(message);
     } finally {
       if (current()) setSubmitting(false);
     }
@@ -416,6 +461,14 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     }}>{label}</button>
   );
 
+  const draftNotice = (saved, discard, busy) => <div style={{ marginTop: 8, fontSize: 12, color: T.textMuted }}>
+    <p role="status" style={{ margin: "0 0 4px" }}>{saved === false
+      ? "This tab could not save your draft. Copy your text before closing or signing in again."
+      : saved ? "Text draft saved for this account in this tab for up to 24 hours. Closing this support window keeps it; explicit sign-out removes it. Reattach screenshots after reopening."
+        : "Text drafts stay in this tab for up to 24 hours. Screenshots are not saved in drafts."}</p>
+    {saved !== null && <button onClick={discard} disabled={busy} style={{ padding: "6px 0", border: "none", background: "none", color: T.accent, cursor: "pointer" }}>Discard text draft</button>}
+  </div>;
+
   const renderNew = () => (
     <>
       <h2 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 800, color: T.text }}>
@@ -429,12 +482,12 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Category</label>
-        <select value={category} disabled={submitting || !!pendingCreate} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
+        <select value={category} disabled={submitting || !!pendingCreate} onChange={(e) => { setCategory(e.target.value); saveCreateDraft({ category: e.target.value }); }} style={inputStyle}>
           {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
 
         <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Priority</label>
-        <select value={priority} disabled={submitting || !!pendingCreate} onChange={(e) => setPriority(e.target.value)} style={inputStyle}>
+        <select value={priority} disabled={submitting || !!pendingCreate} onChange={(e) => { setPriority(e.target.value); saveCreateDraft({ priority: e.target.value }); }} style={inputStyle}>
           {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
 
@@ -442,7 +495,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         <input
           value={subject}
           disabled={submitting || !!pendingCreate}
-          onChange={(e) => setSubject(e.target.value)}
+          onChange={(e) => { setSubject(e.target.value); saveCreateDraft({ subject: e.target.value }); }}
           placeholder="Short summary (optional)"
           maxLength={200}
           style={inputStyle}
@@ -453,7 +506,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
           value={body}
           disabled={submitting || !!pendingCreate}
           maxLength={10000}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => { setBody(e.target.value); saveCreateDraft({ body: e.target.value }); }}
           placeholder="As much detail as helps: steps, error messages, what you expected."
           style={{ ...inputStyle, minHeight: 120, resize: "vertical", fontFamily: "inherit" }}
         />
@@ -465,8 +518,9 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         {SUPPORT_OPERATIONS_ENABLED && <p style={{ margin: 0, fontSize: 12, color: T.textMuted }}>Please describe the issue in text. Attachments are not available here yet.</p>}
       </div>
 
+      {!SUPPORT_OPERATIONS_ENABLED && draftNotice(createDraftSaved, discardCreateDraft, submitting)}
       {error && (
-        <div style={{
+        <div role="alert" style={{
           marginTop: 10, padding: "8px 10px", borderRadius: 8,
           backgroundColor: "rgba(239,68,68,0.1)",
           color: "#ef4444", fontSize: 12, fontWeight: 600,
@@ -611,10 +665,11 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         value={reply}
         disabled={replying || threadLoading || !!pendingReply}
         maxLength={10000}
-        onChange={(e) => setReply(e.target.value)}
+        onChange={(e) => { setReply(e.target.value); saveReplyDraft(e.target.value); }}
         placeholder="Add to this ticket"
         style={{ ...inputStyle, minHeight: 80, marginTop: 12, resize: "vertical", fontFamily: "inherit" }}
       />
+      {!SUPPORT_OPERATIONS_ENABLED && draftNotice(replyDraftSaved, discardReplyDraft, replying)}
       {pendingReply && <p role="status" style={{ fontSize: 12, color: T.textMuted }}>Your previous reply has not been confirmed. Retry the saved reply using the same request.</p>}
       {!SUPPORT_OPERATIONS_ENABLED && <ScreenshotAttach value={replyAttachment} onChange={setReplyAttachment} style={{ marginTop: 8 }} />}
       {replyMsg && <div role="status" style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: replyMsg.startsWith("Reply received.") ? T.accent : "#ef4444" }}>{replyMsg}</div>}
