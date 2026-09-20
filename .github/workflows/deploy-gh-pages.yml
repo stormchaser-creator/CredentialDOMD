@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
 # Publishes the reviewed app and public routes from one packaged artifact.
-# Billing, support automation and private invitations remain off by default.
+# Public paid signup is enabled; support automation and private invitations remain off.
 # Existing legacy docs and the public portrait remain on gh-pages.
 
 on:
@@ -77,6 +77,9 @@ jobs:
           #   GitHub → Settings → Secrets and variables → Actions →
           #   New repository secret → name VITE_CLERK_PUBLISHABLE_KEY
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_LIMITED_LAUNCH_ACCESS_ENABLED: "true"
+          VITE_PUBLIC_SELF_SERVICE_SIGNUP_ENABLED: "true"
+          VITE_CLERK_CONTINUITY_ENABLED: "true"
           VITE_SUPPORT_OPERATIONS_ENABLED: "false"
           VITE_CREDENTIAL_PORTAL_ENABLED: "false"
         run: |

@@ -2,10 +2,10 @@
 export const CREDENTIAL_PRICE_PHASES = Object.freeze({ founding: 9900, earlybird: 14900, standard: 19900 });
 export const PUBLIC_BILLING_POLICY = Object.freeze({
   version: '2026-09-19-credential-practice-v1',
-  pricePhase: 'founding', // Planned waitlist offer; eligibility must be proved server-side.
+  pricePhase: 'earlybird', // Public default; protected historical founding eligibility remains server-owned.
   billingEnabled: false,
   checkoutEnabled: false,
-  enforcementEnabled: false,
+  enforcementEnabled: true,
   practiceTrialDays: 30,
   trialAutoCharges: false,
   lifetimeScope: 'credential_and_practice',

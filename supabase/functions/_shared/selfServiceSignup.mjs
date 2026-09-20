@@ -1,6 +1,6 @@
 import { PUBLIC_BILLING_POLICY } from './accessPolicy.mjs';
 
-export const SELF_SERVICE_SIGNUP = Object.freeze({ enabled: false, policyVersion: PUBLIC_BILLING_POLICY.version });
+export const SELF_SERVICE_SIGNUP = Object.freeze({ enabled: true, policyVersion: PUBLIC_BILLING_POLICY.version });
 
 // Only a fresh Clerk backend response is evidence. No editable profile email,
 // secondary mailbox, JWT email label or browser-selected address can enroll.

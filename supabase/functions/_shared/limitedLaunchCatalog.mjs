@@ -3,7 +3,7 @@ import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from './accessPolicy.mjs
 /** Separate from historical v1 settlement. Nothing here enables a deployed route. */
 export const LIMITED_LAUNCH = Object.freeze({
   version: '2026-09-limited-launch-v2', app: 'credentialdomd',
-  billingEnabled: false, checkoutEnabled: false, invitationEnabled: false, enforcementEnabled: false,
+  billingEnabled: true, checkoutEnabled: true, invitationEnabled: false, enforcementEnabled: false,
   policyVersion: PUBLIC_BILLING_POLICY.version,
 });
 export function limitedOffer(offerId, phase, productIds = {}) {

@@ -1,7 +1,7 @@
 /** Public marketing presentation only. This cannot enable billing or grant access. */
 export const PUBLIC_LAUNCH_MODE = Object.freeze({
-  enabled: false,
-  signupHref: null, // Set only after the real signup/checkout route is reviewed.
+  enabled: true,
+  signupHref: '/app/', // Protected verified-primary signup and explicit paid opt-in.
 });
 
 // Static generators still own the listed surfaces. Do not enable paid copy while

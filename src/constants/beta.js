@@ -10,7 +10,7 @@
  * switch flips itself at midnight local time on that date).
  */
 export const FREE_BETA = {
-  active: true,
+  active: false,
   endsOn: null, // e.g. "2026-10-01"; null = open-ended
 };
 
