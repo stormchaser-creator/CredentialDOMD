@@ -148,16 +148,16 @@ export const CME_PROVIDERS = [
   },
   {
     id: "cdcHivNexus",
-    name: "CDC HIV Nexus",
-    url: "https://www.cdc.gov/hivnexus/hcp/cme/index.html",
+    name: "CDC HIV Education Resources",
+    url: "https://www.cdc.gov/high-quality-care/hcp/resources/provider.html",
     pricing: "free",
-    pricingNote: "Free; government-funded",
+    pricingNote: "Links to free education; confirm each activity",
     accreditation: ["AMA PRA Category 1"],
     accreditedBy: "ACCME (via partner providers)",
     topics: [
       "HIV/AIDS", "Infection Control",
     ],
-    description: "CDC-funded free CME/CE programs for HIV prevention and care continuum, offered through Medscape and partner organizations.",
+    description: "CDC directory of HIV training and continuing education, including HIV Prevention Certified Provider learning. Check each linked activity for current credit, eligibility and availability.",
     stateSpecific: false,
     stateSpecificNote: null,
     dualAccredited: false,
@@ -562,8 +562,8 @@ export const CME_PROVIDERS = [
   // ─── NEUROSURGERY / DO-NATIVE PROVIDERS ─────────────────────────────
   {
     id: "aansCme",
-    name: "AANS Online CME (NREF Education)",
-    url: "https://www.aans.org/en/Online-Learning",
+    name: "AANS NeuroU and Online CME",
+    url: "https://www.aans.org/education-publications/",
     pricing: "freemium",
     pricingNote: "Member discounts; some free content",
     accreditation: ["AMA PRA Category 1"],
@@ -577,7 +577,7 @@ export const CME_PROVIDERS = [
   {
     id: "cnsSans",
     name: "CNS SANS (Self-Assessment in Neurological Surgery)",
-    url: "https://www.cns.org/education/sans",
+    url: "https://www.cns.org/education/sans-lifelong-learning",
     pricing: "paid",
     pricingNote: "Member pricing; counts for ABNS Continuous Certification self-assessment",
     accreditation: ["AMA PRA Category 1"],
@@ -605,7 +605,7 @@ export const CME_PROVIDERS = [
   {
     id: "aoaOnline",
     name: "AOA Online Learning",
-    url: "https://education.osteopathic.org/",
+    url: "https://elearning.osteopathic.org/",
     pricing: "freemium",
     pricingNote: "Member and non-member pricing; AOA Category 1-A/1-B credit",
     accreditation: ["AOA Category 1-A", "AOA Category 1-B"],

@@ -14,7 +14,6 @@ import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
-import { shouldRunVerification, verifyCMEProviders, getVerificationSummary } from "../utils/cmeVerification";
 import { MS_PER_DAY } from "../utils/helpers";
 import {
   supabase,
@@ -802,35 +801,9 @@ export function useNotifications() {
     return () => clearInterval(interval);
   }, [loaded, checkAndNotify]);
 
-  // Monthly CME provider link verification
-  const verifyRef = useRef(false);
-  useEffect(() => {
-    if (!loaded || verifyRef.current) return;
-    if (!shouldRunVerification(data.settings)) return;
-    verifyRef.current = true;
-    (async () => {
-      try {
-        const newResults = await verifyCMEProviders(data.settings.cmeVerificationResults || {});
-        const summary = getVerificationSummary(newResults);
-        setData(d => ({
-          ...d,
-          settings: {
-            ...d.settings,
-            lastCmeVerification: new Date().toISOString(),
-            cmeVerificationResults: newResults,
-            cmeVerificationAlerted: summary.failing > 0,
-          },
-        }));
-        if (summary.failing > 0 && browserPermission === "granted" && data.settings.notifyBrowser !== false) {
-          fireBrowserNotification(
-            "CredentialDOMD: CME Link Check",
-            `${summary.failing} CME provider link(s) may be down. Open Find CME to review.`,
-            "cme-verify-" + new Date().toDateString()
-          );
-        }
-      } catch { /* verification is best-effort */ }
-    })();
-  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  // External provider health cannot be established by browser no-cors probes:
+  // CSP/network rejection is not an outage, and opaque success hides HTTP errors.
+  // Keep legacy settings for compatibility, but never notify from those results.
 
   return { browserPermission, requestPermission, checkAndNotify };
 }

@@ -5,7 +5,6 @@ import { SearchIcon, ExternalLinkIcon, GraduationIcon, CheckIcon } from "../shar
 import { CME_PROVIDERS } from "../../constants/cmeProviders";
 import { providerAoaLine } from "../../constants/creditEquivalence";
 import { complianceFor } from "../../utils/compliance";
-import { getProviderVerificationStatus } from "../../utils/cmeVerification";
 
 const PRICING_COLORS = {
   free: { bg: "#dcfce7", color: "#15803d", label: "Free" },
@@ -74,10 +73,6 @@ function CMEResourcesSection({ initialTopicFilter }) {
     });
     return ids;
   }, [data.settings.specialties]);
-
-  // Verification results
-  const verificationResults = data.settings.cmeVerificationResults || {};
-  const lastVerified = data.settings.lastCmeVerification || null;
 
   // Filter providers
   const filteredProviders = useMemo(() => {
@@ -263,19 +258,9 @@ function CMEResourcesSection({ initialTopicFilter }) {
         </div>
       )}
 
-      {/* Last verified indicator */}
-      {lastVerified && (
-        <div style={{ fontSize: 11, color: T.textDim, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-          Providers last verified: {new Date(lastVerified).toLocaleDateString()}
-          <span style={{
-            width: 6, height: 6, borderRadius: 3,
-            backgroundColor: data.settings.cmeVerificationAlerted ? T.warning : T.success,
-          }} />
-          <span style={{ fontWeight: 600, color: data.settings.cmeVerificationAlerted ? T.warning : T.success }}>
-            {data.settings.cmeVerificationAlerted ? "Some links flagged" : "All reachable"}
-          </span>
-        </div>
-      )}
+      <p style={{ fontSize: 12, color: T.textDim, margin: "0 0 10px", lineHeight: 1.4 }}>
+        Open a provider to check current courses, availability, pricing and credit details.
+      </p>
 
       {/* Provider list */}
       {filteredProviders.length === 0 ? (
@@ -292,20 +277,20 @@ function CMEResourcesSection({ initialTopicFilter }) {
                 {topicMatched.length > 0 && (
                   <>
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, padding: "4px 0" }}>Addresses Your Unmet Topics</div>
-                    {topicMatched.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} degreeType={deg} />)}
+                    {topicMatched.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} degreeType={deg} />)}
                   </>
                 )}
                 {generalOnly.length > 0 && (
                   <>
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, padding: "8px 0 4px" }}>General Hours</div>
-                    {generalOnly.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} degreeType={deg} />)}
+                    {generalOnly.map(p => <ProviderCard key={p.id} provider={p} T={T} unmetTopics={unmetTopics} degreeType={deg} />)}
                   </>
                 )}
               </>
             );
           })()}
           {(viewMode !== "forYou" || isFullyCompliant) && filteredProviders.map(provider => (
-            <ProviderCard key={provider.id} provider={provider} T={T} unmetTopics={unmetTopics} verificationResults={verificationResults} degreeType={deg} />
+            <ProviderCard key={provider.id} provider={provider} T={T} unmetTopics={unmetTopics} degreeType={deg} />
           ))}
         </div>
       )}
@@ -324,13 +309,10 @@ function FilterChip({ label, active, onClick, T }) {
   );
 }
 
-const VERIFY_COLORS = { ok: "#22c55e", timeout: "#eab308", unreachable: "#eab308", unchecked: "#9ca3af" };
-
-const ProviderCard = memo(function ProviderCard({ provider, T, unmetTopics, verificationResults, degreeType }) {
+const ProviderCard = memo(function ProviderCard({ provider, T, unmetTopics, degreeType }) {
   const [expanded, setExpanded] = useState(false);
   const pricing = PRICING_COLORS[provider.pricing] || PRICING_COLORS.paid;
   const matchingUnmet = provider.topics.filter(t => unmetTopics.includes(t));
-  const vStatus = verificationResults ? getProviderVerificationStatus(verificationResults, provider.id) : "unchecked";
 
   return (
     <div style={{
@@ -350,8 +332,6 @@ const ProviderCard = memo(function ProviderCard({ provider, T, unmetTopics, veri
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          <span title={vStatus === "ok" ? "Verified reachable" : vStatus === "unchecked" ? "Not yet verified" : "Link may be down"}
-            style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: VERIFY_COLORS[vStatus] || VERIFY_COLORS.unchecked }} />
           <a href={provider.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
             padding: "8px 14px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff",
             fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
