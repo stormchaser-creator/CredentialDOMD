@@ -2,7 +2,8 @@
 export const CREDENTIAL_PRICE_PHASES = Object.freeze({ founding: 9900, earlybird: 14900, standard: 19900 });
 export const PUBLIC_BILLING_POLICY = Object.freeze({
   version: '2026-09-19-credential-practice-v1',
-  pricePhase: 'earlybird', // Public default; protected historical founding eligibility remains server-owned.
+  pricePhase: 'founding', // Current price and capacity are confirmed by the server.
+  publicFoundingCapacity: 100,
   billingEnabled: false,
   checkoutEnabled: false,
   enforcementEnabled: true,
@@ -21,7 +22,7 @@ export function getPublicBillingOffer(id, phase = PUBLIC_BILLING_POLICY.pricePha
     tier: core ? 'founding' : 'locum', annualCents: amount, unitAmount: amount,
     currency: 'usd', interval: 'year', pricePhase: core ? phase : 'standard',
     priceLockedWhileActive: core && phase !== 'standard',
-    eligibilityLabel: core && phase === 'founding' ? 'Verified waitlist members' : core && phase === 'earlybird' ? 'Early-bird membership' : 'Standard annual membership',
+    eligibilityLabel: core && phase === 'founding' ? 'First 100 paid founding memberships' : core && phase === 'earlybird' ? 'Early-bird membership' : 'Standard annual membership',
     practiceTrialDays: core ? PUBLIC_BILLING_POLICY.practiceTrialDays : 0,
     trialAutoCharges: false, billingEnabled: false,
     productId: `prod_credentialdomd_${id}_v2`,

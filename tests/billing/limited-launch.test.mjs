@@ -199,6 +199,64 @@ test('database expiry after eligibility change requires new quote consent before
   const response=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
   assert.equal(response.status,409);assert.equal((await response.json()).error,'quote_expired');assert.equal(f.calls.some(c=>c[0]==='checkout'),false);
 });
+test('held public capacity blocks Core previews and cap races without changing consent to149; bundle remains245',async()=>{
+  const f=fixture();f.eligibility.founding_state='reserved';const h=createLimitedLaunchHandlers(f.deps,config);
+  const unavailable=await h.quote(request());assert.equal(unavailable.status,409);assert.deepEqual(await unavailable.json(),{error:'founding_capacity_pending'});
+  const bundle=await h.quote(request({offerId:'core_locum'}));assert.equal(bundle.status,200);assert.equal((await bundle.json()).annualCents,24500);
+  f.deps.store.claimLimitedCheckout=async()=>({state:'founding_capacity_pending'});
+  const raced=await h.checkout(paidRequest());assert.equal(raced.status,409);assert.deepEqual(await raced.json(),{error:'founding_capacity_pending'});
+  assert.equal(f.calls.some(c=>['checkout','pin','save'].includes(c[0])),false);
+  f.eligibility.founding_state='held';assert.equal((await h.quote(request())).status,200);
+});
+
+function expiredFoundingFixture() {
+  const f=fixture();f.q.public_founding_slot=1;
+  const session={id:'cs_Expired',status:'expired',payment_status:'unpaid',mode:'subscription',subscription:null,customer:'cus_A',livemode:false,client_reference_id:f.profile.id,metadata:f.sub.metadata};
+  f.event.type='checkout.session.expired';f.event.data.object={id:session.id};
+  f.stripe.checkout.sessions.retrieve=async(id)=>{f.calls.push(['retrieveCheckout',id]);return structuredClone(session);};
+  f.deps.store.releaseFoundingCheckout=async(...args)=>{f.calls.push(['releaseFounding',...args]);return true;};
+  return {...f,session};
+}
+test('expired-session webhook requires signature and fresh provider state before release, without paid settlement',async()=>{
+  const f=expiredFoundingFixture();const h=createLimitedLaunchHandlers(f.deps,config);
+  assert.equal((await h.webhook(request({},true))).status,200);
+  assert.equal(f.calls.filter(c=>c[0]==='retrieveCheckout').length,1);
+  const release=f.calls.find(c=>c[0]==='releaseFounding');assert.deepEqual(release.slice(1,5),[f.profile.id,'user_a',false,f.q.attempt_id]);
+  assert.deepEqual(release[5],{session_id:'cs_Expired',customer_id:'cus_A',status:'expired',payment_status:'unpaid',subscription_id:null});
+  assert.equal(f.calls.some(c=>c[0]==='settle'),false);
+  f.calls.length=0;f.deps.verifyEvent=async()=>{throw Error('invalid');};assert.equal((await h.webhook(request({},true))).status,400);assert.deepEqual(f.calls,[]);
+});
+test('old expired event cannot release a now-paid, open or subscription-bound Checkout',async()=>{
+  for(const patch of [{status:'open'},{status:'complete',payment_status:'paid',subscription:'sub_A'},{subscription:'sub_A'},{payment_status:'paid'}]) {
+    const f=expiredFoundingFixture();Object.assign(f.session,patch);
+    assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);
+    assert.equal(f.calls.some(c=>c[0]==='releaseFounding'),false);
+  }
+});
+test('expired webhook ignores unrelated catalogs and unallocated quotes, rejects wrong owner or mode',async()=>{
+  for(const mutate of [f=>f.session.metadata.catalog_version='other',f=>delete f.q.public_founding_slot]) {
+    const f=expiredFoundingFixture();mutate(f);assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);assert.equal(f.calls.some(c=>c[0]==='releaseFounding'),false);
+  }
+  for(const mutate of [f=>f.session.id='cs_Other',f=>f.session.client_reference_id='other',f=>f.session.metadata.clerk_user_id='user_other',f=>f.event.livemode=true,f=>f.session.livemode=true]) {
+    const f=expiredFoundingFixture();mutate(f);assert.ok([400,503].includes((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status));assert.equal(f.calls.some(c=>c[0]==='releaseFounding'),false);
+  }
+});
+test('same-owner expired Checkout releases through proof before new claim; uncertain release creates nothing',async()=>{
+  for(const released of [true,false]) {
+    const f=expiredFoundingFixture();let claimCount=0;
+    f.deps.store.releaseFoundingCheckout=async(...args)=>{f.calls.push(['releaseFounding',...args]);return released;};
+    f.deps.store.claimLimitedCheckout=async()=>{
+      f.calls.push(['claim',++claimCount]);
+      return claimCount===1?{state:'existing',attempt_id:f.q.attempt_id,offer_id:'core',session_id:f.session.id,quote:f.q}
+        :{state:'claimed',attempt_id:f.q.attempt_id,token:'lease',quote:f.q};
+    };
+    const response=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
+    assert.equal(response.status,released?200:503);
+    assert.equal(claimCount,released?2:1);
+    assert.equal(f.calls.some(c=>c[0]==='checkout'),released);
+    if(released)assert.ok(f.calls.findIndex(c=>c[0]==='releaseFounding')<f.calls.findIndex(c=>c[0]==='claim'&&c[1]===2));
+  }
+});
 test('access snapshot exposes validated saved-session resume separately from new-purchase eligibility',async()=>{
   const snapshot={schemaVersion:1,policyVersion:PUBLIC_BILLING_POLICY.version,enforcementEnabled:true,billingEnabled:true,checkoutEligible:false,checkoutResumeAvailable:true,checkoutResumeOfferId:'core'};
   const deps={authenticate:async()=>({id:'profile',auth_user_id:'user_a'}),readOwnSnapshot:async()=>snapshot};

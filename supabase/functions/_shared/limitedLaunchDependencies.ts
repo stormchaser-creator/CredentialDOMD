@@ -40,6 +40,7 @@ export function limitedLaunchDependencies() {
       previewById: (id: string) => checked(db().from('limited_billing_previews').select('*').eq('id', id).maybeSingle()),
       claimLimitedCheckout: (id: string, subject: string, live: boolean, offer: string, preview: string, consentHash: string) => checked(db().rpc('claim_limited_billing_checkout', { p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_offer_id: offer, p_preview_id: preview, p_consent_hash: consentHash })),
       quoteByAttempt: (id: string) => checked(db().from('limited_billing_quotes').select('*').eq('attempt_id', id).maybeSingle()),
+      releaseFoundingCheckout: (id: string, subject: string, live: boolean, attempt: string, proof: unknown) => checked(db().rpc('release_expired_founding_checkout', { p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_attempt_id: attempt, p_proof: proof })),
       pinPrice: (attempt: string, id: string, subject: string, live: boolean, product: string, price: string) => checked(db().rpc('pin_limited_billing_price', { p_attempt_id: attempt, p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_product_id: product, p_price_id: price })),
       settleLimited: async (args: Record<string, unknown>, quote: string, proof: unknown) => {
         const result = await checked(db().rpc('settle_limited_billing_subscription', { p_args: args, p_quote_id: quote, p_paid_proof: proof }));

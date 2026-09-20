@@ -3,6 +3,7 @@ import { verifiedLimitedPayment } from './limitedLaunchPurchase.mjs';
 import { limitedBillingTiming, assertDeferredSubscription, deferredCheckoutMessage } from './limitedBillingTiming.mjs';
 import { BILLING_CATALOG } from './billingCatalog.mjs';
 import { createBillingHandlers } from './billingHandlers.mjs';
+import { expiredFoundingCheckoutProof } from './foundingCheckout.mjs';
 
 const id = value => typeof value === 'string' ? value : value?.id;
 class Refusal extends Error { constructor(status, code) { super(code); this.status = status; } }
@@ -74,6 +75,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const live = mode(true), data = await input(req);
     const { profile, eligibility } = await purchaser(req, data, live);
     if (eligibility.checkout_enabled !== true) refuse(503, 'billing_disabled');
+    if (data.offerId === 'core' && ['reserved', 'disabled', 'unavailable'].includes(eligibility.founding_state)) refuse(409, 'founding_capacity_pending');
     const preview = await deps.store.createPreview(profile.id, profile.auth_user_id, live, data.offerId);
     const offer = limitedOffer(preview.offer_id, preview.price_phase, config.productIds);
     if (preview.annual_cents !== offer.unitAmount) refuse(409, 'quote_mismatch');
@@ -124,12 +126,17 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       }
       if (unfinished.length) refuse(409, 'subscription_already_exists');
       if (!['expired', 'complete'].includes(prior.status)) refuse(503, 'checkout_unavailable');
+      if (prior.status === 'expired' && claim.quote?.public_founding_slot) {
+        const proof = expiredFoundingCheckoutProof(prior, claim.quote, account, config);
+        if (!await deps.store.releaseFoundingCheckout(profile.id, profile.auth_user_id, live, claim.attempt_id, proof)) refuse(503, 'checkout_pending');
+      }
       await deps.store.closeCheckout(profile.id, live, claim.attempt_id, prior.status);
       if (prior.status === 'complete') refuse(409, 'subscription_already_exists');
       claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
     }
     if (unfinished.length) refuse(409, 'subscription_already_exists');
     if (claim.state === 'quote_expired') refuse(409, 'quote_expired');
+    if (claim.state === 'founding_capacity_pending') refuse(409, 'founding_capacity_pending');
     if (claim.state !== 'claimed') refuse(claim.state === 'offer_conflict' ? 409 : 503, claim.state === 'offer_conflict' ? 'checkout_offer_already_selected' : 'checkout_pending');
     const q = claim.quote;
     if (!q || q.clerk_subject !== profile.auth_user_id || q.offer_id !== data.offerId || q.policy_version !== config.policyVersion) refuse(409, 'quote_mismatch');
@@ -171,6 +178,23 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const raw = await text(req, 262144);
     try { event = await deps.verifyEvent(raw, req.headers.get('stripe-signature')); } catch { refuse(400, 'invalid_signature'); }
     if (event.livemode !== live) refuse(400, 'wrong_billing_mode');
+    if (event.type === 'checkout.session.expired') {
+      // Expired Checkout has no subscription ID to enter the normal settlement
+      // path. Fetch current provider state and release only a proven unpaid
+      // reservation. Paid, committed or ambiguous places remain occupied.
+      const eventSession = event.data?.object;
+      if (!/^cs_[A-Za-z0-9_]+$/.test(eventSession?.id || '')) refuse(400, 'invalid_checkout_event');
+      const session = await deps.stripe().checkout.sessions.retrieve(eventSession.id);
+      if (session.id !== eventSession.id) refuse(503, 'checkout_unavailable');
+      if (session.metadata?.app !== config.app || session.metadata.catalog_version !== config.version) return reply(200, { received: true });
+      if (session.status !== 'expired' || session.payment_status !== 'unpaid' || session.subscription !== null) return reply(200, { received: true });
+      const account = await deps.store.accountByCustomer(id(session.customer), live);
+      const q = await deps.store.quoteByAttempt(session.metadata?.checkout_attempt_id);
+      if (!q?.public_founding_slot) return reply(200, { received: true });
+      const proof = expiredFoundingCheckoutProof(session, q, account, config);
+      await deps.store.releaseFoundingCheckout(q.profile_id, q.clerk_subject, live, q.attempt_id, proof);
+      return reply(200, { received: true });
+    }
     if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed'].includes(event.type)) return reply(200, { received: true });
     const obj = event.data.object;
     const subId = event.type.startsWith('customer.subscription.') ? obj.id : id(obj.subscription) || id(obj.parent?.subscription_details?.subscription);

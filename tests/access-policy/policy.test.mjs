@@ -21,6 +21,7 @@ test('authoritative planned prices and product scopes never introduce automatic 
     assert.equal(core.priceLockedWhileActive,phase!=='standard');
   }
   assert.equal(PUBLIC_BILLING_POLICY.billingEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.checkoutEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled,true);
+  assert.equal(PUBLIC_BILLING_POLICY.pricePhase,'founding');assert.equal(PUBLIC_BILLING_POLICY.publicFoundingCapacity,100);
   assert.throws(()=>getPublicBillingOffer('core','madeup'));assert.equal(getPublicBillingOffer('free'),null);
 });
 test('cohort canonicalization binds immutable identity pairs and rejects duplicates or malformed data',()=>{
