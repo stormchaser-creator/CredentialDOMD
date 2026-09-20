@@ -63,6 +63,45 @@ The development API is required only for first binding. A bound identity can res
 
 The credential-recipient portal's immutable invitation subjects and legacy-file validation are not adapted by this package. Keep that feature disabled until its own lineage and recipient-access review is complete. This package does not authorize new outbound mail or enable billing/other feature gates.
 
+### Reserved logins for reviewed existing members
+
+Existing members may be provisioned with an unverified reserved primary email so
+the normal sign-in page recognizes them before their first production login.
+This is a new provider identity linked to the original application account after
+mailbox verification, not a copy of provider passwords, sessions or MFA secrets.
+Provisioning and its provider acceptance checks are separate from this source
+change. Nothing in the webhook creates provider users or sends an invitation.
+
+The importer contract is `private_metadata.credentialdomd_continuity` with exactly
+`{ schemaVersion: 1, runId, manifestSHA256, sourceSubject }`. These values identify
+the protected, enabled database run and its prepared source account; public and
+unsafe metadata are never accepted. The provider `external_id` must also match
+the marker's `sourceSubject`. The provider primary email must have
+`reserved: true` and either null verification or `verification.status: unverified`.
+
+Only after the regular verified identity read reports `verified_primary_required`
+does the webhook consult `reservedContinuity.ts`. The helper rereads the current
+production identity, checks the run, exact prepared account and source profile
+(including the read-only `account_is_closed` tombstone probe),
+rejects any existing target profile/binding, and freshly verifies the exact legacy
+identity. It rechecks database state after the source-provider read. A successful
+deferral acknowledges the event with no database writes. It does not bind the
+identity, route inbound mail, start a trial, or grant lifetime/admin access.
+
+After the member completes email-code verification, the normal verified webhook
+or authenticated initializer performs the existing protected binding. Bound
+accounts, unrelated unverified identities, malformed/conflicting evidence, and
+provider/database failures do not qualify for deferral. Existing retry behavior
+is preserved for them; this change is not a general mailbox-revocation repair.
+
+Before provisioning, inspect fresh source MFA and enterprise-auth requirements
+and stop for any account whose required protections would be lost. The initial
+sealed snapshot does not include those flags. Never mark a reserved email verified
+administratively to skip the member's normal email-code proof.
+
+Provider references: [createUser](https://clerk.com/docs/reference/backend/user/create-user)
+and [official Backend API schema](https://github.com/clerk/openapi-specs/blob/main/bapi/2021-02-05.yml).
+
 ## Validation
 
 - `tests/clerk-continuity/client-recovery.test.mjs` and `server.test.mjs`: **49 passed**, including actual helpers, proof freshness, exact-subject manifest joins, retirement and device-secret fallback.

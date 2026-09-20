@@ -82,6 +82,7 @@ import { Webhook } from "https://esm.sh/svix@1.40.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyVerifiedMailbox } from "./verifiedMailbox.ts";
 import { PRODUCTION_CLERK_ISSUER, readProductionIdentity, initializeProductionProfile } from "../_shared/clerkContinuity.ts";
+import { canDeferReservedContinuity } from "./reservedContinuity.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("CLERK_WEBHOOK_SECRET");
 if (!WEBHOOK_SECRET) {
@@ -385,7 +386,19 @@ serve(async (req) => {
           await initializeProductionProfile(supabase, identity, PRODUCTION_CLERK_ISSUER, {
             sourceSecret: Deno.env.get("CLERK_CONTINUITY_SOURCE_SECRET_KEY"), sourceIssuer: Deno.env.get("CLERK_CONTINUITY_SOURCE_ISSUER"),
           });
-        } catch {
+        } catch (error) {
+          // Operator-provisioned existing members can have a reserved login
+          // before they prove their email. Acknowledge only that exact pending
+          // migration, without creating a profile, granting access or routing mail.
+          if (error instanceof Error && error.message === "verified_primary_required") {
+            try {
+              if (await canDeferReservedContinuity(supabase, user.id, {
+                productionSecret: Deno.env.get("CLERK_SECRET_KEY") || "",
+                sourceSecret: Deno.env.get("CLERK_CONTINUITY_SOURCE_SECRET_KEY"),
+                sourceIssuer: Deno.env.get("CLERK_CONTINUITY_SOURCE_ISSUER"),
+              })) return new Response("Awaiting email verification", { status: 200 });
+            } catch { /* Provider/database failures remain retryable below. */ }
+          }
           return new Response("Profile continuity is unavailable", { status: 503 });
         }
       }
