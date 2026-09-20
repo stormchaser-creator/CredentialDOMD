@@ -3,7 +3,8 @@
  *
  * Body: { ticket_id, body, status? (admin only),
  *         attachment?: { data: "data:<mime>;base64,...." } }
- * Auth: Required. Allowed if user is the ticket owner OR is_admin().
+ * Auth: Required. Allowed if the account is admitted (active profile, or
+ *       admin by app_admins membership) AND is the ticket owner OR is_admin().
  * Side effect: Telegram ping if reply is from non-admin (i.e., customer).
  *
  * Up to five files per reply, same type and size rules as create-ticket
@@ -21,6 +22,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { admitActiveAccount } from "../_shared/admission.ts";
 import { ATTACHMENT_BUCKET, parseAttachment, replyScreenshotPath , parseAttachments, replyScreenshotPathAt } from "../_shared/ticketAttachment.ts";
 
 const corsHeaders = {
@@ -45,6 +47,18 @@ serve(async (req) => {
     if (!user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Owning the thread is not the same question as being allowed in the
+    // building. Without this, an account whose access was never granted, or
+    // was revoked after it filed, could still append text to a thread the
+    // unattended ticket agent reads. Same test create-ticket applies, from
+    // the same module, so the two cannot drift.
+    const admission = await admitActiveAccount(user);
+    if (!admission.allowed) {
+      return new Response(JSON.stringify({ error: admission.error }), {
+        status: admission.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

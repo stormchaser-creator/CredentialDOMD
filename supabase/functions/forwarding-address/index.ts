@@ -11,9 +11,25 @@
  * FORWARDING address they cannot read.
  *
  * That sentence is now true of the routing decision as a whole. matchProfile
- * checks THIS table before it checks profiles.email (2026-09-03), so a
- * confirmed address outranks a typed one, and profiles.email carries a unique
- * index on lower(email) so two accounts cannot claim the same one.
+ * reads a confirmed row in THIS table, then profiles.verified_email, and
+ * nothing else (2026-09-15). profiles.email is out of it: the unique index on
+ * lower(profiles.email) is partial, so any address no profile currently held
+ * was free to type, and typing it was enough to be handed the real owner's
+ * forwarded documents.
+ *
+ * Two things follow for this function, and both are deliberate:
+ *
+ *   Confirming the address already on your own profile is ALLOWED now. It used
+ *   to be refused as own_profile_email on the grounds that mail from it
+ *   already reached you. That stopped being true the day profiles.email left
+ *   the routing decision, and it left current users with no safe path at all:
+ *   the one address they would confirm was the one they could not.
+ *
+ *   Another account's TYPED email no longer blocks a claim. Only a proven
+ *   claim does: a row somebody else confirmed by this same challenge, or
+ *   somebody else's profiles.verified_email. Letting a typed address block was
+ *   a reservation system for mailboxes nobody had proved, aimed at the one
+ *   person who can read the mailbox.
  *
  *   POST { action: "add",    email }   Clerk JWT. Validates and refuses (see
  *       lib.ts refuseAdd), mints a 32-byte token, stores ONLY its SHA-256
@@ -41,6 +57,11 @@
  * without the mailbox owner doing anything, which is the feature's whole
  * property defeated by the feature's own audience. Scanners GET and HEAD; they
  * do not submit forms.
+ *
+ * Re-checked at confirm time, not only when the link is sent: the answer to
+ * "does somebody else already read this mailbox" can change while the link
+ * sits unread, and the provider-verified column lives in a different table
+ * from the unique index that guards this one.
  *
  * Single use and expiry: confirming clears token_hash, and the claim is a
  * conditional update (verified_at still null AND the hash unchanged), so two
@@ -91,6 +112,7 @@ import {
   isTokenShaped,
   mintToken,
   normalizeEmail,
+  provenByAnotherAccount,
   publicRow,
   refuseAdd,
   refuseResend,
@@ -206,24 +228,28 @@ const atDailyLimit = () => json(429, {
 // ─── POST add ─────────────────────────────────────────────────────────────────
 
 /**
- * Is this address spoken for by someone other than this account?
+ * Is this address PROVEN to belong to someone other than this account?
  *
- * Two lookups, one meaning: another profile's own email, or a row another
- * account has already verified. Both are ilike with every wildcard escaped
- * (ilikeLiteral) AND an exact post-filter on the value that comes back, because
- * ilike is case-insensitive on more than case: without the post-filter a
- * Turkish-dotted or otherwise folding variant could match a row this is not
- * really about. The three queries around here all filter the same way, so they
- * agree about what "the same address" means.
+ * Two lookups, one meaning: a forwarding row another account confirmed by this
+ * same challenge, or another account's profiles.verified_email, which only the
+ * Clerk webhook writes (migration 20260915d locks the column against every
+ * user token). Both are evidence that the other account can read the mailbox.
+ *
+ * A third lookup used to sit in front of these, on profiles.email, and it is
+ * gone on purpose. profiles.email is typed in Settings and nothing checks it,
+ * so treating it as a claim let one account reserve a mailbox it could not
+ * read and permanently lock out the person who reads it every day. It is not
+ * evidence for routing (matchProfile stopped reading it on 2026-09-15) and it
+ * is not evidence here either.
+ *
+ * Both are ilike with every wildcard escaped (ilikeLiteral) AND an exact
+ * post-filter on the value that comes back, because ilike is case-insensitive
+ * on more than case: without the post-filter a Turkish-dotted or otherwise
+ * folding variant could match a row this is not really about. Every query in
+ * this file filters the same way, so they agree about what "the same address"
+ * means.
  */
 async function heldByAnotherAccount(db: Db, profileId: string, email: string): Promise<boolean> {
-  const { data: profileHits, error: pErr } = await db.from("profiles")
-    .select("id, email").ilike("email", ilikeLiteral(email)).limit(5);
-  if (pErr) throw new Error(`profile lookup: ${pErr.message}`);
-  const usedByOtherProfile = (profileHits ?? [])
-    .some((p: { id: string; email: string | null }) => normalizeEmail(p.email) === email && p.id !== profileId);
-  if (usedByOtherProfile) return true;
-
   // One targeted lookup, not a page of rows. Reading a .limit(10) page and
   // deriving "verified elsewhere" from it meant an address held pending by more
   // than a page of accounts could push the verified row off the page, and the
@@ -231,10 +257,28 @@ async function heldByAnotherAccount(db: Db, profileId: string, email: string): P
   // already owns. The verified row is unique across every account
   // (forwarding_addresses_verified_email_key), so limit(1) is the whole answer.
   const { data: verifiedRows, error: vErr } = await db.from("forwarding_addresses")
-    .select("user_id, email").ilike("email", ilikeLiteral(email)).not("verified_at", "is", null).limit(1);
+    .select("user_id, email, verified_at").ilike("email", ilikeLiteral(email)).not("verified_at", "is", null).limit(1);
   if (vErr) throw new Error(`verified address lookup: ${vErr.message}`);
-  return ((verifiedRows ?? []) as { user_id: string; email: string | null }[])
-    .some((r) => normalizeEmail(r.email) === email && r.user_id !== profileId);
+
+  // profiles.verified_email is unique across accounts too (partial unique
+  // index profiles_verified_email_key), so this is the same shape of answer.
+  const { data: profileHits, error: pErr } = await db.from("profiles")
+    .select("id, verified_email").ilike("verified_email", ilikeLiteral(email)).limit(5);
+  if (pErr) throw new Error(`verified mailbox lookup: ${pErr.message}`);
+
+  // The rule itself is pure and lives in lib.ts, where node can run it. It
+  // re-checks verified_at even though the query above already filtered on it:
+  // the query is one place this data comes from, and the rule that a PENDING
+  // row is not a claim is the one that keeps a stranger from parking a request
+  // on somebody else's mailbox.
+  return provenByAnotherAccount({
+    email,
+    callerId: profileId,
+    forwarding: ((verifiedRows ?? []) as { user_id: string; email: string | null; verified_at: string | null }[])
+      .map((r) => ({ owner_id: r.user_id, email: r.email, verified_at: r.verified_at })),
+    verifiedMailboxes: ((profileHits ?? []) as { id: string; verified_email: string | null }[])
+      .map((p) => ({ owner_id: p.id, email: p.verified_email })),
+  });
 }
 
 async function handleAdd(db: Db, profileId: string, rawEmail: unknown) {
@@ -248,8 +292,11 @@ async function handleAdd(db: Db, profileId: string, rawEmail: unknown) {
   }
   const nowMs = Date.now();
 
-  // profiles.email is what the sender matcher compares against, so the caller's
-  // own address is read from the row, not from the JWT claim.
+  // Read for the confirmation email only: it names the account that asked, so
+  // the mailbox owner can tell whether they meant to grant this. It is no
+  // longer a rule input. The sender matcher stopped comparing against
+  // profiles.email on 2026-09-15, and this function stopped refusing a claim
+  // on it the same day.
   const { data: me } = await db.from("profiles").select("email").eq("id", profileId).maybeSingle();
   const ownProfileEmail = (me?.email ?? "") as string;
 
@@ -260,7 +307,6 @@ async function handleAdd(db: Db, profileId: string, rawEmail: unknown) {
 
   const refusal = refuseAdd({
     email,
-    ownProfileEmail,
     usedByAnotherAccount: await heldByAnotherAccount(db, profileId, email),
     ownRowVerified: mine ? Boolean(mine.verified_at) : null,
     pendingCount: await countRows(db, "forwarding_addresses", (q) => q.eq("user_id", profileId).is("verified_at", null)),
@@ -340,7 +386,6 @@ async function handleResend(db: Db, profileId: string, id: unknown) {
     found: Boolean(row),
     verified: Boolean(row?.verified_at),
     email: storedEmail,
-    ownProfileEmail: accountEmail,
     usedByAnotherAccount: vettable ? await heldByAnotherAccount(db, profileId, storedEmail) : false,
     lastSentAt: row?.last_sent_at ?? null,
     sendsLast24h: row ? await sendsLast24h(db, profileId, nowMs) : 0,
@@ -379,11 +424,26 @@ async function handleResend(db: Db, profileId: string, id: unknown) {
 
 async function handleRemove(db: Db, profileId: string, id: unknown) {
   if (typeof id !== "string" || !UUID_RE.test(id)) return json(400, { error: "An address id is required.", code: "invalid" });
-  const { data, error } = await db.from("forwarding_addresses")
-    .delete().eq("id", id).eq("user_id", profileId).select("id");
-  if (error) throw new Error(`delete: ${error.message}`);
-  if (!data || data.length === 0) return json(404, { error: "That address is not on your account.", code: "not_found" });
-  return json(200, { ok: true, removed: id });
+
+  // Removal used to delete the row the physician sees and leave the
+  // authoritative claim routing their documents, while answering 200. The row
+  // and the route go together now, in one transaction. A PROVIDER claim on the
+  // same address is deliberately left standing: that is the identity
+  // provider's separate evidence, and deleting a forwarding row is not the
+  // physician withdrawing it.
+  let r: { outcome?: string; address?: string; route_kept_on?: string | null };
+  try {
+    const { data, error } = await db.rpc("remove_forwarding_claim", {
+      p_profile: profileId, p_row: id, p_now_ms: Date.now(),
+    });
+    if (error) throw new Error(error.message);
+    r = (data ?? {}) as typeof r;
+  } catch (e) {
+    throw new Error(`remove: ${(e as Error).message}`);
+  }
+  if (r.outcome === "not_found") return json(404, { error: "That address is not on your account.", code: "not_found" });
+  if (r.outcome !== "removed") return json(400, { error: "That address could not be removed.", code: "refused" });
+  return json(200, { ok: true, removed: id, route_kept_on: r.route_kept_on ?? null });
 }
 
 // ─── Confirming: GET renders, POST acts ──────────────────────────────────────
@@ -436,29 +496,36 @@ async function handleConfirmPage(db: Db, token: string | null) {
  */
 async function handleConfirm(db: Db, token: string | null) {
   const invalid = () => html(resultPage({ ok: false }));
-  const row = await pendingByToken(db, token);
-  if (!row) return invalid();
+  if (!isTokenShaped(token)) return invalid();
   const hash = await hashToken(token as string);
 
-  // Conditional: the row must still be pending and still hold THIS hash.
-  const { data: claimed, error: cErr } = await db.from("forwarding_addresses")
-    .update({ verified_at: new Date().toISOString(), token_hash: null, token_expires_at: null })
-    .eq("id", row.id).eq("token_hash", hash).is("verified_at", null)
-    .select("id, user_id, email").maybeSingle();
-  // A unique violation here means another account verified the same address
-  // first. That is the loss condition, and it reads as an expired link.
-  if (cErr || !claimed) {
-    if (cErr && cErr.code !== "23505") console.error("confirm update failed:", cErr.message);
+  // ONE call. The challenge is consumed and the address is claimed in the same
+  // transaction, so there is no compensating revoke to get wrong: a review
+  // showed two racing POSTs producing a loser whose rollback removed the
+  // WINNER's claim, leaving the UI saying confirmed with no route. A duplicate
+  // POST is now idempotent and grants nothing new.
+  let r: { outcome?: string; why?: string; address?: string; profile?: string };
+  try {
+    const { data, error } = await db.rpc("confirm_forwarding_claim", { p_token_hash: hash, p_now_ms: Date.now() });
+    if (error) throw new Error(error.message);
+    r = (data ?? {}) as typeof r;
+  } catch (e) {
+    console.error(`confirm: the claims ledger could not answer: ${(e as Error).message}. Refusing.`);
     return invalid();
   }
-  const win = claimed as { id: string; user_id: string; email: string };
 
-  // The losers: any other account's pending row for the same address.
-  const { error: dErr } = await db.from("forwarding_addresses")
-    .delete().eq("email", win.email).is("verified_at", null).neq("id", win.id);
-  if (dErr) console.error("pending cleanup failed:", dErr.message);
-
-  return html(resultPage({ ok: true, address: win.email, accountEmail: await accountEmailOf(db, win.user_id) }));
+  if (r.outcome !== "confirmed" && r.outcome !== "already_confirmed") {
+    // held, terminal, expired, unknown token. The reader gets the same single
+    // page every failure gets: telling a stranger which addresses are already
+    // registered is its own disclosure.
+    console.warn(`confirm: refused (${String(r.outcome)}): ${String(r.why ?? "")}`);
+    return invalid();
+  }
+  return html(resultPage({
+    ok: true,
+    address: String(r.address ?? ""),
+    accountEmail: await accountEmailOf(db, String(r.profile ?? "")),
+  }));
 }
 
 // ─── Entry ────────────────────────────────────────────────────────────────────

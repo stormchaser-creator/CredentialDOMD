@@ -26,6 +26,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { accessWriteDecision } from "../_shared/accessWrite.mjs";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -76,6 +77,9 @@ serve(async (req) => {
   try { body = await req.json(); } catch { return json(400, { error: "bad_json" }); }
   const url = feedUrlFrom(body?.url);
   if (!url) return json(400, { error: "bad_url" });
+
+  const access = await accessWriteDecision(user.db, user.profileId, user.clerkSubject, "practice");
+  if (!access.allowed) return json(access.status, { error: access.error });
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);

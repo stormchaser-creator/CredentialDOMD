@@ -18,9 +18,20 @@
  * That sentence used to stop at this table, because email-inbound's
  * matchProfile checked the self-asserted profiles.email FIRST and returned on a
  * hit, so anyone could take over routing by editing their own profile email.
- * Both halves of that are closed now: profiles.email carries a unique index on
- * lower(email) (migration 20260903e), and matchProfile checks THIS table before
- * it checks profiles.email, so a confirmed address outranks a typed one.
+ * Ordering this table first (2026-09-03) only narrowed that: an address no
+ * profile currently held was still free to claim by typing it, because the
+ * unique index on lower(profiles.email) is PARTIAL. As of 2026-09-15 the
+ * routing decision does not read profiles.email at all. It reads a confirmed
+ * row here, then profiles.verified_email, which only the identity provider
+ * fills (migration 20260915d). chooseInboundAccount below IS that decision,
+ * and it lives here so the rule that hands a mailbox out and the rule that
+ * routes its mail cannot drift apart.
+ *
+ * The same date removed the refusal that used to stop a physician confirming
+ * the address already on their own profile (own_profile_email). With
+ * profiles.email out of the routing decision, that refusal blocked the only
+ * safe path a current user has: receiving the link IS the proof, and the
+ * address on the profile is not.
  *
  * Known limits, both deliberate:
  *
@@ -101,12 +112,11 @@ export interface Refusal { code: string; status: number; message: string }
 
 export interface ClaimFacts {
   email: string;                 // the address, normalized
-  ownProfileEmail: string;       // profiles.email of the caller
-  usedByAnotherAccount: boolean; // another profile's email, or verified to another account
+  usedByAnotherAccount: boolean; // PROVEN elsewhere: verified here, or another profile's verified_email
 }
 
 /**
- * Whether this account may claim this address at all: the four rules that are
+ * Whether this account may claim this address at all: the three rules that are
  * about the ADDRESS rather than about the state of a row or a rate limit.
  *
  * These are factored out because they have to run twice. handleAdd runs them
@@ -119,9 +129,15 @@ export interface ClaimFacts {
  * (migration 20260903d), and this second pass is why resend does not have to
  * trust that it is gone.
  *
- * "In use by another account" covers both another profile's own email and an
- * address already verified elsewhere, on purpose: one message, so a signed-in
- * caller cannot use the difference to map who has an account here.
+ * "In use by another account" now covers only PROVEN claims: a row another
+ * account verified by the same challenge, or another account's
+ * profiles.verified_email. It used to cover another profile's typed email as
+ * well, and that was a reservation system for addresses nobody had proved:
+ * type the real owner's hospital address into your own profile and the owner
+ * could never confirm the mailbox they read every day. A typed address is not
+ * evidence, so it neither routes mail nor blocks the person who can read the
+ * mailbox. One message still covers every proven case, so a signed-in caller
+ * cannot use the difference to map who has an account here.
  */
 export function refuseAddressClaim(f: ClaimFacts): Refusal | null {
   if (!isEmailShaped(f.email)) {
@@ -134,12 +150,12 @@ export function refuseAddressClaim(f: ClaimFacts): Refusal | null {
       message: "That is a CredentialDOMD address. Add the address you forward mail FROM, such as your hospital email.",
     };
   }
-  if (f.email === normalizeEmail(f.ownProfileEmail)) {
-    return {
-      code: "own_profile_email", status: 400,
-      message: "That is already the email on your account, so mail forwarded from it already reaches you.",
-    };
-  }
+  // No own_profile_email refusal here any more, and its absence is the fix.
+  // Inbound routing stopped reading profiles.email on 2026-09-15, so "mail
+  // forwarded from it already reaches you" became false on the same day; a
+  // physician whose account has no verified mailbox yet gets the unregistered
+  // reply until they confirm that address by the normal challenge, and this
+  // rule was the one thing standing in the way of them doing it.
   if (f.usedByAnotherAccount) {
     return {
       code: "other_account", status: 409,
@@ -450,4 +466,179 @@ export function publicRow(row: AddressRow) {
     last_sent_at: row.last_sent_at ?? null,
     created_at: row.created_at ?? null,
   };
+}
+
+// ─── Who a forwarded message belongs to ──────────────────────────────────────
+
+/**
+ * One candidate account for an inbound sender, already read out of the
+ * database. `matched_email` is the address the matching ROW actually holds, so
+ * the decision can re-check it: every lookup that feeds this runs through
+ * ilike, and ilike folds more than case.
+ */
+export interface InboundProfile {
+  id: string;
+  auth_user_id: string | null;
+  access_status: string | null;
+  matched_email: string | null;
+}
+
+/**
+ * The candidate sets email-inbound loads for one sender address.
+ *
+ * `typed` is profiles.email hits. It is accepted and then IGNORED, and that is
+ * the whole point of the parameter: the defect this function exists to close
+ * was a typed address deciding where a document lands, so the ignoring is
+ * something a test can hold on to rather than something a reader has to infer
+ * from an absent query.
+ */
+export interface InboundMatchInput {
+  from: unknown;
+  confirmed?: InboundProfile[] | null;
+  verified?: InboundProfile[] | null;
+  typed?: InboundProfile[] | null;
+}
+
+/**
+ * Which account receives a forwarded credentialing document, attachments and
+ * all. Pure on purpose: this is the security decision in the inbound path, and
+ * scripts/inbound-routing.test.mjs runs it in plain node.
+ *
+ * Two passes, and the reason there is no third:
+ *
+ *   1. A CONFIRMED forwarding_addresses row. Somebody opened a link sent to
+ *      that mailbox and pressed Confirm, so the account proved it can read the
+ *      mailbox.
+ *   2. profiles.verified_email. The identity provider says that address is
+ *      verified for this account, and only the Clerk webhook writes the column
+ *      (migration 20260915d locks it against every user token).
+ *
+ * profiles.email was the third pass and is gone. It is a text box in Settings:
+ * a physician types it and nothing checks it. The unique index on
+ * lower(profiles.email) is PARTIAL, so any address no profile currently held
+ * was free to type, and typing it was enough to be handed the real owner's
+ * forwarded documents. Sender authentication cannot catch that, and it is not
+ * meant to: SPF, DKIM and DMARC all pass on the genuine physician's genuine
+ * forward, because the mail IS genuine. What they prove is that the mailbox
+ * sent the message, never that the account we picked owns the mailbox. This
+ * function is the only place that second question is answered, and an
+ * unanswerable case returns null, which is the unregistered reply.
+ *
+ * WHEN THE TWO PASSES DISAGREE, NOBODY GETS THE MAIL. The first version asked
+ * the confirmed set and then, only if it was empty, the verified set, so a
+ * confirmed forwarding row on account A and a provider-verified address on
+ * account B silently resolved to A. Both are real proof of read access, taken
+ * at different times, and neither is evidence that the other is wrong; what
+ * they establish together is that we do not know who reads that mailbox now. A
+ * confirmation is a one-time challenge that is never re-tested and can be
+ * years old, and the provider's verification can be withdrawn. Picking the
+ * older of two claims is how the original disclosure bug worked, one rung up.
+ * So a disagreement returns null and the sender gets the unregistered reply,
+ * which is the outcome a human can see and fix. Two proofs that name the SAME
+ * account are not a disagreement; that is the ordinary case of an account that
+ * both confirmed its address and had it verified.
+ *
+ * Preferring an active account when more than one row names the same account
+ * is carried over unchanged from the two-pass version.
+ */
+export function chooseInboundAccount(input: InboundMatchInput | null | undefined): InboundProfile | null {
+  return inboundMatch(input).profile;
+}
+
+export type InboundMatchReason =
+  | "bad_sender"       // not an address we can match on at all
+  | "no_match"         // nobody has proved they read this mailbox
+  | "matched"          // exactly one account, by one or both kinds of proof
+  | "ambiguous";       // two accounts each hold proof; see above
+
+export interface InboundMatch {
+  profile: InboundProfile | null;
+  reason: InboundMatchReason;
+  /** Profile ids that hold proof, so a refusal can be investigated. Sorted. */
+  claimants: string[];
+}
+
+/**
+ * chooseInboundAccount with its reasoning attached, for the caller's log and
+ * for tests that need to tell "nobody" apart from "more than one".
+ */
+export function inboundMatch(input: InboundMatchInput | null | undefined): InboundMatch {
+  const from = normalizeEmail(input?.from);
+  if (!isEmailShaped(from)) return { profile: null, reason: "bad_sender", claimants: [] };
+
+  const usable = [...usableIn(input?.confirmed, from), ...usableIn(input?.verified, from)];
+  const claimants = [...new Set(usable.map((r) => r.id))].sort();
+
+  if (claimants.length === 0) return { profile: null, reason: "no_match", claimants };
+  if (claimants.length > 1) return { profile: null, reason: "ambiguous", claimants };
+
+  const chosen = usable.find((r) => String(r.access_status ?? "").trim().toLowerCase() === "active") ?? usable[0];
+  return { profile: chosen, reason: "matched", claimants };
+}
+
+/** Rows that really are this address and really can own a document. */
+function usableIn(rows: InboundProfile[] | null | undefined, from: string): InboundProfile[] {
+  return (Array.isArray(rows) ? rows : []).filter((r) =>
+    r && typeof r.id === "string" && r.id.trim() !== "" &&
+    // storeAsDocuments writes to `${auth_user_id}/${docId}`; a profile without
+    // one has no Storage prefix to write into and is not a candidate.
+    typeof r.auth_user_id === "string" && r.auth_user_id.trim() !== "" &&
+    normalizeEmail(r.matched_email) === from);
+}
+
+// ─── Is this address already PROVEN by another account? ──────────────────────
+
+/**
+ * One row that might be somebody's claim on an address: a forwarding_addresses
+ * row (verified_at decides whether it is a claim at all) or a profile holding
+ * the address in a column.
+ */
+export interface AddressClaimRow {
+  owner_id: string | null;
+  email: string | null;
+  verified_at?: string | null;
+}
+
+export interface ElsewhereFacts {
+  email: unknown;
+  callerId: string;
+  /** forwarding_addresses rows for this address, confirmed or not. */
+  forwarding?: AddressClaimRow[] | null;
+  /** profiles whose verified_email is this address. */
+  verifiedMailboxes?: AddressClaimRow[] | null;
+  /** profiles whose typed email is this address. Accepted and IGNORED: see below. */
+  typedProfileEmails?: AddressClaimRow[] | null;
+}
+
+/**
+ * Whether somebody other than the caller has PROVED they can read this mailbox.
+ *
+ * Two kinds of proof count, and they are the same two the inbound router
+ * accepts: a forwarding row another account confirmed by the emailed
+ * challenge, and another account's profiles.verified_email, which only
+ * clerk-webhook writes.
+ *
+ * Three things deliberately do NOT count:
+ *
+ *   A PENDING forwarding row on another account. Anyone can ask for a link;
+ *   asking is not receiving. Letting a pending row block would mean a stranger
+ *   could park a request on a mailbox and lock out the person who reads it.
+ *
+ *   Another account's typed profiles.email. That is the defect this whole
+ *   change removes, seen from the other side: the column is a text box, so
+ *   treating it as a claim reserved mailboxes for people who could not read
+ *   them. The parameter is accepted and ignored so a test can hold the rule.
+ *
+ *   The caller's own rows, of either kind. "In use by another account" means
+ *   another account.
+ */
+export function provenByAnotherAccount(f: ElsewhereFacts | null | undefined): boolean {
+  const email = normalizeEmail(f?.email);
+  if (!isEmailShaped(email) || !f?.callerId) return false;
+  const others = (rows: AddressClaimRow[] | null | undefined, mustBeVerified: boolean) =>
+    (Array.isArray(rows) ? rows : []).some((r) =>
+      r && typeof r.owner_id === "string" && r.owner_id !== "" && r.owner_id !== f.callerId &&
+      normalizeEmail(r.email) === email &&
+      (!mustBeVerified || Boolean(r.verified_at)));
+  return others(f.forwarding, true) || others(f.verifiedMailboxes, false);
 }

@@ -8,7 +8,7 @@ serve(createAccessPolicyHandler({
     const identity = await clerkProfile(req);
     if (!identity) return null;
     const { data, error } = await identity.db.from('profiles').select('id,auth_user_id,access_status').eq('id', identity.profileId).maybeSingle();
-    if (error) throw Error('Profile unavailable');
+    if (error || data?.auth_user_id !== identity.clerkSubject) throw Error('Profile unavailable');
     return data;
   },
   readOwnSnapshot: async (req: Request) => {

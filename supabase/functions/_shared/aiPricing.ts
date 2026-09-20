@@ -85,7 +85,13 @@ export function normalizeModel(model: unknown): string | null {
   return m || null;
 }
 
-/** The model's price on the request date (default: now), or null if unknown. */
+/**
+ * The model's price on the request date (default: now), or null if unknown.
+ *
+ * Budget reservations must call this WITH the request date and must never read
+ * AI_PRICES directly: the table now carries a rate step, so a reservation
+ * priced off it would quietly reserve at last year's rate once the step lands.
+ */
 export function priceFor(model: unknown, at: Date = new Date()): { key: string; price: ModelPrice } | null {
   const m = normalizeModel(model);
   const timestamp = at.getTime();

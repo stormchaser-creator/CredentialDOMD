@@ -8,6 +8,17 @@
  * client bypasses its storage RLS, so this ownership check is what keeps
  * one user's screenshot from being reachable by another.
  *
+ * Owning the ticket is only half the check. The bucket also holds every
+ * physician's own documents at "<clerk sub>/<uuid>", and the columns this
+ * function reads have a second writer: RLS lets any signed-in caller insert
+ * a ticket row and update their own, straight through PostgREST. So this
+ * function used to be a way to point your own ticket at somebody else's
+ * document and get a signed link to it. Every key now goes through
+ * isTicketAttachmentPath (_shared/ticketAttachment.ts) before it is signed,
+ * and a reply's key has to match the id of the row it came off. Anything
+ * else is logged and dropped, the same answer the thread gets when there
+ * was never an attachment at all.
+ *
  * Returns { url, replies }:
  *   url      signed link to the ticket's own screenshot
  *            (context_payload.attachment_path), null when it has none
@@ -20,7 +31,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
-import { ATTACHMENT_BUCKET , attachmentPathsOf } from "../_shared/ticketAttachment.ts";
+import { ATTACHMENT_BUCKET , attachmentPathsOf, isTicketAttachmentPath } from "../_shared/ticketAttachment.ts";
 
 const LINK_TTL_SECONDS = 3600;
 
@@ -31,6 +42,12 @@ const corsHeaders = {
 };
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+/**
+ * A rejected key is attacker-chosen text on its way into the operator's log,
+ * so it is flattened to printable ASCII and cut short before it is written.
+ */
+const forLog = (p: unknown) => String(p).replace(/[^\x20-\x7e]/g, "?").slice(0, 120);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -54,9 +71,25 @@ serve(async (req) => {
       return json(403, { error: "You don't have access to this ticket." });
     }
 
+    /**
+     * Every key is checked against the shape the writer produces for THIS
+     * row before it can be signed. A key that fails is dropped, not signed
+     * and not reported: the caller who planted it learns nothing from the
+     * answer, and the operator sees it in the log.
+     */
+    const keepOwn = (paths: string[], messageId?: string | null) =>
+      paths.filter((p) => {
+        if (isTicketAttachmentPath(p, String(ticketId), messageId)) return true;
+        console.error(
+          `ticket-attachment-url: refusing to sign a key that is not this ${messageId ? `reply's (${messageId})` : "ticket's"} ` +
+          `on ${ticketId}: ${forLog(p)}`,
+        );
+        return false;
+      });
+
     // Both shapes, merged and de-duplicated: attachment_path held the only
     // screenshot before several were allowed, and still holds the first.
-    const ticketPaths = attachmentPathsOf(ticket.context_payload);
+    const ticketPaths = keepOwn(attachmentPathsOf(ticket.context_payload));
 
     // Reply screenshots. A failure here should not take the ticket's own
     // screenshots down with it, so it is logged and the map comes back empty.
@@ -68,7 +101,7 @@ serve(async (req) => {
     if (mErr) console.error(`ticket-attachment-url: reply lookup failed for ${ticketId}: ${mErr.message}`);
     const replyRows = (mErr ? [] : (msgs || []))
       .map((m: { id: string; attachment_path: string | null; attachment_paths: string[] | null }) =>
-        ({ id: m.id, paths: attachmentPathsOf(m) }))
+        ({ id: m.id, paths: keepOwn(attachmentPathsOf(m), String(m.id)) }))
       .filter((m) => m.paths.length);
 
     const paths = [...ticketPaths, ...replyRows.flatMap((m) => m.paths)];
@@ -88,7 +121,8 @@ serve(async (req) => {
     const urls = ticketPaths.map((p, i) => urlFor(p, i)).filter((u): u is string => !!u);
     if (ticketPaths.length && !urls.length) {
       // Same contract as before: a ticket that has screenshots but no link is
-      // an error, not "no screenshot".
+      // an error, not "no screenshot". A key that failed validation never
+      // reaches here, so this stays a storage failure and nothing else.
       console.error(`ticket-attachment-url: no signed url for ticket screenshots ${ticketId}`);
       return json(502, { error: "Could not build a link to the screenshot. Try again." });
     }

@@ -30,8 +30,12 @@
  * user.deleted:
  *   The profile row is kept (FK integrity, historical records) and name /
  *   email are left intact so a physician who deletes a Clerk account and
- *   re-registers, or asks what we hold, can be matched. Full data deletion is
- *   the admin delete-user path, not this webhook.
+ *   re-registers, or asks what we hold, can be matched. verified_email is the
+ *   exception and is cleared: it is a live routing permission, the provider
+ *   has just withdrawn the assertion behind it, and a mailbox that later
+ *   belongs to somebody else must not keep filing documents into an account
+ *   nobody can sign into. Re-registering re-stamps it from user.created. Full
+ *   data deletion is the admin delete-user path, not this webhook.
  *
  * Configuration (one-time, in the Clerk dashboard → Webhooks):
  *   1. Endpoint URL: https://<your-supabase-ref>.supabase.co/functions/v1/clerk-webhook
@@ -42,15 +46,41 @@
  *
  * Signature verification uses Svix (Clerk's webhook provider).
  *
- * DB note: the profiles_lock_identity trigger reverts email changes for any
- * JWT-bearing request. Migration 20260816_webhook.sql lets service_role
- * through; until it is applied, the email fill on an existing row is
- * silently reverted (logged below as a warning), name fill still lands.
+ * Verified mailbox (profiles.verified_email, migration 20260915d):
+ *   This is the one column here that is NOT fill-blanks-only, and not a
+ *   mirror of what the physician typed. It is stamped from the identity
+ *   provider's VERIFIED address and the provider stays authoritative for it,
+ *   so a changed verified address is written over the old one. email-inbound
+ *   routes forwarded credentialing documents on it, which is why nothing a
+ *   user can type may reach it: a typed address in profiles.email used to be
+ *   enough to be handed another physician's forwarded documents.
+ *
+ *   The whole decision, and the writes that carry it out, live in
+ *   ./verifiedMailbox.ts so they can be run in plain node. In short: an
+ *   explicit empty address list is a WITHDRAWAL and clears the column, while
+ *   an event with no email_addresses field at all taught us nothing and leaves
+ *   it alone; addresses listed with none verified clears it; an event older
+ *   than the one already recorded is refused, because out-of-order delivery of
+ *   genuine signed events was restoring routes the provider had withdrawn; a
+ *   unique violation means OUR row is stale, not that the new claim is
+ *   suspect; and a write that did not land comes back as a failure, so this
+ *   handler answers 500 and Svix retries, rather than acknowledging a
+ *   revocation that never happened.
+ *
+ * DB note: profiles_lock_identity no longer touches email. It froze the column
+ * for every JWT-bearing caller until migration 20260819_lock_access_status
+ * replaced the function: email is the owner's own contact field, several flows
+ * need it set, and admin is decided by the verified Clerk JWT claim rather
+ * than by profiles.email. The trigger now freezes auth_user_id and
+ * access_status only, so the email fill below lands on its own. What IS frozen
+ * against user tokens is verified_email, by the separate
+ * profiles_lock_verified_email trigger in migration 20260915d.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Webhook } from "https://esm.sh/svix@1.40.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyVerifiedMailbox } from "./verifiedMailbox.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("CLERK_WEBHOOK_SECRET");
 if (!WEBHOOK_SECRET) {
@@ -91,6 +121,8 @@ interface ProfileRow {
   name: string | null;
   email: string | null;
   access_status: string | null;
+  verified_email: string | null;
+  verified_email_event_ms: number | null;
 }
 
 interface BetaAccessRow {
@@ -145,7 +177,7 @@ function fullName(user: ClerkUserPayload): string | null {
 async function selectProfile(authUserId: string): Promise<{ row: ProfileRow | null; error: string | null }> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, name, email, access_status")
+    .select("id, name, email, access_status, verified_email, verified_email_event_ms")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
   if (error) return { row: null, error: error.message };
@@ -178,10 +210,15 @@ async function syncProfile(
       created_at: now,
       updated_at: now,
     };
+    // verified_email is not in the seed on purpose. It carries its own unique
+    // index, and a 23505 from THAT index would land in the branch below, which
+    // reads a unique violation as "ensureProfile beat us" and re-selects by
+    // auth_user_id; it would find nothing and 500 the event forever. The stamp
+    // is a separate write (applyVerifiedMailbox) that resolves its own conflict.
     const { error } = await supabase.from("profiles").insert(seed);
     if (!error) {
       console.log(`profile ${id} created for ${user.id} (email=${clerkEmail ?? "none"}, name=${clerkName ? "set" : "blank"})`);
-      return { profile: { id, name: clerkName ?? "", email: clerkEmail, access_status: null }, error: null };
+      return { profile: { id, name: clerkName ?? "", email: clerkEmail, access_status: null, verified_email: null, verified_email_event_ms: null }, error: null };
     }
     if (error.code !== PG_UNIQUE_VIOLATION) {
       return { profile: null, error: `insert profile: ${error.message}` };
@@ -210,7 +247,7 @@ async function syncProfile(
     .from("profiles")
     .update(patch)
     .eq("id", existing.id)
-    .select("id, name, email, access_status")
+    .select("id, name, email, access_status, verified_email, verified_email_event_ms")
     .maybeSingle();
   if (error) return { profile: null, error: `update profile: ${error.message}` };
 
@@ -218,10 +255,13 @@ async function syncProfile(
   const filled = Object.keys(patch).filter((k) => k !== "updated_at");
   console.log(`profile ${existing.id} filled ${filled.join(", ")} for ${user.id}`);
   if (patch.email && after.email !== patch.email) {
-    // profiles_lock_identity reverted the write. Harmless for the user, but
-    // admin views keyed on profiles.email stay blank until the trigger lets
-    // service_role through (migration 20260816_webhook.sql).
-    console.warn(`profile ${existing.id}: email fill was reverted by profiles_lock_identity; apply migration 20260816_webhook.sql`);
+    // Not the identity lock any more: 20260819_lock_access_status stopped it
+    // freezing email, and this call carries the service role in any case. What
+    // is left is the partial unique index on lower(profiles.email)
+    // (20260903e), so the likely cause is another profile already holding this
+    // address. Worth a line because admin views keyed on profiles.email stay
+    // blank; it changes nothing about routing, which does not read the column.
+    console.warn(`profile ${existing.id}: email fill did not land (another profile may hold ${patch.email})`);
   }
   return { profile: after, error: null };
 }
@@ -340,6 +380,16 @@ serve(async (req) => {
         return new Response(`DB error: ${error ?? "no profile"}`, { status: 500 });
       }
 
+      // Routing first, and it CAN fail the event: a revocation that was not
+      // written is not a revocation, and a 200 here would tell Clerk never to
+      // send it again. Beta activation below is idempotent, so a retry that
+      // re-runs both steps costs nothing.
+      const mailbox = await applyVerifiedMailbox(supabase, event.type, event.data, verifiedEmails(user)[0] ?? null, profile, now);
+      if (!mailbox.ok) {
+        console.error(`${event.type} ${user.id}: verified mailbox not applied: ${mailbox.detail}`);
+        return new Response(`Verified mailbox not applied: ${mailbox.detail}`, { status: 500 });
+      }
+
       // A 500 here makes Svix retry, which re-runs both steps idempotently.
       const beta = await activateBetaAccess(user, profile, now);
       if (beta.error) {
@@ -358,6 +408,20 @@ serve(async (req) => {
         return new Response(`DB error: ${error}`, { status: 500 });
       }
       if (row) {
+        // Not a courtesy: this column is what lets a forwarded document into
+        // this account. The provider has withdrawn the verification, so the
+        // permission goes with it, and a clear that did not land is not a
+        // clear. It used to be logged and acknowledged, which left the deleted
+        // account's routing live and told Clerk the event was handled. It now
+        // asks for a retry. The clear runs even when the column already reads
+        // null, because it also raises the watermark: an event that was
+        // already in flight when the account was deleted must not be able to
+        // restore the route behind the deletion.
+        const mailbox = await applyVerifiedMailbox(supabase, "user.deleted", event.data, null, row, now);
+        if (!mailbox.ok) {
+          console.error(`user.deleted ${userId}: verified mailbox not cleared: ${mailbox.detail}`);
+          return new Response(`Verified mailbox not cleared: ${mailbox.detail}`, { status: 500 });
+        }
         console.log(`user.deleted ${userId}: profile ${row.id} retained (email=${row.email ?? "none"}, access_status=${row.access_status ?? "pending"})`);
       } else {
         console.log(`user.deleted ${userId}: no profile row`);
