@@ -265,7 +265,7 @@ function Invoices({ onOpenContract }) {
     // Legacy text-only invoice: short ones open a formatted CRLF mailto
     // composer; long ones (iOS Mail cuts a mailto body off) go out as a PDF
     // page through the share sheet. Either way the text is on the clipboard.
-    const text = inv.text || `Invoice ${inv.number}: ${billNameOf(inv)}, ${money(inv.totalAmount)}`;
+    const text = inv.text || `Invoice ${inv.number} for ${billNameOf(inv)}: ${money(inv.totalAmount)}.`;
     const how = await shareInvoiceText(args, subject, text);
     if (how === "mailto-cover") {
       setNotice("This invoice is longer than Mail accepts from a link, so the composer opened with the cover letter. The full invoice is on your clipboard: paste it in below the letter.");
