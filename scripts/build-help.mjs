@@ -173,7 +173,8 @@ export function renderHelp(input, videoCatalog = null) {
       </section>
       <section class="support" aria-labelledby="support-title"><h2 id="support-title">Still stuck?</h2><p>Open <strong>Get help</strong> in the app and tell us what you tried. Replies stay under <strong>Your tickets</strong>, so you can check there even if an email has not arrived. If you cannot sign in, email <a href="mailto:support@credentialdomd.com">support@credentialdomd.com</a>.</p><p>Support may use AI assistance. Leave passwords, API keys and patient records out of your message.</p><a class="button" href="/app/">Open the app for support</a></section>
     </main>
-    <footer><p>CredentialDoMD · Free invite-only beta. Billing is off.</p><a href="/cme/">CME resources</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/security">Security & data handling</a></footer>
+    <section class="support" aria-label="Founding membership"><p><!-- public-launch:early-release -->credentialdomd is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p><p><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p><!-- public-launch:cta --><a class="button" href="/#join">Join the waitlist</a><!-- /public-launch:cta --></section>
+    <footer><p><!-- public-launch:footer-mode -->CredentialDoMD · Membership opens by invitation. Billing is not open. Card required at future paid checkout.<!-- /public-launch:footer-mode --></p><a href="/cme/">CME resources</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/security">Security & data handling</a></footer>
   </div>
   <script>
     (() => {

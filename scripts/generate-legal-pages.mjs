@@ -14,7 +14,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PRIVACY, TERMS, LEGAL_CONTACT } from "../src/content/legalText.js";
+import { getLegalDocuments, LEGAL_CONTACT } from "../src/content/legalText.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = resolve(here, "..", "landing");
@@ -126,7 +126,7 @@ footer { padding: 48px 0 32px; border-top: 1px solid var(--border-subtle); backg
       <a href="/#features">Features</a>
       <a href="/#faq">FAQ</a>
       <a href="/app/">Sign in</a>
-      <a href="/#join" class="btn-primary">Get Early Access</a>
+      <!-- public-launch:cta --><a href="/#join" class="btn-primary">Get Early Access</a><!-- /public-launch:cta -->
     </div>
   </div>
 </nav>
@@ -169,9 +169,16 @@ ${doc.sections.map(section).join("\n\n")}
 
 // Keep app-relative policy copies and public landing pages generated from
 // the same canonical content. The site packager also creates directory routes.
-const pubDir = resolve(out, "..", "public");
-for (const [name, html] of [["privacy.html", page(PRIVACY, TERMS)], ["terms.html", page(TERMS, PRIVACY)]]) {
-  writeFileSync(resolve(out, name), html);
-  writeFileSync(resolve(pubDir, name), html);
+export function renderLegalPages(mode) {
+  const { privacy, terms } = getLegalDocuments(mode);
+  return { 'privacy.html': page(privacy, terms), 'terms.html': page(terms, privacy) };
 }
-console.log("wrote landing/{privacy,terms}.html and public/{privacy,terms}.html");
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const pubDir = resolve(out, "..", "public");
+  for (const [name, html] of Object.entries(renderLegalPages())) {
+    writeFileSync(resolve(out, name), html);
+    writeFileSync(resolve(pubDir, name), html);
+  }
+  console.log("wrote landing/{privacy,terms}.html and public/{privacy,terms}.html");
+}

@@ -2,7 +2,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdir,mkdtemp,readFile,rm,writeFile,symlink,access} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,rm,writeFile,symlink,access,cp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import {loadVideoCatalog,validateVideoCatalog,copyVideoAssets,VIDEO_FILES} from './help-videos.mjs';
@@ -57,6 +57,9 @@ test('packaging refuses modified video bytes or stale advertised players before 
  for(const path of ['dist','scripts','public/knowledge','site-dist'])await mkdir(resolve(root,path),{recursive:true});
  await writeFile(resolve(root,'dist/index.html'),'<script src="/app/assets/test.js"></script>');
  for(const page of ['index','locums','security','privacy','terms','help','cme','credential-access'])await writeFile(resolve(root,`landing/${page}.html`),'synthetic');
+ // Satisfy the independent reviewed-image prerequisite so this test reaches
+ // the video hash and help freshness checks it is intended to exercise.
+ await cp(new URL('../landing/images/',import.meta.url),resolve(root,'landing/images'),{recursive:true});
  await writeFile(resolve(root,'scripts/root-sw-retirement.js'),'synthetic');
  await writeFile(resolve(root,'public/knowledge/credentialdo-help.json'),JSON.stringify(help));
  await writeFile(resolve(root,'site-dist/keep.txt'),'previous package');
