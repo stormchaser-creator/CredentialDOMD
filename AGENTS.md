@@ -28,3 +28,9 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 ## Important Context
 - This is the proof-of-concept for AutoAIBiz's "Automate What You Have" product line
 - Founding member only — never add freemium
+
+## Membership exceptions approved September 20, 2026
+
+- The owner can give selected verified registered accounts Credential and Practice free for life through Admin → Users → Give free lifetime access. No card, checkout, subscription or automatic email is required. This is a private administrative gift, with an audit reason and server authorization.
+- Preserve existing approved lifetime access and the protected historical 30-day no-card beta promise. Public paid plans and their locked annual rates remain in effect.
+- A lifetime gift must not leave a renewing subscription charging the recipient. Verify current billing and block unresolved checkout or renewal before granting.
