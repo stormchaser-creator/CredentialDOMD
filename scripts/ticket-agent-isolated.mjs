@@ -82,7 +82,7 @@ export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   // Legacy rows require a profile author. Keep storage compatibility until the
   // reviewed support-job actor is installed; the body identifies automation and
   // must never present this profile ID as a human author. No actor is fabricated.
-  const labeledReply = `CredentialDO Support · Automated\n\n${reply}`;
+  const labeledReply = `CredentialDOMD Support · Automated\n\n${reply}`;
   const awaiting = includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;
   const messageId = randomUUID();
   return `DO $ticket_broker$

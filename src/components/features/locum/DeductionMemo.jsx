@@ -17,6 +17,7 @@
  * Export: CSV (for spreadsheet/accountant) or PDF-print (for paper records).
  */
 
+import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
 import { useState, useMemo } from "react";
 import { useApp } from "../../../context/AppContext";
 import { autoDeductions } from "../../../utils/deductions";
@@ -114,7 +115,7 @@ export default function DeductionMemo() {
     const headers = ["Date", "Category", "Description", "Amount", "Source"];
     const rows = all.map((i) => [
       i.date || "",
-      i.category || "",
+      deductionCategoryLabel(i.category) || "",
       `"${(i.description || "").replace(/"/g, '""')}"`,
       i.amount,
       i.source,
@@ -197,7 +198,7 @@ export default function DeductionMemo() {
               padding: "6px 10px", borderBottom: `1px solid ${T.borderSubtle || T.border}`,
               fontSize: 13,
             }}>
-              <span style={{ color: T.text }}>{cat}</span>
+              <span style={{ color: T.text }}>{deductionCategoryLabel(cat)}</span>
               <span style={{ color: T.text, fontWeight: 600 }}>${amt.toFixed(2)}</span>
             </div>
           ))}
@@ -286,7 +287,7 @@ export default function DeductionMemo() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{i.description}</div>
                 <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
-                  {i.category} · {i.date}
+                  {deductionCategoryLabel(i.category)} · {i.date}
                   {i.source === "auto" && (
                     <span style={{
                       marginLeft: 6, fontSize: 10, padding: "1px 6px",
@@ -348,7 +349,7 @@ function DeductionForm({ form, setForm, onSave, onCancel, msg, T }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <select style={inputStyle} value={form.category} onChange={update("category")}>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          {CATEGORIES.map((c) => <option key={c} value={c}>{deductionCategoryLabel(c)}</option>)}
         </select>
         <input style={inputStyle} placeholder="Description (e.g., Texas medical license app fee)" value={form.description} onChange={update("description")} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 8 }}>

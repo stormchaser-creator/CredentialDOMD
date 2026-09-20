@@ -123,7 +123,7 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   await writeFile(resolve(output, 'CNAME'), 'credentialdomd.com\n');
   // A real 404 prevents Cloudflare's default site-wide SPA fallback. Only the
   // /app/ is the app entry; it uses in-app state rather than URL path routing.
-  await writeFile(resolve(output, '404.html'), '<!doctype html><html lang="en"><meta charset="utf-8"><title>Page not found</title><h1>Page not found</h1><p><a href="/">CredentialDoMD home</a></p></html>\n');
+  await writeFile(resolve(output, '404.html'), '<!doctype html><html lang="en"><meta charset="utf-8"><title>Page not found</title><h1>Page not found</h1><p><a href="/">CredentialDOMD home</a></p></html>\n');
   // Pages applies redirects even when a static file exists. A wildcard /app/*
   // rewrite would turn JS, sw.js and version.json into HTML and break the PWA.
   await writeFile(resolve(output, '_redirects'), '/app/privacy /privacy 302\n/app/terms /terms 302\n');

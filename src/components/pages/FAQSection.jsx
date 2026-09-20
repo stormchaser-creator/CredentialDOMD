@@ -20,7 +20,7 @@ const FAQ_DATA = [
         a: "No paid launch date is set. Billing remains off while checkout, account migration and launch preparation are completed. You will receive advance notice and must agree before any charge.",
       },
       {
-        q: "Can I deduct CredentialDoMD on my taxes?",
+        q: "Can I deduct CredentialDOMD on my taxes?",
         a: "Practice includes an expense ledger and an export for your tax professional. Ask them whether a subscription or any recorded expense is deductible in your circumstances.",
       },
       {

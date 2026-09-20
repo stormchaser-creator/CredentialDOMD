@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         sql(f"update support_tickets set updated_at='{VERSION}',agent_approved_at='{approved_at}' where id='{T}'")
         result=sql(reply());check('current approved target can receive exactly one reply',len(result)==36)
         stored=json.loads(sql(f"select row_to_json(x) from (select body,author_id from support_messages where id='{result}')x"))
-        check('legacy-compatible reply explicitly labels automation',stored['body'].startswith('CredentialDO Support · Automated\n\n'))
+        check('legacy-compatible reply explicitly labels automation',stored['body'].startswith('CredentialDOMD Support · Automated\n\n'))
         check('no fabricated actor identity or new schema dependency',stored['author_id']==A)
         check('after-insert bump and host stamp coexist',sql(f"select status||'|'||(agent_last_reply_at is not null)::text from support_tickets where id='{T}'")=='open|true')
         check('same stale envelope cannot duplicate reply',sql(reply())=='')

@@ -29,7 +29,7 @@ test('rendered support UI keeps legacy screenshots, has truthful copy and labels
     assert.doesNotMatch(html,/answers personally|Replies arrive by email|Eric Whitney/);
     assert.match(html,/Feature request/);assert.match(html,/Urgent/);assert.match(html,/Cancel/);
   }
-  for(const [actor,label] of [['automated','CredentialDO Support · Automated'],['support','Support team'],['you','You'],['account','Reply on your ticket']]) {
+  for(const [actor,label] of [['automated','CredentialDOMD Support · Automated'],['support','Support team'],['you','You'],['account','Reply on your ticket']]) {
     const html=renderToStaticMarkup(React.createElement(enabled.SupportMessage,{theme,message:{identity_source:'support-operations',actor_kind:actor,created_at:'2026-09-18T12:00:00Z',body:'<script>private fixture</script>'}}));
     assert.ok(html.includes(label));assert.doesNotMatch(html,/<script>/);assert.match(html,/&lt;script&gt;/);
   }

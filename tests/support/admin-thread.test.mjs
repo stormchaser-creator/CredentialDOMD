@@ -7,7 +7,7 @@ const {adminSupportActorLabel,loadAdminSupportThread} = await import('data:text/
 const automated={id:'message-1',author_id:null,support_actor_id:'00000000-0000-4000-8000-000000000018',support_job_id:'job-1',is_admin_reply:true};
 
 test('admin labels require protected service metadata; historical account IDs never prove a human author',()=>{
-  assert.equal(adminSupportActorLabel(automated,true),'CredentialDO Support · Automated');
+  assert.equal(adminSupportActorLabel(automated,true),'CredentialDOMD Support · Automated');
   for(const message of [automated,{...automated,author_id:'owner-id'},{...automated,support_job_id:null},{...automated,support_actor_id:'unknown'},{author_id:'owner-id',is_admin_reply:true,author_email:'owner@example.invalid'}]) {
     assert.equal(adminSupportActorLabel(message,false),'Reply');
     if(message!==automated) assert.equal(adminSupportActorLabel(message,true),'Reply');
@@ -22,7 +22,7 @@ test('admin reader retains legacy view until enabled and reads protected fields 
     const result=await loadAdminSupportThread(client,'ticket-1',enabled);
     assert.deepEqual(calls[0],['from',enabled?'support_messages':'ticket_thread']);
     assert.deepEqual(calls[2],['eq','ticket_id','ticket-1']);
-    assert.equal(result.data[0].support_display_label,enabled?'CredentialDO Support · Automated':'Reply');
+    assert.equal(result.data[0].support_display_label,enabled?'CredentialDOMD Support · Automated':'Reply');
     if(enabled) assert.match(calls[1][1],/support_actor_id,support_job_id/);
   }
 });

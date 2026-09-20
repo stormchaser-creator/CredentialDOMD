@@ -51,7 +51,7 @@ export function credentialPortalDependencies() {
       try {
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST', headers: { Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-          body: JSON.stringify({ from: 'CredentialDo <docs@credentialdomd.com>', to: [payload.to], subject: payload.subject, text: payload.text }), signal: AbortSignal.timeout(20000),
+          body: JSON.stringify({ from: 'CredentialDOMD <docs@credentialdomd.com>', to: [payload.to], subject: payload.subject, text: payload.text }), signal: AbortSignal.timeout(20000),
         });
         if (response.ok) { const result = await response.json(); return typeof result.id === 'string' && result.id.trim().length > 0 && result.id.length <= 200 ? { state: 'sent', providerId: result.id } : { state: 'unknown' }; }
         // Timeout, conflict/in-progress, rate limit and server errors are uncertain. Retry the SAME encrypted body/key.

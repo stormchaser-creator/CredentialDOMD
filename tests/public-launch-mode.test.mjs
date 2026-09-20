@@ -47,7 +47,7 @@ test('unreviewed, external and data-bearing signup destinations are rejected', (
 test('both views retain the active-membership rate condition and distinct earlier promises', () => {
   for (const enabled of [false, true]) {
     const view = publicLaunchPresentation({ enabled, signupHref: '/signup/' });
-    assert.equal(view.brand, 'credentialdomd');
+    assert.equal(view.brand, 'CredentialDOMD');
     assert.match(view.earlyRelease, /less polished/);
     assert.match(view.founderParticipation, /In the app, ask VERA for help/);
     assert.match(view.founderParticipation, /support tickets/);

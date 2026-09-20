@@ -50,7 +50,7 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
   const enabled = mode.enabled;
   const signupHref = enabled ? reviewedSignupHref(mode.signupHref) : null;
   return Object.freeze({
-    brand: 'credentialdomd',
+    brand: 'CredentialDOMD',
     mode: enabled ? 'founding-signup' : 'waitlist',
     primaryAction: Object.freeze(enabled
       ? { kind: 'navigation', label: 'Sign up as a founding member', shortLabel: 'Founding signup', href: signupHref, collectEmail: false }
@@ -58,7 +58,7 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
     availability: enabled
       ? 'Founding signup is open. Paid membership requires a card at checkout. Review your offer before choosing to pay.'
       : 'Checkout is not open. Join the waitlist for your invitation and membership details. A waitlist request does not create a paid account or charge you; future paid access requires a card at checkout.',
-    earlyRelease: 'credentialdomd is an early release. Some workflows are less polished, and the app will continue to evolve.',
+    earlyRelease: 'CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.',
     founderParticipation: 'Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.',
     foundingRate: enabled
       ? 'Eligible founding members get Credential for $99/year, a discounted annual rate locked for life while their membership remains active.'

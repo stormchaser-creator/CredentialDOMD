@@ -106,7 +106,7 @@ export const ASSISTANT_SOURCES = {
     },
     {
       "id": "product-help",
-      "title": "CredentialDoMD product walkthroughs",
+      "title": "CredentialDOMD product walkthroughs",
       "url": "https://credentialdomd.com/help/",
       "recordedReview": "2026-09-19"
     },

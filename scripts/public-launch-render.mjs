@@ -66,7 +66,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
     if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Founding signup is open. Early release; card required at checkout.');
     if (slot === 'founding-price') return '$99<span> / year, Credential founding rate</span>';
     if (slot === 'full-price') return '$245<span> / year total</span>';
-    if (slot === 'brand') return fallback.replace(/Credential<span>DOMD<\/span>/g, 'credential<span>domd</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
+    if (slot === 'brand') return fallback.replace(/Credential<span>DOMD<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
     const text = {
       'availability': view.availability,
       'invitation-copy': 'Choose a founding membership and review your terms before creating a paid account.',
@@ -84,7 +84,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
       'early-release': view.earlyRelease,
       'participation': view.founderParticipation,
       'footer-mode': `${view.brand} · Early release. Founding signup is open; paid membership requires a card at checkout.`,
-      'guide-product': 'Use credentialdomd to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.',
+      'guide-product': 'Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.',
     }[slot];
     if (text === undefined) throw Error(`Unknown public launch slot: ${slot}`);
     return escapeHtml(text);
