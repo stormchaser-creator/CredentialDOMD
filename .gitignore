@@ -52,3 +52,6 @@ AI-APP-BUILDING-INSTRUCTIONS.md
 
 # Local Netlify folder
 .netlify
+
+# Local Supabase CLI connection metadata
+/supabase/.temp/
