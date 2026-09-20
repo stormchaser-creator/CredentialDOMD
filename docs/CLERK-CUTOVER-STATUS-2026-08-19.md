@@ -1,9 +1,7 @@
-> September 15 release: account migration is **not enabled**. `clerk-relink.mjs`
-> is a read-only readiness report and refuses `--apply`. The prior move-first
-> approach was not safely resumable after moving bytes but before updating
-> database paths. A separate cutover must validate a recovery journal, identity
-> ownership, profile conflicts, stored files, device settings, and sessions.
-> Instructions below are historical and are not authorization to switch users.
+> Superseded by [the protected production continuity runbook](CLERK-PRODUCTION-CONTINUITY.md).
+> `clerk-relink.mjs` is retired. The instructions below are historical, including
+> editable-email matching, file moves and the proposed reverse relink. They must
+> not be used to establish ownership or execute a cutover/rollback.
 
 # Clerk production cutover, status 2026-08-19
 

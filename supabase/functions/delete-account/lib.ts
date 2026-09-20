@@ -105,6 +105,7 @@ export function storagePrefixes(
   profileId: string,
   authUserId: string | null | undefined,
   ticketIds: readonly string[],
+  ownedSubjects: readonly string[] = [],
 ): StoragePrefix[] {
   const auth = String(authUserId ?? "").trim();
   const wanted: StoragePrefix[] = [];
@@ -113,6 +114,11 @@ export function storagePrefixes(
     if (id) wanted.push({ bucket: DOCUMENTS_BUCKET, prefix: `${TICKETS_FOLDER}${id}/` });
   }
   if (auth) wanted.push({ bucket: BACKUPS_BUCKET, prefix: `${auth}/` });
+  for (const subject of ownedSubjects) {
+    if (!/^user_[A-Za-z0-9]+$/.test(subject)) continue;
+    wanted.push({ bucket: DOCUMENTS_BUCKET, prefix: `${subject}/` });
+    wanted.push({ bucket: BACKUPS_BUCKET, prefix: `${subject}/` });
+  }
   if (profileId) wanted.push({ bucket: BACKUPS_BUCKET, prefix: `${profileId}/` });
 
   const seen = new Set<string>();

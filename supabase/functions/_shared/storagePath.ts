@@ -16,3 +16,9 @@ export function isOwnStorageObject(
   if (!/^[^/]+\/[A-Za-z0-9._-]+$/.test(path)) return false;
   return path.startsWith(`${authUserId}/`);
 }
+
+/** Subjects must come from clerk_storage_subjects, never a client payload. */
+export function isOwnStorageObjectForSubjects(subjects: readonly string[], path: string | null | undefined): boolean {
+  return Array.isArray(subjects) && subjects.length <= 2
+    && subjects.some((subject) => /^user_[A-Za-z0-9]+$/.test(subject) && isOwnStorageObject(subject, path));
+}

@@ -131,7 +131,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
-import { isOwnStorageObject } from "../_shared/storagePath.ts";
+import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
+import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import { approveRequestBody, longDate, replySubject } from "../_shared/requestFlow.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
@@ -474,6 +475,7 @@ serve(async (req) => {
       .eq("id", who.profileId).maybeSingle();
     if (pErr) throw pErr;
     if (!prof) return json(401, { error: "Not signed in" });
+    const ownedStorageSubjects = await storageSubjects(db, who.profileId);
     const physEmail = String(prof.email ?? "").trim().toLowerCase();
     // The mailbox the sign-in provider verified. profiles.email is typed in
     // Settings and is often not the address the physician actually reads mail
@@ -698,7 +700,7 @@ serve(async (req) => {
       // user can edit their own row's storage_path, and the service role
       // must not become a way around storage RLS.
       const path = d.storage_path || (prof.auth_user_id ? `${prof.auth_user_id}/${d.id}` : "");
-      if (!isOwnStorageObject(prof.auth_user_id, path)) { skipped.push(filename); continue; }
+      if (!isOwnStorageObjectForSubjects(ownedStorageSubjects, path)) { skipped.push(filename); continue; }
       const dl = await db.storage.from(STORAGE_BUCKET).download(path);
       if (dl.error || !dl.data) {
         console.error(`storage download failed for ${path}: ${dl.error?.message ?? "no data"}`);

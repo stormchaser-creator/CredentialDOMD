@@ -1,4 +1,4 @@
-import { isOwnStorageObject } from "../_shared/storagePath.ts";
+import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
 /**
  * Pure helpers for the monthly backup: no Deno, no network, no JSZip.
  *
@@ -302,6 +302,7 @@ export function prepareDocuments(
   authUserId: string,
   recordIndex: Map<string, Row>,
   sizeByPath?: Map<string, number>,
+  ownedSubjects: readonly string[] = [authUserId],
 ): { items: PreparedDoc[]; skipped: SkippedDoc[] } {
   const items: PreparedDoc[] = [];
   const skipped: SkippedDoc[] = [];
@@ -317,7 +318,7 @@ export function prepareDocuments(
   for (const d of ordered) {
     const originalName = safeFilename(d.name, `document-${items.length + 1}`);
     const path = String(d.storage_path || (authUserId ? `${authUserId}/${d.id}` : ""));
-    if (!isOwnStorageObject(authUserId, path)) {
+    if (!isOwnStorageObjectForSubjects(ownedSubjects, path)) {
       skipped.push({ name: originalName, reason: "the file is not stored in your account folder" });
       continue;
     }

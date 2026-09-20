@@ -81,6 +81,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Webhook } from "https://esm.sh/svix@1.40.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyVerifiedMailbox } from "./verifiedMailbox.ts";
+import { PRODUCTION_CLERK_ISSUER, readProductionIdentity, initializeProductionProfile } from "../_shared/clerkContinuity.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("CLERK_WEBHOOK_SECRET");
 if (!WEBHOOK_SECRET) {
@@ -373,6 +374,21 @@ serve(async (req) => {
       const user = event.data;
       const clerkEmail = primaryEmail(user);
       const clerkName = fullName(user);
+
+      // Production must resolve a trusted development identity BEFORE this
+      // handler or the browser can create a competing profile. A fresh provider
+      // read also prevents a delayed signed webhook from rebinding an old email.
+      if (Deno.env.get("CLERK_ISSUER") === PRODUCTION_CLERK_ISSUER) {
+        if (Deno.env.get("CLERK_CONTINUITY_ENABLED") !== "true") return new Response("Profile continuity is unavailable", { status: 503 });
+        try {
+          const identity = await readProductionIdentity(user.id, Deno.env.get("CLERK_SECRET_KEY") || "");
+          await initializeProductionProfile(supabase, identity, PRODUCTION_CLERK_ISSUER, {
+            sourceSecret: Deno.env.get("CLERK_CONTINUITY_SOURCE_SECRET_KEY"), sourceIssuer: Deno.env.get("CLERK_CONTINUITY_SOURCE_ISSUER"),
+          });
+        } catch {
+          return new Response("Profile continuity is unavailable", { status: 503 });
+        }
+      }
 
       const { profile, error } = await syncProfile(user, clerkEmail, clerkName, now);
       if (error || !profile) {

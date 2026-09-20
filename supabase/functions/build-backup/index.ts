@@ -36,6 +36,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import {
   BACKUP_BUCKET,
   DOCUMENTS_BUCKET,
@@ -191,13 +192,18 @@ async function buildForProfile(db: SupabaseClient, profile: ProfileRow): Promise
   const nonEmptySections = sectionCounts.filter((s) => s.count > 0).length;
 
   // 2. The files behind the documents rows.
-  const sizeByPath = await storageSizes(db, authUserId);
+  const ownedSubjects = authUserId ? await storageSubjects(db, userId) : [];
+  const sizeByPath = new Map<string, number>();
+  for (const subject of ownedSubjects) {
+    for (const [path, size] of await storageSizes(db, subject)) sizeByPath.set(path, size);
+  }
   const recordIndex = buildRecordIndex(dataByTable);
   const prepared = prepareDocuments(
     (dataByTable["documents"] ?? []) as unknown as DocInput[],
     authUserId,
     recordIndex,
     sizeByPath,
+    ownedSubjects,
   );
   const planned = planDocumentParts(prepared.items, PART_CAP);
   const parts = planned.length;

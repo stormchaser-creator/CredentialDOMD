@@ -57,6 +57,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
+import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import {
   BACKUPS_BUCKET,
   COLLECTION_TABLES,
@@ -169,6 +170,7 @@ async function unresolvedErrors(db: SupabaseClient, authUserId: string, userId: 
 async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolean): Promise<Footprint> {
   const userId = profile.id;
   const authUserId = String(profile.auth_user_id ?? "").trim();
+  const ownedSubjects = authUserId ? await storageSubjects(db, userId) : [];
   const ticketIds = await listColumn(db, "support_tickets", "id", "user_id", userId);
 
   // 1. Count everything first, in both modes: the counts are the audit row.
@@ -179,7 +181,7 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
     batch.forEach(({ table }, i) => { tables[table] = counts[i]; });
   }
   tables.support_messages += await ticketMessages(db, ticketIds, userId, false);
-  tables.client_errors += await unresolvedErrors(db, authUserId, userId, false);
+  for (const subject of ownedSubjects) tables.client_errors += await unresolvedErrors(db, subject, userId, false);
 
   const storage: Record<string, number> = {};
   const byBucket = new Map<string, Set<string>>();
@@ -188,7 +190,7 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
     byBucket.get(bucket)!.add(name);
   };
   let ticketObjects = 0;
-  for (const p of storagePrefixes(userId, authUserId, ticketIds)) {
+  for (const p of storagePrefixes(userId, authUserId, ticketIds, ownedSubjects)) {
     const names = await objectsUnder(db, p.bucket, p.prefix);
     for (const n of names) add(p.bucket, n);
     if (p.bucket === DOCUMENTS_BUCKET && p.prefix.startsWith(TICKETS_FOLDER)) ticketObjects += names.length;
@@ -216,7 +218,7 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   await ticketMessages(db, ticketIds, userId, true);
   for (const t of COLLECTION_TABLES) await deleteRows(db, t, "user_id", userId);
   for (const { table, column } of USER_TABLES) await deleteRows(db, table, column, userId);
-  await unresolvedErrors(db, authUserId, userId, true);
+  for (const subject of ownedSubjects) await unresolvedErrors(db, subject, userId, true);
 
   // 4. Every mailbox this account routed is closed TERMINALLY, before the
   //    profile is tombstoned, in ONE transaction.

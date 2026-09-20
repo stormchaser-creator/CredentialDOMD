@@ -21,7 +21,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
-import { isOwnStorageObject } from "../_shared/storagePath.ts";
+import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
+import { storageSubjects } from "../_shared/clerkContinuity.ts";
 import { BACKUP_BUCKET, LINK_TTL_SECONDS } from "../build-backup/lib.ts";
 
 const RECENT_LIMIT = 12;
@@ -71,13 +72,11 @@ serve(async (req) => {
     if (!row.storage_path) return json(409, { error: "That backup has no file. Build a new one." });
     if (row.status === "failed") return json(409, { error: "That backup did not finish. Build a new one." });
 
-    // The caller's own folder, and nothing else. profiles.auth_user_id is the
-    // Clerk id that every storage path starts with.
-    const { data: prof, error: pErr } = await db.from("profiles")
-      .select("auth_user_id").eq("id", who.profileId).maybeSingle();
-    if (pErr) throw pErr;
-    const authUserId = String(prof?.auth_user_id ?? "");
-    if (!isOwnStorageObject(authUserId, String(row.storage_path).split("/").slice(0, 2).join("/")) || !String(row.storage_path).startsWith(`${authUserId}/`) || String(row.storage_path).includes("..")) {
+    // Both prefixes are service-derived from the exact immutable profile.
+    // A relink retains original bytes and paths rather than moving archives.
+    const subjects = await storageSubjects(db, who.profileId);
+    if (!isOwnStorageObjectForSubjects(subjects, String(row.storage_path).split("/").slice(0, 2).join("/"))
+      || String(row.storage_path).includes("..") || String(row.storage_path).includes("\\") || String(row.storage_path).includes("//")) {
       console.error(`backup-link: path outside caller folder for backup ${backupId}`);
       return json(403, { error: "That backup is not in your account" });
     }
