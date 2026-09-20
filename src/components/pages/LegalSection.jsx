@@ -6,7 +6,7 @@ import { DEFAULT_DATA, DEFAULT_SETTINGS } from "../../constants/defaults";
 import { PRIVACY, TERMS, LEGAL_CONTACT } from "../../content/legalText";
 
 function LegalSection({ page }) {
-  const { data, setData, userIdRef, user, theme: T } = useApp();
+  const { data, resetAfterAccountDeletion, userIdRef, user, theme: T } = useApp();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -53,7 +53,7 @@ function LegalSection({ page }) {
     }
     // Reset from the canonical defaults so every collection key exists (the old
     // hand-built object dropped locum/tax/travel collections and crashed adds).
-    setData({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme: data.settings.theme } });
+    resetAfterAccountDeletion({ ...DEFAULT_DATA, settings: { ...DEFAULT_SETTINGS, theme: data.settings.theme } });
     setShowDeleteConfirm(false);
     setDeleteInput("");
     setDeleting(false);

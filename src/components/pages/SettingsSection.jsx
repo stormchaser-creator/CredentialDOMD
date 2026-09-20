@@ -1,3 +1,4 @@
+import LimitedLaunchMembership from "./LimitedLaunchMembership.jsx";
 import { useState, useMemo, useEffect, memo } from "react";
 import { formatPhone, emailProblem, websiteLabel } from "../../utils/contactFormat";
 import { useApp } from "../../context/AppContext";
@@ -31,7 +32,7 @@ import {
 
 function SettingsSection({ onUpgrade }) {
   const { data, setData, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
-    isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage } = useApp();
+    isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage, limitedLaunch } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
 
@@ -161,7 +162,7 @@ function SettingsSection({ onUpgrade }) {
 
       {/* Your plan: moved out of More, which opened on a billing card
           before anything a physician came to do. */}
-      <div style={{
+      {limitedLaunch.enabled ? <div style={{ padding: 18, marginBottom: 14, background: T.card, border: `1px solid ${T.border}`, borderRadius: 14 }}><LimitedLaunchMembership /></div> : <div style={{
         borderRadius: 16, padding: "16px 18px", marginBottom: 4,
         background: isPractice
           ? "linear-gradient(135deg, #7c3aed, #4f46e5)"
@@ -204,7 +205,7 @@ function SettingsSection({ onUpgrade }) {
             {isLifetime ? "Receipts and payment details" : "Manage Billing"}
           </button>
         )}
-      </div>
+      </div>}
 
       <SignInMethodsCard theme={T} />
 

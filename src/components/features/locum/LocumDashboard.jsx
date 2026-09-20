@@ -7,6 +7,7 @@
  * Other tiers see the planned offer; this page never starts checkout.
  */
 
+import ReadOnlyRecords from "../ReadOnlyRecords.jsx";
 import { useEffect, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import TaskNotes from "./TaskNotes";
@@ -30,7 +31,7 @@ const SUBTABS = [
 ];
 
 export default function LocumDashboard({ initialSub, focusId, onFocusConsumed }) {
-  const { theme: T, plan, isDevMode } = useApp();
+  const { theme: T, plan, isDevMode, limitedLaunch, canWritePractice } = useApp();
   const [sub, setSub] = useState(initialSub || "work");
   // Home search can land here on a specific sub-view (contracts, invoices...).
   useEffect(() => { if (initialSub) setSub(initialSub); }, [initialSub]);
@@ -38,6 +39,8 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
   const [billDraft, setBillDraft] = useState(null);
 
   const isLocum = plan === "locum" || isDevMode;
+
+  if (limitedLaunch.enabled && !canWritePractice) return <ReadOnlyRecords scope="practice" />;
 
   if (!isLocum) {
     return <UpgradeCard T={T} />;

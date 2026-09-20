@@ -14,6 +14,9 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
+import { useLimitedLaunchAccess } from "./useLimitedLaunchAccess.js";
+import { LIMITED_LAUNCH_ACCESS_ENABLED, accessAuthority } from "../utils/limitedLaunchAccess.js";
 import { useUser } from "@clerk/clerk-react";
 import { supabase } from "../lib/supabase";
 import { TIERS, getTier } from "../utils/pricingEngine";
@@ -85,7 +88,8 @@ export function useSubscription(userOverride) {
     ?? (isSignedIn ? { id: clerkUser?.id, email: clerkUser?.primaryEmailAddress?.emailAddress } : null);
 
   // Admin-only preview override (URL or localStorage). Beats Stripe-resolved tier.
-  const previewTier = getPreviewTier(user);
+  const limitedLaunch = useLimitedLaunchAccess(user?.id || null);
+  const previewTier = LIMITED_LAUNCH_ACCESS_ENABLED ? null : getPreviewTier(user);
   const [tier, setTier] = useState(() => {
     if (previewTier) return previewTier;
     if (IS_DEV_MODE) return getMockTier();
@@ -107,7 +111,7 @@ export function useSubscription(userOverride) {
 
   // Listen for mock-tier changes (dev mode)
   useEffect(() => {
-    if (!IS_DEV_MODE) return;
+    if (LIMITED_LAUNCH_ACCESS_ENABLED || !IS_DEV_MODE) return;
     const storageHandler = (e) => {
       if (e.key === MOCK_STORAGE_KEY && isValidTier(e.newValue)) {
         setTier(e.newValue);
@@ -128,6 +132,7 @@ export function useSubscription(userOverride) {
   // Reset stale identity state immediately when the signed-in account changes.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    if (LIMITED_LAUNCH_ACCESS_ENABLED) return;
     if (IS_DEV_MODE) { setLoading(false); return; }
     // If the admin preview override is active, don't overwrite the tier
     // with whatever Supabase returns. Used to test tier-locked features
@@ -190,7 +195,7 @@ export function useSubscription(userOverride) {
 
   // Mock tier setter (dev mode only)
   const setMockTier = useCallback((newTier) => {
-    if (!IS_DEV_MODE || !isValidTier(newTier)) return;
+    if (LIMITED_LAUNCH_ACCESS_ENABLED || !IS_DEV_MODE || !isValidTier(newTier)) return;
     try { localStorage.setItem(MOCK_STORAGE_KEY, newTier); } catch { /* Private browsing may disable storage. */ }
     setTier(newTier);
     window.dispatchEvent(new CustomEvent("mock-tier-change", { detail: newTier }));
@@ -199,6 +204,7 @@ export function useSubscription(userOverride) {
   // Two annual founding bundles only. Price, membership and identity are
   // rechecked on the server; no browser price ID or metadata is trusted.
   const checkout = useCallback(async (tierOrId, billing = "annual") => {
+    if (LIMITED_LAUNCH_ACCESS_ENABLED) return { ok: false, error: "review_offer_required" };
     if (isFreeBetaActive() || !BILLING_CATALOG.billingEnabled) return { ok: false, error: "free_beta" };
     const selected = typeof tierOrId === "string" ? tierOrId : tierOrId?.id;
     const offerId = selected === "locum" ? "core_locum" : selected === "founding" ? "core" : selected;
@@ -218,6 +224,16 @@ export function useSubscription(userOverride) {
   }, [setMockTier]);
 
   const manage = useCallback(async () => {
+    if (LIMITED_LAUNCH_ACCESS_ENABLED) {
+      try {
+        const result = await createLimitedLaunchClient({ accountId: userId }).portal();
+        window.location.assign(result.url);
+        return { ok: true };
+      } catch {
+        window.alert("Billing management could not open. Please try again. Your membership and records have not changed.");
+        return { ok: false };
+      }
+    }
     if (IS_DEV_MODE || isFreeBetaActive() || !BILLING_CATALOG.billingEnabled) return;
     if (!supabase) return;
     // No Stripe customer exists without a real subscription; the portal
@@ -227,7 +243,7 @@ export function useSubscription(userOverride) {
       body: {},
     });
     if (!res.error && /^https:\/\/billing\.stripe\.com\//.test(res.data?.url || "")) window.location.href = res.data.url;
-  }, [hasSubscription]);
+  }, [hasSubscription, userId]);
 
   // Derived state.
   // While the free beta is on, everyone is treated as Locum (the full
@@ -305,5 +321,23 @@ export function useSubscription(userOverride) {
     isPro: isPaid,
     isPractice: effectiveTier === "practice" || effectiveTier === "group",
     setMockPlan: setMockTier,  // legacy alias
+    limitedLaunch,
+    canWriteCredential: !LIMITED_LAUNCH_ACCESS_ENABLED || !!limitedLaunch.access?.capabilities.credential.write,
+    canWritePractice: !LIMITED_LAUNCH_ACCESS_ENABLED || !!limitedLaunch.access?.capabilities.practice.write,
+    ...(LIMITED_LAUNCH_ACCESS_ENABLED ? {
+      // Saved Practice records remain reachable after the write entitlement ends.
+      plan: "locum", tier: "locum", tierObject: getTier("locum"),
+      isPro: limitedLaunch.access?.capabilities.credential.read === true,
+      isPractice: false, isDevMode: false,
+      isPaid: !!limitedLaunch.access?.purchasedOfferId,
+      hasSubscription: !!limitedLaunch.access?.purchasedOfferId,
+      isLifetime: limitedLaunch.access?.lifetime.credential === true && limitedLaunch.access?.lifetime.practice === true,
+      isFreeBeta: limitedLaunch.access?.freeBeta?.state === "active",
+      isTrialing: limitedLaunch.access?.practiceTrial.state === "active",
+      trialEndsAt: limitedLaunch.access?.practiceTrial.endsAt || null,
+      loading: limitedLaunch.status === "loading", periodEnd: null,
+      canAddCredential: () => accessAuthority.allows("credential", "write"),
+      canUseFeature: (feature) => tierIncludesFeature(getTier("locum"), feature) && accessAuthority.allows("credential", feature === FEATURES.AI_DOCUMENT_SCAN ? "write" : "read"),
+    } : {}),
   };
 }

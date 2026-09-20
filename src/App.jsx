@@ -25,6 +25,9 @@ import { academicYearOf, caseWRVU, currentAcademicYear, filterLastMonths } from 
 import { CMESection } from "./components/features";
 import { CMEResourcesSection } from "./components/features";
 import { CVGenerator } from "./components/features";
+import ReadOnlyRecords from "./components/features/ReadOnlyRecords.jsx";
+import LaunchAccessNotice from "./components/shared/LaunchAccessNotice.jsx";
+import LimitedLaunchMembership from "./components/pages/LimitedLaunchMembership.jsx";
 import { DataExport } from "./components/features";
 import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
@@ -276,7 +279,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime } = useApp();
+  const { data, setData, loaded, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, manage } = useApp();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
@@ -784,6 +787,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     </div>
   );
 
+  if (limitedLaunch.enabled && access !== "active" && access !== "revoked" && access !== null) return <div style={{ minHeight: "100vh", padding: 24, background: T.bg, display: "grid", placeItems: "center" }}>
+    <div style={{ width: "100%", maxWidth: 620, padding: 24, background: T.card, borderRadius: 16 }}>
+      <LimitedLaunchMembership onActivated={recheckAccess} />
+      <button style={{ marginTop: 20 }} onClick={() => { void limitedLaunch.refresh(); void recheckAccess(); }}>Check access again</button>
+      <button style={{ margin: "20px 0 0 12px" }} onClick={signOut}>Sign out</button>
+    </div>
+  </div>;
+
   if (access !== "active") return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.text, padding: 24 }}>
       <div style={{ maxWidth: 420, textAlign: "center" }}>
@@ -794,6 +805,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <>
             <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800 }}>Access paused</div>
             <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>Your beta access has been paused. Reply to your invitation email if you think this is a mistake.</div>
+            {limitedLaunch.enabled && <button style={{ marginTop: 16 }} onClick={manage}>Manage an existing subscription</button>}
           </>
         ) : (
           <>
@@ -2549,6 +2561,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
   /* ─── RENDER ─────────────────────────────────────────────── */
   const renderContent = () => {
+    if (limitedLaunch.enabled && !canWriteCredential && ["credentials", "documents"].includes(tab)) return <ReadOnlyRecords scope="credential" />;
     if (tab === "home") return renderHome();
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
@@ -2692,7 +2705,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <div style={isDesktop ? { zoom: fontZoom, ...deskStickyVars } : { paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))", zoom: fontZoom }}>
         {tab === "home" && <NotificationBanner onOpenCenter={() => setNotifCenterOpen(true)} onGoSettings={() => { setTab("more"); setSubPage("settings"); }} />}
         {tab === "home" && <AdminMessageCard />}
-        <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}>{renderContent()}</div>
+        <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}><LaunchAccessNotice onReviewOffers={() => setShowPricing(true)} />{renderContent()}</div>
       </div>
     </>
   );

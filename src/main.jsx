@@ -1,3 +1,4 @@
+import { captureLaunchInvitation } from "./utils/launchInvitation.js";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider, useUser } from "@clerk/clerk-react";
@@ -9,6 +10,7 @@ import { SIGN_IN_LOCALIZATION } from "./utils/signInMethods";
 // Global error sink (window.onerror + unhandledrejection -> report-error
 // function -> public.client_errors). Installed before anything renders so a
 // crash inside Clerk or App init is still captured.
+captureLaunchInvitation();
 installErrorReporting();
 
 // Attaches the Clerk user id to error reports once auth resolves. Lives

@@ -1,3 +1,4 @@
+import LimitedLaunchMembership from "./LimitedLaunchMembership.jsx";
 import { useState, useEffect, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
@@ -7,7 +8,7 @@ import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
 
 /** Public founding offers; checkout stays hidden until both billing gates open. */
 export default function PricingModal({ open, onClose }) {
-  const { theme: T, plan, checkout, isFreeBeta, isDesktop } = useApp();
+  const { theme: T, plan, checkout, isFreeBeta, isDesktop, limitedLaunch } = useApp();
   const billingAvailable = PUBLIC_BILLING_ENABLED && !isFreeBeta;
   const [message, setMessage] = useState(null);
   const [startingCheckout, setStartingCheckout] = useState(false);
@@ -32,6 +33,12 @@ export default function PricingModal({ open, onClose }) {
   }, [open, onClose, isDesktop]);
 
   if (!open) return null;
+  if (limitedLaunch.enabled) return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", padding: 16 }}>
+    <div role="dialog" aria-modal="true" aria-label="Membership options" onClick={event => event.stopPropagation()} style={{ background: T.card, borderRadius: 16, padding: 24, width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }}>
+      <button onClick={onClose} style={{ float: "right" }} aria-label="Close membership options">Close</button>
+      <LimitedLaunchMembership />
+    </div>
+  </div>;
 
   const handleCheckout = async (offerId) => {
     if (!billingAvailable || startingCheckout) return;

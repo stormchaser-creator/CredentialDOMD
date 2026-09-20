@@ -13,6 +13,7 @@
  * App.jsx see the same status, and a run in flight is never doubled.
  */
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { accessAuthority } from "../utils/limitedLaunchAccess.js";
 import { useApp } from "../context/AppContext";
 import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../utils/storageScope";
 import { generateId } from "../utils/helpers";
@@ -93,6 +94,7 @@ async function fetchFeed(url) {
 
 // ─── The run ──────────────────────────────────────────────────
 async function runSync({ data, addItem, editItem, deleteItem, trigger }) {
+  if (!accessAuthority.allows("practice", "write")) return { ok: false, error: "membership_read_only", message: "Practice is read-only. Saved records and exports are available." };
   if (state.running) return state.record;
   const s = data?.settings || {};
   const url = parseFeedUrl(s.callsyncFeedUrl);

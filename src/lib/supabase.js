@@ -1,3 +1,4 @@
+import { accessAuthority, assertRecordWrite, allowsSettingsChange, membershipWriteError } from "../utils/limitedLaunchAccess.js";
 import { createClient } from "@supabase/supabase-js";
 import { STORAGE_KEY } from "../constants/defaults";
 import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId } from "../utils/storageScope";
@@ -295,6 +296,7 @@ function queuePendingOp(op, collectionKey, payload) {
 // Low-level, non-queuing writes used by the replay pass. They return a bool so
 // replay can drop only the ops that actually landed and keep the rest.
 async function sbUpsertRow(userId, collectionKey, item) {
+  assertRecordWrite(collectionKey, item);
   if (!item?.id) return true; // nothing addressable — drop it
   const table = tableName(collectionKey);
   const row = toSnakeObj(item);
@@ -306,12 +308,14 @@ async function sbUpsertRow(userId, collectionKey, item) {
   return !error;
 }
 async function sbDeleteRow(userId, collectionKey, itemId) {
+  assertRecordWrite(collectionKey, { id: itemId });
   if (!itemId) return true;
   const table = tableName(collectionKey);
   const { error } = await supabase.from(table).delete().eq("id", itemId).eq("user_id", userId);
   return !error;
 }
 async function sbTombstoneRow(userId, collectionKey, itemId) {
+  assertRecordWrite(collectionKey, { id: itemId });
   if (!itemId) return true;
   const { error } = await supabase.from("deleted_items").upsert(
     { item_id: itemId, user_id: userId, collection: collectionKey },
@@ -332,6 +336,11 @@ export async function replayPendingOps(profileId, authUserId) {
   if (!Array.isArray(ops) || ops.length === 0) return;
   const remaining = [];
   for (const op of ops) {
+    // Keep denied operations in their original account queue for a later authorized sync.
+    const permitted = op.op === "settings" ? allowsSettingsChange(op.payload)
+      : accessAuthority.allowsMutation(op.collectionKey, typeof op.payload === "object" ? op.payload : { id: op.payload }, null, authUserId || currentAuthUserId);
+    const documentReplayAllowed = op.collectionKey !== "documents" || ["credential", "practice"].every(scope => accessAuthority.allows(scope, "write", authUserId || currentAuthUserId));
+    if (!permitted || !documentReplayAllowed) { remaining.push(op); continue; }
     let ok = false;
     try {
       if (op.op === "upsert") {
@@ -492,6 +501,7 @@ export async function loadFromSupabase(userId) {
 
 // ─── Save settings to Supabase ───────────────────────────────
 export async function saveSettings(userId, settings, authUserId = currentAuthUserId) {
+  if (!allowsSettingsChange(settings)) throw membershipWriteError();
   if (authUserId) saveDeviceKeys(authUserId, settings);
   if (!supabase || !userId) {
     // Offline (or before the profile loads) a settings edit has nowhere to
@@ -570,6 +580,7 @@ export function documentStoragePath(docId) {
 }
 
 export async function uploadDocumentFile(item) {
+  assertRecordWrite("documents", item);
   if (!supabase || !item?.data) return null;
   const path = documentStoragePath(item.id);
   if (!path) return null;
@@ -595,6 +606,7 @@ export async function downloadDocumentFile(storagePath) {
 
 // ─── Collection CRUD ─────────────────────────────────────────
 export async function insertItem(userId, collectionKey, item) {
+  assertRecordWrite(collectionKey, item);
   // No cloud target yet (offline / local dev): queue so it isn't lost.
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item); return; }
   const table = tableName(collectionKey);
@@ -619,6 +631,7 @@ export async function insertItem(userId, collectionKey, item) {
 }
 
 export async function updateItem(userId, collectionKey, item) {
+  assertRecordWrite(collectionKey, item);
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item); return; }
   const table = tableName(collectionKey);
   const row = toSnakeObj(item);
@@ -639,7 +652,8 @@ export async function updateItem(userId, collectionKey, item) {
   }
 }
 
-export async function deleteItem(userId, collectionKey, itemId) {
+export async function deleteItem(userId, collectionKey, itemId, previous) {
+  assertRecordWrite(collectionKey, previous || { id: itemId }, previous);
   if (!supabase || !userId) { queuePendingOp("delete", collectionKey, itemId); return; }
   if (collectionKey === "documents") {
     const path = documentStoragePath(itemId);
@@ -664,6 +678,7 @@ export async function deleteItem(userId, collectionKey, itemId) {
 
 // ─── Bulk sync (for initial migration from localStorage) ─────
 export async function bulkSync(userId, collectionKey, items) {
+  for (const item of items) assertRecordWrite(collectionKey, item);
   if (!supabase || !userId || !items.length) return;
   const table = tableName(collectionKey);
   const now = new Date().toISOString();
@@ -690,7 +705,8 @@ export async function bulkSync(userId, collectionKey, items) {
 // ─── Deletion ledger ─────────────────────────────────────────
 // A delete recorded here is final across all devices: loads prune these ids
 // and the self-healing push skips them, so stale devices can't resurrect.
-export async function recordTombstone(userId, collectionKey, itemId) {
+export async function recordTombstone(userId, collectionKey, itemId, previous) {
+  assertRecordWrite(collectionKey, previous || { id: itemId }, previous);
   if (!itemId) return;
   if (!supabase || !userId) { queuePendingOp("tombstone", collectionKey, itemId); return; }
   const { error } = await supabase.from("deleted_items").upsert(

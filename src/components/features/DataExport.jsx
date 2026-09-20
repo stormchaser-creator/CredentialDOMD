@@ -180,7 +180,11 @@ function DataExport() {
           ...filtered,
           settings: { ...data.settings, ...(filtered.settings || {}) },
         };
-        setData(merged);
+        if (setData(merged) === false) {
+          setImportStatus("error");
+          window.alert("Restore is unavailable while records are read-only. Your saved records and exports have not changed.");
+          return;
+        }
         // Sync imported data to Supabase
         if (userIdRef?.current) {
           const uid = userIdRef.current;

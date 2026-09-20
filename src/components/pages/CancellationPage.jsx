@@ -4,7 +4,7 @@ import { generateCredentialZip, downloadBlob } from "../../utils/credentialExpor
 import { supabase } from "../../lib/supabase";
 
 function CancellationPage() {
-  const { data, theme: T, user, userIdRef, navigate, hasSubscription, isFreeBeta } = useApp();
+  const { data, theme: T, user, userIdRef, navigate, hasSubscription, isFreeBeta, limitedLaunch, manage } = useApp();
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
   const [reactivating, setReactivating] = useState(false);
@@ -65,6 +65,16 @@ function CancellationPage() {
   };
 
   const countdownColor = daysLeft <= 2 ? "#ef4444" : daysLeft <= 4 ? "#f59e0b" : "#10b981";
+
+  if (limitedLaunch.enabled) return <section style={{ color: T.text, maxWidth: 520, margin: "0 auto" }}>
+    <h1 style={{ fontSize: 22 }}>Membership and cancellation</h1>
+    <p style={{ color: T.textMuted, lineHeight: 1.6 }}>A free beta or Practice trial does not charge automatically and does not require cancellation. You can keep viewing and exporting saved records after it ends.</p>
+    {hasSubscription ? <>
+      <p>Manage renewal or cancel your paid subscription in the secure billing portal. Your saved records remain available for viewing and export after membership ends.</p>
+      <button onClick={manage}>Manage paid subscription</button>
+    </> : <p>No active paid subscription was found.</p>}
+    <button style={{ marginLeft: 10 }} onClick={() => navigate("more", "export")}>Export saved records</button>
+  </section>;
 
   if (nothingToCancel) {
     return (

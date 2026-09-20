@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
+import { accessAuthority, allowsDataChange, allowsSettingsChange, membershipWriteError } from "../utils/limitedLaunchAccess.js";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
@@ -453,7 +454,27 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [data, loaded]);
 
   // ─── Subscription ─────────────────────────────────────────
-  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta } = useSubscription(user ?? null);
+  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, canWritePractice } = useSubscription(user ?? null);
+  accessAuthority.registerRecords(dataOwnerRef.current, data);
+
+  // Check before replacing local state, so a denied restore never overwrites saved data.
+  const guardedSetData = useCallback((updater) => {
+    if (!accessAuthority.enabled) { setData(updater); return true; }
+    if (!user?.id || dataOwnerRef.current !== user.id || getActiveUserId() !== user.id || window.Clerk?.user?.id !== user.id) return false;
+    const before = dataRef.current;
+    // An updater receives its own copy: in-place changes cannot alter saved data before authorization.
+    const next = typeof updater === "function" ? updater(structuredClone(before)) : updater;
+    if (!allowsDataChange(before, next)) return false;
+    dataRef.current = next;
+    accessAuthority.registerRecords(dataOwnerRef.current, next);
+    setData(next);
+    return true;
+  }, [user?.id]);
+  // Account deletion is an explicit data-rights operation, independent of membership.
+  const resetAfterAccountDeletion = useCallback((next) => {
+    dataRef.current = next;
+    setData(next);
+  }, []);
 
   // Billing is a network surface: offline it fails with a clear message
   // instead of a spinner or a half-built Stripe redirect.
@@ -486,20 +507,26 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
 
   // Convenience CRUD helpers
   const updateSection = useCallback((key, updater) => {
-    setData(d => ({ ...d, [key]: updater(d[key]) }));
-  }, []);
+    return guardedSetData(d => ({ ...d, [key]: updater(d[key]) }));
+  }, [guardedSetData]);
 
   const updateSettings = useCallback((updates) => {
+    if (!allowsSettingsChange(updates)) return false;
+    if (accessAuthority.enabled) {
+      if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }))) return false;
+      sbSaveSettings(userIdRef.current, updates, user?.id).catch(() => {});
+      return true;
+    }
     setData(d => {
       const newSettings = { ...d.settings, ...updates };
       // Sync to Supabase in background
       sbSaveSettings(userIdRef.current, updates).catch(() => {});
       return { ...d, settings: newSettings };
     });
-  }, []);
+  }, [guardedSetData, user?.id]);
 
   const addItem = useCallback((key, item) => {
-    updateSection(key, items => [...(items || []), item]);
+    if (!updateSection(key, items => [...(items || []), item])) { window.alert(membershipWriteError().message); return false; }
     // Sync to Supabase
     sbInsert(userIdRef.current, key, item).catch(() => {});
   }, [updateSection]);
@@ -508,28 +535,31 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // Stamp the edit time so the self-heal pass can tell a newer local edit
     // (whose cloud write may have failed) from an older cloud row.
     const stamped = { ...item, updatedAt: new Date().toISOString() };
-    updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x));
+    if (!updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x))) { window.alert(membershipWriteError().message); return false; }
     // Sync to Supabase
     sbUpdate(userIdRef.current, key, stamped).catch(() => {});
   }, [updateSection]);
 
   const deleteItemFn = useCallback((key, id) => {
-    const profileId = userIdRef.current;
-    // Cascade: documents attached to this item are deleted with it —
-    // row, cloud file, and tombstone — so nothing orphans.
-    if (key !== "documents") {
-      const linkedDocs = (dataRef.current.documents || []).filter(d => d.linkedTo === `${key}:${id}`);
-      for (const doc of linkedDocs) {
-        updateSection("documents", items => (items || []).filter(x => x.id !== doc.id));
-        sbDelete(profileId, "documents", doc.id).catch(() => {});
-        recordTombstone(profileId, "documents", doc.id).catch(() => {});
-      }
+    const before = dataRef.current;
+    const target = (before[key] || []).find(item => item.id === id);
+    const linkedDocs = key === "documents" ? [] : (before.documents || []).filter(doc => doc.linkedTo === `${key}:${id}`);
+    if (!accessAuthority.allowsMutation(key, target || { id }, target)
+      || linkedDocs.some(doc => !accessAuthority.allowsMutation("documents", doc, doc))) {
+      window.alert(membershipWriteError().message); return false;
     }
-    updateSection(key, items => (items || []).filter(x => x.id !== id));
-    sbDelete(profileId, key, id).catch(() => {});
-    // The tombstone makes this delete final across every device.
-    recordTombstone(profileId, key, id).catch(() => {});
-  }, [updateSection]);
+    const next = { ...before, [key]: (before[key] || []).filter(item => item.id !== id) };
+    if (linkedDocs.length) next.documents = (before.documents || []).filter(doc => !linkedDocs.includes(doc));
+    if (!guardedSetData(next)) return false;
+    const profileId = userIdRef.current;
+    for (const doc of linkedDocs) {
+      sbDelete(profileId, "documents", doc.id, doc).catch(() => {});
+      recordTombstone(profileId, "documents", doc.id, doc).catch(() => {});
+    }
+    sbDelete(profileId, key, id, target).catch(() => {});
+    recordTombstone(profileId, key, id, target).catch(() => {});
+    return true;
+  }, [guardedSetData]);
 
   // Tracked states: Settings picks plus every state where a medical license
   // actually exists — adding a license auto-tracks its state's CME.
@@ -549,7 +579,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [onNavigate]);
 
   const value = useMemo(() => ({
-    data, setData, loaded, loadedFrom, theme, toggleTheme, isDesktop,
+    data, setData: guardedSetData, resetAfterAccountDeletion, loaded, loadedFrom, theme, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
     allTrackedStates, navigate, userIdRef,
     // Auth
@@ -557,7 +587,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
-  }), [data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+    isLifetime, limitedLaunch, canWriteCredential, canWritePractice,
+  }), [guardedSetData, resetAfterAccountDeletion, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
