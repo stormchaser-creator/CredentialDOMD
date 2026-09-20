@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CredentialDoMD | Credentials, licenses and CME for every physician</title>
-<meta name="description" content="Organize your medical licenses, DEA registrations, CME and professional documents in one place. Built for MDs and DOs, with optional Practice tools for contracts, work logs and invoices. Invite-only beta.">
+<!-- public-launch:meta --><meta name="description" content="Organize your medical licenses, DEA registrations, CME and professional documents in one place. Built for MDs and DOs, with optional Practice tools for contracts, work logs and invoices. Membership opens by invitation."><!-- /public-launch:meta -->
 <meta name="keywords" content="physician credential tracker, medical license renewal, DEA renewal reminder, locum tenens credentialing, CME tracker, hospital privileges, board certification">
 
 <!-- Canonical -->
@@ -1973,6 +1973,7 @@ footer {
 </style>
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
+<script type="module" src="/waitlist-signup.js"></script>
 </head>
 
 <body>
@@ -1998,7 +1999,7 @@ footer {
         </div>
       </details>
       <a href="/app/">Sign in</a>
-      <a href="#join" class="btn-primary nav-cta">Request Beta Access</a>
+      <!-- public-launch:cta --><a href="#join" class="btn-primary nav-cta">Join the Waitlist</a><!-- /public-launch:cta -->
     </div>
     <button class="mobile-menu-btn" data-nav-toggle aria-label="Open menu" aria-controls="primary-nav" aria-expanded="false">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2016,7 +2017,7 @@ footer {
 
   <div class="container">
     <div class="hero-content">
-      <div class="badge hero-badge">For MDs and DOs &middot; Free invite-only beta</div>
+      <div class="badge hero-badge"><!-- public-launch:audience-badge -->For MDs and DOs &middot; Founding invitations<!-- /public-launch:audience-badge --></div>
 
       <h1>Your medical credentials, <span class="highlight">organized.</span></h1>
 
@@ -2025,19 +2026,21 @@ footer {
       </p>
       <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px;">Need to manage contracts, work logs or invoices too? Add the optional <a href="/locums">Practice tools</a>.</p>
 
-      <form class="wl-form" id="join" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+      <p style="font-size:14px;color:var(--text-secondary);line-height:1.6;"><!-- public-launch:early-release -->credentialdomd is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p>
+      <p style="font-size:14px;color:var(--text-secondary);line-height:1.6;margin-bottom:20px;"><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p>
+      <!-- public-launch:form --><form class="wl-form" id="join" style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
         <input type="email" aria-label="Email address" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 220px; padding: 15px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
         <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
           style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
         <button type="submit" class="btn-primary" style="padding: 15px 24px; font-size: 16px; border: none; cursor: pointer; white-space: nowrap;">
-          Request beta access
+          Join the waitlist
         </button>
-      </form>
-      <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
+      </form><!-- /public-launch:form -->
+      <div class="wl-msg" role="status" aria-live="polite" aria-atomic="true" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
       <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">
-        <span>Invite-only &middot; no card &middot; no charges during beta</span>
+        <span><!-- public-launch:signup-trust -->Paid membership at launch &middot; card required at checkout<!-- /public-launch:signup-trust --></span>
         <a href="#how-it-works" style="white-space: nowrap;">See how it works &rarr;</a>
       </div>
 
@@ -2608,15 +2611,15 @@ footer {
     <div class="animate-on-scroll" style="text-align: center;">
       <div class="section-label" style="justify-content: center;">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-        Early Access
-      </div>
-      <h2 class="section-title">Be first in line when we open the doors.</h2>
-      <p class="section-subtitle" style="margin-left: auto; margin-right: auto;">CredentialDOMD is being tested by physicians organizing their licenses, CME and professional records. Join the list for an invitation and details of the planned Credential offers. Optional Practice tools are available for physicians who also manage contracts and invoices.</p>
+<!-- public-launch:signup-heading -->        Early Access
+<!-- /public-launch:signup-heading -->      </div>
+      <h2 class="section-title"><!-- public-launch:signup-heading -->Be first in line when we open the doors.<!-- /public-launch:signup-heading --></h2>
+      <p class="section-subtitle" style="margin-left: auto; margin-right: auto;"><!-- public-launch:invitation-copy -->CredentialDOMD is being tested by physicians organizing their licenses, CME and professional records. Join the list for an invitation and details of the planned Credential offers. Optional Practice tools are available for physicians who also manage contracts and invoices.<!-- /public-launch:invitation-copy --></p>
     </div>
 
     <div class="animate-on-scroll" style="max-width: 560px; margin: 36px auto 0;">
-      <form id="waitlist-form" class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-        <input type="text" id="waitlist-name" class="wl-name" placeholder="Dr. Jane Smith (optional)" autocomplete="name" maxlength="120"
+      <!-- public-launch:form --><form id="waitlist-form" class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+        <input type="text" id="waitlist-name" class="wl-name" aria-label="Name (optional)" placeholder="Dr. Jane Smith (optional)" autocomplete="name" maxlength="120"
           style="flex: 1 1 100%; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
           onfocus="this.style.borderColor='var(--emerald)'" onblur="this.style.borderColor='var(--border)'">
         <input type="email" aria-label="Email address" id="waitlist-email" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
@@ -2628,11 +2631,11 @@ footer {
         <button type="submit" class="btn-primary" style="padding: 16px 28px; font-size: 16px; border: none; cursor: pointer;">
           Join the list
         </button>
-      </form>
-      <div id="waitlist-msg" class="wl-msg" style="margin-top: 14px; font-size: 14.5px; font-weight: 600; text-align: center; min-height: 22px;"></div>
-      <p style="margin-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center;">
-        No spam, no sharing your address. One email when early access opens, from the physician who built it.
-      </p>
+      </form><!-- /public-launch:form -->
+      <div id="waitlist-msg" class="wl-msg" role="status" aria-live="polite" aria-atomic="true" style="margin-top: 14px; font-size: 14.5px; font-weight: 600; text-align: center; min-height: 22px;"></div>
+      <p style="margin-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center;"><!-- public-launch:invitation-copy -->
+        Joining the waitlist does not charge you or create a paid account. We will email your invitation and membership details when access is available. No spam or sharing your address.
+      <!-- /public-launch:invitation-copy --></p>
     </div>
   </div>
 </section>
@@ -2642,26 +2645,27 @@ footer {
   <div class="container">
     <div class="animate-on-scroll" style="text-align: center; margin-bottom: 32px;">
       <div class="section-label">Founding membership</div>
-      <h2 class="section-title">Founding Credential offer lowered to $99/year.</h2>
-      <p class="section-subtitle" style="margin: 0 auto;">Billing is not open. No card is required for beta access, and joining the list does not start a paid subscription.</p>
+      <h2 class="section-title"><!-- public-launch:founding-headline -->Founding Credential offer lowered to $99/year.<!-- /public-launch:founding-headline --></h2>
+      <p class="section-subtitle" style="margin: 0 auto;"><!-- public-launch:availability -->Checkout is not open. New invitations are for paid membership, with a card required at checkout. Joining the waitlist does not create a paid account or charge you.<!-- /public-launch:availability --></p>
     </div>
     <div class="launch-plan-grid">
       <article class="feature-card animate-on-scroll">
         <h3 class="feature-title">Credential</h3>
-        <p class="launch-price">$99<span> / year, planned founding offer</span></p>
-        <p class="feature-desc">For eligible waitlist founding members. The previously planned founding price was $149/year. Your $99 annual rate stays the same while your membership remains active.</p>
+        <p class="launch-price"><!-- public-launch:founding-price -->$99<span> / year, planned founding offer</span><!-- /public-launch:founding-price --></p>
+        <p class="feature-desc"><!-- public-launch:founding-rate -->For eligible waitlist founding members. The previously planned founding price was $149/year. Your $99 annual rate stays the same while your membership remains active.<!-- /public-launch:founding-rate --></p>
         <p class="feature-desc">Your physician credentials, documents, CME tracking and renewal organization.</p>
-        <p class="feature-desc" style="margin-top: 12px;">Planned early-bird price: $149/year, also held while membership remains active. Planned standard price: $199/year. Your offer and eligibility will be shown before you choose to pay.</p>
+        <p class="feature-desc" style="margin-top: 12px;"><!-- public-launch:rate-comparison -->Planned early-bird price: $149/year, also held while membership remains active. Planned standard price: $199/year. Your offer and eligibility will be shown before you choose to pay.<!-- /public-launch:rate-comparison --></p>
       </article>
       <article class="feature-card animate-on-scroll">
         <h3 class="feature-title">Credential + Practice</h3>
-        <p class="launch-price">$245<span> / year, planned total</span></p>
-        <p class="feature-desc">Everything in Credential, plus contracts, work logs, invoices, payment tracking and locums finance tools. The full package is $245/year for all new paid members.</p>
-        <p class="feature-desc" style="margin-top: 12px;">Credential customers will receive a free 30-day Practice trial. It ends without a charge. Continuing Practice requires an explicit purchase; your Credential membership continues.</p>
+        <p class="launch-price"><!-- public-launch:full-price -->$245<span> / year, planned total</span><!-- /public-launch:full-price --></p>
+        <p class="feature-desc"><!-- public-launch:full-package -->Everything in Credential, plus contracts, work logs, invoices, payment tracking and locums finance tools. The full package is $245/year for all new paid members.<!-- /public-launch:full-package --></p>
+        <p class="feature-desc" style="margin-top: 12px;"><!-- public-launch:practice-trial -->New paid Credential members will receive a separate 30-day Practice trial. It ends without an added charge. Continuing Practice requires an explicit purchase; your paid Credential membership continues.<!-- /public-launch:practice-trial --></p>
       </article>
     </div>
-    <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);">Planned lifetime-access policy: accounts already registered when this policy was announced will keep Credential and Practice free for life. A waitlist entry alone does not qualify. Account eligibility will be confirmed before billing opens.</p>
-    <p style="text-align: center; margin-top: 16px;"><a href="#join" class="btn-primary">Request beta access</a></p>
+    <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);"><!-- public-launch:promised-beta --><strong>Signed up under our earlier free-beta offer?</strong> We will honor 30 days free with no card, then an optional $99/year Credential membership. There is no automatic charge; you must choose to pay to continue. Your invitation will confirm eligibility and when the 30 days start.<!-- /public-launch:promised-beta --></p>
+    <p style="text-align: center; margin-top: 24px; color: var(--text-secondary);"><!-- public-launch:lifetime-exception -->Planned lifetime-access policy: accounts already registered when this policy was announced will keep Credential and Practice free for life. A waitlist entry alone does not qualify. Account eligibility will be confirmed before billing opens.<!-- /public-launch:lifetime-exception --></p>
+    <p style="text-align: center; margin-top: 16px;"><!-- public-launch:cta --><a href="#join" class="btn-primary">Join the waitlist</a><!-- /public-launch:cta --></p>
   </div>
 </section>
 
@@ -2915,19 +2919,19 @@ footer {
     <div class="animate-on-scroll">
       <div class="section-label" style="justify-content: center;">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        Join the Waitlist
-      </div>
+<!-- public-launch:signup-heading -->        Join the Waitlist
+<!-- /public-launch:signup-heading -->      </div>
       <h2 class="section-title">What in your credentialing file expires next? If you have to look it up, that is the problem.</h2>
-      <p class="section-subtitle">Get on the list. Invites go out in small batches, in signup order.</p>
+      <p class="section-subtitle"><!-- public-launch:invitation-copy -->Get on the list. Invites go out in small batches, in signup order.<!-- /public-launch:invitation-copy --></p>
 
       <div class="final-cta-buttons">
-        <a href="#early-access" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
-          Request Beta Access
+        <!-- public-launch:cta --><a href="#early-access" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
+          Join the Waitlist
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
-        </a>
+        </a><!-- /public-launch:cta -->
       </div>
 
-      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">One email when the doors open. Founding-member perks for the earliest names on the list.</p>
+      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);"><!-- public-launch:invitation-copy -->One email when the doors open. Founding-member perks for the earliest names on the list.<!-- /public-launch:invitation-copy --></p>
     </div>
   </div>
 </section>
@@ -2956,99 +2960,15 @@ footer {
 </footer>
 
 <!-- Sticky mobile CTA: appears after the hero scrolls out of view, dismissible -->
-<div class="sticky-cta" id="sticky-cta" role="region" aria-label="Request beta access">
-  <span class="sticky-cta-text">Free invite-only beta &middot; invites by signup order</span>
-  <a href="#join" class="btn-primary">Request beta access</a>
+<div class="sticky-cta" id="sticky-cta" role="region" aria-label="Join the waitlist">
+  <span class="sticky-cta-text"><!-- public-launch:signup-trust -->Founding invitations &middot; paid membership at launch<!-- /public-launch:signup-trust --></span>
+  <!-- public-launch:cta --><a href="#join" class="btn-primary">Join the waitlist</a><!-- /public-launch:cta -->
   <button type="button" class="sticky-cta-close" aria-label="Dismiss">&times;</button>
 </div>
 
 <!-- ============ SCRIPTS ============ -->
 <script>
-// Early-access waitlist → same-origin /api relay (Cloudflare Worker) with
-// direct-Supabase fallback. One binder covers every .wl-form on the page
-// (hero quick-join + full form). Honeypot is flag-and-send, never drop.
-// Both paths call the rate-limited RPCs waitlist_signup / waitlist_attempt
-// (anon cannot insert into the tables directly); payload keys are the RPC
-// argument names (p_email, p_name, ...). 400 = bad address, 409 = already
-// listed, 429 = throttled.
-(function() {
-  var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
-  var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
-  var loadedAt = Date.now();
 
-  var postSignup = function(apiPath, rpcName, payload) {
-    var direct = function() {
-      return fetch(SUPABASE_URL + '/rest/v1/rpc/' + rpcName, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON },
-        body: JSON.stringify(payload), keepalive: true
-      });
-    };
-    return fetch(apiPath, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), keepalive: true
-    }).then(function(res) {
-      if (res.status === 404 || res.status === 405 || res.status >= 500) return direct();
-      return res;
-    }).catch(direct);
-  };
-
-  var forms = document.querySelectorAll('.wl-form');
-  Array.prototype.forEach.call(forms, function(form) {
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      var emailEl = form.querySelector('.wl-email');
-      var nameEl = form.querySelector('.wl-name');
-      var hpEl = form.querySelector('.wl-hp');
-      var msg = form.parentElement.querySelector('.wl-msg') || form.querySelector('.wl-msg');
-      var btn = form.querySelector('button[type="submit"]');
-      var email = (emailEl && emailEl.value || '').trim();
-      var name = (nameEl && nameEl.value || '').trim();
-      if (!email) return;
-
-      var flags = [];
-      if (hpEl && (hpEl.value || '').trim()) flags.push('honeypot');
-      if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
-      var noteFlags = flags.length ? flags.join(',') : null;
-      var payload = { p_email: email, p_name: name || null, p_source: window.location.pathname || '/', p_note: noteFlags };
-
-      // Attempt trace lands BEFORE the real insert, so a failed signup still
-      // leaves the email behind for follow-up.
-      try {
-        postSignup('/api/waitlist-attempt', 'waitlist_attempt',
-          { p_email: email, p_name: name || null, p_source: payload.p_source, p_stage: noteFlags || 'normal' }).catch(function() {});
-      } catch (err) {}
-
-      if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Joining\u2026'; }
-      if (msg) msg.textContent = '';
-
-      postSignup('/api/waitlist', 'waitlist_signup', payload).then(function(res) {
-        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
-        if (!msg) return;
-        if (res.ok) {
-          msg.style.color = 'var(--emerald)';
-          msg.textContent = "You're on the list. Your founding number is assigned when you sign up and activate your account.";
-          form.reset();
-        } else if (res.status === 409) {
-          msg.style.color = 'var(--emerald)';
-          msg.textContent = "You're already on the list. We've got you.";
-        } else if (res.status === 429) {
-          msg.style.color = 'var(--amber, #f59e0b)';
-          msg.textContent = 'The list is busy right now. Try again in a few minutes.';
-        } else {
-          msg.style.color = 'var(--amber, #f59e0b)';
-          msg.textContent = "That didn't go through. Check the address and try again.";
-        }
-      }).catch(function() {
-        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
-        if (msg) {
-          msg.style.color = 'var(--amber, #f59e0b)';
-          msg.textContent = 'Connection hiccup. Please try again.';
-        }
-      });
-    });
-  });
-})();
 
 // FAQ toggle
 function toggleFaq(btn) {
