@@ -17,7 +17,7 @@ export const SIGN_IN_LOCALIZATION = {
       ...(SMS_SIGN_IN_ENABLED ? { blockButton__phoneCode: "Text a code to {{identifier}}" } : {}),
       getHelp: { blockButton__emailSupport: "Email support" },
     },
-    emailCode: { title: "Check your email", subtitle: "Enter the code we just sent to {{identifier}}", formTitle: "Sign-in code", resendButton: "Send a new code" },
+    emailCode: { title: "Check your email", subtitle: "Enter the code we just sent to your email.", formTitle: "Sign-in code", resendButton: "Send a new code" },
   },
 };
 
