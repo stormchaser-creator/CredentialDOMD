@@ -30,6 +30,10 @@ export function createAccessPolicyHandler(deps, policy = PUBLIC_BILLING_POLICY) 
         const beta = snapshot.freeBeta;
         if (!['none','active','expired'].includes(beta.state) || beta.autoCharges !== false || (beta.state === 'none' ? beta.startsAt !== null || beta.endsAt !== null : !Number.isFinite(Date.parse(beta.startsAt)) || Date.parse(beta.endsAt) - Date.parse(beta.startsAt) !== 30 * 86400000)) throw Error('Free beta grant unavailable');
       }
+      if (snapshot.scheduledMembership != null) {
+        const scheduled = snapshot.scheduledMembership;
+        if (!['core','core_locum'].includes(scheduled.offerId) || !['scheduled','payment_pending','canceling'].includes(scheduled.status) || typeof scheduled.cancelAtPeriodEnd !== 'boolean' || (scheduled.status === 'canceling') !== scheduled.cancelAtPeriodEnd || typeof scheduled.firstChargeCanceled !== 'boolean' || (scheduled.firstChargeCanceled && !scheduled.cancelAtPeriodEnd) || !Number.isFinite(Date.parse(scheduled.startsAt)) || Date.parse(scheduled.startsAt) % 1000 || ![9900,14900,19900,24500].includes(scheduled.annualCents) || (scheduled.offerId === 'core_locum' ? scheduled.annualCents !== 24500 : scheduled.annualCents === 24500) || scheduled.currency !== 'usd' || scheduled.interval !== 'year' || snapshot.checkoutEligible === true || snapshot.checkoutResumeAvailable === true || snapshot.purchasedOfferId != null) throw Error('Scheduled membership unavailable');
+      }
       return response(200, snapshot);
     } catch { return response(503, { error: 'access_policy_unavailable' }); }
   };

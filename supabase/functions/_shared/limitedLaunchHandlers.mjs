@@ -1,5 +1,6 @@
 import { LIMITED_LAUNCH, limitedOffer, assertLimitedPrice, validateLimitedConfig } from './limitedLaunchCatalog.mjs';
 import { verifiedLimitedPayment } from './limitedLaunchPurchase.mjs';
+import { limitedBillingTiming, assertDeferredSubscription, deferredCheckoutMessage } from './limitedBillingTiming.mjs';
 import { BILLING_CATALOG } from './billingCatalog.mjs';
 import { createBillingHandlers } from './billingHandlers.mjs';
 
@@ -66,17 +67,18 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (eligibility.state !== 'eligible') refuse(403, eligibility.state === 'membership_unavailable' ? eligibility.state : 'invitation_required');
     return { profile, eligibility };
   }
-  function summary(offer) {
-    return { schemaVersion: 1, policyVersion: config.policyVersion, offerId: offer.id, name: offer.name, annualCents: offer.unitAmount, currency: 'usd', interval: 'year', pricePhase: offer.pricePhase, priceLockedWhileActive: offer.priceLockedWhileActive, practiceTrialDays: offer.practiceTrialDays, trialAutoCharges: false, paymentAtCheckout: true, checkoutEnabled: true };
+  function summary(offer, preview) {
+    return { schemaVersion: 1, policyVersion: config.policyVersion, offerId: offer.id, name: offer.name, annualCents: offer.unitAmount, currency: 'usd', interval: 'year', pricePhase: offer.pricePhase, priceLockedWhileActive: offer.priceLockedWhileActive, practiceTrialDays: offer.practiceTrialDays, trialAutoCharges: false, checkoutEnabled: true, ...limitedBillingTiming(preview) };
   }
   const quote = route(async req => {
     const live = mode(true), data = await input(req);
     const { profile, eligibility } = await purchaser(req, data, live);
     if (eligibility.checkout_enabled !== true) refuse(503, 'billing_disabled');
-    if (eligibility.free_beta?.state === 'active') refuse(409, 'free_beta_active');
     const preview = await deps.store.createPreview(profile.id, profile.auth_user_id, live, data.offerId);
     const offer = limitedOffer(preview.offer_id, preview.price_phase, config.productIds);
-    return reply(200, { ...summary(offer), quoteId: preview.id, expiresAt: preview.expires_at, consentVersion: preview.consent_version, consentHash: preview.consent_hash, consentText: preview.consent_text });
+    if (preview.annual_cents !== offer.unitAmount) refuse(409, 'quote_mismatch');
+    if (eligibility.free_beta?.state === 'active' && limitedBillingTiming(preview).paymentTiming !== 'after_beta') refuse(409, 'quote_expired');
+    return reply(200, { ...summary(offer, preview), quoteId: preview.id, expiresAt: preview.expires_at, consentVersion: preview.consent_version, consentHash: preview.consent_hash, consentText: preview.consent_text });
   });
   const activate = route(async req => {
     if (!config.invitationEnabled || !['test','live'].includes(deps.mode)) refuse(503, 'invitation_activation_disabled');
@@ -89,9 +91,11 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const live = mode(true), data = await input(req, 'checkout');
     const { profile, eligibility } = await purchaser(req, data, live);
     if (eligibility.checkout_enabled !== true) refuse(503, 'billing_disabled');
-    if (eligibility.free_beta?.state === 'active') refuse(409, 'free_beta_active');
     const preview = await deps.store.previewById(data.quoteId);
     if (!preview || preview.profile_id !== profile.id || preview.clerk_subject !== profile.auth_user_id || preview.livemode !== live || preview.policy_version !== config.policyVersion || preview.consent_hash !== data.consentHash || !Number.isFinite(Date.parse(preview.expires_at)) || Date.parse(preview.expires_at) <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
+    const previewTiming = limitedBillingTiming(preview);
+    if (eligibility.free_beta?.state === 'active' && previewTiming.paymentTiming !== 'after_beta') refuse(409, 'quote_expired');
+    if (previewTiming.paymentTiming === 'after_beta' && (!['active','expired'].includes(eligibility.free_beta?.state) || Date.parse(eligibility.free_beta?.endsAt) !== Date.parse(previewTiming.betaEndsAt))) refuse(409, 'quote_expired');
     data.offerId = preview.offer_id;
     const stripe = deps.stripe();
     let account = await deps.store.account(profile.id, live);
@@ -129,6 +133,11 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (claim.state !== 'claimed') refuse(claim.state === 'offer_conflict' ? 409 : 503, claim.state === 'offer_conflict' ? 'checkout_offer_already_selected' : 'checkout_pending');
     const q = claim.quote;
     if (!q || q.clerk_subject !== profile.auth_user_id || q.offer_id !== data.offerId || q.policy_version !== config.policyVersion) refuse(409, 'quote_mismatch');
+    const timing = limitedBillingTiming(q);
+    const betaTime = value => value === null ? null : Date.parse(value);
+    if (timing.paymentTiming !== previewTiming.paymentTiming || timing.firstChargeAt !== previewTiming.firstChargeAt || betaTime(timing.betaEndsAt) !== betaTime(previewTiming.betaEndsAt)) refuse(409, 'quote_mismatch');
+    const billingAnchor = timing.paymentTiming === 'after_beta' ? Date.parse(timing.firstChargeAt) / 1000 : null;
+    if (billingAnchor !== null && billingAnchor * 1000 <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
     const offer = limitedOffer(q.offer_id, q.price_phase, { ...config.productIds, ...(q.product_id ? { [q.offer_id]: q.product_id } : {}) });
     if (q.annual_cents !== offer.unitAmount) refuse(409, 'quote_mismatch');
     let price;
@@ -141,13 +150,16 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     assertLimitedPrice(price, offer, live);
     await deps.store.pinPrice(claim.attempt_id, profile.id, profile.auth_user_id, live, offer.productId, price.id);
     const metadata = { app: config.app, profile_id: profile.id, clerk_user_id: profile.auth_user_id, offer_id: offer.id, catalog_version: config.version, pricing_policy_version: config.policyVersion, price_phase: offer.pricePhase, checkout_attempt_id: claim.attempt_id };
+    if (billingAnchor !== null) metadata.billing_start_at = String(billingAnchor);
     // Stable expiry derives from durable quote creation, not a retry's wall clock.
     const expiresAt = Math.floor(Math.min(Date.parse(q.created_at) + 86400000, Date.parse(eligibility.expires_at)) / 1000);
     if (!Number.isSafeInteger(expiresAt) || expiresAt < Math.floor((deps.now?.() ?? Date.now()) / 1000) + 1800) refuse(409, 'checkout_needs_reconciliation');
+    if (billingAnchor !== null && billingAnchor * 1000 <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
     const session = await stripe.checkout.sessions.create({
       customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }], payment_method_collection: 'always', payment_method_types: ['card'],
       success_url: `${origin}/app/?billing=complete`, cancel_url: `${origin}/app/?billing=canceled`, expires_at: expiresAt,
-      client_reference_id: profile.id, metadata, subscription_data: { metadata },
+      client_reference_id: profile.id, metadata, subscription_data: { metadata, ...(billingAnchor !== null ? { billing_cycle_anchor: billingAnchor, proration_behavior: 'none' } : {}) },
+      ...(billingAnchor !== null ? { custom_text: { submit: { message: deferredCheckoutMessage(q) } } } : {}),
     }, { idempotencyKey: `${config.app}:checkout:${claim.attempt_id}` });
     if (session.livemode !== live || !/^https:\/\/checkout\.stripe\.com\//.test(session.url || '') || !session.id) refuse(503, 'checkout_unavailable');
     await deps.store.saveCheckout(profile.id, live, claim.attempt_id, claim.token, session.id);
@@ -180,6 +192,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       if (!profile || !q || q.profile_id !== profile.id || q.clerk_subject !== profile.auth_user_id || q.livemode !== live || q.offer_id !== sub.metadata.offer_id || q.price_phase !== sub.metadata.price_phase || q.policy_version !== config.policyVersion || sub.metadata.pricing_policy_version !== config.policyVersion || sub.metadata.clerk_user_id !== profile.auth_user_id || sub.metadata.profile_id !== profile.id || id(sub.customer) !== account.stripe_customer_id || sub.livemode !== live || sub.metadata.catalog_version !== config.version || sub.items?.data?.length !== 1 || sub.items.data[0].quantity !== 1 || sub.items.data[0].price.id !== q.price_id) refuse(409, 'subscription_owner_mismatch');
       const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id });
       assertLimitedPrice(sub.items.data[0].price, offer, live, { allowInactive: true, pinnedPriceId: q.price_id });
+      const billingAnchor = assertDeferredSubscription(sub, q);
       const end = sub.current_period_end ?? sub.items.data[0].current_period_end;
       if (!Number.isSafeInteger(end) || end <= 0 || !/^evt_[A-Za-z0-9]+$/.test(event.id || '') || !Number.isSafeInteger(event.created)) refuse(503, 'invalid_subscription_state');
       let proof = null;
@@ -187,7 +200,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
         const invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
         if (invoice.status === 'paid' && invoice.paid === true) proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
       }
-      await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token }, q.attempt_id, proof);
+      await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: sub.cancel_at_period_end === true, p_billing_anchor: billingAnchor }, q.attempt_id, proof);
     } finally { await deps.store.releaseReconcile(account.profile_id, live, lease.token); }
     return reply(200, { received: true });
   }, true);

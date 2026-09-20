@@ -20,7 +20,7 @@ test('authoritative planned prices and product scopes never introduce automatic 
     assert.equal(core.practiceTrialDays,30);assert.equal(full.practiceTrialDays,0);assert.equal(core.trialAutoCharges,false);
     assert.equal(core.priceLockedWhileActive,phase!=='standard');
   }
-  assert.equal(PUBLIC_BILLING_POLICY.billingEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.checkoutEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled,false);
+  assert.equal(PUBLIC_BILLING_POLICY.billingEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.checkoutEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled,true);
   assert.throws(()=>getPublicBillingOffer('core','madeup'));assert.equal(getPublicBillingOffer('free'),null);
 });
 test('cohort canonicalization binds immutable identity pairs and rejects duplicates or malformed data',()=>{
@@ -42,14 +42,14 @@ test('unpaid, renewals, trials, discounts, bad bindings, modes, lines and prices
 });
 test('disabled adapter preserves active beta access without querying new tables, has no-store headers',async()=>{
   let reads=0;
-  const handler=createAccessPolicyHandler({authenticate:async()=>({id:pid,auth_user_id:'user_a',access_status:'active'}),readOwnSnapshot:async()=>{reads++;throw Error('unapplied');}});
+  const handler=createAccessPolicyHandler({authenticate:async()=>({id:pid,auth_user_id:'user_a',access_status:'active'}),readOwnSnapshot:async()=>{reads++;throw Error('unapplied');}},{...PUBLIC_BILLING_POLICY,enforcementEnabled:false});
   const res=await handler(new Request('https://example.com',{method:'POST'}));const data=await res.json();
   assert.equal(res.status,200);assert.equal(reads,0);assert.equal(data.enforcementEnabled,false);assert.equal(data.capabilities.practice.write,true);assert.equal(data.billingEnabled,false);assert.equal(data.practiceTrial.autoCharges,false);assert.equal(res.headers.get('cache-control'),'no-store');
 });
 test('adapter rejects unbound or revoked access, foreign origin and incomplete cutover without leaking errors',async()=>{
   const req=()=>new Request('https://example.com',{method:'POST'});
   assert.equal((await createAccessPolicyHandler({authenticate:async()=>null})(req())).status,401);
-  const h=createAccessPolicyHandler({authenticate:async()=>({id:pid,auth_user_id:'user_a',access_status:'revoked'})});
+  const h=createAccessPolicyHandler({authenticate:async()=>({id:pid,auth_user_id:'user_a',access_status:'revoked'})},{...PUBLIC_BILLING_POLICY,enforcementEnabled:false});
   assert.equal((await (await h(req())).json()).capabilities.practice.read,false);
   assert.equal((await h(new Request('https://example.com',{method:'POST',headers:{Origin:'https://other.example'}}))).status,403);
   const activated=createAccessPolicyHandler({authenticate:async()=>({id:pid,auth_user_id:'user_a'}),readOwnSnapshot:async()=>({schemaVersion:1,enforcementEnabled:false})},{...PUBLIC_BILLING_POLICY,enforcementEnabled:true});

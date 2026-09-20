@@ -21,9 +21,9 @@ function fixture(kind = 'paid') {
   };
   return { calls, profile, user, deps, enrollment };
 }
-test('public signup remains disabled before authentication, Clerk, DB or payment work', async () => {
+test('disabled public signup stops before authentication, Clerk, DB or payment work', async () => {
   const f = fixture(); f.deps.authenticate = async () => { throw Error('must not authenticate'); };
-  const r = await createSelfServiceSignupHandler(f.deps)(request());
+  const r = await createSelfServiceSignupHandler(f.deps, { ...SELF_SERVICE_SIGNUP, enabled: false })(request());
   assert.equal(r.status, 503); assert.deepEqual(await r.json(), { error: 'signup_disabled' }); assert.deepEqual(f.calls, []);
 });
 for (const kind of ['paid', 'grandfathered_beta', 'lifetime']) {

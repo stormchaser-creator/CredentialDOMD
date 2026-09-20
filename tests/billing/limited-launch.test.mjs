@@ -32,16 +32,16 @@ function fixture(offerId='core',phase='founding') {
     checkout:{sessions:{create:async(...args)=>{calls.push(['checkout',...args]);return{id:'cs_A',livemode:false,url:'https://checkout.stripe.com/c/synthetic'};}}},
   };
   const deps={mode:'test',now:()=>now,assertConfigured:()=>{},authenticate:async()=>({profileId:profile.id,clerkSubject:'user_a'}),verifiedEmails:async()=>['member@example.invalid'],stripe:()=>stripe,verifyEvent:async()=>event,
-    store:{profile:async()=>profile,previewById:async()=>preview,createPreview:async(id,subject,live,offerId)=>({...preview,offer_id:offerId,price_phase:offerId==='core_locum'?'standard':eligibility.price_phase}),eligibility:async()=>eligibility,bindInvitation:async(...args)=>calls.push(['bind',...args]),account:async()=>account,bindAccount:async()=>account,accountByCustomer:async()=>account,
+    store:{profile:async()=>profile,previewById:async()=>preview,createPreview:async(id,subject,live,offerId)=>({...preview,offer_id:offerId,price_phase:offerId==='core_locum'?'standard':eligibility.price_phase,annual_cents:limitedOffer(offerId,eligibility.price_phase,config.productIds).unitAmount}),eligibility:async()=>eligibility,bindInvitation:async(...args)=>calls.push(['bind',...args]),account:async()=>account,bindAccount:async()=>account,accountByCustomer:async()=>account,
       claimLimitedCheckout:async()=>({state:'claimed',attempt_id:q.attempt_id,token:'syntheticLease',quote:structuredClone(q)}),pinPrice:async(...args)=>calls.push(['pin',...args]),saveCheckout:async(...args)=>calls.push(['save',...args]),closeCheckout:async()=>{},
       claimReconcile:async()=>({state:'claimed',token:'syntheticLease'}),releaseReconcile:async()=>calls.push(['release']),quoteByAttempt:async()=>q,settleLimited:async(...args)=>calls.push(['settle',...args]),
     }};
   return{deps,calls,profile,offer,price,q,preview,eligibility,sub,invoice,event,stripe};
 }
 
-test('default routes fail closed before identity, database, provider or mailbox I/O',async()=>{
+test('explicitly disabled routes fail closed before identity, database, provider or mailbox I/O',async()=>{
   const f=fixture();f.deps.authenticate=async()=>{throw Error('unexpected');};
-  for(const fn of Object.values(createLimitedLaunchHandlers(f.deps)))assert.equal((await fn(request())).status,503);
+  for(const fn of Object.values(createLimitedLaunchHandlers(f.deps, {...config,billingEnabled:false,checkoutEnabled:false,invitationEnabled:false})))assert.equal((await fn(request())).status,503);
   assert.deepEqual(f.calls,[]);
 });
 test('offline preview has three annual Credential amounts plus full-price bundle; IDs never guessed',async()=>{
@@ -205,4 +205,121 @@ test('access snapshot exposes validated saved-session resume separately from new
   const h=createAccessPolicyHandler(deps,{...PUBLIC_BILLING_POLICY,enforcementEnabled:true});
   assert.deepEqual(await(await h(request())).json(),snapshot);
   snapshot.checkoutResumeOfferId='unreviewed';assert.equal((await h(request())).status,503);
+});
+
+function deferredFixture(remainingMs=20*86400000, offerId='core') {
+  const f=fixture(offerId,offerId==='core'?'founding':'standard');
+  const betaEnd=now+remainingMs, anchor=Math.ceil(betaEnd/1000);
+  for(const row of[f.q,f.preview]) {row.beta_ends_at=new Date(betaEnd).toISOString();row.billing_start_at=new Date(anchor*1000).toISOString();}
+  f.eligibility.free_beta={state:'active',startsAt:new Date(betaEnd-30*86400000).toISOString(),endsAt:f.q.beta_ends_at,autoCharges:false};
+  Object.assign(f.sub,{billing_cycle_anchor:anchor,collection_method:'charge_automatically',cancel_at_period_end:false,current_period_start:Math.floor(now/1000),current_period_end:anchor,latest_invoice:null});
+  f.sub.metadata.billing_start_at=String(anchor);
+  f.event.type='checkout.session.completed';f.event.data.object={mode:'subscription',subscription:f.sub.id,payment_status:'no_payment_required'};
+  return {...f,anchor};
+}
+function markDeferredPaid(f, {renewal=false, delay=0}={}) {
+  const start=f.anchor+(renewal?31536000:0), end=start+31536000;
+  Object.assign(f.sub,{latest_invoice:'in_A',current_period_start:start,current_period_end:end});
+  f.invoice.billing_reason='subscription_cycle';f.invoice.status_transitions.paid_at=start+delay;
+  f.invoice.lines.data[0].period={start,end};f.invoice.lines.data[0].proration=false;
+  f.event.type='invoice.paid';f.event.data.object={subscription:f.sub.id};
+}
+test('active historical beta explicitly opts in with card, zero now and original fixed annual anchor including last minute',async()=>{
+  for(const remaining of[20*86400000,47*3600000,3600000,60000])for(const offerId of['core','core_locum']) {
+    const f=deferredFixture(remaining,offerId),h=createLimitedLaunchHandlers(f.deps,config);
+    const preview=await(await h.quote(request({offerId}))).json();
+    assert.equal(preview.paymentTiming,'after_beta');assert.equal(preview.paymentAtCheckout,false);assert.equal(preview.amountDueNowCents,0);
+    assert.equal(preview.firstChargeAt,f.q.billing_start_at);assert.equal(preview.betaEndsAt,f.q.beta_ends_at);
+    assert.equal(preview.annualCents,offerId==='core'?9900:24500);
+    assert.equal((await h.checkout(paidRequest())).status,200);
+    const [,args]=f.calls.find(c=>c[0]==='checkout');
+    assert.equal(args.mode,'subscription');assert.equal(args.payment_method_collection,'always');assert.deepEqual(args.payment_method_types,['card']);
+    assert.equal(args.subscription_data.billing_cycle_anchor,f.anchor);assert.equal(args.subscription_data.proration_behavior,'none');
+    assert.equal(args.subscription_data.trial_end,undefined);assert.equal(args.subscription_data.trial_period_days,undefined);
+    assert.equal(args.metadata.billing_start_at,String(f.anchor));assert.equal(args.line_items[0].price,'price_Annual');
+    assert.ok(args.custom_text.submit.message.includes(f.q.billing_start_at.replace('T',' ').replace('.000Z',' UTC')));
+    assert.match(args.custom_text.submit.message,/\$0 due before/);assert.match(args.custom_text.submit.message,/Checkout completes if later/);assert.ok(args.custom_text.submit.message.length<1200);
+    assert.equal(f.eligibility.free_beta.endsAt,f.q.beta_ends_at);
+  }
+});
+test('deferred provider parameters and idempotency stay identical across retries, never restart beta',async()=>{
+  const f=deferredFixture();const h=createLimitedLaunchHandlers(f.deps,config);
+  await h.checkout(paidRequest());f.deps.now=()=>now+60000;await h.checkout(paidRequest());
+  const calls=f.calls.filter(c=>c[0]==='checkout');assert.equal(calls.length,2);assert.deepEqual(calls[0],calls[1]);
+});
+test('active beta cannot use immediate-charge, client-supplied or tampered timing; lifetime remains excluded',async()=>{
+  for(const alter of[f=>{f.preview.beta_ends_at=null;f.preview.billing_start_at=null;},f=>{f.q.billing_start_at=new Date(f.anchor*1000+1000).toISOString();},f=>{f.preview.billing_start_at=new Date(f.anchor*1000-1000).toISOString();},f=>{f.eligibility.free_beta.endsAt=new Date(f.anchor*1000+86400000).toISOString();},f=>{f.eligibility.free_beta.state='none';},f=>{f.eligibility.state='lifetime_access_already_granted';}]) {
+    const f=deferredFixture();alter(f);const res=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
+    assert.ok([409,503].includes(res.status));assert.equal(f.calls.some(c=>c[0]==='checkout'),false);
+  }
+  const f=deferredFixture();assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest({billingStartAt:new Date(now).toISOString()}))).status,400);
+});
+test('new Checkout crossing its immutable beta anchor requires refreshed consent, including time spent in provider reads',async()=>{
+  for(const crossDuringRead of[false,true]) {
+    const f=deferredFixture(60000);let time=now;f.deps.now=()=>time;
+    if(crossDuringRead) f.deps.store.pinPrice=async()=>{time=f.anchor*1000;}; else time=f.anchor*1000;
+    const res=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
+    assert.equal(res.status,409);assert.equal((await res.json()).error,'quote_expired');assert.equal(f.calls.some(c=>c[0]==='checkout'),false);
+  }
+});
+test('no-payment-required completion is recorded without a paid membership, receipt or Practice trial',async()=>{
+  const f=deferredFixture();assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);
+  const [,args,,proof]=f.calls.find(c=>c[0]==='settle');assert.equal(proof,null);assert.equal(args.p_billing_anchor,f.anchor);assert.equal(args.p_period_end,f.q.billing_start_at);assert.equal(args.p_cancel_at_period_end,false);
+});
+test('first full invoice starts annual period at original anchor even when card payment completes later',async()=>{
+  for(const delay of[0,3600,86400*3])for(const offer of['core','core_locum']) {
+    const f=deferredFixture(60000,offer);markDeferredPaid(f,{delay});
+    assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);
+    const [,args,,proof]=f.calls.find(c=>c[0]==='settle');assert.equal(proof.initial,true);assert.equal(proof.annualCents,offer==='core'?9900:24500);
+    assert.equal(proof.paidAt,new Date((f.anchor+delay)*1000).toISOString());assert.equal(proof.periodEnd,new Date((f.anchor+31536000)*1000).toISOString());assert.equal(args.p_billing_anchor,f.anchor);
+  }
+});
+test('deferred renewal retains immutable original anchor without a second initial Practice trial',async()=>{
+  const f=deferredFixture();markDeferredPaid(f,{renewal:true});
+  assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);
+  assert.equal(f.calls.find(c=>c[0]==='settle')[3].initial,false);
+});
+test('scheduled cancellation and first-payment failure never mint paid evidence',async()=>{
+  for(const alter of[f=>{f.sub.cancel_at_period_end=true;},f=>{f.sub.status='canceled';},f=>{f.sub.status='past_due';f.sub.current_period_end=f.anchor+31536000;f.sub.latest_invoice='in_A';f.invoice.status='open';f.invoice.paid=false;}]) {
+    const f=deferredFixture();alter(f);
+    assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,200);
+    const [,args,,proof]=f.calls.find(c=>c[0]==='settle');assert.equal(proof,null);assert.equal(args.p_cancel_at_period_end,f.sub.cancel_at_period_end);
+  }
+});
+test('deferred settlement rejects shifted anchor, early payment, partial periods, trials and monetary mismatch',async()=>{
+  for(const alter of[f=>f.sub.billing_cycle_anchor++,f=>f.sub.metadata.billing_start_at='1',f=>f.sub.trial_end=f.anchor,f=>f.sub.collection_method='send_invoice',f=>f.sub.pause_collection={behavior:'void'},f=>delete f.sub.cancel_at_period_end,f=>f.sub.current_period_start=f.anchor-1,f=>f.invoice.status_transitions.paid_at=f.anchor-1,f=>f.invoice.lines.data[0].period.start++,f=>f.invoice.lines.data[0].period.end--,f=>f.invoice.lines.data[0].proration=true,f=>f.invoice.amount_paid=0,f=>f.invoice.amount_paid=1,f=>f.invoice.amount_due=1,f=>f.invoice.total_discount_amounts=[{amount:1}],f=>f.invoice.lines.data[0].amount=1]) {
+    const f=deferredFixture();markDeferredPaid(f);alter(f);
+    assert.equal((await createLimitedLaunchHandlers(f.deps,config).webhook(request({},true))).status,503);assert.equal(f.calls.some(c=>c[0]==='settle'),false);
+  }
+});
+test('existing scheduled/active subscription blocks second card Checkout even before first paid invoice',async()=>{
+  const f=deferredFixture();f.stripe.subscriptions.list=async()=>({data:[f.sub],has_more:false});
+  assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,409);assert.equal(f.calls.some(c=>c[0]==='checkout'),false);
+});
+test('scheduled membership snapshot is bounded, internally consistent and never grants through checkout eligibility',async()=>{
+  const scheduled={offerId:'core',startsAt:'2026-10-19T18:00:00Z',annualCents:9900,currency:'usd',interval:'year',status:'scheduled',cancelAtPeriodEnd:false,firstChargeCanceled:false};
+  const snapshot={schemaVersion:1,policyVersion:config.policyVersion,enforcementEnabled:true,billingEnabled:true,checkoutEligible:false,pricePhase:'founding',purchasedOfferId:null,scheduledMembership:scheduled};
+  const deps={authenticate:async()=>({id:'synthetic',auth_user_id:'user_a'}),readOwnSnapshot:async()=>snapshot};
+  const h=createAccessPolicyHandler(deps,{...PUBLIC_BILLING_POLICY,enforcementEnabled:true});
+  assert.equal((await h(request({}))).status,200);
+  for(const change of[{status:'canceling'},{cancelAtPeriodEnd:true},{annualCents:1},{startsAt:'invalid'},{offerId:'free'},{status:'active'},{firstChargeCanceled:true}]) {
+    snapshot.scheduledMembership={...scheduled,...change};assert.equal((await h(request({}))).status,503);
+  }
+  snapshot.scheduledMembership={...scheduled,status:'canceling',cancelAtPeriodEnd:true};assert.equal((await h(request({}))).status,200);
+  snapshot.checkoutEligible=true;assert.equal((await h(request({}))).status,503);
+  snapshot.checkoutEligible=false;snapshot.checkoutResumeAvailable=true;snapshot.checkoutResumeOfferId='core';assert.equal((await h(request({}))).status,503);
+  snapshot.scheduledMembership=null;assert.equal((await h(request({}))).status,200);
+});
+test('expired beta can resume only the already-owned open deferred Checkout under its original explicit terms',async()=>{
+  for(const providerState of['open','expired','complete']) {
+    const f=deferredFixture(60000);f.deps.now=()=>f.anchor*1000+1000;f.eligibility.free_beta.state='expired';f.preview.expires_at=new Date(f.anchor*1000+1800000).toISOString();
+    let claims=0;
+    f.deps.store.claimLimitedCheckout=async()=> ++claims===1 ? {state:'existing',attempt_id:f.q.attempt_id,offer_id:f.q.offer_id,session_id:'cs_Saved',quote:f.q} : {state:'quote_expired'};
+    f.stripe.checkout.sessions.retrieve=async()=>({id:'cs_Saved',customer:'cus_A',livemode:false,status:providerState,url:'https://checkout.stripe.com/c/original',subscription:null,metadata:{checkout_attempt_id:f.q.attempt_id,clerk_user_id:'user_a',catalog_version:config.version}});
+    f.deps.store.closeCheckout=async(...args)=>f.calls.push(['close',...args]);
+    const response=await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest());
+    if(providerState==='open') {assert.equal(response.status,200);assert.equal((await response.json()).url,'https://checkout.stripe.com/c/original');assert.equal(f.calls.some(c=>c[0]==='close'),false);}
+    else {assert.equal(response.status,409);assert.equal((await response.json()).error,providerState==='complete'?'subscription_already_exists':'quote_expired');assert.equal(f.calls.filter(c=>c[0]==='close').length,1);}
+    assert.equal(f.calls.some(c=>c[0]==='checkout'),false,'past-anchor receipt must never create a fresh Stripe session');
+  }
 });
