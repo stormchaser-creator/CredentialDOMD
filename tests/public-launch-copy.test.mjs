@@ -50,9 +50,12 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /not all payments from past years/);
     assert.match(html, /separate 30-day Practice trial/);
     assert.match(html, /Continuing Practice requires an explicit purchase/);
+    assert.match(html, /Existing Credential members should contact support@credentialdomd.com to review options for adding Practice/);
+    assert.match(html, /no change or charge will occur without their agreement/);
+    assert.match(html, /Practice records remain available to read and export/);
     assert.match(html, /keep Credential and Practice free for life/);
     assert.match(html, /waitlist entry alone does not qualify for lifetime access/);
-    assert.match(html, /\$245\/year total/);
+    assert.match(html, /\$245\/year total at first purchase/);
     assert.doesNotMatch(html, /Checkout is not open|invitation will confirm eligibility|<form\b[^>]*class="[^"]*wl-form/i);
   });
 }

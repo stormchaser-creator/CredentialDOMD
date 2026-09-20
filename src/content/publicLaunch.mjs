@@ -71,13 +71,13 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
     publicRateHeadline: 'Early-bird Credential: $149/year, locked while membership remains active.',
     publicPrice: '$149',
     publicPriceLabel: ' / year, early-bird Credential',
-    fullPackage: 'Credential + Practice is $245/year total. The full package has no founding or early-bird discount.',
+    fullPackage: 'Credential + Practice is $245/year total at first purchase. The full package has no founding or early-bird discount.',
     refundGuarantee: 'No-hassle 100% money-back guarantee: request a full refund of your most recent annual membership payment, including a renewal payment, at any time. There is no request deadline or prorating. This covers your most recent annual payment, not all payments from past years. Request through Get help in the app or support@credentialdomd.com. You do not need to delete your account, saved records or reports to request a refund.',
     promisedBeta: enabled
       ? 'Eligible people who signed up under the earlier free-beta wording receive 30 days free with no card, starting when they first activate their account with a verified email address. The app shows the exact end date; signing in again does not restart those 30 days. You may opt in to $99/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription. Your first charge is scheduled for your original beta end date, when your paid year starts. Choosing early does not charge you early or start a new trial. You keep the same account and saved records. If you never opt in, there is no automatic charge and nothing to cancel. Paid membership renews annually unless canceled.'
       : 'People who signed up under the earlier free-beta wording will receive 30 days free with no card. Their invitation will confirm eligibility and when those 30 days start. Continuing afterward requires an explicit $99/year Credential purchase; there is no automatic charge.',
     lifetimeException: 'Existing accounts eligible under the announced lifetime-access policy keep Credential and Practice free for life. A waitlist entry alone does not qualify for lifetime access. Account eligibility must be confirmed before asking an existing member to pay.',
-    practiceTrial: 'New paid Credential members receive a separate 30-day Practice trial when their first annual payment is confirmed. It ends without an added charge. Continuing Practice requires an explicit purchase; the paid Credential membership continues.',
+    practiceTrial: 'New paid Credential members receive a separate 30-day Practice trial when their first annual payment is confirmed. It ends without an added charge. Continuing Practice requires an explicit purchase. Existing Credential members should contact support@credentialdomd.com to review options for adding Practice; no change or charge will occur without their agreement. The paid Credential membership continues, and existing Practice records remain available to read and export.',
     guideCapture: Object.freeze({
       purpose: 'requested-guide',
       submitLabel: 'Email me the guide',

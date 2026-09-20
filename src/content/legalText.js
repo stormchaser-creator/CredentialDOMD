@@ -266,7 +266,8 @@ export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   membership.title = '1. Membership, early release and pricing';
   membership.blocks[0] = 'CredentialDOMD offers paid membership in an early release. Features and workflows are still being refined. You will see the applicable price and renewal terms before choosing a membership, and a card is required at paid checkout. Nothing will be charged without your agreement.';
   membership.blocks[2] = 'Eligible founding members get Credential for $99 per year. The early-bird price is $149 per year and the standard price is $199 per year. Founding and early-bird members keep their annual rate for life while their membership stays active. We will identify the available offer and eligibility before purchase; these phases do not create a published deadline or reservation by themselves.';
-  membership.blocks[4] = membership.blocks[4].replace('At paid launch, a new Credential membership will include 30 days of Practice access', 'A new paid Credential membership includes 30 days of Practice access starting when the first annual payment is confirmed');
+  membership.blocks[3] = view.fullPackage.replace('$245/year', '$245 per year');
+  membership.blocks[4] = view.practiceTrial;
   membership.blocks.splice(2, 0, view.promisedBeta.replace('$99/year', '$99 per year') + ' If an unfinished checkout is completed after the original beta end date, the first charge is collected when checkout completes; the paid year still starts at that original beta end date. Beta expiry does not delete your account or records; saved records remain available to read and export.');
   membership.blocks.push(view.refundGuarantee);
   const support = terms.sections.find(section => section.title === '8. Support');

@@ -233,8 +233,12 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
       assert.match(section.blocks[3], /\$99.*\$149.*\$199/);
       assert.match(section.blocks[3], /for life while their membership stays active/);
-      assert.equal(section.blocks[4], old.blocks[3], '$245 undiscounted package unchanged');
-      assert.equal(section.blocks[5], old.blocks[4].replace('At paid launch, a new Credential membership will include 30 days of Practice access', 'A new paid Credential membership includes 30 days of Practice access starting when the first annual payment is confirmed'));
+      assert.equal(section.blocks[4], publicLaunchPresentation(paid).fullPackage.replace('$245/year', '$245 per year'));
+      assert.match(section.blocks[4], /at first purchase/);
+      assert.equal(section.blocks[5], publicLaunchPresentation(paid).practiceTrial);
+      assert.match(section.blocks[5], /first annual payment is confirmed/);
+      assert.match(section.blocks[5], /Existing Credential members should contact support@credentialdomd.com to review options for adding Practice/);
+      assert.match(section.blocks[5], /no change or charge will occur without their agreement/);
       assert.match(section.blocks[5], /read and export/);
       assert.equal(section.blocks[6], old.blocks[5]);
       assert.equal(section.blocks[7], publicLaunchPresentation(paid).refundGuarantee);
