@@ -82,6 +82,45 @@ test('locums visible cost and structured data share the same active offer and ex
   assert.deepEqual(faq.mainEntity.filter(item => item.name !== 'What does it cost?'), before.mainEntity.filter(item => item.name !== 'What does it cost?'));
 });
 
+test('home signup and team FAQs use current offers in visible answers and structured data', async () => {
+  const source = await read('landing/index.html');
+  assert.equal(renderPublicLaunch(source, 'home', off), source);
+  assert.match(source, /Early access opens to the waitlist first, in order/);
+  const output = renderPublicLaunch(source, 'home');
+  const faq = jsonLd(output).find(item => item['@type'] === 'FAQPage');
+  assert.equal(faq.mainEntity.length, 2);
+  const visible = output.replace(/<script\b[\s\S]*?<\/script>/g, '');
+  for (const answer of faq.mainEntity) {
+    assert.ok(visible.includes(answer.name));
+    assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);
+  }
+  const available = faq.mainEntity.find(item => item.name === 'When can I use it?').acceptedAnswer.text;
+  assert.match(available, /Early-bird signup is open/);
+  assert.match(available, /\$149\/year/);
+  assert.match(available, /\$99\/year founding Credential offer is reserved for eligible earlier waitlist members/);
+  const teams = faq.mainEntity.find(item => item.name.includes('practice manager')).acceptedAnswer.text;
+  assert.match(teams, /on the roadmap and are not currently available/);
+  assert.match(teams, /support@credentialdomd.com/);
+  assert.match(teams, /individual Practice package does not provide team-wide account management/);
+  assert.doesNotMatch(output, /field testing right now|waitlist first, in order|Leave your email above|when your spot is ready|earliest names on the list|practices get priority onboarding/i);
+  for (const slot of ['faq-availability', 'faq-teams', 'home-faq-json']) {
+    const missing = source.replace(new RegExp(`<!-- public-launch:${slot} -->[\\s\\S]*?<!-- /public-launch:${slot} -->`), '');
+    assert.throws(() => renderPublicLaunch(missing, 'home'), /Incomplete home migration/);
+  }
+});
+
+test('launch render rejects observed stale promises in visible copy and JSON-LD', async () => {
+  const source = await read('landing/index.html');
+  for (const text of ['CredentialDOMD is in field testing right now.',
+    'Early access opens to the waitlist first, in order.', 'Leave your email above.',
+    'You will get one message when your spot is ready.', 'The earliest names on the list get founding-member perks.',
+    'Join the early-access list and mention your group size.', 'Practices get priority onboarding when the team features ship.']) {
+    assert.throws(() => renderPublicLaunch(source + `<p>${text}</p>`, 'home'), /Unmigrated public launch wording/, text);
+    const schema = { '@type': 'FAQPage', mainEntity: [{ name: 'Availability', acceptedAnswer: { text } }] };
+    assert.throws(() => renderPublicLaunch(source + `<script type="application/ld+json">${JSON.stringify(schema)}</script>`, 'home'), /Unmigrated public launch wording/, `structured: ${text}`);
+  }
+});
+
 test('all 51 guides keep four requested-guide forms and facts while removing waitlist choices', async () => {
   const files = (await readdir(new URL('../landing/states/', import.meta.url))).filter(file => file.endsWith('.html') && file !== 'index.html');
   assert.equal(files.length, 51);

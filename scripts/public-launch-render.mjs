@@ -34,7 +34,7 @@ function signupInsteadOfForm(fallback, view) {
 }
 
 const minimumSlots = {
-  home: { cta: 4, form: 2, 'early-release': 1, participation: 1 },
+  home: { cta: 4, form: 2, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1 },
   locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
@@ -49,6 +49,10 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
   const view = publicLaunchPresentation(mode);
   if (!mode.enabled) return html;
   if (!minimumSlots[surface]) throw Error(`Unknown public launch surface: ${surface}`);
+  const homeFaq = [
+    { name: 'When can I use it?', text: `${view.availability} ${view.foundingRate}` },
+    { name: 'Can my practice manager use this for our whole group?', text: view.teamAvailability },
+  ];
   const counts = {};
   const output = html.replace(/<!-- public-launch:([a-z-]+) -->([\s\S]*?)<!-- \/public-launch:\1 -->/g, (_whole, slot, fallback) => {
     counts[slot] = (counts[slot] || 0) + 1;
@@ -56,6 +60,12 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
     if (slot === 'cta') return navigation(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
     if (slot === 'guide-consent') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note)} <a href="${escapeHtml(view.primaryAction.href)}">${escapeHtml(view.primaryAction.shortLabel)}</a></p>`;
+    if (slot === 'home-faq-json') {
+      const schema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: homeFaq.map(answer => ({
+        '@type': 'Question', name: answer.name, acceptedAnswer: { '@type': 'Answer', text: answer.text },
+      })) };
+      return `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`;
+    }
     if (slot === 'faq-json') {
       const match = fallback.match(/^(\s*<script type="application\/ld\+json">)([\s\S]*?)(<\/script>\s*)$/);
       if (!match) throw Error('Missing launch FAQ JSON-LD');
@@ -72,6 +82,8 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
     if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
     const text = {
       'availability': view.availability,
+      'faq-availability': homeFaq[0].text,
+      'faq-teams': homeFaq[1].text,
       'invitation-copy': 'Create your account, then review your eligible offer. Early-bird Credential is $149/year; Credential + Practice is $245/year total. Creating an account does not charge you.',
       'signup-heading': view.signupHeading,
       'signup-label': view.primaryAction.label,
@@ -97,7 +109,10 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
   }
   if (output.includes('<!-- public-launch:')) throw Error(`Unrendered launch slot in ${surface}`);
   const visible = output.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<style\b[\s\S]*?<\/style>/gi, '').replace(/<!--[^]*?-->/g, '').replace(/<[^>]+>/g, ' ');
-  const stale = visible.match(/join (?:the )?(?:waitlist|list)|request (?:beta|early) access|get early access|free during beta|free invite.only beta|checkout is not open|billing is off/i);
+  // Inspect structured answers too: stripping scripts alone misses stale FAQ offers.
+  const structured = [...output.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map(match => JSON.stringify(JSON.parse(match[1]))).join(' ');
+  const stale = `${visible} ${structured}`.match(/join (?:the )?(?:waitlist|list)|request (?:beta|early) access|get early access|free during beta|free invite.only beta|checkout is not open|billing is off|field testing right now|early access opens to (?:the )?waitlist|waitlist first,? in order|leave your email above|when your spot is ready|earliest names on the list|join the early.access list and mention your group size|practices get priority onboarding|after individual early access opens/i);
   if (stale) {
     throw Error(`Unmigrated public launch wording in ${surface}: ${stale[0]}`);
   }

@@ -59,6 +59,7 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
       ? 'Early-bird signup is open. New members can choose Credential for $149/year, with that annual rate locked while membership remains active. Paid membership requires a card at checkout. Review your offer before choosing to pay.'
       : 'Checkout is not open. Join the waitlist for your invitation and membership details. A waitlist request does not create a paid account or charge you; future paid access requires a card at checkout.',
     earlyRelease: 'CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.',
+    teamAvailability: 'Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
     founderParticipation: 'Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.',
     foundingRate: enabled
       ? 'The $99/year founding Credential offer is reserved for eligible earlier waitlist members and individually confirmed founding members, with that annual rate locked for life while their membership remains active.'

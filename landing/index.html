@@ -59,6 +59,8 @@
 }
 </script>
 
+<!-- public-launch:home-faq-json --><!-- /public-launch:home-faq-json -->
+
 <!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. -->
 <script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:document.referrer}))</script>
 
@@ -2705,7 +2707,7 @@ footer {
         </button>
         <div class="faq-answer">
           <div class="faq-answer-inner">
-            CredentialDOMD is in field testing right now. The founder runs his own licenses, CME, hospital assignments, and invoices through it every day. Early access opens to the waitlist first, in order. Leave your email above and you will get one message when your spot is ready. The earliest names on the list get founding-member perks at launch.
+            <!-- public-launch:faq-availability -->CredentialDOMD is in field testing right now. The founder runs his own licenses, CME, hospital assignments, and invoices through it every day. Early access opens to the waitlist first, in order. Leave your email above and you will get one message when your spot is ready. The earliest names on the list get founding-member perks at launch.<!-- /public-launch:faq-availability -->
           </div>
         </div>
       </div>
@@ -2785,7 +2787,7 @@ footer {
         </button>
         <div class="faq-answer">
           <div class="faq-answer-inner">
-            That is the plan. A practice tier with a team-wide compliance view, per-provider profiles, and consolidated alerts is on the roadmap after individual early access opens. Join the early-access list and mention your group size; practices get priority onboarding when the team features ship.
+            <!-- public-launch:faq-teams -->That is the plan. A practice tier with a team-wide compliance view, per-provider profiles, and consolidated alerts is on the roadmap after individual early access opens. Join the early-access list and mention your group size; practices get priority onboarding when the team features ship.<!-- /public-launch:faq-teams -->
           </div>
         </div>
       </div>
