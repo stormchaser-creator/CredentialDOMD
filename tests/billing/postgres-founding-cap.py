@@ -6,6 +6,7 @@ provider requests, live rows, email, or deployment. Provider-backed continuity
 helpers are explicit fixture stubs. The real prerequisite billing/access/signup
 SQL and founding-cap migration implement every operation under test.
 """
+import argparse
 import concurrent.futures
 import hashlib
 import json
@@ -18,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[2]
 BIN = Path('/opt/homebrew/opt/postgresql@17/bin')
 ENV = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
 checks = []
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--mutation', choices=['paid-gte-95'], help='Inject a test-only SQL mutation in memory; the suite must fail.')
+mutation = parser.parse_args().mutation
 
 
 def check(name, condition):
@@ -152,7 +156,12 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/private/tmp') as 
             'limited_billing_eligibility(uuid,text,boolean)', 'bootstrap_limited_signup(uuid,text,boolean,text)',
             'claim_limited_billing_checkout(uuid,text,boolean,text,uuid,text)', 'settle_limited_billing_subscription(jsonb,uuid,jsonb)']}
         migration = (ROOT / 'supabase/migrations/20260922010000_public_founding_capacity.sql').read_text()
-        sql(migration)
+        executed_migration = migration
+        if mutation == 'paid-gte-95':
+            original = "if paid=100 then return 'paid_out'; end if;"
+            assert migration.count(original) == 1, 'mutation target changed; review the test'
+            executed_migration = migration.replace(original, "if paid>=95 then return 'paid_out'; end if;", 1)
+        sql(executed_migration)
         check('migration stages no programs, promises, quotes, beta grants or activation', count() == 0 and sql("select (select count(*) from limited_founding_programs)+(select count(*) from limited_billing_quotes)+(select count(*) from limited_beta_grants)").stdout.strip() == '0' and sql('select not(enforcement_enabled or limited_checkout_enabled or limited_invitation_enabled or limited_self_service_enabled or public_founding_enabled) from access_policy_settings').stdout.strip() == 't')
         check('four reviewed base routine bodies survive wrapper renames exactly', all(sql(f"select pg_get_functiondef('{name.replace('(', '_before_founding(', 1)}'::regprocedure)").stdout.replace(name.split('(')[0] + '_before_founding(', name.split('(')[0] + '(', 1) == body for name, body in bodies.items()))
 
@@ -306,10 +315,26 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/private/tmp') as 
         unpaid_n = next(n for n in winners if n != released_n)
         check('unpaid active settlement commits a seat without marking it paid', settle(unpaid_n, winners[unpaid_n], 'evt_Unpaid', paid=False) == 'applied' and sql(f"select state from limited_founding_slots where livemode and profile_id='{pid(unpaid_n)}'").stdout.strip() == 'committed' and count("livemode and state='paid'") == 0)
         check('committed unpaid subscription cannot use the expired-session release', not release(unpaid_n, winners[unpaid_n], expired_proof(unpaid_n, 'Final')) and count('livemode') == 100)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
-            paid_results = list(pool.map(lambda pair: settle(pair[0], pair[1], f'evt_Paid{pair[0]}'), winners.items()))
+        # Observe the real threshold between batches; checking only zero and100
+        # missed an erroneous earlier transition such as paid>=95.
+        paid_results = []
+        ordered_winners = list(winners.items())
+        previous = 0
+        for threshold in [95, 96, 99, 100]:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+                paid_results.extend(pool.map(lambda pair: settle(pair[0], pair[1], f'evt_Paid{pair[0]}'), ordered_winners[previous:threshold]))
+            previous = threshold
+            if threshold < 100:
+                offer = value('public_membership_offer()')
+                check(f'exactly{threshold} paid of100 occupied keeps public99 pending and protected holder99',
+                      all(r == 'applied' for r in paid_results) and count("livemode and state='paid'") == threshold
+                      and int(sql('select count(*) from limited_paid_purchase_history where livemode').stdout) == threshold
+                      and count('livemode') == 100
+                      and offer == {'schemaVersion': 1, 'phase': 'founding', 'annualCents': 9900, 'checkoutEnabled': True, 'availability': 'temporarily_full'}
+                      and claim(losers[0], pending_previews[losers[0]])['state'] == 'founding_capacity_pending'
+                      and preview(204)['annual_cents'] == 9900)
         check('100 actual validated paid settlements commit exactly100 permanent live places', all(r == 'applied' for r in paid_results) and count("livemode and state='paid'") == 100 and sql('select count(*) from limited_paid_purchase_history where livemode').stdout.strip() == '100')
-        check('only paid-ever100 transitions public Core to149', value('public_membership_offer()')['annualCents'] == 14900 and value('public_membership_offer()')['availability'] == 'available')
+        check('only paid-ever100 transitions public Core to149', value('public_membership_offer()') == {'schemaVersion': 1, 'phase': 'earlybird', 'annualCents': 14900, 'checkoutEnabled': True, 'availability': 'available'})
         stale_n = losers[0]
         check('previously displayed99 consent cannot silently accept149', claim(stale_n, pending_previews[stale_n])['state'] == 'quote_expired')
         new149 = preview(stale_n)
@@ -323,7 +348,8 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/private/tmp') as 
         enroll(502, live=False)
         check('new test account still previews99 after live sellout; prior test purchaser has199 rejoin', preview(502, live=False)['annual_cents'] == 9900 and preview(501, live=False)['annual_cents'] == 19900 and sql("select founding_public_state(false)").stdout.strip() == 'available')
         print(json.dumps({'result': 'PASS', 'count': len(checks),
-                          'migrationSHA256': hashlib.sha256(migration.encode()).hexdigest(), 'checks': checks,
+                          'migrationSHA256': hashlib.sha256(migration.encode()).hexdigest(),
+                          'executedMigrationSHA256': hashlib.sha256(executed_migration.encode()).hexdigest(), 'mutation': mutation, 'checks': checks,
                           'limits': 'Disposable PostgreSQL17; actual billing/access/signup/deferred/cap SQL, synthetic payment proofs and identity-continuity stubs. No Stripe verification or refund operation simulated; the paid-seat persistence and release-denial contract is tested. No provider/live data/network listener.'}, indent=2))
     finally:
         result = run(BIN / 'pg_ctl', '-D', base / 'data', '-m', 'fast', '-w', 'stop')
