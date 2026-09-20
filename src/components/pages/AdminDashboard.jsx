@@ -788,16 +788,17 @@ function ErrorsList({ rows, users, T, onCleared }) {
   );
 }
 
-/** Calls the admin-only send-invite function. Returns { ok, error }. */
+/** Calls the admin-only send-invite function. A held request is never a send. */
 async function sendInvite(body) {
   try {
     const { data, error } = await supabase.functions.invoke("send-invite", { body });
     if (error) {
       let msg = error.message;
-      try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch { /* ignore */ }
-      return { ok: false, error: msg };
+      let held = false;
+      try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; held = j?.held === true; } catch { /* ignore */ }
+      return { ok: false, held, error: msg };
     }
-    if (data?.error) return { ok: false, error: data.error };
+    if (data?.held || data?.ok !== true) return { ok: false, held: data?.held === true, error: data?.error || "The server did not confirm an invitation send." };
     return { ok: true, data };
   } catch (e) { return { ok: false, error: e.message }; }
 }
@@ -843,14 +844,14 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
     const r = await sendInvite({ email: e, name: name.trim() });
     setBusy(false);
     if (r.ok) { setMsg(`Invitation sent to ${e}.`); setEmail(""); setName(""); refresh(); }
-    else setMsg(`Could not invite: ${r.error}`);
+    else setMsg(r.held ? r.error : `Could not invite: ${r.error}`);
   };
 
   const resend = async (inv) => {
     setBusy(true); setMsg("");
     const r = await sendInvite({ email: inv.email, name: inv.name, resend: true });
     setBusy(false);
-    setMsg(r.ok ? `Re-sent to ${inv.email}.` : `Could not re-send: ${r.error}`);
+    setMsg(r.ok ? `Re-sent to ${inv.email}.` : r.held ? r.error : `Could not re-send: ${r.error}`);
     if (r.ok) refresh();
   };
 
@@ -898,13 +899,13 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
     <div>
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 6 }}>Invite a physician</div>
-        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>They get an email from whit@credentialdomd.com and can sign up with that exact address. Nobody else gets past the sign-in screen.</div>
+        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>Invitation emails are on hold for owner review of the exact message and recipient list. An invitation request will not send email or change access while held.</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Name (optional)" style={{ flex: "1 1 120px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
           <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@domain.com" type="email" autoCapitalize="none" style={{ flex: "2 1 180px", padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, fontSize: 13 }} />
           <button onClick={invite} disabled={busy} style={{ padding: "8px 14px", borderRadius: 8, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{busy ? "..." : "Send invite"}</button>
         </div>
-        {msg && <div style={{ fontSize: 12, color: msg.startsWith("Could not") ? "#ef4444" : "#10b981", marginTop: 6 }}>{msg}</div>}
+        <div role="status" aria-live="polite" style={{ fontSize: 12, color: msg.startsWith("Could not") ? "#ef4444" : T.textMuted, marginTop: 6 }}>{msg}</div>
       </div>
 
       {/* Only invitations still waiting on someone. Once they sign in they
@@ -1051,7 +1052,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
           <div style={{ fontSize: 11, color: T.textMuted }}>
             waiting to join · {alreadyJoined.length} already have access · {guideOnly.length} guide-only requests
           </div>
-          {inviteMsg && <div style={{ fontSize: 12, marginTop: 4, color: inviteMsg.startsWith("Could not") ? "#ef4444" : "#10b981" }}>{inviteMsg}</div>}
+          <div role="status" aria-live="polite" style={{ fontSize: 12, marginTop: 4, color: inviteMsg.startsWith("Could not") ? "#ef4444" : T.textMuted }}>{inviteMsg}</div>
         </div>
         <button onClick={copyAll} disabled={!view.contactable.length} style={{
           padding: "8px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
@@ -1130,11 +1131,11 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
                 <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
                 {onInvite && r.waitlist === true && !activeEmails.has((r.email || "").trim().toLowerCase()) && (
                   <button disabled={inviting === r.id} onClick={async () => {
-                    if (!window.confirm(`Send ${r.email} a beta invitation? They will be able to sign up with that address.`)) return;
+                    if (!window.confirm(`Request an invitation for ${r.email}? Email and access changes are held until the exact message and recipient list receive owner approval.`)) return;
                     setInviting(r.id); setInviteMsg("");
                     const res = await onInvite(r);
                     setInviting(null);
-                    setInviteMsg(res.ok ? `Invitation sent to ${r.email}.` : `Could not invite ${r.email}: ${res.error}`);
+                    setInviteMsg(res.ok ? `Invitation sent to ${r.email}.` : res.held ? res.error : `Could not invite ${r.email}: ${res.error}`);
                   }} style={{
                     padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
                   }}>{inviting === r.id ? "..." : leadState(r, view) === "invited" ? "Re-invite" : "Invite"}</button>
