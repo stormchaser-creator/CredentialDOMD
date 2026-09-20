@@ -62,10 +62,33 @@ Before any eventual production create:
 
 The production identity's new creation timestamp does not replace original lifetime evidence. Existing continuity code independently requires fresh provider verification before restoring the old profile UUID, records and approved access. The importer cannot change that authority. No Stripe, database migration, access grant or customer message is part of this tool.
 
+## Separately reviewed execution core
+
+`scripts/clerk-existing-account-executor.mjs` exports `importPayloadDigest(plan)` and `executeReviewedReservedImport(input, adapters)`. It contains no provider transport, environment/credential reader or command-line entry point. Merely importing it cannot create an identity. A separately reviewed operator wrapper supplies the live transport only after reviewing the exact private owner-only pilot.
+
+`input` contains the reviewed `review`, original `reviewedEvidence`, immutable offline `plan`, and an `approval` object pinning `confirmed: true`, `runId`, `targetInstanceId`, `planSHA256`, `payloadSHA256`, `reviewSHA256`, `selectedSubjectSHA256` and `maxCreates` exactly. The core rebuilds the offline plan and validates those hashes before calling any adapter. `maxCreates` must equal the reviewed number of proposed creates; it cannot increase the batch.
+
+Before invoking the core, the wrapper must acquire a **durable one-shot claim for this exact plan hash** using exclusive creation and flush it. Keep that claim after success, failure, process termination or an uncertain provider response. An exclusive lock alone does not prevent a later invocation from retrying a still-invisible create. The core does not read previous execution journals, so the wrapper must refuse reuse of a claimed plan and require explicit reconciliation plus a newly reviewed resume plan. A fresh zero-result provider read alone does not erase an earlier unresolved request.
+
+Adapters are explicit:
+
+- `readEvidence()` returns current complete source/target user inventories, exact manifest, scoped DB account state and normalized auth configuration in the planner input shape. The wrapper must authenticate the intended instances, prove pagination/array presence, timestamp before reads and preserve provider timestamps. Counts must not be inferred from missing security-factor arrays. It must not synthesize new freshness timestamps for cached data.
+- `createReservedUser(payload, {targetInstanceId})` sends exactly the supplied REST payload to the pinned production instance using the operator's intended authenticated credential path. Do not add verification/password/phone/grant fields, retry POST automatically, or emit full provider responses. Give requests a finite timeout.
+- `appendReceipt(event)` must append to a private mode-`0600` journal and durably flush each intent before returning. Events contain identifiers, request hashes and outcomes, with no raw provider response, address, credential or session. A failed intent write prevents the create; a failed confirmation write stops the batch as unresolved.
+- `withExclusiveLock(key, action)` must provide an actual exclusive operator lock for the target instance and run for the entire awaited action. Use an atomic lock acquisition, release it in a `finally` block, and do not silently steal an uncertain/stale execution's lock.
+- `now()` is optional and exists for simulations. A real wrapper uses the real clock.
+
+The core rechecks fresh evidence before every create and again after a potentially slow intent write. It pins the full production subject set as well as the count, allowing only identities confirmed by this execution to be added. Every successful response gets a fresh complete provider readback before proceeding. A thrown/uncertain create response gets one reconciliation read, with no second POST: an exact reserved identity can be confirmed; anything ambiguous stops. A newly created verified identity or malformed response also stops, without automatic deletion. Already verified identities may be skipped only when they were present in the reviewed baseline with matching marker/mailbox/binding.
+
+Real user OTP verification can race the immediate readback; this deliberately stops rather than claiming the tool proved the reserved creation state. A stopped or partial run requires fresh evidence and review of its actual production count before restarting. The owner-only pilot must prove actual login and preserved records before the remaining users are provisioned.
+
 ## Local verification
 
 ```sh
 node --test tests/clerk-continuity/import-plan.test.mjs
+node --test tests/clerk-continuity/import-executor.test.mjs
 ```
 
 Synthetic cases cover manifest/subset pinning, stale/incomplete evidence, account closure and ownership changes, MFA/SSO/passkey holds, all-address collisions, exact reserved and verified retries, owner-only and remaining-account batches, allocated-profile continuity, protected payload allowlist, private output and rejected mutation arguments. Fixtures contain synthetic addresses only.
+
+Execution simulations additionally cover approval/payload tampering, exclusive serialization, slow/failed intent journals, source changes between users, timeout after creation, uncertain absence, unexpected verified response, malformed readback, unrelated concurrent identities, confirmation-receipt failure, and a reviewed partial retry preserving a bound owner. These simulations make no real HTTP or database calls.
