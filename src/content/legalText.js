@@ -255,7 +255,7 @@ const CURRENT_TERMS = {
 /** The same launch mode supplies the in-app and packaged public legal text. */
 export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   // Validation prevents a flag-only change from advertising unconfigured signup.
-  publicLaunchPresentation(mode);
+  const view = publicLaunchPresentation(mode);
   if (!mode.enabled) return { privacy: CURRENT_PRIVACY, terms: CURRENT_TERMS };
   const privacy = structuredClone(CURRENT_PRIVACY);
   const terms = structuredClone(CURRENT_TERMS);
@@ -266,12 +266,13 @@ export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   membership.title = '1. Membership, early release and pricing';
   membership.blocks[0] = 'CredentialDOMD offers paid membership in an early release. Features and workflows are still being refined. You will see the applicable price and renewal terms before choosing a membership, and a card is required at paid checkout. Nothing will be charged without your agreement.';
   membership.blocks[2] = 'Eligible founding members get Credential for $99 per year. The early-bird price is $149 per year and the standard price is $199 per year. Founding and early-bird members keep their annual rate for life while their membership stays active. We will identify the available offer and eligibility before purchase; these phases do not create a published deadline or reservation by themselves.';
-  membership.blocks[4] = membership.blocks[4].replace('At paid launch, a new Credential membership will include', 'A new paid Credential membership includes');
-  membership.blocks.splice(2, 0, 'Eligible people who signed up under the earlier free-beta wording receive 30 days free with no card, starting when they first activate their account with a verified email address. The app shows the exact end date; signing in again does not restart those 30 days. Continuing afterward requires an explicit $99 per year Credential purchase; there is no automatic charge.');
+  membership.blocks[4] = membership.blocks[4].replace('At paid launch, a new Credential membership will include 30 days of Practice access', 'A new paid Credential membership includes 30 days of Practice access starting when the first annual payment is confirmed');
+  membership.blocks.splice(2, 0, view.promisedBeta.replace('$99/year', '$99 per year') + ' If an unfinished checkout is completed after the original beta end date, the first charge is collected when checkout completes; the paid year still starts at that original beta end date. Beta expiry does not delete your account or records; saved records remain available to read and export.');
+  membership.blocks.push(view.refundGuarantee);
   const support = terms.sections.find(section => section.title === '8. Support');
   support.blocks[0] = support.blocks[0].replace('During beta', 'During early release');
   const liability = terms.sections.find(section => section.title === '10. Warranty and liability');
-  liability.blocks[0] = liability.blocks[0].replace(', which during the free beta is zero', '');
+  liability.blocks[0] = liability.blocks[0].replace(', which during the free beta is zero', '') + ' These warranty and liability limitations do not limit the annual-payment refund guarantee in section 1.';
   return { privacy, terms };
 }
 

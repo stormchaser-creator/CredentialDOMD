@@ -150,7 +150,7 @@ test('actual guide controller forces guide-only even with a stale selected waitl
   }
 });
 
-test('help compilation changes only Practice availability and preserves all reviewed media and dates', async () => {
+test('help compilation adds refund request terms and updates Practice availability while preserving media and dates', async () => {
   const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
   const original = structuredClone(help);
   const output = publicLaunchHelp(help, paid);
@@ -160,6 +160,10 @@ test('help compilation changes only Practice availability and preserves all revi
     if (article.id === 'locum-contract') {
       assert.match(article.availability, /separate 30-day Practice trial/);
       assert.deepEqual({ ...article, availability: old.availability }, old);
+    } else if (article.id === 'get-help') {
+      assert.deepEqual(article.notes.slice(0, -1), old.notes);
+      assert.equal(article.notes.at(-1), publicLaunchPresentation(paid).refundGuarantee);
+      assert.deepEqual({ ...article, notes: old.notes }, old);
     } else assert.deepEqual(article, old);
   }
   const catalog = await loadVideoCatalog(root);
@@ -224,15 +228,18 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.equal(section.title, '1. Membership, early release and pricing');
       assert.equal(section.blocks[1], old.blocks[1], 'existing September 19 lifetime promise');
       assert.match(section.blocks[2], /30 days free with no card/);
-      assert.match(section.blocks[2], /explicit \$99 per year Credential purchase/);
+      assert.match(section.blocks[2], /opt in to \$99 per year Credential during the beta/);
+      assert.match(section.blocks[2], /first charge is scheduled for your original beta end date, when your paid year starts/);
+      assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
       assert.match(section.blocks[3], /\$99.*\$149.*\$199/);
       assert.match(section.blocks[3], /for life while their membership stays active/);
       assert.equal(section.blocks[4], old.blocks[3], '$245 undiscounted package unchanged');
-      assert.equal(section.blocks[5], old.blocks[4].replace('At paid launch, a new Credential membership will include', 'A new paid Credential membership includes'));
+      assert.equal(section.blocks[5], old.blocks[4].replace('At paid launch, a new Credential membership will include 30 days of Practice access', 'A new paid Credential membership includes 30 days of Practice access starting when the first annual payment is confirmed'));
       assert.match(section.blocks[5], /read and export/);
       assert.equal(section.blocks[6], old.blocks[5]);
+      assert.equal(section.blocks[7], publicLaunchPresentation(paid).refundGuarantee);
     } else if (i === 7) assert.equal(section.blocks[0], old.blocks[0].replace('During beta', 'During early release'));
-    else if (i === 9) assert.equal(section.blocks[0], old.blocks[0].replace(', which during the free beta is zero', ''));
+    else if (i === 9) assert.equal(section.blocks[0], old.blocks[0].replace(', which during the free beta is zero', '') + ' These warranty and liability limitations do not limit the annual-payment refund guarantee in section 1.');
     else assert.deepEqual(section, old, old.title);
   }
   assert.deepEqual(on.terms.intro, prior.terms.intro, 'legal operator and acceptance unchanged');
@@ -246,7 +253,11 @@ test('public and in-app legal documents use production defaults and retain an ex
     assert.match(output, /href="\/signup\/"/);
     assert.ok(output.includes(LEGAL_OPERATOR));
   }
-  assert.match(paidPages['terms.html'], /requires an explicit \$99 per year Credential purchase/);
+  assert.match(paidPages['terms.html'], /opt in to \$99 per year Credential during the beta/);
+  assert.match(paidPages['terms.html'], /most recent annual membership payment, including a renewal payment, at any time/);
+  assert.match(paidPages['terms.html'], /no request deadline or prorating/);
+  assert.match(paidPages['terms.html'], /not all payments from past years/);
+  assert.match(paidPages['terms.html'], /limitations do not limit the annual-payment refund guarantee/);
   assert.match(paidPages['privacy.html'], /is in early release/);
 });
 

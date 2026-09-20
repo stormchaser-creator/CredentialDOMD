@@ -41,7 +41,13 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /\$99\/year founding Credential offer is reserved for eligible earlier waitlist members/);
     assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
     assert.match(html, /signing in again does not restart those 30 days/);
-    assert.match(html, /requires an explicit \$99\/year Credential purchase; there is no automatic charge/);
+    assert.match(html, /opt in to \$99\/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription/);
+    assert.match(html, /first charge is scheduled for your original beta end date, when your paid year starts/);
+    assert.match(html, /same account and saved records/);
+    assert.match(html, /If you never opt in, there is no automatic charge and nothing to cancel/);
+    assert.match(html, /full refund of your most recent annual membership payment, including a renewal payment, at any time/);
+    assert.match(html, /no request deadline or prorating/);
+    assert.match(html, /not all payments from past years/);
     assert.match(html, /separate 30-day Practice trial/);
     assert.match(html, /Continuing Practice requires an explicit purchase/);
     assert.match(html, /keep Credential and Practice free for life/);
@@ -78,5 +84,7 @@ test('OFF help fixture is unchanged and production help presents verified beta a
   assert.match(activeHelp.articles.find(article => article.id === 'locum-contract').availability, /first activate their account with a verified email address/);
   assert.match(active, /href="\/app\/"/);
   assert.match(active, /separate 30-day Practice trial/);
+  assert.match(active, /most recent annual membership payment, including a renewal payment, at any time/);
+  assert.match(active, /Request through Get help in the app or support@credentialdomd.com/);
   assert.doesNotMatch(active, /Card required at future paid checkout|Their invitation will confirm/);
 });

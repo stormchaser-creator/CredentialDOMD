@@ -2,7 +2,7 @@ import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from '../src/content/pub
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 export const publicLaunchCostAnswer = view => [view.availability, view.foundingRate, view.rateComparison, view.earlyBirdRateLock,
-  view.fullPackage, view.promisedBeta, view.practiceTrial, view.lifetimeException].join(' ');
+  view.fullPackage, view.promisedBeta, view.practiceTrial, view.lifetimeException, view.refundGuarantee].join(' ');
 
 export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
   if (!mode.enabled) return help;
@@ -11,6 +11,9 @@ export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
   const practice = copy.articles.find(article => article.id === 'locum-contract');
   if (!practice) throw Error('Missing Practice availability in public help');
   practice.availability = [view.practiceTrial, view.promisedBeta, view.lifetimeException].join(' ');
+  const support = copy.articles.find(article => article.id === 'get-help');
+  if (!support || !Array.isArray(support.notes)) throw Error('Missing refund request location in public help');
+  support.notes.push(view.refundGuarantee);
   return copy;
 }
 
@@ -77,7 +80,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
       'founding-headline': view.publicRateHeadline,
       'founding-rate': view.foundingRate,
       'rate-comparison': `${view.rateComparison} ${view.earlyBirdRateLock}`,
-      'full-package': view.fullPackage,
+      'full-package': `${view.fullPackage} ${view.refundGuarantee}`,
       'practice-trial': view.practiceTrial,
       'promised-beta': view.promisedBeta,
       'lifetime-exception': view.lifetimeException,
