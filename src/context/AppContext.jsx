@@ -76,6 +76,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // written under this id only, so a stale timer can never file one
   // account's data under another's key.
   const dataOwnerRef = useRef(null);
+  const dataLoadGeneration = useRef(0);
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
 
@@ -153,6 +154,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       setData(DEFAULT_DATA);
       setLoaded(true);
     }
+    return () => { dataLoadGeneration.current += 1; };
   }, [user?.id, authChecked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Involuntary sign-out (session expiry, revocation from the Clerk
@@ -173,13 +175,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [clerkLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadDataForUser(authUserId) {
+    const generation = ++dataLoadGeneration.current;
+    const current = () => generation === dataLoadGeneration.current
+      && getActiveUserId() === authUserId
+      && (offlineMode || window.Clerk?.user?.id === authUserId);
     // Offline session: straight to this identity's own local cache — the
     // same read path the normal load falls back to when the cloud is
     // unreachable. No profile fetch, no Clerk token, no cloud reads.
-    if (offlineMode) return loadLocalData(authUserId);
+    if (offlineMode) return loadLocalData(authUserId, current);
     try {
       // Ensure profile exists for this auth user
       const profile = await ensureProfile(authUserId);
+      if (!current()) return;
       if (profile) {
         // The server wiped this account (Delete All My Data on another
         // device, or the deletion 7 days after a cancellation) and took the
@@ -192,13 +199,16 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         // the server.
         if (profile.deleted_at && lsGet(WIPE_SEEN_KEY, authUserId) !== profile.deleted_at) {
           try { await purgeUserStorage(authUserId, { keepVault: true }); } catch { /* best effort */ }
+          if (!current()) return;
           lsSet(WIPE_SEEN_KEY, profile.deleted_at, authUserId);
         }
         // Replay any writes that never reached the cloud (offline edits and
         // deletes, transient failures) BEFORE reading back, so the snapshot we
         // merge already reflects them.
         try { await replayPendingOps(profile.id, authUserId); } catch { /* offline */ }
+        if (!current()) return;
         const sbData = await loadFromSupabase(authUserId);
+        if (!current()) return;
         if (sbData) {
           const profileId = sbData._userId;
           delete sbData._userId;
@@ -248,6 +258,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // Deletion ledger: anything deleted anywhere stays deleted.
           let tombstones = new Set();
           try { tombstones = await listTombstones(profileId); } catch { /* offline */ }
+          if (!current()) return;
           if (tombstones.size > 0) {
             for (const key of COLLECTION_KEYS) {
               if (merged[key]?.length) merged[key] = merged[key].filter(x => !tombstones.has(x?.id));
@@ -292,13 +303,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
                 for (const x of (merged[key] || [])) byId.set(x?.id, x);
                 for (const x of toPush) byId.set(x.id, x);
                 merged[key] = [...byId.values()];
-                bulkSync(profileId, key, toPush).catch(() => {});
+                bulkSync(profileId, key, toPush, authUserId).catch(() => {});
                 pushed += toPush.length;
               }
             }
             if (!merged.settings.name && local.settings?.name) {
               merged.settings = { ...merged.settings, ...local.settings };
-              sbSaveSettings(profileId, merged.settings).catch(() => {});
+              sbSaveSettings(profileId, merged.settings, authUserId).catch(() => {});
             }
             if (pushed > 0) {
               console.log(`CredentialDOMD: pushed ${pushed} local item(s) to cloud`);
@@ -315,7 +326,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           for (const ref of pausedApplicationLinks(merged)) liveIds.add(ref);
           merged.documents = (merged.documents || []).map(d => {
             if (d.linkedTo && !liveIds.has(d.linkedTo)) {
-              sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }).catch(() => {});
+              sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }, d, authUserId).catch(() => {});
               return { ...d, linkedTo: "" };
             }
             return d;
@@ -347,7 +358,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // Background: reconcile document FILES with cloud storage.
           //  - file on this device but not in the cloud → upload it
           //  - metadata synced from another device without bytes → download
-          reconcileDocumentFiles(profileId, merged.documents || []);
+          reconcileDocumentFiles(profileId, merged.documents || [], authUserId, current);
           return;
         }
       }
@@ -356,31 +367,35 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     }
 
     // Fallback to this account's own local copy (offline)
-    loadLocalData(authUserId);
+    if (current()) loadLocalData(authUserId, current);
   }
 
-  async function reconcileDocumentFiles(profileId, docs) {
+  async function reconcileDocumentFiles(profileId, docs, authUserId, current) {
     for (const doc of docs) {
+      if (!current()) return;
       try {
         if (doc.data && !doc.storagePath) {
-          const path = await uploadDocumentFile(doc);
+          const path = await uploadDocumentFile(doc, authUserId);
+          if (!current()) return;
           if (path) {
             const updated = { ...doc, storagePath: path };
-            setData(d => ({ ...d, documents: d.documents.map(x => x.id === doc.id ? updated : x) }));
-            sbUpdate(profileId, "documents", { id: doc.id, storagePath: path }).catch(() => {});
+            setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? updated : x) }) : d);
+            sbUpdate(profileId, "documents", { id: doc.id, storagePath: path }, doc, authUserId).catch(() => {});
           }
         } else if (!doc.data && doc.storagePath) {
           const dataUrl = await downloadDocumentFile(doc.storagePath);
+          if (!current()) return;
           if (dataUrl) {
-            setData(d => ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, data: dataUrl } : x) }));
+            setData(d => current() ? ({ ...d, documents: d.documents.map(x => x.id === doc.id ? { ...x, data: dataUrl } : x) }) : d);
           }
         }
       } catch { /* per-file best effort — retried on next load */ }
     }
   }
 
-  async function loadLocalData(authUserId) {
+  async function loadLocalData(authUserId, current) {
     const d = await loadData(authUserId);
+    if (!current()) return;
     if (d._userId) {
       userIdRef.current = d._userId;
       delete d._userId;
@@ -446,9 +461,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   useEffect(() => {
     if (!loaded) return;
     clearTimeout(saveTimer.current);
+    const owner = dataOwnerRef.current;
+    const generation = dataLoadGeneration.current;
     saveTimer.current = setTimeout(() => {
-      const owner = dataOwnerRef.current;
-      if (owner) saveData(data, owner);
+      if (owner && dataOwnerRef.current === owner && getActiveUserId() === owner
+        && dataLoadGeneration.current === generation) saveData(data, owner);
     }, 300);
     return () => clearTimeout(saveTimer.current);
   }, [data, loaded]);
@@ -459,8 +476,17 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
 
   // Check before replacing local state, so a denied restore never overwrites saved data.
   const guardedSetData = useCallback((updater) => {
-    if (!accessAuthority.enabled) { setData(updater); return true; }
-    if (!user?.id || dataOwnerRef.current !== user.id || getActiveUserId() !== user.id || window.Clerk?.user?.id !== user.id) return false;
+    if (!user?.id || dataOwnerRef.current !== user.id || getActiveUserId() !== user.id
+      || (!offlineMode && window.Clerk?.user?.id !== user.id)) return false;
+    if (!accessAuthority.enabled) {
+      const ownerId = user.id;
+      setData(before => {
+        if (dataOwnerRef.current !== ownerId || getActiveUserId() !== ownerId
+          || (!offlineMode && window.Clerk?.user?.id !== ownerId)) return before;
+        return typeof updater === "function" ? updater(before) : updater;
+      });
+      return true;
+    }
     const before = dataRef.current;
     // An updater receives its own copy: in-place changes cannot alter saved data before authorization.
     const next = typeof updater === "function" ? updater(structuredClone(before)) : updater;
@@ -469,7 +495,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     accessAuthority.registerRecords(dataOwnerRef.current, next);
     setData(next);
     return true;
-  }, [user?.id]);
+  }, [user?.id, offlineMode]);
   // Account deletion is an explicit data-rights operation, independent of membership.
   const resetAfterAccountDeletion = useCallback((next) => {
     dataRef.current = next;
@@ -498,9 +524,12 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const theme = useMemo(() => THEMES[data.settings.theme] || THEMES.dark || THEMES.light, [data.settings.theme]);
 
   const toggleTheme = useCallback(() => {
+    const ownerId = dataOwnerRef.current, profileId = userIdRef.current;
+    if (!ownerId || getActiveUserId() !== ownerId) return;
     setData(d => {
+      if (getActiveUserId() !== ownerId || dataOwnerRef.current !== ownerId) return d;
       const newTheme = d.settings.theme === "dark" ? "light" : "dark";
-      sbSaveSettings(userIdRef.current, { theme: newTheme }).catch(() => {});
+      sbSaveSettings(profileId, { theme: newTheme }, ownerId).catch(() => {});
       return { ...d, settings: { ...d.settings, theme: newTheme } };
     });
   }, []);
@@ -512,17 +541,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
 
   const updateSettings = useCallback((updates) => {
     if (!allowsSettingsChange(updates)) return false;
-    if (accessAuthority.enabled) {
-      if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }))) return false;
-      sbSaveSettings(userIdRef.current, updates, user?.id).catch(() => {});
-      return true;
-    }
-    setData(d => {
-      const newSettings = { ...d.settings, ...updates };
-      // Sync to Supabase in background
-      sbSaveSettings(userIdRef.current, updates).catch(() => {});
-      return { ...d, settings: newSettings };
-    });
+    if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }))) return false;
+    sbSaveSettings(userIdRef.current, updates, user?.id).catch(() => {});
+    return true;
   }, [guardedSetData, user?.id]);
 
   const addItem = useCallback((key, item) => {
@@ -532,13 +553,14 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [updateSection]);
 
   const editItem = useCallback((key, item) => {
+    const previous = (dataRef.current[key] || []).find(record => record.id === item.id);
     // Stamp the edit time so the self-heal pass can tell a newer local edit
     // (whose cloud write may have failed) from an older cloud row.
     const stamped = { ...item, updatedAt: new Date().toISOString() };
     if (!updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x))) { window.alert(membershipWriteError().message); return false; }
     // Sync to Supabase
-    sbUpdate(userIdRef.current, key, stamped).catch(() => {});
-  }, [updateSection]);
+    sbUpdate(userIdRef.current, key, stamped, previous, user?.id).catch(() => {});
+  }, [updateSection, user?.id]);
 
   const deleteItemFn = useCallback((key, id) => {
     const before = dataRef.current;

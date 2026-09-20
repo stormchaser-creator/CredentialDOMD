@@ -32,19 +32,32 @@ Error reports and React console diagnostics redact invitation values, including 
 
 Eight additional synthetic tests cover failed history cleanup, encoded and quoted keys, clipping boundaries, filename and nested extra fields, beacon/fetch delivery, development and React console output, and ordinary report deduplication and limits. They use synthetic strings and fake transports.
 
-## Known activation blockers
+## Approved persistence repair
 
-1. **Persistence races remain unresolved.** Initial guards cover collection CRUD, upload, bulk sync, tombstones, and replay admission, but a write already waiting on asynchronous work can outlive its account or entitlement. Queued writes, document operations, replay retries, and replay queue reconciliation need the separately reviewed owner-pinning changes. Do not interpret the local guards as a replacement for server authorization.
-2. Automatic approval review rejected both a broader persistence patch and a narrower guard-only retry, describing them as unrequested changes to live data-write/document-upload paths and citing potential orphaning/incorrect writes and synthetic failures. Rejected changes were not applied. The proposed changes and exact refusal evidence are retained privately for owner review; no further retry or splitting is authorized by this document.
-3. Protected backend migrations, row/storage policies, entitlement/activation/quote/checkout/portal handlers, reviewed cohort snapshots, and deployment flags require coordinated verification. Client-side checks cannot establish purchase, eligibility, or account approval.
-4. A real controlled-account test remains required: verified mailbox invitation binding; lifetime account; grandfathered beta activation and fixed expiry; Core Practice trial; account switch during a delayed write; offline/reconnect; revoked account; expired quote/reconsent; provider settlement; cancellation; saved invoice and attachment exports. Synthetic tests and successful builds do not prove those integrations.
-5. Existing paid Core subscribers have no reviewed purchase/upgrade path for Practice after the trial. The client preserves records and does not create a second subscription. A protected upgrade contract requires separate review.
-6. Setup completeness is not an entitlement condition. No seven-day deadline, revocation, lifetime expiry, or setup-triggered email was implemented.
+The owner explicitly approved isolated repair and testing of saves and document uploads during account switches, followed by review before deployment. The earlier rejected partial patch was not applied. The complete repair captures the initiating account and Clerk session, checks both before/after token minting and immediately before SDK fetch, and checks again before retries, metadata writes, queue writes and state updates. These ownership checks apply with membership enforcement OFF as well as ON.
+
+Settings keep device-only fields outside cloud/queued data. Document retries retain original file bytes under the original account and upload them before acknowledging metadata. No later document CRUD cleanup request runs under a switched account; a sign-out purge is not undone by a late failure. A request already sent while authorized may complete on the server; the client stops later requests and effects, while database/storage authorization remains necessary.
+
+Replay acknowledges unique completed queue entries against a fresh queue read, preserving new or identical appended entries. A delete stays pending until both deletion and its tombstone succeed. Concurrent callers within this tab share one replay. This does not add a cross-tab storage transaction.
+
+Background cloud/local loading and document reconciliation carry an account and load generation. Delayed results cannot update another account, start its next upload, or queue an old profile's data under its identity. Document edits retain their original metadata for feature-scope checks; an unknown prior document cannot claim Credential scope after Practice expires.
+
+The delayed device-cache save also captures its owner and load generation together with its data. A callback from an older render cannot file that render's data under a newly loaded account.
+
+## Remaining activation review
+
+1. Protected backend migrations, row/storage policies, entitlement/activation/quote/checkout/portal handlers, reviewed cohort snapshots, and deployment flags require coordinated verification. Client-side checks cannot establish purchase, eligibility, or account approval. The existing `ensureProfile` helper still uses the shared client across its internal lookup/insert/retry; the caller rejects stale results, but that helper's internal request ownership remains part of security integration review. Profile creation was outside this save/upload repair.
+2. Independent review reproduced a separate existing account-deletion race: `LegalSection` reads the current profile/session again after an awaited request, so a confirmation begun under account A can continue under account B. Automatic approval review rejected the proposed deletion-helper protection as outside the explicit save/upload repair scope and involving irreversible erasure. No deletion-path patch was applied or retried. A private review-only proposal and synthetic reproduction await explicit authorization for that bounded deletion path. The current save/upload repair does not resolve it.
+3. A real controlled-account test remains required: verified mailbox invitation binding; lifetime account; grandfathered beta activation and fixed expiry; Core Practice trial; account switch during a delayed write; offline/reconnect; revoked account; expired quote/reconsent; provider settlement; cancellation; saved invoice and attachment exports. Synthetic tests and successful builds do not prove those integrations.
+4. Existing paid Core subscribers have no reviewed purchase/upgrade path for Practice after the trial. The client preserves records and does not create a second subscription. A protected upgrade contract requires separate review.
+5. Setup completeness is not an entitlement condition. No seven-day deadline, revocation, lifetime expiry, or setup-triggered email was implemented.
 
 ## Validation
 
 The initial access, transport, invitation, and rendered-screen foundation passed 40 synthetic tests, with additional resume tests described above. It covers server-time expiry, lifetime/paid overlap, failed refreshes, identity changes, document relinking, atomic restore preflight, transport deadlines/body bounds, invitation privacy, offer/consent validation, strict Stripe hosts, read-only records/exports, and disabled sales controls. These tests perform no provider or customer requests.
 
-Both the default-OFF and explicitly enabled production builds pass. New client modules pass targeted ESLint. Existing modified modules retain their prior lint findings, with no additional findings relative to the base commit. Separate persistence regression evidence must be read alongside these passing checks; it is not an activation pass.
+The persistence suite now makes all seven original regressions required passing checks rather than executing TODOs. Expanded tests cover same-owner success/recovery as well as delayed settings, token, upload, deletion and replay failures in both enforcement modes. Actual AppContext function tests cover stale background loading and reconciliation. A separate suite runs the installed Supabase SDK with synthetic Clerk tokens and a fake fetch transport, proving token-mint and final-fetch ownership checks without network access.
+
+Both the default-OFF and explicitly enabled production builds pass. New client modules pass targeted ESLint. Existing modified modules retain their prior lint findings, with no additional findings relative to the base commit. These local checks are not an activation pass; the integration and security review above remains necessary.
 
 Build warnings about bundle size, existing dynamic imports, and browser externalization of Node modules predate this work.

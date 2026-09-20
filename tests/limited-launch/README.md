@@ -1,50 +1,57 @@
 # Limited-launch client tests
 
-Run the synthetic client checks with:
+Run the client checks with:
 
 ```sh
 node --test tests/limited-launch/*.test.mjs
 ```
 
-All persistence I/O is mocked. The persistence tests execute the real source
-through the repository's existing esbuild/VM test pattern, with synthetic
-identities, an in-memory queue and a fake Supabase client. They do not call any
-network, account, customer, provider or database service.
+**114 tests pass, with zero skipped or TODO cases.** All external I/O is fake;
+these tests do not call any network, account, provider or database service.
 
-## Outstanding persistence regressions
+## Approved persistence repair
 
-`persistence.test.mjs` contains seven explicit TODO cases. Their callbacks run
-and reproduce the failures; a successful test-runner exit does **not** mean
-these cases pass or that access enforcement is ready to activate.
+The owner explicitly approved isolated save/upload account-switch repair and
+testing. The seven earlier executing TODO regressions are now required passing
+checks, covering unknown prior document scope, uploads, document removal,
+wrong-account retry queues, newly appended queue entries, tombstone completion,
+and account switching during token minting.
 
-1. An unknown previous document can supply a Credential link even when Practice
-   access has expired. A trusted prior document is required to verify both scopes.
-2. Account switching during document upload does not stop the following metadata
-   write. The file operation and subsequent row must remain pinned to one owner.
-3. Account switching during document removal does not stop the following
-   metadata delete.
-4. Failed previous-account updates can use the new account's queue namespace.
-5. Replay rewrites its initial queue snapshot, dropping operations appended
-   while it awaits a cloud request.
-6. Replay drops a delete even when its tombstone write fails. The same case also
-   contains an account-switch replay check; that later assertion is not reached
-   until the tombstone failure is fixed.
-7. An account switch during token minting does not stop request dispatch.
+- `persistence.test.mjs`: 41 actual-source/esbuild/VM cases with a fake Supabase
+  client and synthetic identities. Includes normal-owner success/recovery,
+  settings retries, storage operations, original document-byte preservation,
+  no queue recreation after sign-out, and concurrent replay within one tab.
+  Account-isolation checks run with membership enforcement both ON and OFF.
+- `persistence-callers.test.mjs`: 16 actual AppContext function/effect cases.
+  Covers stale cloud/local loading, document reconciliation, delayed React
+  updates and a cache timer retaining its original account and load generation.
+- `persistence-sdk.test.mjs`: 3 cases using the installed Supabase SDK and fake
+  fetch. Verifies account checks during token minting and immediately before
+  request dispatch, plus a normal request with the captured owner's token.
 
-These remain unresolved because automatic approval review rejected the proposed
-persistence edits. The source gate remains off. No pending edit was applied to
-save/delete/storage behavior as part of this regression report.
+The remaining 54 cases cover access, transport, invitations, checkout consent
+and resume, diagnostic redaction, and rendered read-only records/exports.
 
-Two ordinary persistence checks currently pass: denied Practice writes preserve
-existing queued work without adding mutations, and disabled launch access
-preserves ordinary offline queueing. The other transport/invitation/access tests
-remain separate from these known persistence limitations.
+## Limits and separate blocked work
 
-To compare an existing private source snapshot without changing application code:
+Passing local tests does not establish production Clerk, RLS/storage, billing,
+or deployment readiness. The source gate remains OFF. A request already sent
+while authorized may complete; later requests/effects stop on identity change.
+Replay serialization covers callers in this tab, not cross-tab transactions.
+
+Independent review reproduced a separate existing account-deletion caller race.
+Automatic approval review rejected the deletion-helper proposal as beyond the
+explicit save/upload scope. No deletion-path patch was applied or retried.
+Its review-only synthetic reproduction remains outside this passing suite at
+`/private/tmp/credentialdo-deletion-owner-review-20260919/`.
+
+To compare private source snapshots without changing application code:
 
 ```sh
 PERSISTENCE_SOURCE_FILE=/absolute/path/to/supabase.js node --test tests/limited-launch/persistence.test.mjs
+APPCONTEXT_SOURCE_FILE=/absolute/path/to/AppContext.jsx node --test tests/limited-launch/persistence-callers.test.mjs
 ```
 
-Private review evidence and exact automatic-review refusals are kept under
-`/private/tmp/credentialdo-limited-access-blocked-regressions/`.
+Earlier rejection evidence is retained unchanged under
+`/private/tmp/credentialdo-limited-access-blocked-regressions/`; it records the
+history before the owner's explicit save/upload repair authorization.

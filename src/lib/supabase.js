@@ -1,4 +1,4 @@
-import { accessAuthority, assertRecordWrite, allowsSettingsChange, membershipWriteError } from "../utils/limitedLaunchAccess.js";
+import { accessAuthority, allowsSettingsChange, membershipWriteError } from "../utils/limitedLaunchAccess.js";
 import { createClient } from "@supabase/supabase-js";
 import { STORAGE_KEY } from "../constants/defaults";
 import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId } from "../utils/storageScope";
@@ -43,6 +43,79 @@ export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
       },
     })
   : null;
+
+function accountChangedError() {
+  const error = new Error("The signed-in account changed. Reopen this record in its original account.");
+  error.code = "membership_account_changed";
+  return error;
+}
+
+// Each write keeps its initiating identity through token minting, fetch, and
+// follow-up requests. A shared client would obtain the *new* session's token.
+function writeContext(authUserId = getActiveUserId() || clerkSub()) {
+  const accountId = authUserId;
+  const activeId = getActiveUserId();
+  const clerkId = clerkSub();
+  const session = globalThis.window?.Clerk?.session || null;
+  const guard = () => {
+    const active = getActiveUserId(), current = clerkSub();
+    if (!accountId || (active && active !== accountId) || (activeId && active !== activeId)
+      || (current && current !== accountId) || (clerkId && current !== clerkId)
+      || ((session?.user?.id || session?.userId) && (session.user?.id || session.userId) !== accountId)
+      || (globalThis.window?.Clerk?.session || null) !== session) throw accountChangedError();
+  };
+  guard();
+  const owner = { accountId, guard, check: guard, db: null };
+  if (supabase) owner.db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    accessToken: async () => {
+      owner.check();
+      if (!session) throw new Error("The signed-in session is unavailable.");
+      let token;
+      try { token = await session.getToken({ template: "supabase" }); }
+      catch (error) { owner.check(); throw error; }
+      owner.check();
+      if (!token) throw new Error("The signed-in session is unavailable.");
+      return token;
+    },
+    global: { fetch: (...args) => { owner.check(); return globalThis.fetch(...args); } },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  return owner;
+}
+
+function guardRecord(owner, key, item, previous, existing = false) {
+  owner.guard();
+  const before = previous;
+  // An update with unknown provenance cannot relabel a Practice attachment as
+  // Credential to get around expiry. New inserts retain their declared scope.
+  if (existing && key === "documents" && !before && accessAuthority.enabled
+    && !["credential", "practice"].every(scope => accessAuthority.allows(scope, "write", owner.accountId))) throw membershipWriteError();
+  if (!accessAuthority.allowsMutation(key, item, before, owner.accountId)) throw membershipWriteError();
+}
+
+function recordContext(key, item, previous, existing = false, authUserId) {
+  const owner = writeContext(authUserId);
+  const before = previous || accessAuthority.previousRecord(key, item?.id, owner.accountId);
+  owner.check = () => guardRecord(owner, key, item, before, existing);
+  owner.check();
+  return owner;
+}
+
+function guardSettings(owner, settings) {
+  owner.guard();
+  if (!allowsSettingsChange(settings)) throw membershipWriteError();
+}
+
+// Network failures may be queued for this owner. Account/permission changes
+// must propagate and must never be converted into another account's retry.
+async function writeRequest(owner, request) {
+  owner.check();
+  try { return await request(); }
+  catch (error) {
+    owner.check();
+    return { error };
+  }
+}
 
 // ─── Case conversion ─────────────────────────────────────────
 function camelToSnake(str) {
@@ -258,10 +331,6 @@ export function saveDeviceKeys(authUserId, updates) {
   } catch { /* ignore */ }
 }
 
-// The Clerk user id of the session that last loaded data on this device;
-// lets saveSettings route keys to the right slot without callers changing.
-let currentAuthUserId = null;
-
 export function clearDeviceKeys(authUserId) {
   try { if (authUserId) localStorage.removeItem(deviceKeySlot(authUserId)); } catch { /* ignore */ }
 }
@@ -276,18 +345,14 @@ const pendingOpsSlot = (authUserId) =>
   authUserId ? `${BASE_KEYS.pendingOps}:${authUserId}` : null;
 const PENDING_OPS_CAP = 500;
 
-function queuePendingOp(op, collectionKey, payload) {
-  // currentAuthUserId is only set once loadFromSupabase has run — which it
-  // never has on a fully offline load. Fall back to the active user id the
-  // AppProvider sets synchronously during render: it names exactly the
-  // account whose UI produced this write (real or offline session), so the
-  // op lands in that account's own namespace instead of being dropped.
-  const key = pendingOpsSlot(currentAuthUserId || getActiveUserId());
+function queuePendingOp(op, collectionKey, payload, owner) {
+  owner.check();
+  const key = pendingOpsSlot(owner.accountId);
   if (!key) return; // no account context yet — nothing safe to namespace under
   try {
     const cur = JSON.parse(localStorage.getItem(key) || "[]");
     const arr = Array.isArray(cur) ? cur : [];
-    arr.push({ op, collectionKey, payload, ts: Date.now() });
+    arr.push({ op, collectionKey, payload, ts: Date.now(), queueId: crypto.randomUUID() });
     // Bound the queue so one permanently-failing op can't grow without limit.
     localStorage.setItem(key, JSON.stringify(arr.slice(-PENDING_OPS_CAP)));
   } catch { /* storage unavailable — best effort */ }
@@ -295,8 +360,7 @@ function queuePendingOp(op, collectionKey, payload) {
 
 // Low-level, non-queuing writes used by the replay pass. They return a bool so
 // replay can drop only the ops that actually landed and keep the rest.
-async function sbUpsertRow(userId, collectionKey, item) {
-  assertRecordWrite(collectionKey, item);
+async function sbUpsertRow(userId, collectionKey, item, owner) {
   if (!item?.id) return true; // nothing addressable — drop it
   const table = tableName(collectionKey);
   const row = toSnakeObj(item);
@@ -304,50 +368,79 @@ async function sbUpsertRow(userId, collectionKey, item) {
   row.user_id = userId;
   row.created_at = row.created_at || new Date().toISOString();
   row.updated_at = row.updated_at || new Date().toISOString();
-  const { error } = await supabase.from(table).upsert(row, { onConflict: "id" });
+  if (collectionKey === "documents" && item.data) {
+    const path = await uploadForOwner(item, owner);
+    if (!path) return false;
+    row.storage_path = path;
+    row.mime_type = item.type || null;
+    row.size_bytes = item.size || null;
+  }
+  const { error } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
   return !error;
 }
-async function sbDeleteRow(userId, collectionKey, itemId) {
-  assertRecordWrite(collectionKey, { id: itemId });
+async function sbDeleteRow(userId, collectionKey, itemId, owner) {
   if (!itemId) return true;
   const table = tableName(collectionKey);
-  const { error } = await supabase.from(table).delete().eq("id", itemId).eq("user_id", userId);
+  const { error } = await writeRequest(owner, () => owner.db.from(table).delete().eq("id", itemId).eq("user_id", userId));
   return !error;
 }
-async function sbTombstoneRow(userId, collectionKey, itemId) {
-  assertRecordWrite(collectionKey, { id: itemId });
+async function sbTombstoneRow(userId, collectionKey, itemId, owner) {
   if (!itemId) return true;
-  const { error } = await supabase.from("deleted_items").upsert(
+  const { error } = await writeRequest(owner, () => owner.db.from("deleted_items").upsert(
     { item_id: itemId, user_id: userId, collection: collectionKey },
     { onConflict: "item_id" }
-  );
+  ));
   return !error;
 }
 
 // Replay the queued writes for this account, in order, dropping each only on
 // success. Call after the profile is known and BEFORE loadFromSupabase, so the
 // replayed rows are part of the cloud snapshot the merge then reads back.
-export async function replayPendingOps(profileId, authUserId) {
+const replayInFlight = new Map();
+export function replayPendingOps(profileId, authUserId = getActiveUserId() || clerkSub()) {
+  const key = pendingOpsSlot(authUserId);
+  if (replayInFlight.has(key)) return replayInFlight.get(key);
+  const task = replayForOwner(profileId, authUserId).finally(() => replayInFlight.delete(key));
+  replayInFlight.set(key, task);
+  return task;
+}
+
+async function replayForOwner(profileId, authUserId) {
   if (!supabase || !profileId) return;
-  const key = pendingOpsSlot(authUserId || currentAuthUserId);
+  let owner;
+  try { owner = writeContext(authUserId); }
+  catch (error) { if (error.code === "membership_account_changed") return; throw error; }
+  const key = pendingOpsSlot(owner.accountId);
   if (!key) return;
   let ops;
   try { ops = JSON.parse(localStorage.getItem(key) || "[]"); } catch { ops = null; }
   if (!Array.isArray(ops) || ops.length === 0) return;
-  const remaining = [];
+  // Give legacy operations identities before awaiting. Remove only completed
+  // IDs from a fresh read, preserving appended work (including identical rows).
+  ops = ops.map(op => ({ ...op, queueId: op.queueId || crypto.randomUUID() }));
+  try { localStorage.setItem(key, JSON.stringify(ops)); } catch { return; }
+  const completed = new Set();
   for (const op of ops) {
+    try { owner.guard(); } catch { break; }
     // Keep denied operations in their original account queue for a later authorized sync.
     const permitted = op.op === "settings" ? allowsSettingsChange(op.payload)
-      : accessAuthority.allowsMutation(op.collectionKey, typeof op.payload === "object" ? op.payload : { id: op.payload }, null, authUserId || currentAuthUserId);
-    const documentReplayAllowed = op.collectionKey !== "documents" || ["credential", "practice"].every(scope => accessAuthority.allows(scope, "write", authUserId || currentAuthUserId));
-    if (!permitted || !documentReplayAllowed) { remaining.push(op); continue; }
+      : accessAuthority.allowsMutation(op.collectionKey, typeof op.payload === "object" ? op.payload : { id: op.payload }, null, owner.accountId);
+    const documentReplayAllowed = op.collectionKey !== "documents" || ["credential", "practice"].every(scope => accessAuthority.allows(scope, "write", owner.accountId));
+    if (!permitted || !documentReplayAllowed) continue;
+    const item = typeof op.payload === "object" ? op.payload : { id: op.payload };
+    const previous = accessAuthority.previousRecord(op.collectionKey, item?.id, owner.accountId);
+    owner.check = op.op === "settings" ? () => guardSettings(owner, op.payload)
+      : () => {
+        guardRecord(owner, op.collectionKey, item, previous, true);
+        if (op.collectionKey === "documents" && !["credential", "practice"].every(scope => accessAuthority.allows(scope, "write", owner.accountId))) throw membershipWriteError();
+      };
     let ok = false;
     try {
       if (op.op === "upsert") {
-        ok = await sbUpsertRow(profileId, op.collectionKey, op.payload);
+        ok = await sbUpsertRow(profileId, op.collectionKey, op.payload, owner);
       } else if (op.op === "delete") {
-        ok = await sbDeleteRow(profileId, op.collectionKey, op.payload);
-        if (ok) await sbTombstoneRow(profileId, op.collectionKey, op.payload);
+        ok = await sbDeleteRow(profileId, op.collectionKey, op.payload, owner);
+        if (ok) ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload, owner);
       } else if (op.op === "settings") {
         // Reapply the queued settings patch to the profile row. Later queued
         // patches overwrite earlier ones in replay order, which is the same
@@ -355,28 +448,31 @@ export async function replayPendingOps(profileId, authUserId) {
         try {
           const row = settingsToProfileRow(op.payload || {});
           row.updated_at = new Date().toISOString();
-          const { error } = await supabase.from("profiles").update(row).eq("id", profileId);
+          const { error } = await writeRequest(owner, () => owner.db.from("profiles").update(row).eq("id", profileId));
           // A duplicate email (profiles_email_unique_key, 20260903e) is the one
           // failure retrying cannot fix: another account holds that address and
           // still will next time. Replay everything else rather than dropping
           // the physician's whole queued patch over one refused field.
           if (error && error.code === "23505" && "email" in row) {
             const { email: _refused, ...rest } = row;
-            const retry = await supabase.from("profiles").update(rest).eq("id", profileId);
+            const retry = await writeRequest(owner, () => owner.db.from("profiles").update(rest).eq("id", profileId));
             ok = !retry.error;
           } else {
             ok = !error;
           }
         } catch { ok = false; }
       } else if (op.op === "tombstone") {
-        ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload);
+        ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload, owner);
       } else {
         ok = true; // unknown op shape — discard rather than retry forever
       }
     } catch { ok = false; }
-    if (!ok) remaining.push(op);
+    if (ok) completed.add(op.queueId);
   }
   try {
+    const current = JSON.parse(localStorage.getItem(key) || "[]");
+    if (!Array.isArray(current)) return;
+    const remaining = current.filter(op => !completed.has(op.queueId));
     if (remaining.length) localStorage.setItem(key, JSON.stringify(remaining));
     else localStorage.removeItem(key);
   } catch { /* ignore */ }
@@ -443,7 +539,6 @@ export async function loadFromSupabase(userId) {
   if (!profile) return null;
 
   const profileId = profile.id;
-  currentAuthUserId = userId;
   const settings = { ...profileRowToSettings(profile), ...loadDeviceKeys(userId) };
 
   // Fetch all collections in parallel. PostgREST caps any single response at
@@ -500,9 +595,11 @@ export async function loadFromSupabase(userId) {
 }
 
 // ─── Save settings to Supabase ───────────────────────────────
-export async function saveSettings(userId, settings, authUserId = currentAuthUserId) {
-  if (!allowsSettingsChange(settings)) throw membershipWriteError();
-  if (authUserId) saveDeviceKeys(authUserId, settings);
+export async function saveSettings(userId, settings, authUserId) {
+  const owner = writeContext(authUserId);
+  owner.check = () => guardSettings(owner, settings);
+  owner.check();
+  saveDeviceKeys(owner.accountId, settings);
   if (!supabase || !userId) {
     // Offline (or before the profile loads) a settings edit has nowhere to
     // go and used to vanish on the next cloud merge. Queue it like any other
@@ -510,19 +607,20 @@ export async function saveSettings(userId, settings, authUserId = currentAuthUse
     // are stripped the same way every cloud write strips them.
     const clean = { ...settings };
     for (const f of DEVICE_KEY_FIELDS) delete clean[f];
-    queuePendingOp("settings", "settings", clean);
+    queuePendingOp("settings", "settings", clean, owner);
     return null;
   }
   const row = settingsToProfileRow(settings);
   row.updated_at = new Date().toISOString();
   // Read the row back so a server-enforced value (e.g. the identity lock on
   // email) is surfaced instead of being silently cached as whatever we sent.
-  const { data, error } = await supabase
+  const { data, error } = await writeRequest(owner, () => owner.db
     .from("profiles")
     .update(row)
     .eq("id", userId)
     .select()
-    .maybeSingle();
+    .maybeSingle());
+  owner.check();
   if (error) {
     // A taken email is a decision, not an outage, so it is never queued for
     // retry. But the update carries the whole profile, so dropping it whole
@@ -531,7 +629,8 @@ export async function saveSettings(userId, settings, authUserId = currentAuthUse
     // refused, and the caller is told which field did not save.
     if (error.code === "23505" && "email" in row) {
       const { email: refused, ...rest } = row;
-      const retry = await supabase.from("profiles").update(rest).eq("id", userId).select().maybeSingle();
+      const retry = await writeRequest(owner, () => owner.db.from("profiles").update(rest).eq("id", userId).select().maybeSingle());
+      owner.check();
       if (!retry.error) {
         console.warn("That email is on another CredentialDOMD account, so it was not saved. Everything else was.", { refused });
         return { savedExcept: "email" };
@@ -539,13 +638,13 @@ export async function saveSettings(userId, settings, authUserId = currentAuthUse
       console.warn("Failed to save settings:", retry.error.message);
       const clean = { ...settings }; delete clean.email;
       for (const f of DEVICE_KEY_FIELDS) delete clean[f];
-      queuePendingOp("settings", "settings", clean);
+      queuePendingOp("settings", "settings", clean, owner);
       return null;
     }
     console.warn("Failed to save settings:", error.message);
     const clean = { ...settings };
     for (const f of DEVICE_KEY_FIELDS) delete clean[f];
-    queuePendingOp("settings", "settings", clean);
+    queuePendingOp("settings", "settings", clean, owner);
     return null;
   }
   if (data && "email" in row && data.email !== row.email) {
@@ -579,15 +678,20 @@ export function documentStoragePath(docId) {
   return sub ? `${sub}/${docId}` : null;
 }
 
-export async function uploadDocumentFile(item) {
-  assertRecordWrite("documents", item);
+export async function uploadDocumentFile(item, authUserId) {
+  const owner = recordContext("documents", item, undefined, true, authUserId);
+  return uploadForOwner(item, owner);
+}
+
+async function uploadForOwner(item, owner) {
+  owner.check();
   if (!supabase || !item?.data) return null;
-  const path = documentStoragePath(item.id);
-  if (!path) return null;
+  const path = `${owner.accountId}/${item.id}`;
   const blob = dataUrlToBlob(item.data);
   if (!blob) return null;
-  const { error } = await supabase.storage.from("documents")
-    .upload(path, blob, { contentType: item.type || blob.type, upsert: true });
+  const { error } = await writeRequest(owner, () => owner.db.storage.from("documents")
+    .upload(path, blob, { contentType: item.type || blob.type, upsert: true }));
+  owner.check();
   if (error) { console.warn("Document file upload failed:", error.message); return null; }
   return path;
 }
@@ -606,9 +710,9 @@ export async function downloadDocumentFile(storagePath) {
 
 // ─── Collection CRUD ─────────────────────────────────────────
 export async function insertItem(userId, collectionKey, item) {
-  assertRecordWrite(collectionKey, item);
+  const owner = recordContext(collectionKey, item);
   // No cloud target yet (offline / local dev): queue so it isn't lost.
-  if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item); return; }
+  if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
   const table = tableName(collectionKey);
   const row = toSnakeObj(item);
   // Remove fields not in DB
@@ -618,67 +722,75 @@ export async function insertItem(userId, collectionKey, item) {
   row.updated_at = new Date().toISOString();
   // Documents: push the file bytes to Storage and record where they live.
   if (collectionKey === "documents" && item.data) {
-    const path = await uploadDocumentFile(item);
-    if (path) row.storage_path = path;
+    const path = await uploadForOwner(item, owner);
+    if (!path) { queuePendingOp("upsert", collectionKey, item, owner); return; }
+    row.storage_path = path;
     row.mime_type = item.type || null;
     row.size_bytes = item.size || null;
   }
-  const { error } = await supabase.from(table).insert(row);
+  const { error } = await writeRequest(owner, () => owner.db.from(table).insert(row));
+  owner.check();
   if (error) {
     console.warn(`Failed to insert ${collectionKey}:`, error.message);
-    queuePendingOp("upsert", collectionKey, item);
+    queuePendingOp("upsert", collectionKey, item, owner);
   }
 }
 
-export async function updateItem(userId, collectionKey, item) {
-  assertRecordWrite(collectionKey, item);
-  if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item); return; }
+export async function updateItem(userId, collectionKey, item, previous, authUserId) {
+  const owner = recordContext(collectionKey, item, previous, true, authUserId);
+  if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
   const table = tableName(collectionKey);
   const row = toSnakeObj(item);
   for (const f of SKIP_FIELDS) delete row[f];
   delete row.user_id;
   delete row.created_at;
   row.updated_at = new Date().toISOString();
-  const { error } = await supabase
+  const { error } = await writeRequest(owner, () => owner.db
     .from(table)
     .update(row)
     .eq("id", item.id)
-    .eq("user_id", userId);
+    .eq("user_id", userId));
+  owner.check();
   if (error) {
     console.warn(`Failed to update ${collectionKey}:`, error.message);
     // Replay as an upsert: if the row was never inserted (a failed add), the
     // update would no-op, so upsert recovers both cases.
-    queuePendingOp("upsert", collectionKey, item);
+    queuePendingOp("upsert", collectionKey, item, owner);
   }
 }
 
 export async function deleteItem(userId, collectionKey, itemId, previous) {
-  assertRecordWrite(collectionKey, previous || { id: itemId }, previous);
-  if (!supabase || !userId) { queuePendingOp("delete", collectionKey, itemId); return; }
+  const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
+  if (!supabase || !userId) { queuePendingOp("delete", collectionKey, itemId, owner); return; }
   if (collectionKey === "documents") {
-    const path = documentStoragePath(itemId);
+    const path = `${owner.accountId}/${itemId}`;
     // Await the removal so a failure is visible (and can be swept) instead of
     // silently orphaning the stored object.
     if (path) {
-      const { error: rmErr } = await supabase.storage.from("documents").remove([path]);
+      const { error: rmErr } = await writeRequest(owner, () => owner.db.storage.from("documents").remove([path]));
+      owner.check();
       if (rmErr) console.warn("Document file delete failed (object may orphan):", rmErr.message);
     }
   }
   const table = tableName(collectionKey);
-  const { error } = await supabase
+  const { error } = await writeRequest(owner, () => owner.db
     .from(table)
     .delete()
     .eq("id", itemId)
-    .eq("user_id", userId);
+    .eq("user_id", userId));
+  owner.check();
   if (error) {
     console.warn(`Failed to delete ${collectionKey}:`, error.message);
-    queuePendingOp("delete", collectionKey, itemId);
+    queuePendingOp("delete", collectionKey, itemId, owner);
   }
 }
 
 // ─── Bulk sync (for initial migration from localStorage) ─────
-export async function bulkSync(userId, collectionKey, items) {
-  for (const item of items) assertRecordWrite(collectionKey, item);
+export async function bulkSync(userId, collectionKey, items, authUserId) {
+  const owner = writeContext(authUserId);
+  const previous = items.map(item => accessAuthority.previousRecord(collectionKey, item?.id, owner.accountId));
+  owner.check = () => items.forEach((item, index) => guardRecord(owner, collectionKey, item, previous[index], true));
+  owner.check();
   if (!supabase || !userId || !items.length) return;
   const table = tableName(collectionKey);
   const now = new Date().toISOString();
@@ -690,13 +802,15 @@ export async function bulkSync(userId, collectionKey, items) {
     if (!row.updated_at) row.updated_at = now;
     return row;
   });
-  const { error } = await supabase.from(table).upsert(rows, { onConflict: "id" });
+  const { error } = await writeRequest(owner, () => owner.db.from(table).upsert(rows, { onConflict: "id" }));
+  owner.check();
   if (error) {
     // One bad row must not strand the rest — retry each row alone so the
     // failure is contained to the row that actually has the problem.
     console.warn(`Bulk sync ${collectionKey} failed (${error.message}) — retrying row-by-row`);
     for (const row of rows) {
-      const { error: e2 } = await supabase.from(table).upsert(row, { onConflict: "id" });
+      const { error: e2 } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
+      owner.check();
       if (e2) console.warn(`Row ${row.id} of ${collectionKey} still failing:`, e2.message);
     }
   }
@@ -706,16 +820,17 @@ export async function bulkSync(userId, collectionKey, items) {
 // A delete recorded here is final across all devices: loads prune these ids
 // and the self-healing push skips them, so stale devices can't resurrect.
 export async function recordTombstone(userId, collectionKey, itemId, previous) {
-  assertRecordWrite(collectionKey, previous || { id: itemId }, previous);
+  const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
   if (!itemId) return;
-  if (!supabase || !userId) { queuePendingOp("tombstone", collectionKey, itemId); return; }
-  const { error } = await supabase.from("deleted_items").upsert(
+  if (!supabase || !userId) { queuePendingOp("tombstone", collectionKey, itemId, owner); return; }
+  const { error } = await writeRequest(owner, () => owner.db.from("deleted_items").upsert(
     { item_id: itemId, user_id: userId, collection: collectionKey },
     { onConflict: "item_id" }
-  );
+  ));
+  owner.check();
   if (error) {
     console.warn("Failed to record deletion:", error.message);
-    queuePendingOp("tombstone", collectionKey, itemId);
+    queuePendingOp("tombstone", collectionKey, itemId, owner);
   }
 }
 
