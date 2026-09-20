@@ -155,6 +155,11 @@ function getSectionFacts(item, section) {
     // this text feeds Send/email, and this record is never meant to travel
     // that way. Only non-sensitive record metadata is listed.
     a("Record Label", item.label); a("Verified Date", formatDate(item.verifiedDate));
+  } else if (section === "screenings") {
+    a("Type", item.type); a("Agency", item.agency); a("Requested By", item.requestedBy);
+    a("Assignment", item.assignment); a("File #", item.fileNumber);
+    a("Ordered", formatDate(item.orderDate)); a("Reported", formatDate(item.reportDate));
+    a("Expires", formatDate(item.expirationDate)); a("Overall Result", item.result);
   }
 
   return facts;
@@ -181,6 +186,13 @@ export function buildCredentialText(item, section, settings) {
   lines.push(div, describeItem(item, settings.name, section), "");
 
   for (const [k, v] of getSectionFacts(item, section)) lines.push(k + ": " + v);
+
+  if (item.components?.length) {
+    lines.push("", "Searches Performed:");
+    for (const c of item.components) {
+      lines.push("- " + [c.name, c.scope, c.status, c.date && formatDate(c.date)].filter(Boolean).join(" — "));
+    }
+  }
 
   if (item.notes) lines.push("", "Notes: " + item.notes);
   lines.push("", div, "Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString());
