@@ -1,8 +1,10 @@
 // Applicability is a physician-supplied fact on the license, never inferred
 // from specialty, DEA registration, an employer name or an AI response.
 export const OHIO_PAIN_CLINIC_FIELD = "Ohio pain clinic CME applies";
+export const CA_GERIATRIC_FIELD = "California geriatric CME applies";
 
 export function topicApplicability(topic, answers = {}) {
+  if (topic.informational === true) return "informational";
   if (!topic.condition) return "applies";
   const answer = answers?.[topic.condition.field];
   if (answer === true || answer === "Yes") return "applies";

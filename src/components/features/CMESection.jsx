@@ -1,4 +1,5 @@
 import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
+import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "../../utils/cmePresentation";
 import { useState, useMemo, useCallback, memo } from "react";
 import { supabase } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
@@ -400,7 +401,7 @@ function CMESection({ onShare }) {
               </div>
               {!comp.noGeneralReq && (
                 <>
-                  <ComplianceBar label="Total Hours" earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} />
+                  <ComplianceBar label="Total logged hours" earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} />
                   {!comp.totalMet && (
                     <button onClick={() => navigate("credentials", "findCme")} style={{
                       padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
@@ -419,7 +420,9 @@ function CMESection({ onShare }) {
                 degreeType={deg}
                 onFindCme={() => navigate("credentials", "findCme")}
               />
+              <div style={{ fontSize: 13, color: T.textMuted, margin: "8px 0" }}>{cmeAssessmentLabel(comp)}</div>
               <ConditionalCmeTopics comp={comp} />
+              {needsPriorCompletionReview(comp) && <p style={{ fontSize: 12, color: T.textMuted }}>{PRIOR_COMPLETION_NOTE}</p>}
               {/* Every mandated topic carries its own periodicity and its own
                   link to the rule, because the rule set's single sourceUrl
                   cannot tell a physician where any one of these lines came

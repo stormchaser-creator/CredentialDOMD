@@ -283,8 +283,8 @@ eq("no cycle known", topicPeriodLabel(null, 0), "Every renewal cycle");
 const caProv = computeCompliance([], "CA", "MD");
 const caPain = caProv.topicResults.find(t => t.topic === "Pain Management");
 eq("CA pain mgmt row says one time", caPain.periodLabel, "One time, not every cycle");
-const caBias = caProv.topicResults.find(t => t.topic === "Implicit Bias");
-eq("CA implicit bias row says every cycle", caBias.periodLabel, "Every renewal cycle (2 yrs)");
+const caBias = caProv.informationalTopics.find(t => t.topic === "Implicit Bias");
+eq("CA implicit bias is curriculum guidance", caBias.periodLabel, "Course curriculum guidance");
 
 // ── Per-topic citation and link ──
 // CA's rule-set citation is 16 CCR 1336 (the 50-hour total). The pain
@@ -296,7 +296,7 @@ ok("CA pain mgmt link is its own, not inherited", caPain.sourceInherited === fal
 // A topic with no source of its own inherits the rule set's, and says so, so
 // the UI can label the link "Board page" instead of implying it points at the
 // sentence that states the requirement.
-const caGeri = caProv.topicResults.find(t => t.topic === "Geriatric Medicine");
+const caGeri = caProv.conditionalTopics.find(t => t.topic === "Geriatric Medicine");
 eq("CA geriatrics inherits the board URL", caGeri.url, STATE_REQS.CA.md.sourceUrl);
 ok("CA geriatrics is marked inherited", caGeri.sourceInherited === true);
 ok("CA geriatrics still carries its own citation", caGeri.citeInherited === false && caGeri.cite.length > 0);
@@ -443,8 +443,11 @@ ok("CA note carries the 2190.6 buprenorphine alternative", /2190\.6/.test(topicO
 
 // AB 241 binds course providers, not physicians. It must never become an hour
 // requirement, on either board.
-eq("CA MD implicit bias demands no hours", topicOf("CA", "MD", "Implicit Bias").required, 0);
-eq("CA DO implicit bias demands no hours", topicOf("CA", "DO", "Implicit Bias").required, 0);
+for (const degree of ["MD", "DO"]) {
+  const comp = computeCompliance([], "CA", degree);
+  eq(`CA ${degree} implicit bias demands no hours`, comp.informationalTopics.find(t => t.topic === "Implicit Bias").required, 0);
+  ok(`CA ${degree} implicit bias is not a personal checklist`, !comp.topicResults.some(t => t.topic === "Implicit Bias"));
+}
 // CA DO's 1-hr Schedule II hour is the one CA topic that IS every cycle.
 ok("CA DO Schedule II hour stays per cycle", topicOf("CA", "DO", "Substance Use Disorders").period === null);
 eq("CA DO Schedule II row says every cycle", topicOf("CA", "DO", "Substance Use Disorders").periodLabel, "Every renewal cycle (2 yrs)");

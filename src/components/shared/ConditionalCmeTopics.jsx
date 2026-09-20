@@ -3,10 +3,10 @@ import { findStateLicense } from "../../utils/compliance";
 
 export default function ConditionalCmeTopics({ comp }) {
   const { data, editItem, theme: T } = useApp();
-  if (!comp?.conditionalTopics?.length) return null;
+  if (!comp?.conditionalTopics?.length && !comp?.informationalTopics?.length) return null;
   const license = findStateLicense(data.licenses, comp.state);
   return <div onClick={e => e.stopPropagation()} style={{ margin: "10px 0" }}>
-    {comp.conditionalTopics.map(topic => {
+    {(comp.conditionalTopics || []).map(topic => {
       const value = topic.applicability === "applies" ? "Yes" : topic.applicability === "not-applicable" ? "No" : "";
       return <div key={topic.condition.field} style={{ backgroundColor: T.input, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>
         <div style={{ color: T.text, fontWeight: 700, marginBottom: 4 }}>{topic.topic}: {value === "Yes" ? "applies per your selection" : value === "No" ? "does not apply per your selection" : "confirm applicability"}</div>
@@ -26,5 +26,10 @@ export default function ConditionalCmeTopics({ comp }) {
         <p style={{ margin: "8px 0 0" }}><a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{topic.cite}</a> · Checked {topic.checkedOn}</p>
       </div>;
     })}
+    {(comp.informationalTopics || []).map(topic => <details key={topic.topic} style={{ marginTop: 8, padding: "8px 10px", backgroundColor: T.input, borderRadius: 8, fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>
+      <summary style={{ cursor: "pointer" }}>{topic.topic}: provider / course guidance</summary>
+      <p>{topic.note}</p>
+      <a href={topic.url} target="_blank" rel="noopener noreferrer" style={{ color: T.accent }}>{topic.cite}</a>
+    </details>)}
   </div>;
 }

@@ -155,6 +155,7 @@ function firstCycleAllowance(rule, licenseIssued, windowEnd) {
 
 export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const entry = getStateEntry(state, degreeType);
+  const degreeUnknown = !["MD", "DO"].includes(degreeType) && !!hasSeparateBoards(state);
   const cycleYears = entry?.cycle || 2;
 
   // ── Renewal window ──
@@ -240,8 +241,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     }
     const tagged = pool.filter(c => (c.topics || []).includes(t.topic)
       && (!t.acceptedCategories || t.acceptedCategories.includes(c.category)));
-    const earned = tagged.reduce((s, c) => s + hours(c), 0);
-    const checklist = !(t.hours > 0);
+    const informational = t.informational === true;
+    const earned = informational ? null : tagged.reduce((s, c) => s + hours(c), 0);
+    const checklist = !informational && !(t.hours > 0);
     // Per-topic provenance, falling back to the rule set's own citation and
     // URL. `citeInherited` / `sourceInherited` are what let the UI say "this
     // link is the board's general page" instead of implying it points at the
@@ -259,16 +261,19 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const url = t.url || entryUrl;
     return {
       topic: t.topic,
+      informational,
       condition: t.condition || null,
       applicability: topicApplicability(t, opts.topicApplicability),
       checkedOn: t.checkedOn || null,
+      effectiveFrom: t.effectiveFrom || null,
+      effectiveThrough: t.effectiveThrough || null,
       required: t.hours || 0,
       earned,
       checklist,
-      met: checklist ? tagged.length > 0 : earned >= t.hours,
+      met: informational ? null : checklist ? tagged.length > 0 : earned >= t.hours,
       note: t.note,
       period,
-      periodLabel: topicPeriodLabel(period, cycleYears),
+      periodLabel: informational ? "Course curriculum guidance" : topicPeriodLabel(period, cycleYears),
       cite,
       url,
       citeInherited: !t.cite && !!cite,
@@ -278,8 +283,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
 
   // Unknown is neither a shortfall nor an exemption. Keep conditional rows
   // visible separately; only confirmed applicable rules can demand hours.
-  const conditionalTopics = evaluatedTopics.filter(t => t.condition);
-  const topicResults = evaluatedTopics.filter(t => t.applicability === "applies");
+  const informationalTopics = evaluatedTopics.filter(t => t.informational);
+  const conditionalTopics = evaluatedTopics.filter(t => !t.informational && t.condition);
+  const topicResults = evaluatedTopics.filter(t => !t.informational && t.applicability === "applies");
   const applicabilityUnknown = conditionalTopics.some(t => t.applicability === "unknown");
 
   // ── MATE Act (one-time, DEA registrants) — lifetime, not windowed ──
@@ -298,7 +304,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const cat1Met = cat1Required <= 0 || cat1Hrs >= cat1Required;
   const allTopicsMet = topicResults.every(t => t.met);
   const knownRequirementsMet = totalMet && cat1Met && allTopicsMet && (!mate || mate.met);
-  const assessmentStatus = !knownRequirementsMet ? "needs-hours"
+  // Split-board fallback numbers remain visible, but cannot certify compliance
+  // or assert a board-specific shortfall until the physician selects MD or DO.
+  const assessmentStatus = degreeUnknown ? "needs-confirmation" : !knownRequirementsMet ? "needs-hours"
     : applicabilityUnknown ? "needs-confirmation" : "met";
 
   return {
@@ -320,13 +328,14 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     cat1FromData,
     cycle: cycleYears,
     topicResults,
+    informationalTopics,
     allTopicsMet,
     conditionalTopics,
     applicabilityUnknown,
     knownRequirementsMet,
     assessmentStatus,
     mate,
-    fullyCompliant: knownRequirementsMet && !applicabilityUnknown,
+    fullyCompliant: knownRequirementsMet && !applicabilityUnknown && !degreeUnknown,
     notes: entry?.notes,
     // Provenance for the rule set behind these numbers: the statute or rule
     // citation, and the month it was last checked against the regulator (if
@@ -342,7 +351,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     // True when the physician has not chosen MD or DO and this state runs
     // separate boards: the numbers above use the MD rule set as a stand-in.
     // Callers should surface a "set your degree" prompt rather than assert.
-    degreeUnknown: !degreeType && !!hasSeparateBoards(state),
+    degreeUnknown,
     // Window info for display + transcripts. `windowLabel` is the one plain
     // sentence every surface prints, so the counting window can never be
     // invisible or described two different ways in two places.

@@ -71,6 +71,8 @@ import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
 import ConditionalCmeTopics from "./components/shared/ConditionalCmeTopics";
+import CmeReviewSummary from "./components/shared/CmeReviewSummary";
+import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "./utils/cmePresentation";
 import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
 
@@ -964,7 +966,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
-    const cmeBehind = stateComps.filter(x => x.comp.assessmentStatus === "needs-hours").map(x => x.st);
+    const cmeSummary = cmeReviewSummary(stateComps);
     const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && credStats.undated === 0;
     // What is holding the ring below 100, listed where the number is, each
     // line a tap to the record that fixes it. One renderer for both heroes.
@@ -973,7 +975,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {standing.needsAction.slice(0, max).map(({ item, days }) => {
           const isCme = item._sec === "cme" && String(item.id).startsWith("cme:");
           const label = isCme ? `${item.state} CME${item.needsConfirmation ? ": confirm applicability" : ""}` : describeItem(item, data.settings.name, item._sec);
-          const when = item.needsConfirmation ? "review rule" : days == null ? (isCme ? "behind" : "no expiration date")
+          const when = item.needsConfirmation ? "review rule" : days == null ? (isCme ? "review records" : "no expiration date")
             : days < 0 ? `expired ${-days} day${-days === 1 ? "" : "s"} ago`
             : days === 0 ? "expires today" : `${days} day${days === 1 ? "" : "s"} left`;
           const color = item.needsConfirmation ? T.textMuted : days != null && days < 0 ? T.danger : T.warning;
@@ -995,7 +997,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {standing.needsAction.length > max && (
           <div style={{ fontSize: 12, color: T.textMuted }}>and {standing.needsAction.length - max} more below</div>
         )}
-        <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>{standing.good} of {standing.total} tracked items need nothing from you</div>
+        <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 2 }}>{standing.good} of {standing.total} tracked items have no deadline alert</div>
       </div>
     );
     // Subtle gradient glow behind the ring, shared by both hero cards
@@ -1016,7 +1018,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       }}>
         {heroGlow}
         <div className="cmd-ring-animated">
-          <ComplianceRing percent={compliancePercent} size={120} stroke={9} label="In good standing" pending={stateComps.some(x => x.comp.applicabilityUnknown)} />
+          <ComplianceRing percent={compliancePercent} size={120} stroke={9} label="Tracked standing" pending={cmeSummary.confirmation.length > 0} />
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1044,18 +1046,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>{credStats.undated} with no expiration date</span>
               </div>
             )}
-            {/* The ring counts CME cycles too — say so when they're the drag */}
-            {cmeBehind.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning }} />
-                <span style={{ fontSize: 14, fontWeight: 500, color: T.text }}>
-                  CME behind: {cmeBehind.join(", ")}
-                </span>
-              </div>
-            )}
-            {allCurrent && (
-              <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>All credentials current</div>
-            )}
+            <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} theme={T} />
             {needsActionList(4)}
           </div>
         </div>
@@ -1082,7 +1073,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       }}>
         {heroGlow}
         <div className="cmd-ring-animated" style={{ flexShrink: 0 }}>
-          <ComplianceRing percent={compliancePercent} size={136} stroke={10} pending={stateComps.some(x => x.comp.applicabilityUnknown)} />
+          <ComplianceRing percent={compliancePercent} size={136} stroke={10} label="Tracked standing" pending={cmeSummary.confirmation.length > 0} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: hasActionColumn ? "repeat(auto-fit, minmax(120px, 1fr))" : "repeat(4, 1fr)" }}>
@@ -1096,15 +1087,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               </div>
             ))}
           </div>
-          {cmeBehind.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: T.warning, flexShrink: 0 }} />
-              <span style={{ fontSize: 13.5, fontWeight: 500, color: T.text }}>CME behind: {cmeBehind.join(", ")}</span>
-            </div>
-          )}
-          {allCurrent && (
-            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 12 }}>All credentials current</div>
-          )}
+          <CmeReviewSummary stateComps={stateComps} credentialDatesCurrent={allCurrent} theme={T} />
           {needsActionList(6)}
         </div>
       </div>
@@ -1343,12 +1326,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   ))}
                 </div>
 
+                <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 8 }}>{cmeAssessmentLabel(comp)}</div>
                 <ConditionalCmeTopics comp={comp} />
                 {/* Requirement scoreboard */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
                   {!comp.noGeneralReq && (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                      <span style={{ color: T.text, fontWeight: 600 }}>Total hours</span>
+                      <span style={{ color: T.text, fontWeight: 600 }}>Total logged hours</span>
                       <span style={{ fontWeight: 800, color: comp.totalMet ? T.success : T.warning }}>{comp.totalEarned} / {comp.totalRequired}</span>
                     </div>
                   )}
@@ -1363,7 +1347,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   {comp.topicResults.map(t => (
                     <div key={t.topic} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
                       <span style={{ color: T.text, fontWeight: 600 }}>{t.topic}{t.checklist ? " (required topic)" : ""}</span>
-                      <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.checklist ? (t.met ? "✓" : "missing") : `${t.earned} / ${t.required}`}</span>
+                      <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.checklist ? (t.met ? "recorded" : "not recorded") : `${t.earned} / ${t.required}h recorded`}</span>
                     </div>
                   ))}
                   {comp.mate && (
@@ -1372,6 +1356,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                       <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{comp.mate.earned} / {comp.mate.required}</span>
                     </div>
                   )}
+                  {needsPriorCompletionReview(comp) && <p style={{ fontSize: 12, color: T.textMuted }}>{PRIOR_COMPLETION_NOTE}</p>}
                 </div>
 
                 {/* What counted */}
@@ -1732,7 +1717,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               {comp.noGeneralReq
                 ? <span style={{ fontSize: 13, color: T.textDim }}>Topic-specific</span>
                 : <span style={{ fontSize: 14, fontWeight: 700, color: comp.totalMet ? T.success : T.text }}>
-                    {comp.totalMet ? `${comp.totalEarned}/${comp.totalRequired} hrs \u2713` : `${comp.hoursRemaining} hrs to go`}
+                    {totalHoursLabel(comp)}
                   </span>
               }
               <div style={{
@@ -1771,6 +1756,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             )}
           </div>
 
+          <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>{cmeAssessmentLabel(comp)}</div>
           <ConditionalCmeTopics comp={comp} />
           {/* Progress bar */}
           {!comp.noGeneralReq && comp.totalRequired > 0 && (
@@ -1789,7 +1775,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                 <span key={t.topic} style={{
                   padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
                   backgroundColor: T.warningDim, color: T.warning,
-                }}>{t.checklist ? `${t.topic}: required` : `${t.topic}: ${t.earned}/${t.required}h`}</span>
+                }}>{topicRecordLabel(t)}</span>
               ))}
               <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
                 padding: "3px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
@@ -1800,17 +1786,18 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           {!comp.cat1Met && comp.cat1Required > 0 && (
             <div style={{ marginTop: 6 }}>
               <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
-                {(comp.cat1Keywords || []).every(k => k.startsWith("AOA Category")) ? "AOA Cat 1" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h needed
+                {(comp.cat1Keywords || []).every(k => k.startsWith("AOA Category")) ? "AOA Cat 1" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h recorded
               </span>
             </div>
           )}
           {comp.mate && !comp.mate.met && (
             <div style={{ marginTop: 6 }}>
               <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
-                MATE Act (one-time): {comp.mate.earned}/{comp.mate.required}h opioid/SUD training
+                MATE Act (one-time): {comp.mate.earned}/{comp.mate.required}h recorded
               </span>
             </div>
           )}
+          {needsPriorCompletionReview(comp) && <p style={{ fontSize: 11.5, color: T.textMuted, lineHeight: 1.5 }}>{PRIOR_COMPLETION_NOTE}</p>}
           <div style={{ marginTop: 8 }}>
             <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st); }} style={{
               padding: "6px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8,
