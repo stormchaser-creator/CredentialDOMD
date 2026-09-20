@@ -10,9 +10,12 @@ import vm from "node:vm";
 import { packageSite } from "../scripts/package-site.mjs";
 import { renderHelp } from "../scripts/build-help.mjs";
 import { renderCme } from "../scripts/build-cme.mjs";
+import { renderLegalPages } from "../scripts/generate-legal-pages.mjs";
 import { loadVideoCatalog, WATCH_PAGES } from "../scripts/help-videos.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// Baseline fixtures test byte-preserving packaging, independent of live launch mode.
+const BASELINE_LAUNCH_MODE = Object.freeze({ enabled: false, signupHref: null });
 const pages = ["index", "locums", "security", "privacy", "terms", "help", "cme", "credential-access"];
 const read = path => readFile(path, "utf8");
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -73,9 +76,12 @@ function headerRules(text) {
 
 test("site package keeps public help/CME, private routes, declared assets and distinct workers intact", async t => {
   const root = await siteFixture(t);
-  const output = await packageSite(root);
+  const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE);
+  // Legal pages are generated for the requested mode; committed source may
+  // describe the active paid release even in this baseline fixture.
+  const baselineLegal = renderLegalPages(BASELINE_LAUNCH_MODE);
   for (const page of pages) {
-    const expected = await read(resolve(root, `landing/${page}.html`));
+    const expected = baselineLegal[`${page}.html`] || await read(resolve(root, `landing/${page}.html`));
     assert.equal(await read(resolve(output, `${page}.html`)), expected);
     if (page !== "index") assert.equal(await read(resolve(output, page, "index.html")), expected);
   }
@@ -161,7 +167,7 @@ test('packaged watch pages resolve their media, canonical, related guides and si
   const catalog = await loadVideoCatalog(root);
   const help = JSON.parse(await read(resolve(root, 'public/knowledge/credentialdo-help.json')));
   await writeFile(resolve(root, 'landing/help.html'), renderHelp(help, catalog));
-  const output = await packageSite(root);
+  const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE);
   const sitemap = await read(resolve(output, 'sitemap.xml'));
   for (const { id } of WATCH_PAGES) {
     const html = await read(resolve(output, 'help', id, 'index.html'));
@@ -191,11 +197,11 @@ test("invalid app base or missing retirement script preserves the previous packa
   await mkdir(resolve(root, "site-dist"));
   await writeFile(resolve(root, "site-dist/sentinel.txt"), "previous reviewed artifact");
   await writeFile(resolve(root, "dist/index.html"), '<script src="/assets/wrong.js"></script>');
-  await assert.rejects(packageSite(root), /--base=\/app\//);
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), /--base=\/app\//);
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
   await writeFile(resolve(root, "dist/index.html"), '<script src="/app/assets/synthetic.js"></script>');
   await rm(resolve(root, "scripts/root-sw-retirement.js"));
-  await assert.rejects(packageSite(root), { code: "ENOENT" });
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), { code: "ENOENT" });
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
 });
 
@@ -270,29 +276,29 @@ test("stale CME page or missing required CME asset preserves the previous packag
   await writeFile(resolve(root, "site-dist/sentinel.txt"), "previous reviewed artifact");
   const cmePage = await read(resolve(root, "landing/cme.html"));
   await writeFile(resolve(root, "landing/cme.html"), cmePage + "\n<!-- stale manual change -->\n");
-  await assert.rejects(packageSite(root), /CME page is stale/);
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), /CME page is stale/);
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
   await writeFile(resolve(root, "landing/cme.html"), cmePage);
   await rm(resolve(root, "public/cme-assets/cme.mjs"));
-  await assert.rejects(packageSite(root), { code: "ENOENT" });
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), { code: "ENOENT" });
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
 });
 
 test("missing invitation controller preserves the previous package", async t => {
   const root = await siteFixture(t);
-  const output = await packageSite(root);
+  const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE);
   const previous = await read(resolve(output, "waitlist-signup.js"));
   await writeFile(resolve(output, "previous-artifact-sentinel.txt"), "previous reviewed artifact");
   const missingPath = resolve(root, "public/waitlist-signup.js");
   await rm(missingPath);
-  await assert.rejects(packageSite(root), { code: "ENOENT", path: missingPath });
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), { code: "ENOENT", path: missingPath });
   assert.equal(await read(resolve(output, "waitlist-signup.js")), previous);
   assert.equal(await read(resolve(output, "previous-artifact-sentinel.txt")), "previous reviewed artifact");
 });
 
 test("each missing homepage image fails before replacing the previous package", async t => {
   const root = await siteFixture(t);
-  const output = await packageSite(root);
+  const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE);
   const imagePaths = homepageImagePaths(await read(resolve(output, "index.html")));
   const previousFiles = ["index.html", "app/index.html", "app/sw.js", "sw.js", "_headers", ...imagePaths.map(path => path.slice(1))];
   const previousHashes = await Promise.all(previousFiles.map(async path => sha256(await readFile(resolve(output, path)))));
@@ -301,7 +307,7 @@ test("each missing homepage image fails before replacing the previous package", 
     const sourcePath = resolve(root, "landing", path.slice(1));
     const bytes = await readFile(sourcePath);
     await rm(sourcePath);
-    await assert.rejects(packageSite(root), { code: "ENOENT", path: sourcePath });
+    await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), { code: "ENOENT", path: sourcePath });
     assert.equal(await read(resolve(output, "previous-artifact-sentinel.txt")), "previous reviewed artifact", path);
     assert.deepEqual(await Promise.all(previousFiles.map(async file => sha256(await readFile(resolve(output, file))))), previousHashes,
       `missing ${path} must preserve the prior pages, workers, headers and every image`);
