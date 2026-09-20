@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * UpdatePrompt — CallSync-style silent auto-update.
@@ -15,6 +15,8 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
  *    "New version — tap to update" pill.
  *  - Updates found by the 15-minute background timer also show the pill
  *    instead of yanking the page out from under the user mid-task.
+ *  - Authentication keeps this component's cache wipe and reload as a manual
+ *    choice. Background service-worker installation/activation is unchanged.
  */
 
 const CURRENT_BUILD = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
@@ -51,20 +53,38 @@ function markAutoAttempt(build) {
   try { sessionStorage.setItem(AUTO_GUARD_PREFIX + build, "1"); } catch { /* noop */ }
 }
 
-function UpdatePrompt() {
+function UpdatePrompt({ allowAutomaticUpdates = true } = {}) {
   const [mode, setMode] = useState("idle"); // idle | updating | pill
   const reloading = useRef(false);
+  const automaticAllowed = useRef(allowAutomaticUpdates);
+  const updateKind = useRef(null);
+  // Commit the current permission before browser callbacks can run. Async
+  // checks, delayed reloads, and controllerchange must not use a stale prop.
+  useLayoutEffect(() => {
+    automaticAllowed.current = allowAutomaticUpdates;
+  }, [allowAutomaticUpdates]);
+
+  const pauseAutomaticUpdate = useCallback(() => {
+    if (updateKind.current !== "automatic" || automaticAllowed.current) return false;
+    setMode("pill");
+    return true;
+  }, []);
 
   const doReload = useCallback(() => {
+    if (pauseAutomaticUpdate()) return;
     if (reloading.current) return;
     reloading.current = true;
     window.location.reload();
-  }, []);
+  }, [pauseAutomaticUpdate]);
 
   // Activate any waiting SW, wipe caches, reload fresh.
-  const applyUpdate = useCallback(async () => {
+  const applyUpdate = useCallback(async (automatic = false) => {
+    if (automatic && updateKind.current === "manual") return;
+    updateKind.current = automatic ? "automatic" : "manual";
+    if (pauseAutomaticUpdate()) return;
     setMode("updating");
     const reg = await getRegistration();
+    if (pauseAutomaticUpdate()) return;
 
     if (reg?.waiting) {
       navigator.serviceWorker.addEventListener("controllerchange", doReload, { once: true });
@@ -74,12 +94,14 @@ function UpdatePrompt() {
     try {
       if (window.caches) {
         const keys = await caches.keys();
+        if (pauseAutomaticUpdate()) return;
         await Promise.all(keys.map((k) => caches.delete(k)));
       }
     } catch { /* cache wipe is best-effort */ }
 
+    if (pauseAutomaticUpdate()) return;
     setTimeout(doReload, 600);
-  }, [doReload]);
+  }, [doReload, pauseAutomaticUpdate]);
 
   // silent=true (open/focus): auto-update. silent=false (timer): show pill.
   const check = useCallback(async (silent) => {
@@ -95,9 +117,9 @@ function UpdatePrompt() {
     }
     if (!newBuild) return;
 
-    if (silent && !autoAttempted(newBuild)) {
+    if (silent && automaticAllowed.current && !autoAttempted(newBuild)) {
       markAutoAttempt(newBuild);
-      applyUpdate();
+      applyUpdate(true);
     } else {
       setMode((m) => (m === "updating" ? m : "pill"));
     }
@@ -121,7 +143,8 @@ function UpdatePrompt() {
       });
     })();
 
-    check(true); // app opened
+    // Start after the effect commits; a Strict Mode cleanup cancels this pass.
+    void Promise.resolve().then(() => { if (!disposed) return check(true); });
 
     const onFocus = () => { if (document.visibilityState !== "hidden") check(true); };
     window.addEventListener("focus", onFocus);
@@ -142,7 +165,7 @@ function UpdatePrompt() {
 
   return (
     <button
-      onClick={updating ? undefined : applyUpdate}
+      onClick={updating ? undefined : () => applyUpdate(false)}
       disabled={updating}
       aria-label={updating ? "Updating the app" : "Update app to the new version"}
       style={{

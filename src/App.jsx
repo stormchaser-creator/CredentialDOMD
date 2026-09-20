@@ -60,7 +60,7 @@ import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen, supabase } from "./lib/supabase";
 import FoundingMemberBadge from "./components/shared/FoundingMemberBadge";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
-import { SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, useAuth, useUser } from "@clerk/clerk-react";
 import { evaluateOfflineFallback, probeNetwork, CLERK_LOAD_TIMEOUT_MS } from "./utils/offlineSession";
 import {
   STATES, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
@@ -101,6 +101,8 @@ export default function App() {
   // working network never activates this: the browser must say offline, or
   // Clerk must time out AND a same-origin probe must fail.
   const { isLoaded: clerkLoaded } = useUser();
+  // Match SignedOut's verdict, including a session with unfinished auth tasks.
+  const { userId: signedInUserId } = useAuth();
   const [offlineSession, setOfflineSession] = useState(null);
   // The real auth verdict always wins the moment it arrives — including
   // "signed out": the render below ignores offlineSession once clerkLoaded
@@ -142,9 +144,9 @@ export default function App() {
           </SignedIn>
         </>
       )}
-      {/* Update check/refresh button — outside the auth gate so a stale
-          bundle can be refreshed from the sign-in screen too. */}
-      <UpdatePrompt />
+      {/* Keep manual updates available at sign-in, but never interrupt email
+          entry or provider verification with an automatic cache wipe/reload. */}
+      <UpdatePrompt allowAutomaticUpdates={clerkLoaded && Boolean(signedInUserId)} />
     </>
   );
 }
