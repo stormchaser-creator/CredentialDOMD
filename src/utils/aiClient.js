@@ -50,6 +50,26 @@ export const SHARED_DAILY_LIMIT = 200;
 // keep them plain and tell them the one thing that fixes it.
 export const quotaMessage = (limit) => `Shared AI quota reached for today (${limit || SHARED_DAILY_LIMIT} calls). Add your own Gemini key in Settings to keep going.`;
 export const opusQuotaMessage = (limit) => `Shared Opus quota reached for today (${limit || sharedAiStatus?.anthropicLimit || SHARED_DAILY_LIMIT} calls). Add your own Anthropic key in Settings to keep going.`;
+// The proxy's own refusal codes, spelled once. Two of these are the reason
+// this list exists at all: until 2026-09-15 every 503 from the proxy read as
+// "the shared key is not configured" and switched shared AI off on the
+// device, so a transient accounting failure looked exactly like an operator
+// who had never set a key, and the physician stayed switched off until they
+// cleared site storage. A status code is not a reason; the code in the body
+// is. PROXY_CODES.notConfigured is the only one that may disable anything.
+export const PROXY_CODES = {
+  notConfigured: "shared_key_not_configured",
+  quota: "quota",
+  budget: "budget",
+  rateLimited: "ai_rate_limited",
+  accounting: "ai_accounting_unavailable",
+};
+
+/** True for a refusal that will clear on its own. Never a reason to disable shared AI. */
+export function isTransientProxyCode(code) {
+  return code === PROXY_CODES.accounting || code === PROXY_CODES.rateLimited;
+}
+
 export const AI_MESSAGES = {
   get quota() { return quotaMessage(sharedAiStatus?.limit); },
   get opus_quota() { return opusQuotaMessage(sharedAiStatus?.anthropicLimit); },
@@ -62,6 +82,11 @@ export const AI_MESSAGES = {
   // until the 1st and Gemini takes the turn. Vera's reply and the coder's
   // review note both say exactly this.
   budget: "The monthly AI budget is used up, so Gemini answered.",
+  // Transient. Both of these clear by themselves, so the wording says "again"
+  // and never "not switched on": a physician told the feature is off goes
+  // looking for a setting that is already correct.
+  ai_accounting_unavailable: "AI could not be started just now, so nothing was sent. Try again in a moment.",
+  ai_rate_limited: "That was a lot of requests at once. Wait a moment and try again.",
 };
 
 const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
@@ -224,7 +249,20 @@ export async function fetchSharedAiStatus({ force = false } = {}) {
     } else if (res.status === 401) {
       setSharedAiStatus({ shared: false, anthropicShared: false, reason: "signed_out", checkedAt: Date.now() });
     } else if (res.status === 503) {
-      setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
+      // Read the code before switching anything off. A 503 used to mean one
+      // thing here and now means two: the operator has configured no shared
+      // key (persistent, and "not configured" is the right thing to show), or
+      // the proxy's own accounting could not answer (transient, and switching
+      // shared AI off for it strands the physician on a condition that has
+      // already passed). Only the first disables.
+      let code = null;
+      try { code = proxyCodeOf(await res.json()); } catch { code = null; }
+      if (isTransientProxyCode(code)) {
+        setSharedAiStatus({ checkedAt: Date.now() });
+        scheduleStatusRetry(15000);
+      } else {
+        setSharedAiStatus({ shared: false, anthropicShared: false, reason: "not_configured", checkedAt: Date.now() });
+      }
     } else {
       // Unknown server trouble (404 = function not deployed yet): keep whatever
       // we last knew rather than flipping features off on a hiccup.
@@ -401,7 +439,7 @@ export function useAnthropicAvailable(settings) {
 }
 
 // ─── The Gemini call ────────────────────────────────────────
-function wrapResponse(res, { proxyError = null, message = null, parsed } = {}) {
+function wrapResponse(res, { proxyError = null, message = null, retryAfter = null, transient = false, parsed } = {}) {
   let cached = parsed !== undefined ? Promise.resolve(parsed) : null;
   return {
     ok: res.ok,
@@ -409,6 +447,11 @@ function wrapResponse(res, { proxyError = null, message = null, parsed } = {}) {
     json: () => (cached ??= res.json()),
     proxyError,
     message,
+    // Set for a refusal that clears on its own. A caller that wants to retry
+    // has both the fact and the wait; one that does not can keep showing
+    // `message`, which already says to try again.
+    transient,
+    retryAfter,
   };
 }
 
@@ -419,6 +462,8 @@ function syntheticResponse(status, proxyError) {
     json: async () => ({ error: proxyError }),
     proxyError,
     message: AI_MESSAGES[proxyError] || AI_MESSAGES.offline,
+    transient: isTransientProxyCode(proxyError),
+    retryAfter: null,
   };
 }
 
@@ -476,6 +521,20 @@ export async function geminiCall(path, body, apiKey, { signal } = {}) {
     });
     return wrapResponse(res, { proxyError: "quota", message: quotaMessage(Number(parsed.limit) || sharedAiStatus.limit), parsed });
   }
+  // Transient refusals, from either status. These clear by themselves, so the
+  // status cache is NOT touched: the physician keeps shared AI and the next
+  // call goes through. Before this split, the 429 fell through to Gemini's own
+  // error handling with no message, and the 503 switched shared AI off for a
+  // condition that had already passed.
+  if (!fromGemini && isTransientProxyCode(code)) {
+    return wrapResponse(res, {
+      proxyError: code,
+      message: AI_MESSAGES[code] || AI_MESSAGES.offline,
+      retryAfter: retryAfterSeconds(res, parsed),
+      transient: true,
+      parsed,
+    });
+  }
   if (res.status === 503 && !fromGemini) {
     setSharedAiStatus({ shared: false, reason: "not_configured" });
     return wrapResponse(res, { proxyError: "shared_key_not_configured", message: AI_MESSAGES.shared_key_not_configured, parsed });
@@ -515,11 +574,32 @@ function proxyCodeOf(body) {
   return typeof body?.error === "string" ? body.error : null;
 }
 
+/**
+ * How long to wait before retrying, in seconds: the Retry-After header when
+ * the proxy sent one, the body's own retry_after otherwise, and null when
+ * neither says. Bounded so a bad header cannot park a caller for an hour.
+ */
+export function retryAfterSeconds(res, body) {
+  const usable = (raw) => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.ceil(n), 300) : null;
+  };
+  // Not `??`: a header of "soon" is present and useless, and coalescing on
+  // nullish alone would take it and then produce NaN. Each source is tried and
+  // the first USABLE one wins.
+  return usable(res?.headers?.get?.("Retry-After")) ?? usable(body?.retry_after);
+}
+
 // The proxy's own refusals, noted in the status cache as they happen so the
 // next call routes straight to Gemini and Settings reads true.
 function noteOpusRefusal(status, body) {
   const code = proxyCodeOf(body);
   if (!code) return;
+  // Transient first, and it changes NOTHING. An accounting failure or a burst
+  // refusal used to land in the 503 branch below and set anthropicShared to
+  // false, which routes every later call to Gemini and makes Settings read
+  // "Opus off" for a condition that lasts seconds.
+  if (isTransientProxyCode(code)) return;
   if (status === 429 && code === "quota") {
     setSharedAiStatus({
       anthropicUsed: Number(body.used) || sharedAiStatus.anthropicLimit || SHARED_DAILY_LIMIT,
@@ -600,6 +680,7 @@ export function anthropicErrorMessage(err) {
   const body = err?.error;
   const code = proxyCodeOf(body);
   if (!code) return null;
+  if (isTransientProxyCode(code)) return AI_MESSAGES[code] || AI_MESSAGES.offline;
   if (status === 429 && code === "quota") return opusQuotaMessage(Number(body.limit) || sharedAiStatus.anthropicLimit);
   if (status === 429 && code === "budget") return AI_MESSAGES.budget;
   if (status === 503) return AI_MESSAGES.opus_not_enabled;

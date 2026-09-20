@@ -3,13 +3,17 @@ import { useApp } from "../../context/AppContext";
 const until = value => new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export default function LaunchAccessNotice({ onReviewOffers }) {
-  const { limitedLaunch, theme: T } = useApp();
+  const { limitedLaunch, data, theme: T } = useApp();
   if (!limitedLaunch.enabled) return null;
   const access = limitedLaunch.access;
+  const hasSavedRecords = Object.values(data || {}).some(value => Array.isArray(value) && value.length > 0);
   let title, copy;
   if (!access || limitedLaunch.error || access.needsRefresh) {
     title = "Checking membership";
     copy = "Saved records remain available. Changes are paused until membership can be verified.";
+  } else if (access.accessStatus === "pending" && !hasSavedRecords) {
+    title = "Choose your membership";
+    copy = "Review your eligible offer and its renewal terms before choosing to pay. Creating an account does not charge you.";
   } else if (access.lifetime.credential && access.lifetime.practice) {
     title = "Free for life"; copy = "Your lifetime membership includes Credential and Practice.";
   } else if (access.freeBeta?.state === "active") {

@@ -5,9 +5,10 @@ import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
 import { loadData, saveData, readCachedData, clearLocalData } from "../utils/storage";
-import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage, lsGet, lsSet, WIPE_SEEN_KEY, pendingOpCount } from "../utils/storageScope";
+import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage, hasLegacyStorage, lsGet, lsSet, WIPE_SEEN_KEY, pendingOpCount, retireContinuityRecovery } from "../utils/storageScope";
 import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
+import { configureSecretContinuity } from "../utils/secretBox.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
@@ -16,6 +17,7 @@ import { MS_PER_DAY } from "../utils/helpers";
 import {
   supabase,
   ensureProfile,
+  invalidateAccountWrites,
   loadFromSupabase,
   insertItem as sbInsert,
   updateItem as sbUpdate,
@@ -30,6 +32,7 @@ import {
   createDataDeletionContext,
   isCurrentDataDeletionContext,
   COLLECTION_KEYS,
+  withLocalOnlySettings,
 } from "../lib/supabase";
 
 const AppContext = createContext(null);
@@ -46,9 +49,18 @@ function normalizeClerkUser(clerkUser) {
     email: clerkUser.primaryEmailAddress?.emailAddress
       || clerkUser.emailAddresses?.[0]?.emailAddress
       || null,
-    // Every address on the account — the admin gate matches any of them,
-    // so which one happens to be "primary" in Clerk doesn't matter.
+    // VERIFIED addresses only. Clerk lists a secondary address in
+    // emailAddresses the instant it is typed, with verification.status
+    // "unverified" and no code sent to it, so this array used to carry
+    // anything the account holder cared to claim. It fed the client admin
+    // check, which fed the invite-only gate, so adding
+    // admin@credentialdomd.com to your own Clerk profile was enough to walk
+    // past the invite screen. The admin check no longer reads addresses at
+    // all (src/lib/admin.js), and this array is filtered as well, because an
+    // unverified address is a claim and nothing downstream should be able to
+    // mistake it for a fact.
     emails: (clerkUser.emailAddresses || [])
+      .filter((e) => e?.verification?.status === "verified")
       .map((e) => e?.emailAddress)
       .filter(Boolean),
     fullName: clerkUser.fullName || null,
@@ -72,6 +84,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // stamp its first-render marks off the local fallback: a degraded load
   // looks like a brand-new account, and the next real load would then
   // congratulate an established physician for finishing setup.
+  const [profileOwner, setProfileOwner] = useState(null);
+  const [profileIssue, setProfileIssue] = useState(null);
   const [loadedFrom, setLoadedFrom] = useState(null); // "cloud" | "local"
   const userIdRef = useRef(null);
   // Clerk id the in-memory `data` was loaded for. The on-device cache is
@@ -144,6 +158,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (dataOwnerRef.current !== (user?.id || null)) {
       dataOwnerRef.current = null;
       userIdRef.current = null;
+      setProfileOwner(null);
       setLoaded(false);
       setData(DEFAULT_DATA);
     }
@@ -187,9 +202,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (offlineMode) return loadLocalData(authUserId, current);
     try {
       // Ensure profile exists for this auth user
-      const profile = await ensureProfile(authUserId);
+      const profile = await ensureProfile(authUserId, { isCurrent: current });
       if (!current()) return;
       if (profile) {
+        setProfileOwner(authUserId);
+        setProfileIssue(null);
         // The server wiped this account (Delete All My Data on another
         // device, or the deletion 7 days after a cancellation) and took the
         // tombstone ledger with it. A device that has not yet purged for THIS
@@ -200,7 +217,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         // The private vault stays; it exists nowhere else and never touched
         // the server.
         if (profile.deleted_at && lsGet(WIPE_SEEN_KEY, authUserId) !== profile.deleted_at) {
-          try { await purgeUserStorage(authUserId, { keepVault: true }); } catch { /* best effort */ }
+          try { await purgeUserStorage(authUserId, { keepVault: true, retireRecovery: true }); }
+          catch (error) { if (error.code === "continuity_retirement_unavailable") throw error; }
           if (!current()) return;
           lsSet(WIPE_SEEN_KEY, profile.deleted_at, authUserId);
         }
@@ -247,6 +265,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
               local = adopted || local;
             } catch { /* keep local */ }
           }
+
+          // Settings the cloud has no column for (LOCAL_ONLY_SETTINGS in
+          // lib/supabase.js) come back from the merge above as undefined,
+          // because loadFromSupabase can only rebuild what the profile row
+          // holds. setData and saveData below then wrote that gap over the
+          // on-device copy as well, so "Vera answers with: Claude Opus"
+          // survived exactly until the next online load and then read
+          // "Gemini (cheaper, the default)" again with nothing said. Only
+          // the named keys are carried, and only where the cloud is silent:
+          // merging all of local.settings would resurrect values deleted on
+          // another device.
+          merged.settings = withLocalOnlySettings(merged.settings, local?.settings);
 
           // A collection we failed to READ keeps this device's last-known-good
           // copy rather than the empty set the merge would otherwise show — and
@@ -365,6 +395,21 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         }
       }
     } catch (err) {
+      if (!current()) return;
+      if (["continuity_initialization_failed", "continuity_retirement_unavailable"].includes(err.code)) {
+        // An unresolved legacy identity must never hydrate/replay destination
+        // storage or silently become a fresh profile. Preserve every disk copy.
+        dataOwnerRef.current = null;
+        userIdRef.current = null;
+        setProfileOwner(null);
+        setProfileIssue({ accountId: authUserId, message: err.recoveryConflict
+          ? "An existing device copy needs a recovery review. Your saved data has not been overwritten. Please contact support."
+          : "Your account identity could not be verified. Your existing records have not changed. Reload to try again." });
+        setData(DEFAULT_DATA);
+        setLoadedFrom(null);
+        setLoaded(true);
+        return;
+      }
       console.warn("CredentialDOMD: Supabase load failed:", err.message);
     }
 
@@ -429,6 +474,13 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         ? `You have ${pending} change${pending === 1 ? "" : "s"} made offline that have not synced yet. Signing out now discards them permanently. Reconnect first to keep them. Sign out anyway?`
         : `You have ${pending} change${pending === 1 ? "" : "s"} that have not reached the cloud yet. Signing out now discards them permanently. Reload the app first to retry them. Sign out anyway?`
     )) return;
+    // Persist retirement before clearing anything. A failure leaves the user
+    // signed in with their in-memory data and actionable explanation intact.
+    try { retireContinuityRecovery(ownerId); }
+    catch (error) { window.alert(error.message); return; }
+    invalidateAccountWrites(ownerId);
+    dataLoadGeneration.current += 1;
+    configureSecretContinuity(null);
     // Past the point of no return. Drop the in-memory file and its owner
     // BEFORE the purge, so the debounced cache write cannot put the record
     // set back under this account's key, then purge everything this account
@@ -476,7 +528,21 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [data, loaded]);
 
   // ─── Subscription ─────────────────────────────────────────
-  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, canWritePractice } = useSubscription(user ?? null);
+  const { plan, isPro, isPractice, loading: subLoading, periodEnd, checkout: sbCheckout, manage: sbManage, setMockPlan, isDevMode, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, canWritePractice } = useSubscription(user ?? null, { profileReady: !offlineMode && profileOwner === user?.id });
+
+  // Enrollment may finish after the initial cloud load. Retry the owner-bound
+  // replay/self-heal once when protected write scopes become available.
+  const reconciledAccess = useRef(null);
+  useEffect(() => {
+    if (!limitedLaunch.enabled || !loaded || offlineMode || !user?.id || profileOwner !== user.id
+      || getActiveUserId() !== user.id || window.Clerk?.user?.id !== user.id
+      || limitedLaunch.status !== "ready" || (!canWriteCredential && !canWritePractice)) return;
+    const key = `${user.id}:${canWriteCredential}:${canWritePractice}`;
+    if (reconciledAccess.current === key) return;
+    reconciledAccess.current = key;
+    void loadDataForUser(user.id);
+  }, [limitedLaunch.enabled, limitedLaunch.status, loaded, offlineMode, user?.id, profileOwner, canWriteCredential, canWritePractice]); // eslint-disable-line react-hooks/exhaustive-deps
+  // End protected-access reconciliation.
   accessAuthority.registerRecords(dataOwnerRef.current, data);
 
   // Check before replacing local state, so a denied restore never overwrites saved data.
@@ -640,8 +706,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     signOut: handleSignOut,
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
-    isLifetime, limitedLaunch, canWriteCredential, canWritePractice,
-  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+    isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null }, canWriteCredential, canWritePractice,
+  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

@@ -48,6 +48,12 @@ if (import.meta.env.PROD) {
     "https://clerk-telemetry.com",
     // Clerk's Smart CAPTCHA is Cloudflare Turnstile — its widget posts back here.
     "https://challenges.cloudflare.com",
+    // A physician who pastes their own Anthropic key in Settings talks to
+    // Claude straight from the browser (aiClient.js points the SDK at
+    // api.anthropic.com and only routes through ai-proxy when there is no own
+    // key). Without this entry that direct path was blocked in production, so
+    // the one route that costs us nothing failed and only the proxy worked.
+    "https://api.anthropic.com",
   ];
   // Include the Supabase project URL if configured
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;

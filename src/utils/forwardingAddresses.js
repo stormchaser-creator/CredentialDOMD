@@ -1,12 +1,18 @@
 /**
  * The addresses a physician may forward mail from.
  *
- * email-inbound matches a forwarded message to an account by its SENDER:
- * a CONFIRMED forwarding address first, then profiles.email (the order was
- * reversed in 20260903e so a confirmed address outranks a self-asserted one).
- * physician who signed up as name@gmail.com and forwards the credentialer's
- * request from name@hospital.org needs that second address registered and
- * confirmed before anything reaches their account.
+ * email-inbound matches a forwarded message to an account by its SENDER, and
+ * that match is now a held address only: a CONFIRMED forwarding_addresses row,
+ * or a mailbox the server itself verified. The old fallback to profiles.email
+ * is gone. That column is user-editable, so an attacker could type an address
+ * they did not hold, and when the genuine physician forwarded a real document
+ * from that mailbox every authentication check passed (the mail really was
+ * theirs) and the document landed in the attacker's account.
+ *
+ * The cost of closing that hole is that the account address is no longer
+ * special. A physician who signed up as name@gmail.com and forwards from
+ * name@hospital.org still needs the hospital address confirmed, and now
+ * name@gmail.com needs confirming too before mail forwarded from it routes.
  *
  * This file holds only the decisions, no I/O: the same normalization and the
  * same refusal reasons the forwarding-address function applies, so the field
@@ -14,7 +20,8 @@
  * name the addresses to a physician. The server still decides; nothing here
  * is a permission check. The two lists of rules are deliberately identical in
  * wording (supabase/functions/forwarding-address/lib.ts), so a refusal reads
- * the same whichever side produced it.
+ * the same whichever side produced it, and a disagreement between the two is
+ * a bug in whichever side moved last, not a local preference.
  *
  * Tested by scripts/forwarding-addresses.test.mjs.
  */
@@ -59,12 +66,15 @@ export function domainOf(email) {
  * the field has nothing to complain about yet. An empty box is not a problem,
  * it is an unfinished one, so it answers null and the button stays disabled.
  *
+ * There is no accountEmail parameter any more. The account address used to be
+ * compared against and refused here; now it is an ordinary address that has to
+ * be confirmed like every other one, so there is nothing left to compare it to.
+ *
  * @param {object} o
- * @param {string} o.email        what was typed, raw
- * @param {string} o.accountEmail profiles.email for this account
- * @param {Array}  o.rows         this account's forwarding_addresses rows
+ * @param {string} o.email  what was typed, raw
+ * @param {Array}  o.rows   this account's forwarding_addresses rows
  */
-export function addProblem({ email, accountEmail, rows = [] }) {
+export function addProblem({ email, rows = [] }) {
   const addr = normalizeAddress(email);
   if (!addr) return null;
   if (!isAddressShaped(addr)) return "That does not look like an email address.";
@@ -72,9 +82,16 @@ export function addProblem({ email, accountEmail, rows = [] }) {
   if (domain === INBOX_DOMAIN || domain.endsWith(`.${INBOX_DOMAIN}`)) {
     return "That is a CredentialDOMD address. Add the address you forward mail FROM, such as your hospital email.";
   }
-  if (addr === normalizeAddress(accountEmail)) {
-    return "That is already the email on your account, so mail forwarded from it already reaches you.";
-  }
+  // The account address used to be refused here with "That is already the
+  // email on your account, so mail forwarded from it already reaches you."
+  // Both halves of that sentence stopped being true when email-inbound
+  // dropped the profiles.email fallback: mail forwarded from the account
+  // address reaches nobody until the address is confirmed, and the refusal
+  // blocked the one control that could confirm it. The matching refusal
+  // (code own_profile_email) came out of
+  // supabase/functions/forwarding-address/lib.ts in the same change; the two
+  // must agree, and a mismatch is a bug in whichever side moved last, not a
+  // local preference.
   const mine = (rows || []).find((r) => normalizeAddress(r?.email) === addr);
   if (mine && mine.verified_at) return "You have already confirmed that address.";
   if (mine) return "That address is already waiting to be confirmed. Send the confirmation email again if it did not arrive.";
@@ -98,13 +115,41 @@ export function sortAddresses(rows = []) {
   });
 }
 
+/** The row on this account for one address, or undefined. Case and display name insensitive. */
+export function rowForAddress(email, rows = []) {
+  const addr = normalizeAddress(email);
+  if (!addr) return undefined;
+  return (rows || []).find((r) => normalizeAddress(r?.email) === addr);
+}
+
 /**
- * Every address mail may be forwarded from: the account address first,
- * because it always works and cannot be removed, then each confirmed
- * forwarding address. Deduplicated, since a physician may have changed their
- * account email to one they had already confirmed.
+ * TWO QUESTIONS, TWO FUNCTIONS. They used to share one answer, and collapsing
+ * them again breaks one of the two screens below.
+ *
+ * forwardingSenders = "which addresses are MINE". Used to notice that a
+ * document request names the physician's own address as the requester, which
+ * means the forwarded mail carried no From: line and there is nobody to reply
+ * to (App.jsx ownSenders, then requesterMissing in features/RequestPacket.js).
+ * The account address belongs in that answer whether or not it is confirmed:
+ * it is the physician's address either way, and dropping it would let the
+ * Home banner offer a send that mails the packet back to the physician.
+ * `verifiedEmail` belongs there for the same reason and was missing: it is
+ * profiles.verified_email, the mailbox the sign-in provider verified, and for
+ * most live accounts it is the address the physician actually reads mail at
+ * while profiles.email is something they typed once. A physician who mails
+ * themselves a checklist from that mailbox and forwards it in got a green
+ * Approve button, and the tap mailed the packet back to themselves.
+ * send-packet-email now refuses that send; this is the same answer one screen
+ * earlier, before the tap instead of after it.
+ *
+ * routableSenders = "which addresses will actually ROUTE inbound mail". Used
+ * to tell a physician which addresses to forward from. Since email-inbound
+ * stopped falling back to profiles.email that is the confirmed rows, plus the
+ * account address only when it is confirmed among them or the caller can say
+ * the server verified it. Naming an unconfirmed address here sends a
+ * physician to forward mail that will be dropped.
  */
-export function forwardingSenders(accountEmail, rows = []) {
+export function forwardingSenders(accountEmail, rows = [], { verifiedEmail = "" } = {}) {
   const out = [];
   const seen = new Set();
   const push = (e) => {
@@ -114,9 +159,92 @@ export function forwardingSenders(accountEmail, rows = []) {
     out.push(a);
   };
   push(accountEmail);
+  push(verifiedEmail);
   for (const r of sortAddresses(rows)) if (r?.verified_at) push(r.email);
   return out;
 }
+
+/**
+ * See the pair above. accountVerified is for a caller that holds a
+ * server-owned verified-mailbox flag; it defaults to false because the
+ * browser reads profiles.email, which is user-editable and proves nothing.
+ *
+ * Every caller now passes it, built by accountMailboxVerified below from the
+ * read-only profiles.verified_email that loadFromSupabase surfaces. The
+ * default stayed false and no caller passed anything, so an account whose
+ * mailbox Clerk had verified was told by two screens that nothing reached it
+ * while email-inbound was routing that mail perfectly well.
+ */
+export function routableSenders(accountEmail, rows = [], { verifiedEmail = "", accountVerified = false } = {}) {
+  const out = [];
+  const seen = new Set();
+  const push = (e) => {
+    const a = normalizeAddress(e);
+    if (!a || seen.has(a)) return;
+    seen.add(a);
+    out.push(a);
+  };
+  const acct = normalizeAddress(accountEmail);
+  const verified = normalizeAddress(verifiedEmail);
+  const confirmed = sortAddresses(rows).filter((r) => r?.verified_at);
+  const acctConfirmed = Boolean(acct) && confirmed.some((r) => normalizeAddress(r.email) === acct);
+
+  // The address the physician TYPED into Settings routes only when something
+  // proves they read it: a forwarding row they confirmed by opening an emailed
+  // link, or the identity provider verifying that same address. A typed
+  // address on its own is the disclosure defect this whole change removed, so
+  // it never gets in here by being typed.
+  if (acct && (acctConfirmed || accountVerified || (verified && verified === acct))) push(acct);
+
+  // The provider-verified mailbox, on its own footing and NOT conditional on
+  // it being the same string as the typed one. This took an argument that was
+  // only a boolean "is the account address the verified one", so a physician
+  // whose Settings email is their professional address while Clerk verified a
+  // different mailbox had NO routable senders at all: CME and Requests told
+  // them to confirm an address first, and Settings did not show the one that
+  // already worked. The server was routing that mailbox correctly the whole
+  // time. This was guidance that contradicted the product, not a gate.
+  // Shape-checked, because unlike a forwarding row (which the database
+  // constrains) this arrives from a settings object and a caller could hand it
+  // anything. A value that is not an address cannot route, and showing it in a
+  // list of addresses that DO route would be a lie.
+  if (isAddressShaped(verified)) push(verified);
+
+  for (const r of confirmed) push(r.email);
+  return out;
+}
+
+/**
+ * Is the account address the very mailbox the sign-in provider verified?
+ *
+ * profiles.verified_email is server-owned: clerk-webhook stamps it with the
+ * service role and profiles_lock_verified_email freezes it against every user
+ * token (migration 20260915d), so a browser reading it back is reading a fact,
+ * not a claim. profiles.email sitting beside it is typed by the owner and
+ * proves nothing, which is why the two are compared rather than trusted apart.
+ *
+ * The answer feeds routableSenders' accountVerified, and Settings uses it to
+ * stop badging a mailbox "Not confirmed" that the server already routes.
+ */
+export function accountMailboxVerified(verifiedEmail, accountEmail) {
+  const v = normalizeAddress(verifiedEmail);
+  const a = normalizeAddress(accountEmail);
+  return Boolean(v && a && v === a);
+}
+
+/**
+ * What every screen says when this account has no routable address at all.
+ *
+ * One string, because three screens say it: the Requests header and its empty
+ * state, and the CME intake hint. They each carried their own sentence, the
+ * Requests header named the unconfirmed account address as a place to forward
+ * from while the empty state below it said the opposite, and CME told the
+ * physician to forward from profiles.email, which email-inbound stopped
+ * reading. A physician who follows any of those gets the unregistered reply
+ * and a document that was never filed.
+ */
+export const CONFIRM_FIRST_SENTENCE =
+  "Confirm the address you forward from under Settings, Email. Nothing reaches this account from an unconfirmed address, so there is no address to name here yet.";
 
 /** ["a"] -> "a"; ["a","b"] -> "a or b"; ["a","b","c"] -> "a, b or c". */
 export function joinAddresses(list = []) {

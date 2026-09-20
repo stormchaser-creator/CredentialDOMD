@@ -84,3 +84,29 @@ test('each saved offer renders only Resume checkout and requires a fresh quote b
     assert.match(render(Membership), /disabled=""[^>]*>Resume checkout/);
   }
 });
+
+test('public signup replaces invitation-only instructions while requiring a separately reviewed offer', () => {
+  const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;
+  value.limitedLaunch.publicSignupEnabled = true;
+  Object.assign(value.limitedLaunch.access, { accessStatus: 'pending', freeBeta: { state: 'none' }, billingEnabled: true, checkoutEligible: true });
+  const html = render(Membership);
+  assert.match(html, /Creating an account does not charge you/);
+  assert.doesNotMatch(html, /Open your personal invitation link|type="checkbox"|Continue to secure payment/);
+  assert.doesNotMatch(html, /disabled=""[^>]*>Review Credential offer/);
+  value.limitedLaunch.enrollmentError = 'verified_primary_email_required';
+  assert.match(render(Membership), /Verify the primary email address/);
+  assert.match(render(Membership), /Check membership again/);
+});
+
+
+test('fresh pending account gets purchase guidance while saved records retain recovery notice', () => {
+  const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;
+  value.data = { settings: {}, licenses: [], documents: [] };
+  value.limitedLaunch.access.accessStatus = 'pending';
+  value.limitedLaunch.access.freeBeta = { state: 'none' };
+  assert.match(render(Notice), /Choose your membership/);
+  assert.doesNotMatch(render(Notice), /Saved records are available/);
+  value.data.licenses.push({ id: 'saved-license' });
+  assert.match(render(Notice), /Saved records are available/);
+  assert.match(render(Notice), /viewing and exporting saved records/);
+});

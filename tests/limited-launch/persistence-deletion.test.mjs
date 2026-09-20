@@ -30,7 +30,7 @@ function fixture({ profileId = 'profileA', offline = false, deferDeletingState =
   const calls = [], handlers = {};
   const userIdRef = { current: profileId };
   const sessionA = { user: { id: ownerA } };
-  const window = { Clerk: { user: offline ? null : { id: ownerA }, session: offline ? null : sessionA } };
+  const window = { alert: message => calls.push({ name: 'alert', args: [message], actor }), Clerk: { user: offline ? null : { id: ownerA }, session: offline ? null : sessionA } };
   const record = (name, args) => { calls.push({ name, args, actor }); return handlers[name]?.(...args); };
   const asyncDependency = (name, fallback) => async (...args) => {
     const result = record(name, args);
@@ -220,7 +220,7 @@ function appFixture({ offline = false, profileId = 'profileA', withCache = false
   const timers = [], cacheWrites = [], clearedTimers = [];
   const issued = new WeakSet();
   const originalSession = offline ? null : { user: { id: ownerA } };
-  const window = { Clerk: { user: offline ? null : { id: ownerA }, session: originalSession } };
+  const window = { alert: message => calls.push({ name: 'alert', args: [message], actor }), Clerk: { user: offline ? null : { id: ownerA }, session: originalSession } };
   const context = {
     user: { id: ownerA }, dataOwnerRef, userIdRef, dataRef, dataLoadGeneration, cacheWriteGeneration, offlineMode: offline, window,
     data: state, loaded: true, saveTimer: { current: null }, clearTimeout: id => clearedTimers.push(id), getActiveUserId: () => actor,
@@ -415,4 +415,15 @@ test('stale A deletion start and reset cannot clear B timer or change B cache ge
   assert.equal(f.clearedTimers.length, clearsBefore);
   assert.equal(f.scheduled.length, 0);
   assert.equal(f.dataRef.current, stateBefore);
+});
+
+
+test('a failed durable recovery cancellation stops deletion before cloud changes and reports failure', async () => {
+  const f = fixture(); confirm(f);
+  f.handlers.purgeUserStorage = async () => { const error = Error('Synthetic blocked storage'); error.code = 'continuity_retirement_unavailable'; throw error; };
+  await f.run();
+  for (const name of ['clearDeviceKeys', 'list', 'remove', 'deleteAllData', 'requestAccountDeletion', 'resetAfterAccountDeletion']) assert.equal(f.named(name).length, 0, name);
+  assert.equal(f.named('alert').length, 1);
+  assert.match(f.named('alert')[0].args[0], /cloud records have not been deleted/);
+  assert.equal(f.named('setDeleting').at(-1).args[0], false);
 });

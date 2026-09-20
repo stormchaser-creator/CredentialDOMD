@@ -38,7 +38,11 @@ function LegalSection({ page }) {
     // the device-key slot (AI keys + the portal password lock code).
     try {
       owner.start();
-      await purgeUserStorage(owner.accountId).catch(() => {});
+      await purgeUserStorage(owner.accountId).catch(error => {
+        // A failed retirement marker could resurrect legacy bytes after this
+        // deletion. Stop before device-key/cloud deletion or a success reset.
+        if (error.code === "continuity_retirement_unavailable") throw error;
+      });
       owner.check();
       clearDeviceKeys(owner.accountId);
       if (owner.profileId && owner.db) {
@@ -93,6 +97,7 @@ function LegalSection({ page }) {
     } catch (error) {
       // A changed identity stops the remaining phases; never retarget or reset
       // the newly selected account. Already-dispatched owner requests may finish.
+      if (error.code === "continuity_retirement_unavailable") window.alert("Deletion could not safely start because this browser could not save the recovery cancellation. Your cloud records have not been deleted. Please try again or contact support.");
       if (error.code !== "membership_account_changed") console.warn("CredentialDOMD: data deletion stopped:", error.message);
     } finally {
       deletionBusyRef.current = false;

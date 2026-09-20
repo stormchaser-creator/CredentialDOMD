@@ -335,3 +335,90 @@ test('resume owner, offer, expiry and pending refusals return errors without a p
     await assert.rejects(f.client.checkout(consent), failure=>failure.code===error);
   }
 });
+
+const enrollmentFixture = (kind = 'paid') => ({
+  schemaVersion: 1, policyVersion: PUBLIC_BILLING_POLICY.version,
+  enrollmentKind: kind, accessStatus: kind === 'paid' ? 'pending' : 'active',
+  freeBeta: kind === 'grandfathered_beta'
+    ? { state: 'active', startsAt: '2026-09-20T12:00:00Z', endsAt: '2026-10-20T12:00:00Z', autoCharges: false }
+    : { state: 'none', startsAt: null, endsAt: null, autoCharges: false },
+  pricePhase: kind === 'lifetime' ? null : kind === 'grandfathered_beta' ? 'founding' : 'earlybird',
+  cardRequired: kind === 'paid', subscriptionCreated: false,
+});
+
+test('public enrollment posts no mailbox or client eligibility and validates each protected cohort', async () => {
+  for (const kind of ['paid', 'grandfathered_beta', 'lifetime']) {
+    let request;
+    const value = enrollmentFixture(kind);
+    const { client } = setup({ fetchImpl: async (...args) => { request = args; return Response.json(value); } });
+    assert.deepEqual(await client.bootstrap(), value);
+    assert.ok(request[0].endsWith('/bootstrap-launch-access'));
+    assert.equal(request[1].body, '{}');
+    assert.equal(request[1].referrerPolicy, 'no-referrer');
+  }
+});
+
+test('enrollment rejects invented grants, automatic charges and a changed historical trial duration', async () => {
+  for (const change of [
+    { enrollmentKind: 'free' }, { subscriptionCreated: true }, { cardRequired: true },
+    { policyVersion: 'unrecognized' }, { accessStatus: 'revoked' }, { pricePhase: null },
+    { freeBeta: { state: 'active', startsAt: '2026-09-20T12:00:00Z', endsAt: '2026-11-20T12:00:00Z', autoCharges: false } },
+    { freeBeta: { ...enrollmentFixture('grandfathered_beta').freeBeta, autoCharges: true } },
+  ]) {
+    const { client } = setup({ fetchImpl: async () => Response.json({ ...enrollmentFixture('grandfathered_beta'), ...change }) });
+    await assert.rejects(client.bootstrap(), unavailable);
+  }
+});
+
+test('enrollment preserves a safe reason for unverified email or a disabled rollout, without server detail', async () => {
+  for (const reason of ['signup_disabled', 'signup_unavailable', 'verified_primary_email_required', 'membership_unavailable']) {
+    const { client } = setup({ fetchImpl: async () => Response.json({ error: reason, debug: 'secret synthetic value' }, { status: 403 }) });
+    await assert.rejects(client.bootstrap(), error => error.code === reason && !error.message.includes('secret'));
+  }
+});
+
+test('public enrollment cannot dispatch after session replacement and remains inert with gate disabled', async () => {
+  let requests = 0;
+  const { client, session, switchSession } = setup({ fetchImpl: async () => { requests++; return Response.json(enrollmentFixture()); } });
+  const wait = deferred(); session.getToken = () => wait.promise;
+  const pending = client.bootstrap();
+  switchSession({ user: { id: 'user_synthetic_b' } }); wait.resolve('late-token');
+  await assert.rejects(pending, unavailable);
+  assert.equal(requests, 0);
+  const disabled = setup({ enabled: false, getSession() { throw Error('No auth access while disabled'); } });
+  await assert.rejects(disabled.client.bootstrap(), unavailable);
+});
+
+const initializationFixture = (bound = true) => ({ schemaVersion: 1, state: bound ? 'bound' : 'current',
+  profileId: '00000000-0000-4000-8000-000000000001', subject: 'user_synthetic_a', issuer: 'https://clerk.credentialdomd.com',
+  continuity: bound ? { id: '00000000-0000-4000-8000-000000000002', state: 'bound', sourceSubject: 'user_legacyA', sourceIssuer: 'https://dynamic-goshawk-87.clerk.accounts.dev' } : null });
+
+test('identity initializer sends only an empty body and accepts exact authenticated current or bound receipts', async () => {
+  for (const bound of [true, false]) {
+    let request;
+    const receipt = initializationFixture(bound);
+    const { client } = setup({ fetchImpl: async (...args) => { request = args; return Response.json(receipt); } });
+    assert.deepEqual(await client.initializeProfile(), receipt);
+    assert.ok(request[0].endsWith('/initialize-clerk-profile'));
+    assert.equal(request[1].body, '{}');
+  }
+});
+test('identity receipt cannot redirect account ownership, profile UUID, issuer, or legacy namespace', async () => {
+  for (const mutation of [
+    { subject: 'user_unrelated' }, { issuer: 'https://attacker.invalid' }, { profileId: 'not-a-uuid' },
+    { continuity: null }, { state: 'pending' }, { schemaVersion: 2 },
+    { continuity: { ...initializationFixture().continuity, sourceSubject: 'user_synthetic_a' } },
+    { continuity: { ...initializationFixture().continuity, sourceIssuer: 'https://attacker.invalid' } },
+    { continuity: { ...initializationFixture().continuity, sourceSubject: 'user_../escape' } },
+  ]) {
+    const { client } = setup({ fetchImpl: async () => Response.json({ ...initializationFixture(), ...mutation }) });
+    await assert.rejects(client.initializeProfile(), error => error.code === 'continuity_unavailable');
+  }
+});
+test('a delayed initialization acknowledgment is rejected after a same-account session replacement', async () => {
+  const response = deferred(), started = deferred();
+  const { client, switchSession } = setup({ fetchImpl: () => { started.resolve(); return response.promise; } });
+  const pending = client.initializeProfile(); await started.promise;
+  switchSession({ user: { id: 'user_synthetic_a' } }); response.resolve(Response.json(initializationFixture()));
+  await assert.rejects(pending, unavailable);
+});

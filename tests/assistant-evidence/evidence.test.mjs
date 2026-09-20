@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { calculationEvidence, jurisdictionEvidence, renewalEvidence, savedReferenceContext, mentionedJurisdictions, evidenceForTurn } from '../../src/utils/assistantEvidence.js';
+import { calculationEvidence, jurisdictionEvidence, EVIDENCE_INSTRUCTIONS, renewalEvidence, savedReferenceContext, mentionedJurisdictions, evidenceForTurn } from '../../src/utils/assistantEvidence.js';
 import { STATE_REQS } from '../../src/constants/stateRequirements.js';
 import { VERA_SOURCES, VERA_SOURCE_VERSION } from '../../supabase/functions/_shared/veraSourceRegistry.mjs';
 
@@ -147,4 +147,26 @@ test('actual snapshot, both provider payloads and existing action response use t
   }
   assert.equal(sourceRequests.length, 4);
   for (const request of sourceRequests) assert.deepEqual(Object.keys(request), ['sourceId']);
+});
+
+test('links shown to point at the wrong authority are withheld, and nothing is substituted', () => {
+  for (const [state, degree] of [['AZ', 'DO'], ['VT', 'DO'], ['NM', 'DO']]) {
+    const rule = jurisdictionEvidence(state, degree).rules[0];
+    assert.equal(rule.url, null, `${state}:${degree} still emits its stored link`);
+    assert.match(rule.sourceLinkStatus, /^withheld_/);
+    assert.equal(rule.reviewStatus, 'needs_independent_review');
+    assert.ok(rule.topics.every(topic => topic.url === null), `${state}:${degree} topics inherit a withheld link`);
+    // The citation TEXT survives: withholding a wrong link is not deleting a rule.
+    assert.ok(rule.citation && rule.citation.length > 4);
+  }
+  // Negative controls: the allopathic side of the same states keeps its link,
+  // and an untouched state is unaffected. Without these, a change that nulled
+  // every url would pass the assertions above.
+  for (const [state, degree] of [['AZ', 'MD'], ['NM', 'MD'], ['OH', 'MD'], ['TX', 'MD']]) {
+    const rule = jurisdictionEvidence(state, degree).rules[0];
+    assert.match(rule.url, /^https:\/\//, `${state}:${degree} lost its link`);
+    assert.equal(rule.sourceLinkStatus, 'stored_link_supplied');
+  }
+  assert.match(EVIDENCE_INSTRUCTIONS, /withheld_[^.]*url is null on purpose/);
+  assert.match(EVIDENCE_INSTRUCTIONS, /never supply a link from memory/);
 });

@@ -10,12 +10,25 @@
  * key = PBKDF2-SHA256(lockCode + ":" + userId, salt, 150k iterations).
  */
 import { DEVICE_KEYS_BASE } from "./storageScope.js";
+import { continuityBindingSubject, continuitySourceSubject } from "./continuityRecovery.js";
 
 const PREFIX = "enc1:";
 const slot = (uid) => `${DEVICE_KEYS_BASE}:${uid}`;
 let activeUid = null;
+let continuityBinding = null;
 
-export function setSecretUser(uid) { activeUid = uid || null; }
+export function setSecretUser(uid) {
+  activeUid = uid || null;
+  if (continuityBinding) {
+    try { if (continuityBindingSubject(continuityBinding) !== activeUid) continuityBinding = null; }
+    catch { continuityBinding = null; }
+  }
+}
+/** Configure only a branded binding from successful authenticated bootstrap. */
+export function configureSecretContinuity(binding = null) {
+  if (binding) continuityBindingSubject(binding);
+  continuityBinding = binding;
+}
 export function isEncrypted(v) { return typeof v === "string" && v.startsWith(PREFIX); }
 
 export function getLockCode(uid = activeUid) {
@@ -61,6 +74,22 @@ export async function decryptSecret(value, code = getLockCode(), uid = activeUid
   try {
     return td.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct));
   } catch {
+    if (continuityBinding) {
+      const binding = continuityBinding;
+      let legacySubject;
+      try { legacySubject = continuitySourceSubject(binding, uid); } catch { throw new Error("wrong-lock-code"); }
+      const legacyKey = await deriveKey(code, legacySubject, salt);
+      // Both awaits can outlive a session/account change. Check before using
+      // legacy derivation and again before returning any decrypted plaintext.
+      try {
+        continuitySourceSubject(binding, uid);
+        if (continuityBinding !== binding) throw new Error("stale-continuity");
+        const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, legacyKey, ct);
+        continuitySourceSubject(binding, uid);
+        if (continuityBinding !== binding) throw new Error("stale-continuity");
+        return td.decode(plain);
+      } catch { throw new Error("wrong-lock-code"); }
+    }
     throw new Error("wrong-lock-code");
   }
 }

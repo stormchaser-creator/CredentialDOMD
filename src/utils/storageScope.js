@@ -39,6 +39,66 @@ export const BASE_KEYS = {
 // sign-in after a wipe would purge again. It holds a timestamp, nothing else.
 export const WIPE_SEEN_KEY = "credentialdomd-wipe-seen";
 
+// An explicit purge must also retire unfinished development-to-production
+// recovery. Keep this outside BASE_KEYS so the purge cannot remove its own
+// protection. It contains only a fixed marker, never cached data or secrets.
+export const CONTINUITY_RETIREMENT_BASE = "credentialdomd-continuity-retired-v1";
+export const CONTINUITY_JOURNAL_BASE = "credentialdomd-continuity-recovery-v1";
+const retiredContinuitySubjects = new Set();
+const knownContinuitySubjects = new Set();
+
+/** Register only after authenticated continuity validation, before any await. */
+export function registerContinuityRecoverySubject(userId) {
+  if (userId) knownContinuitySubjects.add(userId);
+}
+
+function hasContinuityRecovery(userId) {
+  if (knownContinuitySubjects.has(userId) || retiredContinuitySubjects.has(userId)) return true;
+  try {
+    if (localStorage.getItem(`${CONTINUITY_RETIREMENT_BASE}:${userId}`) !== null) return true;
+    const prefix = `${CONTINUITY_JOURNAL_BASE}:${userId}:`;
+    for (let i = 0; i < localStorage.length; i += 1) {
+      if (localStorage.key(i)?.startsWith(prefix)) return true;
+    }
+  } catch {
+    // Preserve the existing ordinary-account purge contract when there is no
+    // known continuity. A caller with authenticated continuity must register it
+    // first; unavailable storage cannot establish that history after a reload.
+  }
+  return false;
+}
+
+function continuityRetirementFailure(code) {
+  const error = new Error(code === "continuity_recovery_retired"
+    ? "Automatic recovery of this account's old device data has been retired."
+    : "Could not save the protection against restoring old device data. The local purge did not begin. Free device storage and try again.");
+  error.code = code;
+  return error;
+}
+
+/** Synchronous, durable barrier BEFORE any deliberate local deletion. */
+export function retireContinuityRecovery(userId) {
+  if (!userId || !hasContinuityRecovery(userId)) return;
+  // Also stop already pending work when persistence fails. This memory barrier
+  // cannot survive a reload, so failure MUST abort the purge and reach the UI.
+  retiredContinuitySubjects.add(userId);
+  const key = `${CONTINUITY_RETIREMENT_BASE}:${userId}`;
+  try {
+    if (localStorage.getItem(key) === null) localStorage.setItem(key, "retired");
+    if (localStorage.getItem(key) === null) throw new Error();
+  } catch { throw continuityRetirementFailure("continuity_retirement_unavailable"); }
+}
+
+/** Check at every recovery await/commit, including asynchronous adapters. */
+export function assertContinuityRecoveryAllowed(userId) {
+  if (retiredContinuitySubjects.has(userId)) throw continuityRetirementFailure("continuity_recovery_retired");
+  let marker;
+  try { marker = localStorage.getItem(`${CONTINUITY_RETIREMENT_BASE}:${userId}`); }
+  catch { throw continuityRetirementFailure("continuity_retirement_unavailable"); }
+  // Any present value is a denial. A damaged marker must never enable a copy.
+  if (marker !== null) throw continuityRetirementFailure("continuity_recovery_retired");
+}
+
 // AI keys and the portal-password lock code, one slot per user
 // (src/lib/supabase.js, src/utils/secretBox.js). Deliberately NOT in
 // BASE_KEYS: purgeUserStorage also runs on an involuntary sign-out (session
@@ -93,8 +153,11 @@ export function lsRemove(base, userId) {
  * unreadable to any other account. The explicit Sign out button and Delete
  * All My Data pass keepVault=false.
  */
-export async function purgeUserStorage(userId, { keepVault = false } = {}) {
+export async function purgeUserStorage(userId, { keepVault = false, retireRecovery = false } = {}) {
   if (!userId) return;
+  // A real server wipe may preserve a private vault but must still prevent
+  // recovery. Ordinary involuntary sign-out uses keepVault:true without this.
+  if (!keepVault || retireRecovery) retireContinuityRecovery(userId);
   for (const [name, base] of Object.entries(BASE_KEYS)) {
     if (name === "vault" && keepVault) continue;
     lsRemove(base, userId);

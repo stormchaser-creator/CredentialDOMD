@@ -40,9 +40,12 @@ function fixture({ enabled = true, practice = true } = {}) {
     }, storage: { from: bucket => ({ upload: (path, blob) => execute({ method: 'upload', bucket, path, blob }), remove: paths => execute({ method: 'remove', bucket, paths }) }) } };
   }
   const imports = {
-    '@supabase/supabase-js': { createClient }, '../constants/defaults': { STORAGE_KEY: 'synthetic-data' },
-    '../utils/storageScope': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor },
-    '../utils/founding': { foundingFromProfile: () => ({}) },
+    '@supabase/supabase-js': { createClient }, '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data' },
+    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor },
+    '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { throw Error('Continuity must be disabled'); } },
+    '../utils/continuityRecovery.js': {},
+    '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
+    '../utils/founding.js': { foundingFromProfile: () => ({}) },
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, allowsSettingsChange: (value, a = authority) => allowsSettingsChange(value, a), membershipWriteError,
       assertRecordWrite: (key, value, previous) => { if (!authority.allowsMutation(key, value, previous)) throw membershipWriteError(); } },
   };

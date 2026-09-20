@@ -42,7 +42,10 @@ export const IS_DEV_MODE =
 // active tier in localStorage so you can test tier-locked features (Locum
 // dashboard, etc.) before Stripe is wired. Visit /app/?preview_tier=clear
 // to reset. Persists across reloads until cleared. Ignored (and never
-// written to localStorage) unless the signed-in user is in ADMIN_EMAILS.
+// written to localStorage) unless the SERVER says this account is an admin:
+// isAdminUser now reads public.app_admins membership through ai-proxy's
+// status, not a hardcoded address list that anyone could add to their own
+// Clerk profile. See src/lib/admin.js.
 function isValidTier(t) {
   return typeof t === "string" && VALID_TIER_IDS.has(t);
 }
@@ -64,8 +67,8 @@ function readPreviewTierFromURL() {
   return null;
 }
 
-function getPreviewTier(user) {
-  if (typeof window === "undefined" || !isAdminUser(user)) return null;
+function getPreviewTier() {
+  if (typeof window === "undefined" || !isAdminUser()) return null;
   const fromUrl = readPreviewTierFromURL();
   if (fromUrl) return fromUrl;
   try {
@@ -79,7 +82,7 @@ function getMockTier() {
   catch { return "free"; }
 }
 
-export function useSubscription(userOverride) {
+export function useSubscription(userOverride, { profileReady = false } = {}) {
   // Pull the auth user straight from Clerk. The optional `userOverride`
   // argument is a back-compat hatch for AppContext, which used to pass a
   // Supabase-Auth user object in. Either source resolves to a Clerk user id.
@@ -88,8 +91,8 @@ export function useSubscription(userOverride) {
     ?? (isSignedIn ? { id: clerkUser?.id, email: clerkUser?.primaryEmailAddress?.emailAddress } : null);
 
   // Admin-only preview override (URL or localStorage). Beats Stripe-resolved tier.
-  const limitedLaunch = useLimitedLaunchAccess(user?.id || null);
-  const previewTier = LIMITED_LAUNCH_ACCESS_ENABLED ? null : getPreviewTier(user);
+  const limitedLaunch = useLimitedLaunchAccess(user?.id || null, { profileReady });
+  const previewTier = LIMITED_LAUNCH_ACCESS_ENABLED ? null : getPreviewTier();
   const [tier, setTier] = useState(() => {
     if (previewTier) return previewTier;
     if (IS_DEV_MODE) return getMockTier();

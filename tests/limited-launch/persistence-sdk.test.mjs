@@ -10,11 +10,14 @@ const source = await readFile(new URL('../../src/lib/supabase.js', import.meta.u
 const code = transformSync(source, { loader: 'js', format: 'cjs', define: {
   'import.meta.env': JSON.stringify({ VITE_SUPABASE_URL: 'https://synthetic.invalid', VITE_SUPABASE_ANON_KEY: 'synthetic-public' }),
 } }).code;
+const continuityCode = transformSync(source, { loader: 'js', format: 'cjs', define: {
+  'import.meta.env': JSON.stringify({ VITE_SUPABASE_URL: 'https://synthetic.invalid', VITE_SUPABASE_ANON_KEY: 'synthetic-public', VITE_CLERK_CONTINUITY_ENABLED: 'true' }),
+} }).code;
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 // Real Supabase SDK authentication and request serialization; the supplied
 // fetch records synthetic requests only and never invokes a network transport.
-function fixture({ switchAfterToken = false, enabled = false, offline = false } = {}) {
+function fixture({ switchAfterToken = false, enabled = false, offline = false, continuity = false } = {}) {
   let actor = 'user_syntheticA';
   const requests = [], values = new Map();
   const clerk = { user: offline ? null : { id: actor }, session: offline ? null : { user: { id: actor }, getToken: async () => 'synthetic-token-A' } };
@@ -34,9 +37,14 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false } 
       }
       return createClient(url, key, options);
     } },
-    '../constants/defaults': { STORAGE_KEY: 'synthetic-data' },
-    '../utils/storageScope': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor },
-    '../utils/founding': { foundingFromProfile: () => ({}) },
+    '../constants/defaults.js': { STORAGE_KEY: 'synthetic-data' },
+    '../utils/storageScope.js': { BASE_KEYS: { pendingOps: 'ops' }, DEVICE_KEYS_BASE: 'device', getActiveUserId: () => actor },
+    '../utils/limitedLaunchClient.js': { createLimitedLaunchClient() { return { initializeProfile: () => f.initializeProfile() }; } },
+    '../utils/continuityRecovery.js': { PRODUCTION_CLERK_ISSUER: 'https://clerk.credentialdomd.com',
+      createContinuityBinding: (receipt, context) => { f.bindingContext = context; return receipt; },
+      recoverContinuity: binding => f.recover(binding) },
+    '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {}, configureSecretContinuity: binding => { f.configured = binding; } },
+    '../utils/founding.js': { foundingFromProfile: () => ({}) },
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, allowsSettingsChange: value => allowsSettingsChange(value, authority), membershipWriteError },
   };
   const module = { exports: {} };
@@ -50,7 +58,7 @@ function fixture({ switchAfterToken = false, enabled = false, offline = false } 
     },
     console: { warn() {}, error() {} }, crypto, Date, Blob, atob,
   });
-  vm.runInContext(code, context);
+  vm.runInContext(continuity ? continuityCode : code, context);
   return Object.assign(f, { api: module.exports, requests, values, clerk, switchAccount, signOut, authority });
 }
 
@@ -276,3 +284,127 @@ for (const operation of ['list', 'remove']) {
     });
   }
 }
+
+for (const phase of ['token', 'fetch']) test(`profile initialization rejects an account switch at ${phase} without lookup or insertion`, async () => {
+  const f = fixture({ switchAfterToken: phase === 'fetch' });
+  let release;
+  if (phase === 'token') f.clerk.session.getToken = () => new Promise(resolve => { release = resolve; });
+  const operation = f.api.ensureProfile('user_syntheticA');
+  if (phase === 'token') { await tick(); f.switchAccount(); release('late-profile-token'); }
+  await assert.rejects(operation, error => error.code === 'membership_account_changed');
+  assert.equal(f.requests.length, 0);
+});
+
+test('failed profile lookup does not fall through to insertion', async () => {
+  const f = fixture();
+  f.onRequest = () => Response.json({ code: '42501', message: 'Synthetic denied read' }, { status: 403 });
+  await assert.rejects(f.api.ensureProfile('user_syntheticA'), /could not be loaded/);
+  assert.deepEqual(f.requests.map(r => r.method), ['GET']);
+});
+
+test('profile initialization returns only the initiating subject row and never inserts after a stale lookup', async () => {
+  const f = fixture(); let release;
+  f.onRequest = () => new Promise(resolve => { release = resolve; });
+  const pending = f.api.ensureProfile('user_syntheticA');
+  await tick(); f.switchAccount(); release(Response.json([]));
+  await assert.rejects(pending, error => error.code === 'membership_account_changed');
+  assert.deepEqual(f.requests.map(r => r.method), ['GET']);
+});
+
+test('profile creation sends no access grant and accepts a concurrent webhook only for the same subject', async () => {
+  const f = fixture(); const profile = { id: 'profileA', auth_user_id: 'user_syntheticA', access_status: 'pending' };
+  f.onRequest = r => r.method === 'POST'
+    ? Response.json({ code: '23505', message: 'Synthetic unique conflict' }, { status: 409 })
+    : Response.json(f.requests.length === 1 ? [] : [profile]);
+  assert.deepEqual(await f.api.ensureProfile('user_syntheticA'), profile);
+  assert.deepEqual(f.requests.map(r => r.method), ['GET', 'POST', 'GET']);
+  assert.deepEqual(Object.keys(JSON.parse(f.requests[1].body)).sort(), ['auth_user_id', 'id']);
+  assert.ok(f.requests.filter(r => r.method === 'GET').every(r => r.url.includes('auth_user_id=eq.user_syntheticA')));
+  assert.ok(f.requests.every(r => r.actor === 'user_syntheticA'));
+});
+
+const continuityReceipt = { schemaVersion: 1, state: 'bound', subject: 'user_syntheticA', issuer: 'https://clerk.credentialdomd.com',
+  profileId: '00000000-0000-4000-8000-000000000001', continuity: { id: '00000000-0000-4000-8000-000000000002', state: 'bound', sourceSubject: 'user_legacyA', sourceIssuer: 'https://dynamic-goshawk-87.clerk.accounts.dev' } };
+
+test('production initialization recovers before profile lookup and never uses ordinary insertion', async () => {
+  const f = fixture({ continuity: true }), steps = [];
+  f.initializeProfile = async () => { steps.push('initialize'); return continuityReceipt; };
+  f.recover = async () => { steps.push('recover'); assert.equal(f.requests.length, 0); return { state: 'complete', conflicts: [] }; };
+  f.onRequest = () => { steps.push('lookup'); return Response.json([{ id: continuityReceipt.profileId, auth_user_id: continuityReceipt.subject }]); };
+  const value = await f.api.ensureProfile('user_syntheticA');
+  assert.equal(value.id, continuityReceipt.profileId);
+  assert.deepEqual(steps, ['initialize', 'recover', 'lookup']);
+  assert.deepEqual(f.requests.map(r => r.method), ['GET']);
+  assert.equal(f.bindingContext.isCurrent(), true);
+  f.switchAccount(); assert.equal(f.bindingContext.isCurrent(), false);
+});
+
+for (const failure of ['refused', 'conflict', 'missing-profile', 'wrong-profile', 'failed-lookup']) test(`production ${failure} stops without creating a replacement identity`, async () => {
+  const f = fixture({ continuity: true });
+  f.initializeProfile = async () => { if (failure === 'refused') throw Error('Synthetic identity conflict'); return continuityReceipt; };
+  f.recover = async () => failure === 'conflict' ? { state: 'recovering', conflicts: [{ base: 'synthetic' }] } : { state: 'complete', conflicts: [] };
+  f.onRequest = () => failure === 'failed-lookup' ? Response.json({ code: '42501' }, { status: 403 })
+    : Response.json(failure === 'wrong-profile' ? [{ id: 'wrong-profile', auth_user_id: 'user_syntheticA' }] : []);
+  await assert.rejects(f.api.ensureProfile('user_syntheticA'), error => error.code === 'continuity_initialization_failed');
+  assert.ok(f.requests.every(r => r.method === 'GET'));
+  if (failure === 'refused' || failure === 'conflict') assert.equal(f.requests.length, 0);
+});
+
+test('a superseded same-account profile load cannot recover or dispatch a lookup', async () => {
+  const f = fixture({ continuity: true }); let release, current = true, recoveries = 0;
+  f.initializeProfile = () => new Promise(resolve => { release = resolve; });
+  f.recover = async () => { recoveries++; return { state: 'complete', conflicts: [] }; };
+  const pending = f.api.ensureProfile('user_syntheticA', { isCurrent: () => current });
+  current = false; release(continuityReceipt);
+  await assert.rejects(pending, error => error.code === 'membership_account_changed');
+  assert.equal(recoveries, 0); assert.equal(f.requests.length, 0);
+});
+
+
+test('retired local migration still opens the canonical cloud account without restoring old bytes', async () => {
+  const f = fixture({ continuity: true });
+  f.initializeProfile = async () => continuityReceipt;
+  f.recover = async () => { const error = Error('Deliberately purged'); error.code = 'continuity_recovery_retired'; throw error; };
+  f.onRequest = () => Response.json([{ id: continuityReceipt.profileId, auth_user_id: continuityReceipt.subject }]);
+  const profile = await f.api.ensureProfile('user_syntheticA');
+  assert.equal(profile.id, continuityReceipt.profileId);
+  assert.equal(f.configured, continuityReceipt);
+  assert.equal(f.values.size, 0);
+  assert.deepEqual(f.requests.map(r => r.method), ['GET']);
+});
+
+test('explicit signout invalidation prevents a late failed write from recreating the purged queue before Clerk resolves', async () => {
+  const f = fixture(); let release;
+  f.onRequest = () => new Promise(resolve => { release = resolve; });
+  const pending = f.api.updateItem('profileA', 'licenses', { id: 'license-one', name: 'Synthetic pending change' });
+  await tick();
+  // This is the exact gap: device purge has happened, but Clerk's asynchronous
+  // signout has not resolved, so subject and session still belong to A.
+  f.api.invalidateAccountWrites?.('user_syntheticA');
+  f.values.clear();
+  release(Response.json({ code: 'synthetic_offline', message: 'Synthetic network failure' }, { status: 503 }));
+  await assert.rejects(pending, error => error.code === 'membership_account_changed');
+  assert.equal(f.values.size, 0);
+  assert.equal(f.requests.length, 1);
+});
+
+test('signout invalidation prevents late token dispatch and does not permanently lock fresh owner requests', async () => {
+  const f = fixture(); let release;
+  f.clerk.session.getToken = () => new Promise(resolve => { release = resolve; });
+  const pending = f.api.updateItem('profileA', 'licenses', { id: 'old' });
+  await tick(); f.api.invalidateAccountWrites('user_syntheticA'); release('synthetic-old-token');
+  await assert.rejects(pending, error => error.code === 'membership_account_changed');
+  assert.equal(f.requests.length, 0); assert.equal(f.values.size, 0);
+  // If Clerk signout failed, new explicit owner actions can still operate.
+  f.clerk.session.getToken = async () => 'synthetic-new-token';
+  await f.api.updateItem('profileA', 'licenses', { id: 'new' });
+  assert.equal(f.requests.length, 1);
+});
+test('invalidating another account does not cancel this owners pending write', async () => {
+  const f = fixture(); let release;
+  f.onRequest = () => new Promise(resolve => { release = resolve; });
+  const pending = f.api.updateItem('profileA', 'licenses', { id: 'unrelated' });
+  await tick(); f.api.invalidateAccountWrites('user_syntheticB'); release(new Response(null, { status: 204 }));
+  await pending;
+  assert.equal(f.requests.length, 1); assert.equal(f.values.size, 0);
+});

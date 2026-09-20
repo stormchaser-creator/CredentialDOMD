@@ -60,9 +60,12 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     lsGet: (...args) => record('lsGet', args) ?? null,
     lsSet: (...args) => record('lsSet', args),
     readCachedData: (...args) => record('readCachedData', args) ?? null,
+    withLocalOnlySettings: cloud => cloud,
     hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [],
     setData: update => { calls.push({ name: 'setData', actor }); if (deferReact) queuedUpdates.push(update); else applyUpdate(update); },
+    setProfileIssue: value => { calls.push({ name: 'setProfileIssue', actor, value }); },
+    setProfileOwner: value => { calls.push({ name: 'setProfileOwner', actor, value }); },
     setLoaded: value => { calls.push({ name: 'setLoaded', actor, value }); },
     setLoadedFrom: value => { calls.push({ name: 'setLoadedFrom', actor, value }); },
     console: { log() {}, warn: (...args) => warnings.push(args) },
@@ -116,7 +119,7 @@ test('account switch while cloud data waits cannot replace the new profile or st
   await tick();
   assert.equal(f.named('loadFromSupabase').length, 1);
   f.switchAccount(); pending.resolve({ _userId: 'profileA', settings: { name: 'Late Cloud A' }, documents: [] }); await loading;
-  assert.deepEqual(f.calls.map(call => call.name), ['ensureProfile', 'replayPendingOps', 'loadFromSupabase']);
+  assert.deepEqual(f.calls.map(call => call.name), ['ensureProfile', 'setProfileOwner', 'setProfileIssue', 'replayPendingOps', 'loadFromSupabase']);
   assertNoLateWrites(f);
 });
 
@@ -293,4 +296,61 @@ test('same-owner current-generation cache callback saves its captured data under
   assert.equal(f.writes[0].accountId, ownerA);
   assert.equal(f.writes[0].actor, ownerA);
   assert.equal(f.writes[0].value, f.data);
+});
+
+test('failed production identity initialization never hydrates or replays a possible legacy account', async () => {
+  const f = fixture();
+  f.handlers.ensureProfile = async () => { const error = Error('Synthetic identity conflict'); error.code = 'continuity_initialization_failed'; error.recoveryConflict = true; throw error; };
+  await f.api.loadDataForUser(ownerA);
+  for (const name of ['loadData', 'readCachedData', 'replayPendingOps', 'loadFromSupabase', 'saveData', 'bulkSync']) assert.equal(f.named(name).length, 0, name);
+  assert.equal(f.refs.dataOwnerRef.current, null);
+  assert.match(f.named('setProfileIssue')[0].value.message, /recovery review/);
+});
+
+
+test('server-wiped account retires recovery before replay and stops if the marker cannot persist', async () => {
+  const f = fixture();
+  f.handlers.ensureProfile = () => ({ id: 'profileA', deleted_at: '2026-09-20T12:00:00Z' });
+  f.handlers.purgeUserStorage = async () => { const error = Error('Synthetic blocked marker'); error.code = 'continuity_retirement_unavailable'; throw error; };
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.named('purgeUserStorage')[0].args[1].retireRecovery, true);
+  for (const name of ['loadData', 'replayPendingOps', 'loadFromSupabase', 'saveData', 'lsSet']) assert.equal(f.named(name).length, 0, name);
+});
+
+
+const syncStart = source.indexOf('  // Enrollment may finish after the initial cloud load.');
+const syncEnd = source.indexOf('  // End protected-access reconciliation.', syncStart);
+const syncCode = source.slice(syncStart, syncEnd);
+test('first protected write access retries reconciliation once per owner/scope without render loops', () => {
+  const ref = { current: null }, calls = [];
+  const context = { useRef: () => ref, useEffect: fn => fn(), limitedLaunch: { enabled: true, status: 'ready' }, loaded: true,
+    offlineMode: false, user: { id: ownerA }, profileOwner: ownerA, getActiveUserId: () => context.user.id,
+    window: { Clerk: { user: { id: ownerA } } }, canWriteCredential: false, canWritePractice: false,
+    loadDataForUser: id => calls.push(id) };
+  vm.runInNewContext(`{${syncCode}}`, context);
+  assert.deepEqual(calls, []);
+  context.canWriteCredential = true;
+  for (let i = 0; i < 3; i++) vm.runInNewContext(`{${syncCode}}`, context);
+  assert.deepEqual(calls, [ownerA]);
+  context.canWritePractice = true;
+  for (let i = 0; i < 3; i++) vm.runInNewContext(`{${syncCode}}`, context);
+  assert.deepEqual(calls, [ownerA, ownerA]);
+  context.user = { id: ownerB }; context.window.Clerk.user = context.user;
+  vm.runInNewContext(`{${syncCode}}`, context); // stale prior account's profile readiness
+  assert.equal(calls.length, 2);
+  context.profileOwner = ownerB;
+  vm.runInNewContext(`{${syncCode}}`, context);
+  assert.deepEqual(calls, [ownerA, ownerA, ownerB]);
+});
+test('reconciliation waits for loaded, online and current protected account state', () => {
+  for (const change of [{ loaded: false }, { offlineMode: true }, { profileOwner: ownerB },
+    { limitedLaunch: { enabled: false, status: 'ready' } }, { limitedLaunch: { enabled: true, status: 'error' } },
+    { getActiveUserId: () => ownerB }, { window: { Clerk: { user: { id: ownerB } } } }]) {
+    const calls = [], context = { useRef: () => ({ current: null }), useEffect: fn => fn(), limitedLaunch: { enabled: true, status: 'ready' },
+      loaded: true, offlineMode: false, user: { id: ownerA }, profileOwner: ownerA, getActiveUserId: () => ownerA,
+      window: { Clerk: { user: { id: ownerA } } }, canWriteCredential: true, canWritePractice: true,
+      loadDataForUser: id => calls.push(id), ...change };
+    vm.runInNewContext(`{${syncCode}}`, context);
+    assert.deepEqual(calls, []);
+  }
 });

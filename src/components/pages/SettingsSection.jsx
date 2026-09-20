@@ -26,8 +26,8 @@ import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
 import SignInMethodsCard from "./SignInMethodsCard";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
 import {
-  addProblem, normalizeAddress, pendingLine, resendBlockedReason,
-  REQUESTS_INBOX, CME_INBOX, LINK_TTL_HOURS,
+  addProblem, normalizeAddress, pendingLine, resendBlockedReason, rowForAddress,
+  accountMailboxVerified, REQUESTS_INBOX, CME_INBOX, LINK_TTL_HOURS,
 } from "../../utils/forwardingAddresses";
 
 function SettingsSection({ onUpgrade }) {
@@ -413,7 +413,7 @@ function SettingsSection({ onUpgrade }) {
 
       {/* Email: the addresses inbound mail may be forwarded from. The
           "not registered" reply points a physician here by name. */}
-      <EmailBlock accountEmail={s.email || ""} T={T} iS={iS} />
+      <EmailBlock accountEmail={s.email || ""} verifiedEmail={s.verifiedEmail || ""} T={T} iS={iS} />
 
       {/* AI */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
@@ -1055,20 +1055,36 @@ function SpecialtyPicker({ selected, onChange, degreeType, iS, T }) {
 /**
  * Settings > Email. Which addresses a physician may forward mail FROM.
  *
- * The account address is the primary and is not managed here: it always
- * routes, it cannot be removed, and it is edited in Physician Profile above.
- * Everything under it is a registered forwarding address, and a forwarding
- * address does nothing at all until the mailbox it names opens the link sent
- * to it. That is the whole security property of the feature: a confirmed
- * address routes another person's credentialing mail, attachments and all,
- * into this account, so control of the mailbox is what earns it.
+ * Every address here earns its routing the same way: the mailbox it names
+ * opens the link sent to it and presses Confirm. That is the whole security
+ * property of the feature. A confirmed address routes another person's
+ * credentialing mail, attachments and all, into this account, so control of
+ * the mailbox is what earns it.
+ *
+ * The account address is no longer the exception. email-inbound used to fall
+ * back to profiles.email when no confirmed row matched, so this panel called
+ * that row "Always on"; that column is user-editable, an attacker could claim
+ * an address they did not hold, and the genuine physician's forwarded
+ * documents landed in the attacker's account. With the fallback gone, the
+ * account address routes only once it is confirmed too, and this panel has to
+ * offer that confirmation rather than promise routing it cannot deliver. It
+ * is still edited in Physician Profile above; only its routing lives here.
+ *
+ * With one exception, and it is the server's, not a softer local rule:
+ * profiles.verified_email, the mailbox the sign-in provider itself reported
+ * as verified. clerk-webhook stamps it with the service role, a trigger
+ * freezes it against user tokens, and email-inbound routes on it. When it IS
+ * the account address, that address already works, so this panel says
+ * Confirmed and drops the button. Badging it "Not confirmed" told physicians
+ * whose mail was routing fine that nothing reached them, and the button under
+ * it sent a challenge email for a mailbox the server already trusts.
  *
  * The panel refuses locally what the server refuses (utils/forwardingAddresses
  * mirrors the wording), but the server still decides; when it says no, its own
  * sentence is what shows, because it is the one that knows whether another
  * account already holds the address.
  */
-function EmailBlock({ accountEmail, T, iS }) {
+function EmailBlock({ accountEmail, verifiedEmail, T, iS }) {
   const { rows, loading, error, busyId, add, resend, remove } = useForwardingAddresses();
   const [draft, setDraft] = useState("");
   const [note, setNote] = useState(null);          // { ok: bool, text }
@@ -1083,9 +1099,33 @@ function EmailBlock({ accountEmail, T, iS }) {
   }, []);
 
   const typed = normalizeAddress(draft);
-  const problem = addProblem({ email: draft, accountEmail, rows });
+  const problem = addProblem({ email: draft, rows });
   const adding = busyId === "add";
   const canAdd = Boolean(typed) && !problem && !adding;
+
+  // The account address may now hold an ordinary forwarding_addresses row, so
+  // it is drawn once, at the top, from whatever row it has. Drawing it in both
+  // places would show the same address twice with two different badges.
+  const acctRow = rowForAddress(accountEmail, rows);
+  const otherRows = acctRow ? rows.filter((r) => r.id !== acctRow.id) : rows;
+  // The provider-verified mailbox when it is NOT the account address and has
+  // no forwarding row of its own. It routes mail today and this block used to
+  // omit it entirely: a physician whose Settings email is their professional
+  // address while the sign-in provider verified a different mailbox saw
+  // "nothing is confirmed, confirm an address first" while the server was
+  // already filing their forwarded documents from it. It is drawn read-only,
+  // with no Resend and no Remove, because it is not ours to withdraw: it comes
+  // from the sign-in provider and changes when they change it there.
+  const providerOnly = (() => {
+    const v = normalizeAddress(verifiedEmail);
+    if (!v || v === normalizeAddress(accountEmail)) return null;
+    return rowForAddress(v, rows) ? null : v;
+  })();
+  // verifiedEmail is server-owned, read straight off the profile row
+  // (lib/supabase.js profileRowToSettings). addressRow asks
+  // accountMailboxVerified per ROW rather than once for the account, because
+  // the provider evidence belongs to an address and not to a position in this
+  // list.
 
   const say = (ok, text) => setNote({ ok, text });
 
@@ -1099,6 +1139,19 @@ function EmailBlock({ accountEmail, T, iS }) {
     } else {
       say(false, res.message);
     }
+  };
+
+  // The account address goes through the same challenge as every other one:
+  // add it, open the link from that mailbox, press Confirm. There is no
+  // second, softer flow for it, because the routing it buys is the same
+  // routing, and the mailbox is the only thing that can prove it.
+  const onConfirmAccount = async () => {
+    const acct = normalizeAddress(accountEmail);
+    if (!acct || adding) return;
+    setNote(null);
+    const res = await add(acct);
+    if (res.ok) say(true, `Confirmation link sent to ${res.sentTo || acct}. Open it from that mailbox and the address starts working.`);
+    else say(false, res.message);
   };
 
   const onResend = async (row) => {
@@ -1136,6 +1189,101 @@ function EmailBlock({ accountEmail, T, iS }) {
     backgroundColor: T.input, border: `1px solid ${T.inputBorder}`, ...extra,
   });
 
+  /**
+   * One address. The account address and a registered forwarding address are
+   * drawn by the same function because they now have the same three states
+   * (confirmed, waiting, not confirmed yet) and earn them the same way. The
+   * account address keeps its accent box and its Account badge, and when it
+   * has no row at all it gets the one button that can give it one.
+   *
+   * `r` is null only for the account address before anyone has tried to
+   * confirm it.
+   */
+  const addressRow = (r, isAccount) => {
+    const email = isAccount ? accountEmail : r.email;
+    // An address counts as confirmed when the sign-in provider verified THAT
+    // mailbox, because that is the other thing email-inbound routes on.
+    // Everything else is earned by the emailed link.
+    //
+    // This used to be `isAccount && acctVerified`, so the provider evidence
+    // only ever reached the account row. A provider-verified mailbox that ALSO
+    // had a pending forwarding row then fell between the two: the read-only
+    // provider row above is suppressed because a row exists for that address,
+    // and this row labelled it Waiting. The mailbox routes today. It is the
+    // address that decides, not which row happens to carry it.
+    const providerVerified = accountMailboxVerified(verifiedEmail, email);
+    const confirmed = Boolean(r?.verified_at) || providerVerified;
+    const busy = r ? busyId === r.id : adding;
+    const wait = r ? resendBlockedReason(r, now) : null;
+    const confirmedLine = "Confirmed from that mailbox. Forwarded mail from it reaches this account.";
+    const providerLine = isAccount
+      ? "Verified by your sign-in provider, so forwarded mail from it already reaches this account. Change the address itself in Physician Profile above."
+      : "Verified by your sign-in provider, so forwarded mail from it already reaches this account. Change it where you sign in, not here.";
+    // A pending link on an address the provider has already verified is not
+    // what makes it work, so say so rather than leaving a Waiting-shaped
+    // sentence next to a Confirmed badge.
+    const providerWithPending = providerVerified && r && !r.verified_at
+      ? " The link sent to it is still open, but it is not what makes this address work."
+      : "";
+    let line;
+    if (isAccount && !email) line = "Set your email in Physician Profile above so forwarded mail can reach you.";
+    else if (providerVerified && !r?.verified_at) line = providerLine + providerWithPending;
+    else if (confirmed) line = isAccount ? `${confirmedLine} Change the address itself in Physician Profile above.` : confirmedLine;
+    else if (r) line = pendingLine(r, now);
+    else line = "Not confirmed yet, so mail forwarded from it does not reach your account. Confirm it here, the same way as any other address. Change the address itself in Physician Profile above.";
+    return (
+      <div key={isAccount ? "account" : r.id}
+        style={isAccount ? rowBox({ backgroundColor: T.accentGlow, borderColor: T.accent }) : rowBox()}>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>
+            {email || "No account email set yet"}
+          </span>
+          {isAccount && badge(T.accent, "#fff", "Account")}
+          {confirmed && badge(T.successDim, T.success, "Confirmed")}
+          {!confirmed && r && badge(T.warningDim, T.warning, "Waiting")}
+          {!confirmed && !r && Boolean(email) && badge(T.warningDim, T.warning, "Not confirmed")}
+        </div>
+        <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>{line}</div>
+        {wait && <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>{wait}</div>}
+        {(r || (isAccount && email && !providerVerified)) && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+            {!r && !providerVerified && (
+              <button onClick={onConfirmAccount} disabled={busy}
+                style={{ ...smallBtn(), opacity: busy ? 0.5 : 1, cursor: busy ? "default" : "pointer" }}>
+                {busy ? "Sending…" : "Confirm this address"}
+              </button>
+            )}
+            {r && !confirmed && (
+              <button onClick={() => onResend(r)} disabled={busy || Boolean(wait)}
+                style={{ ...smallBtn(), opacity: busy || wait ? 0.5 : 1, cursor: busy || wait ? "default" : "pointer" }}>
+                {busy ? "Sending…" : "Resend link"}
+              </button>
+            )}
+            {r && (confirmId === r.id ? (
+              <>
+                <button onClick={() => onRemove(r)} disabled={busy} style={{ ...smallBtn("danger"), opacity: busy ? 0.5 : 1 }}>
+                  {busy ? "Removing…" : "Yes, remove"}
+                </button>
+                <button onClick={() => setConfirmId(null)} style={smallBtn()}>Keep it</button>
+              </>
+            ) : (
+              <button onClick={() => { setNote(null); setConfirmId(r.id); }} style={smallBtn("danger")}>Remove</button>
+            ))}
+          </div>
+        )}
+        {r && confirmId === r.id && (
+          <div style={{ fontSize: 12, color: T.textDim, marginTop: 6, lineHeight: 1.45 }}>
+            {providerVerified
+              ? "This address keeps working: your sign-in provider verified it, and that is separate from this link."
+              : confirmed
+                ? "Mail forwarded from this address will stop reaching your account."
+                : "The link already sent to this address stops working."}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, color: T.text }}>
@@ -1143,72 +1291,31 @@ function EmailBlock({ accountEmail, T, iS }) {
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: 0 }}>Email</h3>
       </div>
       <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14, lineHeight: 1.5 }}>
-        Mail forwarded from any of these addresses to {REQUESTS_INBOX} becomes a document request on this account, and {CME_INBOX} files certificates the same way.
+        Mail forwarded from a confirmed address to {REQUESTS_INBOX} becomes a document request on this account, and {CME_INBOX} files certificates the same way. An address that is not confirmed yet routes nothing, and that includes your account address unless it is the mailbox your sign-in provider verified.
       </div>
 
-      {/* The account address. Always works, not removable here. */}
-      <div style={rowBox({ backgroundColor: T.accentGlow, borderColor: T.accent })}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>
-            {accountEmail || "No account email set yet"}
-          </span>
-          {badge(T.accent, "#fff", "Account")}
+      {addressRow(acctRow, true)}
+
+      {providerOnly && (
+        <div style={rowBox()}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>
+              {providerOnly}
+            </span>
+            {badge(T.successDim, T.success, "Confirmed")}
+          </div>
+          <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>
+            Verified by your sign-in provider, so forwarded mail from it already reaches this account. Change it where you sign in, not here.
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>
-          {accountEmail
-            ? "Always on. Change it in Physician Profile above."
-            : "Set your email in Physician Profile above so forwarded mail can reach you."}
-        </div>
-      </div>
+      )}
 
       {loading && rows.length === 0 && (
         <div style={{ fontSize: 13, color: T.textDim, padding: "8px 2px" }}>Loading your other addresses…</div>
       )}
       {error && <div style={{ fontSize: 13, color: T.danger, fontWeight: 600, padding: "8px 2px" }}>{error}</div>}
 
-      {rows.map((r) => {
-        const busy = busyId === r.id;
-        const wait = resendBlockedReason(r, now);
-        return (
-          <div key={r.id} style={rowBox()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{r.email}</span>
-              {r.verified_at
-                ? badge(T.successDim, T.success, "Confirmed")
-                : badge(T.warningDim, T.warning, "Waiting")}
-            </div>
-            <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>
-              {r.verified_at ? "Confirmed from that mailbox. Forwarded mail from it reaches this account." : pendingLine(r, now)}
-            </div>
-            {wait && <div style={{ fontSize: 12, color: T.textDim, marginTop: 3, lineHeight: 1.45 }}>{wait}</div>}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
-              {!r.verified_at && (
-                <button onClick={() => onResend(r)} disabled={busy || Boolean(wait)}
-                  style={{ ...smallBtn(), opacity: busy || wait ? 0.5 : 1, cursor: busy || wait ? "default" : "pointer" }}>
-                  {busy ? "Sending…" : "Resend link"}
-                </button>
-              )}
-              {confirmId === r.id ? (
-                <>
-                  <button onClick={() => onRemove(r)} disabled={busy} style={{ ...smallBtn("danger"), opacity: busy ? 0.5 : 1 }}>
-                    {busy ? "Removing…" : "Yes, remove"}
-                  </button>
-                  <button onClick={() => setConfirmId(null)} style={smallBtn()}>Keep it</button>
-                </>
-              ) : (
-                <button onClick={() => { setNote(null); setConfirmId(r.id); }} style={smallBtn("danger")}>Remove</button>
-              )}
-            </div>
-            {confirmId === r.id && (
-              <div style={{ fontSize: 12, color: T.textDim, marginTop: 6, lineHeight: 1.45 }}>
-                {r.verified_at
-                  ? "Mail forwarded from this address will stop reaching your account."
-                  : "The link already sent to this address stops working."}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {otherRows.map((r) => addressRow(r, false))}
 
       <div style={{ marginTop: 10 }}>
         <Field label="Add an address you forward from"

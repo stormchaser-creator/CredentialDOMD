@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { isDea, isBoard } from "./setupTasks.js";
+import { redactForExport } from "../lib/supabase.js";
 
 /**
  * Section key to the folder its documents belong in. This is the ONE list:
@@ -415,11 +416,14 @@ export async function generateCredentialZip(data) {
   const xlsxData = buildSpreadsheet(data);
   root.file("credentials_summary.xlsx", xlsxData);
 
-  // Add JSON backup
-  const { apiKey, anthropicApiKey, ...safeSettings } = data.settings || {};
+  // Add JSON backup. This is a second copy of the same export that the
+  // Download JSON button produces, and it used to keep its own two-field
+  // strip, so the ZIP carried the portal-password lock code and the CallSync
+  // feed link that the other path dropped. Both go through the one redaction
+  // now (src/lib/supabase.js).
   const jsonBackup = JSON.stringify({
     ...data,
-    settings: safeSettings,
+    settings: redactForExport(data.settings),
     _exportMeta: {
       app: "CredentialDOMD",
       exportedAt: new Date().toISOString(),

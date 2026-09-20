@@ -5,6 +5,9 @@ import { readLaunchInvitation, clearLaunchInvitation } from "../../utils/launchI
 import { accessAuthority, canReviewBillingOffer } from "../../utils/limitedLaunchAccess.js";
 
 const messages = {
+  signup_disabled: "New membership enrollment is not open yet. Please check again later.",
+  signup_unavailable: "Your membership could not be prepared. Please check again or contact support.",
+  verified_primary_email_required: "Verify the primary email address on your signed-in account, then check again.",
   free_beta_active: "Your free beta is still active. No payment is required. You can review a membership after it ends.",
   billing_disabled: "Payments are not open yet. Your saved records have not changed.",
   invitation_activation_disabled: "Invitation activation is not open yet. Please try again later.",
@@ -91,6 +94,10 @@ function MembershipForAccount({ accountId, onActivated }) {
   return <section style={{ color: T.text, lineHeight: 1.6 }} aria-label="Membership">
     <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Your membership</h2>
     {message && <p role="status">{message}</p>}
+    {limitedLaunch.publicSignupEnabled && limitedLaunch.enrollmentError && <div role="status">
+      <p>{messageFor({ code: limitedLaunch.enrollmentError })}</p>
+      <button style={button} disabled={busy} onClick={limitedLaunch.refresh}>Check membership again</button>
+    </div>}
     {lifetime ? <p>Your lifetime access is protected. No payment is required for those features.</p>
       : beta ? <p>Your free beta is active until {new Date(access.freeBeta.endsAt).toLocaleString()}. No card, automatic charge, or cancellation is required. You can choose a membership after it ends.</p>
         : access?.purchasedOfferId ? <div><p>Your {access.purchasedOfferId === "core" ? "Credential" : "Credential + Practice"} membership is active. Your saved records and exports remain available.</p><button style={button} onClick={manage}>Manage paid subscription</button></div>
@@ -99,13 +106,15 @@ function MembershipForAccount({ accountId, onActivated }) {
               <p>Activate the personal invitation for your verified account. If it includes the grandfathered free beta, no card or payment is collected.</p>
               <button style={button} disabled={busy} onClick={activate}>{busy ? "Checking…" : "Activate my invitation"}</button>
             </div>}
-            {access?.accessStatus === "pending" && !invitation && <p>Open your personal invitation link and sign in with its verified email address. Account approval and payment eligibility are checked securely.</p>}
+            {access?.accessStatus === "pending" && !invitation && <p>{limitedLaunch.publicSignupEnabled
+              ? "Your account is signed in. Review an eligible membership below; paid access begins after checkout is confirmed. Creating an account does not charge you."
+              : "Open your personal invitation link and sign in with its verified email address. Account approval and payment eligibility are checked securely."}</p>}
             {invitation && access?.invitationActivationEnabled !== true && <p>Invitation activation is not open yet. Please check again later.</p>}
             {resumeOffer ? <>
               <p>You have an unfinished {resumeOffer === "core" ? "Credential" : "Credential + Practice"} checkout. Review its current terms and confirm them before returning to payment.</p>
               <button style={button} disabled={busy || !canReviewBillingOffer(access, resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>
             </> : <>
-              <p>Paid membership is optional. {access?.billingEnabled && access?.checkoutEligible ? "Review the exact offer before choosing to pay." : "An eligible membership offer is not available for this account right now."}</p>
+              <p>Choose whether to purchase a membership. {access?.billingEnabled && access?.checkoutEligible ? "Review the exact offer before choosing to pay." : "An eligible membership offer is not available for this account right now."}</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <button style={button} disabled={busy || !canReviewBillingOffer(access, "core")} onClick={() => review("core")}>Review Credential offer</button>
                 <button style={button} disabled={busy || !canReviewBillingOffer(access, "core_locum")} onClick={() => review("core_locum")}>Review Credential + Practice offer</button>

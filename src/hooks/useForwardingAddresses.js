@@ -20,9 +20,10 @@ import { sortAddresses } from "../utils/forwardingAddresses";
  * usable only after the mailbox it names proves control of itself.
  */
 
-// Dispatched after any change, so a second view of the same list (the
-// Requests header names every address that can forward) refreshes without
-// polling.
+// Dispatched after any change, so a second view of the same list refreshes
+// without polling. There are two others now: the Requests header and the CME
+// intake hint, and both name only the addresses inbound mail actually routes
+// (routableSenders), not every address on the account.
 export const FORWARDING_ADDRESSES_CHANGED_EVENT = "cdomd:forwarding-addresses-changed";
 
 const COLUMNS = "id, user_id, email, verified_at, last_sent_at, created_at";
@@ -76,8 +77,8 @@ export function useForwardingAddresses() {
   }, [reload]);
 
   // The event is what refreshes the list, here and in any other view of it
-  // (the Requests header names every confirmed address). This instance is
-  // listening too, so one dispatch reloads everyone exactly once.
+  // (the Requests header and the CME hint each name the confirmed addresses).
+  // This instance is listening too, so one dispatch reloads everyone once.
   const announce = () => {
     try { window.dispatchEvent(new CustomEvent(FORWARDING_ADDRESSES_CHANGED_EVENT)); return true; } catch { return false; }
   };

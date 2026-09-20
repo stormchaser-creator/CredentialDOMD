@@ -1,11 +1,25 @@
 import { accessAuthority, allowsSettingsChange, membershipWriteError } from "../utils/limitedLaunchAccess.js";
 import { createClient } from "@supabase/supabase-js";
-import { STORAGE_KEY } from "../constants/defaults";
-import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId } from "../utils/storageScope";
-import { foundingFromProfile } from "../utils/founding";
+// Extensions are explicit on purpose: node resolves these specifiers as
+// written, which is what lets scripts/device-secrets.test.mjs import the real
+// redaction and the real hydration allowlist instead of a copy of them.
+import { STORAGE_KEY } from "../constants/defaults.js";
+import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId } from "../utils/storageScope.js";
+import { foundingFromProfile } from "../utils/founding.js";
+import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
+import { createContinuityBinding, recoverContinuity, PRODUCTION_CLERK_ISSUER } from "../utils/continuityRecovery.js";
+import { getLockCode, saveLockCode, configureSecretContinuity } from "../utils/secretBox.js";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// The typeof guard is the same one src/constants/defaults.js carries, and for
+// the same reason: this module owns redactForExport, which the export paths and
+// the pure-node test scripts (scripts/device-secrets.test.mjs) both import, and
+// import.meta.env does not exist outside Vite. Vite still statically replaces
+// the member expression at build time.
+export const CLERK_CONTINUITY_ENABLED = import.meta.env?.VITE_CLERK_CONTINUITY_ENABLED === "true";
+const SUPABASE_URL =
+  (typeof import.meta.env !== "undefined" && import.meta.env.VITE_SUPABASE_URL) || undefined;
+const SUPABASE_ANON_KEY =
+  (typeof import.meta.env !== "undefined" && import.meta.env.VITE_SUPABASE_ANON_KEY) || undefined;
 
 /**
  * Pulls a fresh Supabase-flavored JWT from Clerk on every request.
@@ -50,16 +64,24 @@ function accountChangedError() {
   return error;
 }
 
+// Invalidate requests already in flight before an explicit local purge. Clerk
+// signout is asynchronous, so session identity alone cannot mark that boundary.
+const writeGenerations = new Map();
+export function invalidateAccountWrites(accountId) {
+  if (accountId) writeGenerations.set(accountId, (writeGenerations.get(accountId) || 0) + 1);
+}
+
 // Each write keeps its initiating identity through token minting, fetch, and
 // follow-up requests. A shared client would obtain the *new* session's token.
 function writeContext(authUserId = getActiveUserId() || clerkSub(), { cloud = true } = {}) {
   const accountId = authUserId;
+  const writeGeneration = writeGenerations.get(accountId) || 0;
   const activeId = getActiveUserId();
   const clerkId = clerkSub();
   const session = globalThis.window?.Clerk?.session || null;
   const guard = () => {
     const active = getActiveUserId(), current = clerkSub();
-    if (!accountId || (active && active !== accountId) || (activeId && active !== activeId)
+    if (!accountId || (writeGenerations.get(accountId) || 0) !== writeGeneration || (active && active !== accountId) || (activeId && active !== activeId)
       || (current && current !== accountId) || (clerkId && current !== clerkId)
       || ((session?.user?.id || session?.userId) && (session.user?.id || session.userId) !== accountId)
       || (globalThis.window?.Clerk?.session || null) !== session) throw accountChangedError();
@@ -253,7 +275,11 @@ const PROFILE_TO_SETTINGS = Object.fromEntries(
   Object.entries(SETTINGS_TO_PROFILE).map(([k, v]) => [v, k])
 );
 
-function settingsToProfileRow(settings) {
+// settingsToProfileRow / profileRowToSettings are exported for
+// scripts/settings-persistence.test.mjs: which settings survive a round trip
+// through the cloud is exactly the kind of thing that looks right in review
+// and is silently lossy in production (see LOCAL_ONLY_SETTINGS below).
+export function settingsToProfileRow(settings) {
   const row = {};
   for (const [settingsKey, col] of Object.entries(SETTINGS_TO_PROFILE)) {
     if (settings[settingsKey] !== undefined) {
@@ -263,7 +289,7 @@ function settingsToProfileRow(settings) {
   return row;
 }
 
-function profileRowToSettings(row) {
+export function profileRowToSettings(row) {
   const settings = {};
   for (const [col, settingsKey] of Object.entries(PROFILE_TO_SETTINGS)) {
     if (row[col] !== undefined && row[col] !== null) {
@@ -272,11 +298,63 @@ function profileRowToSettings(row) {
   }
   // Read-only, server-owned: the beta gate. Never written back (not in the map).
   if (row.access_status) settings.accessStatus = row.access_status;
+  // Read-only, server-owned: the mailbox the sign-in provider reported as
+  // verified. clerk-webhook stamps it with the service role and
+  // profiles_lock_verified_email freezes it against user tokens (migration
+  // 20260915d). email-inbound routes forwarded mail on it, so the browser has
+  // to be able to see it: without it, routableSenders always assumed the
+  // account address was unconfirmed and Settings and Requests both told a
+  // physician whose mail was routing fine that nothing reached them. Never
+  // written back: it is not in SETTINGS_TO_PROFILE, and the trigger on the
+  // table would drop it even if it were.
+  if (row.verified_email) settings.verifiedEmail = row.verified_email;
   // Read-only, server-owned: founding member number and flag, assigned by
   // Postgres when the physician signs up and is activated (migration
   // 20260902g_founding_members.sql). Never written back (not in the map).
   Object.assign(settings, foundingFromProfile(row));
   return settings;
+}
+
+/**
+ * Settings the cloud has no column for, so a cloud read cannot carry them.
+ *
+ * settingsToProfileRow writes only what SETTINGS_TO_PROFILE names; anything
+ * else is dropped without a word. That is fine for a value the device also
+ * keeps, and it was silently destructive for these two, which only the device
+ * keeps: loadFromSupabase rebuilds settings from the profile row, AppContext
+ * merges DEFAULT_SETTINGS with that row, and then caches the result over the
+ * on-device copy. A physician who set "Vera answers with: Claude Opus" got it
+ * for exactly as long as they stayed offline; the next online load put Vera
+ * back on Gemini and the dropdown back to "Gemini (cheaper, the default)",
+ * with nothing said. coderModel rides the same path and is listed for the
+ * same reason, not because it has failed yet.
+ *
+ * Deliberately NOT in DEFAULT_SETTINGS: a default would make the merged value
+ * defined, the carry-forward below would find nothing missing, and the
+ * physician's choice would still be lost. The readers already treat absent as
+ * their own default (SettingsSection reads `s.coderModel || "opus"` and
+ * `s.assistantModel || "gemini"`).
+ *
+ * Device keys are not here. They are local-only too, but loadFromSupabase
+ * hydrates them from the per-user device slot (loadDeviceKeys), which is a
+ * stronger place than the cached settings blob.
+ */
+export const LOCAL_ONLY_SETTINGS = ["assistantModel", "coderModel"];
+
+/**
+ * Cloud settings, plus the local-only keys the cloud never stored.
+ *
+ * Only the named keys, and only where the cloud has nothing to say: merging
+ * all of the cached settings would resurrect values the physician deleted on
+ * another device, which is the bug the namespaced cache exists to avoid.
+ */
+export function withLocalOnlySettings(cloudSettings, localSettings) {
+  const out = { ...(cloudSettings || {}) };
+  if (!localSettings || typeof localSettings !== "object") return out;
+  for (const k of LOCAL_ONLY_SETTINGS) {
+    if (out[k] === undefined && localSettings[k] !== undefined) out[k] = localSettings[k];
+  }
+  return out;
 }
 
 // ─── Device-local AI keys ────────────────────────────────────
@@ -288,30 +366,194 @@ function profileRowToSettings(row) {
 export const DEVICE_KEY_FIELDS = ["apiKey", "anthropicApiKey", "callsyncFeedUrl", "callsyncContractId"];
 const deviceKeySlot = (authUserId) => `${DEVICE_KEYS_BASE}:${authUserId}`;
 
-export function loadDeviceKeys(authUserId) {
+// The unlock material that shares the device slot. secretBox.js keeps the
+// portal-password lock code there (same DEVICE_KEYS_BASE slot as the AI keys)
+// and it is deliberately NOT in DEVICE_KEY_FIELDS: nothing hydrates it into
+// settings any more, and nothing reads it from there. It is named here because
+// an export, or a cache written by an older build, can still hold a copy.
+export const UNLOCK_FIELDS = ["lockCode"];
+
+// The ONE list an export is redacted against. DataExport.jsx and
+// credentialExport.js each carried their own hand-written
+// `const { apiKey, anthropicApiKey, ...safe }` strip, and two hand-maintained
+// lists is exactly how the lock code and the CallSync feed link ended up in a
+// downloaded backup: neither list was updated when the slot grew.
+export const EXPORT_REDACT_FIELDS = [...DEVICE_KEY_FIELDS, ...UNLOCK_FIELDS];
+
+/**
+ * Settings with every device-only field removed: the two AI keys, the CallSync
+ * feed link and contract id, and the lock code that opens the encrypted portal
+ * passwords. The only redaction any export path may use.
+ */
+export function redactForExport(settings) {
+  const safe = { ...(settings || {}) };
+  for (const f of EXPORT_REDACT_FIELDS) delete safe[f];
+  return safe;
+}
+
+/**
+ * The allowlist that decides what may be hydrated back into settings.
+ *
+ * The slot holds more than the AI keys, and loadDeviceKeys used to spread all
+ * of it into settings: the lock code rode along, was cached to disk by
+ * saveData, and was written into the downloaded JSON export beside the very
+ * ciphertext it opens. The code keeps working because secretBox.getLockCode
+ * reads the slot directly (src/utils/secretBox.js line 22), never settings.
+ */
+function pickDeviceFields(obj) {
+  const out = {};
+  if (!obj || typeof obj !== "object") return out;
+  for (const f of DEVICE_KEY_FIELDS) if (obj[f]) out[f] = obj[f];
+  return out;
+}
+
+/**
+ * Strip every device-only field out of ONE parsed cache blob.
+ *
+ * The one place the rule is written, so the three callers cannot drift: the
+ * localStorage scrub below, and readCachedData / loadData in
+ * src/utils/storage.js, which have to apply it to what they RETURN as well as
+ * to what is on disk. Returning a blob unsanitised and rewriting the disk copy
+ * afterwards leaves the secret in the object the app then renders, saves and
+ * exports from, which is most of the way back to the original defect.
+ *
+ * `trusted` says whether this blob is known to belong to authUserId. Only a
+ * trusted blob may hand its lock code back to the device slot: on a shared
+ * device an un-namespaced file can belong to whoever used the machine before,
+ * and adopting their unlock material is worse than dropping our own. The lock
+ * code is the only way to read this account's encrypted portal passwords, so
+ * recovering it from a trusted copy before deleting it is what keeps the vault
+ * readable.
+ *
+ * Returns { blob, changed }. `changed` is false when there was nothing to
+ * strip, which is the common case and means no rewrite is needed.
+ */
+export function sanitizeCachedBlob(blob, authUserId, { trusted = false } = {}) {
+  const settings = blob?.settings;
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return { blob, changed: false };
+  if (!EXPORT_REDACT_FIELDS.some((f) => f in settings)) return { blob, changed: false };
+
+  // MIGRATE BEFORE SCRUBBING. This order is the whole correctness of the
+  // function and it was wrong for a day: the scrub ran first, and
+  // loadDeviceKeys' one-time adoption then found an already-cleaned blob, so a
+  // physician whose keys lived only in a pre-slot cache lost all four device
+  // fields on the next load. They are not recoverable from anywhere else: the
+  // AI keys are the user's own, and callsyncFeedUrl is a per-user calendar
+  // feed token. Reproduced for a localStorage-only cache and for a
+  // Capacitor-only one before this was written.
+  //
+  // Only a TRUSTED blob may donate. Trusted means this file is namespaced to
+  // authUserId, so its contents are that account's own. The un-namespaced
+  // pre-namespace blob is never trusted: on a shared device it can belong to
+  // whoever used the machine before, and adopting their key bills one
+  // physician's Anthropic account to another and pulls the wrong call
+  // schedule. That refusal is unchanged; this only adds the case where the
+  // file demonstrably IS ours.
+  if (trusted && authUserId) {
+    // Field by field, and only where the slot has nothing. A value already in
+    // the slot is the current one; a value in an old cache is at best equally
+    // old, so it must never overwrite.
+    const have = loadDeviceKeys(authUserId, { adopt: false });
+    const donate = {};
+    for (const f of DEVICE_KEY_FIELDS) {
+      if (settings[f] && !have[f]) donate[f] = settings[f];
+    }
+    if (Object.keys(donate).length) saveDeviceKeys(authUserId, donate);
+
+    // The lock code is the only way to read this account's encrypted portal
+    // passwords, so recovering it before the delete is what keeps the vault
+    // readable. It is deliberately NOT in DEVICE_KEY_FIELDS: nothing hydrates
+    // it into settings, and secretBox reads the slot directly.
+    if (settings.lockCode && !getLockCode(authUserId)) {
+      saveLockCode(settings.lockCode, authUserId);
+    }
+  }
+
+  const clean = { ...settings };
+  for (const f of EXPORT_REDACT_FIELDS) delete clean[f];
+  return { blob: { ...blob, settings: clean }, changed: true };
+}
+
+/**
+ * Settings with every device-only field removed, for a settings object that is
+ * already in hand. Same list, same rule; this is the shape storage.js needs
+ * when it is rebuilding settings rather than a whole blob.
+ */
+export function stripDeviceFields(settings) {
+  const clean = { ...(settings || {}) };
+  for (const f of EXPORT_REDACT_FIELDS) delete clean[f];
+  return clean;
+}
+
+/**
+ * Remove device-only material from the copies of the file already on this disk.
+ *
+ * Before the allowlist above, the lock code reached settings and saveData
+ * (src/utils/storage.js) cached everything it was not explicitly told to drop,
+ * so a blob written by an older build still holds it; a blob written before the
+ * CallSync link joined DEVICE_KEY_FIELDS still holds that link. Both are
+ * rewritten out of the stored blob here. Every other cached key is left exactly
+ * as it was: this file is what a physician offline reads their records from.
+ */
+function scrubCachedSecrets(authUserId) {
+  // This account's own namespaced blob, and the un-namespaced pre-namespace
+  // one, which is the only other copy this device could be holding.
+  for (const key of [STORAGE_KEY, `${STORAGE_KEY}:${authUserId}`]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const { blob, changed } = sanitizeCachedBlob(JSON.parse(raw), authUserId, { trusted: key !== STORAGE_KEY });
+      if (!changed) continue;
+      localStorage.setItem(key, JSON.stringify(blob));
+    } catch { /* corrupt, or storage unavailable: nothing safe to rewrite */ }
+  }
+}
+
+export function loadDeviceKeys(authUserId, { adopt = true } = {}) {
   if (!authUserId) return {};
+  let found = {};
   try {
     const raw = localStorage.getItem(deviceKeySlot(authUserId));
-    if (raw) return JSON.parse(raw) || {};
+    if (raw) found = pickDeviceFields(JSON.parse(raw));
   } catch { /* ignore */ }
+
+  // adopt:false is the plain read of the slot, with no legacy adoption and no
+  // scrub. sanitizeCachedBlob uses it to ask "does the slot already have this
+  // field" while it is migrating one, which would otherwise re-enter here.
+  if (!adopt) return found;
+
   // One-time adoption: keys used to live inside the synced settings blob.
-  // Only ever read THIS device's own copies — the un-namespaced legacy blob
-  // and this account's own namespaced blob. Scanning every "credentialdomd-data*"
-  // key would inherit another account's API keys off a shared device.
-  try {
-    const candidates = [STORAGE_KEY, `${STORAGE_KEY}:${authUserId}`];
-    for (const k of candidates) {
-      const cached = JSON.parse(localStorage.getItem(k) || "null");
-      const st = cached?.settings || {};
-      const found = {};
-      for (const f of DEVICE_KEY_FIELDS) if (st[f]) found[f] = st[f];
-      if (Object.keys(found).length) {
-        localStorage.setItem(deviceKeySlot(authUserId), JSON.stringify(found));
-        return found;
-      }
-    }
-  } catch { /* ignore */ }
-  return {};
+  // Only ever read THIS ACCOUNT's own namespaced copy.
+  //
+  // The un-namespaced blob used to be first in this list, and the same trust
+  // rule scrubCachedSecrets states twenty lines above applies here: on a
+  // shared device that file can belong to whoever used the machine before,
+  // and it is not this account's by default. The fields at stake are not only
+  // the two AI keys, since callsyncFeedUrl is a per-user calendar feed token, so
+  // adopting it billed one physician's Anthropic key to another and pulled
+  // the wrong call schedule, and the scrub that runs straight afterwards
+  // deleted the evidence from the blob.
+  //
+  // The price is the same one the lock code already pays: on a device that
+  // never ran a namespaced build, the AI key and the CallSync link in that
+  // file are scrubbed rather than carried over, and the physician types the
+  // key in again once. Dropping a key is recoverable in a minute; handing a
+  // colleague's key and calendar feed to the wrong account is not.
+  if (!Object.keys(found).length) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${authUserId}`) || "null");
+      found = pickDeviceFields(cached?.settings);
+      // Merged, not written whole: the slot may also hold the lock code, and
+      // overwriting it with the adopted keys alone would take the physician's
+      // encrypted portal passwords with it.
+      if (Object.keys(found).length) saveDeviceKeys(authUserId, found);
+    } catch { /* ignore */ }
+  }
+
+  // Runs on every load, whatever the slot held: the contamination is in the
+  // cached file, and it outlives the load that created it.
+  scrubCachedSecrets(authUserId);
+  return found;
 }
 
 // Merge semantics: a field absent from `updates` is untouched; an empty
@@ -494,35 +736,75 @@ export async function touchLastSeen() {
 }
 
 // ─── Ensure profile exists (now uses auth user id) ──────────
-export async function ensureProfile(userId) {
+export async function ensureProfile(userId, { isCurrent = () => true } = {}) {
   if (!supabase || !userId) return null;
-
-  // Check if profile exists for this auth user
-  const { data: existing } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("auth_user_id", userId)
-    .maybeSingle();
-
-  if (existing) return existing;
-
-  // Create new profile linked to auth user
-  const newId = crypto.randomUUID();
-  const { data: created, error } = await supabase
-    .from("profiles")
-    .insert({ id: newId, auth_user_id: userId })
-    .select()
-    .single();
-
-  if (error) {
-    // Lost the race with the Clerk webhook (unique on auth_user_id): the row
-    // exists now, use it.
-    const { data: again } = await supabase.from("profiles").select("*").eq("auth_user_id", userId).maybeSingle();
-    if (again) return again;
-    console.warn("Failed to create profile:", error.message);
-    return null;
+  const owner = writeContext(userId);
+  owner.check = () => { owner.guard(); if (!isCurrent()) throw accountChangedError(); };
+  owner.check();
+  let initializedProfileId = null;
+  if (CLERK_CONTINUITY_ENABLED) {
+    const session = globalThis.window?.Clerk?.session;
+    const authenticatedAt = Date.now();
+    try {
+      // This endpoint authenticates the production JWT and resolves legacy
+      // identity server-side before it may create an ordinary fresh profile.
+      const receipt = await createLimitedLaunchClient({ accountId: userId, enabled: true }).initializeProfile();
+      owner.check();
+      initializedProfileId = receipt.profileId;
+      configureSecretContinuity(null);
+      if (receipt.continuity) {
+        const binding = createContinuityBinding(receipt, { subject: userId, issuer: PRODUCTION_CLERK_ISSUER,
+          session, authenticatedAt, isCurrent: () => {
+            try { owner.check(); return globalThis.window?.Clerk?.session === session; } catch { return false; }
+          } });
+        let recovered;
+        try { recovered = await recoverContinuity(binding); }
+        catch (error) {
+          // A deliberate purge retires device migration, not the physician's
+          // cloud account or the verified legacy password derivation.
+          if (error.code !== "continuity_recovery_retired") throw error;
+          recovered = { state: "complete", conflicts: [] };
+        }
+        owner.check();
+        if (recovered.state !== "complete" || recovered.conflicts.length) throw new Error("continuity_recovery_conflict");
+        configureSecretContinuity(binding);
+      }
+    } catch (cause) {
+      owner.check();
+      const error = new Error("Your account identity could not be verified. Your existing records have not changed.");
+      error.code = "continuity_initialization_failed";
+      error.cause = cause;
+      error.recoveryConflict = cause?.message === "continuity_recovery_conflict";
+      throw error;
+    }
   }
-  return created;
+  const lookup = () => writeRequest(owner, () => owner.db.from("profiles")
+    .select("*").eq("auth_user_id", userId).maybeSingle());
+  const existing = await lookup();
+  owner.check();
+  // A failed read is not permission to create another account.
+  if (initializedProfileId && (existing.error || existing.data?.id !== initializedProfileId || existing.data?.auth_user_id !== userId)) {
+    const error = new Error("Your existing account could not be loaded. Please try again.");
+    error.code = "continuity_initialization_failed";
+    throw error;
+  }
+  if (existing.error) throw new Error("Your account could not be loaded. Please try again.");
+  if (existing.data) return existing.data;
+
+  // The disabled legacy path creates only an ordinary pending profile. When
+  // continuity is enabled, the exact initialized row must already exist above.
+  const { data: created, error } = await writeRequest(owner, () => owner.db
+    .from("profiles").insert({ id: crypto.randomUUID(), auth_user_id: userId }).select().single());
+  owner.check();
+  if (!error) return created;
+  // A concurrent Clerk webhook may have created exactly this subject's row.
+  // The retry retains the same account and session through token and fetch.
+  if (error.code === "23505") {
+    const again = await lookup();
+    owner.check();
+    if (!again.error && again.data) return again.data;
+  }
+  throw new Error("Your account could not be initialized. Please try again.");
 }
 
 // ─── Load all data from Supabase ─────────────────────────────
@@ -603,10 +885,10 @@ export async function saveSettings(userId, settings, authUserId) {
   if (!supabase || !userId) {
     // Offline (or before the profile loads) a settings edit has nowhere to
     // go and used to vanish on the next cloud merge. Queue it like any other
-    // write; replay applies it once the session is back. Device-local keys
-    // are stripped the same way every cloud write strips them.
-    const clean = { ...settings };
-    for (const f of DEVICE_KEY_FIELDS) delete clean[f];
+    // write; replay applies it once the session is back. Device-local material
+    // is stripped through the one redaction, so a queued patch sitting on disk
+    // holds no more than a cloud write would.
+    const clean = redactForExport(settings);
     queuePendingOp("settings", "settings", clean, owner);
     return null;
   }
@@ -636,14 +918,12 @@ export async function saveSettings(userId, settings, authUserId) {
         return { savedExcept: "email" };
       }
       console.warn("Failed to save settings:", retry.error.message);
-      const clean = { ...settings }; delete clean.email;
-      for (const f of DEVICE_KEY_FIELDS) delete clean[f];
+      const clean = redactForExport(settings); delete clean.email;
       queuePendingOp("settings", "settings", clean, owner);
       return null;
     }
     console.warn("Failed to save settings:", error.message);
-    const clean = { ...settings };
-    for (const f of DEVICE_KEY_FIELDS) delete clean[f];
+    const clean = redactForExport(settings);
     queuePendingOp("settings", "settings", clean, owner);
     return null;
   }

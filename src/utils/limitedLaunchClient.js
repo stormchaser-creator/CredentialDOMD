@@ -4,6 +4,8 @@ import { isLaunchInvitationToken } from "./launchInvitation.js";
 
 const ENV = import.meta.env || {};
 const SAFE_ERROR_CODES = new Set([
+  "continuity_unavailable", "continuity_disabled", "identity_conflict", "account_unavailable", "verified_primary_required",
+  "signup_disabled", "signup_unavailable", "verified_primary_email_required",
   "free_beta_active", "billing_disabled", "billing_not_configured", "billing_unavailable", "unauthorized",
   "membership_unavailable", "lifetime_access_already_granted", "verified_invitation_email_required",
   "invitation_unavailable", "invitation_required", "invitation_activation_disabled",
@@ -73,6 +75,35 @@ function validateActivation(value) {
   return structuredClone(value);
 }
 
+function validateProfileInitialization(value, accountId) {
+  if (!object(value) || value.schemaVersion !== 1 || !["bound", "current"].includes(value.state)
+    || !uuid(value.profileId) || value.subject !== accountId || value.issuer !== "https://clerk.credentialdomd.com"
+    || (value.continuity === null ? value.state !== "current"
+      : !object(value.continuity) || value.continuity.state !== "bound" || !uuid(value.continuity.id)
+        || value.continuity.sourceIssuer !== "https://dynamic-goshawk-87.clerk.accounts.dev"
+        || typeof value.continuity.sourceSubject !== "string" || !/^user_[A-Za-z0-9]{1,120}$/.test(value.continuity.sourceSubject)
+        || value.continuity.sourceSubject === accountId)) throw unavailable("continuity_unavailable");
+  return structuredClone(value);
+}
+
+function validateEnrollment(value) {
+  const beta = value?.freeBeta;
+  if (!contract(value) || !["lifetime", "grandfathered_beta", "paid"].includes(value.enrollmentKind)
+    || !["active", "pending"].includes(value.accessStatus) || value.subscriptionCreated !== false
+    || value.cardRequired !== (value.enrollmentKind === "paid")
+    || ![null, "founding", "earlybird", "standard"].includes(value.pricePhase)
+    || !object(beta) || !["none", "active", "expired"].includes(beta.state) || beta.autoCharges !== false
+    || (beta.state === "none" ? beta.startsAt !== null || beta.endsAt !== null
+      : !date(beta.startsAt) || !date(beta.endsAt)
+        || Date.parse(beta.endsAt) - Date.parse(beta.startsAt) !== 30 * 24 * 60 * 60 * 1000)
+    || (value.enrollmentKind === "lifetime" && (beta.state !== "none" || value.pricePhase !== null))
+    || (value.enrollmentKind === "grandfathered_beta" && (beta.state === "none" || value.pricePhase === null))
+    || (value.enrollmentKind === "paid" && (beta.state !== "none" || value.pricePhase === null))) throw unavailable();
+  // This acknowledgment is never itself an entitlement. Only the separately
+  // fetched billing-entitlements snapshot authorizes product access.
+  return structuredClone(value);
+}
+
 /** A fresh default Clerk token, pinned to one signed-in account and one session. */
 export function createLimitedLaunchClient({
   accountId, enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
@@ -123,6 +154,8 @@ export function createLimitedLaunchClient({
     finally { clearTimeout(timer); controller.abort(); cancelBody(); }
   }
   return {
+    async initializeProfile() { return validateProfileInitialization(await request("initialize-clerk-profile"), accountId); },
+    async bootstrap() { return validateEnrollment(await request("bootstrap-launch-access")); },
     async portal() { return validatePortal(await request("limited-customer-portal")); },
     async entitlements() { return validateAccessSnapshot(await request("billing-entitlements")); },
     async quote(input) {

@@ -29,6 +29,8 @@ import { complianceFor, windowNotes, cycleBucket } from "../../utils/compliance"
 import { computeBoardCompliance, boardIdsFromLicenses, aoaNationalEntry } from "../../utils/boardCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf } from "../../utils/cmeTranscriptPdf";
 import { CME_INBOX_ADDRESS } from "../../utils/inboxDocs";
+import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
+import { routableSenders, joinAddresses, accountMailboxVerified, CONFIRM_FIRST_SENTENCE } from "../../utils/forwardingAddresses";
 
 // What one entry is called and where it came from, read by the phone card and
 // the desk table alike so the two can never label the same record differently.
@@ -48,6 +50,17 @@ const IN_CYCLE_FIRST = [CYCLE_ORDER.in];
 function CMESection({ onShare }) {
   const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop } = useApp();
   const iS = useInputStyle();
+  // The addresses cme@ actually accepts mail from, the same list the Requests
+  // header names. Empty is a real answer and the hint says so rather than
+  // naming an address that routes nowhere.
+  const { rows: forwardingRows } = useForwardingAddresses();
+  const cmeSenders = useMemo(() => {
+    const acct = data.settings?.email || "";
+    return joinAddresses(routableSenders(acct, forwardingRows, {
+      verifiedEmail: data.settings?.verifiedEmail || "",
+      accountVerified: accountMailboxVerified(data.settings?.verifiedEmail, acct),
+    }));
+  }, [data.settings?.email, data.settings?.verifiedEmail, forwardingRows]);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({});
@@ -290,12 +303,20 @@ function CMESection({ onShare }) {
       <div style={{ fontSize: 13, color: T.textDim, marginBottom: 4 }}>
         {data.cme.length} entries &middot; {totalHours} total hours
       </div>
-      {/* Certificate intake by email: the email-inbound function matches the
-          sender to profiles.email, so the hint names the address that works. */}
+      {/* Certificate intake by email. The hint names only addresses that have
+          passed the mailbox challenge, or the account address when the
+          sign-in provider verified that same mailbox: email-inbound's
+          matchProfile reads confirmed forwarding_addresses rows and
+          profiles.verified_email, and nothing else. It used to name
+          data.settings.email, which is profiles.email, the column that was
+          deliberately removed from the routing decision, so this panel told
+          every pre-existing account to forward from the one address
+          guaranteed to come back "not confirmed for a CredentialDOMD
+          account" with the certificate unfiled. */}
       <div style={{ fontSize: 13, color: T.textDim, marginBottom: note ? 6 : 16, lineHeight: 1.45 }}>
-        Forward certificate emails to <span style={{ fontWeight: 600, color: T.text }}>{CME_INBOX_ADDRESS}</span> from {data.settings.email
-          ? <span style={{ fontWeight: 600, color: T.text }}>{data.settings.email}</span>
-          : <span>the email on your account (<span onClick={() => navigate("more", "settings")} style={{ color: T.accent, cursor: "pointer", fontWeight: 600 }}>add it in Settings</span>)</span>}
+        {cmeSenders
+          ? <>Forward certificate emails to <span style={{ fontWeight: 600, color: T.text }}>{CME_INBOX_ADDRESS}</span> from <span style={{ fontWeight: 600, color: T.text }}>{cmeSenders}</span></>
+          : <>Forward certificate emails to <span style={{ fontWeight: 600, color: T.text }}>{CME_INBOX_ADDRESS}</span>. {CONFIRM_FIRST_SENTENCE} <span onClick={() => navigate("more", "settings")} style={{ color: T.accent, cursor: "pointer", fontWeight: 600 }}>Open Settings, Email</span>.</>}
       </div>
       {note && (
         <div style={{ fontSize: 13, color: T.accent, marginBottom: 12, padding: "8px 12px", borderRadius: 10, backgroundColor: T.accentGlow }}>{note}</div>

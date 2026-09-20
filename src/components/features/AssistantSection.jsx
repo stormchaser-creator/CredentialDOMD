@@ -167,7 +167,18 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     try {
       const history = buildAssistantHistory([...msgs.filter(x => x.id !== userMsg.id), userMsg]);
       const snapshot = buildSnapshot(data, allTrackedStates);
-      const result = await assistantTurn({ history, snapshot, apiKey: data.settings.apiKey, anthropicKey: data.settings.anthropicApiKey, attachment: att });
+      // The whole settings object, not just the two keys: assistant.js reads
+      // settings.assistantModel to decide whether Vera thinks on Opus. Handing
+      // it apiKey/anthropicKey alone made it build a settings stand-in that had
+      // no assistantModel, so "Vera answers with: Opus" in Settings did nothing
+      // and every turn from this screen ran on Gemini. Same fix the RVU coder
+      // needed (RVULog.jsx), same cause.
+      //
+      // Passing it was only half. The choice is not a profiles column, so a
+      // cloud load used to rebuild settings without it and the toggle fell
+      // back to Gemini on the next online start; LOCAL_ONLY_SETTINGS in
+      // lib/supabase.js is what carries it across that merge now.
+      const result = await assistantTurn({ history, snapshot, settings: data.settings, attachment: att });
       // Deterministic honesty net: if the reply CLAIMS the developer will
       // hear about something but carries no feedback action, attach one
       // built from the user's own words — the model once said "I'll pass

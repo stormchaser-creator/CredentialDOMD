@@ -2,6 +2,8 @@ import { PUBLIC_BILLING_POLICY } from "../../supabase/functions/_shared/accessPo
 
 // This client switch never enables checkout or changes an account entitlement.
 export const LIMITED_LAUNCH_ACCESS_ENABLED = import.meta.env?.VITE_LIMITED_LAUNCH_ACCESS_ENABLED === "true";
+// Separate rollout switch: existing personal invitations work while public enrollment is off.
+export const PUBLIC_SELF_SERVICE_SIGNUP_ENABLED = import.meta.env?.VITE_PUBLIC_SELF_SERVICE_SIGNUP_ENABLED === "true";
 export const ACCESS_REFRESH_MS = 5 * 60 * 1000;
 const scopes = ["credential", "practice"];
 const operations = ["read", "write", "export"];

@@ -11,7 +11,7 @@ import { ProposalChecklist, ApproveSendButton, proposalSummary, requesterMissing
 import { REQUESTS_CHANGED_EVENT } from "../../hooks/useNewRequestCount";
 import { useRequestProposals } from "../../hooks/useRequestProposals";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
-import { forwardingSenders, joinAddresses } from "../../utils/forwardingAddresses";
+import { forwardingSenders, routableSenders, joinAddresses, accountMailboxVerified, CONFIRM_FIRST_SENTENCE } from "../../utils/forwardingAddresses";
 
 // Where physicians forward credentialer emails. The inbound edge function
 // also accepts requests@ and packets@; docs@ is the one we print.
@@ -134,13 +134,39 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
 
   const realEmail = data.settings?.email || user?.email || "";
   const accountEmail = realEmail || "your account email";
-  // Inbound mail is matched by SENDER, and the account address is no longer
-  // the only one that matches: a confirmed forwarding address does too. Naming
-  // only the account address here told a physician who registered their
-  // hospital email that it would not work.
+  // Two lists, two questions, and they are not interchangeable (see the pair
+  // documented in utils/forwardingAddresses.js).
+  //
+  // `senders` is "which addresses are MINE". It feeds ApproveSendButton, whose
+  // requesterMissing() uses it to notice that a request names the physician's
+  // own address as the requester, which means the forward carried no From:
+  // line. The account address belongs there confirmed or not, and so does the
+  // provider-verified mailbox: it is the address most live accounts actually
+  // read mail at, and leaving it out let a self-addressed checklist reach the
+  // green Approve button.
+  //
+  // `routable` is "which addresses will inbound mail actually match". Since
+  // email-inbound stopped falling back to the user-editable profiles.email,
+  // that is the confirmed addresses, plus the account address when the
+  // sign-in provider itself verified it (profiles.verified_email, which
+  // email-inbound also routes on). Naming an unconfirmed address in the
+  // forward-from copy would send a physician to forward a real credentialing
+  // request from a mailbox the matcher drops on the floor, and leaving the
+  // provider-verified case out tells a physician whose mail routes perfectly
+  // well that nothing reaches them. Both lines below use `routable`; the
+  // header used to use `senders` and said the opposite of the empty state a
+  // few hundred pixels under it.
   const { rows: forwarding } = useForwardingAddresses();
-  const senders = useMemo(() => forwardingSenders(accountEmail, forwarding), [accountEmail, forwarding]);
-  const sendersText = joinAddresses(senders) || accountEmail;
+  const acctVerified = accountMailboxVerified(data.settings?.verifiedEmail, realEmail);
+  const senders = useMemo(
+    () => forwardingSenders(accountEmail, forwarding, { verifiedEmail: data.settings?.verifiedEmail || "" }),
+    [accountEmail, forwarding, data.settings?.verifiedEmail],
+  );
+  const routable = useMemo(
+    () => routableSenders(realEmail, forwarding, { verifiedEmail: data.settings?.verifiedEmail || "", accountVerified: acctVerified }),
+    [realEmail, forwarding, acctVerified, data.settings?.verifiedEmail]
+  );
+  const sendersText = joinAddresses(routable);
 
   const load = useCallback(async ({ quiet } = {}) => {
     if (!supabase) { setErr("Not connected to your account."); setLoading(false); return; }
@@ -528,20 +554,36 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
           cursor: loading ? "default" : "pointer", opacity: loading ? 0.5 : 1,
         }}>{loading ? "Refreshing…" : "Refresh"}</button>
       </div>
+      {/* The addresses named here are `routable`, never `senders`: this is the
+          instruction a physician acts on, and it is on screen every visit
+          while the empty state below is only on screen when the list is
+          empty. With nothing routable there is no address to name, so the
+          sentence becomes the confirm-first one instead of naming a mailbox
+          the matcher would drop. */}
       <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
-        Forward a credentialer's email from{" "}
-        {senders.map((e, i) => (
-          <span key={e}>
-            {i > 0 ? (i === senders.length - 1 ? " or " : ", ") : ""}
-            <b style={{ color: T.text }}>{e}</b>
-          </span>
-        ))}
-        {" "}to <b style={{ color: T.text }}>{REQUESTS_ADDRESS}</b> and that is the last thing you type. The app reads what was asked for,
-        matches it against your file and writes the reply; one tap here or on Home sends it. Or{" "}
+        {routable.length > 0 ? (
+          <>
+            Forward a credentialer's email from{" "}
+            {routable.map((e, i) => (
+              <span key={e}>
+                {i > 0 ? (i === routable.length - 1 ? " or " : ", ") : ""}
+                <b style={{ color: T.text }}>{e}</b>
+              </span>
+            ))}
+            {" "}to <b style={{ color: T.text }}>{REQUESTS_ADDRESS}</b> and that is the last thing you type. The app reads what was asked for,
+            matches it against your file and writes the reply; one tap here or on Home sends it. Or{" "}
+          </>
+        ) : (
+          <>
+            {CONFIRM_FIRST_SENTENCE} Once one is confirmed, forward a credentialer's email from it to{" "}
+            <b style={{ color: T.text }}>{REQUESTS_ADDRESS}</b> and the app reads what was asked for, matches it against your file
+            and writes the reply; one tap here or on Home sends it.{" "}
+          </>
+        )}
         <button onClick={() => navigate("more", "settings")} style={{
           padding: 0, border: "none", background: "none", color: T.accent,
           font: "inherit", fontWeight: 700, cursor: "pointer", textDecoration: "underline",
-        }}>add another address in Settings</button>.
+        }}>{routable.length > 0 ? "add another address in Settings" : "Open Settings, Email"}</button>.
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -582,7 +624,9 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
       ) : visible.length === 0 ? (
         tab === "new" ? (
           <EmptyState icon={"📨"} title="No document requests"
-            subtitle={`Forward a credentialer's request from ${sendersText} to ${REQUESTS_ADDRESS}. That is the last step: the app matches the ask against your file, writes the reply, and one tap sends it with the documents attached.`} />
+            subtitle={sendersText
+              ? `Forward a credentialer's request from ${sendersText} to ${REQUESTS_ADDRESS}. That is the last step: the app matches the ask against your file, writes the reply, and one tap sends it with the documents attached.`
+              : `${CONFIRM_FIRST_SENTENCE} Once one is confirmed, forward a credentialer's request from it to ${REQUESTS_ADDRESS} and the app matches the ask against your file, writes the reply, and one tap sends it with the documents attached.`} />
         ) : (
           <div style={{ fontSize: 13.5, color: T.textDim, padding: "24px 0", textAlign: "center" }}>
             {tab === "replied" ? "Nothing replied to yet." : "Nothing dismissed."}

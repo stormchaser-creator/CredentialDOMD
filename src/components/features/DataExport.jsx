@@ -2,7 +2,7 @@ import { useState, useRef, memo } from "react";
 import { exportVault, importVault, vaultCount, clearVault } from "../../utils/privateVault";
 import { useApp } from "../../context/AppContext";
 import { STORAGE_KEY } from "../../constants/defaults";
-import { bulkSync, saveSettings, COLLECTION_KEYS } from "../../lib/supabase";
+import { bulkSync, saveSettings, COLLECTION_KEYS, redactForExport } from "../../lib/supabase";
 import BackupPanel from "./BackupPanel";
 
 function DataExport() {
@@ -61,8 +61,12 @@ function DataExport() {
   };
 
   const handleExportJSON = () => {
-    // Strip sensitive fields from export (API keys, etc.)
-    const { apiKey, anthropicApiKey, ...safeSettings } = data.settings;
+    // Device-only material never leaves the device. This stripped apiKey and
+    // anthropicApiKey by hand and missed everything else that shares the
+    // device slot, so a downloaded backup carried the CallSync feed link and
+    // the lock code that opens the encrypted portal passwords stored beside
+    // it. One redaction now, shared with the ZIP (src/lib/supabase.js).
+    const safeSettings = redactForExport(data.settings);
     const exportData = {
       ...data,
       settings: safeSettings,

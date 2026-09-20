@@ -53,7 +53,7 @@ import { RequestPacketSummary, ApproveSendButton, unwrapInvoke, HOME_NOT_FOUND_R
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
-import { isAdminUser } from "./lib/admin";
+import { useIsAdmin } from "./lib/admin";
 import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
@@ -280,6 +280,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
   const { data, setData, loaded, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, manage } = useApp();
+  // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
+  // the Admin card appears when that answer lands rather than one render too
+  // late. It gates a card, not a permission: every admin view and every admin
+  // function asks the server again.
+  const isAdmin = useIsAdmin();
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
@@ -297,12 +302,28 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // starts on the list.
   const [requestsOpenId, setRequestsOpenId] = useState(null);
   const onRequestOpened = useCallback(() => setRequestsOpenId(null), []);
-  // Every address this physician forwards from (account email plus confirmed
-  // forwarding addresses): a request whose from_addr is one of them has no
-  // requester, and the banner must say so instead of offering a send that
-  // can only fail.
+  // Which addresses are MINE (account email plus confirmed forwarding
+  // addresses): a request whose from_addr is one of them has no requester, and
+  // the banner must say so instead of offering a send that can only fail.
+  //
+  // This one stays forwardingSenders and must NOT become routableSenders.
+  // requesterMissing() in components/features/RequestPacket.js consumes it
+  // (through ownAddresses on RequestPacketSummary and ApproveSendButton) to
+  // ask "is the requester on this request just me?", and the answer is yes
+  // whether or not the account address is confirmed for inbound routing. Swap
+  // in the routable list and an unconfirmed account address stops matching:
+  // the banner then stops detecting a requester-not-found request and offers a
+  // send that mails the packet straight back to the physician. The routable
+  // list answers a different question and is used in RequestsInbox.jsx.
   const { rows: forwardingRows } = useForwardingAddresses();
-  const ownSenders = useMemo(() => forwardingSenders(data.settings?.email || user?.email || "", forwardingRows), [data.settings?.email, user?.email, forwardingRows]);
+  // settings.verifiedEmail is profiles.verified_email, server-owned and
+  // read-only here. It is one of the physician's own addresses and was left
+  // out, so a request whose From: was their provider-verified mailbox looked
+  // like a real requester and the banner offered a send back to themselves.
+  const ownSenders = useMemo(
+    () => forwardingSenders(data.settings?.email || user?.email || "", forwardingRows, { verifiedEmail: data.settings?.verifiedEmail || "" }),
+    [data.settings?.email, data.settings?.verifiedEmail, user?.email, forwardingRows],
+  );
   // The packet that just went out from the banner. Held until the physician
   // clears it, because the next open request would otherwise slide its own
   // green button into the same spot within one round trip of the tap, and a
@@ -423,20 +444,35 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     setTab("credentials"); setSubPage(sec);
   }, [setTab, setSubPage]);
 
-  // Beta gate: invite-only. Admins are always in; everyone else must be
-  // 'active' in profiles.access_status (activated by the Clerk webhook, the
-  // self-claim RPC against the JWT email, or the owner from Admin > Users).
-  const [access, setAccess] = useState(null);
+  // Beta gate: invite-only. The answer comes from the server and only from
+  // the server: claim_beta_access() returns 'active' for an app_admins member
+  // (it checks is_admin(pid) first), for an account already marked active,
+  // and for an invited address, and 'pending' otherwise. Admins are still
+  // always in; they are let in by the same RPC as everyone else.
+  //
+  // There used to be a client short-circuit here: isAdminUser(user) matched a
+  // hardcoded address list against every address on the Clerk account,
+  // verified or not, and set access to 'active' without asking anything. With
+  // Clerk sign-up open, typing admin@credentialdomd.com into your own Clerk
+  // profile as a secondary address was enough to skip the invite screen
+  // below. The gate is the product; it does not get a client-side bypass.
+  const [legacyAccess, setAccess] = useState(null);
+  const launchAccessEnabled = limitedLaunch.enabled, refreshLaunchAccess = limitedLaunch.refresh;
+  // The protected membership snapshot is the only online access decision in
+  // launch mode. Never run the historical invitation-grant RPC in this mode.
+  const access = limitedLaunch.enabled
+    ? (offlineMode ? (data.settings?.accessStatus === "active" ? "active" : "pending") : limitedLaunch.access?.accessStatus ?? (data.settings?.accessStatus === "active" ? "active" : null))
+    : legacyAccess;
   const recheckAccess = useCallback(async () => {
     if (!user) return;
+    if (launchAccessEnabled) { await refreshLaunchAccess(); return; }
     // Offline session: the server can't be asked, so the cached answer from
     // the last real load decides — same fallback the RPC failure path uses.
     if (offlineMode) { setAccess(data.settings?.accessStatus === "active" ? "active" : "pending"); return; }
-    if (isAdminUser(user)) { setAccess("active"); claimBetaAccess().catch(() => {}); return; }
     const r = await claimBetaAccess();
     if (r === "unknown") setAccess(data.settings?.accessStatus === "active" ? "active" : "pending");
     else setAccess(r);
-  }, [user, offlineMode, data.settings?.accessStatus]);
+  }, [user, offlineMode, data.settings?.accessStatus, launchAccessEnabled, refreshLaunchAccess]);
   useEffect(() => {
     if (!loaded || !user) return;
     recheckAccess();
@@ -800,11 +836,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       <div style={{ maxWidth: 420, textAlign: "center" }}>
         <AsclepiusIcon size={44} color={T.accent} />
         {access === null ? (
-          <div style={{ marginTop: 12, fontSize: 14, color: T.textMuted }}>Checking your invitation...</div>
+          <>
+            <div role="status" style={{ marginTop: 12, fontSize: 14, color: T.textMuted }}>{limitedLaunch.enabled
+              ? (limitedLaunch.initializationError || limitedLaunch.error || (!limitedLaunch.profileReady ? "Your account setup could not finish. Reload to try again." : "Checking your membership…"))
+              : "Checking your invitation…"}</div>
+            {limitedLaunch.enabled && (limitedLaunch.error || !limitedLaunch.profileReady) && <button style={{ marginTop: 16 }} onClick={() => limitedLaunch.profileReady ? limitedLaunch.refresh() : window.location.reload()}>Try again</button>}
+          </>
         ) : access === "revoked" ? (
           <>
             <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800 }}>Access paused</div>
-            <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>Your beta access has been paused. Reply to your invitation email if you think this is a mistake.</div>
+            <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>{limitedLaunch.enabled ? "Your account access has been paused. Contact support if you think this is a mistake." : "Your beta access has been paused. Reply to your invitation email if you think this is a mistake."}</div>
             {limitedLaunch.enabled && <button style={{ marginTop: 16 }} onClick={manage}>Manage an existing subscription</button>}
           </>
         ) : (
@@ -2342,8 +2383,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </div>
           </button>
 
-          {/* Admin (founders only) */}
-          {isAdminUser(user) && (
+          {/* Admin (app_admins membership, resolved server-side) */}
+          {isAdmin && (
             <button onClick={() => setSubPage("admin")} className="cmd-card-hover" style={{
               display: "flex", alignItems: "center", gap: 12,
               backgroundColor: T.card, border: `2px solid ${T.accent}`,
