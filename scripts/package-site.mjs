@@ -96,7 +96,13 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   for (const name of landingImages) await cp(resolve(root, 'landing/images', name), resolve(output, 'images', name));
   await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true });
   await cp(resolve(root, 'public/knowledge'), resolve(output, 'knowledge'), { recursive: true });
-  if (launchMode.enabled) await writeFile(resolve(output, 'knowledge/credentialdo-help.json'), JSON.stringify(publishedHelp, null, 2) + '\n');
+  if (launchMode.enabled) {
+    const helpJson = JSON.stringify(publishedHelp, null, 2) + '\n';
+    await writeFile(resolve(output, 'knowledge/credentialdo-help.json'), helpJson);
+    // Vite also copies this public file under /app/; publish the same mode there.
+    await mkdir(resolve(output, 'app/knowledge'), { recursive: true });
+    await writeFile(resolve(output, 'app/knowledge/credentialdo-help.json'), helpJson);
+  }
   await mkdir(resolve(output, 'cme-assets'), { recursive: true });
   for (const name of cmeAssets) await cp(resolve(root, 'public/cme-assets', name), resolve(output, 'cme-assets', name));
   await copyVideoAssets(root, output, videoCatalog);

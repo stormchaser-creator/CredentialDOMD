@@ -57,6 +57,7 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /waitlist entry alone does not qualify for lifetime access/);
     assert.match(html, /\$245\/year total at first purchase/);
     assert.doesNotMatch(html, /Checkout is not open|invitation will confirm eligibility|<form\b[^>]*class="[^"]*wl-form/i);
+    assert.doesNotMatch(html, /Founding invitations/i);
   });
 }
 test('locums visible cost answer and FAQ structured data are identical', async () => {
@@ -89,5 +90,15 @@ test('OFF help fixture is unchanged and production help presents verified beta a
   assert.match(active, /separate 30-day Practice trial/);
   assert.match(active, /most recent annual membership payment, including a renewal payment, at any time/);
   assert.match(active, /Request through Get help in the app or support@credentialdomd.com/);
+  assert.doesNotMatch(active, /An invited, signed-in account|new invited physicians/);
+  assert.match(active, /signed-in account with active Credential access/);
   assert.doesNotMatch(active, /Card required at future paid checkout|Their invitation will confirm/);
+});
+
+test('app metadata and security label remain factual in either launch mode', async () => {
+  const app = await read('index.html');
+  const security = await read('landing/security.html');
+  assert.match(app, /Organize medical licenses, DEA registrations, CME, and professional documents/);
+  assert.match(security, /Updated September 18, 2026 &middot; Physician credential management/);
+  for (const html of [app, security]) assert.doesNotMatch(html, /Invite-only beta|billing is off/i);
 });

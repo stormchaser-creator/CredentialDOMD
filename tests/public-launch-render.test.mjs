@@ -114,7 +114,8 @@ test('launch render rejects observed stale promises in visible copy and JSON-LD'
   for (const text of ['CredentialDOMD is in field testing right now.',
     'Early access opens to the waitlist first, in order.', 'Leave your email above.',
     'You will get one message when your spot is ready.', 'The earliest names on the list get founding-member perks.',
-    'Join the early-access list and mention your group size.', 'Practices get priority onboarding when the team features ship.']) {
+    'Join the early-access list and mention your group size.', 'Practices get priority onboarding when the team features ship.',
+    'Founding invitations', 'Invite-only beta', 'Billing is off.', 'An invited, signed-in account.', 'new invited physicians']) {
     assert.throws(() => renderPublicLaunch(source + `<p>${text}</p>`, 'home'), /Unmigrated public launch wording/, text);
     const schema = { '@type': 'FAQPage', mainEntity: [{ name: 'Availability', acceptedAnswer: { text } }] };
     assert.throws(() => renderPublicLaunch(source + `<script type="application/ld+json">${JSON.stringify(schema)}</script>`, 'home'), /Unmigrated public launch wording/, `structured: ${text}`);
@@ -196,7 +197,12 @@ test('help compilation adds refund request terms and updates Practice availabili
   assert.deepEqual(help, original, 'do not mutate the shared authored knowledge');
   for (const article of output.articles) {
     const old = original.articles.find(item => item.id === article.id);
-    if (article.id === 'locum-contract') {
+    if (article.id === 'first-license') {
+      assert.deepEqual(article.audience, ['physicians with active Credential access']);
+      assert.match(article.availability, /signed-in account with active Credential access/);
+      assert.match(article.availability, /NPI lookup needs a connection/);
+      assert.deepEqual({ ...article, availability: old.availability, audience: old.audience }, old);
+    } else if (article.id === 'locum-contract') {
       assert.match(article.availability, /separate 30-day Practice trial/);
       assert.deepEqual({ ...article, availability: old.availability }, old);
     } else if (article.id === 'get-help') {
@@ -239,7 +245,7 @@ test('paid rendering rejects missing or stray slots and current legal contradict
   assert.throws(() => renderPublicLaunch(home + '<a href="/#join">Join the waitlist</a>', 'home', paid), /Unmigrated public launch wording/);
   assert.throws(() => renderPublicLaunch(home + '<!-- public-launch:unknown -->x<!-- /public-launch:unknown -->', 'home', paid), /Unknown public launch slot/);
   const staleTerms = renderLegalPages(off)['terms.html'];
-  assert.throws(() => renderPublicLaunch(staleTerms, 'legal-navigation', paid), /Unmigrated public launch wording.*billing is off/i);
+  assert.throws(() => renderPublicLaunch(staleTerms, 'legal-navigation', paid), /Unmigrated public launch wording.*(?:invite-only beta|billing is off)/i);
   const currentTerms = await read('landing/terms.html');
   assert.doesNotThrow(() => renderPublicLaunch(currentTerms, 'legal-navigation'));
 });

@@ -8,6 +8,10 @@ export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
   if (!mode.enabled) return help;
   const view = publicLaunchPresentation(mode);
   const copy = structuredClone(help);
+  const setup = copy.articles.find(article => article.id === 'first-license');
+  if (!setup) throw Error('Missing signup availability in public help');
+  setup.audience = ['physicians with active Credential access'];
+  setup.availability = 'A signed-in account with active Credential access. NPI lookup needs a connection.';
   const practice = copy.articles.find(article => article.id === 'locum-contract');
   if (!practice) throw Error('Missing Practice availability in public help');
   practice.availability = [view.practiceTrial, view.promisedBeta, view.lifetimeException].join(' ');
@@ -35,7 +39,7 @@ function signupInsteadOfForm(fallback, view) {
 
 const minimumSlots = {
   home: { cta: 4, form: 2, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1 },
-  locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1 },
+  locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 3 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
   'state-guides': { cta: 4, 'guide-consent': 4, 'early-release': 1, participation: 1 },
@@ -112,7 +116,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
   // Inspect structured answers too: stripping scripts alone misses stale FAQ offers.
   const structured = [...output.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)]
     .map(match => JSON.stringify(JSON.parse(match[1]))).join(' ');
-  const stale = `${visible} ${structured}`.match(/join (?:the )?(?:waitlist|list)|request (?:beta|early) access|get early access|free during beta|free invite.only beta|checkout is not open|billing is off|field testing right now|early access opens to (?:the )?waitlist|waitlist first,? in order|leave your email above|when your spot is ready|earliest names on the list|join the early.access list and mention your group size|practices get priority onboarding|after individual early access opens/i);
+  const stale = `${visible} ${structured}`.match(/join (?:the )?(?:waitlist|list)|request (?:beta|early) access|get early access|free during beta|invite.only beta|checkout is not open|billing is off|field testing right now|early access opens to (?:the )?waitlist|waitlist first,? in order|leave your email above|when your spot is ready|earliest names on the list|join the early.access list and mention your group size|practices get priority onboarding|after individual early access opens|founding invitations|invited, signed.in account|new invited physicians/i);
   if (stale) {
     throw Error(`Unmigrated public launch wording in ${surface}: ${stale[0]}`);
   }
