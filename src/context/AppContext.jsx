@@ -10,6 +10,7 @@ import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
 import { configureSecretContinuity } from "../utils/secretBox.js";
 import { profileSupportReference } from "../utils/profileIssueDiagnostics.js";
+import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from "../utils/accountRecordsLoad.js";
 import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
@@ -87,6 +88,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // congratulate an established physician for finishing setup.
   const [profileOwner, setProfileOwner] = useState(null);
   const [profileIssue, setProfileIssue] = useState(null);
+  const [recordsLoadIssue, setRecordsLoadIssue] = useState(null);
   const [loadedFrom, setLoadedFrom] = useState(null); // "cloud" | "local"
   const userIdRef = useRef(null);
   // Clerk id the in-memory `data` was loaded for. The on-device cache is
@@ -228,15 +230,21 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         // merge already reflects them.
         try { await replayPendingOps(profile.id, authUserId); } catch { /* offline */ }
         if (!current()) return;
-        const sbData = await loadFromSupabase(authUserId);
-        if (!current()) return;
+        let sbData;
+        try {
+          sbData = await loadFromSupabase(authUserId);
+          if (!current()) return;
+          // Do not hydrate, repair links, or cache an incomplete online read.
+          // A fresh browser has no local rows with which to fill those gaps.
+          assertCompleteAccountRecords(sbData, profile.id, COLLECTION_KEYS);
+        } catch {
+          if (!current()) return;
+          throw accountRecordsLoadError();
+        }
+        setRecordsLoadIssue(null);
         if (sbData) {
           const profileId = sbData._userId;
           delete sbData._userId;
-          // Collections whose read FAILED (not empty) — never overwrite their
-          // last-known-good with an empty set, and never push stale local rows
-          // over cloud data we couldn't see.
-          const erroredKeys = sbData._errored || new Set();
           delete sbData._errored;
           userIdRef.current = profileId;
 
@@ -279,15 +287,6 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           // another device.
           merged.settings = withLocalOnlySettings(merged.settings, local?.settings);
 
-          // A collection we failed to READ keeps this device's last-known-good
-          // copy rather than the empty set the merge would otherwise show — and
-          // is excluded from the self-heal push below.
-          if (erroredKeys.size && local) {
-            for (const key of erroredKeys) {
-              if (local[key]) merged[key] = local[key];
-            }
-          }
-
           // Deletion ledger: anything deleted anywhere stays deleted.
           let tombstones = new Set();
           try { tombstones = await listTombstones(profileId); } catch { /* offline */ }
@@ -313,9 +312,6 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
             // greater risk.
             let pushed = 0;
             for (const key of COLLECTION_KEYS) {
-              // A collection whose read failed has an unknown cloud state —
-              // pushing local rows could clobber newer cloud data. Skip it.
-              if (erroredKeys.has(key)) continue;
               const localItems = local[key] || [];
               if (localItems.length === 0) continue;
               const cloudById = new Map((merged[key] || []).map(x => [x?.id, x]));
@@ -397,20 +393,25 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       }
     } catch (err) {
       if (!current()) return;
-      if (["continuity_initialization_failed", "continuity_retirement_unavailable"].includes(err.code)) {
-        // An unresolved legacy identity must never hydrate/replay destination
-        // storage or silently become a fresh profile. Preserve every disk copy.
+      if (["continuity_initialization_failed", "continuity_retirement_unavailable", "account_records_unavailable"].includes(err.code)) {
+        // An unresolved identity or incomplete cloud read must never appear
+        // as a fresh empty account. Preserve every existing disk copy.
         accessAuthority.suspendWrites();
         dataOwnerRef.current = null;
         userIdRef.current = null;
         setProfileOwner(null);
-        const supportReference = profileSupportReference(err);
-        // Report only the allowlisted reference, never the underlying error.
-        reportError(`Account load stopped (${supportReference}).`);
-        setProfileIssue({ accountId: authUserId, supportReference, message: (err.recoveryConflict
-          ? "An existing device copy needs a recovery review. Your saved data has not been overwritten. Please contact support."
-          : "Your account identity could not be verified. Your existing records have not changed. Reload to try again.")
-          + ` Support reference: ${supportReference}.` });
+        if (err.code === "account_records_unavailable") {
+          reportError(`Account records load stopped (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}).`);
+          setRecordsLoadIssue({ accountId: authUserId, supportReference: ACCOUNT_RECORDS_SUPPORT_REFERENCE });
+        } else {
+          const supportReference = profileSupportReference(err);
+          // Report only the allowlisted reference, never the underlying error.
+          reportError(`Account load stopped (${supportReference}).`);
+          setProfileIssue({ accountId: authUserId, supportReference, message: (err.recoveryConflict
+            ? "An existing device copy needs a recovery review. Your saved data has not been overwritten. Please contact support."
+            : "Your account identity could not be verified. Your existing records have not changed. Reload to try again.")
+            + ` Support reference: ${supportReference}.` });
+        }
         setData(DEFAULT_DATA);
         setLoadedFrom(null);
         setLoaded(true);
@@ -704,7 +705,8 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [onNavigate]);
 
   const value = useMemo(() => ({
-    data, setData: guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, loaded, loadedFrom, theme, toggleTheme, isDesktop,
+    data, setData: guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, loaded, loadedFrom,
+    recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, toggleTheme, isDesktop,
     updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
     allTrackedStates, navigate, userIdRef,
     // Auth
@@ -713,7 +715,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
     isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null }, canWriteCredential, canWritePractice,
-  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, recordsLoadIssue, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

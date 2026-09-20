@@ -27,6 +27,7 @@ import { CMEResourcesSection } from "./components/features";
 import { CVGenerator } from "./components/features";
 import ReadOnlyRecords from "./components/features/ReadOnlyRecords.jsx";
 import LaunchAccessNotice from "./components/shared/LaunchAccessNotice.jsx";
+import AccountRecordsLoadError from "./components/shared/AccountRecordsLoadError.jsx";
 import LimitedLaunchMembership from "./components/pages/LimitedLaunchMembership.jsx";
 import { DataExport } from "./components/features";
 import { DocumentsSection } from "./components/features";
@@ -283,7 +284,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, manage } = useApp();
+  const { data, setData, loaded, recordsLoadIssue, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, manage } = useApp();
   // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
   // the Admin card appears when that answer lands rather than one render too
   // late. It gates a card, not a permission: every admin view and every admin
@@ -826,6 +827,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       </div>
     </div>
   );
+
+  if (recordsLoadIssue) return <AccountRecordsLoadError theme={T} onRetry={() => window.location.reload()} />;
 
   if (limitedLaunch.enabled && access !== "active" && access !== "revoked" && access !== null) return <div style={{ minHeight: "100vh", padding: 24, background: T.bg, display: "grid", placeItems: "center" }}>
     <div style={{ width: "100%", maxWidth: 620, padding: 24, background: T.card, borderRadius: 16 }}>

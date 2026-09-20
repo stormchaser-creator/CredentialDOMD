@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { profileSupportReference, profileInitializationError } from '../../src/utils/profileIssueDiagnostics.js';
+import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from '../../src/utils/accountRecordsLoad.js';
 
 // Execute the actual provider functions with synthetic dependencies. Extracting
 // this contiguous function block avoids mounting Clerk/React or making requests;
@@ -49,6 +50,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     DEFAULT_DATA: { settings: {}, documents: [], licenses: [] }, COLLECTION_KEYS: ['licenses', 'documents'], WIPE_SEEN_KEY: 'synthetic-wipe',
     getActiveUserId: () => actor,
     profileSupportReference,
+    ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords,
     reportError: (...args) => record('reportError', args),
     ensureProfile: asyncDependency('ensureProfile', { id: 'profileA' }),
     replayPendingOps: asyncDependency('replayPendingOps'),
@@ -68,6 +70,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [],
     setData: update => { calls.push({ name: 'setData', actor }); if (deferReact) queuedUpdates.push(update); else applyUpdate(update); },
     setProfileIssue: value => { calls.push({ name: 'setProfileIssue', actor, value }); },
+    setRecordsLoadIssue: value => { calls.push({ name: 'setRecordsLoadIssue', actor, value }); },
     setProfileOwner: value => { calls.push({ name: 'setProfileOwner', actor, value }); },
     setLoaded: value => { calls.push({ name: 'setLoaded', actor, value }); },
     setLoadedFrom: value => { calls.push({ name: 'setLoadedFrom', actor, value }); },
@@ -323,6 +326,91 @@ test('identity failure displays and reports only an allowlisted support referenc
   assert.deepEqual(f.named('reportError')[0].args, ['Account load stopped (ID-RECOVER-DIGEST_FAILED).']);
   assert.equal(JSON.stringify(issue).includes('private@example.test'), false);
   for (const name of ['loadData', 'replayPendingOps', 'loadFromSupabase', 'saveData']) assert.equal(f.named(name).length, 0);
+});
+
+test('failed collections without a cache stop before partial hydration, link repair or cache writes', async () => {
+  const f = fixture();
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A', accessStatus: 'active' },
+    documents: [{ id: file.id, linkedTo: 'licenses:unavailable-license' }], _errored: new Set(['licenses']) });
+  await f.api.loadDataForUser(ownerA);
+  const issue = f.named('setRecordsLoadIssue').at(-1).value;
+  assert.equal(issue.accountId, ownerA);
+  assert.equal(issue.supportReference, 'DATA-LOAD-UNAVAILABLE');
+  assert.equal(f.named('setLoadedFrom').at(-1).value, null);
+  assert.equal(f.named('setLoaded').at(-1).value, true);
+  assert.equal(f.refs.dataOwnerRef.current, null);
+  assert.equal(f.refs.userIdRef.current, null);
+  assert.equal(f.named('setProfileOwner').at(-1).value, null);
+  assert.equal(f.named('suspendWrites').length, 1);
+  assert.deepEqual(f.named('reportError')[0].args, ['Account records load stopped (DATA-LOAD-UNAVAILABLE).']);
+  for (const name of ['readCachedData', 'loadData', 'saveData', 'bulkSync', 'sbUpdate', 'sbSaveSettings', 'listTombstones', 'uploadDocumentFile', 'downloadDocumentFile']) assert.equal(f.named(name).length, 0, name);
+});
+
+test('failed collection read leaves the existing good same-account cache and links untouched', async () => {
+  const cache = { settings: { name: 'Cached A' }, licenses: [{ id: 'kept-license' }], documents: [{ id: file.id, linkedTo: 'licenses:kept-license', data: file.data }] };
+  const before = JSON.stringify(cache), f = fixture();
+  f.handlers.readCachedData = () => cache;
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, documents: [], _errored: new Set(['licenses']) });
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(JSON.stringify(cache), before);
+  assert.equal(f.named('readCachedData').length, 0);
+  for (const name of ['saveData', 'purgeUserStorage', 'sbUpdate', 'bulkSync']) assert.equal(f.named(name).length, 0, name);
+  assert.equal(f.named('setRecordsLoadIssue').at(-1).value.supportReference, 'DATA-LOAD-UNAVAILABLE');
+});
+
+for (const result of [null, { _userId: 'profileA', settings: {}, documents: [] },
+  { _userId: 'different-profile', settings: {}, documents: [], licenses: [] }]) {
+  test(`missing or mismatched cloud snapshot blocks instead of loading defaults: ${JSON.stringify(result)}`, async () => {
+    const f = fixture(); f.handlers.loadFromSupabase = async () => result;
+    await f.api.loadDataForUser(ownerA);
+    assert.equal(f.named('setRecordsLoadIssue').at(-1).value.supportReference, 'DATA-LOAD-UNAVAILABLE');
+    assert.equal(f.named('loadData').length, 0);
+    assert.equal(f.named('saveData').length, 0);
+  });
+}
+
+test('a rejected record load has a fixed reference and cannot expose private provider text', async () => {
+  const f = fixture();
+  f.handlers.loadFromSupabase = async () => { throw new Error('private@example.test stored document'); };
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.named('setRecordsLoadIssue').at(-1).value.supportReference, 'DATA-LOAD-UNAVAILABLE');
+  assert.equal(JSON.stringify([...f.named('reportError'), ...f.named('setRecordsLoadIssue'), ...f.warnings]).includes('private'), false);
+  assert.equal(f.named('loadData').length, 0);
+});
+
+test('genuinely empty successful collections remain a valid account', async () => {
+  const f = fixture();
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, licenses: [], documents: [], _errored: new Set() });
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.named('setRecordsLoadIssue').at(-1).value, null);
+  assert.equal(f.named('setLoadedFrom').at(-1).value, 'cloud');
+  assert.equal(f.named('saveData').length, 1);
+  assert.equal(f.named('suspendWrites').length, 0);
+});
+
+test('failed read after account switch cannot block or clear the newly active account', async () => {
+  const f = fixture(), pending = deferred();
+  f.handlers.loadFromSupabase = () => pending.promise;
+  const loading = f.api.loadDataForUser(ownerA);
+  await tick(); f.switchAccount();
+  pending.resolve({ _userId: 'profileA', settings: {}, _errored: new Set(['licenses']) });
+  await loading;
+  assertNoLateWrites(f);
+  assert.equal(f.named('setRecordsLoadIssue').length, 0);
+  assert.equal(f.named('reportError').length, 0);
+});
+
+test('a complete retry clears the records error only after validating the same account', async () => {
+  const f = fixture();
+  f.handlers.loadFromSupabase = async () => null;
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.named('setRecordsLoadIssue').at(-1).value.supportReference, 'DATA-LOAD-UNAVAILABLE');
+  f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A' }, licenses: [{ id: 'kept-license' }], documents: [] });
+  await f.api.loadDataForUser(ownerA);
+  assert.equal(f.named('setRecordsLoadIssue').at(-1).value, null);
+  assert.equal(f.state.licenses[0].id, 'kept-license');
+  assert.equal(f.named('setLoadedFrom').at(-1).value, 'cloud');
+  assert.equal(f.named('saveData').length, 1);
 });
 
 
