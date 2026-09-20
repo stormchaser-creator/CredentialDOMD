@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>4 agencies, 9 states, 1 ledger: locum tenens invoices, taxes, licenses | CredentialDoMD</title>
-<meta name="description" content="One ledger across every locum agency: invoices priced from your signed contract with a payment ledger, cash-basis multistate tax estimates cited to Rev. Proc. 2025-32, dictation to CPT with CY2026 work RVUs, and license, DEA and CME tracking in all 50 states. Free beta, no card.">
+<meta name="description" content="One ledger across every locum agency: invoices priced from your signed contract with a payment ledger, cash-basis multistate tax estimates cited to Rev. Proc. 2025-32, dictation to CPT with CY2026 work RVUs, and license, DEA and CME tracking in all 50 states. Paid membership opens by invitation; card required at checkout.">
 <meta name="keywords" content="locum tenens taxes, locum tenens invoice, locum tenens multi state tax filing, locum tenens expense tracker, track multiple state medical licenses, locum tenens 1099 quarterly estimated taxes, physician credential tracker app, locum tenens S corp">
 
 <link rel="canonical" href="https://credentialdomd.com/locums">
@@ -22,7 +22,7 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Locum tenens invoices, multistate tax, and 50-state licenses in one ledger">
-<meta name="twitter:description" content="Built and used by a practicing neurosurgeon who works locums. Free beta, every feature on, no card.">
+<meta name="twitter:description" content="Built and used by a practicing neurosurgeon who works locums. Paid membership opens by invitation; card required at checkout.">
 <meta name="twitter:image" content="https://credentialdomd.com/og-image.png">
 
 <!-- Schema.org SoftwareApplication (no purchase offer while billing is off) -->
@@ -118,7 +118,7 @@
       "name": "What does it cost?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Billing is off and the invite beta is free, with no card required. Planned Credential pricing is $99/year for eligible waitlist founding members, lowered from the previously planned $149/year founding offer; $149/year for early-bird members; and $199/year standard. The $99 and $149 annual rates stay the same while membership remains active. Credential + Practice is $245/year total for all new paid members. Credential customers will receive a free 30-day Practice trial that ends without a charge; continuing Practice requires an explicit purchase. Under the planned lifetime-access policy, accounts already registered when the policy was announced will keep both products free for life. Waitlist entries alone do not qualify; account eligibility will be confirmed before billing opens."
+        "text": "Checkout is not open. New invitations are for paid membership, with a card required at checkout. Joining the waitlist does not create a paid account or charge you. Planned Credential pricing is $99/year for eligible waitlist founding members, lowered from the previously planned $149/year founding offer; $149/year for early-bird members; and $199/year standard. The $99 and $149 annual rates stay the same while membership remains active. Credential + Practice is $245/year total for all new paid members. People who signed up under our earlier free-beta offer will receive 30 days free with no card, then may explicitly choose the $99/year Credential membership. There is no automatic charge; their invitation will confirm eligibility and when the 30 days start. New paid Credential members will receive a separate 30-day Practice trial that ends without an added charge; continuing Practice requires an explicit purchase. Under the planned lifetime-access policy, accounts already registered when the policy was announced will keep both products free for life. Waitlist entries alone do not qualify for lifetime access; account eligibility will be confirmed before billing opens."
       }
     },
     {
@@ -2227,6 +2227,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
 </style>
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
+<script type="module" src="/waitlist-signup.js"></script>
 
 </head>
 
@@ -2253,7 +2254,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
         </div>
       </details>
       <a href="/app/">Sign in</a>
-      <a href="#beta" class="btn-primary nav-cta">Get Early Access</a>
+      <a href="#beta" class="btn-primary nav-cta">Join the Waitlist</a>
     </div>
     <button class="mobile-menu-btn" data-nav-toggle aria-label="Open menu" aria-controls="primary-nav" aria-expanded="false">
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2286,12 +2287,12 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
         <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
           style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
         <button type="submit" class="btn-primary" style="padding: 15px 24px; font-size: 16px; border: none; cursor: pointer; white-space: nowrap;">
-          Request beta access
+          Join the waitlist
         </button>
       </form>
-      <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
+      <div class="wl-msg" role="status" aria-live="polite" aria-atomic="true" style="font-size: 14px; font-weight: 600; min-height: 20px; margin-bottom: 4px;"></div>
       <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); margin-bottom: 22px;">
-        <span>Free beta &middot; every feature on &middot; no card</span>
+        <span>Paid membership at launch &middot; card required at checkout</span>
         <a href="/#how-it-works" style="white-space: nowrap;">See the four-step workflow &rarr;</a>
       </div>
 
@@ -2300,7 +2301,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
           <svg width="20" height="20" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <div class="trust-text">
-          <strong>The beta is invite-only.</strong> Getting on the list is how you get in.
+          <strong>Membership opens by invitation.</strong> Join the waitlist for your offer and access details.
         </div>
       </div>
     </div>
@@ -3440,17 +3441,19 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
     <div class="animate-on-scroll" style="text-align: center;">
       <div class="section-label" style="justify-content: center;">
         <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M15 7h3a5 5 0 010 10h-3m-6 0H6A5 5 0 016 7h3m-1 5h8"/></svg>
-        Invite-only beta
+        Founding invitations
       </div>
-      <h2 class="section-title">Free beta. Every feature on. No card.</h2>
-      <p class="section-subtitle" style="margin: 0 auto;">Access is invited from the list, which is how the beta stays small enough to fix things quickly.</p>
+      <h2 class="section-title">Membership opens by invitation.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">Join the waitlist for your invitation and membership details. Checkout is not open yet; paid access will require a card at checkout.</p>
     </div>
 
     <div class="beta-card animate-on-scroll">
-      <h3>Request access</h3>
+      <h3>Join the waitlist</h3>
       <p style="margin-bottom: 16px;">One email when your invite is ready. Billing is off. Planned Credential + Practice membership is $245/year total for all new paid members.</p>
       <p style="margin-bottom: 16px;">Founding Credential offer lowered to $99/year for eligible waitlist members, from the previously planned $149/year. Early-bird Credential is planned at $149/year; standard Credential is planned at $199/year. The $99 and $149 annual rates stay the same while membership remains active.</p>
-      <p style="margin-bottom: 22px;">Credential customers will receive a free 30-day Practice trial. It ends without a charge, and continuing Practice requires an explicit purchase. Your offer and eligibility will be shown before you choose to pay.</p>
+      <p style="margin-bottom: 22px;">New paid Credential members will receive a separate 30-day Practice trial. It ends without an added charge, and continuing Practice requires an explicit purchase. Your offer and eligibility will be shown before you choose to pay.</p>
+      <p style="margin-bottom: 16px;"><strong>Signed up under our earlier free-beta offer?</strong> We will honor 30 days free with no card, then an optional $99/year Credential membership. There is no automatic charge; you must choose to pay to continue. Your invitation will confirm eligibility and when the 30 days start.</p>
+      <p style="margin-bottom: 22px;">Existing accounts eligible under the announced lifetime-access policy will keep Credential and Practice free for life. A waitlist entry alone does not qualify for lifetime access.</p>
       <form class="wl-form" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
         <input type="email" aria-label="Email address" class="wl-email" required placeholder="you@hospital.org" autocomplete="email" maxlength="254"
           style="flex: 1; min-width: 240px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text); font-size: 16px; outline: none;"
@@ -3458,11 +3461,11 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
         <input type="text" class="wl-hp" name="wl_extra_field" autocomplete="one-time-code" tabindex="-1" aria-hidden="true"
           style="position: absolute; left: -9999px; opacity: 0; height: 0; width: 0;">
         <button type="submit" class="btn-primary" style="padding: 16px 28px; font-size: 16px; border: none; cursor: pointer;">
-          Request beta access
+          Join the waitlist
         </button>
       </form>
-      <div class="wl-msg" style="font-size: 14px; font-weight: 600; min-height: 22px; margin-top: 12px;"></div>
-      <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">30 seconds &middot; no card &middot; founding-member perks by signup order</p>
+      <div class="wl-msg" role="status" aria-live="polite" aria-atomic="true" style="font-size: 14px; font-weight: 600; min-height: 22px; margin-top: 12px;"></div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">Joining the waitlist does not charge you or create a paid account.</p>
     </div>
   </div>
 </section>
@@ -3535,7 +3538,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
           <span class="faq-toggle">+</span>
         </button>
         <div class="faq-answer"><div class="faq-answer-inner">
-          Billing is off and the invite beta is free, with no card required. Planned Credential pricing is $99/year for eligible waitlist founding members, lowered from the previously planned $149/year founding offer; $149/year for early-bird members; and $199/year standard. The $99 and $149 annual rates stay the same while membership remains active. Credential + Practice is $245/year total for all new paid members. Credential customers will receive a free 30-day Practice trial that ends without a charge; continuing Practice requires an explicit purchase. Under the planned lifetime-access policy, accounts already registered when the policy was announced will keep both products free for life. Waitlist entries alone do not qualify; account eligibility will be confirmed before billing opens.
+          Checkout is not open. New invitations are for paid membership, with a card required at checkout. Joining the waitlist does not create a paid account or charge you. Planned Credential pricing is $99/year for eligible waitlist founding members, lowered from the previously planned $149/year founding offer; $149/year for early-bird members; and $199/year standard. The $99 and $149 annual rates stay the same while membership remains active. Credential + Practice is $245/year total for all new paid members. People who signed up under our earlier free-beta offer will receive 30 days free with no card, then may explicitly choose the $99/year Credential membership. There is no automatic charge; their invitation will confirm eligibility and when the 30 days start. New paid Credential members will receive a separate 30-day Practice trial that ends without an added charge; continuing Practice requires an explicit purchase. Under the planned lifetime-access policy, accounts already registered when the policy was announced will keep both products free for life. Waitlist entries alone do not qualify for lifetime access; account eligibility will be confirmed before billing opens.
         </div></div>
       </div>
 
@@ -3629,12 +3632,12 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
 
       <div class="final-cta-buttons">
         <a href="#beta" class="btn-primary" style="padding: 18px 40px; font-size: 17px;">
-          Get Early Access
+          Join the Waitlist
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
         </a>
       </div>
 
-      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">Free beta, every feature on, no card. Founding-member perks for the earliest names on the list.</p>
+      <p style="margin-top: 16px; font-size: 14px; color: var(--text-muted);">Paid membership opens by invitation; card required at checkout. Founding-member perks for the earliest names on the list.</p>
     </div>
   </div>
 </section>
@@ -3660,91 +3663,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
 
 <!-- ============ SCRIPTS ============ -->
 <script>
-// Early-access waitlist → same-origin /api relay (Cloudflare Worker) with
-// direct-Supabase fallback. One binder covers every .wl-form on the page
-// (hero quick-join + full form). Honeypot is flag-and-send, never drop.
-// Both paths call the rate-limited RPCs waitlist_signup / waitlist_attempt
-// (anon cannot insert into the tables directly); payload keys are the RPC
-// argument names (p_email, p_name, ...). 400 = bad address, 409 = already
-// listed, 429 = throttled.
-(function() {
-  var SUPABASE_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
-  var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
-  var loadedAt = Date.now();
 
-  var postSignup = function(apiPath, rpcName, payload) {
-    var direct = function() {
-      return fetch(SUPABASE_URL + '/rest/v1/rpc/' + rpcName, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON },
-        body: JSON.stringify(payload), keepalive: true
-      });
-    };
-    return fetch(apiPath, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), keepalive: true
-    }).then(function(res) {
-      if (res.status === 404 || res.status === 405 || res.status >= 500) return direct();
-      return res;
-    }).catch(direct);
-  };
-
-  var forms = document.querySelectorAll('.wl-form');
-  Array.prototype.forEach.call(forms, function(form) {
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      var emailEl = form.querySelector('.wl-email');
-      var nameEl = form.querySelector('.wl-name');
-      var hpEl = form.querySelector('.wl-hp');
-      var msg = form.parentElement.querySelector('.wl-msg') || form.querySelector('.wl-msg');
-      var btn = form.querySelector('button[type="submit"]');
-      var email = (emailEl && emailEl.value || '').trim();
-      var name = (nameEl && nameEl.value || '').trim();
-      if (!email) return;
-
-      var flags = [];
-      if (hpEl && (hpEl.value || '').trim()) flags.push('honeypot');
-      if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
-      var noteFlags = flags.length ? flags.join(',') : null;
-      var payload = { p_email: email, p_name: name || null, p_source: window.location.pathname || '/', p_note: noteFlags };
-
-      // Attempt trace lands BEFORE the real insert. A failed signup still
-      // leaves the email behind for follow-up.
-      try {
-        postSignup('/api/waitlist-attempt', 'waitlist_attempt',
-          { p_email: email, p_name: name || null, p_source: payload.p_source, p_stage: noteFlags || 'normal' }).catch(function() {});
-      } catch (err) {}
-
-      if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Joining\u2026'; }
-      if (msg) msg.textContent = '';
-
-      postSignup('/api/waitlist', 'waitlist_signup', payload).then(function(res) {
-        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
-        if (!msg) return;
-        if (res.ok) {
-          msg.style.color = 'var(--emerald)';
-          msg.textContent = "You're on the list. Your founding number is assigned when you sign up and activate your account.";
-          form.reset();
-        } else if (res.status === 409) {
-          msg.style.color = 'var(--emerald)';
-          msg.textContent = "You're already on the list. We've got you.";
-        } else if (res.status === 429) {
-          msg.style.color = 'var(--amber, #f59e0b)';
-          msg.textContent = 'The list is busy right now. Try again in a few minutes.';
-        } else {
-          msg.style.color = 'var(--amber, #f59e0b)';
-          msg.textContent = "That didn't go through. Check the address and try again.";
-        }
-      }).catch(function() {
-        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Join the list'; }
-        if (msg) {
-          msg.style.color = 'var(--amber, #f59e0b)';
-          msg.textContent = 'Connection hiccup. Please try again.';
-        }
-      });
-    });
-  });
-})();
 
 // FAQ toggle
 function toggleFaq(btn) {

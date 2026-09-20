@@ -10,7 +10,7 @@ import { renderWatchPages, addWatchPagesToSitemap } from './watch-pages.mjs';
 
 const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
 const cmeAssets = ['cme.css', 'cme.mjs'];
-const supportNavAssets = ['support-nav.css', 'support-nav.js'];
+const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js'];
 // Reviewed runtime images only; source originals and provenance stay out of the site.
 const landingImages = [
   'physician-life-v3-600.webp', 'physician-life-v3-1200.webp',
@@ -39,7 +39,7 @@ export async function packageSite(root, legacyDir) {
   const states = JSON.parse(await readFile(resolve(root, 'landing/states/states-data.json'), 'utf8'));
   if (await readFile(resolve(root, 'landing/cme.html'), 'utf8') !== renderCme(cme, states)) throw Error('CME page is stale; run node scripts/build-cme.mjs');
   for (const name of cmeAssets) await access(resolve(root, 'public/cme-assets', name));
-  for (const name of supportNavAssets) await access(resolve(root, 'public', name));
+  for (const name of publicSiteAssets) await access(resolve(root, 'public', name));
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   await cp(resolve(root, 'dist'), resolve(output, 'app'), { recursive: true });
@@ -60,7 +60,7 @@ export async function packageSite(root, legacyDir) {
       await writeFile(resolve(output, page, 'index.html'), html);
     }
   }
-  for (const name of supportNavAssets) await cp(resolve(root, 'public', name), resolve(output, name));
+  for (const name of publicSiteAssets) await cp(resolve(root, 'public', name), resolve(output, name));
   await mkdir(resolve(output, 'images'), { recursive: true });
   for (const name of landingImages) await cp(resolve(root, 'landing/images', name), resolve(output, 'images', name));
   await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true });

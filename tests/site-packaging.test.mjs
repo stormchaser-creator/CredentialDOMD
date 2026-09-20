@@ -32,7 +32,7 @@ async function siteFixture(t) {
   await writeFile(resolve(root, "landing/states/example.html"), "<!doctype html><title>Synthetic state guide</title>");
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
-    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
+    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
     cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
@@ -91,8 +91,13 @@ test("site package keeps public help/CME, private routes, declared assets and di
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/cme\/<\/loc>/);
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/help<\/loc>/);
   assert.equal(await read(resolve(output, "organization-logo.svg")), await read(resolve(root, "public/organization-logo.svg")));
-  for (const file of ["support-nav.css", "support-nav.js"]) {
+  for (const file of ["support-nav.css", "support-nav.js", "waitlist-signup.js"]) {
     assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
+  }
+  for (const page of ["index.html", "locums.html"]) {
+    const html = await read(resolve(output, page));
+    assert.equal((html.match(/<script type="module" src="\/waitlist-signup\.js"><\/script>/g) || []).length, 1);
+    assert.doesNotMatch(html, /var postSignup =|postSignup\('\/api\/waitlist'/);
   }
   const imagePaths = homepageImagePaths(await read(resolve(output, "index.html")));
   assert.equal(imagePaths.length, 7, "all reviewed responsive homepage images must be advertised");
@@ -205,6 +210,18 @@ test("stale CME page or missing required CME asset preserves the previous packag
   await rm(resolve(root, "public/cme-assets/cme.mjs"));
   await assert.rejects(packageSite(root), { code: "ENOENT" });
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
+});
+
+test("missing invitation controller preserves the previous package", async t => {
+  const root = await siteFixture(t);
+  const output = await packageSite(root);
+  const previous = await read(resolve(output, "waitlist-signup.js"));
+  await writeFile(resolve(output, "previous-artifact-sentinel.txt"), "previous reviewed artifact");
+  const missingPath = resolve(root, "public/waitlist-signup.js");
+  await rm(missingPath);
+  await assert.rejects(packageSite(root), { code: "ENOENT", path: missingPath });
+  assert.equal(await read(resolve(output, "waitlist-signup.js")), previous);
+  assert.equal(await read(resolve(output, "previous-artifact-sentinel.txt")), "previous reviewed artifact");
 });
 
 test("each missing homepage image fails before replacing the previous package", async t => {

@@ -173,7 +173,7 @@ export function renderHelp(input, videoCatalog = null) {
       </section>
       <section class="support" aria-labelledby="support-title"><h2 id="support-title">Still stuck?</h2><p>Open <strong>Get help</strong> in the app and tell us what you tried. Replies stay under <strong>Your tickets</strong>, so you can check there even if an email has not arrived. If you cannot sign in, email <a href="mailto:support@credentialdomd.com">support@credentialdomd.com</a>.</p><p>Support may use AI assistance. Leave passwords, API keys and patient records out of your message.</p><a class="button" href="/app/">Open the app for support</a></section>
     </main>
-    <footer><p>CredentialDoMD · Free invite-only beta. Billing is off.</p><a href="/cme/">CME resources</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/security">Security & data handling</a></footer>
+    <footer><p>CredentialDoMD · Membership opens by invitation. Billing is not open. Card required at future paid checkout.</p><a href="/cme/">CME resources</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/security">Security & data handling</a></footer>
   </div>
   <script>
     (() => {
