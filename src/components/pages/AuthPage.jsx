@@ -24,6 +24,8 @@ import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
 // automatically once the pk_live_ key ships. Cutover steps: PRODUCTION-CUTOVER.md.
 const IS_DEV_CLERK_INSTANCE =
   (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? "").startsWith("pk_test_");
+// Explain the one-time production sign-in setup only during coordinated continuity.
+const CLERK_CONTINUITY_ENABLED = import.meta.env.VITE_CLERK_CONTINUITY_ENABLED === "true";
 
 const HIDE_SOCIAL_ELEMENTS = IS_DEV_CLERK_INSTANCE
   ? {
@@ -129,6 +131,24 @@ function AuthPage() {
             Physician Credential Management
           </p>
         </div>
+
+        {CLERK_CONTINUITY_ENABLED && (
+          <section aria-labelledby="returning-beta-heading" style={{
+            marginBottom: 16, padding: "14px 16px", borderRadius: 10,
+            backgroundColor: T.card, border: `1px solid ${T.border}`,
+            color: T.textMuted, fontSize: 13, lineHeight: 1.6,
+          }}>
+            <h2 id="returning-beta-heading" style={{
+              margin: "0 0 6px", color: T.text, fontSize: 14, fontWeight: 700,
+            }}>Returning from the beta?</h2>
+            <p style={{ margin: 0 }}>
+              Use the verified primary email from your original beta sign-in account.
+              If Sign In can’t find your account, choose Create Account once and verify that same email.
+              We can reconnect your saved beta records after verifying the account match.
+            </p>
+            <p style={{ margin: "6px 0 0" }}>Your beta password wasn’t transferred.</p>
+          </section>
+        )}
 
         {/* Mode toggle */}
         <div style={{
