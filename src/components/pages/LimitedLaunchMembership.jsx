@@ -64,7 +64,10 @@ function MembershipForAccount({ accountId, onActivated }) {
     const turn = ++request.current;
     setBusy(true); setMessage(null); setConsent(false); setQuote(null);
     try {
-      const result = await client.quote({ offerId, ...(invitation ? { invitationToken: invitation } : {}) });
+      // Public enrollment already resolves eligibility. A saved token must not
+      // invoke the separate manual-invitation route while its server gate is off.
+      const invitationEnabled = accessAuthority.state(accountId)?.invitationActivationEnabled === true;
+      const result = await client.quote({ offerId, ...(invitation && invitationEnabled ? { invitationToken: invitation } : {}) });
       if (current(turn) && currentlyPermitted(offerId)) setQuote(result);
     } catch (error) { if (current(turn)) setMessage(messageFor(error)); }
     finally { if (current(turn)) setBusy(false); }
@@ -106,10 +109,10 @@ function MembershipForAccount({ accountId, onActivated }) {
               <p>Activate the personal invitation for your verified account. If it includes the grandfathered free beta, no card or payment is collected.</p>
               <button style={button} disabled={busy} onClick={activate}>{busy ? "Checking…" : "Activate my invitation"}</button>
             </div>}
-            {access?.accessStatus === "pending" && !invitation && <p>{limitedLaunch.publicSignupEnabled
+            {access?.accessStatus === "pending" && (!invitation || limitedLaunch.publicSignupEnabled) && <p>{limitedLaunch.publicSignupEnabled
               ? "Your account is signed in. Review an eligible membership below; paid access begins after checkout is confirmed. Creating an account does not charge you."
               : "Open your personal invitation link and sign in with its verified email address. Account approval and payment eligibility are checked securely."}</p>}
-            {invitation && access?.invitationActivationEnabled !== true && <p>Invitation activation is not open yet. Please check again later.</p>}
+            {invitation && access?.invitationActivationEnabled !== true && !limitedLaunch.publicSignupEnabled && <p>Invitation activation is not open yet. Please check again later.</p>}
             {resumeOffer ? <>
               <p>You have an unfinished {resumeOffer === "core" ? "Credential" : "Credential + Practice"} checkout. Review its current terms and confirm them before returning to payment.</p>
               <button style={button} disabled={busy || !canReviewBillingOffer(access, resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>

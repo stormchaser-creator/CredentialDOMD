@@ -63,18 +63,18 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
       return `${match[1]}\n${JSON.stringify(json, null, 2).replace(/</g, '\\u003c')}\n${match[3]}`;
     }
     if (slot === 'faq-cost') return escapeHtml(publicLaunchCostAnswer(view));
-    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Founding signup is open. Early release; card required at checkout.');
-    if (slot === 'founding-price') return '$99<span> / year, Credential founding rate</span>';
+    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Early-bird Credential signup is open at $149/year. Early release; card required at checkout.');
+    if (slot === 'founding-price') return `${escapeHtml(view.publicPrice)}<span>${escapeHtml(view.publicPriceLabel)}</span>`;
     if (slot === 'full-price') return '$245<span> / year total</span>';
     if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
     const text = {
       'availability': view.availability,
-      'invitation-copy': 'Choose a founding membership and review your terms before creating a paid account.',
-      'signup-heading': 'Founding signup',
+      'invitation-copy': 'Create your account, then review your eligible offer. Early-bird Credential is $149/year; Credential + Practice is $245/year total. Creating an account does not charge you.',
+      'signup-heading': view.signupHeading,
       'signup-label': view.primaryAction.label,
       'signup-trust': 'Early release · Card required at checkout',
-      'audience-badge': 'For MDs and DOs · Founding membership',
-      'founding-headline': 'Founding Credential: $99/year, locked while membership remains active.',
+      'audience-badge': 'For MDs and DOs · Early-bird membership',
+      'founding-headline': view.publicRateHeadline,
       'founding-rate': view.foundingRate,
       'rate-comparison': `${view.rateComparison} ${view.earlyBirdRateLock}`,
       'full-package': view.fullPackage,
@@ -83,7 +83,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
       'lifetime-exception': view.lifetimeException,
       'early-release': view.earlyRelease,
       'participation': view.founderParticipation,
-      'footer-mode': `${view.brand} · Early release. Founding signup is open; paid membership requires a card at checkout.`,
+      'footer-mode': `${view.brand} · Early release. Early-bird Credential signup is open at $149/year; paid membership requires a card at checkout.`,
       'guide-product': 'Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.',
     }[slot];
     if (text === undefined) throw Error(`Unknown public launch slot: ${slot}`);
@@ -102,5 +102,5 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE) {
     throw Error(`Unmigrated waitlist form/consent in ${surface}`);
   }
   return output.replace(/<html\b/, '<html data-public-launch="founding-signup"')
-    .replace(/aria-label="Join the waitlist"/g, 'aria-label="Founding signup"');
+    .replace(/aria-label="Join the waitlist"/g, 'aria-label="Early-bird signup"');
 }

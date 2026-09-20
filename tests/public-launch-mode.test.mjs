@@ -34,6 +34,12 @@ test('paid preview is navigation, and guide delivery cannot imply paid or waitli
   assert.equal(view.guideCapture.signupIsSeparateNavigation, true);
   assert.equal(view.guideCapture.submitLabel, 'Email me the guide');
   assert.match(view.guideCapture.note, /does not create an account/);
+  assert.match(view.primaryAction.label, /Credential \$149\/year/);
+  assert.match(view.availability, /New members can choose Credential for \$149\/year/);
+  assert.match(view.foundingRate, /reserved for eligible earlier waitlist members/);
+  assert.match(view.promisedBeta, /first activate their account with a verified email address/);
+  assert.match(view.promisedBeta, /does not restart those 30 days/);
+  assert.doesNotMatch(view.promisedBeta, /invitation will confirm/);
 });
 
 test('unreviewed, external and data-bearing signup destinations are rejected', () => {

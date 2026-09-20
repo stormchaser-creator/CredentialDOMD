@@ -98,6 +98,22 @@ test('public signup replaces invitation-only instructions while requiring a sepa
   assert.match(render(Membership), /Check membership again/);
 });
 
+test('public signup with a saved token shows purchase guidance while manual-only mode keeps its unavailable notice', () => {
+  const previous = globalThis.window;
+  globalThis.window = { sessionStorage: { getItem: () => 'synthetic_saved_launch_token_A1b2c3d4e5f6g7h8j9', removeItem() {} } };
+  try {
+    const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;
+    Object.assign(value.limitedLaunch.access, { accessStatus: 'pending', freeBeta: { state: 'none' }, billingEnabled: true, checkoutEligible: true });
+    value.limitedLaunch.publicSignupEnabled = true;
+    const html = render(Membership);
+    assert.match(html, /Creating an account does not charge you/);
+    assert.doesNotMatch(html, /Invitation activation is not open yet|Activate my invitation/);
+    assert.doesNotMatch(html, /disabled=""[^>]*>Review Credential offer/);
+    value.limitedLaunch.publicSignupEnabled = false;
+    assert.match(render(Membership), /Invitation activation is not open yet/);
+  } finally { globalThis.window = previous; }
+});
+
 
 test('fresh pending account gets purchase guidance while saved records retain recovery notice', () => {
   const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;

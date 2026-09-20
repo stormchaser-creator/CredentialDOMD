@@ -33,7 +33,14 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     assert.doesNotMatch(output, /<form\b[^>]*\bclass="[^"]*wl-form/);
     assert.doesNotMatch(output, /type="email"/);
     assert.ok((output.match(/href="\/signup\/"/g) || []).length >= 4);
-    assert.match(output, />Sign up as a founding member<\/a>/);
+    assert.match(output, />Sign up: Credential \$149\/year<\/a>/);
+    assert.match(output, /\$99\/year founding Credential offer is reserved for eligible earlier waitlist members/);
+    assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
+    if (surface === 'home') {
+      assert.match(output, /Early-bird Credential: \$149\/year/);
+      assert.match(output, /\$149<span> \/ year, early-bird Credential<\/span>/);
+      assert.doesNotMatch(output, /\$99<span>/);
+    }
     assert.match(output, /less polished/);
     assert.match(output, /support tickets/);
     assert.match(output, /locked for life while their membership remains active/);
