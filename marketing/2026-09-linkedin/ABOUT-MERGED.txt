@@ -1,0 +1,25 @@
+I am a practicing neurosurgeon with more than one state license, a DEA registration, board certification and hospital privileges. Every one of them runs on a different clock. Colorado expires every physician on April 30 of odd numbered years. Texas assigns one of four fixed dates and picks the year by whether your license number is odd or even. Maine goes by the year you were born.
+
+No spreadsheet knows any of that, so I built CredentialDOMD. It keeps licenses, DEA, board certification, privileges and CME in one place, with each state's rules built in. No patient data goes into it. I use it on my own credentials.
+
+I also published a sourced renewal guide for every state and DC, free at credentialdomd.com/states. Here I post one renewal rule a week.
+
+Founding membership is $99 a year for the first 100 paid members, with a no hassle 100% money back guarantee.
+
+Board certified neurosurgeon practicing with Arrowhead Neurosurgical Medical Group across Eisenhower Health, Arrowhead Regional Medical Center, Riverside University Health System, and Desert Regional Medical Center in Southern California's Inland Empire and Coachella Valley.
+
+I completed my neurosurgical residency at Arrowhead Regional Medical Center and my internship at Desert Regional Medical Center after graduating from Liberty University College of Osteopathic Medicine. I hold board certification from the American Osteopathic Board of Surgery in Neurosurgery.
+
+My clinical work spans the full spectrum of neurosurgery: trauma, spine, cerebrovascular, and neurooncology. My research interests include traumatic brain injury, cerebral aneurysms, the neurological effects of music and binaural beats, and a soliton based framework for understanding consciousness loss in aneurysmal subarachnoid hemorrhage.
+
+I also build tools at the intersection of clinical neuroscience and technology:
+
+• The Decoded Human (thedecodedhuman.com): an AI powered literature connectome that discovers hidden semantic connections across open access scientific papers
+
+• Still You Recovery (stillyourecovery.com): free patient education resources for the emotional and cognitive aftermath of brain surgery and stroke
+
+• ANMG CallSync: a scheduling platform for multisite neuroscience on call coverage
+
+I believe the mind and body are deeply interconnected, and that healing requires caring for both. My clinical, technological and intellectual work is guided by that conviction.
+
+Open to: research collaborations, health technology partnerships, speaking invitations, and locums opportunities in neurosurgery.

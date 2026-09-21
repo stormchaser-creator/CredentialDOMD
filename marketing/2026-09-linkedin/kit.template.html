@@ -57,6 +57,8 @@ a:focus-visible,button:focus-visible,summary:focus-visible,input:focus-visible{o
 .block-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 .count{font-family:var(--mono);font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .when{color:var(--muted);font-size:.92rem;max-width:65ch}
+.live{color:var(--done);font-weight:500;font-size:.92rem}
+.checks input:disabled{opacity:1}
 .flag{background:var(--warn-bg);color:var(--warn);padding:10px 12px;border-radius:4px;font-size:.92rem}
 .copytext{margin:0;background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px;font-family:var(--sans);font-size:.95rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
 .copy{align-self:flex-start;font:600 .92rem var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:10px 20px;min-width:112px;cursor:pointer}
@@ -80,7 +82,7 @@ summary{cursor:pointer;color:var(--muted);padding:4px 0}
 <header>
   <p class="meta">Eric Whitney, DO · measured 21 Sep 2026</p>
   <h1>Building the LinkedIn following</h1>
-  <p class="lede">The posts are written. The constraint is the network they go out to: a post is shown first to the people already connected to you, and today that is 19 people.</p>
+  <p class="lede">The profile is rewritten and the first post is live. What is left is the part only you can do: the network. A post is shown first to the people already connected to you, and today that is 19 people.</p>
 </header>
 
 <section class="sec" aria-label="Baseline">
@@ -89,17 +91,18 @@ summary{cursor:pointer;color:var(--muted);padding:4px 0}
     <div><b>19</b><span>connections</span></div>
     <div><b>0</b><span>posts of your own (one repost, 7 months ago)</span></div>
     <div><b>6</b><span>invitations waiting</span></div>
-    <div><b>0</b><span>LinkedIn referrals in the site's last 446 hits</span></div>
+    <div><b>0</b><span>LinkedIn referrals in the last 446 site hits</span></div>
   </div>
-  <p>So the order is: fix the profile, seed the network with people you know, then post once a week. The profile and network steps take one sitting. After that it is 20 minutes a week.</p>
+  <p>Baseline as measured on 21 September, before anything changed. The network steps below take one sitting. After that it is 20 minutes a week.</p>
 </section>
 
 <section class="sec">
-  <h2>One sitting, about 40 minutes</h2>
+  <h2>One sitting, about 35 minutes</h2>
   <ul class="checks">
-    <li><label><input type="checkbox" id="c-headline"><span><span class="what">Replace the headline</span> <span class="mins">2 min</span><span class="why">Copy it from the block below. Profile, pencil icon, Headline.</span></span></label></li>
-    <li><label><input type="checkbox" id="c-about"><span><span class="what">Paste the About</span> <span class="mins">2 min</span><span class="why">It is empty today. Profile, Add section, About.</span></span></label></li>
-    <li><label><input type="checkbox" id="c-exp"><span><span class="what">Add CredentialDOMD as a position</span> <span class="mins">3 min</span><span class="why">This is what puts "Founder, CredentialDOMD" under your name everywhere you comment.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-headline" checked disabled><span><span class="what">Replace the headline</span> <span class="mins">done 21 Sep</span><span class="why">Live on your profile.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-about" checked disabled><span><span class="what">Put CredentialDOMD at the top of the About</span> <span class="mins">done 21 Sep</span><span class="why">Your existing bio was kept underneath it. An earlier version of this page said the About was empty. That was wrong: LinkedIn loads the section late and my first read missed it.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-exp" checked disabled><span><span class="what">Add CredentialDOMD as a position</span> <span class="mins">done 21 Sep</span><span class="why">Founder, self employed, from February 2026. Your network was notified, which is LinkedIn's default.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-attending"><span><span class="what">Add your attending position</span> <span class="mins">3 min</span><span class="why">Your Experience stops at residency, June 2025, and the profile still shows Open to work. A physician checking who wrote the post sees a resident. Profile, Experience, plus sign, Add role. Only you know the title and start date.</span></span></label></li>
     <li><label><input type="checkbox" id="c-featured"><span><span class="what">Feature the state guides</span> <span class="mins">2 min</span><span class="why">Add section, Featured, Add a link: credentialdomd.com/states?src=li</span></span></label></li>
     <li><label><input type="checkbox" id="c-follow"><span><span class="what">Make Follow the main button on your profile</span> <span class="mins">1 min</span><span class="why">Settings, Visibility, Followers. Strangers who like a post follow in one tap instead of waiting on a connection request.</span></span></label></li>
     <li><label><input type="checkbox" id="c-verify"><span><span class="what">Finish LinkedIn's identity verification</span> <span class="mins">2 min</span><span class="why">Your profile shows a "Verify in 2 minutes" prompt. A verified badge matters more on a physician's profile than on most. It needs your ID, so it has to be you.</span></span></label></li>
@@ -124,7 +127,7 @@ summary{cursor:pointer;color:var(--muted);padding:4px 0}
 
 <section class="sec">
   <h2>Four weeks of posts</h2>
-  <p>One a week, each built on a rule a physician can use whether or not they ever click. Every number was checked against the board's own page; the checks are under each post. The offer line uses the site's published wording.</p>
+  <p>One a week, each built on a rule a physician can use whether or not they ever click. Every number was checked against the board's own page; the checks are under each post. No hyphens or dashes anywhere, apart from the Colorado bill and statute numbers.</p>
   {{POSTS}}
 </section>
 
@@ -140,12 +143,12 @@ summary{cursor:pointer;color:var(--muted);padding:4px 0}
 
 <section class="sec">
   <h2>How we will know it worked</h2>
-  <p>Followers and connections against the baseline above, and <code>linkedin.com</code> as a referrer in the site's visit counts, which is zero today. One gap: the LinkedIn phone app often sends no referrer, so those visits would be counted as direct. The links carry <code>?src=li</code>, but the visit counter drops query strings by design. Closing that is a small change to the beacon and it is worth making before post one.</p>
+  <p>Followers and connections against the baseline above, and <code>linkedin.com</code> as a referrer in the site's visit counts, which is zero today. One gap: the LinkedIn phone app often sends no referrer, so those visits would be counted as direct. That gap is closed: since 21 September a link tagged <code>?src=li</code> that arrives with no referrer is credited to linkedin.com, and the query string is still never stored. One of today's LinkedIn counts on the Texas guide is my own test visit.</p>
 </section>
 
 <section class="sec">
-  <h2>What I will not do</h2>
-  <p>Post, comment, message or send connection requests from your account on my own, or use follower tools, engagement pods or bought followers. LinkedIn's user agreement bans automation, accounts get restricted for it, and this account carries the name on your medical license. I draft and verify. You press the button.</p>
+  <h2>How posting works</h2>
+  <p>I post from your account only when you tell me to in the conversation, one post at a time, after you have seen the text. The Texas post went out that way. I do not send connection requests, comment or message as you, and I do not use follower tools, engagement pods or bought followers. LinkedIn restricts accounts for automation, and this account carries the name on your medical license.</p>
 </section>
 </div>
 
