@@ -61,8 +61,8 @@
 
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I sign up now?","acceptedAnswer":{"@type":"Answer","text":"Yes. Membership is open now. Compare the plans here, then create your account. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed before payment; creating an account does not reserve a place. Paid membership requires a card at checkout and your explicit agreement. That founding annual rate stays locked for life while membership remains continuously active."}},{"@type":"Question","name":"Can my practice manager use this for our whole group?","acceptedAnswer":{"@type":"Answer","text":"Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised."}}]}</script>
 
-<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. -->
-<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:document.referrer}))</script>
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. -->
+<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:document.referrer||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
 
 
 <!-- Favicon -->
