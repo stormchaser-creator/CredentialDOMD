@@ -3,6 +3,8 @@ import { SignIn } from "@clerk/clerk-react";
 import { THEMES } from "../../constants/themes";
 import { AsclepiusIcon } from "../shared/Icons";
 import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
+import { loadAuthOffer } from "../../utils/authOffer";
+import { sendAuthVisit } from "../../utils/visitBeacon";
 
 /**
  * Auth landing page — wraps Clerk's unified <SignIn withSignUp /> component
@@ -75,6 +77,14 @@ function AuthPage() {
   const widgetRef = useRef(null);
   useOneTapEmailCode(widgetRef, entry.ready && !SMS_SIGN_IN_ENABLED);
   const T = THEMES.light;
+  // Live public offer, or null. Null renders the screen exactly as it was.
+  const [offer, setOffer] = useState(null);
+  useEffect(() => { sendAuthVisit(); }, []);
+  useEffect(() => {
+    let alive = true;
+    loadAuthOffer({ supabaseUrl: import.meta.env?.VITE_SUPABASE_URL }).then(o => { if (alive) setOffer(o); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -126,6 +136,15 @@ function AuthPage() {
           </p>
         </div>
 
+        {offer && (
+          <div data-auth-offer style={{
+            margin: "0 0 14px", padding: "12px 14px", borderRadius: 12, textAlign: "center",
+            border: `1px solid ${T.accent}`, backgroundColor: T.card,
+          }}>
+            <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: T.text, lineHeight: 1.4 }}>{offer.headline}</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{offer.status}</p>
+          </div>
+        )}
         <p style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
           Already have an account? Use the same email address.
         </p>

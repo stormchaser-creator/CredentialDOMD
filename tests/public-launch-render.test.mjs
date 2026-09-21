@@ -156,7 +156,16 @@ test('all 51 guides keep four requested-guide forms and facts while removing wai
     assert.equal((output.match(/This form requests one guide\./g) || []).length, 4, file);
     assert.doesNotMatch(output, /<fieldset\b[^>]*class="guide-choice"/);
     assert.doesNotMatch(output, /<input\b[^>]*name="waitlist"/);
-    assert.equal((output.match(/href="\/signup\/"/g) || []).length, 8, file);
+    assert.equal((output.match(/href="\/signup\/"/g) || []).length, 9, file);
+    // The guides carry most of the traffic: each must state the founding offer once,
+    // above the guide form, and point locums physicians at the practice tools.
+    assert.equal((output.match(/class="guide-offer"/g) || []).length, 1, file);
+    assert.match(output, /Founding offer: \$99\/year for the first 100 paid members/, file);
+    assert.ok(output.indexOf('class="guide-offer"') < output.indexOf('class="guide-form"'), `${file}: offer sits above the guide form`);
+    assert.match(output, /href="\/locums"/, file);
+    assert.match(output.slice(output.indexOf('class="guide-offer"'), output.indexOf('class="guide-form"')), /No-hassle 100% money-back guarantee/, `${file}: the offer button states the guarantee`);
+    // Off mode leaves the page byte-for-byte as generated.
+    assert.equal(renderPublicLaunch(source, 'state-guides', { ...paid, enabled: false }), source, `${file}: off mode unchanged`);
     assert.deepEqual(jsonLd(output), jsonLd(source), `${file}: preserve source-backed answers`);
     assert.deepEqual(scripts(output), scripts(source), `${file}: preserve search/guide/FAQ behavior`);
     assert.deepEqual(assets(output), assets(source), file);
