@@ -1,0 +1,182 @@
+<title>Whitney LinkedIn Kit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  --ground:#F4F7F5; --surface:#FFFFFF; --ink:#14201B; --muted:#57675F; --rule:#D2DAD5;
+  --accent:#0B5D4E; --accent-ink:#FFFFFF; --accent-soft:#E3EFEB;
+  --warn:#7E4A00; --warn-bg:#FBF0DA; --done:#0B5D4E;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"IBM Plex Serif",Georgia,"Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1513; --surface:#161F1C; --ink:#E3EBE7; --muted:#90A199; --rule:#2A3631;
+    --accent:#63C9B0; --accent-ink:#06211B; --accent-soft:#16302A;
+    --warn:#E8AE52; --warn-bg:#2A2212; --done:#63C9B0;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1513; --surface:#161F1C; --ink:#E3EBE7; --muted:#90A199; --rule:#2A3631;
+  --accent:#63C9B0; --accent-ink:#06211B; --accent-soft:#16302A;
+  --warn:#E8AE52; --warn-bg:#2A2212; --done:#63C9B0;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55;padding-inline:16px;padding-block:28px 64px}
+.wrap{max-width:700px;margin-inline:auto;display:flex;flex-direction:column;gap:40px}
+header{display:flex;flex-direction:column;gap:6px}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(1.7rem,5vw,2.2rem);line-height:1.15;margin:0;text-wrap:balance}
+h2{font-family:var(--serif);font-weight:600;font-size:1.3rem;line-height:1.25;margin:0;text-wrap:balance}
+h3{font-family:var(--sans);font-weight:600;font-size:1rem;margin:0}
+p{margin:0}
+a{color:var(--accent);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.meta{font-family:var(--mono);font-size:.78rem;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.05rem;max-width:62ch}
+.sec{display:flex;flex-direction:column;gap:16px}
+.sec > p{max-width:65ch}
+
+/* baseline readout */
+.baseline{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));border-block:1px solid var(--rule)}
+.baseline div{padding:14px 12px 14px 0;display:flex;flex-direction:column;gap:2px}
+.baseline b{font-family:var(--mono);font-weight:500;font-size:1.6rem;font-variant-numeric:tabular-nums;line-height:1.1}
+.baseline span{font-size:.82rem;color:var(--muted)}
+
+/* checklist */
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.checks li{border-bottom:1px solid var(--rule)}
+.checks label{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:12px 0;cursor:pointer;align-items:start}
+.checks input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent)}
+.checks .what{font-weight:500}
+.checks .why{display:block;color:var(--muted);font-size:.9rem;font-weight:400}
+.checks input:checked + span .what{text-decoration:line-through;color:var(--muted)}
+.mins{font-family:var(--mono);font-size:.78rem;color:var(--muted);white-space:nowrap}
+
+/* copy blocks */
+.block{display:flex;flex-direction:column;gap:10px}
+.block-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.count{font-family:var(--mono);font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.when{color:var(--muted);font-size:.92rem;max-width:65ch}
+.flag{background:var(--warn-bg);color:var(--warn);padding:10px 12px;border-radius:4px;font-size:.92rem}
+.copytext{margin:0;background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px;font-family:var(--sans);font-size:.95rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.copy{align-self:flex-start;font:600 .92rem var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:10px 20px;min-width:112px;cursor:pointer}
+.copy.ok{background:var(--accent-soft);color:var(--accent)}
+.post{display:flex;flex-direction:column;gap:10px;padding-top:24px;border-top:1px solid var(--rule)}
+.eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+details{font-size:.9rem}
+summary{cursor:pointer;color:var(--muted);padding:4px 0}
+.sources{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.sources li{display:flex;flex-direction:column;gap:2px;padding-left:12px;border-left:2px solid var(--rule)}
+.claim{font-weight:500}
+.basis{color:var(--muted)}
+.sources a{overflow-wrap:anywhere}
+.plain{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;max-width:65ch}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a{border:1px solid var(--rule);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:.9rem;text-decoration:none}
+@media (prefers-reduced-motion:no-preference){.copy{transition:background .15s}}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="meta">Eric Whitney, DO · measured 21 Sep 2026</p>
+  <h1>Building the LinkedIn following</h1>
+  <p class="lede">The posts are written. The constraint is the network they go out to: a post is shown first to the people already connected to you, and today that is 19 people.</p>
+</header>
+
+<section class="sec" aria-label="Baseline">
+  <div class="baseline">
+    <div><b>21</b><span>followers</span></div>
+    <div><b>19</b><span>connections</span></div>
+    <div><b>0</b><span>posts of your own (one repost, 7 months ago)</span></div>
+    <div><b>6</b><span>invitations waiting</span></div>
+    <div><b>0</b><span>LinkedIn referrals in the site's last 446 hits</span></div>
+  </div>
+  <p>So the order is: fix the profile, seed the network with people you know, then post once a week. The profile and network steps take one sitting. After that it is 20 minutes a week.</p>
+</section>
+
+<section class="sec">
+  <h2>One sitting, about 40 minutes</h2>
+  <ul class="checks">
+    <li><label><input type="checkbox" id="c-headline"><span><span class="what">Replace the headline</span> <span class="mins">2 min</span><span class="why">Copy it from the block below. Profile, pencil icon, Headline.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-about"><span><span class="what">Paste the About</span> <span class="mins">2 min</span><span class="why">It is empty today. Profile, Add section, About.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-exp"><span><span class="what">Add CredentialDOMD as a position</span> <span class="mins">3 min</span><span class="why">This is what puts "Founder, CredentialDOMD" under your name everywhere you comment.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-featured"><span><span class="what">Feature the state guides</span> <span class="mins">2 min</span><span class="why">Add section, Featured, Add a link: credentialdomd.com/states?src=li</span></span></label></li>
+    <li><label><input type="checkbox" id="c-follow"><span><span class="what">Make Follow the main button on your profile</span> <span class="mins">1 min</span><span class="why">Settings, Visibility, Followers. Strangers who like a post follow in one tap instead of waiting on a connection request.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-verify"><span><span class="what">Finish LinkedIn's identity verification</span> <span class="mins">2 min</span><span class="why">Your profile shows a "Verify in 2 minutes" prompt. A verified badge matters more on a physician's profile than on most. It needs your ID, so it has to be you.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-accept"><span><span class="what">Accept the 6 waiting invitations</span> <span class="mins">2 min</span><span class="why">Two are physician recruiters at locums agencies. Their connections are locum physicians, which is the exact audience for the Practice and Locums tools.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-connect"><span><span class="what">Send 25 connection requests to people you actually know</span> <span class="mins">25 min</span><span class="why">Partners, residency and fellowship classmates, OR staff, referring physicians, reps you trust. No note needed. Repeat weekly until you pass 300. This step moves the numbers more than any post.</span></span></label></li>
+  </ul>
+  <div class="links" aria-label="Where to find people you know">
+    <a href="https://www.linkedin.com/mynetwork/invitation-manager/received/" target="_blank" rel="noopener">Waiting invitations</a>
+    <a href="https://www.linkedin.com/mynetwork/grow/" target="_blank" rel="noopener">People you may know</a>
+    <a href="https://www.linkedin.com/search/results/people/?keywords=Eisenhower%20Health" target="_blank" rel="noopener">Eisenhower Health</a>
+    <a href="https://www.linkedin.com/search/results/people/?keywords=Arrowhead%20Regional%20Medical%20Center" target="_blank" rel="noopener">Arrowhead Regional</a>
+    <a href="https://www.linkedin.com/search/results/people/?keywords=neurosurgeon&network=%5B%22S%22%5D" target="_blank" rel="noopener">Neurosurgeons, 2nd degree</a>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Profile copy</h2>
+  {{HEADLINE}}
+  {{ABOUT}}
+  {{EXPERIENCE}}
+</section>
+
+<section class="sec">
+  <h2>Four weeks of posts</h2>
+  <p>One a week, each built on a rule a physician can use whether or not they ever click. Every number was checked against the board's own page; the checks are under each post. The offer line uses the site's published wording.</p>
+  {{POSTS}}
+</section>
+
+<section class="sec">
+  <h2>Every week, 20 minutes</h2>
+  <ol class="plain">
+    <li>Post the week's draft. Same day and time each week is enough of a system.</li>
+    <li>Answer every comment the same day. A reply from the surgeon who wrote it is the reason a physician follows.</li>
+    <li>Send the next 25 connection requests to people you know.</li>
+    <li>Leave two or three comments on posts by physicians with larger audiences (locums, licensing, physician finance) where one of your state facts answers the question being asked. Ask me and I will find the posts and draft the comments.</li>
+  </ol>
+</section>
+
+<section class="sec">
+  <h2>How we will know it worked</h2>
+  <p>Followers and connections against the baseline above, and <code>linkedin.com</code> as a referrer in the site's visit counts, which is zero today. One gap: the LinkedIn phone app often sends no referrer, so those visits would be counted as direct. The links carry <code>?src=li</code>, but the visit counter drops query strings by design. Closing that is a small change to the beacon and it is worth making before post one.</p>
+</section>
+
+<section class="sec">
+  <h2>What I will not do</h2>
+  <p>Post, comment, message or send connection requests from your account on my own, or use follower tools, engagement pods or bought followers. LinkedIn's user agreement bans automation, accounts get restricted for it, and this account carries the name on your medical license. I draft and verify. You press the button.</p>
+</section>
+</div>
+
+<script>
+(function(){
+  function fallbackCopy(text){
+    var ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');
+    ta.style.position='fixed';ta.style.top='0';ta.style.opacity='0';document.body.appendChild(ta);
+    ta.select();ta.setSelectionRange(0,text.length);var ok=false;
+    try{ok=document.execCommand('copy');}catch(e){}
+    document.body.removeChild(ta);return ok;
+  }
+  function selectNode(el){var r=document.createRange();r.selectNodeContents(el);var s=window.getSelection();s.removeAllRanges();s.addRange(r);}
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var el=document.getElementById(btn.dataset.target),text=el.textContent;
+      function done(ok){
+        if(!ok){selectNode(el);}
+        btn.textContent=ok?'Copied':'Selected. Press copy';btn.classList.toggle('ok',ok);
+        setTimeout(function(){btn.textContent='Copy';btn.classList.remove('ok');},2200);
+      }
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){done(true);},function(){done(fallbackCopy(text));});
+      }else{done(fallbackCopy(text));}
+    });
+  });
+  var KEY='whitney-li-kit-checks',state={};
+  try{state=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(e){}
+  document.querySelectorAll('.checks input').forEach(function(cb){
+    if(state[cb.id])cb.checked=true;
+    cb.addEventListener('change',function(){state[cb.id]=cb.checked;try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}});
+  });
+})();
+</script>

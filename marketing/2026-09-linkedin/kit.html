@@ -1,0 +1,310 @@
+<title>Whitney LinkedIn Kit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  --ground:#F4F7F5; --surface:#FFFFFF; --ink:#14201B; --muted:#57675F; --rule:#D2DAD5;
+  --accent:#0B5D4E; --accent-ink:#FFFFFF; --accent-soft:#E3EFEB;
+  --warn:#7E4A00; --warn-bg:#FBF0DA; --done:#0B5D4E;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"IBM Plex Serif",Georgia,"Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1513; --surface:#161F1C; --ink:#E3EBE7; --muted:#90A199; --rule:#2A3631;
+    --accent:#63C9B0; --accent-ink:#06211B; --accent-soft:#16302A;
+    --warn:#E8AE52; --warn-bg:#2A2212; --done:#63C9B0;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1513; --surface:#161F1C; --ink:#E3EBE7; --muted:#90A199; --rule:#2A3631;
+  --accent:#63C9B0; --accent-ink:#06211B; --accent-soft:#16302A;
+  --warn:#E8AE52; --warn-bg:#2A2212; --done:#63C9B0;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55;padding-inline:16px;padding-block:28px 64px}
+.wrap{max-width:700px;margin-inline:auto;display:flex;flex-direction:column;gap:40px}
+header{display:flex;flex-direction:column;gap:6px}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(1.7rem,5vw,2.2rem);line-height:1.15;margin:0;text-wrap:balance}
+h2{font-family:var(--serif);font-weight:600;font-size:1.3rem;line-height:1.25;margin:0;text-wrap:balance}
+h3{font-family:var(--sans);font-weight:600;font-size:1rem;margin:0}
+p{margin:0}
+a{color:var(--accent);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.meta{font-family:var(--mono);font-size:.78rem;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+.lede{font-size:1.05rem;max-width:62ch}
+.sec{display:flex;flex-direction:column;gap:16px}
+.sec > p{max-width:65ch}
+
+/* baseline readout */
+.baseline{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));border-block:1px solid var(--rule)}
+.baseline div{padding:14px 12px 14px 0;display:flex;flex-direction:column;gap:2px}
+.baseline b{font-family:var(--mono);font-weight:500;font-size:1.6rem;font-variant-numeric:tabular-nums;line-height:1.1}
+.baseline span{font-size:.82rem;color:var(--muted)}
+
+/* checklist */
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.checks li{border-bottom:1px solid var(--rule)}
+.checks label{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:12px 0;cursor:pointer;align-items:start}
+.checks input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent)}
+.checks .what{font-weight:500}
+.checks .why{display:block;color:var(--muted);font-size:.9rem;font-weight:400}
+.checks input:checked + span .what{text-decoration:line-through;color:var(--muted)}
+.mins{font-family:var(--mono);font-size:.78rem;color:var(--muted);white-space:nowrap}
+
+/* copy blocks */
+.block{display:flex;flex-direction:column;gap:10px}
+.block-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.count{font-family:var(--mono);font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.when{color:var(--muted);font-size:.92rem;max-width:65ch}
+.flag{background:var(--warn-bg);color:var(--warn);padding:10px 12px;border-radius:4px;font-size:.92rem}
+.copytext{margin:0;background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px;font-family:var(--sans);font-size:.95rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.copy{align-self:flex-start;font:600 .92rem var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:10px 20px;min-width:112px;cursor:pointer}
+.copy.ok{background:var(--accent-soft);color:var(--accent)}
+.post{display:flex;flex-direction:column;gap:10px;padding-top:24px;border-top:1px solid var(--rule)}
+.eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+details{font-size:.9rem}
+summary{cursor:pointer;color:var(--muted);padding:4px 0}
+.sources{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.sources li{display:flex;flex-direction:column;gap:2px;padding-left:12px;border-left:2px solid var(--rule)}
+.claim{font-weight:500}
+.basis{color:var(--muted)}
+.sources a{overflow-wrap:anywhere}
+.plain{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;max-width:65ch}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a{border:1px solid var(--rule);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:.9rem;text-decoration:none}
+@media (prefers-reduced-motion:no-preference){.copy{transition:background .15s}}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="meta">Eric Whitney, DO · measured 21 Sep 2026</p>
+  <h1>Building the LinkedIn following</h1>
+  <p class="lede">The posts are written. The constraint is the network they go out to: a post is shown first to the people already connected to you, and today that is 19 people.</p>
+</header>
+
+<section class="sec" aria-label="Baseline">
+  <div class="baseline">
+    <div><b>21</b><span>followers</span></div>
+    <div><b>19</b><span>connections</span></div>
+    <div><b>0</b><span>posts of your own (one repost, 7 months ago)</span></div>
+    <div><b>6</b><span>invitations waiting</span></div>
+    <div><b>0</b><span>LinkedIn referrals in the site's last 446 hits</span></div>
+  </div>
+  <p>So the order is: fix the profile, seed the network with people you know, then post once a week. The profile and network steps take one sitting. After that it is 20 minutes a week.</p>
+</section>
+
+<section class="sec">
+  <h2>One sitting, about 40 minutes</h2>
+  <ul class="checks">
+    <li><label><input type="checkbox" id="c-headline"><span><span class="what">Replace the headline</span> <span class="mins">2 min</span><span class="why">Copy it from the block below. Profile, pencil icon, Headline.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-about"><span><span class="what">Paste the About</span> <span class="mins">2 min</span><span class="why">It is empty today. Profile, Add section, About.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-exp"><span><span class="what">Add CredentialDOMD as a position</span> <span class="mins">3 min</span><span class="why">This is what puts "Founder, CredentialDOMD" under your name everywhere you comment.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-featured"><span><span class="what">Feature the state guides</span> <span class="mins">2 min</span><span class="why">Add section, Featured, Add a link: credentialdomd.com/states?src=li</span></span></label></li>
+    <li><label><input type="checkbox" id="c-follow"><span><span class="what">Make Follow the main button on your profile</span> <span class="mins">1 min</span><span class="why">Settings, Visibility, Followers. Strangers who like a post follow in one tap instead of waiting on a connection request.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-verify"><span><span class="what">Finish LinkedIn's identity verification</span> <span class="mins">2 min</span><span class="why">Your profile shows a "Verify in 2 minutes" prompt. A verified badge matters more on a physician's profile than on most. It needs your ID, so it has to be you.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-accept"><span><span class="what">Accept the 6 waiting invitations</span> <span class="mins">2 min</span><span class="why">Two are physician recruiters at locums agencies. Their connections are locum physicians, which is the exact audience for the Practice and Locums tools.</span></span></label></li>
+    <li><label><input type="checkbox" id="c-connect"><span><span class="what">Send 25 connection requests to people you actually know</span> <span class="mins">25 min</span><span class="why">Partners, residency and fellowship classmates, OR staff, referring physicians, reps you trust. No note needed. Repeat weekly until you pass 300. This step moves the numbers more than any post.</span></span></label></li>
+  </ul>
+  <div class="links" aria-label="Where to find people you know">
+    <a href="https://www.linkedin.com/mynetwork/invitation-manager/received/" target="_blank" rel="noopener">Waiting invitations</a>
+    <a href="https://www.linkedin.com/mynetwork/grow/" target="_blank" rel="noopener">People you may know</a>
+    <a href="https://www.linkedin.com/search/results/people/?keywords=Eisenhower%20Health" target="_blank" rel="noopener">Eisenhower Health</a>
+    <a href="https://www.linkedin.com/search/results/people/?keywords=Arrowhead%20Regional%20Medical%20Center" target="_blank" rel="noopener">Arrowhead Regional</a>
+    <a href="https://www.linkedin.com/search/results/people/?keywords=neurosurgeon&network=%5B%22S%22%5D" target="_blank" rel="noopener">Neurosurgeons, 2nd degree</a>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>Profile copy</h2>
+  <section class="block" aria-labelledby="headline-h">
+  <div class="block-head"><h3 id="headline-h">Headline</h3><span class="count">188 chars</span></div>
+  <p class="when">Now: "Board-Certified Neurosurgeon | DO | Eisenhower Health &amp; ANMG | Consciousness Researcher | Building AI Tools for Scientific Discovery". Five identities, and none of them is the thing you are asking people to follow you for.</p>
+  <pre class="copytext" id="headline">Neurosurgeon, DO | Founder of CredentialDOMD | I publish the medical license renewal rules for all 50 states and DC, and built the tracker I wanted for my own licenses, DEA, boards and CME</pre>
+  <button class="copy" type="button" data-target="headline" id="headline-btn">Copy</button>
+</section>
+  <section class="block" aria-labelledby="about-h">
+  <div class="block-head"><h3 id="about-h">About</h3><span class="count">1,342 chars</span></div>
+  <p class="when">Your About section is empty today. "More than one state license" is deliberately vague; make it exact if you like.</p>
+  <pre class="copytext" id="about">I am a practicing neurosurgeon. I hold more than one state license, a DEA registration, board certification and hospital privileges, and every one of them runs on a different clock.
+
+California anchors renewal to the month your license was issued. Colorado expires every physician on April 30 of odd-numbered years. Texas assigns one of four fixed dates and picks the year by whether your license number is odd or even. Maine goes by whether you were born in an odd or an even year, and sends DOs to a different board with a different CME requirement.
+
+No spreadsheet knows any of that, so I built CredentialDOMD. It keeps licenses, DEA, board certification, privileges and CME in one place, with each state&#x27;s rules built in. No patient data goes into it. I use it on my own credentials.
+
+I also published what I learned: a renewal guide for every state and DC, each one citing the board&#x27;s own pages. Free to read at credentialdomd.com/states
+
+What I post here: one renewal rule a week that physicians get caught by, with the source.
+
+It is an early release, and founding members help shape what comes next. Founding membership is $99 a year for the first 100 paid members, and that rate stays locked for life while membership remains active. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.</pre>
+  <button class="copy" type="button" data-target="about" id="about-btn">Copy</button>
+</section>
+  <section class="block" aria-labelledby="experience-h">
+  <div class="block-head"><h3 id="experience-h">Experience entry</h3><span class="count">328 chars</span></div>
+  <p class="when">Add a position. You set the start date.</p>
+  <pre class="copytext" id="experience">Title: Founder
+Company: CredentialDOMD
+Description: I built the credential tracker I wanted as a multi-state physician: licenses, DEA, board certification, privileges and CME in one place, with each state&#x27;s renewal rules built in. I also publish free, sourced renewal guides for all 50 states and DC at credentialdomd.com/states</pre>
+  <button class="copy" type="button" data-target="experience" id="experience-btn">Copy</button>
+</section>
+</section>
+
+<section class="sec">
+  <h2>Four weeks of posts</h2>
+  <p>One a week, each built on a rule a physician can use whether or not they ever click. Every number was checked against the board's own page; the checks are under each post. The offer line uses the site's published wording.</p>
+  <article class="post">
+  <p class="eyebrow">Week 1</p>
+  <section class="block" aria-labelledby="post1-h">
+  <div class="block-head"><h3 id="post1-h">Texas: CE Broker hard stop</h3><span class="count">1,483 chars</span></div>
+  <p class="when">Post this week. The rule took effect September 1 and the next Texas expiration date is November 30.</p>
+  <pre class="copytext" id="post1">Texas physicians: as of September 1, you cannot renew your license until your CME is in CE Broker.
+
+The Texas Medical Board now requires it for every renewal on or after September 1, 2026. You need an active CE Broker account with your completed CME reported in it. The basic account is free. If the board cannot verify your hours there, you cannot renew. A folder of certificates does not count until the hours are entered.
+
+The next fixed expiration date is November 30.
+
+Three other Texas rules that catch people:
+
+Your expiration is not your birthday or your license anniversary. It is one of four dates (February 28, May 31, August 31, November 30), assigned when you were licensed. Even-numbered licenses expire in even years, odd-numbered in odd years. Two partners in the same practice can be on different clocks.
+
+Online renewal opens 60 to 90 days before expiration. A half-finished application is saved for 15 days. After that you start over.
+
+There is a 30-day grace period. Then a $75 penalty, rising to $150 after 90 days. At one year expired the license is automatically cancelled, and there is no reinstatement by fee. You apply for a new license under whatever rules exist that day.
+
+Full Texas guide with the board&#x27;s sources: credentialdomd.com/states/texas?src=li
+
+I am a practicing neurosurgeon. I built CredentialDOMD and use it for my own credentials. Founding membership is $99 a year for the first 100 paid members, with a no-hassle 100% money-back guarantee.</pre>
+  <button class="copy" type="button" data-target="post1" id="post1-btn">Copy</button>
+</section>
+  <details><summary>What each claim was checked against</summary><ul class="sources"><li><span class="claim">CE Broker required from September 1, 2026; basic account free; cannot renew if TMB cannot verify</span><span class="basis">TMB Continuing Education Tracking page, read live 2026-09-21</span><a href="https://www.tmb.texas.gov/resources/for-applicants-and-licensees/continuing-education-tracking" target="_blank" rel="noopener">www.tmb.texas.gov/resources/for-applicants-and-licensees/continuing-education-tracking</a></li><li><span class="claim">Four dates; even/odd license numbers; 60 to 90 days; 15-day save; 30-day grace; $75 then $150 after 90 days; cancelled at one year</span><span class="basis">TMB Physician Renewal page, read live 2026-09-21, every figure quoted verbatim</span><a href="https://www.tmb.texas.gov/apply-renew/physician/physician-renewal" target="_blank" rel="noopener">www.tmb.texas.gov/apply-renew/physician/physician-renewal</a></li><li><span class="claim">Independent confirmation of the September 1 rule</span><span class="basis">TMLT and Texas Academy of Family Physicians notices</span><a href="https://www.tmlt.org/resource/new-cme-requirements-begin-september-1" target="_blank" rel="noopener">www.tmlt.org/resource/new-cme-requirements-begin-september-1</a></li></ul></details>
+</article>
+<article class="post">
+  <p class="eyebrow">Week 2</p>
+  <section class="block" aria-labelledby="post2-h">
+  <div class="block-head"><h3 id="post2-h">Why a neurosurgeon built a license tracker</h3><span class="count">1,317 chars</span></div>
+  <p class="when">The founder post. Goes second so that people who check your profile after the Texas post find a reason to follow.</p><p class="flag"><strong>Before posting.</strong> Confirm the count before posting. The draft says four licenses and names four anchor types (California, Colorado, North Dakota, Maine). If you hold a different number, change it, or write &quot;my licenses&quot;.</p>
+  <pre class="copytext" id="post2">I opened the spreadsheet to answer what should have been a five-second question: which of my licenses renews next?
+
+I could not answer it.
+
+Not because the dates were hard to find. Because the states do not agree on what a date is. One anchors to the month my license was issued. One expires every physician in the state on one fixed day in odd-numbered years. One uses my birthday. One uses whether I was born in an even year or an odd one. Four licenses, four unrelated clocks, and a spreadsheet that only knew what I typed into it.
+
+So I made the thing I wanted. It holds the licenses, the DEA record, the board requirements and the per-state CME rules in one place, and I use it on my own credentials.
+
+The part worth keeping even if you never click anything:
+
+If you hold a Maine license, your renewal year follows your birth year. Born in an even year, you renew in even years. Born odd, odd. And Maine DOs do not renew with the MD board at all: different board, different portal, 100 CME hours per cycle instead of 40.
+
+I am a DO. I found that out by looking.
+
+I wrote up all 50 states and DC, with the boards&#x27; own sources: credentialdomd.com/states?src=li
+
+I built this. It is called CredentialDOMD. Founding membership is $99 a year for the first 100 paid members, with a no-hassle 100% money-back guarantee.</pre>
+  <button class="copy" type="button" data-target="post2" id="post2-btn">Copy</button>
+</section>
+  <details><summary>What each claim was checked against</summary><ul class="sources"><li><span class="claim">California, Colorado, North Dakota and Maine anchor rules; Maine DO board and 100 vs 40 hours</span><span class="basis">landing/states/states-data.json, fact-checked field by field in marketing/2026-08-refresh/linkedin-01-founder-arc.md. Maine is multi-source verified.</span><a href="https://credentialdomd.com/states/maine" target="_blank" rel="noopener">credentialdomd.com/states/maine</a></li><li><span class="claim">$99 founding rate and the money-back guarantee</span><span class="basis">Live wording on credentialdomd.com and its Terms, read 2026-09-21: &quot;No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.&quot;</span><a href="https://credentialdomd.com/" target="_blank" rel="noopener">credentialdomd.com/</a></li></ul></details>
+</article>
+<article class="post">
+  <p class="eyebrow">Week 3</p>
+  <section class="block" aria-labelledby="post3-h">
+  <div class="block-head"><h3 id="post3-h">Florida: no grace period, $355 becomes $705 overnight</h3><span class="count">1,342 chars</span></div>
+  <p class="when">Florida online renewal opens about 90 days before January 31, which is early November. This lands just ahead of it.</p><p class="flag"><strong>Before posting.</strong> The DO paragraph (March 31 of even years, $405, 1-hour Laws and Rules) comes from the August multi-source check, not from today&#x27;s live read. The MD figures were re-read live today.</p>
+  <pre class="copytext" id="post3">Florida MDs in Group 2: your license expires January 31, 2027, and Florida has no grace period.
+
+On February 1 the license is delinquent and the renewal fee goes from $355 to $705. After the board&#x27;s 120-day delinquent notice it is $1,060.
+
+Leave it delinquent through the end of the next cycle and the license becomes null and void, with no further action by the board and no reinstatement. You apply again as a new applicant.
+
+Two things to check now instead of in January:
+
+Which group you are in. Group 1 expires January 31 of even-numbered years, Group 2 of odd-numbered years. The board assigns the group. It has nothing to do with your birthday or when you were licensed, so your partner&#x27;s year may not be yours. The expiration date printed on your license is the answer.
+
+Whether your CME is in CE Broker. Florida confirms your hours there when you renew.
+
+DOs are on a separate clock: every Florida DO license expires March 31 of even-numbered years, the fee is $405, and there is a 1-hour Florida Laws and Rules requirement that MDs do not have.
+
+Full Florida guide with the boards&#x27; sources: credentialdomd.com/states/florida?src=li
+
+I am a practicing neurosurgeon. I built CredentialDOMD and use it for my own credentials. Founding membership is $99 a year for the first 100 paid members, with a no-hassle 100% money-back guarantee.</pre>
+  <button class="copy" type="button" data-target="post3" id="post3-btn">Copy</button>
+</section>
+  <details><summary>What each claim was checked against</summary><ul class="sources"><li><span class="claim">$355, $705, $1,060; Group 1 even years, Group 2 odd years; delinquent status; null and void; CE Broker</span><span class="basis">Florida Board of Medicine MD renewal page, read live 2026-09-21, figures quoted verbatim</span><a href="https://flboardofmedicine.gov/medical-doctor-renewal/" target="_blank" rel="noopener">flboardofmedicine.gov/medical-doctor-renewal/</a></li><li><span class="claim">DO date, fee and Laws and Rules hour</span><span class="basis">Florida Board of Osteopathic Medicine renewal and fees pages, verified 2026-08</span><a href="https://floridasosteopathicmedicine.gov/renewals/osteopathic-physician-renewal/" target="_blank" rel="noopener">floridasosteopathicmedicine.gov/renewals/osteopathic-physician-renewal/</a></li></ul></details>
+</article>
+<article class="post">
+  <p class="eyebrow">Week 4</p>
+  <section class="block" aria-labelledby="post4-h">
+  <div class="block-head"><h3 id="post4-h">Colorado: the first renewal with mandatory CME</h3><span class="count">1,398 chars</span></div>
+  <p class="when">Colorado&#x27;s April 30, 2027 renewal is the first one with mandatory CME. Seven months of lead time is the point of the post.</p>
+  <pre class="copytext" id="post4">If you hold a Colorado medical license, 2027 is the first renewal in the state&#x27;s history where CME is mandatory.
+
+HB 24-1153 did it. For renewals on or after January 1, 2026, Colorado physicians owe 30 hours per two-year cycle, including 2 hours on substance use disorders, with board audits of up to 5 percent of physicians. The first physician renewal it touches is April 30, 2027.
+
+The rest of the Colorado calendar, since most of it surprises people:
+
+Every physician license in the state expires April 30 of odd-numbered years. Not your birthday, not your license anniversary. If yours was issued mid-cycle, your first renewal period is shorter than two years.
+
+The renewal link does not appear in the state portal until roughly four to six weeks before expiration, so starting early is not an option.
+
+There is a 60-day grace period after expiration under CRS 12-20-202(1)(e). Miss it and this stops being a late renewal: reinstatement wants a certified NPDB self-query, an FSMB disciplinary action report sent to DORA, out-of-state license verifications and a practice history. Those reports take weeks to arrive.
+
+Full Colorado guide with sources: credentialdomd.com/states/colorado?src=li
+
+I am a practicing neurosurgeon. I built CredentialDOMD and use it for my own credentials. Founding membership is $99 a year for the first 100 paid members, with a no-hassle 100% money-back guarantee.</pre>
+  <button class="copy" type="button" data-target="post4" id="post4-btn">Copy</button>
+</section>
+  <details><summary>What each claim was checked against</summary><ul class="sources"><li><span class="claim">Every Colorado claim</span><span class="basis">Eleven-point fact check against states-data.json and the statute, in marketing/2026-08-refresh/linkedin-03-state-guide.md. Colorado is multi-source verified.</span><a href="https://credentialdomd.com/states/colorado" target="_blank" rel="noopener">credentialdomd.com/states/colorado</a></li></ul></details>
+</article>
+</section>
+
+<section class="sec">
+  <h2>Every week, 20 minutes</h2>
+  <ol class="plain">
+    <li>Post the week's draft. Same day and time each week is enough of a system.</li>
+    <li>Answer every comment the same day. A reply from the surgeon who wrote it is the reason a physician follows.</li>
+    <li>Send the next 25 connection requests to people you know.</li>
+    <li>Leave two or three comments on posts by physicians with larger audiences (locums, licensing, physician finance) where one of your state facts answers the question being asked. Ask me and I will find the posts and draft the comments.</li>
+  </ol>
+</section>
+
+<section class="sec">
+  <h2>How we will know it worked</h2>
+  <p>Followers and connections against the baseline above, and <code>linkedin.com</code> as a referrer in the site's visit counts, which is zero today. One gap: the LinkedIn phone app often sends no referrer, so those visits would be counted as direct. The links carry <code>?src=li</code>, but the visit counter drops query strings by design. Closing that is a small change to the beacon and it is worth making before post one.</p>
+</section>
+
+<section class="sec">
+  <h2>What I will not do</h2>
+  <p>Post, comment, message or send connection requests from your account on my own, or use follower tools, engagement pods or bought followers. LinkedIn's user agreement bans automation, accounts get restricted for it, and this account carries the name on your medical license. I draft and verify. You press the button.</p>
+</section>
+</div>
+
+<script>
+(function(){
+  function fallbackCopy(text){
+    var ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');
+    ta.style.position='fixed';ta.style.top='0';ta.style.opacity='0';document.body.appendChild(ta);
+    ta.select();ta.setSelectionRange(0,text.length);var ok=false;
+    try{ok=document.execCommand('copy');}catch(e){}
+    document.body.removeChild(ta);return ok;
+  }
+  function selectNode(el){var r=document.createRange();r.selectNodeContents(el);var s=window.getSelection();s.removeAllRanges();s.addRange(r);}
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var el=document.getElementById(btn.dataset.target),text=el.textContent;
+      function done(ok){
+        if(!ok){selectNode(el);}
+        btn.textContent=ok?'Copied':'Selected. Press copy';btn.classList.toggle('ok',ok);
+        setTimeout(function(){btn.textContent='Copy';btn.classList.remove('ok');},2200);
+      }
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){done(true);},function(){done(fallbackCopy(text));});
+      }else{done(fallbackCopy(text));}
+    });
+  });
+  var KEY='whitney-li-kit-checks',state={};
+  try{state=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(e){}
+  document.querySelectorAll('.checks input').forEach(function(cb){
+    if(state[cb.id])cb.checked=true;
+    cb.addEventListener('change',function(){state[cb.id]=cb.checked;try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}});
+  });
+})();
+</script>
