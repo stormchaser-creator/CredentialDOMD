@@ -174,7 +174,14 @@ export function composeEmail(email, subject, body) {
 export function composeText(phone, body) {
   const cleaned = phone.replace(/[^0-9+]/g, "");
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const truncated = body.substring(0, 1400);
+  // A hard character cut can land mid-word or mid-line on a long body; back
+  // up to the last line break or space so the truncated text still reads as
+  // whole words/lines instead of splitting one in half.
+  let truncated = body.substring(0, 1400);
+  if (truncated.length < body.length) {
+    const lastBreak = Math.max(truncated.lastIndexOf("\n"), truncated.lastIndexOf(" "));
+    if (lastBreak > 0) truncated = truncated.slice(0, lastBreak);
+  }
   window.open(
     `sms:${cleaned}${isIOS ? "&body=" : "?body="}${encodeURIComponent(truncated)}`,
     "_blank"
