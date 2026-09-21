@@ -269,9 +269,19 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
     || window.matchMedia?.("(display-mode: standalone)")?.matches;
   if (standalone && navigator.share && fallbackText) {
     try {
+      // No PDF rides along here, so the itemized invoice — multi-line by
+      // nature, not prose — goes on the clipboard where its line breaks
+      // survive, same as the cover letter above. Only the flowing blurb
+      // goes into share `text`; the line-item table jammed into that field
+      // would hit the same iOS Mail newline-stripping this file works
+      // around everywhere else and read as one run-on paragraph.
+      try {
+        await navigator.clipboard.writeText(`${cover}\n\n${normalizeInvoiceText(fallbackText)}`);
+        coverCopied = true;
+      } catch { /* clipboard unavailable */ }
       await navigator.share({
         title: subject || `Invoice ${inv.number}`,
-        text: `${invoiceCoverBlurb(inv, { attached: false })}\n\n${normalizeInvoiceText(fallbackText)}`,
+        text: `${invoiceCoverBlurb(inv, { attached: false })} The full itemized invoice is on your clipboard for pasting.`,
       });
       return coverCopied ? "share-text+cover" : "share-text";
     } catch (err) {
