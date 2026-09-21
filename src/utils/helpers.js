@@ -75,6 +75,20 @@ export function formatDate(s) {
   });
 }
 
+// The assistant is instructed to write cover notes as short standalone
+// sentences on separate lines, but an LLM can still return one
+// semicolon/period-joined run-on line despite that instruction. This
+// deterministically re-splits it so a slip on the model's part never
+// reaches the user as a run-on paragraph.
+export function normalizeMultilineNote(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return raw;
+  const existingLines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+  if (existingLines.length > 1) return existingLines.join("\n");
+  const bySemicolon = raw.split(/;\s*/).map(s => s.trim()).filter(Boolean);
+  return bySemicolon.length > 1 ? bySemicolon.join("\n") : raw;
+}
+
 // RFC 6068: a mailto body needs CRLF line breaks — a bare "\n" reads as one
 // continuous line in several mail clients. Every mailto in the app goes
 // through here so no send path can miss the conversion again.

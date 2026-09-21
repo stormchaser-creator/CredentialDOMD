@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { searchRecords, findSection } from "./HomeSearch";
 import { useInputStyle } from "../shared/useInputStyle";
-import { generateId } from "../../utils/helpers";
+import { generateId, normalizeMultilineNote } from "../../utils/helpers";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
 import { archivedReferenceActions, buildAssistantHistory, latestReferenceSelection, resolveReferenceSelection } from "../../utils/referenceDraft.js";
 import ReferenceDraftCard from "./ReferenceDraftCard.jsx";
@@ -365,7 +365,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           .filter(d => d && d.data);
         if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet — open Files to let them sync, then approve again.");
         const files = docs.map(dataUrlToFile);
-        const note = `${action.coverNote || "Credential documents enclosed."}\n\n— sent from CredentialDOMD`;
+        const note = `${normalizeMultilineNote(action.coverNote) || "Credential documents enclosed."}\n\n— sent from CredentialDOMD`;
         // LLM cover notes can be multi-line; iOS Mail would promote the first
         // fragment to the subject and flatten the rest. One-paragraph blurb
         // out, formatted note on the clipboard.
