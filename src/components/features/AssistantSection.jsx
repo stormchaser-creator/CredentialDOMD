@@ -607,7 +607,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                     {a.kind === "send_packet" && (
                       <button
                         title="Send these documents as email attachments from CredentialDOMD, replies come to you"
-                        onClick={() => setEmailPacket({ msgId: m.id, idx: i, docIds: a.docIds || [], note: a.coverNote || "" })}
+                        onClick={() => setEmailPacket({ msgId: m.id, idx: i, docIds: a.docIds || [], note: normalizeMultilineNote(a.coverNote) || "" })}
                         style={{
                           flex: 1, minWidth: 120, padding: "9px", borderRadius: 9, border: `1px solid ${T.accent}`,
                           backgroundColor: "transparent", color: T.accent, fontSize: 13, fontWeight: 800, cursor: "pointer",
