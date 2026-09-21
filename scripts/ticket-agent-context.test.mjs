@@ -124,6 +124,14 @@ test('case assessment rejects already-answered questions, nonexistent evidence, 
   assert.throws(() => validateAssessment(assessment(context, { questions: [question] }), context), /already answered/);
   const missing = assessment(context); missing.assessment.acceptance_criteria[0].evidence_ids = [uuid(999)];
   assert.throws(() => validateAssessment(missing, context), /unavailable evidence/);
+  // The 2026-09-21 outage: after doing code work on a zero-message ticket the model cited a
+  // commit SHA. The rejection must name the bad reference so a repeat is diagnosable.
+  const sha = assessment(context); sha.assessment.acceptance_criteria[0].evidence_ids = [targetId, '86a05cb2'];
+  assert.throws(() => validateAssessment(sha, context), /unavailable evidence: "86a05cb2" is not a ticket or message id/);
+  const none = assessment(context); none.assessment.acceptance_criteria[0].evidence_ids = [];
+  assert.throws(() => validateAssessment(none, context), /unavailable evidence: an item has no evidence_ids/);
+  const long = assessment(context); long.assessment.acceptance_criteria[0].evidence_ids = ['x'.repeat(500)];
+  assert.throws(() => validateAssessment(long, context), err => err.message.length < 200, 'offending reference is truncated');
   assert.throws(() => validateAssessment(assessment(context, { follow_up: [] }), context), /durable next action/);
   const falseRuntime = assessment(context); falseRuntime.assessment.verification.kind = 'verified_change';
   assert.throws(() => validateAssessment(falseRuntime, context, { isolated: true }), /runtime verification/);

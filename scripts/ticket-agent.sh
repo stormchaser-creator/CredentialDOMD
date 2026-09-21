@@ -75,6 +75,17 @@ for TARGET in ${(f)TARGETS}; do
   RUN_MODE="${TARGET#*:}"
   CONTEXT="$RUN_DIR/$TICKET_ID-context.json"
   OUTPUT="$RUN_DIR/$TICKET_ID-output.json"
+  # Circuit breaker: a target whose review was rejected three runs in a row is
+  # parked until a human clears it. Without this, one unrecordable ticket burned
+  # 71 consecutive model runs (2026-09-20/21) with no alert.
+  FAIL_DIR="$CASE_STATE/failed"; FAIL_COUNT="$FAIL_DIR/$TICKET_ID.count"
+  /bin/mkdir -p "$FAIL_DIR" && /bin/chmod 700 "$FAIL_DIR"
+  FAILS=$(/bin/cat "$FAIL_COUNT" 2>/dev/null || echo 0)
+  case "$FAILS" in ''|*[!0-9]*) FAILS=0 ;; esac
+  if [ "$FAILS" -ge 3 ]; then
+    echo "$(date '+%F %T') PARKED — $TICKET_ID rejected $FAILS runs in a row; inspect $FAIL_DIR then remove $FAIL_COUNT" >> "$LOG"
+    RC=1; continue
+  fi
   TICKET_DATABASE_TOKEN="$TOKEN" node "$REPO/scripts/ticket-agent-context.mjs" \
     --load "$TICKET_ID" "$CONTEXT" "$CASE_STATE" "$RUN_MODE" >> "$LOG" 2>&1 || { RC=1; break; }
 
@@ -89,8 +100,19 @@ for TARGET in ${(f)TARGETS}; do
   if [ "$MODEL_RC" -ne 0 ]; then RC=$MODEL_RC; break; fi
   # Rechecks target approval, freshness and actionability inside the write
   # transaction. No model-selected target/recipient/SQL is accepted.
-  TICKET_DATABASE_TOKEN="$TOKEN" node "$REPO/scripts/ticket-agent-context.mjs" \
-    --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1 || { RC=1; break; }
+  if TICKET_DATABASE_TOKEN="$TOKEN" node "$REPO/scripts/ticket-agent-context.mjs" \
+    --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1; then
+    /bin/rm -f "$FAIL_COUNT"
+  else
+    # Keep the rejected review privately so the rejection can be diagnosed; the
+    # run directory is deleted on exit. Newest five per target are retained.
+    KEPT="$FAIL_DIR/$TICKET_ID-$(date '+%Y%m%dT%H%M%S').json"
+    /bin/cp "$OUTPUT" "$KEPT" 2>/dev/null && /bin/chmod 600 "$KEPT"
+    /bin/ls -t "$FAIL_DIR/$TICKET_ID-"*.json 2>/dev/null | /usr/bin/tail -n +6 | while IFS= read -r OLD; do /bin/rm -f "$OLD"; done
+    echo $((FAILS + 1)) > "$FAIL_COUNT"
+    echo "$(date '+%F %T') REJECTED — $TICKET_ID review not recorded ($((FAILS + 1)) in a row); kept $KEPT" >> "$LOG"
+    RC=1; break
+  fi
 done
 
 echo "$(date '+%F %T') DONE rc=$RC" >> "$LOG"

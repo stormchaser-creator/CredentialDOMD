@@ -181,7 +181,10 @@ export function validateAssessment(result, context, { isolated = false } = {}) {
   const customerMessages = new Set(context.tickets.flatMap(t => t.messages)
     .filter(m => m.author_id === context.owner_id && m.is_admin_reply === false).map(m => m.id));
   for (const item of [...review.acceptance_criteria, ...review.answered_questions, ...review.prior_fixes, ...review.questions]) {
-    if (!item.evidence_ids.length || item.evidence_ids.some(ref => !evidence.has(ref))) throw Error('Review cites unavailable evidence');
+    if (!item.evidence_ids.length) throw Error('Review cites unavailable evidence: an item has no evidence_ids');
+    const unknown = item.evidence_ids.filter(ref => !evidence.has(ref));
+    // Name the offending references (ids only, never customer text) so a repeated failure is diagnosable.
+    if (unknown.length) throw Error(`Review cites unavailable evidence: ${unknown.slice(0, 3).map(ref => JSON.stringify(String(ref).slice(0, 48))).join(', ')} is not a ticket or message id in the supplied context`);
     if (item.state === 'customer_confirmed' && !item.evidence_ids.some(ref => customerMessages.has(ref))) throw Error('Customer confirmation needs a customer message, not a legacy support claim');
   }
   if (!context.history_complete && review.questions.length) throw Error('Read missing history before asking the customer');
