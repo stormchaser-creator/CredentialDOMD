@@ -126,8 +126,23 @@ test('case assessment rejects already-answered questions, nonexistent evidence, 
   assert.throws(() => validateAssessment(missing, context), /unavailable evidence/);
   // The 2026-09-21 outage: after doing code work on a zero-message ticket the model cited a
   // commit SHA. The rejection must name the bad reference so a repeat is diagnosable.
-  const sha = assessment(context); sha.assessment.acceptance_criteria[0].evidence_ids = [targetId, '86a05cb2'];
-  assert.throws(() => validateAssessment(sha, context), /unavailable evidence: "86a05cb2" is not a ticket or message id/);
+  // A revision beside real evidence is dropped, not fatal: the claim still rests on the ticket.
+  const sha = assessment(context); sha.assessment.acceptance_criteria[0].evidence_ids = [targetId, 'c19efaf1283106978b8d8cbf6758cdf0cc400760'];
+  assert.equal(validateAssessment(sha, context), sha);
+  assert.deepEqual(sha.assessment.acceptance_criteria[0].evidence_ids, [targetId]);
+  // A revision ALONE is never evidence: the item has nothing real left, so the review is rejected.
+  const onlySha = assessment(context); onlySha.assessment.acceptance_criteria[0].evidence_ids = ['86a05cb2'];
+  assert.throws(() => validateAssessment(onlySha, context), /unavailable evidence: "86a05cb2" is not a ticket or message id/);
+  // A CLAIMED prior fix that exists only as a commit is anchored to the target ticket it answers.
+  const claimed = assessment(context); claimed.assessment.prior_fixes = [{ summary: 'Fixed run-on text (c19efaf1)', state: 'claimed', evidence_ids: ['c19efaf1283106978b8d8cbf6758cdf0cc400760'] }];
+  assert.equal(validateAssessment(claimed, context), claimed);
+  assert.deepEqual(claimed.assessment.prior_fixes[0].evidence_ids, [targetId]);
+  // ...but a revision can never stand in for the customer's own confirmation.
+  const confirmed = assessment(context); confirmed.assessment.prior_fixes = [{ summary: 'Fixed', state: 'customer_confirmed', evidence_ids: ['c19efaf1283106978b8d8cbf6758cdf0cc400760'] }];
+  assert.throws(() => validateAssessment(confirmed, context), /unavailable evidence/);
+  // A non-revision unknown reference is still fatal even beside real evidence.
+  const bogus = assessment(context); bogus.assessment.acceptance_criteria[0].evidence_ids = [targetId, 'tickets/abc/screenshot.png'];
+  assert.throws(() => validateAssessment(bogus, context), /unavailable evidence: "tickets\/abc\/screenshot.png"/);
   const none = assessment(context); none.assessment.acceptance_criteria[0].evidence_ids = [];
   assert.throws(() => validateAssessment(none, context), /unavailable evidence: an item has no evidence_ids/);
   const long = assessment(context); long.assessment.acceptance_criteria[0].evidence_ids = ['x'.repeat(500)];

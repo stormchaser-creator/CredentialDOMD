@@ -94,6 +94,7 @@ Evidence IDs are validated mechanically and a bad one discards the whole run, re
 - An `evidence_ids` entry must be the exact `id` of a ticket or of a message that appears in the supplied context. Nothing else is accepted.
 - A commit SHA, file path, attachment path, URL, or test name is NOT an evidence ID. Put release revisions in `verification.release` and describe files or checks in `verification.checks`.
 - When the target ticket has no messages, its request lives in the ticket `body`; cite the target ticket's own `id`.
+- A fix that exists only as a commit has no ticket or message of its own. Cite the target ticket's `id` (the request it answers), name the revision in the `summary` text, and put it in `verification.release`.
 - `completed_follow_up` may only name work listed in this target's saved `pending_follow_up` from a prior review. On the first review of a ticket there is none, so leave `completed_follow_up` empty and report work you did this run under `prior_fixes` (state `claimed`) and `verification`.
 Use `customer_confirmed` only for an actual customer confirmation, not an agent's own
 “fixed” reply. Saved reviews are fallible working notes: prefer newer source messages

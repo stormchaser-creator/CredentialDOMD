@@ -181,6 +181,15 @@ export function validateAssessment(result, context, { isolated = false } = {}) {
   const customerMessages = new Set(context.tickets.flatMap(t => t.messages)
     .filter(m => m.author_id === context.owner_id && m.is_admin_reply === false).map(m => m.id));
   for (const item of [...review.acceptance_criteria, ...review.answered_questions, ...review.prior_fixes, ...review.questions]) {
+    // A git revision is a release detail, never customer evidence. The model cites one when a fix
+    // exists only as a commit. Drop it when real evidence remains; an item left with no real
+    // evidence still fails below, so no claim ever stands on a revision alone.
+    const real = item.evidence_ids.filter(ref => !/^[a-f0-9]{7,40}$/i.test(String(ref)) || evidence.has(ref));
+    if (real.length && real.length !== item.evidence_ids.length) item.evidence_ids = real;
+    // A merely CLAIMED prior fix that exists only as a commit answers the target ticket's request,
+    // so that ticket is its evidence. Confirmed fixes and every other field get no such help.
+    else if (!real.length && item.evidence_ids.length && review.prior_fixes.includes(item) && item.state === 'claimed'
+      && evidence.has(context.target_id)) item.evidence_ids = [context.target_id];
     if (!item.evidence_ids.length) throw Error('Review cites unavailable evidence: an item has no evidence_ids');
     const unknown = item.evidence_ids.filter(ref => !evidence.has(ref));
     // Name the offending references (ids only, never customer text) so a repeated failure is diagnosable.
