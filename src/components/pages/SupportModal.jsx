@@ -365,6 +365,30 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     }
   };
 
+  // A ticket can be resolved without being archived: it was resolved before
+  // resolving also archived, or an admin resolved it. "Mark as resolved" is
+  // hidden once a ticket is resolved, so without this such a ticket could
+  // never leave the active list. Archiving changes visibility only.
+  const archiveResolved = async () => {
+    if (!openTicket) return;
+    const requestId = threadRequest.current;
+    const current = () => requestId === threadRequest.current;
+    setResolving(true); setReplyMsg("");
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase.from("support_tickets")
+        .update({ archived_at: now, updated_at: now }).eq("id", openTicket.id);
+      if (error) throw error;
+      if (!current()) return;
+      setOpenTicket((t) => (t ? { ...t, archived_at: now } : t));
+      loadTickets();
+    } catch (e) {
+      if (current()) setReplyMsg(e.message || "Could not archive this ticket.");
+    } finally {
+      if (current()) setResolving(false);
+    }
+  };
+
   const reset = useCallback(() => {
     listRequest.current++; threadRequest.current++; actionRequest.current++;
     clearTimeout(closeTimer.current);
@@ -694,6 +718,16 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
           cursor: resolving ? "default" : "pointer",
         }}>
           {resolving ? "Marking resolved..." : "Mark as resolved"}
+        </button>
+      )}
+      {(openTicket.status === "resolved" || openTicket.status === "closed") && !openTicket.archived_at && (
+        <button onClick={archiveResolved} disabled={resolving} style={{
+          width: "100%", marginTop: 10, padding: "12px", borderRadius: 10,
+          border: `1px solid ${T.border}`, backgroundColor: "transparent",
+          color: T.accent, fontSize: 14, fontWeight: 700,
+          cursor: resolving ? "default" : "pointer",
+        }}>
+          {resolving ? "Archiving..." : "Move to archive"}
         </button>
       )}
     </>
