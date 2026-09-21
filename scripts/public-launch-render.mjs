@@ -105,7 +105,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       'signup-heading': view.signupHeading,
       'signup-eyebrow': 'Membership',
       'signup-card-heading': 'Membership is open',
-      'signup-note': 'Card required at checkout. Full refund of your most recent annual payment at any time.',
+      'signup-note': 'Card required at checkout. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.',
       'signup-label': view.primaryAction.label,
       'signup-trust': 'Early release · Card required at checkout',
       'audience-badge': 'For MDs and DOs · Membership options',
