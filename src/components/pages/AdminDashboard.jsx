@@ -12,6 +12,7 @@ import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
+import AdminLifetimeGift from "./AdminLifetimeGift";
 
 /**
  * AdminDashboard — displayed for server-verified administrators only.
@@ -900,8 +901,9 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
     <div>
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Give someone free lifetime access</div>
-        <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 0" }}>Have them create and verify an account at credentialdomd.com/app/ first. Creating an account requires no card. Then choose “Give free lifetime access” on their account below to review the verified identity and record your reason. This does not send an email.</p>
+        <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 0" }}>Someone who already has an account: choose “Give free lifetime access” on their row below. It checks their billing first and records your reason. Someone who has not signed up yet: gift it to their email address here and it applies the moment they confirm that address. Neither sends an email.</p>
       </div>
+      <AdminLifetimeGift />
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 6 }}>Invite a physician</div>
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>Invitation emails are on hold for owner review of the exact message and recipient list. An invitation request will not send email or change access while held.</div>
