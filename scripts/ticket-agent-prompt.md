@@ -154,6 +154,13 @@ A prior completion claim or a resolved related ticket is not itself task verific
    claim it shipped. Never reset/discard work to hide a failure. `verified_change` requires
    the reproduction, actual relevant test results, and release verification; a source-only
    investigation must use `source_review` and say what remains unverified.
+   `verification.kind` describes the state of the fix you are reporting, not whether code changed
+   during this run. When the fix was committed in an earlier run and you confirmed the live build
+   includes it (for example `version.json` reports a build at or after that revision), that is
+   `verified_change`: record how you reproduced or checked it, the checks you ran, and the release
+   revision. Use `source_review` only when you did not confirm a live release, and in that case the
+   reply must not say the work is fixed, shipped, deployed or live. A completion claim in the reply
+   without `verified_change` discards the whole run.
 
 ## Reply and durable follow-through
 
