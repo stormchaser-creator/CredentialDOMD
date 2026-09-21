@@ -37,7 +37,7 @@ test('canonical prices never become rounded monthly equivalents', () => {
     assert.equal(priceFor('core_locum', cadence).perInterval, '/year');
   }
 });
-test('legacy entitlement IDs and feature bundles remain intact; launch stays off', () => {
+test('legacy entitlement IDs and feature bundles remain intact; source defaults keep sales off', () => {
   assert.deepEqual(Object.keys(TIERS), ['free', 'resident', 'founding', 'solo', 'locum', 'practice', 'group', 'enterprise']);
   assert.deepEqual(TIERS.free.features, ['license_tracker', 'dea_tracker', 'email_alerts']);
   for (const id of ['resident', 'founding', 'solo']) assert.equal(TIERS[id].features, 'all_individual');
@@ -47,8 +47,11 @@ test('legacy entitlement IDs and feature bundles remain intact; launch stays off
   assert.equal(TIERS.enterprise.features, 'all_enterprise');
   assert.equal(PUBLIC_BILLING_ENABLED, false);
   assert.equal(BILLING_CATALOG.newSalesEnabled, false);
-  assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled, false);
-  assert.deepEqual(FREE_BETA, { active: true, endsOn: null });
+  // Enforcement went live with the limited launch; checkout itself stays server-governed.
+  assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled, true);
+  assert.equal(PUBLIC_BILLING_POLICY.checkoutEnabled, false);
+  // The open free beta ended at paid launch; individual 30-day periods are server grants.
+  assert.deepEqual(FREE_BETA, { active: false, endsOn: null });
 });
 
 const component = fileURLToPath(new URL('../src/components/pages/PricingModal.jsx', import.meta.url));
@@ -66,7 +69,7 @@ const { default: PricingModal } = await import(temp.href);
 try {
   test('rendered modal shows planned catalog prices and no purchase buttons in all off states', () => {
     for (const isFreeBeta of [false, true]) for (const isDevMode of [false, true]) {
-      globalThis.__foundingPricingContext = { theme: {}, plan: 'locum', isFreeBeta, isDevMode, isDesktop: true,
+      globalThis.__foundingPricingContext = { theme: {}, plan: 'locum', isFreeBeta, isDevMode, isDesktop: true, limitedLaunch: { enabled: false },
         checkout: () => { throw Error('Must not call checkout'); } };
       const html = renderToStaticMarkup(React.createElement(PricingModal, { open: true, onClose() {} }));
       assert.match(html, /\$99/);

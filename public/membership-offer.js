@@ -1,7 +1,7 @@
 // Public presentation only: no account, capacity count, storage, or checkout action.
 const PRICES = Object.freeze({ founding: 9900, earlybird: 14900, standard: 19900 });
 const FALLBACK = Object.freeze({ action: 'Create your account', reviewAction: 'See membership plans',
-  status: 'Checkout availability is not confirmed. Creating an account does not reserve a founding place.',
+  status: 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.',
   headline: 'First 100 paid founding memberships: $99/year', price: '$99', priceLabel: ' / year, founding rate for the first 100 paid members',
   heroHeadline: 'Founding offer: $99/year for the first 100 paid members',
   heroNote: 'The founding annual rate stays locked for life while membership remains active.',
@@ -21,7 +21,7 @@ export function offerPresentation(value) {
       ? 'Founding checkout is temporarily unavailable. Creating an account does not reserve a place.'
       : 'Your offer is confirmed before payment. Creating an account does not reserve a founding place.';
   return { action: 'Create your account', reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
-    heroHeadline: `${phase} Credential — ${rate}${value.phase === 'founding' ? ' for the first 100 paid members' : ''}`,
+    heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid members' : ''}`,
     heroNote: value.phase === 'standard' ? 'One annual membership for your credentials, CME and professional records.' : `Your $${value.annualCents / 100} annual rate stays locked for life while membership remains active.`,
     headline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid founding members' : ''}.`,
     price: `$${value.annualCents / 100}`, priceLabel: ` / year, ${phase.toLowerCase()} Credential`,

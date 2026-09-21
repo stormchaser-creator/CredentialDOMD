@@ -75,7 +75,7 @@ export const AI_MESSAGES = {
   get opus_quota() { return opusQuotaMessage(sharedAiStatus?.anthropicLimit); },
   shared_key_not_configured: "AI is not switched on yet: the shared key is not configured.",
   opus_not_enabled: "Opus is not enabled on this account yet.",
-  forbidden: "AI is available once your beta access is active.",
+  forbidden: "AI is available once your membership is active. Open Profile & settings to review it.",
   unauthorized: "Sign in to use AI features.",
   offline: "AI is not reachable right now. Check your connection and try again.",
   // The proxy's monthly hard budget (429 { error: "budget" }): Opus is done
@@ -348,7 +348,7 @@ export function describeAiStatus(settings) {
   if (settings?.apiKey) return "Your own Gemini key is in use on this device. The shared daily limit does not apply.";
   const s = sharedAiStatus;
   if (s.shared) return `Shared AI: on, ${s.used} of ${s.limit} calls used today`;
-  if (s.reason === "pending") return "Shared AI: available once your beta access is active.";
+  if (s.reason === "pending") return "Shared AI: available once your membership is active.";
   if (s.reason === "not_configured") return "Shared AI: not switched on yet (the shared key is not configured).";
   if (s.reason === "signed_out") return "Shared AI: sign in to use it.";
   if (s.reason === "offline") return "Shared AI: could not be reached. Check your connection.";

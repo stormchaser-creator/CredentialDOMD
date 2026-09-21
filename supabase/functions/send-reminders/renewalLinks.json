@@ -14,7 +14,7 @@
   "guide": "https://credentialdomd.com/states/alaska"
  },
  "AZ": {
-  "portal": "https://azbomv7prod.glsuite.us/glsuiteweb/clients/azbom/Private/Renewals/LoginRenewal.aspx?RenewalType=MD",
+  "portal": "https://azmd.gov/Licensure/Licensure/md-renewal-application",
   "board": "Arizona Medical Board",
   "due": "MD: every other year on or before the licensee's birthday (A.R.S. 32-1430(A); the on-year depends on your license record, check your profile at azmd.gov Doctor Search). DO: December 31 of either even-numbered or odd-numbered years depending on the licensee's assigned renew-by date; the DO renewal portal opens on or about October 1.",
   "fee": "$500 (MD active license, 2-year renewal). DO: $636 biennial, non-refundable.",
@@ -234,7 +234,7 @@
   "portal": "https://portal.ncmedboard.org/index.aspx",
   "board": "North Carolina Medical Board",
   "due": "Every year, no later than 30 days after the licensee's birthday, regardless of license issue date (N.C. Gen. Stat. 90-13.2). A licensee's first renewal is due within 30 days of their NEXT birthday, even if that birthday falls shortly after the license was issued.",
-  "fee": "$250 (MD and DO, annual renewal; set by N.C. Gen. Stat. 90-13.2 and the board's Renewal Fees schedule, last updated 12.30.2025)",
+  "fee": "$250 (MD and DO, annual renewal; set by N.C. Gen. Stat. 90-13.2 and the board's fee schedule, last updated 08.21.2026)",
   "guide": "https://credentialdomd.com/states/north-carolina"
  },
  "ND": {

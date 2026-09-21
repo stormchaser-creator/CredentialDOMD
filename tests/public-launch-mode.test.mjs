@@ -105,6 +105,8 @@ test('founding marketing states the paid cap without claiming live availability 
   assert.match(view.availability, /does not reserve a place/);
   assert.match(view.foundingRate, /membership remains continuously active/);
   assert.match(view.rateComparison, /After the 100 paid founding memberships.*\$149.*\$199/);
-  assert.match(view.foundingChange, /previously planned \$149/);
+  // Liability hedging about a never-charged $149 price was removed for a live product.
+  assert.equal(view.foundingChange, undefined);
+  assert.doesNotMatch(JSON.stringify(view), /previously planned/i);
   assert.doesNotMatch(JSON.stringify(view), /\d+ (?:spots?|places?|memberships?) (?:left|remaining)|signup is open|reserved for eligible earlier waitlist members/i);
 });

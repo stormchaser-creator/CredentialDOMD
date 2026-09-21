@@ -46,6 +46,7 @@ function fixture({ enabled = true, practice = true } = {}) {
     '../utils/continuityRecovery.js': {},
     '../utils/secretBox.js': { getLockCode: () => null, saveLockCode() {} },
     '../utils/founding.js': { foundingFromProfile: () => ({}) },
+    '../utils/profileIssueDiagnostics.js': { profileInitializationError() { throw Error('Continuity must be disabled'); }, profileSupportReference: () => 'ID-TEST' },
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, allowsSettingsChange: (value, a = authority) => allowsSettingsChange(value, a), membershipWriteError,
       assertRecordWrite: (key, value, previous) => { if (!authority.allowsMutation(key, value, previous)) throw membershipWriteError(); } },
   };

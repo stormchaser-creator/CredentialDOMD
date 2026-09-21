@@ -54,7 +54,7 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /no change or charge will occur without their agreement/);
     assert.match(html, /Practice records remain available to read and export/);
     assert.match(html, /keep Credential and Practice free for life/);
-    assert.match(html, /waitlist entry alone does not qualify for lifetime access/);
+    assert.match(html, /waitlist entry, or an account that was created but never active before launch, does not qualify/);
     assert.match(html, /\$245\/year total at first purchase/);
     assert.doesNotMatch(html, /Checkout is not open|invitation will confirm eligibility|<form\b[^>]*class="[^"]*wl-form/i);
     assert.doesNotMatch(html, /Founding invitations/i);

@@ -64,10 +64,10 @@ test('packaging refuses modified video bytes or stale advertised players before 
  await writeFile(resolve(root,'public/knowledge/credentialdo-help.json'),JSON.stringify(help));
  await writeFile(resolve(root,'site-dist/keep.txt'),'previous package');
  await writeFile(resolve(root,'landing/help-videos/first-license/tutorial.mp4'),'changed');
- await assert.rejects(packageSite(root),/hash mismatch/);
+ await assert.rejects(packageSite(root,undefined,undefined,{supabaseUrl:'https://synthetic.supabase.co'}),/hash mismatch/);
  assert.equal(await readFile(resolve(root,'site-dist/keep.txt'),'utf8'),'previous package');
  await writeFile(resolve(root,'landing/help-videos/first-license/tutorial.mp4'),bytes.video);
- await assert.rejects(packageSite(root),/Help page is stale/);
+ await assert.rejects(packageSite(root,undefined,undefined,{supabaseUrl:'https://synthetic.supabase.co'}),/Help page is stale/);
  assert.equal(await readFile(resolve(root,'site-dist/keep.txt'),'utf8'),'previous package');
 });
 

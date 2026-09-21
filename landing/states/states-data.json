@@ -29,7 +29,7 @@
         "Complete your CME for the cycle (25 hours) (see details below)",
         "Log in to the Alabama Board of Medical Examiners & Medical Licensure Commission renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($300 (full MD/DO license, annual renewal))",
+        "Pay the renewal fee ($300)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -132,7 +132,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the Alaska State Medical Board (Division of Corporations, Business and Professional Licensing, Department of Commerce, Community, and Economic Development) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($350 (active MD or DO, full-term biennial renewal, or lapsed less than 1 year))",
+        "Pay the renewal fee ($350)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -217,7 +217,7 @@
       "slug": "arizona",
       "boardName": "Arizona Medical Board",
       "boardUrl": "https://azmd.gov",
-      "portalUrl": "https://azbomv7prod.glsuite.us/glsuiteweb/clients/azbom/Private/Renewals/LoginRenewal.aspx?RenewalType=MD",
+      "portalUrl": "https://azmd.gov/Licensure/Licensure/md-renewal-application",
       "doBoardName": "Arizona Board of Osteopathic Examiners in Medicine and Surgery",
       "doBoardUrl": "https://azdo.gov",
       "renewalCycle": "Biennial (2 years) for both MD and DO",
@@ -236,7 +236,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the Arizona Medical Board renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($500 (MD active license, 2-year renewal))",
+        "Pay the renewal fee (MD: $500)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -335,7 +335,7 @@
         "Complete your CME for the cycle (20 hours) (see details below)",
         "Log in to the Arkansas State Medical Board renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($11 (MD/DO annual renewal, per the ASMB fee schedule PDF reflecting the Act 114 of 2023 fee reduction stated to run 7/1/2023 through 6/30/2026))",
+        "Pay the renewal fee ($11)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -439,7 +439,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the Medical Board of California renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee (MD active: $1,206 total ($1,151 base plus mandatory $25 Steven M)",
+        "Pay the renewal fee (MD: $1,206 total)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -645,7 +645,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the Connecticut Department of Public Health, Practitioner Licensing and Investigations Section (adjudicative board: Connecticut Medical Examining Board) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($575 per year (Physician/Surgeon, MD or DO))",
+        "Pay the renewal fee ($575)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -852,7 +852,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the District of Columbia Board of Medicine (DC Health, Health Regulation and Licensing Administration) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($500 (MD/DO renewal license fee for the 2-year term, per 17 DCMR 3500)",
+        "Pay the renewal fee ($500)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -1263,7 +1263,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the Idaho State Board of Medicine (Division of Occupational and Professional Licenses, DOPL) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($160 per year for both Physician and Surgeon (MD) and Osteopathic Physician and Surgeon (DO), effective January 1, 2025 (reduced from $200))",
+        "Pay the renewal fee ($160)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -1366,7 +1366,7 @@
         "Complete your CME for the cycle (150 hours) (see details below)",
         "Log in to the Illinois Department of Financial and Professional Regulation (IDFPR), Division of Professional Regulation renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($543 for the 3-year renewal if the licensee has held the Illinois Physician and Surgeon license for more than 365 days as of the application signature date; $181 if held for 365 days or fewer (first renewal shortly after initial licensure))",
+        "Pay the renewal fee ($543)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -1470,7 +1470,7 @@
         "Complete your CME for the cycle (0 hours)",
         "Log in to the Indiana Medical Licensing Board (Indiana Professional Licensing Agency) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($200 (active MD or DO, 2-year renewal))",
+        "Pay the renewal fee ($200)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -1573,7 +1573,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the Iowa Board of Medicine (Department of Inspections, Appeals, and Licensing) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($450 if renewed online, $550 if renewed by paper application, per biennial period (prorated if the current license was issued for less than 24 months); $0 for physicians on active duty in the U)",
+        "Pay the renewal fee ($450 if renewed online, $550 if renewed by paper application, per biennial period)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -1779,7 +1779,7 @@
         "Complete your CME for the cycle (60 hours) (see details below)",
         "Log in to the Kentucky Board of Medical Licensure (KBML) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($150 (annual registration or renewal of regular MD/DO license, online))",
+        "Pay the renewal fee ($150)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -1883,7 +1883,7 @@
         "Complete your CME for the cycle (20 hours) (see details below)",
         "Log in to the Louisiana State Board of Medical Examiners (LSBME) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($332 per year (active MD/DO): $300 renewal fee plus $25 physician health program assessment plus $7 CME assessment under La)",
+        "Pay the renewal fee ($332)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -1987,7 +1987,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the Maine Board of Licensure in Medicine renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($500 (MD active license, 2-year renewal))",
+        "Pay the renewal fee (MD: $500)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -2297,7 +2297,7 @@
         "Complete your CME for the cycle (150 hours) (see details below)",
         "Log in to the Michigan Board of Medicine (Bureau of Professional Licensing, Department of Licensing and Regulatory Affairs) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($314)",
+        "Pay the renewal fee ($314.40)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -2401,7 +2401,7 @@
         "Complete your CME for the cycle (75 hours) (see details below)",
         "Log in to the Minnesota Board of Medical Practice renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($192 (Physician Annual License, MD and DO; confirmed in Minn)",
+        "Pay the renewal fee ($192)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -2609,7 +2609,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the Missouri State Board of Registration for the Healing Arts renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($147 (Permanent Physician Renewal Fee, MD and DO alike, 1-year registration) per 20 CSR 2150-2)",
+        "Pay the renewal fee ($147)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -2713,7 +2713,7 @@
         "Complete your CME for the cycle (0 hours)",
         "Log in to the Montana Board of Medical Examiners (Department of Labor and Industry, Professional Licensing Bureau) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($375 (active physician, 2-year renewal) per the board FAQ, plus the Montana Prescription Drug Registry fee of $30/year ($60 for a two-year renewal) for physicians with prescribing authority)",
+        "Pay the renewal fee ($375)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -2817,7 +2817,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the Nebraska Department of Health and Human Services, Division of Public Health, Licensure Unit (Board of Medicine and Surgery) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($171 total for active status: $121 renewal fee plus a $50 Patient Safety Cash Fund fee (the $50 cannot be waived))",
+        "Pay the renewal fee ($171 total)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -2921,7 +2921,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the Nevada State Board of Medical Examiners renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee (MD: $750 biennial registration for an active MD ($375 inactive; $375 if renewing for only the second half of the biennium), per the board's Licensure Fees schedule; statutory cap is $1,000 (NRS 630)",
+        "Pay the renewal fee (MD: $750)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -3129,7 +3129,7 @@
         "Complete your CME for the cycle (100 hours) (see details below)",
         "Log in to the New Jersey State Board of Medical Examiners (Division of Consumer Affairs) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($580 (active MD/DO, full biennial renewal))",
+        "Pay the renewal fee ($580)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -3233,7 +3233,7 @@
         "Complete your CME for the cycle (75 hours) (see details below)",
         "Log in to the New Mexico Medical Board renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($600 total (active physician triennial renewal: $450 renewal fee plus $150 impaired physicians program fee, 16)",
+        "Pay the renewal fee ($600 total)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -3341,7 +3341,7 @@
         "Complete your CME for the cycle (0 hours)",
         "Log in to the New York State Education Department, Office of the Professions (State Board for Medicine) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($600 (registration renewal for Medicine, MD and DO, per two-year registration period; Office of the Professions Fees Chart, Rev)",
+        "Pay the renewal fee ($600)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -3436,21 +3436,21 @@
       "cmeSplit": false,
       "cmeSource": "N.C. Admin. Code tit. 21, r. 32R.0101",
       "cmeSourceUrl": "https://www.ncmedboard.org/resources-information/faqs/professional-faqs/cme",
-      "renewalFee": "$250 (MD and DO, annual renewal; set by N.C. Gen. Stat. 90-13.2 and the board's Renewal Fees schedule, last updated 12.30.2025)",
+      "renewalFee": "$250 (MD and DO, annual renewal; set by N.C. Gen. Stat. 90-13.2 and the board's fee schedule, last updated 08.21.2026)",
       "lateFee": "$50, added 30 days after the renewal date (birthday) passes, on top of the $250 renewal fee",
-      "graceOrLapse": "After the $50 late fee is assessed (30 days past the birthday), the board sends a certified letter and the licensee has an additional 30 days to complete renewal. If renewal is still not completed within that period, the license is automatically placed on inactive status, and it is unlawful to practice with an inactive license. A license inactive for less than one year (with no discipline involved) can be reactivated: application plus $263 fee, fingerprint cards, and a CME log for the inactive period; average processing is 8 weeks. Inactive more than one year, or inactive due to board action, requires full reinstatement, which is essentially a new licensure application. Physicians out of clinical practice for two or more years may also be required to demonstrate competence, determined case by case.",
+      "graceOrLapse": "After the $50 late fee is assessed (30 days past the birthday), the board sends a certified letter and the licensee has an additional 30 days to complete renewal. If renewal is still not completed within that period, the license is automatically placed on inactive status, and it is unlawful to practice with an inactive license. A license inactive for less than one year (with no discipline involved) can be reactivated: a $300 application fee plus $38 fingerprinting and a $2.50 NPDB fee, and a CME log for the inactive period; average processing is 8 weeks. Inactive more than one year, or inactive due to board action, requires full reinstatement, which is essentially a new licensure application. Physicians out of clinical practice for two or more years may also be required to demonstrate competence, determined case by case.",
       "processingTime": "Online renewals are processed immediately once payment shows \"transaction approved\"; the renewal itself typically takes 10-15 minutes to complete. Reactivation after lapse averages 8 weeks.",
       "steps": [
         "Complete your CME for the cycle (60 hours) (see details below)",
         "Log in to the North Carolina Medical Board renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($250 (MD and DO, annual renewal; set by N)",
+        "Pay the renewal fee ($250)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
-        "The first renewal trap: your first renewal is due within 30 days of your NEXT birthday even if it comes right after your license was issued, and the license application fee does NOT count toward that first renewal fee (board Renewal Fees PDF, 12.30.2025).",
+        "The first renewal trap: your first renewal is due within 30 days of your NEXT birthday even if it comes right after your license was issued, and the license application fee does NOT count toward that first renewal fee (board fee schedule, 08.21.2026).",
         "The lapse clock is fast: $50 late fee at 30 days past your birthday, then a certified letter starts a final 30-day window; miss that and the license goes automatically inactive under N.C. Gen. Stat. 90-13.2, and practicing on an inactive license is unlawful.",
-        "Reactivation after a lapse is not a quick fix: even under one year inactive it requires a separate application, a $263 fee, fingerprint cards, a CME log for the inactive period, and averages 8 weeks of processing. Over one year inactive means full reinstatement, essentially a new license application.",
+        "Reactivation after a lapse is not a quick fix: even under one year inactive it requires a separate application, a $300 application fee plus $38 fingerprinting and a $2.50 NPDB fee, a CME log for the inactive period, and averages 8 weeks of processing. Over one year inactive means full reinstatement, essentially a new license application.",
         "The renewal portal does not support mobile devices; the board says to use a desktop or laptop, and CME hours must be entered as whole numbers with no decimals or extra text or the form errors.",
         "Renewal notices go out by email only about two months before your birthday, so a stale email address on file means no reminder. Also, renewing more than 60 days early is possible only by contacting the board's Registration Coordinator."
       ],
@@ -3469,7 +3469,7 @@
         },
         {
           "question": "How do I get my license back after it goes inactive?",
-          "answer": "If it has been inactive less than one year and no discipline was involved, apply for reactivation: application, $263 fee, fingerprint cards, and a log of CME earned while inactive; average processing is 8 weeks. Inactive more than one year, or inactive due to board action, requires full reinstatement, essentially a new licensure application. Out of clinical practice 2+ years may also trigger a case-by-case competence assessment."
+          "answer": "If it has been inactive less than one year and no discipline was involved, apply for reactivation: a $300 application fee plus $38 fingerprinting and a $2.50 NPDB fee, and a log of CME earned while inactive; average processing is 8 weeks. Inactive more than one year, or inactive due to board action, requires full reinstatement, essentially a new licensure application. Out of clinical practice 2+ years may also trigger a case-by-case competence assessment."
         },
         {
           "question": "Is the renewal processed right away?",
@@ -3494,8 +3494,8 @@
           "what": "Renewals landing page: Licensee Gateway portal link (portal.ncmedboard.org), fee schedule PDF link, credit card payment, military fee waiver"
         },
         {
-          "url": "https://www.ncmedboard.org/images/uploads/other_pdfs/Renewal_Fees_12302025_1.pdf",
-          "what": "Official renewal fee schedule (12.30.2025): MD/DO $250 annual, $50 late fee, first-renewal rule, application fee does not count toward first renewal"
+          "url": "https://www.ncmedboard.org/images/uploads/other_pdfs/NCMB_Fee_Schedule_08212026.pdf",
+          "what": "Official fee schedule (08.21.2026): MD/DO $250 annual, $50 late fee, first-renewal rule, application fee does not count toward first renewal"
         }
       ],
       "verified": "2026-08 (single-source)",
@@ -3650,7 +3650,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the State Medical Board of Ohio renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($305 (MD/DO/DPM biennial renewal, per ORC 4731)",
+        "Pay the renewal fee ($305)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -3757,7 +3757,7 @@
         "Complete your CME for the cycle (60 hours) (see details below)",
         "Log in to the Oklahoma State Board of Medical Licensure and Supervision renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee (MD: $200 (application for annual reregistration fee, full medical license, OAC 435:1-1-7))",
+        "Pay the renewal fee (MD: $200)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -3861,7 +3861,7 @@
         "Complete your CME for the cycle (60 hours) (see details below)",
         "Log in to the Oregon Medical Board renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($756 total for an Active MD/DO two-year renewal per the board fee schedule effective 7/2/2026: $608 license registration + $20 OHSU library + $50 HPSP fee + $70 prescription monitoring + $8 OHA workforce database)",
+        "Pay the renewal fee ($756 total)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -3965,7 +3965,7 @@
         "Complete your CME for the cycle (100 hours) (see details below)",
         "Log in to the Pennsylvania State Board of Medicine (Bureau of Professional and Occupational Affairs, Department of State) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($360 (MD unrestricted license, 2-year renewal, 49 Pa)",
+        "Pay the renewal fee (MD: $360)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -4279,7 +4279,7 @@
         "Complete your CME for the cycle (0 hours)",
         "Log in to the South Dakota Board of Medical and Osteopathic Examiners renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($400 (biennial renewal of the physician and surgeon license, MD and DO alike; ARSD 20:47:06:01, within the $400 statutory cap of SDCL 36-4-24)",
+        "Pay the renewal fee ($400)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -4383,7 +4383,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the Tennessee Board of Medical Examiners (Tennessee Department of Health) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee (MD: $300 Licensure Renewal Fee plus $10 biennial State Regulatory Fee, so $310 total per 2-year cycle (Rule 0880-02-)",
+        "Pay the renewal fee (MD: $310 total)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -4486,7 +4486,7 @@
         "Complete your CME for the cycle (48 hours) (see details below)",
         "Log in to the Texas Medical Board renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($491)",
+        "Pay the renewal fee ($491.48)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -4511,7 +4511,7 @@
         },
         {
           "question": "Do I send my CME certificates to the board when I renew?",
-          "answer": "Currently you attest to CME compliance at renewal and keep records in case of audit. Starting September 1, 2026, all renewals require an active CE Broker account (basic tier is free) with all completed CE coursework reported in it; TMB states licensees cannot renew after that date without verified CE compliance through CE Broker."
+          "answer": "No, but your CME must be in CE Broker. Since September 1, 2026, every renewal requires an active CE Broker account (the basic tier is free) with all completed CE coursework reported in it. TMB states licensees cannot renew without verified CE compliance through CE Broker. Keep your certificates in case of audit."
         },
         {
           "question": "How long does the renewal take to process, and where is my permit?",
@@ -4589,7 +4589,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the Utah Division of Professional Licensing (DOPL), Physicians Licensing Board renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($193 (MD or DO, 2-year renewal))",
+        "Pay the renewal fee ($193)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -4693,7 +4693,7 @@
         "Complete your CME for the cycle (30 hours) (see details below)",
         "Log in to the Vermont Board of Medical Practice (Vermont Department of Health) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee (MD: $525 biennial renewal (26 V)",
+        "Pay the renewal fee (MD: $525)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -4899,7 +4899,7 @@
         "Complete your CME for the cycle (200 hours) (see details below)",
         "Log in to the Washington Medical Commission (WMC) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee (MD active 2-year renewal: $996 total = $824 base renewal + $32 UW HEAL-WA online access surcharge + $140 Washington Physician Health Program surcharge (RCW 18)",
+        "Pay the renewal fee (MD: $996 total)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -5003,7 +5003,7 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the West Virginia Board of Medicine renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($400 (MD active status, 2-year renewal; inactive status is $150))",
+        "Pay the renewal fee ($400)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -5106,7 +5106,7 @@
         "Complete your CME for the cycle (30 hours) (see details below)",
         "Log in to the Wisconsin Medical Examining Board (Department of Safety and Professional Services, DSPS) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($120 (Medicine and Surgery, MD or DO, 2-year renewal))",
+        "Pay the renewal fee ($120)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -5209,7 +5209,7 @@
         "Complete your CME for the cycle (60 hours) (see details below)",
         "Log in to the Wyoming Board of Medicine renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($155 (annual physician renewal, incl)",
+        "Pay the renewal fee ($155)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [

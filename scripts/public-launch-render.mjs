@@ -10,7 +10,7 @@ export function publicMembershipEndpoint(supabaseUrl) {
   }
   return `${url.origin}/functions/v1/public-membership-offer`;
 }
-export const publicLaunchCostAnswer = view => [view.availability, view.foundingRate, view.foundingChange, view.rateComparison, view.earlyBirdRateLock,
+export const publicLaunchCostAnswer = view => [view.availability, view.foundingRate, view.rateComparison, view.earlyBirdRateLock,
   view.fullPackage, view.promisedBeta, view.practiceTrial, view.lifetimeException, view.refundGuarantee].join(' ');
 
 export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
@@ -51,7 +51,7 @@ function signupInsteadOfForm(fallback, view) {
 
 const minimumSlots = {
   home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1 },
-  locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 3 },
+  locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
   'state-guides': { cta: 4, 'guide-consent': 4, 'early-release': 1, participation: 1 },
@@ -66,7 +66,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
   if (!mode.enabled) return html;
   if (!minimumSlots[surface]) throw Error(`Unknown public launch surface: ${surface}`);
   const homeFaq = [
-    { name: 'When can I use it?', text: `${view.availability} ${view.foundingRate}` },
+    { name: 'Can I sign up now?', text: `Yes. Membership is open now. ${view.availability} That founding annual rate stays locked for life while membership remains continuously active.` },
     { name: 'Can my practice manager use this for our whole group?', text: view.teamAvailability },
   ];
   const counts = {};
@@ -103,11 +103,14 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       'faq-teams': homeFaq[1].text,
       'invitation-copy': `${view.availability} ${view.fullPackage}`,
       'signup-heading': view.signupHeading,
+      'signup-eyebrow': 'Membership',
+      'signup-card-heading': 'Membership is open',
+      'signup-note': 'Card required at checkout. Full refund of your most recent annual payment at any time.',
       'signup-label': view.primaryAction.label,
       'signup-trust': 'Early release · Card required at checkout',
       'audience-badge': 'For MDs and DOs · Membership options',
       'founding-headline': view.publicRateHeadline,
-      'founding-rate': `${view.foundingRate} ${view.foundingChange}`,
+      'founding-rate': view.foundingRate,
       'rate-comparison': `${view.rateComparison} ${view.earlyBirdRateLock}`,
       'full-package': `${view.fullPackage} ${view.refundGuarantee}`,
       'practice-trial': view.practiceTrial,
@@ -122,7 +125,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
     if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
     if (slot === 'audience-badge') return 'For MDs and DOs · <span data-membership-phase>Membership options</span>';
-    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Checkout availability is not confirmed. Creating an account does not reserve a founding place.</span>' : '');
+    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Your offer is confirmed before payment. Creating an account does not reserve a founding place.</span>' : '');
   });
   for (const [slot, count] of Object.entries(minimumSlots[surface])) {
     if ((counts[slot] || 0) < count) throw Error(`Incomplete ${surface} migration: ${slot} needs ${count} slots`);

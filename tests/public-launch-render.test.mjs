@@ -84,7 +84,7 @@ test('home shows founding policy before sign-in and its offer buttons lead to pu
   }
   assert.match(hero, /Founding offer: \$99\/year for the first 100 paid members/);
   assert.match(hero, /locked for life while membership remains active/);
-  assert.match(hero, /availability is not confirmed/);
+  assert.match(hero, /confirmed before payment/);
   const core = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
   assert.match(core, /data-membership-price>\$99/);
   assert.match(core, /data-membership-status/);
@@ -115,7 +115,7 @@ test('home signup and team FAQs use current offers in visible answers and struct
     assert.ok(visible.includes(answer.name));
     assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);
   }
-  const available = faq.mainEntity.find(item => item.name === 'When can I use it?').acceptedAnswer.text;
+  const available = faq.mainEntity.find(item => item.name === 'Can I sign up now?').acceptedAnswer.text;
   assert.match(available, /Compare the plans here, then create your account/);
   assert.match(available, /\$99\/year/);
   assert.match(available, /Founding Credential is \$99\/year for the first 100 paid founding members/);
@@ -284,8 +284,8 @@ test('public and in-app legal documents use production defaults and retain an ex
   assert.doesNotMatch(JSON.stringify(current.terms), /billing is off|Paid membership has not launched/);
   const on = getLegalDocuments(paid);
   assert.deepEqual(on, current, 'alternate reviewed signup route does not change legal terms');
-  assert.equal(on.privacy.updated, 'September 20, 2026');
-  assert.equal(on.terms.updated, 'September 20, 2026');
+  assert.equal(on.privacy.updated, 'September 21, 2026');
+  assert.equal(on.terms.updated, 'September 21, 2026');
   const privacy = structuredClone(on.privacy);
   privacy.intro[1] = privacy.intro[1].replace('is in early release.', 'is in free beta.');
   privacy.updated = prior.privacy.updated;

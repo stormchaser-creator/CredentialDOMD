@@ -82,10 +82,11 @@ const CURRENT_PRIVACY = {
       blocks: [
         [
           "**Clerk** (clerk.com): sign-in, sessions, and the cookies that keep you signed in.",
+          "**Stripe** (stripe.com): paid checkout, the billing portal and refunds. You enter your card details on Stripe's pages and Stripe holds them. We send Stripe an internal account id, and we store your Stripe customer and subscription ids, payment status and renewal date. We never see or store the card number.",
           "**Supabase** (supabase.com), US region: database, file storage, and the server functions behind tickets and feedback.",
           "**Cloudflare**: proxy and CDN in front of credentialdomd.com, and Turnstile, the bot check Clerk shows at sign-in.",
           "**GitHub Pages**: static hosting for the site and the app files.",
-          "**Resend**: transactional email, such as the early-access welcome note and account emails.",
+          "**Resend**: transactional email, such as renewal reminders, support replies, requested state guides and the document packets you choose to send.",
           "**Google** (Gemini API) and **Anthropic** (Claude API): when you use an AI feature, under the shared keys or your own (section 4).",
           "**CMS NPPES registry**, **CMS provider data** (data.cms.gov, the Medicare Care Compare files), **NLM Clinical Tables**, and **NLM PubMed** (E-utilities): the NPI and public-register lookups. Public government APIs, called from our server, that receive only what the search is keyed on: your NPI, or the name and state you searched by, or the surname and initials PubMed is matched on.",
           "**Telegram**: when you file a support ticket or reply to one, a notification containing your email, the subject, and the start of the message reaches the operator's phone through Telegram."
@@ -109,7 +110,7 @@ const CURRENT_PRIVACY = {
     {
       title: "8. Cookies and the marketing site",
       blocks: [
-        "Inside the app there are no third-party analytics, ad pixels, or trackers; the only cookies are Clerk's session cookies. On the marketing site at credentialdomd.com, a first-party beacon records the page path, referrer, and utm source of each visit, without cookies or identifiers, so we can see which pages are read; those visit counts are kept for 13 months. The site loads the Inter typeface from Google Fonts, which shows Google your IP address the way any hosted font does. If you join the early-access list, we keep the email address (and name, if you gave one) to send your invite."
+        "Inside the app there are no third-party analytics, ad pixels, or trackers; the only cookies are Clerk's session cookies. On the marketing site at credentialdomd.com, a first-party beacon records the page path, referrer, and utm source of each visit, without cookies or identifiers, so we can see which pages are read; those visit counts are kept for 13 months. The site loads the Inter typeface from Google Fonts, which shows Google your IP address the way any hosted font does. If you request a renewal guide by email, we keep the email address to send it. If you joined the earlier early-access list, we keep that email address (and name, if you gave one) to contact you about membership."
       ],
     },
     {
@@ -119,7 +120,7 @@ const CURRENT_PRIVACY = {
           "Your records, documents, and backups stay as long as your account does.",
           "Deleting a record in the app removes it from the database and, for documents, removes the file from storage. A tombstone holding only the record id is kept so the deletion reaches your other devices.",
           "**More > Data Rights > Delete All My Data** clears this device and deletes everything the app holds for your account on the server: your records, uploaded documents, monthly backups and their archives, support tickets and their screenshots, feedback, notes from the operator and your replies to them, the assistant log, AI usage rows, and error reports. Your profile is reduced to an account id with no name, email, or other fields, so the sign-in still resolves. It cannot be undone; export first.",
-          "After a cancellation, the same deletion runs automatically 7 days later unless you reactivate before then; the Cancellation page shows the date.",
+          "Canceling a paid membership does not delete anything. Your saved records stay available to view and export until you delete them yourself.",
           "Operating records have fixed lifetimes whether or not you delete: AI usage rows 90 days, marketing-site visit counts 13 months, the assistant question log 12 months, and error reports 7 days.",
           "To close the sign-in account itself, or to have anything else removed, email support@credentialdomd.com from the address on the account."
         ]
@@ -163,7 +164,7 @@ const CURRENT_TERMS = {
       title: "1. Membership, beta and planned pricing",
       blocks: [
         "CredentialDOMD is in an invite-only beta and billing is off. Paid membership has not launched. You will receive the applicable price and terms before choosing a paid membership; nothing will be charged without your agreement.",
-        "People who already had registered accounts when our membership policy changed on September 19, 2026 receive Credential and Practice free for life. Being on the waitlist without a registered account does not qualify for this lifetime membership.",
+        "Members whose accounts were already active before paid membership launched, and accounts the founder has personally gifted, receive Credential and Practice free for life. A waitlist entry, or an account that was registered but never active before launch, does not qualify for lifetime membership. People who signed up under the earlier free-beta wording receive the 30 free days described in the next paragraph instead.",
         "The planned Credential founding offer for eligible waitlist members has been lowered to $99 per year. The planned early-bird price is $149 per year and the standard price is $199 per year. Founding and early-bird members keep their annual rate while their membership stays active. We will identify the available offer and eligibility before purchase; these phases do not create a published deadline or reservation by themselves.",
         "The full Credential + Practice package is $245 per year, with no founding or early-bird discount on that package.",
         "At paid launch, a new Credential membership will include 30 days of Practice access at no additional cost. That Practice access ends unless you explicitly choose to purchase the full package. The trial never converts into a paid Practice membership automatically, and there is no Practice charge to cancel or opt out of. Trial expiry does not cancel your Credential membership or delete your Practice records; existing records remain available to read and export.",
@@ -228,7 +229,7 @@ const CURRENT_TERMS = {
     {
       title: "11. Ending the relationship",
       blocks: [
-        "You can stop any time: export, delete your data from More > Data Rights, and email us to close the account. We may suspend or end access for breach of these terms, and will give notice and time to export where we can. Ending the beta does not remove an existing member's free lifetime membership."
+        "You can stop any time: export, delete your data from More > Data Rights, and email us to close the account. We may suspend or end access for breach of these terms, and will give notice and time to export where we can. Members who were already active before paid launch, and accounts the founder has personally gifted, keep their free lifetime membership."
       ],
     },
     {
@@ -259,8 +260,8 @@ export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   if (!mode.enabled) return { privacy: CURRENT_PRIVACY, terms: CURRENT_TERMS };
   const privacy = structuredClone(CURRENT_PRIVACY);
   const terms = structuredClone(CURRENT_TERMS);
-  privacy.updated = 'September 20, 2026';
-  terms.updated = 'September 20, 2026';
+  privacy.updated = 'September 21, 2026';
+  terms.updated = 'September 21, 2026';
   privacy.intro[1] = privacy.intro[1].replace('is in free beta.', 'is in early release.');
   const membership = terms.sections[0];
   membership.title = '1. Membership, early release and pricing';

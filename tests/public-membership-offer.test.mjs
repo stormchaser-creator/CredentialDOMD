@@ -9,7 +9,7 @@ const offer = (phase = 'founding', availability = 'available') => ({schemaVersio
   annualCents:{founding:9900,earlybird:14900,standard:19900}[phase], checkoutEnabled:availability !== 'paused', availability});
 const deferred = () => { let resolve; return {promise:new Promise(done => {resolve=done;}),resolve}; };
 const root = () => {
-  const actions = [{textContent:'Membership signup'}], statuses = [{textContent:'Checkout availability is not confirmed. Creating an account does not reserve a founding place.'}];
+  const actions = [{textContent:'Membership signup'}], statuses = [{textContent:'Your offer is confirmed before payment. Creating an account does not reserve a founding place.'}];
   const nodes = Object.fromEntries(['headline','price','price-label','heading','phase','review-action','hero-headline','hero-note'].map(key=>[key,[{textContent:''}]]));
   return {actions,statuses,nodes,querySelectorAll:selector=>selector === '[data-membership-action]' ? actions
     : selector === '[data-membership-status]' ? statuses : nodes[selector.slice(17,-1)] || []};
@@ -31,7 +31,7 @@ test('each current-offer element follows all phases and later failures retain th
   current={};await refresh();
   assert.equal(dom.nodes.price[0].textContent,'$199');
   assert.match(dom.nodes.headline[0].textContent,/Standard Credential: \$199\/year/);
-  assert.match(dom.statuses[0].textContent,/availability is not confirmed/i);
+  assert.match(dom.statuses[0].textContent,/confirmed before payment/i);
   assert.doesNotMatch(JSON.stringify(dom.nodes), /\$99|first 100/);
 });
 
@@ -92,9 +92,9 @@ test('unknown configuration uses qualified founding policy, while a later failur
   await refresh();assert.match(dom.nodes['review-action'][0].textContent,/149/);
   await refresh();assert.equal(dom.actions[0].textContent,'Create your account');
   assert.equal(dom.nodes.price[0].textContent, '$149');
-  assert.equal(dom.statuses[0].textContent,'Checkout availability is not confirmed. Creating an account does not reserve a founding place.');
+  assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Creating an account does not reserve a founding place.');
   await createOfferUpdater(dom,undefined,{fetchImpl:()=>{throw Error('Must not fetch');}})();
-  assert.equal(dom.statuses[0].textContent,'Checkout availability is not confirmed. Creating an account does not reserve a founding place.');
+  assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Creating an account does not reserve a founding place.');
   assert.equal(dom.nodes.price[0].textContent, '$99');
   assert.match(dom.nodes.headline[0].textContent, /First 100 paid founding memberships/);
 });
@@ -107,12 +107,12 @@ test('later-phase prices never flash back to $99 during a slow or failed refresh
     const expected = dom.nodes.price[0].textContent;
     const pending = refresh();
     assert.equal(dom.nodes.price[0].textContent, expected, 'the in-flight view retains the last validated phase');
-    assert.match(dom.statuses[0].textContent, /availability is not confirmed/i);
+    assert.match(dom.statuses[0].textContent, /confirmed before payment/i);
     assert.doesNotMatch(JSON.stringify(dom.nodes), /\$99|first 100/);
     waiting.resolve(Response.json({}, { status: 503 }));
     await pending;
     assert.equal(dom.nodes.price[0].textContent, expected);
-    assert.match(dom.statuses[0].textContent, /availability is not confirmed/i);
+    assert.match(dom.statuses[0].textContent, /confirmed before payment/i);
     assert.doesNotMatch(JSON.stringify(dom.nodes), /\$99|first 100/);
   }
 });

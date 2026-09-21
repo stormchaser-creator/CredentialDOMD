@@ -87,7 +87,7 @@ export default function PricingModal({ open, onClose }) {
         </div>
         {!billingAvailable && <div style={{ padding: "0 20px", color: T.text, fontSize: 13, lineHeight: 1.6 }}>
           <p style={{ fontWeight: 700, margin: "0 0 6px" }}>{MEMBERSHIP_COPY.foundingHeadline}</p>
-          <p style={{ margin: "0 0 6px" }}>{MEMBERSHIP_COPY.credentialPrices} {MEMBERSHIP_COPY.foundingChange}</p>
+          <p style={{ margin: "0 0 6px" }}>{MEMBERSHIP_COPY.credentialPrices}</p>
           <p style={{ margin: 0 }}>{MEMBERSHIP_COPY.rateLock}</p>
         </div>}
         {message && <p role="status" style={{ padding: "0 20px", color: T.text, textAlign: "center" }}>{message}</p>}

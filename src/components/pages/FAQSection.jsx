@@ -12,7 +12,7 @@ const FAQ_DATA = [
         a: `${MEMBERSHIP_COPY.availability} ${MEMBERSHIP_COPY.promisedBeta} ${MEMBERSHIP_COPY.lifetimePolicy}`,
       },
       {
-        q: "What happens to existing registered accounts?",
+        q: "Who gets free lifetime membership?",
         a: MEMBERSHIP_COPY.lifetimePolicy,
       },
       {
@@ -25,7 +25,7 @@ const FAQ_DATA = [
       },
       {
         q: "What are the annual membership prices?",
-        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.foundingChange} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.fullPackage}`,
+        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.fullPackage}`,
       },
       {
         q: "What does Practice add?",

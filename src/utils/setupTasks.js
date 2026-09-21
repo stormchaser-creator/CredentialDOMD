@@ -756,7 +756,8 @@ function resolveTask(def, ctx, state) {
     // out of the denominator and out of the Next rotation while the account
     // cannot reach it. A locked row never claims the physician has it.
     locked: !!def.pro && !ctx.isPro,
-    betaTag: !!def.pro && ctx.isFreeBeta && !ctx.hasSubscription,
+    // Membership status belongs on Profile & settings only, never on everyday setup rows.
+    betaTag: false,
     section: def.section || null,
     variable: !!def.variable,
     secs: def.estimateSecs ? def.estimateSecs(ctx) : def.secs,

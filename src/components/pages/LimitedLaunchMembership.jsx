@@ -57,7 +57,7 @@ function MembershipForAccount({ accountId, onActivated }) {
       clearLaunchInvitation(); setInvitation(null);
       await limitedLaunch.refresh();
       if (!current(turn)) return;
-      setMessage(result.freeBeta.state === "active" ? "Your free beta is active. No card or payment was collected." : "Your invitation was verified. Review your membership below.");
+      setMessage(result.freeBeta.state === "active" ? "Your 30 free days have started. No card or payment was collected." : "Your invitation was verified. Review your membership below.");
       onActivated?.();
     } catch (error) { if (current(turn)) setMessage(messageFor(error)); }
     finally { if (current(turn)) setBusy(false); }

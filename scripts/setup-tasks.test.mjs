@@ -594,7 +594,8 @@ eq("shortDate of garbage", shortDate("not a date"), "");
   // upgrade link would lead nowhere.
   const beta = build(packed(), { isPro: true, isFreeBeta: true, hasSubscription: false });
   ok("beta rows are unlocked", !beta.tier2.some((t) => t.locked));
-  eq("beta rows carry the tag", beta.tier2.filter((t) => t.betaTag).length, 3);
+  // Membership status renders on Profile & settings only, never on everyday setup rows.
+  eq("beta rows carry no membership tag", beta.tier2.filter((t) => t.betaTag).length, 0);
   const subscriber = build(packed(), { isPro: true, isFreeBeta: true, hasSubscription: true });
   ok("a real subscriber is never tagged Free beta", !subscriber.tier2.some((t) => t.betaTag));
 

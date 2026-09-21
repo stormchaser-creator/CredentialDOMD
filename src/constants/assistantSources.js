@@ -683,7 +683,7 @@ export const ASSISTANT_SOURCES = {
           "url": "https://www.ncmedboard.org/licensing-registration/renewals"
         },
         {
-          "url": "https://www.ncmedboard.org/images/uploads/other_pdfs/Renewal_Fees_12302025_1.pdf"
+          "url": "https://www.ncmedboard.org/images/uploads/other_pdfs/NCMB_Fee_Schedule_08212026.pdf"
         }
       ]
     },
