@@ -365,11 +365,16 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           .filter(d => d && d.data);
         if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet — open Files to let them sync, then approve again.");
         const files = docs.map(dataUrlToFile);
-        const note = `${normalizeMultilineNote(action.coverNote) || "Credential documents enclosed."}\n\n— sent from CredentialDOMD`;
-        // LLM cover notes can be multi-line; iOS Mail would promote the first
-        // fragment to the subject and flatten the rest. One-paragraph blurb
-        // out, formatted note on the clipboard.
-        const blurb = ("Credential packet: " + (action.coverNote || "Credential documents enclosed.")).replace(/\s+/g, " ").trim()
+        const normalizedCoverNote = normalizeMultilineNote(action.coverNote) || "Credential documents enclosed.";
+        const note = `${normalizedCoverNote}\n\n— sent from CredentialDOMD`;
+        // LLM cover notes can be multi-line or semicolon-joined; iOS Mail and
+        // the native share sheet both flatten newlines into one paragraph, so
+        // the blurb re-splits the normalized note into lines and turns each
+        // into its own sentence rather than leaving raw semicolons/newlines
+        // to collapse into a run-on line. Formatted note also goes on the
+        // clipboard above.
+        const blurb = "Credential packet: " + normalizedCoverNote.split("\n").map(l => l.trim()).filter(Boolean)
+          .map(l => /[.!?]$/.test(l) ? l : `${l}.`).join(" ")
           + " Sent from CredentialDOMD.";
         try { await navigator.clipboard.writeText(note); } catch { /* clipboard unavailable */ }
         let shared = false;
