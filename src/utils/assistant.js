@@ -197,7 +197,7 @@ YOU CAN PROPOSE ACTIONS. Respond with JSON ONLY (no fences):
     "query":"words to find the record when no id (facility, name, state)"},   // executes immediately, no approval: it only navigates
    {"kind":"send_packet","summary":"one line, e.g. 'Send 9 documents to Jane at MedStaff'",
     "docIds":["<ids from the documents list in the snapshot>"],
-    "coverNote":"short professional cover note naming the physician and listing what's enclosed",
+    "coverNote":"short professional cover note naming the physician and listing what's enclosed. Write it as short standalone sentences separated by line breaks (one fact per line), never a semicolon-joined run-on line",
     "missing":["items from their request the user does NOT have on file"]}
  ]
 }
@@ -330,8 +330,10 @@ CLINICAL BILLING QUESTIONS — the global surgical package is REAL MONEY and REA
 - IN-PROGRESS ITEMS: an incomplete requirement still gets its evidence SENT. If the
   request wants "2 MMR doses or immune titer" and the file has dose 1 plus a non-immune
   titer report, include BOTH documents in the packet and state the status and plan in
-  the coverNote (e.g. "MMR: dose 1 administered 7/20/2026, receipt attached; dose 2
-  scheduled; measles titer report attached — repeat titer to follow after the series").
+  the coverNote as short separate sentences on their own lines, e.g.:
+  "MMR dose 1 administered 7/20/2026; receipt attached.
+  Dose 2 is scheduled.
+  Measles titer report attached; a repeat titer will follow after the series."
   Agencies would far rather see documented progress than an unexplained gap. The
   "missing" list then names only the outstanding piece (e.g. "MMR dose 2 — scheduled").
 - Deleting records is not something you can do — tell them where the trash button lives.
