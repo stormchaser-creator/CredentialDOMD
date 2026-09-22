@@ -39,7 +39,7 @@ POSTS = [
   flag=None,
   body=f"""Texas physicians: as of September 1, you cannot renew your license until your CME is in CE Broker.
 
-The Texas Medical Board now requires it for every renewal on or after September 1, 2026. You need an active CE Broker account with your completed CME reported in it. The basic account is free. If the board cannot verify your hours there, you cannot renew. A folder of certificates does not count until the hours are entered.
+The Texas Medical Board now requires it for every renewal on or after September 1, 2026. You need an active CE Broker account with your completed CME reported in it. A basic CE Broker account is free. If the board cannot verify your hours there, you cannot renew. A folder of certificates does not count until the hours are entered.
 
 The next fixed expiration date is November 30.
 
