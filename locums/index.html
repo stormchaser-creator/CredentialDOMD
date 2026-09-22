@@ -2116,7 +2116,7 @@ footer {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-table.cmp { border-collapse: collapse; width: 100%; min-width: 760px; }
+table.cmp { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; }
 table.cmp th, table.cmp td {
   padding: 15px 18px;
   text-align: left;
@@ -2138,6 +2138,21 @@ table.cmp td.job { color: var(--text); font-weight: 700; width: 28%; }
 table.cmp td { color: var(--text-secondary); }
 table.cmp td.us { color: var(--text); background: rgba(16, 185, 129, 0.04); font-weight: 600; }
 table.cmp tbody tr:last-child td { border-bottom: none; }
+/* Pin the job column: this grid is swiped sideways on a phone. */
+table.cmp th:first-child, table.cmp td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+}
+table.cmp thead th:first-child { background: var(--bg-elevated); z-index: 3; }
+@media (max-width: 700px) {
+  /* Give the swiped columns more room: the pinned job column shrinks and the
+     cells tighten so an answer is readable without swiping twice per row. */
+  table.cmp th, table.cmp td { padding: 12px 13px; font-size: 13px; }
+  table.cmp td.job, table.cmp th:first-child { width: 150px; min-width: 150px; }
+}
 
 /* ---------- SETUP STEPS ---------- */
 .setup-list { counter-reset: step; list-style: none; margin-top: 40px; display: flex; flex-direction: column; gap: 14px; }
@@ -3313,7 +3328,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
           </tr>
           <tr>
             <td class="job">Warn you before a license or DEA lapses</td>
-            <td>Not its job</td>
+            <td>Monitors the credentials it needs for its own placements</td>
             <td>No reminders at all</td>
             <td class="us">Days remaining on every state you hold, with unmet CME topics named</td>
           </tr>
@@ -3331,7 +3346,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
           </tr>
           <tr>
             <td class="job">Tell you what you owe and to whom</td>
-            <td>No</td>
+            <td>Paystubs and tax forms for its own assignments, not an estimate</td>
             <td>No</td>
             <td class="us">Federal, resident state and each work state, estimated minus paid, per jurisdiction</td>
           </tr>
@@ -3356,7 +3371,7 @@ table.cmp tbody tr:last-child td { border-bottom: none; }
         </tbody>
       </table>
     </div>
-    <p class="mock-cap" style="margin-top: 16px;">Wide on a phone: swipe the table sideways.</p>
+    <p class="mock-cap" style="margin-top: 16px;">Wide on a phone: swipe the table sideways. The job column stays put. &ldquo;Your agency&rsquo;s app&rdquo; means the apps and portals staffing agencies give their own physicians, such as MyCompHealth and the LocumTenens.com portal, as those companies described them in September 2026. Several of them do monitor credentials and store documents for the placements they staff. What none of them do is show you every agency at once, because each one only sees its own.</p>
   </div>
 </section>
 
