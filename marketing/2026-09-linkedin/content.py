@@ -59,28 +59,35 @@ Full Texas guide with the board's sources: credentialdomd.com/states/texas?src=l
    ("Four dates; even/odd license numbers; 60 to 90 days; 15 day save; 30 day grace; $75 then $150 after 90 days; cancelled at one year", "TMB Physician Renewal page, read live 21 Sep 2026, every figure quoted verbatim", "https://www.tmb.texas.gov/apply-renew/physician/physician-renewal"),
    ("Independent confirmation of the September 1 rule", "TMLT and Texas Academy of Family Physicians notices", "https://www.tmlt.org/resource/new-cme-requirements-begin-september-1"),
   ]),
- dict(week="Week 2", when="The founder post. Goes second so that people who check your profile after the Texas post find a reason to follow.",
+ dict(week="Week 2", when="Scheduled for Sunday 27 September 2026, one week after the Texas post.",
   title="Why a neurosurgeon built a license tracker",
-  flag="Confirm the count before posting. The draft says four licenses and names four anchor types (California, Colorado, North Dakota, Maine). If you hold a different number, change it, or write \"my licenses\".",
+  flag=None,
   body=f"""I opened the spreadsheet to answer what should have been a five second question: which of my licenses renews next?
 
 I could not answer it.
 
-Not because the dates were hard to find. Because the states do not agree on what a date is. One anchors to the month my license was issued. One expires every physician in the state on one fixed day in odd numbered years. One uses my birthday. One uses whether I was born in an even year or an odd one. Four licenses, four unrelated clocks, and a spreadsheet that only knew what I typed into it.
+Not because the dates were hard to find. Because the states do not agree on what a date is. One expires every physician in the state on one fixed day in odd numbered years, whether you were licensed twenty years ago or last spring. One uses my birthday. And the third is a DO license in a state where osteopathic physicians renew with an entirely different board than MDs do.
+
+Three licenses, three unrelated clocks, and a spreadsheet that only knew what I typed into it.
 
 So I made the thing I wanted. It holds the licenses, the DEA record, the board requirements and each state's CME rules in one place, and I use it on my own credentials.
 
-The part worth keeping even if you never click anything:
+Then I wrote up the renewal rules for all 50 states and DC, each one citing that board's own pages, and put them where anyone can read them free.
 
-If you hold a Maine license, your renewal year follows your birth year. Born in an even year, you renew in even years. Born odd, odd. And Maine DOs do not renew with the MD board at all: different board, different portal, 100 CME hours per cycle instead of 40.
+The part worth keeping even if you never click anything. I do not hold a Maine license. I read Maine's rules anyway. If you hold one, your renewal year follows the year you were born: born in an even year you renew in even years, born odd, odd. And Maine DOs do not renew with the MD board at all. Different board, different portal, 100 CME hours per cycle instead of 40.
 
-I am a DO. I found that out by looking.
+I am a DO. Nobody tells you these things. You find them by looking.
 
-I wrote up all 50 states and DC, with the boards' own sources: credentialdomd.com/states?src=li
+The guides: credentialdomd.com/states?src=li
 
 I built this. It is called CredentialDOMD. Founding membership is $99 a year for the first 100 paid members, with a no hassle 100% money back guarantee.""",
   sources=[
-   ("California, Colorado, North Dakota and Maine anchor rules; Maine DO board and 100 vs 40 hours", "landing/states/states-data.json, checked field by field in marketing/2026-08-refresh/linkedin-01-founder-arc.md. Maine is verified against more than one source.", "https://credentialdomd.com/states/maine"),
+   ("Three licenses: California, North Dakota, Colorado", "Eric confirmed the three states on 21 Sep 2026. The earlier draft said four and put the Maine birth year clock in his own mouth; that was wrong and is removed.", "https://credentialdomd.com/states"),
+   ("One fixed day in odd numbered years, whoever you are (Colorado)", "states[CO].renewalAnchor: \"All Physician and Pro Bono Physician licenses expire on April 30 of odd numbered years, regardless of when the license was issued.\" Colorado has one board for MDs and DOs, so it applies to him. Verified against more than one source.", "https://dpo.colorado.gov/Medical"),
+   ("One uses my birthday (North Dakota)", "states[ND].renewalAnchor: \"Licenses expire on the physician's birthday every other year (effective August 1, 2023).\" The North Dakota Board of Medicine licenses MDs and DOs alike. Single source, which is why the post names no state.", "https://www.ndbom.org/practitioners/physicians/current/renew-reactivate-instruct.asp"),
+   ("The third is a DO license renewed with a different board (California)", "states[CA].doBoardName is the Osteopathic Medical Board of California, separate from the Medical Board of California. The post deliberately does NOT state his California renewal date rule: the widely quoted \"month your license was issued\" anchor is the MD rule, and our own record says OMBC does not publish the DO anchor. Do not reinstate that line.", "https://www.ombc.ca.gov/"),
+   ("Maine birth year parity; Maine DOs, 100 CME hours against 40", "states[ME] pitfalls and cmeDetails, checked field by field in marketing/2026-08-refresh/linkedin-01-founder-arc.md. Maine is verified against more than one source.", "https://credentialdomd.com/states/maine"),
+   ("No count of how many states split MDs from DOs", "Deliberately omitted. A naive count of the doBoardName field gives 15, but Connecticut and Wisconsin hold prose in that field saying they have NO separate board, so the real figure from our data is 13 and the field cannot be trusted as a flag. Do not publish a number without checking each state.", "https://credentialdomd.com/states"),
    ("$99 founding rate and the money back guarantee", "Live wording on credentialdomd.com and its Terms, read 21 Sep 2026: \"No hassle 100% money back guarantee: a full refund of your most recent annual payment, at any time.\"", "https://credentialdomd.com/"),
   ]),
  dict(week="Week 3", when="Florida online renewal opens about 90 days before January 31, which is early November. This lands just ahead of it.",
