@@ -4,8 +4,25 @@
     {
       "name": "dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--host"],
+      "runtimeArgs": [
+        "vite",
+        "--host"
+      ],
       "port": 5173
+    },
+    {
+      "name": "site-dist",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "http-server",
+        "site-dist",
+        "-p",
+        "4178",
+        "-c-1",
+        "--silent"
+      ],
+      "port": 4178
     }
   ]
 }
