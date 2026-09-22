@@ -47,7 +47,7 @@ function Expenses() {
   // navigator.share.
   const [receiptCache, setReceiptCache] = useState({});   // docId -> File
   const [receiptState, setReceiptState] = useState("idle"); // idle | loading | ready
-  const [lightbox, setLightbox] = useState(null);           // { url, name }
+  const [viewer, setViewer] = useState(null);               // { url, name, file, isImage }
   const cameraRef = useRef(null);
   const uploadRef = useRef(null);
   const showNotice = (t) => { setNotice(t); setTimeout(() => setNotice(null), 6000); };
@@ -85,13 +85,29 @@ function Expenses() {
         : missingReceiptMessage([{ name: d.name || "receipt", reason: d.storagePath ? "unavailable" : "never_uploaded" }]));
       return;
     }
+    // Always open a viewer rather than calling window.open. In an installed
+    // PWA, window.open on a blob URL does nothing AND can still return a
+    // truthy window, so a "did it work" check silently reports success while
+    // the physician sees no response at all. A visible sheet cannot fail that
+    // way, and it gives iOS a real button to hand the file to Files or Mail.
     const url = URL.createObjectURL(file);
-    if (docMime(d).startsWith("image/")) { setLightbox({ url, name: d.name }); return; }
-    const win = window.open(url, "_blank", "noopener");
-    if (!win && navigator.canShare?.({ files: [file] })) {
-      navigator.share({ files: [file], title: d.name || "Receipt" }).catch(() => {});
+    setViewer({ url, name: d.name || "Receipt", file, isImage: docMime(d).startsWith("image/") });
+  };
+
+  const closeViewer = () => { if (viewer) URL.revokeObjectURL(viewer.url); setViewer(null); };
+
+  // Hand the file to the operating system. Must stay synchronous from the tap:
+  // the bytes are already resolved, so the user gesture is still live.
+  const shareReceipt = () => {
+    if (!viewer) return;
+    if (navigator.canShare?.({ files: [viewer.file] })) {
+      navigator.share({ files: [viewer.file], title: viewer.name }).catch(err => {
+        if (err?.name !== "AbortError") showNotice("Your device would not open that file. Use Download instead.");
+      });
+      return;
     }
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const a = document.createElement("a");
+    a.href = viewer.url; a.download = viewer.name; a.click();
   };
   useDeskAddShortcut(openNew);
 
@@ -426,8 +442,33 @@ function Expenses() {
       {/* Invoice picker */}
       {/* Images open in the app. A PDF goes to the OS, which is the only thing
           that can render one here: there is no PDF viewer in this codebase. */}
-      <Modal open={!!lightbox} onClose={() => { if (lightbox) URL.revokeObjectURL(lightbox.url); setLightbox(null); }} title={lightbox?.name || "Receipt"}>
-        {lightbox && <img src={lightbox.url} alt={lightbox.name || "Receipt"} style={{ width: "100%", height: "auto", borderRadius: 10, display: "block" }} />}
+      <Modal open={!!viewer} onClose={closeViewer} title={viewer?.name || "Receipt"}>
+        {viewer && (viewer.isImage ? (
+          <img src={viewer.url} alt={viewer.name} style={{ width: "100%", height: "auto", borderRadius: 10, display: "block" }} />
+        ) : (
+          <>
+            {/* The preview renders on a desktop browser. On a phone it is
+                often blank, which is why the button below is the real answer
+                and is always offered rather than kept as a fallback. */}
+            <iframe src={viewer.url} title={viewer.name} style={{ width: "100%", height: "60vh", border: `1px solid ${T.border}`, borderRadius: 10, background: "#fff" }} />
+            <div style={{ fontSize: 12.5, color: T.textMuted, margin: "10px 0 8px", lineHeight: 1.5 }}>
+              If the preview is blank, use the button below and pick a viewer. Nothing is uploaded, this is the file already on your account.
+            </div>
+          </>
+        ))}
+        {viewer && (() => {
+          // Label by capability, not by guess. A phone can hand the file to
+          // Quick Look, Files or Mail; a desktop browser generally cannot, and
+          // promising "open" there would be another button that does nothing.
+          const canHandOff = typeof navigator !== "undefined" && navigator.canShare?.({ files: [viewer.file] });
+          return (
+            <button onClick={shareReceipt} style={{
+              width: "100%", marginTop: viewer.isImage ? 12 : 0, padding: "13px", borderRadius: 12, border: "none",
+              background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
+              fontSize: 14.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+            }}>{canHandOff ? "Open with\u2026" : "Download"}</button>
+          );
+        })()}
       </Modal>
 
       <Modal open={invOpen} onClose={() => !busy && setInvOpen(false)} title="Invoice expenses">
