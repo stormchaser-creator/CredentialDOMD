@@ -12,7 +12,7 @@ import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../utils/deskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
-import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon } from "../shared/Icons";
+import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon, StarIcon } from "../shared/Icons";
 import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -85,9 +85,32 @@ function isShown(f, form) {
   return typeof f.show === "function" ? !!f.show(form) : true;
 }
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort }) {
-  const { data, setData, addItem, theme: T , user, isDesktop } = useApp();
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort, favoritable = false }) {
+  const { data, setData, addItem, theme: T , user, isDesktop, toggleFavorite } = useApp();
   const iS = useInputStyle();
+  // One star control, shared by the desktop row, the phone card and the detail
+  // view. stopPropagation matters: the whole card is a click target, so without
+  // it every star tap would also open the record.
+  const starButton = (item) => {
+    if (!favoritable) return null;
+    const on = item?.favorite === true;
+    return (
+      <button
+        type="button"
+        aria-pressed={on}
+        title={on ? "Remove from Favorites" : "Add to Favorites"}
+        aria-label={on ? "Remove from Favorites" : "Add to Favorites"}
+        onClick={(e) => { e.stopPropagation(); toggleFavorite(sectionKey, item.id); }}
+        style={{
+          padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+          backgroundColor: on ? T.accentDim : "transparent",
+          color: on ? T.accent : T.textDim,
+        }}
+      >
+        <StarIcon filled={on} />
+      </button>
+    );
+  };
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({});
@@ -1016,7 +1039,26 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 ))}
               </div>
             )}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+            <div style={{ display: "flex", gap: 8, justifyContent: favoritable ? "space-between" : "flex-end", marginTop: 16, alignItems: "center" }}>
+              {favoritable && (() => {
+                // Read the live record, not viewItem: viewItem is a snapshot
+                // taken when the modal opened and would not reflect the toggle.
+                const live = (items || []).find(x => x.id === viewItem.id) || viewItem;
+                const on = live.favorite === true;
+                return (
+                  <button type="button" aria-pressed={on} onClick={() => toggleFavorite(sectionKey, viewItem.id)} style={{
+                    padding: "12px 16px", borderRadius: 10, display: "flex", alignItems: "center", gap: 8,
+                    border: `1px solid ${on ? T.accent : T.border}`,
+                    backgroundColor: on ? T.accentDim : "transparent",
+                    color: on ? T.accent : T.textMuted, fontSize: 15, fontWeight: 600, cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}>
+                    <StarIcon filled={on} size={17} />
+                    {on ? "Favorited" : "Favorite"}
+                  </button>
+                );
+              })()}
+              <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => { const it = viewItem; setViewItem(null); onShare(it, sectionKey); }} style={{
                 padding: "12px 18px", borderRadius: 10, border: "none",
                 backgroundColor: T.shareGlow, color: T.share, fontSize: 15, fontWeight: 600, cursor: "pointer",
@@ -1025,6 +1067,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 padding: "12px 18px", borderRadius: 10, border: "none",
                 backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer",
               }}>Edit</button>
+              </div>
             </div>
           </>
         )}
@@ -1065,6 +1108,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
            the existing view modal; the quick actions are the card buttons'
            own handlers. Phone (the branch below) is untouched. */
         <DeskTable
+          actionsWidth={favoritable ? 156 : 122}
           columns={deskColumns}
           items={filteredItems}
           defaultSort={deskDefaultSort}
@@ -1083,6 +1127,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           }}
           actions={(item) => (
             <div style={{ display: "inline-flex", gap: 3 }}>
+              {starButton(item)}
               <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
               <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
               <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
@@ -1193,6 +1238,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 </div>
                 {!selectMode && (
                   <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                    {starButton(item)}
                     <button onClick={(e) => { e.stopPropagation(); onShare(item, sectionKey); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
                     <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
                     <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this item? This cannot be undone.")) onDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>

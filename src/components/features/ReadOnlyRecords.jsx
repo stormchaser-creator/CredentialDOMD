@@ -7,7 +7,7 @@ import { invoicePdfFile, invoiceTextPdfFile } from "../../utils/invoicePdf";
 
 const label = value => String(value).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, ch => ch.toUpperCase());
 const title = record => record.name || record.title || record.number || record.facility || record.type || record.date || "Saved record";
-const fields = record => Object.entries(record).filter(([key]) => !["id", "userId", "data", "storagePath"].includes(key));
+const fields = record => Object.entries(record).filter(([key]) => !["id", "userId", "data", "storagePath", "favorite"].includes(key));
 
 /** An expiry never removes the physician's file, attachments, or invoice downloads. */
 export default function ReadOnlyRecords({ scope }) {

@@ -23,6 +23,7 @@ import {
   loadFromSupabase,
   insertItem as sbInsert,
   updateItem as sbUpdate,
+  setFavorite as sbSetFavorite,
   deleteItem as sbDelete,
   saveSettings as sbSaveSettings,
   bulkSync,
@@ -666,6 +667,25 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     sbUpdate(userIdRef.current, key, stamped, previous, user?.id).catch(() => {});
   }, [updateSection, user?.id]);
 
+  // Star or unstar a record.
+  //
+  // updatedAt is deliberately left untouched. A star is not an edit, and
+  // bumping it would let a star tapped on a stale or offline device win the
+  // self-heal comparison against a real edit made elsewhere. The write is
+  // column-only for the same reason, so a rejected star cannot take the
+  // record's other fields down with it.
+  const toggleFavorite = useCallback((key, id) => {
+    const current = (dataRef.current[key] || []).find(record => record.id === id);
+    if (!current) return false;
+    const favorite = !(current.favorite === true);
+    const next = { ...current, favorite };
+    if (!updateSection(key, items => (items || []).map(x => x.id === id ? next : x))) {
+      window.alert(membershipWriteError().message); return false;
+    }
+    sbSetFavorite(userIdRef.current, key, next, favorite, user?.id).catch(() => {});
+    return true;
+  }, [updateSection, user?.id]);
+
   const deleteItemFn = useCallback((key, id) => {
     const before = dataRef.current;
     const target = (before[key] || []).find(item => item.id === id);
@@ -707,7 +727,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   const value = useMemo(() => ({
     data, setData: guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, loaded, loadedFrom,
     recordsLoadIssue: recordsLoadIssue?.accountId === user?.id ? recordsLoadIssue : null, theme, toggleTheme, isDesktop,
-    updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn,
+    updateSection, updateSettings, addItem, editItem, deleteItem: deleteItemFn, toggleFavorite,
     allTrackedStates, navigate, userIdRef,
     // Auth
     user, authChecked, offlineMode,
@@ -715,7 +735,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // Subscription
     plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta,
     isLifetime, limitedLaunch: { ...limitedLaunch, initializationError: profileIssue?.accountId === user?.id ? profileIssue.message : null }, canWriteCredential, canWritePractice,
-  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, recordsLoadIssue, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
+  }), [guardedSetData, beginAccountDeletion, resetAfterAccountDeletion, profileIssue, recordsLoadIssue, isLifetime, limitedLaunch, canWriteCredential, canWritePractice, data, loaded, loadedFrom, theme, toggleTheme, isDesktop, updateSection, updateSettings, addItem, editItem, deleteItemFn, toggleFavorite, allTrackedStates, navigate, user, authChecked, offlineMode, handleSignOut, plan, isPro, isPractice, subLoading, periodEnd, checkout, manage, setMockPlan, isDevMode, hasSubscription, isFreeBeta]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

@@ -416,3 +416,67 @@ test('replay acknowledgement preserves an identical same-timestamp operation app
   assert.equal(f.queue()[0].ts, identical.ts);
   assert.deepEqual(f.queue()[0].payload, identical.payload);
 });
+
+// ── Record favorites ────────────────────────────────────────────────────────
+// A star is not an edit. It must send the favorite column ALONE and must never
+// stamp updated_at: bumping it would let a star tapped on a stale or offline
+// device beat a real edit made elsewhere in the self-heal comparison, and
+// sending the whole row would let one rejected column reject the record's
+// other fields with it.
+
+test('setFavorite sends only the favorite column and never touches updated_at', async () => {
+  const f = fixture();
+  await f.api.setFavorite('profileA', 'licenses', { id: 'license', name: 'Synthetic', expirationDate: '2027-01-01' }, true);
+  assert.equal(f.requests.length, 1);
+  const [req] = f.requests;
+  assert.equal(req.table, 'licenses');
+  assert.equal(req.method, 'update');
+  assert.deepEqual({ ...req.value }, { favorite: true }, 'the whole row must not be sent');
+  assert.ok(!('updated_at' in req.value), 'a star must not stamp updated_at');
+  assert.ok(!('name' in req.value) && !('expiration_date' in req.value));
+  assert.deepEqual(JSON.parse(JSON.stringify(req.filters)), [['eq', 'id', 'license'], ['eq', 'user_id', 'profileA']]);
+});
+
+test('unstarring sends false, not a removal', async () => {
+  const f = fixture();
+  await f.api.setFavorite('profileA', 'licenses', { id: 'license', favorite: true }, false);
+  assert.deepEqual({ ...f.requests[0].value }, { favorite: false });
+});
+
+test('a failed star queues a narrow favorite op that replays and lands', async () => {
+  const f = fixture();
+  f.onRequest = async () => ({ error: { message: 'PGRST204' } });
+  await f.api.setFavorite('profileA', 'licenses', { id: 'license' }, true);
+  const queued = f.queue();
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].op, 'favorite', 'must not be queued as a whole-row upsert');
+  assert.deepEqual({ ...queued[0].payload }, { id: 'license', favorite: true });
+
+  f.requests.length = 0;
+  f.onRequest = async () => ({ error: null });
+  await f.api.replayPendingOps('profileA', 'user_syntheticA');
+  assert.equal(f.requests.length, 1);
+  assert.deepEqual({ ...f.requests[0].value }, { favorite: true }, 'replay must stay column-only');
+  assert.equal(f.queue().length, 0, 'a landed star must leave the queue');
+});
+
+test('starring is refused for a read-only membership and queues nothing', async () => {
+  const f = fixture({ practice: false });
+  // Practice collections are read-only in this fixture; a star must obey the
+  // same gate as any other write to that record.
+  await assert.rejects(f.api.setFavorite('profileA', 'invoices', { id: 'inv' }, true), /read-only/);
+  assert.equal(f.requests.length, 0);
+  assert.equal(f.queue().length, 0);
+});
+
+test('starring with no profile yet queues the narrow op offline, and never a wide upsert', async () => {
+  const f = fixture();
+  await f.api.setFavorite(null, 'licenses', { id: 'license', name: 'Synthetic' }, true);
+  assert.equal(f.requests.length, 0, 'nothing may be sent without a profile');
+  const queued = f.queue();
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].op, 'favorite',
+    'an offline star queued as an upsert would replay the whole row and stamp updated_at');
+  assert.deepEqual({ ...queued[0].payload }, { id: 'license', favorite: true },
+    'the queued payload must carry the id and the flag only');
+});

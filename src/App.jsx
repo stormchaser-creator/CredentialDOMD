@@ -5,7 +5,9 @@ import {
   SendIcon, BellIcon, SunIcon, MoonIcon,
   BackIcon, SearchIcon, CheckIcon, PlusIcon,
   AsclepiusIcon, DocsIcon,
+  StarIcon,
 } from "./components/shared/Icons";
+import EmptyState from "./components/shared/EmptyState";
 import SideNav from "./components/shared/SideNav";
 import { useDeskKeyboard } from "./hooks/useDeskKeys";
 import StatusDot from "./components/shared/StatusDot";
@@ -75,6 +77,7 @@ import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "./utils/cmePresentation";
 import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
+import { selectFavorites, isStarrable } from "./utils/favorites";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -283,7 +286,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, recordsLoadIssue, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, manage } = useApp();
+  const { data, setData, loaded, recordsLoadIssue, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, manage } = useApp();
   // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
   // the Admin card appears when that answer lands rather than one render too
   // late. It gates a card, not a permission: every admin view and every admin
@@ -2047,9 +2050,22 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   };
 
   /* ─── CREDENTIALS PAGE ───────────────────────────────────── */
-  const PRO_GATED = new Set(["privileges", "insurance", "caseLogs", "peerReferences", "malpracticeHistory"]);
+  // Computed once: renderCredSection runs twice per desktop render and
+  // credGroups is rebuilt on every render.
+  //
+  // PRO_GATED used to be declared here and never read anywhere. The gate lives
+  // in selectFavorites now, because a cross-section list is the first place
+  // that actually needs it: Pro-gated records sit in every user's store
+  // regardless of plan, and only the per-section render was withholding them.
+  const favorites = useMemo(() => selectFavorites(data, { isPro }), [data, isPro]);
 
   const credGroups = [
+    // Its own group and first, so it never sorts into the middle of another
+    // group: the phone list pushes any zero-count item to the bottom of its
+    // group, which would move Favorites between desktop and phone.
+    { title: "Saved", items: [
+      { id: "favorites", label: "Favorites", icon: "\u2b50", count: favorites.length },
+    ]},
     { title: "Active Credentials", items: [
       { id: "licenses", label: "Licenses", icon: "\ud83e\udea3", count: data.licenses.length },
       { id: "matrix", label: "Multi-State Matrix", icon: "\ud83d\uddfa\ufe0f" },
@@ -2085,6 +2101,67 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (Object.hasOwn(PAUSED_APPLICATION_SECTIONS, sub)) {
       return <ApplicationRecordsPaused section={sub} count={(data[sub] || []).length} theme={T} />;
     }
+    if (sub === "favorites") {
+      // Label and icon come from credGroups so a renamed category stays in step
+      // here without a second list to maintain.
+      const meta = {};
+      for (const group of credGroups) for (const entry of group.items) meta[entry.id] = entry;
+      if (favorites.length === 0) {
+        return (
+          <div>
+            <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Favorites</h2>
+            <EmptyState
+              icon={"\u2b50"}
+              title="Nothing starred yet"
+              subtitle="Tap the star on any license, CME entry or other record and it will be listed here, across every category."
+            />
+          </div>
+        );
+      }
+      return (
+        <div>
+          <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: T.text }}>Favorites</h2>
+          <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14 }}>
+            {favorites.length} starred {favorites.length === 1 ? "record" : "records"} across your categories.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {favorites.map(({ section, record }) => (
+              <div
+                key={`${section}:${record.id}`}
+                className="cmd-card-hover"
+                onClick={() => { setSubPage(section); setAutoEditTarget({ sec: section, id: record.id, mode: "view" }); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
+                  backgroundColor: T.card, border: `1px solid ${T.border}`,
+                  borderRadius: 12, padding: "13px 14px",
+                }}
+              >
+                <span style={{ fontSize: 20, width: 28, textAlign: "center", flexShrink: 0 }}>{meta[section]?.icon || "\ud83d\udcc4"}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {describeItem(record, data.settings.name, section)}
+                  </div>
+                  <div style={{ fontSize: 12, color: T.textDim }}>{meta[section]?.label || section}</div>
+                </div>
+                <button
+                  type="button"
+                  aria-pressed="true"
+                  aria-label="Remove from Favorites"
+                  title="Remove from Favorites"
+                  onClick={(e) => { e.stopPropagation(); toggleFavorite(section, record.id); }}
+                  style={{
+                    padding: "7px 9px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+                    backgroundColor: T.accentDim, color: T.accent, flexShrink: 0,
+                  }}
+                >
+                  <StarIcon filled size={17} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
     if (sub === "licenses") {
       return (<>
         {/* The registry lookup and import is one component now (NpiPanel);
@@ -2095,7 +2172,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           <div style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 10 }}>Every state license number the federal registry lists, in one lookup.</div>
           <NpiPanel dense />
         </div>
-        <CrudSection title="Licenses" sectionKey="licenses" {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={[
+        <CrudSection title="Licenses" sectionKey="licenses" favoritable {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={[
           { key: "type", label: "Type" },
           { key: "state", label: "State", width: "9%" },
           { key: "licenseNumber", label: "Number" },
@@ -2122,18 +2199,18 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (sub?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={sub.split(":")[1]} />;
     if (sub === "privileges") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;
-      return <CrudSection title="Privileges" sectionKey="privileges" {...crudTarget("privileges")} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "portalUrl", label: "Credentialing / portal URL", type: "url", placeholder: "medstaff.hospital.org" }, { key: "loginUsername", label: "Portal username" }, { key: "loginSecret", label: "Portal password", type: "secret", hint: "Encrypted with your lock code before it syncs. Show it from the record's detail view." }, { key: "notes", label: "Notes", type: "textarea", placeholder: "Medical staff office contact, reappointment steps, badge, parking, dictation line..." }]} />;
+      return <CrudSection title="Privileges" sectionKey="privileges" favoritable {...crudTarget("privileges")} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "portalUrl", label: "Credentialing / portal URL", type: "url", placeholder: "medstaff.hospital.org" }, { key: "loginUsername", label: "Portal username" }, { key: "loginSecret", label: "Portal password", type: "secret", hint: "Encrypted with your lock code before it syncs. Show it from the record's detail view." }, { key: "notes", label: "Notes", type: "textarea", placeholder: "Medical staff office contact, reappointment steps, badge, parking, dictation line..." }]} />;
     }
     if (sub === "insurance") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
-      return <CrudSection title="Insurance" sectionKey="insurance" {...crudTarget("insurance")} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => !/health insurance|dental|vision|life insurance|disability/i.test(f.type || "") }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+      return <CrudSection title="Insurance" sectionKey="insurance" favoritable {...crudTarget("insurance")} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => !/health insurance|dental|vision|life insurance|disability/i.test(f.type || "") }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
     if (sub === "screenings") return <ScreeningsSection onShare={openShare} />;
-    if (sub === "publications") return <CrudSection title="Publications" sectionKey="publications" {...crudTarget("publications")} items={data.publications || []} {...crud("publications")} onShare={openShare} emptyIcon={"\ud83d\udcda"} emptyTitle="No publications" emptySub="Papers, chapters, and case reports — they appear on your CV in the order you set." fields={[{ key: "name", label: "Short Label", placeholder: "e.g. Cureus 2026 — Composite Homeostatic Wave" }, { key: "citation", label: "Full Citation (as it should read on the CV)", type: "textarea" }, { key: "year", label: "Year" }, { key: "sortOrder", label: "Order on CV", type: "number", placeholder: "1 = first; blank = after the ordered ones" }, { key: "doi", label: "DOI" }, { key: "pmid", label: "PMID" }, { key: "url", label: "Link" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (sub === "memberships") return <CrudSection title="Professional Organizations" sectionKey="memberships" {...crudTarget("memberships")} items={data.memberships || []} {...crud("memberships")} onShare={openShare} emptyIcon={"\ud83c\udfdb\ufe0f"} emptyTitle="No memberships" emptySub="AMA, ACS, CNS, AANS, AOA — society memberships appear on your CV under Professional Organizations. Track dues and renewal dates here too." fields={[{ key: "organization", label: "Organization", placeholder: "e.g. Congress of Neurological Surgeons" }, { key: "role", label: "Membership Type", placeholder: "e.g. Member, Fellow, Resident member" }, { key: "cost", label: "Annual Dues ($)", type: "currency", placeholder: "e.g. 310" }, { key: "startDate", label: "Member Since", type: "date" }, { key: "expirationDate", label: "Renewal Due", type: "date" }, { key: "endDate", label: "Ended (blank if current)", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
-    if (sub === "professionalPhotos") return <CrudSection title="Professional Photo" sectionKey="professionalPhotos" {...crudTarget("professionalPhotos")} items={data.professionalPhotos || []} {...crud("professionalPhotos")} onShare={openShare} emptyIcon={"\ud83d\udcf8"} emptyTitle="No professional photo" emptySub="Agencies ask for a recent color photo — keep a dated headshot here and it rides along in packets." fields={[{ key: "name", label: "Label", placeholder: "e.g. Professional headshot" }, { key: "dateTaken", label: "Date Taken", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "publications") return <CrudSection title="Publications" sectionKey="publications" favoritable {...crudTarget("publications")} items={data.publications || []} {...crud("publications")} onShare={openShare} emptyIcon={"\ud83d\udcda"} emptyTitle="No publications" emptySub="Papers, chapters, and case reports — they appear on your CV in the order you set." fields={[{ key: "name", label: "Short Label", placeholder: "e.g. Cureus 2026 — Composite Homeostatic Wave" }, { key: "citation", label: "Full Citation (as it should read on the CV)", type: "textarea" }, { key: "year", label: "Year" }, { key: "sortOrder", label: "Order on CV", type: "number", placeholder: "1 = first; blank = after the ordered ones" }, { key: "doi", label: "DOI" }, { key: "pmid", label: "PMID" }, { key: "url", label: "Link" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "memberships") return <CrudSection title="Professional Organizations" sectionKey="memberships" favoritable {...crudTarget("memberships")} items={data.memberships || []} {...crud("memberships")} onShare={openShare} emptyIcon={"\ud83c\udfdb\ufe0f"} emptyTitle="No memberships" emptySub="AMA, ACS, CNS, AANS, AOA — society memberships appear on your CV under Professional Organizations. Track dues and renewal dates here too." fields={[{ key: "organization", label: "Organization", placeholder: "e.g. Congress of Neurological Surgeons" }, { key: "role", label: "Membership Type", placeholder: "e.g. Member, Fellow, Resident member" }, { key: "cost", label: "Annual Dues ($)", type: "currency", placeholder: "e.g. 310" }, { key: "startDate", label: "Member Since", type: "date" }, { key: "expirationDate", label: "Renewal Due", type: "date" }, { key: "endDate", label: "Ended (blank if current)", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "professionalPhotos") return <CrudSection title="Professional Photo" sectionKey="professionalPhotos" favoritable {...crudTarget("professionalPhotos")} items={data.professionalPhotos || []} {...crud("professionalPhotos")} onShare={openShare} emptyIcon={"\ud83d\udcf8"} emptyTitle="No professional photo" emptySub="Agencies ask for a recent color photo — keep a dated headshot here and it rides along in packets." fields={[{ key: "name", label: "Label", placeholder: "e.g. Professional headshot" }, { key: "dateTaken", label: "Date Taken", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (sub === "healthRecords") return <HealthRecordsSection onShare={openShare} {...crudTarget("healthRecords")} />;
-    if (sub === "travelDocs") return <CrudSection title="Travel & IDs" sectionKey="travelDocs" {...crudTarget("travelDocs")} filterTabs={[
+    if (sub === "travelDocs") return <CrudSection title="Travel & IDs" sectionKey="travelDocs" favoritable {...crudTarget("travelDocs")} filterTabs={[
       { key: "ids", label: "Personal IDs", match: i => /driver|passport|visa|global entry|known traveler|tsa/i.test(i.type || "") },
       { key: "programs", label: "Travel Programs", match: i => /loyalty|rental|credit/i.test(i.type || "") },
     ]} items={[...(data.travelDocs || [])].sort((a, b) => (a.type || "").localeCompare(b.type || "") || (a.provider || "").localeCompare(b.provider || "") || (a.name || "").localeCompare(b.name || ""))} {...crud("travelDocs")} onShare={openShare} emptyIcon={"✈️"} emptyTitle="No travel records" emptySub="Passports, driver's licenses, Known Traveler Number, loyalty programs, rental memberships, airline credits. The numbers every new assignment asks for." fields={[
@@ -2144,7 +2221,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       { key: "expirationDate", label: "Expires (if it does)", type: "date" },
       { key: "notes", label: "Notes", type: "textarea" },
     ]} />;
-    if (sub === "education") return <CrudSection title="Education" sectionKey="education" {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "education") return <CrudSection title="Education" sectionKey="education" favoritable {...crudTarget("education")} items={[...(data.education || [])].sort((a, b) => (b.graduationDate || b.startDate || "").localeCompare(a.graduationDate || a.startDate || ""))} {...crud("education")} onShare={openShare} emptyIcon={"\ud83c\udf93"} emptyTitle="No education records" emptySub="Add your degrees, diplomas, and training certificates." fields={[{ key: "type", label: "Type", type: "select", options: EDUCATION_TYPES }, { key: "name", label: "Display Name", placeholder: "e.g. DO Diploma - PCOM" }, { key: "institution", label: "Institution" }, { key: "startDate", label: "Start Date", type: "date" }, { key: "graduationDate", label: "Graduation / End Date", type: "date" }, { key: "fieldOfStudy", label: "Field of Study / Specialty" }, { key: "honors", label: "Honors" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (sub === "caseLogs") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Case Logs" /></div>;
       {
@@ -2153,7 +2230,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         return <>
           <CaseLogSummary cases={allCases} year={caseLogYear} onYear={setCaseLogYear} />
           <CaseDictate categories={CASE_CATEGORIES} onDraft={setCaseDraft} />
-          <CrudSection title="Case Logs" sectionKey="caseLogs" {...crudTarget("caseLogs")} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
+          <CrudSection title="Case Logs" sectionKey="caseLogs" favoritable {...crudTarget("caseLogs")} items={shownCases} prefillItem={caseDraft} onPrefillDone={() => setCaseDraft(null)} {...crud("caseLogs")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No cases logged" emptySub="Track surgical cases for credentialing — every case, its codes, and its wRVU value, grouped by academic year." fields={[{ key: "category", label: "Category", type: "select", options: CASE_CATEGORIES, groups: CASE_CATEGORY_GROUPS }, { key: "title", label: "Description" }, { key: "date", label: "Date", type: "date" }, { key: "facility", label: "Facility", type: "datalist", options: [...new Set([...(data.workHistory || []).map(w => w.employer), ...allCases.map(c => c.facility)].filter(Boolean))] }, { key: "role", label: "Role", type: "select", options: ["Primary Surgeon", "Co-Surgeon", "Teaching/Supervising", "First Assist", "Observer"] }, { key: "attending", label: "Attending / Supervising Surgeon" }, { key: "cptCodes", label: "CPT Code(s)", type: "cptPicker" }, { key: "complication", label: "Complication (if any)" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
               {item.role && <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{item.role}</span>}
               {caseWRVU(item) > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{caseWRVU(item).toFixed(2)} wRVU</span>}
@@ -2163,7 +2240,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         </>;
       }
     }
-    if (sub === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" {...crudTarget("workHistory")} items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "select", options: ["No", "Yes"] }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+    if (sub === "workHistory") return <CrudSection title="Work History" sectionKey="workHistory" favoritable {...crudTarget("workHistory")} items={data.workHistory || []} {...crud("workHistory")} onShare={openShare} emptyIcon={"\ud83c\udfe2"} emptyTitle="No work history" emptySub="Track employment and practice experience for credentialing applications." fields={[{ key: "type", label: "Position Type", type: "select", options: WORK_HISTORY_TYPES }, { key: "position", label: "Position/Title", placeholder: "e.g. Attending Neurosurgeon" }, { key: "employer", label: "Employer/Organization" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "startDate", label: "Start Date", type: "date" }, { key: "endDate", label: "End Date", type: "date" }, { key: "current", label: "Current Position", type: "select", options: ["No", "Yes"] }, { key: "description", label: "Description", type: "textarea" }, { key: "reasonForLeaving", label: "Reason for Leaving" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     if (sub === "peerReferences") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Peer References" /></div>;
       const handleContactImport = async () => {
@@ -2192,12 +2269,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </button>
           </div>
         )}
-        <CrudSection title="Peer References" sectionKey="peerReferences" {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
+        <CrudSection title="Peer References" sectionKey="peerReferences" favoritable {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
       </>);
     }
     if (sub === "malpracticeHistory") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Malpractice History" /></div>;
-      return <CrudSection title="Malpractice History" sectionKey="malpracticeHistory" {...crudTarget("malpracticeHistory")} items={data.malpracticeHistory || []} {...crud("malpracticeHistory")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No malpractice claims" emptySub="Track malpractice claims for consistent disclosure across applications." fields={[{ key: "dateOfIncident", label: "Date of Incident", type: "date" }, { key: "dateFiled", label: "Date Filed", type: "date" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "outcome", label: "Outcome", type: "select", options: MALPRACTICE_OUTCOMES }, { key: "settlementAmount", label: "Settlement Amount" }, { key: "description", label: "Description", type: "textarea" }, { key: "facility", label: "Facility" }, { key: "insuranceCarrier", label: "Insurance Carrier" }, { key: "dateResolved", label: "Date Resolved", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+      return <CrudSection title="Malpractice History" sectionKey="malpracticeHistory" favoritable {...crudTarget("malpracticeHistory")} items={data.malpracticeHistory || []} {...crud("malpracticeHistory")} onShare={openShare} emptyIcon={"\ud83d\udccb"} emptyTitle="No malpractice claims" emptySub="Track malpractice claims for consistent disclosure across applications." fields={[{ key: "dateOfIncident", label: "Date of Incident", type: "date" }, { key: "dateFiled", label: "Date Filed", type: "date" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "outcome", label: "Outcome", type: "select", options: MALPRACTICE_OUTCOMES }, { key: "settlementAmount", label: "Settlement Amount" }, { key: "description", label: "Description", type: "textarea" }, { key: "facility", label: "Facility" }, { key: "insuranceCarrier", label: "Insurance Carrier" }, { key: "dateResolved", label: "Date Resolved", type: "date" }, { key: "notes", label: "Notes", type: "textarea" }]} />;
     }
 
   };

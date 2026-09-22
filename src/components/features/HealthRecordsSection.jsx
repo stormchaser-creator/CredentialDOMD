@@ -7,14 +7,26 @@ import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
-import { PlusIcon, SendIcon, EditIcon, TrashIcon } from "../shared/Icons";
+import { PlusIcon, SendIcon, EditIcon, TrashIcon, StarIcon } from "../shared/Icons";
 import { HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, getHealthRecordResults, TB_RESULTS } from "../../constants/credentialTypes";
 import { generateId, getStatusColor, getStatusLabel, formatDate, describeItem } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
 import { attachExistingDoc } from "../../utils/docPrefill";
 
 function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId, onAutoViewDone }) {
-  const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T } = useApp();
+  const { data, setData, addItem, editItem: editItemCtx, deleteItem, theme: T, toggleFavorite } = useApp();
+  const starButton = (item) => {
+    const on = item?.favorite === true;
+    return (
+      <button type="button" aria-pressed={on} title={on ? "Remove from Favorites" : "Add to Favorites"}
+        aria-label={on ? "Remove from Favorites" : "Add to Favorites"}
+        onClick={(e) => { e.stopPropagation(); toggleFavorite("healthRecords", item.id); }}
+        style={{ padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+          backgroundColor: on ? T.accentDim : "transparent", color: on ? T.accent : T.textDim }}>
+        <StarIcon filled={on} />
+      </button>
+    );
+  };
   const iS = useInputStyle();
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -377,7 +389,8 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
-                    <button onClick={(ev) => { ev.stopPropagation(); onShare(item, "healthRecords"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
+                    {starButton(item)}
+                  <button onClick={(ev) => { ev.stopPropagation(); onShare(item, "healthRecords"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
                     <button onClick={(ev) => { ev.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
                     <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this record? This cannot be undone.")) handleDelete(item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
                   </div>

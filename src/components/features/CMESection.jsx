@@ -19,7 +19,7 @@ import { attachExistingDoc } from "../../utils/docPrefill";
 import RuleProvenance from "../shared/RuleProvenance";
 import TopicProvenance from "../shared/TopicProvenance";
 import DeskTable from "../shared/DeskTable";
-import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon } from "../shared/Icons";
+import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon, StarIcon } from "../shared/Icons";
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getCMECategories } from "../../constants/credentialTypes";
 import { BOARD_REQS_META } from "../../constants/boardRequirements";
@@ -49,7 +49,7 @@ const CYCLE_ORDER = { after: "0", in: "1", before: "2", undated: "3" };
 const IN_CYCLE_FIRST = [CYCLE_ORDER.in];
 
 function CMESection({ onShare }) {
-  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop } = useApp();
+  const { data, addItem, editItem: editItemCtx, deleteItem, theme: T, allTrackedStates, navigate, isDesktop, toggleFavorite } = useApp();
   const iS = useInputStyle();
   // The addresses cme@ actually accepts mail from, the same list the Requests
   // header names. Empty is a real answer and the hint says so rather than
@@ -118,6 +118,21 @@ function CMESection({ onShare }) {
   }, [form, editItem, editItemCtx, addItem, closeForm, attachedDocs, data.documents]);
 
   const handleDelete = useCallback((id) => deleteItem("cme", id), [deleteItem]);
+  // Same star control as every other Credentials section. CME renders its own
+  // rows rather than going through CrudSection, so it needs its own copy.
+  const starButton = (item, compact = false) => {
+    const on = item?.favorite === true;
+    const pad = compact ? "5px 7px" : "6px 8px";
+    return (
+      <button type="button" aria-pressed={on} title={on ? "Remove from Favorites" : "Add to Favorites"}
+        aria-label={on ? "Remove from Favorites" : "Add to Favorites"}
+        onClick={(ev) => { ev.stopPropagation(); toggleFavorite("cme", item.id); }}
+        style={{ padding: pad, borderRadius: compact ? 6 : 8, border: "none", cursor: "pointer", display: "flex",
+          backgroundColor: on ? T.accentDim : "transparent", color: on ? T.accent : T.textDim }}>
+        <StarIcon filled={on} size={compact ? 15 : 16} />
+      </button>
+    );
+  };
 
   const toggleTopic = useCallback((topic) => {
     setForm(f => {
@@ -650,7 +665,7 @@ function CMESection({ onShare }) {
             items={data.cme}
             defaultSort={{ key: "date", dir: "desc" }}
             onRowClick={(item) => openEdit(item)}
-            actionsWidth={110}
+            actionsWidth={146}
             groupBy={auditCycle ? (item) => CYCLE_ORDER[cycleBucket(item, auditCycle.start, auditCycle.end)] : undefined}
             groupDir="asc"
             groupKeys={auditCycle ? IN_CYCLE_FIRST : undefined}
@@ -744,6 +759,7 @@ function CMESection({ onShare }) {
             ]}
             actions={(c) => (
               <div style={{ display: "inline-flex", gap: 3 }}>
+                {starButton(c)}
                 <button title="Share" aria-label="Share entry" onClick={(ev) => { ev.stopPropagation(); onShare(c, "cme"); }} style={{ ...deskBtn, backgroundColor: T.shareGlow, color: T.share }}><SendIcon /></button>
                 <button title="Edit" aria-label="Edit entry" onClick={(ev) => { ev.stopPropagation(); openEdit(c); }} style={deskGhostBtn}><EditIcon /></button>
                 <button title="Delete" aria-label="Delete entry" onClick={(ev) => { ev.stopPropagation(); if (window.confirm(DELETE_CONFIRM)) handleDelete(c.id); }} style={{ ...deskBtn, backgroundColor: T.dangerDim, color: T.danger }}><TrashIcon /></button>
@@ -808,6 +824,7 @@ function CMESection({ onShare }) {
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 3, flexShrink: 0, paddingTop: 2 }}>
+                  {starButton(item, true)}
                   <button onClick={() => onShare(item, "cme")} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
                   <button onClick={() => openEdit(item)} style={{ padding: "5px 7px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
                   <button onClick={() => { if (window.confirm(DELETE_CONFIRM)) handleDelete(item.id); }} style={{ padding: "5px 7px", borderRadius: 6, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>

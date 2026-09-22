@@ -621,6 +621,16 @@ async function sbUpsertRow(userId, collectionKey, item, owner) {
   const { error } = await writeRequest(owner, () => owner.db.from(table).upsert(row, { onConflict: "id" }));
   return !error;
 }
+async function sbFavoriteRow(userId, collectionKey, item, owner) {
+  if (!item?.id) return true; // nothing addressable — drop it
+  const table = tableName(collectionKey);
+  const { error } = await writeRequest(owner, () => owner.db
+    .from(table)
+    .update({ favorite: !!item.favorite })
+    .eq("id", item.id)
+    .eq("user_id", userId));
+  return !error;
+}
 async function sbDeleteRow(userId, collectionKey, itemId, owner) {
   if (!itemId) return true;
   const table = tableName(collectionKey);
@@ -681,6 +691,8 @@ async function replayForOwner(profileId, authUserId) {
     try {
       if (op.op === "upsert") {
         ok = await sbUpsertRow(profileId, op.collectionKey, op.payload, owner);
+      } else if (op.op === "favorite") {
+        ok = await sbFavoriteRow(profileId, op.collectionKey, op.payload, owner);
       } else if (op.op === "delete") {
         ok = await sbDeleteRow(profileId, op.collectionKey, op.payload, owner);
         if (ok) ok = await sbTombstoneRow(profileId, op.collectionKey, op.payload, owner);
@@ -1046,6 +1058,26 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
     // Replay as an upsert: if the row was never inserted (a failed add), the
     // update would no-op, so upsert recovers both cases.
     queuePendingOp("upsert", collectionKey, item, owner);
+  }
+}
+
+// A star is not an edit.
+//
+// This sends the `favorite` column ALONE and never touches updated_at. Routing
+// it through updateItem would do two harmful things: it stamps a fresh
+// updated_at, so a star tapped on a stale or offline phone would beat a real
+// expiration-date edit made elsewhere in the self-heal comparison; and it sends
+// the whole row, so one rejected column would reject the record's other edits
+// with it. The queued replay op is narrow for the same reason.
+export async function setFavorite(userId, collectionKey, item, favorite, authUserId) {
+  const payload = { id: item?.id, favorite: !!favorite };
+  const owner = recordContext(collectionKey, { ...item, favorite: !!favorite }, item, true, authUserId);
+  if (!supabase || !userId) { queuePendingOp("favorite", collectionKey, payload, owner); return; }
+  const ok = await sbFavoriteRow(userId, collectionKey, payload, owner);
+  owner.check();
+  if (!ok) {
+    console.warn(`Failed to set favorite on ${collectionKey}`);
+    queuePendingOp("favorite", collectionKey, payload, owner);
   }
 }
 

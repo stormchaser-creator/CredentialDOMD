@@ -7,7 +7,7 @@ import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
-import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon } from "../shared/Icons";
+import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon, StarIcon } from "../shared/Icons";
 import { SCREENING_TYPES, SCREENING_RESULTS } from "../../constants/credentialTypes";
 import { generateId, getStatusColor, getStatusLabel, formatDate } from "../../utils/helpers";
 import DocAttach from "./DocAttach";
@@ -20,7 +20,19 @@ import { attachExistingDoc } from "../../utils/docPrefill";
  * checklist of searches plus the usual expiration tracking.
  */
 function ScreeningsSection({ onShare }) {
-  const { data, addItem, editItem: editCtx, deleteItem, theme: T } = useApp();
+  const { data, addItem, editItem: editCtx, deleteItem, theme: T, toggleFavorite } = useApp();
+  const starButton = (item) => {
+    const on = item?.favorite === true;
+    return (
+      <button type="button" aria-pressed={on} title={on ? "Remove from Favorites" : "Add to Favorites"}
+        aria-label={on ? "Remove from Favorites" : "Add to Favorites"}
+        onClick={(e) => { e.stopPropagation(); toggleFavorite("screenings", item.id); }}
+        style={{ padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", display: "flex",
+          backgroundColor: on ? T.accentDim : "transparent", color: on ? T.accent : T.textDim }}>
+        <StarIcon filled={on} />
+      </button>
+    );
+  };
   const iS = useInputStyle();
   const items = data.screenings || [];
 
@@ -282,6 +294,7 @@ function ScreeningsSection({ onShare }) {
                   {item.result && (
                     <span style={{ fontSize: 11, fontWeight: 800, color: statusColor(item.result), textTransform: "uppercase", marginRight: 4 }}>{item.result}</span>
                   )}
+                  {starButton(item)}
                   <button onClick={(e) => { e.stopPropagation(); onShare?.(item, "screenings"); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.shareGlow, color: T.share, cursor: "pointer", display: "flex" }}><SendIcon /></button>
                   <button onClick={(e) => { e.stopPropagation(); openEdit(item); }} style={{ padding: "6px 8px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, cursor: "pointer", display: "flex" }}><EditIcon /></button>
                   <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this screening?")) deleteItem("screenings", item.id); }} style={{ padding: "6px 8px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex" }}><TrashIcon /></button>
