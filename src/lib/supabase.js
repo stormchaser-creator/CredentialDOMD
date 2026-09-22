@@ -998,6 +998,16 @@ async function uploadForOwner(item, owner) {
   return path;
 }
 
+// Blob variant. downloadDocumentFile below re-encodes the same bytes as a
+// base64 data URL, which costs roughly five copies of the file in memory once
+// the caller decodes it again. Anything that only needs a File should use this.
+export async function downloadDocumentBlob(storagePath) {
+  if (!supabase || !storagePath) return null;
+  const { data, error } = await supabase.storage.from("documents").download(storagePath);
+  if (error || !data) return null;
+  return data;
+}
+
 export async function downloadDocumentFile(storagePath) {
   if (!supabase || !storagePath) return null;
   const { data, error } = await supabase.storage.from("documents").download(storagePath);

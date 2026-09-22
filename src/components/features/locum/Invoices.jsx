@@ -5,7 +5,9 @@ import Modal from "../../shared/Modal";
 import DeskTable from "../../shared/DeskTable";
 import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon, ExternalLinkIcon, DollarIcon, UndoIcon } from "../../shared/Icons";
-import { sortInvoiceLines, invoiceSubject, shareInvoiceText } from "../../../utils/invoicePdf";
+import { sortInvoiceLines, invoiceSubject, shareInvoiceText, invoicePdfFile, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
+import { resolveDocuments, missingReceiptMessage, billedReceiptDocs } from "../../../utils/receiptFiles";
+import { downloadDocumentBlob } from "../../../lib/supabase";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { money } from "../../../utils/invoiceCover";
@@ -237,6 +239,25 @@ function Invoices({ onOpenContract }) {
 
   // Format chooser state: which invoice is about to be sent, in what shape
   const [sendFor, setSendFor] = useState(null);
+  // Receipts for the invoice whose format chooser is open. Resolved here, one
+  // step before the send tap, because awaiting a download inside the tap
+  // spends the user gesture and the OS then refuses the share sheet.
+  const [resendReceipts, setResendReceipts] = useState({ files: [], missing: [], forId: null });
+
+  // The expenses actually billed on THIS invoice. Intersect the two links
+  // rather than union them: after an offline send on a second device an
+  // expense can carry another invoice's id, and a union would attach proof
+  // for work this invoice does not bill.
+  const receiptDocsFor = (inv) => billedReceiptDocs(inv, data.travelExpenses, data.documents);
+
+  const openSendFor = async (inv) => {
+    setSendFor(inv);
+    setResendReceipts({ files: [], missing: [], forId: inv.id });
+    const docs = receiptDocsFor(inv);
+    if (!docs.length) return;
+    const { files, missing } = await resolveDocuments(docs, { download: downloadDocumentBlob });
+    setResendReceipts({ files, missing, forId: inv.id });
+  };
   const resend = async (inv, format = "pdf") => {
     const c = contracts.find(x => x.id === inv.contractId);
     const s = data.settings || {};
@@ -255,7 +276,37 @@ function Invoices({ onOpenContract }) {
     const subject = invoiceSubject(args);
     // Rebuild the document from the stored line items when we have them
     if (inv.lines?.length) {
+      // Expense invoices carry their proof. The receipts were resolved when the
+      // format chooser opened, so nothing is awaited before the share and the
+      // user gesture is still live.
+      const ready = resendReceipts.forId === inv.id ? resendReceipts : { files: [], missing: [] };
+      if (format === "pdf" && ready.files.length) {
+        const bundle = [invoicePdfFile(args), ...ready.files];
+        try { await navigator.clipboard.writeText(invoiceCoverEmail(args)); } catch { /* clipboard unavailable */ }
+        if (navigator.canShare?.({ files: bundle })) {
+          try {
+            await navigator.share({ title: subject, text: invoiceCoverBlurb(args), files: bundle });
+            setNotice(ready.missing.length
+              ? `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"}. ${missingReceiptMessage(ready.missing)}`
+              : `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"} attached.`);
+            setTimeout(() => setNotice(null), 9000);
+            return;
+          } catch (err) {
+            if (err?.name === "AbortError") return;
+            // Anything else falls through to the unchanged single-document
+            // path below, so a resend can never deliver less than it did
+            // before receipts were added.
+          }
+        }
+      }
       const how = await exportInvoice(args, format, subject, inv.text);
+      if (ready.missing.length || (ready.files.length && format === "pdf")) {
+        setNotice(ready.missing.length
+          ? `Invoice resent on its own. ${missingReceiptMessage(ready.missing)}`
+          : "Invoice resent on its own: the receipts were too large to send in the same message.");
+        setTimeout(() => setNotice(null), 9000);
+        return;
+      }
       if (how && how.includes("+cover")) {
         setNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard: paste it over the intro if you want the long form.");
         setTimeout(() => setNotice(null), 9000);
@@ -549,7 +600,7 @@ function Invoices({ onOpenContract }) {
               </div>
             )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
-              <button onClick={() => (viewInv.lines?.length ? setSendFor(viewInv) : resend(viewInv))} style={{
+              <button onClick={() => (viewInv.lines?.length ? openSendFor(viewInv) : resend(viewInv))} style={{
                 padding: "12px 18px", borderRadius: 10, border: "none",
                 backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
               }}>Share PDF</button>
@@ -677,7 +728,7 @@ function Invoices({ onOpenContract }) {
                   <button title={st.isPartial ? "Record another payment" : "Record payment"} aria-label="Record payment" onClick={(e) => { e.stopPropagation(); openPayment(inv); }} style={{ ...deskBtn, backgroundColor: T.successDim, color: T.success }}><DollarIcon /></button>
                 )}
                 <button title="Open" aria-label="Open invoice" onClick={(e) => { e.stopPropagation(); setViewInv(inv); }} style={deskGhostBtn}><ExternalLinkIcon /></button>
-                <button title="Resend" aria-label="Resend invoice" onClick={(e) => { e.stopPropagation(); if (inv.lines?.length) setSendFor(inv); else resend(inv); }} style={{ ...deskBtn, backgroundColor: T.shareGlow, color: T.share }}><SendIcon /></button>
+                <button title="Resend" aria-label="Resend invoice" onClick={(e) => { e.stopPropagation(); if (inv.lines?.length) openSendFor(inv); else resend(inv); }} style={{ ...deskBtn, backgroundColor: T.shareGlow, color: T.share }}><SendIcon /></button>
                 <button title="Delete" aria-label="Delete invoice" onClick={(e) => { e.stopPropagation(); removeInvoice(inv); }} style={{ ...deskBtn, backgroundColor: T.dangerDim, color: T.danger }}><TrashIcon /></button>
               </div>
             );
@@ -753,7 +804,7 @@ function Invoices({ onOpenContract }) {
                     backgroundColor: T.success || "#22c55e", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
                   }}>{isPartial ? "＄ Record another payment" : "＄ Record payment"}</button>
                 )}
-                <button onClick={(ev) => { ev.stopPropagation(); if (inv.lines?.length) setSendFor(inv); else resend(inv); }} style={{
+                <button onClick={(ev) => { ev.stopPropagation(); if (inv.lines?.length) openSendFor(inv); else resend(inv); }} style={{
                   padding: "8px 12px", borderRadius: 10, border: "none",
                   backgroundColor: T.shareGlow, color: T.share, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   display: "inline-flex", alignItems: "center", gap: 5,

@@ -10,6 +10,9 @@ import { money } from "../../../utils/invoiceCover";
 import { checkStorageQuota } from "../../../utils/storageQuota";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
 import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCategories";
+import { resolveDocuments, missingReceiptMessage } from "../../../utils/receiptFiles";
+import { downloadDocumentBlob } from "../../../lib/supabase";
+import { docMime } from "../../../utils/inboxDocs";
 
 
 /**
@@ -38,6 +41,13 @@ function Expenses() {
   const [form, setForm] = useState({});
   const [pendingFiles, setPendingFiles] = useState([]); // receipts staged before save
   const [notice, setNotice] = useState(null);
+  // Receipt bytes, resolved ahead of the tap. The tap itself must stay
+  // synchronous: awaiting a download inside a click handler spends the
+  // browser's user gesture, after which iOS blocks both window.open and
+  // navigator.share.
+  const [receiptCache, setReceiptCache] = useState({});   // docId -> File
+  const [receiptState, setReceiptState] = useState("idle"); // idle | loading | ready
+  const [lightbox, setLightbox] = useState(null);           // { url, name }
   const cameraRef = useRef(null);
   const uploadRef = useRef(null);
   const showNotice = (t) => { setNotice(t); setTimeout(() => setNotice(null), 6000); };
@@ -47,7 +57,42 @@ function Expenses() {
     setPendingFiles([]);
     setForm({ date: new Date().toISOString().slice(0, 10), category: "Airfare", agency: agencies[0] || "" });
   };
-  const openEdit = (exp) => { setEditing(exp.id); setPendingFiles([]); setForm({ ...exp }); };
+  // Pull the receipt bytes in as soon as the editor opens, so tapping a receipt
+  // is instant and, more importantly, synchronous.
+  const hydrateReceipts = async (docs) => {
+    if (!docs.length) { setReceiptState("ready"); return; }
+    setReceiptState("loading");
+    const { byId } = await resolveDocuments(docs, { download: downloadDocumentBlob });
+    const next = {};
+    for (const [id, r] of byId) if (r.file) next[id] = r.file;
+    setReceiptCache(c => ({ ...c, ...next }));
+    setReceiptState("ready");
+  };
+
+  const openEdit = (exp) => {
+    setEditing(exp.id); setPendingFiles([]); setForm({ ...exp });
+    setReceiptState("idle");
+    hydrateReceipts(receiptsOf(exp));
+  };
+
+  // Tap a receipt to open it. No await here on purpose: the File is already
+  // resolved, so the gesture is still live for window.open and share.
+  const openReceipt = (d) => {
+    const file = receiptCache[d.id];
+    if (!file) {
+      showNotice(receiptState === "loading"
+        ? "Still fetching this receipt, try again in a moment."
+        : missingReceiptMessage([{ name: d.name || "receipt", reason: d.storagePath ? "unavailable" : "never_uploaded" }]));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    if (docMime(d).startsWith("image/")) { setLightbox({ url, name: d.name }); return; }
+    const win = window.open(url, "_blank", "noopener");
+    if (!win && navigator.canShare?.({ files: [file] })) {
+      navigator.share({ files: [file], title: d.name || "Receipt" }).catch(() => {});
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
   useDeskAddShortcut(openNew);
 
   const stageFiles = async (files) => {
@@ -103,6 +148,11 @@ function Expenses() {
     setInvAgency(ag);
     setChecked(Object.fromEntries(unbilled.map(e => [e.id, (e.agency || "") === ag])));
     setInvOpen(true);
+    // Fetch the proof now, while the physician is still choosing. Downloading
+    // inside the Send tap would spend the user gesture and make the OS refuse
+    // the share sheet, which is worse than the bug being fixed.
+    setReceiptState("idle");
+    hydrateReceipts(unbilled.flatMap(receiptsOf));
   };
   const pickAgency = (ag) => {
     setInvAgency(ag);
@@ -135,26 +185,44 @@ function Expenses() {
         lines, totalMin: 0, total,
       };
       const pdf = invoicePdfFile(inv);
-      // Receipts ride along in the same share — proof travels with the bill.
-      const receiptFiles = [];
-      let missing = 0;
-      for (const e of sel) {
-        for (const d of receiptsOf(e)) {
-          if (!d.data) { missing += 1; continue; }
-          const byteStr = atob(d.data.split(",")[1]);
-          const arr = new Uint8Array(byteStr.length);
-          for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-          receiptFiles.push(new File([arr], d.name || "receipt", { type: d.type || "application/octet-stream" }));
-        }
+      // Receipts ride along in the same share, proof travels with the bill.
+      // They were resolved when this modal opened, so nothing is awaited here:
+      // a download inside the tap would spend the user gesture and make the OS
+      // refuse the share sheet.
+      const receiptDocs = sel.flatMap(receiptsOf);
+      const attached = [];
+      const missingDocs = [];
+      for (const d of receiptDocs) {
+        const f = receiptCache[d.id];
+        if (f) attached.push(f);
+        else missingDocs.push({ id: d.id, name: d.name || "receipt", reason: d.storagePath ? "unavailable" : "never_uploaded" });
       }
-      const files = [pdf, ...receiptFiles];
+      const files = [pdf, ...attached];
       // Cover letter to clipboard, flowing blurb as share text — otherwise
       // iOS Mail sends the attachments with an empty body.
       try { await navigator.clipboard.writeText(invoiceCoverEmail(inv)); } catch { /* clipboard unavailable */ }
       let how = null;
-      if (navigator.canShare && navigator.canShare({ files })) {
-        try { await navigator.share({ title: invoiceSubject(inv), text: invoiceCoverBlurb(inv), files }); how = "share"; }
-        catch (err) { if (err?.name === "AbortError") { setBusy(false); return; } }
+      let droppedForSize = 0;
+      // The invoice itself must never be held hostage by its receipts. If the
+      // OS refuses the whole bundle, on count or size, fall back to the invoice
+      // alone rather than silently dropping to a path that sends nothing.
+      const trySend = async (bundle) => {
+        if (!(navigator.canShare && navigator.canShare({ files: bundle }))) return null;
+        try {
+          await navigator.share({ title: invoiceSubject(inv), text: invoiceCoverBlurb(inv), files: bundle });
+          return "share";
+        } catch (err) {
+          if (err?.name === "AbortError") return "abort";
+          return null;
+        }
+      };
+      const first = await trySend(files);
+      if (first === "abort") { setBusy(false); return; }   // cancelled: record nothing
+      how = first;
+      if (!how && attached.length) {
+        const second = await trySend([pdf]);
+        if (second === "abort") { setBusy(false); return; }
+        if (second) { how = second; droppedForSize = attached.length; }
       }
       if (!how) {
         for (const f of files) {
@@ -177,9 +245,17 @@ function Expenses() {
       });
       for (const e of sel) editItem("travelExpenses", { ...e, invoiceId });
       setInvOpen(false);
-      showNotice(missing
-        ? `Sent, but ${missing} receipt file${missing > 1 ? "s weren't" : " wasn't"} downloaded on this device and didn't attach.`
-        : `Invoice ${number} sent with ${receiptFiles.length} receipt${receiptFiles.length === 1 ? "" : "s"} attached. Tracked on the Invoices tab.`);
+      if (droppedForSize) {
+        showNotice(`Invoice ${number} sent on its own. The ${droppedForSize} receipt${droppedForSize === 1 ? "" : "s"} were too large for one message, so send them from the expense, or resend from the Invoices tab.`);
+      } else if (missingDocs.length) {
+        showNotice(`Invoice ${number} sent. ${missingReceiptMessage(missingDocs)} Resend from the Invoices tab once they are available.`);
+      } else {
+        showNotice(`Invoice ${number} sent with ${attached.length} receipt${attached.length === 1 ? "" : "s"} attached. Tracked on the Invoices tab.`);
+      }
+    } catch (err) {
+      // Without this a throw looked exactly like a slow success: the button
+      // came back and nothing was said.
+      showNotice(`The invoice could not be sent: ${err?.message || "unknown error"}. Nothing was recorded, so you can try again.`);
     } finally { setBusy(false); }
   };
 
@@ -289,14 +365,28 @@ function Expenses() {
 
         {/* receipts */}
         <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Receipts</div>
-        {editing !== "new" && receiptsOf({ id: editing }).map(d => (
-          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
-            {d.type?.startsWith("image/") && d.data
-              ? <img src={d.data} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8 }} />
-              : <span style={{ fontSize: 20 }}>📄</span>}
-            <span style={{ flex: 1, fontSize: 13, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
-          </div>
-        ))}
+        {editing !== "new" && receiptsOf({ id: editing }).map(d => {
+          const file = receiptCache[d.id];
+          const isImage = docMime(d).startsWith("image/");
+          const thumb = isImage ? (d.data || (file ? URL.createObjectURL(file) : null)) : null;
+          const pending = !file && receiptState === "loading";
+          return (
+            <button key={d.id} type="button" onClick={() => openReceipt(d)}
+              title={file ? `Open ${d.name}` : "Fetching this receipt"}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", width: "100%",
+                borderBottom: `1px solid ${T.border}`, border: "none", borderBottomStyle: "solid",
+                background: "none", textAlign: "left", cursor: file ? "pointer" : "default",
+                fontFamily: "inherit", opacity: pending ? 0.6 : 1 }}>
+              {thumb
+                ? <img src={thumb} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8 }} />
+                : <span style={{ fontSize: 20, width: 40, textAlign: "center" }}>{"\ud83d\udcc4"}</span>}
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: file ? T.accent : T.textDim, flexShrink: 0 }}>
+                {file ? "Open" : pending ? "Loading" : "Unavailable"}
+              </span>
+            </button>
+          );
+        })}
         {pendingFiles.map((f, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: `1px solid ${T.border}` }}>
             {f.type.startsWith("image/")
@@ -334,6 +424,12 @@ function Expenses() {
       </Modal>
 
       {/* Invoice picker */}
+      {/* Images open in the app. A PDF goes to the OS, which is the only thing
+          that can render one here: there is no PDF viewer in this codebase. */}
+      <Modal open={!!lightbox} onClose={() => { if (lightbox) URL.revokeObjectURL(lightbox.url); setLightbox(null); }} title={lightbox?.name || "Receipt"}>
+        {lightbox && <img src={lightbox.url} alt={lightbox.name || "Receipt"} style={{ width: "100%", height: "auto", borderRadius: 10, display: "block" }} />}
+      </Modal>
+
       <Modal open={invOpen} onClose={() => !busy && setInvOpen(false)} title="Invoice expenses">
         <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Bill to</div>
         {agencies.length > 0 && (
@@ -363,6 +459,28 @@ function Expenses() {
           <span>Total</span>
           <span>{money(unbilled.filter(e => checked[e.id]).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0))}</span>
         </div>
+        {/* Say what will actually attach BEFORE the send. The invoice itself
+            prints "receipts attached" from the count of receipts on file, so a
+            silent shortfall is how an agency receives a bill claiming proof it
+            never got. */}
+        {(() => {
+          const sel = unbilled.filter(e => checked[e.id]);
+          const docs = sel.flatMap(receiptsOf);
+          if (!docs.length) return null;
+          const ready = docs.filter(d => receiptCache[d.id]).length;
+          if (receiptState === "loading" && ready < docs.length) {
+            return <div style={{ marginTop: 8, fontSize: 12.5, color: T.textMuted }}>Fetching receipts: {ready} of {docs.length} ready.</div>;
+          }
+          if (ready === docs.length) {
+            return <div style={{ marginTop: 8, fontSize: 12.5, color: T.textMuted }}>{docs.length} receipt{docs.length === 1 ? "" : "s"} will be attached.</div>;
+          }
+          return (
+            <div style={{ marginTop: 8, padding: "9px 11px", borderRadius: 10, fontSize: 12.5, lineHeight: 1.5,
+              backgroundColor: T.dangerDim, color: T.danger, border: `1px solid ${T.danger}55` }}>
+              Only {ready} of {docs.length} receipts can be attached right now. The invoice says receipts are attached, so send it once the rest are available, or tell the agency what is coming separately.
+            </div>
+          );
+        })()}
         <button onClick={sendExpenseInvoice} disabled={busy} style={{
           width: "100%", marginTop: 6, padding: "13px", borderRadius: 12, border: "none",
           background: busy ? T.textDim : "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
