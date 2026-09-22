@@ -28,7 +28,7 @@ globalThis.localStorage = {
 globalThis.window = globalThis.window || {};
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const {
@@ -361,8 +361,12 @@ eq("every settings.lockCode line in supabase.js is part of the recovery",
 ok("and that one touch is the recovery before the delete",
   /settings\.lockCode && !getLockCode\(authUserId\)\) \{\s*saveLockCode\(settings\.lockCode, authUserId\);/.test(supabaseSrc));
 
+// Relative to the scanned root, not split on "/src/": CI checks this repo out
+// into a directory that is itself named src, so the absolute path contains
+// "/src/src/" and the split returned "src/main.jsx" instead of "main.jsx".
+const srcRoot = resolve(here, "..", "src");
 const importsErrorReport = srcFiles.filter((p) => /from\s+"\.[^"]*errorReport"/.test(readFileSync(p, "utf8")))
-  .map((p) => p.split("/src/")[1]);
+  .map((p) => relative(srcRoot, p).split(sep).join("/"));
 ok("main.jsx is where the sink is installed", importsErrorReport.includes("main.jsx"),
   importsErrorReport.join(", "));
 const reportErrorCalls = srcFiles.flatMap((p) =>

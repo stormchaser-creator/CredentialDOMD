@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -11,7 +12,9 @@ const exec = promisify(execFile);
 export const quote = value => value === null || value === undefined ? 'null' : typeof value === 'boolean' || typeof value === 'number' ? String(value) : `'${(typeof value === 'object' ? JSON.stringify(value) : String(value)).replaceAll("'", "''")}'`;
 export async function postgresFixture() {
   const bin = pgBin();
-  const root = fs.mkdtempSync('/private/tmp/credential-portal-'); const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
+  // os.tmpdir(), not a hardcoded /private/tmp: that path is macOS only and
+  // does not exist on a Linux CI runner.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'credential-portal-')); const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
   // LC_ALL is required, not cosmetic: on macOS the postmaster aborts at
   // startup with "postmaster became multithreaded during startup" unless a
   // valid locale is set, so without this the fixture cannot start at all.

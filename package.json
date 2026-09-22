@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "node --experimental-vm-modules --test \"tests/**/*.test.mjs\" \"scripts/*.test.mjs\"",
-    "lint:hooks": "node --test tests/hooks-rules.test.mjs"
+    "lint:hooks": "node --test tests/hooks-rules.test.mjs",
+    "pretest": "node scripts/build-credential-portal.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
