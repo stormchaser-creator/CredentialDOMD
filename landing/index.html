@@ -1972,6 +1972,40 @@ footer {
 @media (max-width: 480px) {
   .locum-cta.founder-quote { flex-direction: column; align-items: flex-start; gap: 16px; }
 }
+/* ---------- COMPARISON TABLE ---------- */
+.cmp-wrap {
+  margin-top: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table.cmp { border-collapse: collapse; width: 100%; min-width: 980px; }
+table.cmp th, table.cmp td {
+  padding: 15px 18px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.55;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+table.cmp thead th {
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: var(--bg-elevated);
+}
+table.cmp thead th.us { color: var(--emerald); }
+table.cmp td.job { color: var(--text); font-weight: 700; width: 24%; }
+table.cmp td { color: var(--text-secondary); }
+table.cmp td.us { color: var(--text); background: rgba(16, 185, 129, 0.04); font-weight: 600; }
+table.cmp tbody tr.price td { border-top: 2px solid var(--border); font-weight: 700; color: var(--text); }
+table.cmp tbody tr:last-child td { border-bottom: none; }
+.cmp-note { margin-top: 14px; font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+
 </style>
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
@@ -1992,6 +2026,7 @@ footer {
       <a href="/states/">License Guides</a>
       <a href="/cme/">CME</a>
       <a href="/locums">Practice &amp; Locums</a>
+      <a href="#comparison">Compare</a>
       <details class="support-menu">
         <summary>Support</summary>
         <div class="support-links">
@@ -2674,6 +2709,117 @@ footer {
 </section>
 
 <!-- ============ GUARANTEE ============ -->
+<section class="comparison" id="comparison" style="padding: 100px 0;">
+  <div class="container">
+    <div class="animate-on-scroll" style="text-align: center;">
+      <div class="section-label" style="justify-content: center;">
+        <svg width="16" height="16" fill="none" stroke="var(--emerald)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+        Next to what you already use
+      </div>
+      <h2 class="section-title">The compliance trackers are good. Then your day ends and the invoice starts.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">An honest grid, including the rows we lose. Every mark below is what that company publishes about itself, checked in September 2026.</p>
+    </div>
+
+    <div class="cmp-wrap animate-on-scroll">
+      <table class="cmp">
+        <thead>
+          <tr>
+            <th scope="col">The job</th>
+            <th scope="col">Mocingbird</th>
+            <th scope="col">CE Broker</th>
+            <th scope="col">Modio OneView</th>
+            <th scope="col">Your agency app</th>
+            <th scope="col" class="us">CredentialDOMD</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="job">Track CME for every state you hold, with the topic rules</td>
+            <td>Yes. Their research team validates requirements across states and specialties.</td>
+            <td>Yes. Published subject breakdowns per state and license type.</td>
+            <td>CME tracking with goals and supporting documents.</td>
+            <td>Not in published features.</td>
+            <td class="us">Yes. Per state cycles, topic mandates, MD and DO handled separately, plus the federal opioid requirement.</td>
+          </tr>
+          <tr>
+            <td class="job">Warn you before a license or DEA registration lapses</td>
+            <td>Yes. Real time alerts on deadlines, and trackers for DEA, ACLS, ATLS and BLS.</td>
+            <td>Yes, on the free tier. Expiration tracking and reminders, DEA included.</td>
+            <td>Yes. Primary source verified data with expiration alerts.</td>
+            <td>Credential monitoring is advertised for its own placements.</td>
+            <td class="us">Yes. Days remaining on every state you hold, with the unmet CME topics named.</td>
+          </tr>
+          <tr>
+            <td class="job">Verify a credential against the primary source</td>
+            <td>Yes, as part of their license application service.</td>
+            <td>License verification is listed on the free tier.</td>
+            <td>Yes. Continuous state board and DEA integrations. This is their core.</td>
+            <td>The agency verifies what it needs for its own placement.</td>
+            <td class="us">No. We import public records and hold the documents you upload. We do not perform primary source verification.</td>
+          </tr>
+          <tr>
+            <td class="job">Report your CME to the board for you</td>
+            <td>Reporting to state and board licensure is advertised.</td>
+            <td>Yes in Florida and Texas, where it is the board's own system and providers report credits automatically.</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td class="us">No. We produce the transcript and the renewal packet. You file it.</td>
+          </tr>
+          <tr>
+            <td class="job">Sell you the accredited CME courses themselves</td>
+            <td>Yes. A learning center of accredited courses, and they say over 60% of them are free.</td>
+            <td>Yes on Pro plus, which their help center lists physicians as eligible for.</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td class="us">No. We track and file what you earned elsewhere. We do not sell you courses.</td>
+          </tr>
+          <tr>
+            <td class="job">Price a day from your signed agreement, including call stipend, included hours and overage</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td>Its own rates on its own timesheet.</td>
+            <td class="us">Yes. Reads the agreement, then prices a call day including the stipend, the included hours and the overage.</td>
+          </tr>
+          <tr>
+            <td class="job">Invoice, then track a partial payment and what is aging past 30 days</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td>Its remittance, not your ledger.</td>
+            <td class="us">Yes. A payment ledger per invoice, with the open balance and the aging on the card.</td>
+          </tr>
+          <tr>
+            <td class="job">Reconcile what an agency actually paid against your own logged hours</td>
+            <td>Not checked. The staffing pages where they would market this did not load for us.</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td>You cannot audit an agency's numbers inside that agency's own app.</td>
+            <td class="us">Yes. Your logged time against their remittance, with the difference shown.</td>
+          </tr>
+          <tr>
+            <td class="job">Estimate what you owe, by jurisdiction, across every state you worked</td>
+            <td>Not in published features.</td>
+            <td>Not in published features.</td>
+            <td>Stores tax documents such as a W9. No estimation.</td>
+            <td>Paystubs and tax forms for its own assignments.</td>
+            <td class="us">Yes. Federal, resident state and each work state, estimated minus paid, per jurisdiction.</td>
+          </tr>
+          <tr class="price">
+            <td class="job">What an individual physician pays</td>
+            <td>$199 a year, after a 30 day free trial. Free for students and residents.</td>
+            <td>Free tier. Paid plans start at $39.99 a year and vary by profession.</td>
+            <td>No public price. Sold to organizations, no individual signup.</td>
+            <td>Free to you. Your agency provides it.</td>
+            <td class="us">$99 a year for the first 100 paid founding members, then $149, then $199. No free trial. You pay up front, and you can ask for that year back in full at any time.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cmp-note">Wide on a phone: swipe the table sideways. Each cell reflects that company's own public pricing, feature and app store pages as they read in September 2026, and prices change. "Not in published features" means the capability does not appear in the feature list that company publishes, which is not the same as the company saying it cannot do it. &ldquo;Not checked&rdquo; means we could not load the page where that company would market it, so we are not claiming either way. If you are licensed in Florida or Texas, note the row above: CE Broker is your board's own reporting system and a free account is enough to meet that requirement. Agency app refers to the apps staffing agencies give their own physicians, such as MyCompHealth and the LocumTenens.com app.</p>
+  </div>
+</section>
+
 <section class="guarantee" id="guarantee">
   <div class="container">
     <div class="guarantee-box animate-on-scroll">
