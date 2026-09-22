@@ -77,7 +77,7 @@ import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "./utils/cmePresentation";
 import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
-import { selectFavorites, isStarrable } from "./utils/favorites";
+import { selectFavorites } from "./utils/favorites";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -2057,7 +2057,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // in selectFavorites now, because a cross-section list is the first place
   // that actually needs it: Pro-gated records sit in every user's store
   // regardless of plan, and only the per-section render was withholding them.
-  const favorites = useMemo(() => selectFavorites(data, { isPro }), [data, isPro]);
+  // NOT useMemo. Five early returns sit above this point (!authChecked,
+  // !loaded, recordsLoadIssue, the launch gate and access !== "active"), so a
+  // hook here runs on some renders and not others, which is React error #310,
+  // "rendered more hooks than during the previous render". PRO_GATED used to
+  // live here and was a plain const, which is why the position looked safe.
+  // selectFavorites walks fifteen arrays and is cheap enough to just call.
+  const favorites = selectFavorites(data, { isPro });
 
   const credGroups = [
     // Its own group and first, so it never sorts into the middle of another
