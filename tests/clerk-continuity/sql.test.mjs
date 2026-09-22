@@ -3,25 +3,35 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { execFileSync, execFile } from 'node:child_process';
+// On macOS the postmaster aborts with "postmaster became multithreaded
+// during startup" unless a valid locale is set, so every pg spawn below
+// inherits this rather than the ambient environment.
+const PG_ENV = { ...process.env, LC_ALL: 'C' };
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { canonicalMembers } from '../../scripts/clerk-continuity-plan.mjs';
 
 // Disposable PostgreSQL, synthetic identities, Unix socket only; no live DB URL.
-const bin = '/opt/homebrew/opt/postgresql@17/bin';
+const bin = process.env.PG_BIN || '/opt/homebrew/opt/postgresql@17/bin';
 const migration = await readFile(new URL('../../supabase/migrations/20260920120000_clerk_identity_continuity.sql', import.meta.url), 'utf8');
 const temp = await mkdtemp(join(tmpdir(), 'credentialdomd-continuity-sql-'));
 const data = join(temp, 'data');
 const args = ['-h', temp, '-p', '55479', '-U', userInfo().username, '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1', '-At'];
-const query = sql => execFileSync(`${bin}/psql`, [...args, '-c', sql], { encoding: 'utf8' }).trim();
+const query = sql => execFileSync(`${bin}/psql`, [...args, '-c', sql], { encoding: 'utf8', env: PG_ENV }).trim();
 const run = promisify(execFile);
 let started = false;
 
-test('continuity SQL binding, recovery journal, privileges, RLS and concurrent claims', async t => {
+test('continuity SQL binding, recovery journal, privileges, RLS and concurrent claims', {
+  // A machine without PostgreSQL cannot run this, and a hard failure there
+  // would block a deploy for a missing tool rather than a broken change.
+  // Set PG_BIN to point at the binaries.
+  skip: existsSync(join(bin, 'initdb')) ? false : `PostgreSQL not found at ${bin}; set PG_BIN`,
+}, async t => {
   try {
-    execFileSync(`${bin}/initdb`, ['-D', data, '-A', 'trust', '--no-locale'], { stdio: 'pipe' });
-    execFileSync(`${bin}/pg_ctl`, ['-D', data, '-l', join(temp, 'postgres.log'), '-o', `-k ${temp} -p 55479 -c listen_addresses=''`, '-w', 'start'], { stdio: 'pipe' });
+    execFileSync(`${bin}/initdb`, ['-D', data, '-A', 'trust', '--no-locale'], { stdio: 'pipe', env: PG_ENV });
+    execFileSync(`${bin}/pg_ctl`, ['-D', data, '-l', join(temp, 'postgres.log'), '-o', `-k ${temp} -p 55479 -c listen_addresses=''`, '-w', 'start'], { stdio: 'pipe', env: PG_ENV });
     started = true;
     query(`
       create role anon; create role authenticated; create role service_role bypassrls;
@@ -167,6 +177,6 @@ test('continuity SQL binding, recovery journal, privileges, RLS and concurrent c
     });
     await writeFile(join(temp,'result.txt'),'Synthetic continuity SQL suite passed; no live connection.\n');
   } finally {
-    if(started) execFileSync(`${bin}/pg_ctl`,['-D',data,'-m','fast','-w','stop'],{stdio:'pipe'});
+    if(started) execFileSync(`${bin}/pg_ctl`,['-D',data,'-m','fast','-w','stop'],{stdio:'pipe',env:PG_ENV});
   }
 });

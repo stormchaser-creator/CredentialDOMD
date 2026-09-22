@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCredentialPortalHandler } from '../../supabase/functions/_shared/credentialPortalHandler.mjs';
 import { CREDENTIAL_PORTAL_POLICY, createPortalCrypto, digest, token, safeInlineMime } from '../../supabase/functions/_shared/credentialPortalCrypto.mjs';
-import { postgresFixture, quote as q } from './postgresFixture.mjs';
+import { postgresFixture, pgSkip, quote as q } from './postgresFixture.mjs';
 
-test('private credential portal: actual migration, two recipients, atomic redemption, revocation and adversarial cases', { timeout: 120000 }, async t => {
+test('private credential portal: actual migration, two recipients, atomic redemption, revocation and adversarial cases', { timeout: 120000, skip: pgSkip() }, async t => {
   const db = await postgresFixture();
   t.after(() => db.close());
   const alice = { id: '10000000-0000-4000-8000-000000000001', subject: 'user_alice', email: 'alice-admin@example.com' };

@@ -2,12 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+
+/** Where the PostgreSQL binaries are, and whether they are there at all. */
+export const pgBin = () => process.env.PG_BIN || '/opt/homebrew/opt/postgresql@17/bin';
+/** A machine without PostgreSQL should skip these, not fail a deploy. */
+export const pgSkip = () => fs.existsSync(path.join(pgBin(), 'initdb')) ? false : `PostgreSQL not found at ${pgBin()}; set PG_BIN`;
 const exec = promisify(execFile);
 export const quote = value => value === null || value === undefined ? 'null' : typeof value === 'boolean' || typeof value === 'number' ? String(value) : `'${(typeof value === 'object' ? JSON.stringify(value) : String(value)).replaceAll("'", "''")}'`;
 export async function postgresFixture() {
-  const bin = process.env.PG_BIN || '/opt/homebrew/opt/postgresql@17/bin';
+  const bin = pgBin();
   const root = fs.mkdtempSync('/private/tmp/credential-portal-'); const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('PG')));
+  // LC_ALL is required, not cosmetic: on macOS the postmaster aborts at
+  // startup with "postmaster became multithreaded during startup" unless a
+  // valid locale is set, so without this the fixture cannot start at all.
+  const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('PG'))), LC_ALL: 'C' };
   const run = (name, args) => exec(path.join(bin, name), args, { env, maxBuffer: 2 * 1024 * 1024 });
   await run('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await run('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'postgres.log'), '-o', `-k ${socket} -p 56441 -c listen_addresses='' -c unix_socket_permissions=0700 -c fsync=off`, '-w', 'start']);

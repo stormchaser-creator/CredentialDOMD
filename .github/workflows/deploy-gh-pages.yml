@@ -60,6 +60,29 @@ jobs:
         working-directory: src
         run: npm ci --legacy-peer-deps
 
+      # Gate the deploy on the tests. Until 2026-09-22 this workflow only
+      # built, so a hook placed below App's early returns shipped and crashed
+      # the app for every signed-in user. Nothing ran the suite or eslint.
+      #
+      # Scoped deliberately: the whole eslint run reports ~1,500 pre-existing
+      # errors across the repo, mostly in vendored code, so it cannot gate
+      # today. tests/hooks-rules.test.mjs runs the React hook rules over src,
+      # which is the class that takes the app down, and it runs as part of the
+      # suite below.
+      #
+      # PG_BIN points the two PostgreSQL integration tests at the runner's
+      # server. If it is ever missing they skip with a message rather than
+      # blocking a deploy over a missing tool.
+      - name: Run tests
+        working-directory: src
+        run: |
+          # Ask the runner where its PostgreSQL lives rather than pinning a
+          # version that will age out. If it is not there the two integration
+          # tests skip with a message instead of blocking the deploy.
+          PG_BIN="$(pg_config --bindir 2>/dev/null || true)"
+          echo "PG_BIN=${PG_BIN:-<not found, PostgreSQL tests will skip>}"
+          PG_BIN="$PG_BIN" npm test
+
       - name: Build the app and public site
         working-directory: src
         env:

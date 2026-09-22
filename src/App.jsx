@@ -77,6 +77,7 @@ import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE } from "./utils/cmePresentation";
 import { complianceFor, standingScore, findStateLicense, windowNotes } from "./utils/compliance";
 import { generateAlerts, activeAckFor } from "./utils/notifications";
+import { clearStateBanner } from "./utils/clearState";
 import { selectFavorites } from "./utils/favorites";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
@@ -1881,7 +1882,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       </div>
     ));
 
-    // All clear
+    // All clear.
+    //
+    // "urgent" excludes anything acknowledged, so this banner can render while
+    // real renewals are due and merely snoozed. Saying "All Clear" on the same
+    // screen that lists them is a contradiction the physician has to resolve
+    // himself, so when something is snoozed the banner names it and the date
+    // it comes back instead.
+    const clearState = clearStateBanner(snoozed, id => activeAckFor(data, id)?.until, formatDate);
     const allClear = allCreds.length > 0 && urgent.length === 0 && (
       <div style={{
         textAlign: "center", padding: "24px 16px", backgroundColor: T.successDim,
@@ -1890,8 +1898,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         <div style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: T.success, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", color: "#fff" }}>
           <CheckIcon />
         </div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>All Clear</div>
-        <div style={{ fontSize: 14, color: T.textMuted, marginTop: 2 }}>No urgent items right now.</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>
+          {clearState.title}
+        </div>
+        <div style={{ fontSize: 14, color: T.textMuted, marginTop: 2 }}>
+          {clearState.detail}
+        </div>
       </div>
     );
 
