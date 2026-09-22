@@ -2151,6 +2151,9 @@ table.cmp thead th:first-child { background: var(--bg-elevated); z-index: 3; }
   /* Give the swiped columns more room: the pinned job column shrinks and the
      cells tighten so an answer is readable without swiping twice per row. */
   table.cmp th, table.cmp td { padding: 12px 13px; font-size: 13px; }
+  table.cmp { table-layout: fixed; min-width: 678px; }
+  table.cmp td, table.cmp th { overflow-wrap: break-word; }
+  table.cmp tbody td, table.cmp thead th { width: 176px; }
   table.cmp td.job, table.cmp th:first-child { width: 150px; min-width: 150px; }
 }
 
