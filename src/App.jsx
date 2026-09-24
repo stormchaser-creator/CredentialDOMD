@@ -8,6 +8,8 @@ import {
   StarIcon,
 } from "./components/shared/Icons";
 import EmptyState from "./components/shared/EmptyState";
+import CustomCategorySection, { NewCategoryPanel } from "./components/features/CustomCategorySection";
+import { liveCategories, unsortedRecords } from "./utils/customCategories";
 import SideNav from "./components/shared/SideNav";
 import { useDeskKeyboard } from "./hooks/useDeskKeys";
 import StatusDot from "./components/shared/StatusDot";
@@ -587,7 +589,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     ...(data.malpracticeHistory || []).map(m => ({ ...m, _sec: "malpracticeHistory", _cat: "Malpractice" })),
     ...(data.publications || []).map(p => ({ ...p, _sec: "publications", _cat: "Publication" })),
     ...(data.memberships || []).map(m => ({ ...m, _sec: "memberships", _cat: "Organization" })),
-  ], [data.licenses, data.cme, data.privileges, data.insurance, data.caseLogs, data.healthRecords, data.education, data.workHistory, data.peerReferences, data.malpracticeHistory, data.publications, data.memberships]);
+    // Records in the physician's own categories, so one with an expiry date
+    // warns like any credential. _rail is where it lives on the Credentials page.
+    ...(data.customRecords || []).filter(r => r && r.id).map(r => ({ ...r, _sec: "customRecords", _cat: r.categoryName || "Record", _rail: `custom:${r.categoryId || "unsorted"}` })),
+  ], [data.licenses, data.cme, data.privileges, data.insurance, data.caseLogs, data.healthRecords, data.education, data.workHistory, data.peerReferences, data.malpracticeHistory, data.publications, data.memberships, data.customRecords]);
 
   const { expired, soon, urgent, snoozed } = useMemo(() => {
     const now = new Date();
@@ -875,8 +880,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   );
 
   /* ─── HOME PAGE ──────────────────────────────────────────── */
-  const openFromSearch = (sec, id) => {
-    if (sec.tab === "credentials") { setTab("credentials"); setSubPage(sec.sub); setAutoEditTarget({ sec: sec.key, id }); return; }
+  const openFromSearch = (sec, id, dest) => {
+    if (sec.tab === "credentials") { setTab("credentials"); setSubPage(dest || sec.sub); setAutoEditTarget({ sec: sec.key, id }); return; }
     if (sec.tab === "documents") { setTab("documents"); setSubPage(null); return; }
     if (sec.tab === "locum") { setLocumSeed({ sub: sec.sub, id }); setTab("locum"); setSubPage(sec.sub); return; }
     if (sec.tab === "more") { setTab("more"); setSubPage(sec.sub); return; }
@@ -992,7 +997,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           const color = item.needsConfirmation ? T.textMuted : days != null && days < 0 ? T.danger : T.warning;
           const go = () => {
             if (isCme) { reviewCmeState(item.state); return; }
-            setTab("credentials"); setSubPage(item._sec);
+            setTab("credentials"); setSubPage(item._rail || item._sec);
             setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" });
           };
           return (
@@ -1176,7 +1181,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       const sc = getStatusColor(item.expirationDate);
       const isExpired = sc === "red";
       return (
-        <div key={item.id} onClick={() => { setTab("credentials"); setSubPage(item._sec); setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
+        <div key={item.id} onClick={() => { setTab("credentials"); setSubPage(item._rail || item._sec); setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
           ...layout,
           backgroundColor: T.card, borderRadius: 12,
           padding: 16, cursor: "pointer", boxShadow: T.shadow1,
@@ -2113,11 +2118,37 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       { id: "answerBank", label: "Answer Bank", icon: "\ud83d\uddc2\ufe0f", count: (data.answerBank || []).length },
       { id: "identityVault", label: "Protected Identity", icon: "\ud83d\udd12", count: (data.identityVault || []).length },
     ]},
+    // The physician's own categories: created by them, by Vera or by the
+    // uploader for documents no built-in section holds. Plain expressions only:
+    // a hook here, below AppInner's early returns, crashes the app (c54cc06e).
+    { title: "Your categories", items: [
+      ...liveCategories(data).map(c => ({
+        id: `custom:${c.id}`, label: c.name, icon: c.icon,
+        count: (data.customRecords || []).filter(r => r?.categoryId === c.id).length,
+      })),
+      ...(unsortedRecords(data).length ? [{ id: "custom:unsorted", label: "Unsorted records", icon: "\ud83d\udce5", count: unsortedRecords(data).length }] : []),
+      { id: "newCategory", label: "New category", icon: "\u2795" },
+    ]},
   ];
 
   const renderCredSection = (sub) => {
     if (Object.hasOwn(PAUSED_APPLICATION_SECTIONS, sub)) {
       return <ApplicationRecordsPaused section={sub} count={(data[sub] || []).length} theme={T} />;
+    }
+    if (sub === "newCategory") {
+      return <NewCategoryPanel onCreated={(id) => setSubPage(`custom:${id}`)} />;
+    }
+    if (typeof sub === "string" && sub.startsWith("custom:")) {
+      const catId = sub.slice("custom:".length);
+      return (
+        <CustomCategorySection
+          key={catId}
+          categoryId={catId}
+          onShare={openShare}
+          onOpenCategory={(id) => setSubPage(`custom:${id}`)}
+          crudTargetProps={crudTarget("customRecords")}
+        />
+      );
     }
     if (sub === "favorites") {
       // Label and icon come from credGroups so a renamed category stays in step
@@ -2147,19 +2178,19 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               <div
                 key={`${section}:${record.id}`}
                 className="cmd-card-hover"
-                onClick={() => { setSubPage(section); setAutoEditTarget({ sec: section, id: record.id, mode: "view" }); }}
+                onClick={() => { setSubPage(section === "customRecords" ? `custom:${record.categoryId || "unsorted"}` : section); setAutoEditTarget({ sec: section, id: record.id, mode: "view" }); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
                   backgroundColor: T.card, border: `1px solid ${T.border}`,
                   borderRadius: 12, padding: "13px 14px",
                 }}
               >
-                <span style={{ fontSize: 20, width: 28, textAlign: "center", flexShrink: 0 }}>{meta[section]?.icon || "\ud83d\udcc4"}</span>
+                <span style={{ fontSize: 20, width: 28, textAlign: "center", flexShrink: 0 }}>{(section === "customRecords" ? meta[`custom:${record.categoryId}`]?.icon : meta[section]?.icon) || "\ud83d\udcc4"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {describeItem(record, data.settings.name, section)}
                   </div>
-                  <div style={{ fontSize: 12, color: T.textDim }}>{meta[section]?.label || section}</div>
+                  <div style={{ fontSize: 12, color: T.textDim }}>{section === "customRecords" ? (record.categoryName || "Your categories") : (meta[section]?.label || section)}</div>
                 </div>
                 <button
                   type="button"
@@ -2329,7 +2360,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   {group.items.map(p => {
                     // Acknowledging an alert only snoozes the Home nag — the category
                     // badge should keep flagging it until the underlying date changes.
-                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => i._sec === p.id).length;
+                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => (i._rail || i._sec) === p.id).length;
                     const locked = p.pro && !isPro;
                     const selected = activeRailId === p.id;
                     return (
@@ -2386,7 +2417,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                   {sorted.map(p => {
                     // Same as the desktop rail: acknowledging snoozes the Home nag,
                     // not the category badge — an acked item is still outstanding.
-                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => i._sec === p.id).length;
+                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => (i._rail || i._sec) === p.id).length;
                     const locked = p.pro && !isPro;
                     return (
                       <button key={p.id} onClick={() => setSubPage(p.id)} className="cmd-card-hover" style={{

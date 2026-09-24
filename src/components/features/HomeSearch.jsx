@@ -36,13 +36,17 @@ export const SECTIONS = [
   { key: "travelExpenses", label: "Expenses", tab: "locum", sub: "expenses" },
   { key: "deductibles", label: "Deductions", tab: "more", sub: "finance" },
   { key: "taskNotes", label: "To-do", tab: "locum", sub: "todo" },
+  // Records in the physician's own categories. Each opens in its own
+  // category, so the hit carries its destination (see searchRecords).
+  { key: "customRecords", label: "Your categories", tab: "credentials", sub: null },
 ];
 
 // Fields worth matching on, beyond whatever describeItem prints.
 const TEXT_FIELDS = ["name", "type", "title", "facility", "state", "city", "provider", "institution", "issuer", "issuingAuthority",
   "licenseNumber", "number", "policyNumber", "notes", "description", "category", "topics", "vendor", "merchant", "payer", "agency",
   "invoiceNumber", "contact", "email", "phone", "portalUrl", "loginUsername", "specialty", "role", "procedure", "cptCodes", "codes",
-  "subject", "text", "label", "degree", "school", "employer", "position", "journal", "authors", "location", "billTo", "billToLabel"];
+  "subject", "text", "label", "degree", "school", "employer", "position", "journal", "authors", "location", "billTo", "billToLabel",
+  "categoryName", "fieldValues", "customFields"];
 
 // "RUHS" should find "Riverside University Health System": add the
 // initials of every multi-word value (with and without small words) to
@@ -99,7 +103,8 @@ export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
       if (toks.every(t => hay.includes(t))) {
         const sub = [it.state, it.facility, it.provider, it.expirationDate && `exp ${it.expirationDate}`, it.date, it.total != null && `$${it.total}`]
           .filter(Boolean).join(" · ");
-        hits.push({ id: it.id, label: label || "(untitled)", sub });
+        hits.push({ id: it.id, label: label || "(untitled)", sub,
+          ...(sec.key === "customRecords" ? { dest: `custom:${it.categoryId || "unsorted"}`, sub: [it.categoryName, sub].filter(Boolean).join(" \u00b7 ") } : {}) });
       }
       if (hits.length >= limitPerSection) break;
     }
@@ -156,7 +161,7 @@ export default function HomeSearch({ onOpen, onAskVera }) {
             if (e.key === "Escape") { setFocus(false); e.currentTarget.blur(); }
             if (e.key === "Enter" && q.trim()) {
               const first = results[0]?.hits[0];
-              if (first && totalHits === 1) { onOpen(results[0].sec, first.id); setQ(""); setFocus(false); }
+              if (first && totalHits === 1) { onOpen(results[0].sec, first.id, first.dest); setQ(""); setFocus(false); }
               else { onAskVera(q.trim()); setQ(""); setFocus(false); }
             }
           }}
@@ -177,7 +182,7 @@ export default function HomeSearch({ onOpen, onAskVera }) {
             <div key={g.sec.key} style={{ padding: "4px 4px 6px" }}>
               <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: T.textMuted, padding: "6px 8px 2px" }}>{g.sec.label}</div>
               {g.hits.map(h => (
-                <div key={h.id} onClick={() => { onOpen(g.sec, h.id); setQ(""); setFocus(false); }} style={{ padding: "8px 8px", borderRadius: 10, cursor: "pointer" }}
+                <div key={h.id} onClick={() => { onOpen(g.sec, h.id, h.dest); setQ(""); setFocus(false); }} style={{ padding: "8px 8px", borderRadius: 10, cursor: "pointer" }}
                   onMouseEnter={e => e.currentTarget.style.backgroundColor = T.input} onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.label}</div>
                   {h.sub && <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.sub}</div>}

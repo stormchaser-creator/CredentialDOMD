@@ -90,6 +90,18 @@ jobs:
             echo "Admin database checks unavailable: PostgreSQL is not installed."
           fi
 
+      # Refuse to ship a client that syncs a table production does not have.
+      # A TABLE_MAP key whose table is missing fails the account load for EVERY
+      # user (assertCompleteAccountRecords), so the migration must be applied
+      # and verified first. This makes that ordering mechanical instead of a
+      # procedure someone has to remember. It fails closed.
+      - name: Check every synced table exists in production
+        working-directory: src
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: node scripts/check-tables-exist.mjs
+
       - name: Build the app and public site
         working-directory: src
         env:

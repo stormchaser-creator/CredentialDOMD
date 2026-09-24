@@ -9,7 +9,7 @@
  * deletion.
  */
 
-/** The 31 synced collections (src/lib/supabase.js TABLE_MAP), keyed by user_id. */
+/** The 33 synced collections (src/lib/supabase.js TABLE_MAP), keyed by user_id. */
 export const COLLECTION_TABLES: string[] = [
   "licenses",
   "cme",
@@ -42,6 +42,8 @@ export const COLLECTION_TABLES: string[] = [
   "invoices",
   "deductibles",
   "rotations",
+  "custom_categories",
+  "custom_records",
 ];
 
 /**

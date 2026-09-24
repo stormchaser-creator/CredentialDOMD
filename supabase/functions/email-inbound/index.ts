@@ -1145,6 +1145,10 @@ const RECORD_TABLES: { table: string; section: string; columns: string }[] = [
   // offered a signed locum agreement to a credentialer who asked for a CV.
   { table: "locum_contracts", section: "locumContracts", columns: "id" },
   { table: "travel_expenses", section: "travelExpenses", columns: "id" },
+  // Records in the physician's own categories. Loaded so a file filed there
+  // resolves to its record rather than reading as unlinked, which is what let
+  // a filename rule offer the wrong file before. Packet eligible.
+  { table: "custom_records", section: "customRecords", columns: "id, name, issuer, number, category_name, expiration_date" },
 ];
 
 // Rows go straight to the matcher, which declares its own row shapes; typing

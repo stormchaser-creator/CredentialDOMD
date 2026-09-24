@@ -21,6 +21,8 @@ export function generateAlerts(data) {
     ...(data.caseLogs || []).map(c => ({ ...c, _sec: "caseLogs", _cat: "Case" })),
     ...(data.healthRecords || []).map(h => ({ ...h, _sec: "healthRecords", _cat: "Health" })),
     ...(data.education || []).map(e => ({ ...e, _sec: "education", _cat: "Education" })),
+    // Records in the physician's own categories warn like any credential.
+    ...(data.customRecords || []).filter(r => r && r.id).map(r => ({ ...r, _sec: "customRecords", _cat: r.categoryName || "Record" })),
   ];
 
   const expired = allCreds.filter(i => i.expirationDate && new Date(i.expirationDate) < now && !activeAckFor(data, i.id));

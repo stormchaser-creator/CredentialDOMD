@@ -40,7 +40,7 @@ function mapValues(constName) {
 
 // ── The 31 collections: exactly TABLE_MAP, no more, no less ─────────────────
 const tableMap = mapValues("TABLE_MAP");
-eq("TABLE_MAP parsed from supabase.js has 31 tables", tableMap.length, 31);
+eq("TABLE_MAP parsed from supabase.js has 33 tables", tableMap.length, 33);
 eq("COLLECTION_TABLES is TABLE_MAP, same order", COLLECTION_TABLES, tableMap);
 eq("no duplicate collection table", new Set(COLLECTION_TABLES).size, COLLECTION_TABLES.length);
 

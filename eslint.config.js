@@ -15,7 +15,9 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      // __APP_BUILD_ID__ is a Vite define (vite.config.js), replaced at build
+      // time. Declared so no-undef can gate real undefined names.
+      globals: { ...globals.browser, __APP_BUILD_ID__: 'readonly' },
       parserOptions: {
         ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },

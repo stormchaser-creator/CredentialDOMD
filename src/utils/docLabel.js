@@ -7,6 +7,8 @@ import { describeItem } from "./helpers";
 // describes a file the same way.
 
 const SECTION_LABELS = {
+  // A record in one of the physician's own categories
+  customRecords: "Record",
   licenses: "License",
   privileges: "Privilege",
   insurance: "Insurance",

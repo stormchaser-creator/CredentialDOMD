@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { profileSupportReference, profileInitializationError } from '../../src/utils/profileIssueDiagnostics.js';
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from '../../src/utils/accountRecordsLoad.js';
+import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 
 // Execute the actual provider functions with synthetic dependencies. Extracting
 // this contiguous function block avoids mounting Clerk/React or making requests;
@@ -68,6 +69,8 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     withLocalOnlySettings: cloud => cloud,
     hasLegacyStorage: () => false, adoptLegacyStorage: () => null,
     preservePausedApplicationRecords: value => value, pausedApplicationLinks: () => [],
+    // The REAL reconciler, so the harness exercises the actual sweep.
+    reconcileDocumentLinks,
     setData: update => { calls.push({ name: 'setData', actor }); if (deferReact) queuedUpdates.push(update); else applyUpdate(update); },
     setProfileIssue: value => { calls.push({ name: 'setProfileIssue', actor, value }); },
     setRecordsLoadIssue: value => { calls.push({ name: 'setRecordsLoadIssue', actor, value }); },

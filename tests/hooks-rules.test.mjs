@@ -15,6 +15,10 @@ import { ESLint } from "eslint";
 const CRASH_RULES = [
   "react-hooks/rules-of-hooks",
   "react-hooks/set-state-in-render",
+  // An undefined name is a ReferenceError the moment that line runs. The load
+  // path is exercised by a harness that supplies its own globals, so a
+  // forgotten import can pass every test and still crash sign-in for real.
+  "no-undef",
 ];
 
 test("no React hooks rule violations anywhere in src", async () => {

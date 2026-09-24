@@ -5,7 +5,7 @@ import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documen
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
-import { mergeExtracted, findDuplicateDoc } from "../../utils/docPrefill";
+import { mergeExtracted, mergeScanned, findDuplicateDoc } from "../../utils/docPrefill";
 import { docMime } from "../../utils/inboxDocs";
 import { docAttachedLabel, fmtBytes, docBytes } from "../../utils/docLabel";
 import { checkStorageQuota } from "../../utils/storageQuota";
@@ -80,7 +80,11 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
             : await analyzeDocument(src.dataUrl, deg, apiKey);
       const extracted = result?.extracted || result?.fields;
       if (extracted && typeof extracted === "object") {
-        setForm((prev) => mergeExtracted(prev, extracted));
+        // An "other" document is not this form's kind of record: none of its
+        // keys are this table's columns, so all of it is kept as details
+        // rather than written as columns. Known types fill the form as before.
+        if (result?.documentType === "other") setForm((prev) => mergeScanned(prev, extracted, []).form);
+        else setForm((prev) => mergeExtracted(prev, extracted));
         setMsg(`Document read, fields auto-filled. Review before saving.${note}`);
       } else {
         setIsError(true);
