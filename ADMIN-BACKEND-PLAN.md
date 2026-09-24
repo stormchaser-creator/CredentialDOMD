@@ -1,3 +1,5 @@
+> Superseded September 24, 2026. See [the current administrative operations release](docs/admin/OPERATIONS-2026-09-24.md). The examples below are historical and must not be used for current pricing, authorization, or deployment.
+
 # Admin Backend — Real Plan
 
 ## What I shipped that doesn't work
@@ -226,7 +228,6 @@ If you give me 1 + 2, I start executing. If you want changes, tell me what to cu
 
 Right now there's also a wall I haven't crossed:
 - **Magic-link email is rate-limited** (2/hr on Supabase built-in SMTP)
-- **Eric account exists with password `CredDoMD-Test-2026!`** (auto-confirmed via admin Add User, can sign in immediately at https://credentialdomd.com/app/)
 - **Confirm email is OFF** — re-enable when we wire Resend SMTP for production magic links
 
 If you want me to add Resend as part of this admin work, that's another ~30 min and I'll wire it in commit 1. Tell me your call.
