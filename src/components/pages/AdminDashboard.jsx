@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
-import { isAdminUser } from "../../lib/admin";
+import { useIsAdmin } from "../../lib/admin";
+import { ADMIN_SOURCES, ADMIN_TAB_SOURCES, readAdminSource, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
+import AdminOperationsReport from "./AdminOperationsReport";
+import AdminErrorReports from "./AdminErrorReports";
+import AdminAccessChange from "./AdminAccessChange";
+import AdminControlHistory from "./AdminControlHistory";
 import { Modal, ScreenshotAttach } from "../shared";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
@@ -26,7 +31,11 @@ export default function AdminDashboard() {
 
 function AdminDashboardContent() {
   const { theme: T, user, data, userIdRef, updateSettings } = useApp();
-  const [tab, setTab] = useState("tickets");
+  const [tab, setTab] = useState("reports");
+  const [coverage, setCoverage] = useState({});
+  const [rowLimits, setRowLimits] = useState({});
+  const [ticketPreset, setTicketPreset] = useState({});
+  const [accountPreset, setAccountPreset] = useState("all");
   const [tickets, setTickets] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [signups, setSignups] = useState([]);
@@ -72,12 +81,9 @@ function AdminDashboardContent() {
     setOpenTicket(null); setThread([]); setAttachmentUrls([]); setReplyUrls({}); setBusy(false);
   };
 
-  const isAdmin = isAdminUser(user);
+  const isAdmin = useIsAdmin();
 
-  const refreshTickets = async () => {
-    const { data } = await supabase.from("admin_tickets_open").select("*").limit(200);
-    setTickets(data || []);
-  };
+  const refreshTickets = async () => { setReloadKey(k => k + 1); };
 
   // Signed links for every screenshot on the thread (the ticket's own plus one
   // per reply), one round trip through ticket-attachment-url.
@@ -233,42 +239,24 @@ function AdminDashboardContent() {
       return;
     }
     let cancelled = false;
-    Promise.all([
-      supabase.from("admin_tickets_open").select("*").limit(50),
-      supabase.from("admin_feedback_recent").select("*").limit(50),
-      supabase.from("admin_signups_daily").select("*").limit(30),
-      supabase.from("admin_visits_daily").select("*").limit(30),
-      supabase.from("early_access_leads").select("id,name,email,source,note,status,invited_at,created_at,waitlist,guide_sent_at,guide_attempts").order("created_at", { ascending: false }).limit(500),
-      supabase.from("waitlist_attempts").select("id,name,email,stage,created_at").order("created_at", { ascending: false }).limit(200),
-      supabase.from("field_proposals").select("*").order("created_at", { ascending: false }).limit(200),
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state,deleted_at").order("created_at", { ascending: false }).limit(500),
-      supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
-      supabase.from("client_errors").select("id, created_at, kind, message, stack, url, user_agent, build, auth_user_id, profile_id, extra").order("created_at", { ascending: false }).limit(50),
-      supabase.from("admin_messages_overview").select("*").limit(200),
-    ]).then(([t, f, s, v, w, wa, fp, pr, ba, ce, am]) => {
+    const keys = ADMIN_TAB_SOURCES[tab] || [];
+    const setters = { tickets: setTickets, feedback: setFeedback, signups: setSignups, visits: setVisits,
+      waitlist: setWaitlist, attempts: setAttempts, fields: setFields, users: setUsers,
+      invites: setInvites, errors: setErrors, messages: setMessages };
+    setLoading(keys.length > 0); setError("");
+    Promise.all(keys.map(key => readAdminSource(supabase, key, rowLimits[key]))).then(results => {
       if (cancelled) return;
-      if (t.error) setError(`Tickets: ${t.error.message}`);
-      else setTickets(t.data || []);
-      if (f.error) setError((prev) => prev || `Feedback: ${f.error.message}`);
-      else setFeedback(f.data || []);
-      if (s.error) setError((prev) => prev || `New accounts: ${s.error.message}`);
-      else setSignups(s.data || []);
-      if (!v.error) setVisits(v.data || []);
-      if (w.error) setError((prev) => prev || `Waitlist: ${w.error.message}`);
-      else setWaitlist(w.data || []);
-      if (!wa.error) setAttempts(wa.data || []);
-      if (fp.error) setError((prev) => prev || `Fields: ${fp.error.message}`);
-      else setFields(fp.data || []);
-      if (pr.error) setError((prev) => prev || `Users: ${pr.error.message}`);
-      else setUsers(pr.data || []);
-      if (!ba.error) setInvites(ba.data || []);
-      if (!ce.error) setErrors(ce.data || []);
-      if (!am.error) setMessages(am.data || []);
-      setReloadedAt(new Date());
+      for (const result of results) {
+        if (!result.error) setters[result.key](result.rows);
+      }
+      setCoverage(previous => ({ ...previous, ...Object.fromEntries(results.map(result => [result.key, result])) }));
+      const failures = results.filter(result => result.error);
+      setError(failures.map(result => `${ADMIN_SOURCES[result.key].label}: ${result.error}`).join(" · "));
+      if (!failures.length) setReloadedAt(new Date());
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [isAdmin, reloadKey]);
+  }, [isAdmin, reloadKey, tab, rowLimits]);
 
   if (!isAdmin) {
     return (
@@ -281,24 +269,17 @@ function AdminDashboardContent() {
     );
   }
 
+  const hasSectionData = (ADMIN_TAB_SOURCES[tab] || []).every(key => coverage[key]?.rows && !coverage[key]?.error);
+  const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); setTab(nextTab); };
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = tickets.filter(t => t.archived_at);
-  const openWaitlist = waitlistView(waitlist, users, invites).waiting;
-  const messagesSeenAt = data?.settings?.adminInboxSeenAt;
-  const unreadMessages = messages.filter(m =>
-    m.last_physician_reply_at && (!messagesSeenAt || new Date(m.last_physician_reply_at) > new Date(messagesSeenAt))
-  ).length;
-  const errorsSeenAt = data?.settings?.adminErrorsSeenAt;
-  const unattendedErrors = errors.filter(e => !errorsSeenAt || new Date(e.created_at) > new Date(errorsSeenAt)).length;
   const TABS = [
-    { id: "tickets",   label: `Tickets (${activeTickets.length})` },
-    { id: "messages",  label: unreadMessages > 0 ? `Messages (${unreadMessages})` : "Messages" },
-    { id: "users",     label: `Users (${users.filter(u => u.access_status === "active").length})` },
-    { id: "errors",    label: unattendedErrors > 0 ? `Errors (${unattendedErrors})` : "Errors" },
-    { id: "signups",   label: "Traffic" },
-    { id: "waitlist",  label: `Waitlist (${openWaitlist.length})` },
-    { id: "fields",    label: `Fields (${fields.filter(x => x.status === "pending").length})` },
-    { id: "ai",        label: "AI" },
+    { id: "reports", label: "Overview & reports" },
+    { id: "tickets", label: "Tickets" }, { id: "messages", label: "Messages" },
+    { id: "users", label: "Accounts" }, { id: "errors", label: "Errors" },
+    { id: "signups", label: "Traffic history" }, { id: "waitlist", label: "Waitlist" },
+    { id: "fields", label: "Fields" }, { id: "ai", label: "AI" },
+    { id: "audit", label: "Control history" },
   ];
 
   return (
@@ -308,13 +289,14 @@ function AdminDashboardContent() {
         Support, accounts, waitlist signups, and traffic for credentialdomd.com
       </p>
 
-      <div style={{
+      <nav aria-label="Administration sections" style={{
         display: "flex", gap: 4, marginBottom: 14, overflowX: "auto", WebkitOverflowScrolling: "touch",
         backgroundColor: T.input, borderRadius: 10, padding: 3,
       }}>
         {TABS.map((t) => (
           <button
             key={t.id}
+            aria-current={tab === t.id ? "page" : undefined}
             onClick={() => {
               setTab(t.id);
               // Opening a panel reads again. Every number here aged for the
@@ -331,23 +313,38 @@ function AdminDashboardContent() {
             }}
           >{t.label}</button>
         ))}
-      </div>
+      </nav>
 
-      {loading && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>Loading…</div>}
+      {tab === "reports" && <AdminOperationsReport T={T} onNavigate={navigateReport} />}
+      {tab === "audit" && <AdminControlHistory T={T} />}
+      {loading && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
       {error && (
-        <div style={{
+        <div role="alert" style={{
           padding: "10px 12px", borderRadius: 8,
           backgroundColor: "rgba(239,68,68,0.1)", color: "#ef4444", fontSize: 12,
           marginBottom: 12,
         }}>
           {error}
-          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-            (If "relation does not exist": run supabase-tracking-migration.sql.)
-          </div>
+          <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>This section could not refresh. Its lists are hidden until the read succeeds.</div>
+          <button onClick={() => setReloadKey(k => k + 1)}>Retry section</button>
         </div>
       )}
 
-      {tab === "tickets"  && !loading && (
+      {!loading && !error && (ADMIN_TAB_SOURCES[tab] || []).length > 0 && (
+        <div aria-label="List coverage" style={{ padding: "10px 12px", marginBottom: 12, border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMuted, fontSize: 12 }}>
+          <div>List counts describe loaded records. Overview & reports contains full-database totals.</div>
+          {(ADMIN_TAB_SOURCES[tab] || []).map(key => {
+            const item = coverage[key]; if (!item || item.error) return null;
+            return <div key={key} style={{ marginTop: 5 }}>
+              {ADMIN_SOURCES[key].label}: {item.rows.length} loaded{item.count !== null ? ` of ${item.count}` : " (total unavailable)"}
+              {(item.count === null ? item.rows.length >= item.limit : item.rows.length < item.count) && <button style={{ marginLeft: 8 }} onClick={() => setRowLimits(previous => ({ ...previous, [key]: (previous[key] || ADMIN_SOURCES[key].size) + ADMIN_SOURCES[key].size }))}>Load more {ADMIN_SOURCES[key].label.toLowerCase()}</button>}
+            </div>;
+          })}
+          <button style={{ marginTop: 8 }} onClick={() => setReloadKey(k => k + 1)}>Refresh section</button>
+          {reloadedAt && <span style={{ marginLeft: 8 }}>Read {reloadedAt.toLocaleTimeString()}</span>}
+        </div>
+      )}
+      {tab === "tickets"  && (!loading || hasSectionData) && !error && (
         <>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <button onClick={() => { setNewOpen(true); setTicketMsg(""); }} style={{
@@ -360,7 +357,7 @@ function AdminDashboardContent() {
               fontSize: 13, fontWeight: 700, cursor: "pointer",
             }}>{showArchived ? "Back to active" : `Archived (${archivedTickets.length})`}</button>
           </div>
-          <TicketsList rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
+          <TicketsList key={JSON.stringify(ticketPreset)} initialFilters={ticketPreset} rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
           {feedback.length > 0 && (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>
@@ -371,10 +368,10 @@ function AdminDashboardContent() {
           )}
         </>
       )}
-      {tab === "messages" && !loading && (
+      {tab === "messages" && (!loading || hasSectionData) && !error && (
         <MessagesPanel messages={messages} setMessages={setMessages} users={users} myProfileId={userIdRef.current} T={T} />
       )}
-      {tab === "signups"  && !loading && (
+      {tab === "signups"  && (!loading || hasSectionData) && !error && (
         <>
           <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
             Webpage visits
@@ -404,9 +401,9 @@ function AdminDashboardContent() {
           <SignupsList rows={signups} T={T} reloadedAt={reloadedAt} onReload={() => setReloadKey((k) => k + 1)} />
         </>
       )}
-      {tab === "errors" && !loading && <ErrorsList rows={errors} users={users} T={T} onCleared={() => setErrors([])} />}
-      {tab === "users" && !loading && <UsersPanel users={users} setUsers={setUsers} invites={invites} setInvites={setInvites} T={T} />}
-      {tab === "waitlist" && !loading && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onInvite={async (r) => {
+      {tab === "errors" && (!loading || hasSectionData) && !error && <AdminErrorReports rows={errors} users={users} T={T} onCleared={ids => { setErrors(rows => rows.filter(row => !ids.includes(row.id))); setCoverage(previous => { const old = previous.errors; return old ? { ...previous, errors: { ...old, rows: old.rows.filter(row => !ids.includes(row.id)), count: old.count === null ? null : Math.max(0, old.count - ids.length) } } : previous; }); }} />}
+      {tab === "users" && (!loading || hasSectionData) && !error && <UsersPanel key={accountPreset} initialAccess={accountPreset} myProfileId={userIdRef.current} users={users} setUsers={setUsers} invites={invites} T={T} onRefresh={() => setReloadKey(k => k + 1)} />}
+      {tab === "waitlist" && (!loading || hasSectionData) && !error && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onInvite={async (r) => {
         const res = await sendInvite({ email: r.email, name: r.name, lead_id: r.id });
         if (res.ok) {
           setWaitlist(rs => rs.map(x => x.id === r.id ? { ...x, status: "invited", invited_at: new Date().toISOString() } : x));
@@ -415,8 +412,8 @@ function AdminDashboardContent() {
         }
         return res;
       }} />}
-      {tab === "fields" && !loading && <FieldProposals rows={fields} setRows={setFields} T={T} />}
-      {tab === "ai" && !loading && <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} />}
+      {tab === "fields" && (!loading || hasSectionData) && !error && <FieldProposals rows={fields} setRows={setFields} T={T} />}
+      {tab === "ai" && (!loading || hasSectionData) && !error && <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} />}
 
       {/* Tap a ticket → read it, answer it, close it */}
       <Modal open={!!openTicket} onClose={closeTicketDetail} title={openTicket?.subject || "Ticket"}>
@@ -559,14 +556,26 @@ function statusColor(s) {
   return "#94a3b8";
 }
 
-function TicketsList({ rows, T, onOpen }) {
-  if (!rows.length) return <Empty T={T} text="No open tickets. Quiet day." />;
+function TicketsList({ rows, T, onOpen, initialFilters = {} }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState(initialFilters.status || "all");
+  const [priority, setPriority] = useState(initialFilters.priority || "all");
+  const [approval, setApproval] = useState(initialFilters.approval || "all");
+  const filtered = filterAdminTickets(rows, { query, status, priority, approval });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {rows.map((r) => (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: T.text }}>
+        <label>Search loaded tickets <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Subject, email or details" /></label>
+        <label>Status <select value={status} onChange={event => setStatus(event.target.value)}>{["all", "unresolved", "open", "in_progress", "waiting_user", "resolved", "closed"].map(value => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select></label>
+        <label>Priority <select value={priority} onChange={event => setPriority(event.target.value)}>{["all", "urgent", "high", "normal", "low"].map(value => <option key={value}>{value}</option>)}</select></label>
+        <label>Approval <select value={approval} onChange={event => setApproval(event.target.value)}><option value="all">All tickets</option><option value="needs_review">Needs owner approval</option></select></label>
+      </div>
+      <div style={{ color: T.textMuted, fontSize: 12 }}>{filtered.length} matching tickets in {rows.length} loaded records.</div>
+      {!filtered.length && <Empty T={T} text="No loaded tickets match these filters." />}
+      {filtered.map((r) => (
         <div key={r.id} role="button" tabIndex={0}
           onClick={() => onOpen?.(r)}
-          onKeyDown={(ev) => { if (ev.key === "Enter") onOpen?.(r); }}
+          onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onOpen?.(r); } }}
           style={{
           backgroundColor: T.card, border: `1px solid ${T.border}`,
           borderRadius: 10, padding: "10px 12px", cursor: "pointer", textAlign: "left",
@@ -658,7 +667,7 @@ function FeedbackList({ rows, T }) {
 }
 
 function SignupsList({ rows, T, onReload, reloadedAt }) {
-  if (!rows.length) return <Empty T={T} text="No new accounts in last 90 days." />;
+  if (!rows.length) return <Empty T={T} text="No account creation days were returned." />;
   const total = rows.reduce((s, r) => s + (r.signups || 0), 0);
   // The old number added these three together and called the sum "signups",
   // which is how a panel showing four physicians read 8.
@@ -672,9 +681,9 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Account creation in the loaded history</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>physicians who created an account (email on file, admin excluded)</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>account records with email on file, excluding administrators</div>
           </div>
           {onReload && (
             <button onClick={onReload} style={{
@@ -686,7 +695,7 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
         {(abandoned > 0 || adminAccts > 0) && (
           <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 8, lineHeight: 1.5 }}>
             Not counted above: {[
-              abandoned ? `${abandoned} started signing up and never came back (no email on the account)` : "",
+              abandoned ? `${abandoned} profiles with no email on file` : "",
               adminAccts ? `${adminAccts} your own admin account` : "",
             ].filter(Boolean).join(" \u00b7 ")}.
           </div>
@@ -711,85 +720,6 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
   );
 }
 
-/** Client-side crashes reported by report-error. Last 50, newest first. */
-function ErrorsList({ rows, users, T, onCleared }) {
-  const [openId, setOpenId] = useState(null);
-  const [liveBuild, setLiveBuild] = useState(null);
-  useEffect(() => {
-    // What the site serves right now: anything reported by an older build
-    // cannot happen again on current code.
-    fetch(`${import.meta.env.BASE_URL}version.json?cb=${Date.now()}`)
-      .then(r => r.json()).then(v => setLiveBuild(v?.build || null)).catch(() => {});
-  }, []);
-  const [clearing, setClearing] = useState(false);
-  const clearAll = async () => {
-    if (!rows.length || !window.confirm(`Delete all ${rows.length} error reports? Do this once the cause is fixed.`)) return;
-    setClearing(true);
-    const { error } = await supabase.from("client_errors").delete().in("id", rows.map(r => r.id));
-    setClearing(false);
-    if (!error) onCleared?.();
-  };
-  const who = (e) => {
-    const u = users.find(x => x.auth_user_id && x.auth_user_id === e.auth_user_id) || users.find(x => x.id === e.profile_id);
-    return u ? (u.name || u.email || "account") : (e.auth_user_id ? "signed-in user" : "signed-out visitor");
-  };
-  if (!rows.length) return <div style={{ fontSize: 13, color: T.textMuted, padding: "20px 0", textAlign: "center" }}>No client errors reported.</div>;
-  // One row per distinct crash per build, with how many times it happened.
-  const groups = [];
-  const seen = new Map();
-  for (const e of rows) {
-    const key = `${e.build}|${e.kind}|${e.message}`;
-    if (seen.has(key)) { const g = seen.get(key); g.count++; g.ids.push(e.id); continue; }
-    const g = { ...e, count: 1, ids: [e.id] };
-    seen.set(key, g); groups.push(g);
-  }
-  const stale = groups.filter(g => liveBuild && g.build && g.build !== liveBuild);
-  const clearStale = async () => {
-    const ids = stale.flatMap(g => g.ids);
-    if (!ids.length) return;
-    setClearing(true);
-    const { error } = await supabase.from("client_errors").delete().in("id", ids);
-    setClearing(false);
-    if (!error) onCleared?.();
-  };
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div style={{ fontSize: 12, color: T.textMuted }}>
-          {groups.length} distinct {groups.length === 1 ? "crash" : "crashes"} from {rows.length} report{rows.length === 1 ? "" : "s"}.
-          {stale.length > 0 && ` ${stale.length} already fixed by a later build; they clear themselves within a day.`}
-        </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          {stale.length > 0 && (
-            <button onClick={clearStale} disabled={clearing} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer" }}>Clear fixed</button>
-          )}
-          <button onClick={clearAll} disabled={clearing} style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textDim, cursor: "pointer" }}>{clearing ? "..." : "Clear all"}</button>
-        </div>
-      </div>
-      {groups.map(e => (
-        <div key={e.id} onClick={() => setOpenId(openId === e.id ? null : e.id)} style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", color: e.kind === "react" ? "#ef4444" : "#f59e0b" }}>{e.kind}</span>
-            <span style={{ fontSize: 11, color: T.textDim }}>
-              {e.count > 1 ? `${e.count}x · ` : ""}{timeAgo(e.created_at)} · {who(e)}{e.build ? ` · ${String(e.build).slice(-7)}` : ""}
-              {liveBuild && e.build && e.build !== liveBuild ? " · fixed in a later build" : ""}
-            </span>
-          </div>
-          <div style={{ fontSize: 13, color: T.text, marginTop: 4, wordBreak: "break-word" }}>{e.message}</div>
-          {openId === e.id && (
-            <div style={{ marginTop: 8, fontSize: 11, color: T.textMuted, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "ui-monospace, monospace" }}>
-              {e.url && <div>{e.url}</div>}
-              {e.user_agent && <div style={{ marginTop: 4 }}>{e.user_agent}</div>}
-              {e.stack && <div style={{ marginTop: 6 }}>{e.stack}</div>}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Calls the admin-only send-invite function. A held request is never a send. */
 async function sendInvite(body) {
   try {
     const { data, error } = await supabase.functions.invoke("send-invite", { body });
@@ -822,22 +752,18 @@ function accessColor(st) {
  * Users: the account directory plus the invite allowlist. Two people can be
  * approved today; this is where that happens and where it can be undone.
  */
-function UsersPanel({ users, setUsers, invites, setInvites, T }) {
+function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invites, T, onRefresh }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [showTest, setShowTest] = useState(false);
   const [lifetimeTarget, setLifetimeTarget] = useState(null);
+  const [accessChange, setAccessChange] = useState(null);
+  const [search, setSearch] = useState("");
+  const [accessFilter, setAccessFilter] = useState(initialAccess);
 
-  const refresh = async () => {
-    const [pr, ba] = await Promise.all([
-      supabase.from("profiles").select("id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state,deleted_at").order("created_at", { ascending: false }).limit(500),
-      supabase.from("beta_access").select("*").order("created_at", { ascending: false }).limit(500),
-    ]);
-    if (pr.data) setUsers(pr.data);
-    if (ba.data) setInvites(ba.data);
-  };
+  const refresh = async () => { onRefresh(); };
 
   const invite = async () => {
     const e = email.trim().toLowerCase();
@@ -857,36 +783,16 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
     if (r.ok) refresh();
   };
 
-  const setInviteStatus = async (inv, status) => {
-    setInvites(rs => rs.map(x => x.id === inv.id ? { ...x, status } : x));
-    await supabase.from("beta_access").update({ status, updated_at: new Date().toISOString() }).eq("id", inv.id);
-    if (inv.profile_id) {
-      await supabase.rpc("admin_set_access", { p_profile: inv.profile_id, p_status: status === "active" ? "active" : status === "revoked" ? "revoked" : "pending" });
-    }
-    refresh();
-  };
-
-  const removeInvite = async (inv) => {
-    if (!confirm(`Remove ${inv.email} from the invite list?`)) return;
-    setInvites(rs => rs.filter(x => x.id !== inv.id));
-    await supabase.from("beta_access").delete().eq("id", inv.id);
-    if (inv.profile_id) await supabase.rpc("admin_set_access", { p_profile: inv.profile_id, p_status: "pending" });
-    refresh();
-  };
-
-  const setAccess = async (u, status) => {
-    setUsers(rs => rs.map(x => x.id === u.id ? { ...x, access_status: status } : x));
-    const { error } = await supabase.rpc("admin_set_access", { p_profile: u.id, p_status: status });
-    if (error) setMsg(`Could not update: ${error.message}`);
-    refresh();
-  };
+  const setInviteStatus = (inv, status) => setAccessChange({ kind: "invite", row: inv, action: "set_status", status });
+  const removeInvite = inv => setAccessChange({ kind: "invite", row: inv, action: "remove" });
+  const setAccess = (u, status) => setAccessChange({ kind: "profile", row: u, status });
 
   const isTest = (u) => !u.email && !u.name && !u.npi && !u.last_seen_at;
-  const shown = users.filter(u => showTest || !isTest(u));
+  const shown = filterAdminUsers(users, { query: search, access: accessFilter, showEmpty: showTest });
   // Founding members: numbered by Postgres when a physician signs up and
   // is activated (profiles.founding_number). An invitation alone never counts.
   const foundingCount = users.filter(u => u.founding_number != null && u.access_status === "active").length;
-  const hiddenCount = users.length - shown.length;
+  const hiddenCount = users.filter(isTest).length;
   const inviteByEmail = Object.fromEntries(invites.map(i => [i.email.toLowerCase(), i]));
   const accountEmails = new Set(users.map(u => (u.email || "").toLowerCase()).filter(Boolean));
   // Still outstanding: never signed in (no account, not activated), or paused.
@@ -937,10 +843,10 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
             {inv.status !== "revoked" && chip("Re-send email", T.accent, () => resend(inv), false)}
-            {inv.status === "revoked"
-              ? chip("Restore access", "#10b981", () => setInviteStatus(inv, inv.profile_id ? "active" : "invited"), false)
-              : chip("Pause access", "#ef4444", () => setInviteStatus(inv, "revoked"), false)}
-            {chip("Remove", T.textDim, () => removeInvite(inv), false)}
+            {!inv.profile_id && !inv.activated_at ? <>
+              {inv.status === "revoked" ? chip("Restore invitation", "#10b981", () => setInviteStatus(inv, "invited"), false) : chip("Pause invitation", "#ef4444", () => setInviteStatus(inv, "revoked"), false)}
+              {chip("Remove", T.textDim, () => removeInvite(inv), false)}
+            </> : <span style={{ color: T.textMuted, fontSize: 12 }}>Manage this invitation through its linked account below.</span>}
           </div>
         </div>
       ))}
@@ -948,8 +854,12 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
       <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
         Legacy founding badges: {foundingCount} (separate from paid founding memberships)
       </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" /></label>
+        <label>App access <select value={accessFilter} onChange={event => setAccessFilter(event.target.value)}><option value="all">All access states</option><option value="active">Active</option><option value="pending">Pending</option><option value="revoked">Paused</option></select></label>
+      </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
-        Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty test account{hiddenCount === 1 ? "" : "s"}</button>}
+        Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}
       </div>
       {shown.map(u => {
         const inv = u.email ? inviteByEmail[u.email.toLowerCase()] : null;
@@ -990,15 +900,17 @@ function UsersPanel({ users, setUsers, invites, setInvites, T }) {
               </div>
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-              {u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
-              {u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
-              {u.access_status === "revoked" && chip("Back to pending", T.textDim, () => setAccess(u, "pending"), false)}
+              {!u.deleted_at && u.id !== myProfileId && u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
+              {!u.deleted_at && u.id !== myProfileId && u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
+              {!u.deleted_at && u.id !== myProfileId && u.access_status === "revoked" && chip("Back to pending", T.textDim, () => setAccess(u, "pending"), false)}
               {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
                 && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
             </div>
           </div>
         );
       })}
+      {!shown.length && <Empty T={T} text="No loaded accounts match these filters. Load more records above to widen the search." />}
+      {accessChange && <AdminAccessChange key={`${accessChange.kind}:${accessChange.row.id}:${accessChange.status || accessChange.action}`} change={accessChange} T={T} onClose={() => setAccessChange(null)} onSaved={() => { setMsg("Access change saved in Control history."); refresh(); }} />}
       {lifetimeTarget && <AdminLifetimeAccess target={lifetimeTarget} onClose={() => setLifetimeTarget(null)} onGranted={result => {
         setUsers(rows => rows.map(row => row.id === result.target.profileId && row.auth_user_id === result.target.clerkSubject ? { ...row, access_status: "active" } : row));
       }} />}

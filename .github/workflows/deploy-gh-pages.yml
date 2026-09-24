@@ -82,6 +82,13 @@ jobs:
           PG_BIN="$(pg_config --bindir 2>/dev/null || true)"
           echo "PG_BIN=${PG_BIN:-<not found, PostgreSQL tests will skip>}"
           PG_BIN="$PG_BIN" npm test
+          # Run the new permission/transaction suite after other disposable DBs
+          # have stopped, avoiding contention for local shared-memory slots.
+          if [ -x "$PG_BIN/initdb" ]; then
+            PG_BIN="$PG_BIN" npm run test:admin-db
+          else
+            echo "Admin database checks unavailable: PostgreSQL is not installed."
+          fi
 
       # Refuse to ship a client that syncs a table production does not have.
       # A TABLE_MAP key whose table is missing fails the account load for EVERY
