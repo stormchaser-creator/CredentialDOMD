@@ -65,7 +65,12 @@ test('production wiring gates both editors and preserves the exact local collect
   assert.doesNotMatch(app, /sectionKey="(?:answerBank|identityVault)"/);
   const preserve = context.indexOf('merged = preservePausedApplicationRecords(merged, local, tombstones)');
   assert.ok(preserve > context.indexOf('await listTombstones(profileId)'));
-  assert.ok(preserve < context.indexOf('for (const ref of pausedApplicationLinks(merged))'));
+  // The link pass (src/utils/documentLinks.js) must run after paused records
+  // are preserved, or their document links would be cleared. Assert the call
+  // exists, so a refactor that moves it cannot make this pass vacuously.
+  const linkPass = context.indexOf('reconcileDocumentLinks(merged, COLLECTION_KEYS, pausedApplicationLinks(merged))');
+  assert.ok(linkPass > 0, 'the link pass must still receive the paused application links');
+  assert.ok(preserve < linkPass);
   assert.ok(preserve < context.indexOf('saveData(merged, authUserId)'));
   const registry = database.match(/const TABLE_MAP = \{[\s\S]*?\n\};/)[0];
   assert.doesNotMatch(registry, /answerBank|identityVault/);

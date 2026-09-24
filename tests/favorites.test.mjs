@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -80,12 +80,26 @@ test("every starrable section is a real synced collection", () => {
   }
 });
 
-test("the migration adds the column to every table in TABLE_MAP", () => {
-  const sql = read("supabase", "migrations", "20260924010000_record_favorites.sql");
-  const covered = new Set([...sql.matchAll(/'([a-z_]+)'/g)].map(m => m[1]));
+test("every table in TABLE_MAP has a favorite column in some migration", () => {
+  // The favorites migration covered the 31 tables that existed then. A table
+  // created later declares the column in its own CREATE TABLE. Never "fix"
+  // this by editing an already-applied migration: that changes nothing on a
+  // database that has run it.
+  const dir = new URL("../supabase/migrations/", import.meta.url);
+  const covered = new Set();
+  for (const f of readdirSync(dir).filter(n => n.endsWith(".sql"))) {
+    const sql = readFileSync(new URL(f, dir), "utf8");
+    if (f === "20260924010000_record_favorites.sql") {
+      for (const m of sql.matchAll(/'([a-z_]+)'/g)) covered.add(m[1]);
+      continue;
+    }
+    for (const m of sql.matchAll(/create table if not exists public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gi)) {
+      if (/\bfavorite\s+boolean\b/i.test(m[2])) covered.add(m[1]);
+    }
+  }
   for (const table of Object.values(tableMap())) {
     assert.ok(covered.has(table),
-      `${table} is in TABLE_MAP but not in the favorites migration: any record carrying the favorite key would have its WHOLE row rejected on save, not just the star`);
+      `${table} is in TABLE_MAP but no migration gives it a favorite column: any record carrying the favorite key would have its WHOLE row rejected on save, not just the star`);
   }
 });
 

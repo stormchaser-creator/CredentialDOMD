@@ -14,6 +14,7 @@ import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompl
 import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
+import { reconcileDocumentLinks } from "../utils/documentLinks.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { MS_PER_DAY } from "../utils/helpers";
 import {
@@ -347,20 +348,18 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           }
 
           // Link sweep: a document pointing at an item that no longer exists
-          // becomes unlinked (visible in Files) instead of phantom-linked.
-          const liveIds = new Set();
-          for (const key of COLLECTION_KEYS) {
-            if (key === "documents") continue;
-            for (const x of merged[key] || []) if (x?.id) liveIds.add(`${key}:${x.id}`);
+          // becomes unlinked (visible in Files) instead of phantom-linked. It
+          // clears only links whose collection this version knows, and puts
+          // back links an older version cleared but a custom record still
+          // claims. See src/utils/documentLinks.js.
+          const linkPass = reconcileDocumentLinks(merged, COLLECTION_KEYS, pausedApplicationLinks(merged));
+          merged.documents = linkPass.documents;
+          for (const d of linkPass.cleared) {
+            sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }, d, authUserId).catch(() => {});
           }
-          for (const ref of pausedApplicationLinks(merged)) liveIds.add(ref);
-          merged.documents = (merged.documents || []).map(d => {
-            if (d.linkedTo && !liveIds.has(d.linkedTo)) {
-              sbUpdate(profileId, "documents", { id: d.id, linkedTo: "" }, d, authUserId).catch(() => {});
-              return { ...d, linkedTo: "" };
-            }
-            return d;
-          });
+          for (const d of linkPass.relinked) {
+            sbUpdate(profileId, "documents", { id: d.id, linkedTo: d.linkedTo }, d, authUserId).catch(() => {});
+          }
 
           // A cloud document row carries metadata only (bytes live in Storage).
           // Re-attach any bytes this device still holds locally so the merge

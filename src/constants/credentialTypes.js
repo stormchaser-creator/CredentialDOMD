@@ -300,5 +300,8 @@ export const SECTION_META = {
   // A receipt has two possible homes (Work > Expenses to bill an agency, or
   // the deduction ledger); the scan card picks, so no fixed section here.
   receipt: { label: "Expense Receipt", icon: "\ud83e\uddfe", color: "#d97706", section: null },
+  // Fits no built-in section: filed into one of the physician's own
+  // categories (custom_records). No fixed section, like a receipt.
+  other: { label: "Other (your categories)", icon: "\ud83d\uddc2\ufe0f", color: "#64748b", section: null },
   unknown: { label: "Unrecognized Document", icon: "\u2753", color: "#6b7280", section: null },
 };

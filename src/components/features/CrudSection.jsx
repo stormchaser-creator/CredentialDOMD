@@ -15,6 +15,7 @@ import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon, StarIcon } from "../shared/Icons";
 import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
+import { splitScanned } from "../../utils/docPrefill";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { isContactPickerSupported, pickContact, parseVCard, parseContactText, CONTACT_EMAIL } from "../../utils/contactImport";
@@ -285,9 +286,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           const extracted = result?.extracted || result?.fields;
           if (extracted && typeof extracted === "object") {
             // Auto-fill form with extracted fields (don't overwrite existing values)
+            // Only this form's own fields become form keys: the form's keys are
+            // written as columns, and one the table lacks rejects the whole
+            // record. Everything else is kept as a detail on the record.
+            const { placed, extras, withheld } = splitScanned(extracted, fields.map(f => f.key));
             setForm(prev => {
               const merged = { ...prev };
-              for (const [key, value] of Object.entries(extracted)) {
+              for (const [key, value] of Object.entries(placed)) {
                 if (value != null && value !== "" && !merged[key]) {
                   // Handle arrays (like topics) properly
                   const strValue = Array.isArray(value) ? value : String(value);
@@ -295,10 +300,12 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                   merged[key] = canonicalizeSelectValue(fieldDef, strValue);
                 }
               }
+              if (Object.keys(extras).length) merged.customFields = { ...extras, ...(merged.customFields || {}) };
               return merged;
             });
-            const fieldCount = Object.keys(extracted).filter(k => extracted[k] != null && extracted[k] !== "").length;
-            setScanMsg(`${fieldCount} field${fieldCount !== 1 ? "s" : ""} extracted and auto-filled.`);
+            const fieldCount = Object.keys(placed).length;
+            const extraCount = Object.keys(extras).length;
+            setScanMsg(`${fieldCount} field${fieldCount !== 1 ? "s" : ""} filled${extraCount ? `, ${extraCount} more detail${extraCount !== 1 ? "s" : ""} kept on the record` : ""}.${withheld.length ? " Patient identifiers, SSNs and full birth dates were left out." : ""}`);
             setScanIsError(false);
           } else {
             setScanMsg("Document scanned but no fields could be extracted.");

@@ -1,4 +1,6 @@
 import { useState, useMemo, memo } from "react";
+import OtherDocumentReview from "./OtherDocumentReview";
+import { identifierReason } from "../../utils/customCategories";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, HEALTH_RECORD_CATEGORIES, getHealthRecordTypes, TB_RESULTS, EDUCATION_TYPES, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../../constants/credentialTypes";
@@ -93,18 +95,53 @@ const FIELD_ALIASES = {
 };
 const DIRECT_CARRY_KEYS = ["state", "expirationDate", "notes"];
 
+// Reclassifying must never throw away what the scan read. Values that map to
+// the new type's fields move there; everything else is kept as a detail on
+// the record (customFields, which every credential table has) instead of being
+// dropped, which is what used to happen to all but three fields.
+const humanKey = (k) => String(k).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, c => c.toUpperCase());
 function remapEdited(prevDocType, nextDocType, prev) {
+  // The "other" flow reads every field and fact itself.
+  if (nextDocType === "other") return { ...prev };
   const nextKeys = new Set((FIELD_DEFS[nextDocType] || []).map(f => f.key));
   const next = {};
+  const used = new Set();
   DIRECT_CARRY_KEYS.forEach(k => {
-    if (nextKeys.has(k) && prev[k]) next[k] = prev[k];
+    if (nextKeys.has(k) && prev[k]) { next[k] = prev[k]; used.add(k); }
   });
   const from = FIELD_ALIASES[prevDocType] || {};
   const to = FIELD_ALIASES[nextDocType] || {};
-  if (to.name && from.name && prev[from.name]) next[to.name] = prev[from.name];
-  if (to.primaryDate && from.primaryDate && prev[from.primaryDate]) next[to.primaryDate] = prev[from.primaryDate];
-  if (to.provider && from.provider && prev[from.provider]) next[to.provider] = prev[from.provider];
+  for (const role of ["name", "primaryDate", "provider"]) {
+    if (to[role] && from[role] && prev[from[role]]) { next[to[role]] = prev[from[role]]; used.add(from[role]); }
+  }
+  if ((prevDocType === "other" || prevDocType === "unknown") && to.name && !next[to.name] && prev.name) { next[to.name] = prev.name; used.add("name"); }
+  const extras = { ...(prev.customFields && typeof prev.customFields === "object" ? prev.customFields : {}) };
+  const put = (label, value) => {
+    const text = Array.isArray(value) ? value.join(", ") : String(value);
+    if (!text.trim()) return;
+    // Moving a fact into a built-in record's details must pass the same gate
+    // as everywhere else: no patient identifier, SSN or full birth date.
+    if (identifierReason(label, text)) return;
+    let k = label, n = 2;
+    while (Object.hasOwn(extras, k)) k = `${label} (${n++})`;
+    extras[k] = text;
+  };
+  for (const f of Array.isArray(prev.facts) ? prev.facts : []) if (f?.label && f.value != null) put(String(f.label), f.value);
+  for (const [k, v] of Object.entries(prev)) {
+    if (used.has(k) || k === "facts" || k === "customFields" || k === "suggestedCategory") continue;
+    if (v == null || v === "" || typeof v === "object" && !Array.isArray(v)) continue;
+    if (nextKeys.has(k)) { next[k] = v; continue; }
+    put(humanKey(k), v);
+  }
+  if (Object.keys(extras).length) next.customFields = extras;
   return next;
+}
+
+// An unrecognised document still counts as read when the scan returned any
+// value; those readings are filed, not thrown away.
+function hasReadings(extracted) {
+  if (!extracted || typeof extracted !== "object") return false;
+  return Object.entries(extracted).some(([k, v]) => k !== "suggestedCategory" && (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== ""));
 }
 
 function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
@@ -202,6 +239,15 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
         ))}
       </div>
 
+      {/* Fits no built-in section, or unrecognised but still read: file it in
+          one of the physician's own categories instead of discarding it. */}
+      {(docType === "other" || (docType === "unknown" && hasReadings(edited))) ? (
+        <OtherDocumentReview
+          extracted={edited}
+          onFile={(payload) => onSave("other", payload, imageData, fileName)}
+          onDiscard={onDiscard}
+        />
+      ) : (<>
       {/* Fields */}
       <div style={{ padding: "14px 18px" }}>
         {docType === "unknown" ? (
@@ -427,6 +473,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
           }}>Keep as plain document</button>
         </div>
       )}
+      </>)}
     </div>
   );
 }

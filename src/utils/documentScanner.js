@@ -31,14 +31,60 @@ function extractBase64(dataUrl) {
 // result is never filed here: it is handed to the CV import
 // (src/utils/cvScan.js) instead. Deliberately absent from SECTION_META and
 // FIELD_DEFS for the same reason.
-const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "travel", RECEIPT_DOC_TYPE, "cv", "unknown"];
+const VALID_DOC_TYPES = ["license", "cme", "privilege", "insurance", "healthRecord", "education", "agreement", "travel", RECEIPT_DOC_TYPE, "cv", "other", "unknown"];
+
+// A physician's own document that fits no built-in type. It is filed into one
+// of their own categories (custom_records) rather than dropped. See
+// src/utils/customCategories.js.
+export const OTHER_DOC_TYPE = "other";
 
 export const CV_DOC_TYPE = "cv";
 
 
+// Category names are the physician's own text and go into a prompt, so they
+// are capped and stripped of anything that could read as markup or quotes.
+function categoryHints(categories) {
+  return (Array.isArray(categories) ? categories : [])
+    .map(c => String(typeof c === "string" ? c : c?.name || "").replace(/["`{}<>\\]/g, "").replace(/\s+/g, " ").trim().slice(0, 60))
+    .filter(Boolean).slice(0, 30);
+}
+
+function normalizeOther(extracted) {
+  const e = extracted && typeof extracted === "object" && !Array.isArray(extracted) ? { ...extracted } : {};
+  const facts = Array.isArray(e.facts) ? e.facts : [];
+  e.facts = facts
+    .filter(f => f && typeof f === "object" && f.label != null && f.value != null && String(f.value).trim() !== "")
+    .slice(0, 200)
+    .map(f => ({ label: String(f.label).slice(0, 80), value: typeof f.value === "string" ? f.value : JSON.stringify(f.value) }));
+  const sc = e.suggestedCategory && typeof e.suggestedCategory === "object" ? e.suggestedCategory : {};
+  e.suggestedCategory = {
+    name: String(sc.name || "").slice(0, 80),
+    icon: String(sc.icon || "").slice(0, 8),
+    fields: (Array.isArray(sc.fields) ? sc.fields : []).map(x => String(typeof x === "string" ? x : x?.label || "")).filter(Boolean).slice(0, 12),
+  };
+  return e;
+}
+
 function validateResponse(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  if (!VALID_DOC_TYPES.includes(parsed.documentType)) return null;
+  // A type string the model invented used to throw "could not identify", and
+  // everything it had read was lost. Keep what it read, as an "other" document
+  // the physician files into one of their own categories.
+  if (!VALID_DOC_TYPES.includes(parsed.documentType)) {
+    if (typeof parsed.documentType !== "string" || !parsed.extracted || typeof parsed.extracted !== "object") return null;
+    const invented = parsed.documentType;
+    parsed.documentType = OTHER_DOC_TYPE;
+    const ex = parsed.extracted;
+    const KEEP = ["name", "issuer", "number", "issuedDate", "expirationDate"];
+    const human = (k) => String(k).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, c => c.toUpperCase());
+    // MOVE every other field into facts (never copy it): each value appears
+    // once, under a readable label the identifier gate can recognise.
+    const kept = Object.fromEntries(KEEP.filter(k => ex[k] != null && ex[k] !== "").map(k => [k, ex[k]]));
+    parsed.extracted = { ...kept, facts: [...(Array.isArray(ex.facts) ? ex.facts : []),
+      ...Object.entries(ex).filter(([k, v]) => !["facts", "suggestedCategory", ...KEEP].includes(k) && v != null && v !== "" && typeof v !== "object")
+        .map(([k, v]) => ({ label: human(k), value: String(v) }))],
+      suggestedCategory: ex.suggestedCategory || { name: invented } };
+  }
   if (parsed.extracted && typeof parsed.extracted !== "object") return null;
   if (parsed.confidence && !["high", "medium", "low"].includes(parsed.confidence)) {
     parsed.confidence = "low";
@@ -47,6 +93,7 @@ function validateResponse(parsed) {
   // (amount, ISO date, currency code, card last-4, a category from our list)
   // rather than trusting the model's formatting.
   if (parsed.documentType === RECEIPT_DOC_TYPE) parsed.extracted = normalizeReceipt(parsed.extracted);
+  if (parsed.documentType === OTHER_DOC_TYPE) parsed.extracted = normalizeOther(parsed.extracted);
   parsed.extracted = normalizeScanDates(parsed.extracted);
   return parsed;
 }
@@ -107,7 +154,7 @@ function handleApiError(response) {
   throw new Error("Document analysis failed. Please try again.");
 }
 
-const SYSTEM_PROMPT = (degreeType) => `You are a medical credential document analyzer. Given an image of a document a physician uploaded (a credential, or an expense receipt from their work travel), you must:
+const SYSTEM_PROMPT = (degreeType, categories = []) => `You are a medical credential document analyzer. Given an image of a document a physician uploaded (a credential, or an expense receipt from their work travel), you must:
 1. Classify the document type
 2. Extract all relevant fields
 3. Return ONLY valid JSON (no markdown, no backticks, no explanation)
@@ -146,15 +193,20 @@ ${degreeType === "DO" ? `    "State Medical License (DO)", "State Medical Licens
   Fields: type (MUST be one of: "Driver\u2019s License", "Passport", "Known Traveler (TSA PreCheck)", "Global Entry", "Visa", "Airline loyalty", "Hotel loyalty", "Rental car membership", "Other"), name (display label, e.g. "CA Driver's License — notarized copy"), provider (issuing state, country, or company), number (document or membership number), expirationDate (YYYY-MM-DD), notes (e.g. "notarized copy, notarized 2026-07-30")
 - "receipt": An expense receipt, invoice, folio, or charge slip for money the physician paid: tolls (INCLUDING toll, PlatePass, TollPass or e-Toll charges billed by a rental car company such as Alamo, Hertz, Avis, Enterprise, National or Budget), rental car, fuel, rideshare or taxi, airfare or baggage fees, hotel or lodging, parking, meals; also licensing or registration fees, CME or conference registration, society dues, supplies, or software the physician paid for. A printed or emailed receipt, a phone screenshot of one, and a rental "toll administration" statement are all "receipt". A receipt is NEVER "license", "agreement", or "cme" even when it names the physician or a course.
   Fields: merchant (the business paid, cleaned: "Alamo Rent A Car", not a card-processor prefix), date (YYYY-MM-DD transaction date; for a multi-day rental or hotel stay use the return / checkout date), total (number, the grand total actually paid including tax, fees and tip; plain number, no $ or commas), currency (ISO 4217 code such as "USD"; assume USD when only a $ sign is shown), category (MUST be exactly one of: ${RECEIPT_CATEGORIES.map(c => `"${c}"`).join(", ")}; toll charges on a rental car invoice are "Tolls", not "Rental car"), last4 (the last four digits of the card if printed, e.g. "4321"), paymentMethod (card brand or method if printed: "Visa", "Mastercard", "Amex", "Discover", "Debit", "Cash"), description (short: what was bought, e.g. "Toll charges, Denver rental Aug 12-15"), notes
+- "other": a physician's OWN document that is none of the types above: e.g. a hospital ID badge, an award or honor, a parking or facility access permit, a vendor or badge-access credentialing registration, a radiation dosimetry report. NEVER use "other" when the document is any type listed above: a board certification, DEA or BLS is still "license"; a vendor, device, procedure or course-completion certificate without CME credit is still "license" with type "Certification"; a fellowship, residency or internship certificate is still "education"; a titer or drug screen is still "healthRecord".
+  Fields: name (display label of the item, never a person's name), issuer, number, issuedDate (YYYY-MM-DD), expirationDate (YYYY-MM-DD),
+  suggestedCategory: { name (a PLURAL, reusable kind of document, e.g. "Hospital ID Badges"; if one of the physician's existing categories listed below fits, return ITS EXACT NAME), icon (one emoji), fields (array of 2 to 8 labels for facts that recur on this kind of document) },
+  facts: array of { label, value } for EVERY other data point printed on it, so nothing is lost. Repeat a label when the document repeats it.
+  NEVER include a patient's name, MRN, medical record number, diagnosis or date of birth, and never the physician's Social Security number, full date of birth, or any account number. Leave those out entirely.
 - "unknown": Cannot determine document type
 
 The physician is ${degreeType === "DO" ? "a DO (Doctor of Osteopathic Medicine)" : degreeType === "MD" ? "an MD" : "an MD or DO (degree not yet specified in their profile; classify from the document itself)"}.
 Return JSON: { "documentType": "...", "confidence": "high"|"medium"|"low", "extracted": { ...fields }, "notes": "..." }
 Use YYYY-MM-DD dates. Omit fields that are not visible. Use 2-letter state abbreviations.
 If the document is a curriculum vitae or resume (a multi-section document listing this physician's own education, training, positions, licenses, publications and memberships), classify it as "cv", extract NOTHING, and return { "documentType": "cv", "confidence": "high", "extracted": {}, "notes": "" }. It is read elsewhere.
-IMPORTANT: the "name" field is a DISPLAY LABEL describing the credential itself (e.g. "CO Medical License", "DEA Registration", "MMR Vaccination", "DO Diploma - PCOM") — NEVER the physician's own name. Do not put a person's name in "name".`;
+${categories.length ? `The physician's existing categories (reuse one for an "other" document when it fits): ${categories.map(c => `"${c}"`).join(", ")}.\n` : ""}IMPORTANT: the "name" field is a DISPLAY LABEL describing the credential itself (e.g. "CO Medical License", "DEA Registration", "MMR Vaccination", "DO Diploma - PCOM") — NEVER the physician's own name. Do not put a person's name in "name".`;
 
-export async function analyzeDocument(imageData, degreeType, apiKey) {
+export async function analyzeDocument(imageData, degreeType, apiKey, { categories = [] } = {}) {
   if (!isValidDataUrl(imageData)) {
     throw new Error("Invalid image data. Please try uploading again.");
   }
@@ -162,7 +214,7 @@ export async function analyzeDocument(imageData, degreeType, apiKey) {
   const compressed = await compressImage(imageData);
 
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType) }] },
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType, categoryHints(categories)) }] },
     contents: [{
       parts: [
         {
@@ -188,13 +240,13 @@ export async function analyzeDocument(imageData, degreeType, apiKey) {
   return result;
 }
 
-export async function analyzePDF(pdfData, degreeType, apiKey) {
+export async function analyzePDF(pdfData, degreeType, apiKey, { categories = [] } = {}) {
   if (!isValidDataUrl(pdfData)) {
     throw new Error("Invalid PDF data. Please try uploading again.");
   }
 
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType) }] },
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType, categoryHints(categories)) }] },
     contents: [{
       parts: [
         {
@@ -224,13 +276,13 @@ export async function analyzePDF(pdfData, degreeType, apiKey) {
  * Analyze a document supplied as PLAIN TEXT (extracted from Word/Excel
  * uploads). Same classification pipeline as images/PDFs.
  */
-export async function analyzeDocText(text, degreeType, apiKey) {
+export async function analyzeDocText(text, degreeType, apiKey, { categories = [] } = {}) {
   if (!text?.trim()) {
     throw new Error("No readable text in this document.");
   }
 
   const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType) }] },
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType, categoryHints(categories)) }] },
     contents: [{
       parts: [
         { text: `DOCUMENT CONTENT (text extracted from an uploaded Word/Excel file):\n\n${text}` },

@@ -4,6 +4,7 @@ import { searchRecords, findSection } from "./HomeSearch";
 import { useInputStyle } from "../shared/useInputStyle";
 import { generateId, normalizeMultilineNote } from "../../utils/helpers";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
+import { repairActions, buildCategory, packRecord, cleanRecordInput, recordFromFields, updateRecord } from "../../utils/customCategories";
 import { archivedReferenceActions, buildAssistantHistory, latestReferenceSelection, resolveReferenceSelection } from "../../utils/referenceDraft.js";
 import ReferenceDraftCard from "./ReferenceDraftCard.jsx";
 import VeraSourceReceipt from "./VeraSourceReceipt.jsx";
@@ -179,6 +180,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       // back to Gemini on the next online start; LOCAL_ONLY_SETTINGS in
       // lib/supabase.js is what carries it across that merge now.
       const result = await assistantTurn({ history, snapshot, settings: data.settings, attachment: att });
+      // Her section list is enforced by her prompt alone. Repair in code: an
+      // invented section becomes a proposed category instead of a record that
+      // shows as done and then exists nowhere. See customCategories.js.
+      result.actions = repairActions(result.actions, { data });
       // Deterministic honesty net: if the reply CLAIMS the developer will
       // hear about something but carries no feedback action, attach one
       // built from the user's own words — the model once said "I'll pass
@@ -219,7 +224,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           else if (sec) target = { sec, id: null };
         }
         if (target) {
-          navigate(target.sec.tab, target.sec.sub, target.id ? { sec: target.sec.key, id: target.id } : null);
+          const sub = target.sec.key === "customRecords"
+            ? `custom:${(data.customRecords || []).find(r => r?.id === target.id)?.categoryId || "unsorted"}`
+            : target.sec.sub;
+          navigate(target.sec.tab, sub, target.id ? { sec: target.sec.key, id: target.id } : null);
           result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, done: true, summary: `Opened ${target.sec.label}${target.id ? "" : " (record not found, showing the section)"}` } : a);
         } else {
           result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, dismissed: true } : a);
@@ -229,7 +237,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       const modelMsg = { id: generateId(), role: "model", text: result.reply, actions: result.actions, sourceEvidence: result.sourceEvidence };
       // Keep the file with the proposal so Approve can save it to Files too —
       // only for documents the user just attached, never the implicit re-send.
-      if (explicitAtt?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record")) {
+      if (explicitAtt?.dataUrl && (result.actions || []).some(a => a.kind === "create_record" || a.kind === "update_record" || a.kind === "create_category")) {
         modelMsg.sourceAttach = { dataUrl: explicitAtt.dataUrl, name: explicitAtt.name };
       }
       // Resolve against the latest state: checkbox edits made while Vera was
@@ -290,23 +298,40 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     if (!action || action.done) return;
     // The document that produced this proposal gets saved to Files and linked
     // to the first record you approve — the file itself stays with the data.
-    const saveSourceDoc = (linkedTo) => {
+    const saveSourceDoc = (linkedTo, docId = generateId()) => {
       const att = msg.sourceAttach;
-      if (!att?.dataUrl || msg.sourceAttachSaved || savedAttachRef.current.has(msgId)) return;
+      if (!att?.dataUrl || msg.sourceAttachSaved || savedAttachRef.current.has(msgId)) return null;
       const b64 = att.dataUrl.split(",")[1] || "";
       // The record is still created; only the file stays out of Documents
       // when the account is at its 2 GB line.
       const quota = checkStorageQuota(data.documents, [{ name: att.name || "attachment", size: Math.round(b64.length * 0.75) }]);
-      if (!quota.ok) { setErr(quota.message); return; }
+      if (!quota.ok) { setErr(quota.message); return null; }
       savedAttachRef.current.add(msgId);
-      addItem("documents", {
-        id: generateId(), name: att.name || "attachment",
+      const stored = addItem("documents", {
+        id: docId, name: att.name || "attachment",
         type: att.dataUrl.slice(5, att.dataUrl.indexOf(";")),
         size: Math.round(b64.length * 0.75), data: att.dataUrl,
         uploadedAt: new Date().toISOString(), linkedTo,
       });
+      if (stored === false) { savedAttachRef.current.delete(msgId); return null; }
       setMsgs(m => m.map(x => x.id === msgId ? { ...x, sourceAttachSaved: true } : x));
+      return docId;
     };
+    // The file that produced a proposal, if it has not been saved yet: its id
+    // is decided BEFORE the record is written, so the record can list it.
+    const pendingSourceDocId = () => (msg.sourceAttach?.dataUrl && !msg.sourceAttachSaved && !savedAttachRef.current.has(msgId)) ? generateId() : null;
+    // addItem/editItem return false when the write is refused (a read-only
+    // membership, a storage limit) and undefined on success. A refused write
+    // must never show as done.
+    const mustWrite = (result, what) => { if (result === false) throw new Error(`Could not save ${what}. Nothing was changed.`); };
+    // A category the physician hid is matched rather than duplicated, so filing
+    // into it brings it back: otherwise the record lands somewhere they cannot see.
+    const revive = (category) => {
+      if (category?.archivedAt) mustWrite(editItem("customCategories", { ...category, archivedAt: null }), `"${category.name}"`);
+    };
+    const withheldNote = (withheld) => withheld.length
+      ? `Not saved, on purpose: ${[...new Set(withheld.map(w => w.reason))].join(", ")}. This app does not keep patient identifiers or your SSN and full date of birth.`
+      : null;
     // New on-the-fly fields go to the founder's approval queue — the schema
     // evolves under admin review, not silently.
     const proposeFields = (section, extra) => {
@@ -319,27 +344,84 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       }
     };
     try {
-      if (action.kind === "create_record") {
-        const { clean, extra } = splitFields(action.section, action.fields, action.customFields);
+      // Re-check against the data as it is NOW: a category an earlier card in
+      // this chat created must be reused, never duplicated.
+      const [current] = repairActions([action], { data });
+      if (current.invalid) throw new Error(current.invalid);
+      let note = null;
+      if (current.kind === "create_category") {
+        const now = new Date().toISOString();
+        const category = current.existingCategoryId
+          ? (data.customCategories || []).find(c => c.id === current.existingCategoryId)
+          : buildCategory(current.category, { id: generateId(), origin: "vera", now });
+        if (!category) throw new Error("That category no longer exists.");
+        if (!current.existingCategoryId) mustWrite(addItem("customCategories", category), "the new category");
+        else revive(category);
+        const withheld = [];
+        let firstId = null;
+        const docId = pendingSourceDocId();
+        for (const [n, input] of (current.records || []).entries()) {
+          const id = generateId();
+          const { record, withheld: w } = packRecord(category, { ...input, documentIds: n === 0 && docId ? [docId] : [] }, { id });
+          withheld.push(...w);
+          mustWrite(addItem("customRecords", record), `"${record.name || "the record"}"`);
+          if (!firstId) firstId = id;
+        }
+        if (firstId && docId) saveSourceDoc(`customRecords:${firstId}`, docId);
+        else if (docId) saveSourceDoc("", docId); // no record to hold it: still keep the file, in Documents
+        note = withheldNote(withheld);
+      } else if (current.kind === "create_record" && current.section === "customRecords") {
+        const category = (data.customCategories || []).find(c => c.id === current.categoryId);
+        if (!category) throw new Error("That category no longer exists.");
+        revive(category);
+        const id = generateId();
+        const docId = pendingSourceDocId();
+        const { record, withheld } = packRecord(category, { ...(current.record || {}), documentIds: docId ? [docId] : [] }, { id });
+        mustWrite(addItem("customRecords", record), `"${record.name || "the record"}"`);
+        if (docId) saveSourceDoc(`customRecords:${id}`, docId);
+        note = withheldNote(withheld);
+      } else if (current.kind === "create_record") {
+        const { clean, extra } = splitFields(current.section, current.fields, current.customFields);
         const newId = generateId();
-        addItem(action.section, { ...clean, id: newId, ...(extra ? { customFields: extra } : {}) });
-        proposeFields(action.section, extra);
-        saveSourceDoc(`${action.section}:${newId}`);
+        mustWrite(addItem(current.section, { ...clean, id: newId, ...(extra ? { customFields: extra } : {}) }), "the record");
+        proposeFields(current.section, extra);
+        saveSourceDoc(`${current.section}:${newId}`);
+      } else if (current.kind === "update_record" && current.section === "customRecords") {
+        const existing = (data.customRecords || []).find(x => x.id === current.id);
+        if (!existing) throw new Error("Record not found. It may have been deleted.");
+        const category = (data.customCategories || []).find(c => c.id === existing.categoryId) || null;
+        // Her prompt teaches { fields, customFields } for every update; accept
+        // that shape and { record } alike. updateRecord keeps every value the
+        // edit does not mention, and a value it sends replaces the old one.
+        const incoming = { ...cleanRecordInput(recordFromFields(current.fields, current.customFields)), ...cleanRecordInput(current.record || {}) };
+        const docId = pendingSourceDocId();
+        const { record, withheld } = updateRecord(category, existing, incoming, { addDocumentIds: docId ? [docId] : [] });
+        mustWrite(editItem("customRecords", record), "the change");
+        if (docId) saveSourceDoc(`customRecords:${existing.id}`, docId);
+        note = withheldNote(withheld);
       } else if (action.kind === "update_record") {
         const existing = (data[action.section] || []).find(x => x.id === action.id);
         if (!existing) throw new Error("Record not found — it may have been deleted.");
         const { clean, extra } = splitFields(action.section, action.fields, action.customFields);
-        editItem(action.section, { ...existing, ...clean, ...(extra ? { customFields: { ...(existing.customFields || {}), ...extra } } : {}) });
+        mustWrite(editItem(action.section, { ...existing, ...clean, ...(extra ? { customFields: { ...(existing.customFields || {}), ...extra } } : {}) }), "the change");
         proposeFields(action.section, extra);
         saveSourceDoc(`${action.section}:${action.id}`);
       } else if (action.kind === "update_document") {
         const doc = (data.documents || []).find(d => d.id === action.id);
-        if (!doc) throw new Error("Document not found — it may have been deleted.");
-        editItem("documents", {
+        if (!doc) throw new Error("Document not found. It may have been deleted.");
+        const nextLink = current.linkedTo !== undefined ? (current.linkedTo || "") : undefined;
+        mustWrite(editItem("documents", {
           ...doc,
-          ...(action.name ? { name: action.name } : {}),
-          ...(action.linkedTo !== undefined ? { linkedTo: action.linkedTo || "" } : {}),
-        });
+          ...(current.name ? { name: current.name } : {}),
+          ...(nextLink !== undefined ? { linkedTo: nextLink } : {}),
+        }), "the document");
+        const prev = String(doc.linkedTo || "");
+        if (nextLink !== undefined && prev.startsWith("customRecords:") && prev !== nextLink) {
+          const owner = (data.customRecords || []).find(r => `customRecords:${r.id}` === prev);
+          if (owner && Array.isArray(owner.documentIds) && owner.documentIds.includes(doc.id)) {
+            editItem("customRecords", { ...owner, documentIds: owner.documentIds.filter(x => x !== doc.id) });
+          }
+        }
       } else if (action.kind === "feedback") {
         const body = action.text || action.summary || "";
         logToCloud("feedback", `[${action.category || "idea"}] ${body}`, "queued for the developer");
@@ -435,8 +517,12 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           a.href = url; a.download = file.name; a.click();
           setTimeout(() => URL.revokeObjectURL(url), 15000);
         }
+      } else if (!["create_record", "create_category", "update_record"].includes(current.kind)) {
+        // Anything this version does not know how to run used to be marked
+        // done without doing anything.
+        throw new Error("This version cannot run that action.");
       }
-      markAction(msgId, idx, { done: true });
+      markAction(msgId, idx, { done: true, ...(note ? { note } : {}) });
     } catch (e3) {
       if (e3?.name !== "AbortError") markAction(msgId, idx, { error: e3.message });
     }
@@ -580,7 +666,9 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                     : a.kind === "feedback" ? "Feedback for the developer"
                     : a.kind === "send_packet" ? `Send packet · ${(a.docIds || []).length} documents`
                       : a.kind === "update_document" ? "File / rename a document"
-                        : a.kind === "update_record" ? `Update in ${a.section}` : `New record → ${a.section}`}
+                        : a.kind === "update_record" ? `Update in ${a.section}`
+                          : a.kind === "create_category" ? (a.existingCategoryId ? `Add to ${a.category?.name}` : `New category → ${a.category?.name}`)
+                            : a.section === "customRecords" ? `New record → ${a.categoryName || "your category"}` : `New record → ${a.section}`}
                   {a.done && " ✓ done"}
                 </div>
                 <div style={{ fontSize: 13.5, color: T.text, marginTop: 3 }}>{a.summary}</div>
@@ -594,16 +682,25 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
                     +{Object.keys(a.customFields).length} extra detail{Object.keys(a.customFields).length > 1 ? "s" : ""} kept as custom fields
                   </div>
                 )}
+                {a.kind === "create_category" && !a.done && (a.records || []).length > 0 && (
+                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
+                    Files {(a.records || []).length} record{(a.records || []).length > 1 ? "s" : ""} in it
+                    {(a.category?.fields || []).length ? `, with fields: ${(a.category.fields || []).map(f => typeof f === "string" ? f : f?.label).filter(Boolean).slice(0, 6).join(", ")}` : ""}
+                  </div>
+                )}
+                {a.repaired && !a.done && <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>{a.repaired}</div>}
+                {a.invalid && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{a.invalid}</div>}
+                {a.note && <div style={{ fontSize: 12, color: T.warning, marginTop: 4 }}>{a.note}</div>}
                 {a.error && <div style={{ fontSize: 12, color: T.danger, marginTop: 4 }}>{a.error}</div>}
                 {a.done && a.emailedTo && (
                   <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>Emailed to {a.emailedTo}</div>
                 )}
                 {!a.done && (
                   <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    <button onClick={() => runAction(m.id, i)} style={{
+                    {!a.invalid && <button onClick={() => runAction(m.id, i)} style={{
                       flex: 1, minWidth: 100, padding: "9px", borderRadius: 9, border: "none",
                       backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
-                    }}>Approve</button>
+                    }}>Approve</button>}
                     {a.kind === "send_packet" && (
                       <button
                         title="Send these documents as email attachments from CredentialDOMD, replies come to you"

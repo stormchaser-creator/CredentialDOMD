@@ -49,6 +49,10 @@ export const SECTIONS: Section[] = [
   { table: "invoices", key: "invoices", label: "Invoices" },
   { table: "deductibles", key: "deductibles", label: "Deductions" },
   { table: "rotations", key: "rotations", label: "Rotations" },
+  // follow_ups was in TABLE_MAP and missing here, so monthly backups left it out.
+  { table: "follow_ups", key: "followUps", label: "Follow-ups" },
+  { table: "custom_categories", key: "customCategories", label: "Your categories" },
+  { table: "custom_records", key: "customRecords", label: "Records in your categories" },
 ];
 
 /** Columns that must never leave Postgres inside an archive. */

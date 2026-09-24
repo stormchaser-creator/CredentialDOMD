@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, memo } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useDeskAddShortcut } from "../../hooks/useDeskKeys";
 import { pushModal, popModal } from "../../utils/deskKeys";
@@ -7,7 +7,8 @@ import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
 import { generateId, downscalePhoto } from "../../utils/helpers";
-import { analyzeDocument, analyzePDF, analyzeDocText, CV_DOC_TYPE } from "../../utils/documentScanner";
+import { analyzeDocument, analyzePDF, analyzeDocText, CV_DOC_TYPE, OTHER_DOC_TYPE } from "../../utils/documentScanner";
+import { liveCategories, findCategory, buildCategory, packRecord } from "../../utils/customCategories";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
@@ -24,11 +25,15 @@ const LINKED_META_KEY = {
   licenses: "license", cme: "cme", privileges: "privilege", insurance: "insurance",
   healthRecords: "healthRecord", education: "education", locumContracts: "agreement",
   travelDocs: "travel", travelExpenses: RECEIPT_DOC_TYPE, deductibles: RECEIPT_DOC_TYPE,
+  customRecords: "other",
 };
 
 function DocumentsSection() {
   const { data, setData, addItem, editItem, deleteItem: deleteItemCtx, updateSettings, theme: T, navigate } = useApp();
   const iS = useInputStyle();
+  // The physician's own category names, so the scanner files a second badge
+  // where the first went instead of inventing a near-duplicate.
+  const scanHints = useMemo(() => ({ categories: liveCategories({ customCategories: data.customCategories }).map(c => c.name) }), [data.customCategories]);
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
   const videoRef = useRef(null);
@@ -269,10 +274,10 @@ function DocumentsSection() {
         setScanning(true);
         try {
           const result = isOfficeFile(file)
-            ? await analyzeDocText(await extractOfficeText({ name: file.name, type: file.type, file }), deg, apiKey)
+            ? await analyzeDocText(await extractOfficeText({ name: file.name, type: file.type, file }), deg, apiKey, scanHints)
             : file.type === "application/pdf"
-              ? await analyzePDF(dataUrl, deg, apiKey)
-              : await analyzeDocument(dataUrl, deg, apiKey);
+              ? await analyzePDF(dataUrl, deg, apiKey, scanHints)
+              : await analyzeDocument(dataUrl, deg, apiKey, scanHints);
           // An image or PDF can only be judged once it has been read. If it
           // turns out to be a patient record, remove it again immediately
           // rather than leaving it on the server.
@@ -300,7 +305,7 @@ function DocumentsSection() {
         setScanError(`Document saved but could not be analyzed. ${describeAiStatus(data.settings)}`);
       }
     }
-  }, [apiKey, aiOn, deg, addItem, deleteItemCtx, data.documents, data.settings, requireApiKey]);
+  }, [apiKey, aiOn, deg, addItem, deleteItemCtx, data.documents, data.settings, requireApiKey, scanHints]);
 
   const capturePhoto = useCallback(() => {
     const video = videoRef.current;
@@ -341,6 +346,34 @@ function DocumentsSection() {
       setScanQueue(q => q.filter(item => item.docId !== docId));
       return;
     }
+    if (docType === OTHER_DOC_TYPE) {
+      const now = new Date().toISOString();
+      let category = fields?.mode === "existing"
+        ? (data.customCategories || []).find(c => c.id === fields.categoryId)
+        // A card saved a moment ago may already have created it: reuse, never twin.
+        : findCategory(data.customCategories, fields?.newCategory?.name);
+      if (!category && fields?.mode !== "existing") {
+        try { category = buildCategory(fields?.newCategory || {}, { id: generateId(), origin: "uploader", now }); }
+        catch (e) { setScanError(e.message); return; }
+        if (addItem("customCategories", category) === false) { setScanError("Could not create that category. Nothing was changed."); return; }
+      }
+      if (!category) { setScanError("That category no longer exists. Pick another one."); return; }
+      // Filing into a category the physician hid brings it back, rather than
+      // putting the record somewhere they cannot see it.
+      if (category.archivedAt && editItem("customCategories", { ...category, archivedAt: null }) === false) {
+        setScanError("Could not show that category again. Nothing was changed."); return;
+      }
+      const { record, withheld } = packRecord(category, { ...(fields?.record || {}), documentIds: docId ? [docId] : [] }, { id });
+      if (addItem("customRecords", record) === false) { setScanError("Could not save this record. The file is still in Documents."); return; }
+      const doc = data.documents.find(d => d.id === docId);
+      if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `customRecords:${id}` });
+      setFiled({
+        text: `Filed in ${category.name}.${withheld.length ? " Patient identifiers, SSNs and full birth dates were left out." : ""}`,
+        label: `Open ${category.name}`, tab: "credentials", sub: `custom:${category.id}`,
+      });
+      setScanQueue(q => q.filter(item => item.docId !== docId));
+      return;
+    }
     if (docType === CV_DOC_TYPE) {
       setScanError("A CV holds many records at once, so it is not filed as one. Use Start from your CV.");
       return;
@@ -350,7 +383,10 @@ function DocumentsSection() {
       setScanError(`Cannot file "${docType}" — this app version doesn't know that category. Update the app (reload) and re-scan.`);
       return;
     }
-    const entry = { ...fields, id };
+    // facts and suggestedCategory come only from an "other" read and are never
+    // columns; written as keys they would reject the whole record.
+    const { facts: _facts, suggestedCategory: _suggested, ...kept } = fields || {};
+    const entry = { ...kept, id };
     if (section === "cme" && !entry.topics) entry.topics = [];
     if (section === "locumContracts") {
       // Contract terms drive billing math — coerce to numbers with defaults.
@@ -386,10 +422,10 @@ function DocumentsSection() {
       const mime = docMime(doc);
       const isPdf = mime === "application/pdf" || doc.data.startsWith("data:application/pdf");
       const result = isOfficeFile(doc)
-        ? await analyzeDocText(await extractOfficeText({ name: doc.name, type: mime, dataUrl: doc.data }), deg, apiKey)
+        ? await analyzeDocText(await extractOfficeText({ name: doc.name, type: mime, dataUrl: doc.data }), deg, apiKey, scanHints)
         : isPdf
-          ? await analyzePDF(doc.data, deg, apiKey)
-          : await analyzeDocument(doc.data, deg, apiKey);
+          ? await analyzePDF(doc.data, deg, apiKey, scanHints)
+          : await analyzeDocument(doc.data, deg, apiKey, scanHints);
       // Same branch as the upload path: a CV rescanned here would otherwise
       // render a fieldless review card whose Save has nowhere to file it.
       if (result.documentType === CV_DOC_TYPE) {
@@ -401,7 +437,7 @@ function DocumentsSection() {
       setScanError(err.message || "Could not read this document.");
     }
     setScanning(false);
-  }, [apiKey, deg, requireApiKey]);
+  }, [apiKey, deg, requireApiKey, scanHints]);
   // Full-screen viewing: images get a lightbox, PDFs open in a viewer sheet
   const [lightbox, setLightbox] = useState(null);
   // Escape must close the lightbox, not the modal underneath it: capture
@@ -440,7 +476,10 @@ function DocumentsSection() {
   // One document card. Shared by the inbox group and the stored list.
   const renderDoc = (doc) => {
     const sectionKey = doc.linkedTo?.split(":")[0];
-    const linkedMeta = doc.linkedTo ? SECTION_META[LINKED_META_KEY[sectionKey] || "unknown"] : null;
+    const baseMeta = doc.linkedTo ? SECTION_META[LINKED_META_KEY[sectionKey] || "unknown"] : null;
+    const customHome = sectionKey === "customRecords"
+      ? (data.customRecords || []).find(r => `customRecords:${r.id}` === doc.linkedTo)?.categoryName : null;
+    const linkedMeta = baseMeta && customHome ? { ...baseMeta, label: customHome } : baseMeta;
 
     const isSelected = selectedIds.has(doc.id);
     const mime = docMime(doc);

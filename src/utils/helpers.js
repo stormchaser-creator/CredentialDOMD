@@ -353,6 +353,9 @@ export function describeItem(item, physicianName, sectionKey) {
         || (item.citation ? String(item.citation).split(".").slice(0, 2).join(".").slice(0, 90) : "Publication");
     case "caseLogs":
       return notMe(item.title) || t(item.category) || "Case";
+    case "customRecords":
+      // A record in one of the physician's own categories
+      return join(notMe(item.name) || t(item.categoryName) || "Record", t(item.issuer));
     default:
       break;
   }

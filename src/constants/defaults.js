@@ -44,6 +44,11 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const DEFAULT_DATA = {
+  // User-created categories and the records filed in them (custom_categories,
+  // custom_records). Without these, offline and cached loads leave the keys
+  // undefined and assertCompleteAccountRecords refuses the account.
+  customCategories: [],
+  customRecords: [],
   licenses: [],
   cme: [],
   privileges: [],

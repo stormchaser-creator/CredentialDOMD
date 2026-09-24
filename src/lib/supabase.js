@@ -206,6 +206,11 @@ const TABLE_MAP = {
   // cache and vanished on a fresh load.
   deductibles: "deductibles",
   rotations: "rotations",
+  // Categories a physician, Vera or the uploader created, and the records in
+  // them. Credential scope. Migration 20260925010000_custom_categories.sql;
+  // scripts/check-tables-exist.mjs refuses a deploy if either table is missing.
+  customCategories: "custom_categories",
+  customRecords: "custom_records",
 };
 
 function tableName(key) {

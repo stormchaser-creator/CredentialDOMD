@@ -33,6 +33,9 @@ export const STARRABLE_SECTIONS = [
   "cme", "education", "workHistory", "caseLogs",
   "healthRecords", "travelDocs", "screenings", "professionalPhotos",
   "publications", "memberships", "peerReferences", "malpracticeHistory",
+  // Records in the physician's own categories. custom_records declares its
+  // own favorite column (migration 20260925010000).
+  "customRecords",
 ];
 
 export function isStarrable(sectionKey) {
