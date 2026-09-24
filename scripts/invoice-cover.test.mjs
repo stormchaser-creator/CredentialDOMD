@@ -79,7 +79,8 @@ ok("subject has no em dash", !subject.includes(EM_DASH));
 const [blurbLead, ...blurbRest] = blurb.split("\n\n");
 eq("blurb leads with the subject line (iOS Mail may promote it)", blurbLead.trim(), subject + ".");
 ok("blurb body is one flowing paragraph", blurbRest.length === 1 && !blurbRest[0].includes("\n"));
-ok("blurb reads correctly with every line break stripped", /Medical Center\. Attached is invoice/.test(blurb.replace(/\n/g, "")));
+ok("blurb reads correctly with every line break stripped", /Medical Center\. The attached invoice/.test(blurb.replace(/\n/g, "")));
+ok("blurb doesn't repeat the invoice number/physician/facility the subject already gave", blurb.split("INV-0012").length === 2 && blurb.split("Arrowhead Regional Medical Center").length === 2);
 ok("blurb has no em dash", !blurb.includes(EM_DASH));
 ok("blurb has no CR", !blurb.includes("\r"));
 ok("partial blurb never calls the full amount 'total due'", !blurb.includes("Total due"));
@@ -87,12 +88,12 @@ ok("partial blurb states total, paid, balance", blurb.includes("Invoice total: $
 ok("unpaid blurb states total due", invoiceCoverBlurb(unpaid).includes("Total due: $3,025.00."));
 ok("settled blurb says paid in full", invoiceCoverBlurb(settled).includes("Invoice total: $3,025.00, paid in full."));
 ok("blurb signs with name, NPI, email", blurb.includes("Thank you, Eric Whitney, DO (NPI 1234567890, eric@example.com)."));
-ok("blurb mentions the period", blurb.includes("covering Aug 1, 2026 through Aug 15, 2026"));
-ok("blurb says 'Below' when the invoice text follows in the same body", invoiceCoverBlurb(partial, { attached: false }).includes("Below is invoice INV-0012"));
+ok("blurb mentions the period", blurb.includes("covers Aug 1, 2026 through Aug 15, 2026"));
+ok("blurb says 'Below' when the invoice text follows in the same body", invoiceCoverBlurb(partial, { attached: false }).includes("The invoice below"));
 {
   const bare = invoiceCoverBlurb({ number: "INV-0003", total: 200 });
   ok("bare blurb has no undefined/null", !/undefined|null/.test(bare), bare);
-  ok("bare blurb falls back to 'your facility'", bare.includes("at your facility"));
+  ok("bare blurb states the total due", bare.includes("Total due: $200.00."));
 }
 
 // ── Cover letter ──

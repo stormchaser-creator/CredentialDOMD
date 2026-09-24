@@ -83,6 +83,11 @@ const signature = (inv) => [inv.physician || "", inv.npi ? `NPI ${inv.npi}` : ""
  * then one flowing paragraph that still reads correctly with every line
  * break stripped. `attached` is false when the invoice text follows the
  * blurb in the same body instead of riding as a file.
+ *
+ * Every navigator.share() caller passes this alongside its own `title`
+ * (which the OS uses as the Subject), so the lead sentence already names
+ * the invoice number, physician, and facility once. The paragraph below it
+ * doesn't repeat them -- restating all three again read as a wall of text.
  */
 export function invoiceCoverBlurb(inv = {}, { attached = true } = {}) {
   const pay = invoicePayment(inv);
@@ -94,11 +99,15 @@ export function invoiceCoverBlurb(inv = {}, { attached = true } = {}) {
   const sig = signature(inv);
   const contact = sig.slice(1).join(", ");
   const thanks = `Thank you, ${sig[0] || "the physician"}${contact ? ` (${contact})` : ""}.`;
+  const period = invoicePeriod(inv);
+  const coverageSentence = period
+    ? `${attached ? "The attached invoice" : "The invoice below"} covers ${period}.`
+    : `${attached ? "The attached invoice is ready for review." : "The invoice is below."}`;
   // Trailing space after the lead: if Mail strips the newlines the lead and
   // the paragraph still read as two sentences.
   return `${invoiceSubject(inv)}. \n\n`
-    + `${attached ? "Attached" : "Below"} is invoice ${inv.number || ""} for ${whereLine(inv)}. ${moneyText} `
-    + "The invoice itemizes each day of coverage and the work performed under the terms of our agreement. "
+    + `${coverageSentence} ${moneyText} `
+    + "It itemizes each day of coverage and the work performed under the terms of our agreement. "
     + `Please reach out with any questions. ${thanks}`;
 }
 
