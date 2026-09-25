@@ -173,6 +173,37 @@ const numbersConflict = (a, b) => { const x = normNumber(a), y = normNumber(b); 
 // name tells them apart.
 const GENERIC_TYPES = new Set(["", "other", "certification", "certificate", "board certification", "board certification abms", "board certification aoa"]);
 
+// One facility name written out in full inside the other, as whole words:
+// "Arrowhead Neurosurgical Medical Group" inside "Arrowhead Neurosurgical
+// Medical Group / Arrowhead Regional Medical Center". A shared common word
+// ("Regional", "Medical") is not enough, and neither is a single word.
+const GENERIC_PLACE_WORDS = new Set(["medical", "group", "center", "centre", "hospital", "hospitals", "health", "healthcare",
+  "system", "systems", "regional", "university", "college", "school", "clinic", "clinics", "institute", "community", "general",
+  "memorial", "county", "state", "department", "program", "network", "services", "associates", "physicians", "partners", "care"]);
+const containsName = (a, b) => {
+  const x = normFacility(a), y = normFacility(b);
+  if (!x || !y) return false;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  const words = short.split(" ");
+  return words.length >= 2 && words.some((w) => !GENERIC_PLACE_WORDS.has(w)) && ` ${long} `.includes(` ${short} `);
+};
+// The level of a training record, so "Fellowship" and "Fellowship
+// Certificate" are one fellowship. The app's own type list mixes both forms.
+const trainingLevel = (type) => {
+  const t = normKey(type);
+  if (/\bfellow/.test(t)) return "fellowship";
+  if (/\bresiden|\bchief resident/.test(t)) return "residency";
+  if (/\bintern/.test(t)) return "internship";
+  // Degrees by kind: a master's diploma from the university that granted the
+  // bachelor's is a second degree, not the same one.
+  if (/\b(doctor|do|md|dds|dmd|phd)\b/.test(t)) return "doctorate";
+  if (/\b(master|mph|mba|ms|msc)\b/.test(t)) return "master";
+  if (/\b(bachelor|bs|ba|bsc)\b/.test(t)) return "bachelor";
+  return "";
+};
+const sameDate = (a, b) => !!a && !!b && String(a).slice(0, 10) === String(b).slice(0, 10);
+const statesAgree = (a, b) => !normKey(a) || !normKey(b) || normKey(a) === normKey(b);
+
 /** "2026-09-24" -> "09/24/2026". */
 export function usDate(iso) {
   if (!validDate(iso)) return String(iso ?? "");
@@ -278,13 +309,21 @@ export function findExisting(section, fields, rows) {
           // names a kind of credential, only the same name does.
           && ((normKey(f.state) !== "" && !GENERIC_TYPES.has(normKey(f.type))) || same(f.name, r.name)));
     case "privileges":
-      return hit((r) => same(f.facility, r.facility, normFacility));
+      return hit((r) => same(f.facility, r.facility, normFacility))
+        || hit((r) => containsName(f.facility, r.facility) && statesAgree(f.state, r.state));
     case "insurance":
       return hit((r) => same(f.policyNumber, r.policyNumber, normNumber))
         || hit((r) => !numbersConflict(f.policyNumber, r.policyNumber)
           && same(f.provider, r.provider, normFacility) && same(f.type, r.type));
     case "education":
-      return hit((r) => same(f.type, r.type) && same(f.institution, r.institution, normFacility));
+      // A completion letter for a fellowship already on file is that
+      // fellowship's document, not a second fellowship. Same level of
+      // training, and either the same completion date or one institution
+      // name written inside the other.
+      return hit((r) => same(f.type, r.type) && same(f.institution, r.institution, normFacility))
+        || hit((r) => trainingLevel(f.type) !== "" && trainingLevel(f.type) === trainingLevel(r.type)
+          && (containsName(f.institution, r.institution)
+            || (sameDate(f.graduationDate, r.graduationDate) && (!f.institution || !r.institution))));
     case "cme":
       return hit((r) => !numbersConflict(f.certificateNumber, r.certificateNumber) && same(f.title, r.title) && same(f.date, r.date));
     case "healthRecords":

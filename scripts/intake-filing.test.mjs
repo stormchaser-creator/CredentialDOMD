@@ -373,3 +373,30 @@ test("in an email that also asks for something, only a finished credential with 
   assert.equal(fileableFromRequest(null), false);
   assert.ok(patientRecordScreen("op.pdf", scanOf("unknown", { text: "Operative note. MRN 00481234. Discharge summary." })));
 });
+
+// The owner's own case, 2026-09-25: a fellowship completion letter for a
+// fellowship already on file must attach to it, not become a second one.
+test("a completion letter attaches to the training record it completes", () => {
+  const rows = [
+    { id: "fel", type: "Fellowship", name: "Skull Base Fellowship", institution: "Arrowhead Neurosurgical Medical Group", graduation_date: "2026-06-30" },
+    { id: "res", type: "Residency Certificate", institution: "Desert Regional Medical Center and Arrowhead Regional Medical Center", graduation_date: "2025-06-30" },
+    { id: "bs", type: "Bachelor Degree", institution: "Liberty University", graduation_date: "2011-05-15" },
+    { id: "do", type: "Doctor of Osteopathic Medicine (DO)", institution: "Liberty University College of Osteopathic Medicine", graduation_date: "2018-05-19" },
+  ];
+  const letter = { type: "Fellowship Certificate", institution: "Arrowhead Neurosurgical Medical Group / Arrowhead Regional Medical Center", graduationDate: "2026-06-30" };
+  assert.equal(findExisting("education", letter, rows)?.id, "fel");
+  assert.equal(findExisting("education", { type: "Residency Certificate", institution: "Arrowhead Regional Medical Center", graduationDate: "2025-06-30" }, rows)?.id, "res");
+  assert.equal(findExisting("education", { type: "Fellowship Certificate", graduationDate: "2026-06-30" }, rows)?.id, "fel", "no institution read: the date decides");
+  // Must stay separate.
+  assert.equal(findExisting("education", { type: "Master of Science (MS)", institution: "Liberty University", graduationDate: "2013-05-01" }, rows), null, "a second degree from the same university");
+  assert.equal(findExisting("education", { type: "Fellowship Certificate", institution: "Barrow Neurological Institute", graduationDate: "2026-06-30" }, rows), null, "a different fellowship ending the same day");
+  assert.equal(findExisting("education", { type: "Fellowship Certificate", institution: "Medical Group", graduationDate: "2027-06-30" }, rows), null, "one generic word in common is not the same institution");
+});
+
+test("a privileges letter naming the facility more fully finds the record, within one state", () => {
+  const rows = [{ id: "pen", type: "Full Admitting Privileges", facility: "Commonspirit Penrose Hospital", state: "CO" }];
+  assert.equal(findExisting("privileges", { facility: "Penrose Hospital", state: "CO" }, rows)?.id, "pen");
+  assert.equal(findExisting("privileges", { facility: "Penrose Hospital" }, rows)?.id, "pen", "no state on the letter");
+  assert.equal(findExisting("privileges", { facility: "Penrose Hospital", state: "TX" }, rows), null, "same name, another state");
+  assert.equal(findExisting("privileges", { facility: "Sanford Health Plan" }, rows), null);
+});
