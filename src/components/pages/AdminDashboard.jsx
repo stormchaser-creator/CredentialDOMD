@@ -426,7 +426,7 @@ function AdminDashboardContent() {
         </>
       )}
       {tab === "messages" && (!loading || hasSectionData) && !error && (
-        <MessagesPanel messages={messages} setMessages={setMessages} users={users} myProfileId={userIdRef.current} repliesSince={repliesSince} T={T} />
+        <MessagesPanel messages={messages} users={users} myProfileId={userIdRef.current} repliesSince={repliesSince} T={T} onRefresh={() => setReloadKey(k => k + 1)} />
       )}
       {tab === "signups"  && (!loading || hasSectionData) && !error && (
         <>
@@ -1001,15 +1001,22 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
   };
   const [inviting, setInviting] = useState(null);
   const [inviteMsg, setInviteMsg] = useState("");
+  // Remove a row only once the server confirms exactly one row deleted. A
+  // delete that RLS refuses returns success with zero rows, so the count is
+  // the check, not just the error.
   const removeLead = async (r) => {
     const from = r.waitlist === false ? "the guide-request list" : "the waitlist";
     if (!window.confirm(`Remove ${r.email} from ${from}?`)) return;
+    setInviteMsg("");
+    const { data, error } = await supabase.from("early_access_leads").delete().eq("id", r.id).select("id");
+    if (error || data?.length !== 1) { setInviteMsg(`Could not remove ${r.email}: ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setRows(rs => rs.filter(x => x.id !== r.id));
-    await supabase.from("early_access_leads").delete().eq("id", r.id);
   };
   const removeAttempt = async (a) => {
+    setInviteMsg("");
+    const { data, error } = await supabase.from("waitlist_attempts").delete().eq("id", a.id).select("id");
+    if (error || data?.length !== 1) { setInviteMsg(`Could not dismiss ${a.email}: ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setAttempts(as2 => as2.filter(x => x.id !== a.id));
-    await supabase.from("waitlist_attempts").delete().eq("id", a.id);
   };
   const [showJoined, setShowJoined] = useState(false);
   const [showGuideOnly, setShowGuideOnly] = useState(false);
@@ -1159,13 +1166,18 @@ function FieldProposals({ rows, setRows, T }) {
   // New fields/categories the assistant created on the fly — the schema
   // evolves under founder review. Approve = keep an eye on it as a candidate
   // for a first-class field; dismiss = noise.
+  const [msg, setMsg] = useState("");
+  // The new status shows only once the server confirms one row changed.
   const setStatus = async (row, status) => {
+    setMsg("");
+    const { data, error } = await supabase.from("field_proposals").update({ status }).eq("id", row.id).select("id");
+    if (error || data?.length !== 1) { setMsg(`Could not ${status === "approved" ? "approve" : "dismiss"} "${row.label}": ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setRows(rs => rs.map(r => r.id === row.id ? { ...r, status } : r));
-    await supabase.from("field_proposals").update({ status }).eq("id", row.id);
   };
   if (!rows.length) return <Empty T={T} text="No new fields proposed yet. When the assistant invents a field to avoid dropping data, it lands here for your review." />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {msg && <div role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: T.danger || "#ef4444" }}>{msg}</div>}
       {rows.map(r => (
         <div key={r.id} style={{
           backgroundColor: T.card, border: `1px solid ${T.border}`,
@@ -1428,7 +1440,7 @@ function AiPanel({ users, ownKey, T }) {
  * Broadcast replies fan out into one thread per physician (admin_message_
  * reply_threads) so nobody sees anyone else's reply.
  */
-function MessagesPanel({ messages, setMessages, users, myProfileId, repliesSince, T }) {
+function MessagesPanel({ messages, users, myProfileId, repliesSince, T, onRefresh }) {
   const [composeOpen, setComposeOpen] = useState(false);
   const [recipient, setRecipient] = useState(""); // "" = broadcast
   const [subject, setSubject] = useState("");
@@ -1443,13 +1455,17 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, repliesSince
   const [replyBody, setReplyBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [detailMsg, setDetailMsg] = useState("");
+  // A failed thread read is not an empty thread: it hides "No one has
+  // replied yet." and says the replies could not be loaded.
+  const [threadError, setThreadError] = useState("");
 
   const activeUsers = users.filter(u => u.access_status === "active");
 
-  const refreshMessages = async () => {
-    const { data } = await supabase.from("admin_messages_overview").select("*").limit(200);
-    setMessages(data || []);
-  };
+  // Re-read through the section loader, so a failed read shows the section's
+  // error and Retry instead of "No messages sent yet.", and the coverage line
+  // is recounted with the list.
+  const refreshMessages = () => { onRefresh?.(); };
+  const THREAD_READ_FAILED = "Could not load the replies. Close this message and open it again to retry.";
 
   const send = async () => {
     const text = body.trim();
@@ -1468,22 +1484,25 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, repliesSince
   };
 
   const openDetail = async (m) => {
-    setOpenMsg(m); setDetailMsg(""); setViewingUser(null); setBroadcastThreads([]); setDirectThread([]);
+    setOpenMsg(m); setDetailMsg(""); setThreadError(""); setViewingUser(null); setBroadcastThreads([]); setDirectThread([]);
     if (m.recipient_id) {
-      const { data } = await supabase.from("admin_message_replies").select("*")
+      const { data, error } = await supabase.from("admin_message_replies").select("*")
         .eq("message_id", m.id).order("created_at");
+      if (error) { setThreadError(THREAD_READ_FAILED); return; }
       setDirectThread(data || []);
     } else {
-      const { data } = await supabase.from("admin_message_reply_threads").select("*")
+      const { data, error } = await supabase.from("admin_message_reply_threads").select("*")
         .eq("message_id", m.id).order("last_reply_at", { ascending: false });
+      if (error) { setThreadError(THREAD_READ_FAILED); return; }
       setBroadcastThreads(data || []);
     }
   };
 
   const openBroadcastThread = async (row) => {
-    setViewingUser(row); setDetailMsg("");
-    const { data } = await supabase.from("admin_message_replies").select("*")
+    setViewingUser(row); setDetailMsg(""); setThreadError(""); setDirectThread([]);
+    const { data, error } = await supabase.from("admin_message_replies").select("*")
       .eq("message_id", openMsg.id).eq("user_id", row.user_id).order("created_at");
+    if (error) { setThreadError(THREAD_READ_FAILED); return; }
     setDirectThread(data || []);
   };
 
@@ -1499,9 +1518,10 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, repliesSince
     setBusy(false);
     if (error) { setDetailMsg(error.message); return; }
     setReplyBody("");
-    const { data } = await supabase.from("admin_message_replies").select("*")
+    const { data, error: readError } = await supabase.from("admin_message_replies").select("*")
       .eq("message_id", openMsg.id).eq("user_id", targetUserId).order("created_at");
-    setDirectThread(data || []);
+    if (readError) setDetailMsg("Reply sent. The conversation could not refresh; close this message and open it again to see it.");
+    else setDirectThread(data || []);
     refreshMessages();
   };
 
@@ -1588,7 +1608,9 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, repliesSince
                 <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
                   Replies ({broadcastThreads.length})
                 </div>
-                {broadcastThreads.length === 0 ? (
+                {threadError ? (
+                  <div role="alert" style={{ fontSize: 12.5, color: T.danger || "#ef4444" }}>{threadError}</div>
+                ) : broadcastThreads.length === 0 ? (
                   <div style={{ fontSize: 12.5, color: T.textDim }}>No one has replied yet.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1613,6 +1635,7 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, repliesSince
 
             {showingThread && (
               <>
+                {threadError && <div role="alert" style={{ marginTop: 12, fontSize: 12.5, color: T.danger || "#ef4444" }}>{threadError}</div>}
                 {directThread.length > 0 && (
                   <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
                     {directThread.map(r => (
