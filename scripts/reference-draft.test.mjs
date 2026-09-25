@@ -39,6 +39,11 @@ assert.equal(buildEmailSubject(refs[0], "peerReferences", settings), "Profession
 const mail = new URL(mailtoHref("", "Professional references", draft.text));
 assert.equal(mail.searchParams.get("body").replace(/\r\n/g, "\n"), draft.text);
 assert.ok(buildCredentialText({ type: "Medical License", licenseNumber: "SYN-123", state: "CA" }, "licenses", settings).includes("License #: SYN-123"));
+// The share text goes to the recipient; the clipboard is the sender's business (ticket 821d2f76).
+for (const hasDocs of [true, false]) {
+  assert.ok(!/clipboard|sender/i.test(buildCredentialBlurb({ type: "Medical License", licenseNumber: "SYN-123", state: "CA" }, "licenses", settings, hasDocs, "")));
+  assert.ok(!/clipboard/i.test(buildCredentialBlurb(refs[0], "peerReferences", settings, hasDocs, "")));
+}
 
 const messages = [
   { role: "user", text: "Prepare my references, excluding Excluded One." },

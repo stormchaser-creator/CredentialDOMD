@@ -71,9 +71,12 @@ export function buildReferenceDraft(references, action) {
 
 export function referenceSharePayload(references) {
   return {
+    // The multi-reference share carries `full`: no file rides along, and the
+    // line-break strip was seen on shares that carry one (ticket 821d2f76).
     full: references.map(buildReferenceText).join("\n\n"),
-    // Native iOS Mail flattens newlines; each reference remains self-contained
-    // and reads as short sentences instead of a semicolon-joined run-on line.
+    // Flowing form for a share that carries a file, where iOS Mail flattens
+    // newlines; each reference remains self-contained and reads as short
+    // sentences instead of a semicolon-joined run-on line.
     text: references.map((ref, i) => `${i + 1}. ${referenceSentences(ref)}`).join(" "),
   };
 }

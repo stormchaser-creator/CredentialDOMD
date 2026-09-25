@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { searchRecords, findSection } from "./HomeSearch";
 import { useInputStyle } from "../shared/useInputStyle";
 import { generateId, normalizeMultilineNote } from "../../utils/helpers";
+import { veraPacketShareText } from "../../utils/shareText";
 import { assistantTurn, buildSnapshot, splitFields } from "../../utils/assistant";
 import { repairActions, buildCategory, packRecord, cleanRecordInput, recordFromFields, updateRecord } from "../../utils/customCategories";
 import { archivedReferenceActions, buildAssistantHistory, latestReferenceSelection, resolveReferenceSelection } from "../../utils/referenceDraft.js";
@@ -445,24 +446,18 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         const docs = (action.docIds || [])
           .map(id2 => (data.documents || []).find(d => d.id === id2))
           .filter(d => d && d.data);
-        if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet — open Files to let them sync, then approve again.");
+        if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet. Open Files to let them sync, then approve again.");
         const files = docs.map(dataUrlToFile);
-        const normalizedCoverNote = normalizeMultilineNote(action.coverNote) || "Credential documents enclosed.";
-        const note = `${normalizedCoverNote}\n\n— sent from CredentialDOMD`;
-        // LLM cover notes can be multi-line or semicolon-joined; iOS Mail and
-        // the native share sheet both flatten newlines into one paragraph, so
-        // the blurb re-splits the normalized note into lines and turns each
-        // into its own sentence rather than leaving raw semicolons/newlines
-        // to collapse into a run-on line. Formatted note also goes on the
-        // clipboard above.
-        const blurb = "Credential packet: " + normalizedCoverNote.split("\n").map(l => l.trim()).filter(Boolean)
-          .map(l => /[.!?]$/.test(l) ? l : `${l}.`).join(" ")
-          + " Sent from CredentialDOMD.";
-        try { await navigator.clipboard.writeText(note); } catch { /* clipboard unavailable */ }
+        // LLM cover notes can be multi-line or semicolon-joined; iOS Mail
+        // flattens the newlines of a share that carries files, so the blurb
+        // is one sentence per line of the normalized note, and the formatted
+        // note goes on the clipboard (src/utils/shareText.js).
+        const { title, note: packetNote, blurb } = veraPacketShareText(action.coverNote);
+        try { await navigator.clipboard.writeText(packetNote); } catch { /* clipboard unavailable */ }
         let shared = false;
         if (navigator.canShare && navigator.canShare({ files })) {
           try {
-            await navigator.share({ title: "Credential packet", text: blurb, files });
+            await navigator.share({ title, text: blurb, files });
             shared = true;
           } catch (shareErr) {
             if (shareErr?.name === "AbortError") return; // user closed the sheet
@@ -476,14 +471,14 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           if (standalone) throw new Error("The share sheet didn't open — try Approve again.");
           // Desktop fallback: download every file and put the cover note on
           // the clipboard, ready to paste into an email.
-          try { await navigator.clipboard.writeText(note); } catch { /* clipboard unavailable */ }
+          try { await navigator.clipboard.writeText(packetNote); } catch { /* clipboard unavailable */ }
           for (const f of files) {
             const url = URL.createObjectURL(f);
             const a = document.createElement("a");
             a.href = url; a.download = f.name; a.click();
             setTimeout(() => URL.revokeObjectURL(url), 15000);
           }
-          setErr(`This browser can't attach files to a share sheet, so the ${files.length} documents are downloading instead (allow multiple downloads if asked) — and the cover note is on your clipboard, ready to paste into your email.`);
+          setErr(`This browser can't attach files to a share sheet, so the ${files.length} documents are downloading instead (allow multiple downloads if asked). The cover note is on your clipboard, ready to paste into your email.`);
         }
         addItem("shareLog", {
           id: generateId(), itemName: `Vera packet (${docs.length} files)`,
@@ -491,7 +486,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           recipient: action.summary || "",
         });
         if (docs.length < (action.docIds || []).length) {
-          setErr(`Sent ${docs.length} of ${(action.docIds || []).length} — the rest haven't downloaded to this device yet.`);
+          setErr(`Sent ${docs.length} of ${(action.docIds || []).length}. The rest haven't downloaded to this device yet.`);
         }
       } else if (action.kind === "export_data") {
         const { rows, label } = buildExport(data, action);

@@ -77,16 +77,18 @@ export function formatDate(s) {
 
 // The assistant is instructed to write cover notes as short standalone
 // sentences on separate lines, but an LLM can still return one
-// semicolon/period-joined run-on line despite that instruction. This
+// semicolon-joined run-on line despite that instruction. This
 // deterministically re-splits it so a slip on the model's part never
-// reaches the user as a run-on paragraph.
+// reaches the user as a run-on paragraph. A run-on list has at least two
+// semicolons; a single one is ordinary punctuation inside a sentence
+// ("The DEA renewal is pending; I will send it next week.") and stays.
 export function normalizeMultilineNote(text) {
   const raw = String(text || "").trim();
   if (!raw) return raw;
   const existingLines = raw.split("\n").map(l => l.trim()).filter(Boolean);
   if (existingLines.length > 1) return existingLines.join("\n");
   const bySemicolon = raw.split(/;\s*/).map(s => s.trim()).filter(Boolean);
-  return bySemicolon.length > 1 ? bySemicolon.join("\n") : raw;
+  return bySemicolon.length > 2 ? bySemicolon.join("\n") : raw;
 }
 
 // RFC 6068: a mailto body needs CRLF line breaks — a bare "\n" reads as one
@@ -103,9 +105,19 @@ export function daysUntil(dateStr) {
   return Math.ceil((new Date(dateStr) - new Date()) / MS_PER_DAY);
 }
 
+// Outgoing text never carries an em dash (ticket 821d2f76). On-screen labels
+// from describeItem join their parts with one; a letter or subject line gets
+// a comma instead.
+export function plainDashes(text) {
+  return String(text ?? "").replace(/\s*\u{2014}\s*/gu, ", ");
+}
+
 function getSectionFacts(item, section) {
   const facts = [];
-  const a = (k, v) => { if (v) facts.push([k, v]); };
+  // formatDate() of a missing date is an on-screen dash placeholder; a fact
+  // with no value is left out instead of being sent as "Issued: <dash>".
+  const noDate = formatDate("");
+  const a = (k, v) => { if (v && v !== noDate) facts.push([k, v]); };
 
   if (section === "licenses") {
     a("Type", item.type); a("License #", item.licenseNumber); a("State", item.state);
@@ -199,14 +211,14 @@ export function buildCredentialText(item, section, settings) {
     lines.push("Specialty: " + names.join(", "));
   }
   lines.push("Degree: " + (deg === "DO" ? "Doctor of Osteopathic Medicine" : "Doctor of Medicine"));
-  lines.push(div, describeItem(item, settings.name, section), "");
+  lines.push(div, plainDashes(describeItem(item, settings.name, section)), "");
 
   for (const [k, v] of getSectionFacts(item, section)) lines.push(k + ": " + v);
 
   if (item.components?.length) {
     lines.push("", "Searches Performed:");
     for (const c of item.components) {
-      lines.push("- " + [c.name, c.scope, c.status, c.date && formatDate(c.date)].filter(Boolean).join(" — "));
+      lines.push("- " + [c.name, c.scope, c.status].filter(Boolean).join(", ") + (c.date ? ` (${formatDate(c.date)})` : ""));
     }
   }
 
@@ -220,7 +232,9 @@ export function buildCredentialText(item, section, settings) {
  * files are attached, promotes the FIRST LINE of text to the subject, and
  * strips every line break — so this must be ONE flowing paragraph whose
  * opening words read as a subject. The formatted letter goes to the
- * clipboard alongside (see ShareModal.doShare). Broken into short sentences
+ * clipboard alongside (see ShareModal.doShare), and the SENDER is told so
+ * there; this text goes to the recipient and never mentions the clipboard
+ * (ticket 821d2f76). Broken into short sentences
  * (physician, then facts, then provenance) instead of one semicolon-joined
  * run-on — each fact is its own period-terminated sentence, not a "; "-joined
  * list, so it still reads as separate statements once line breaks are gone —
@@ -247,8 +261,7 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
   return "Credential verification from " + physician + ". " + facts
     + (note ? " " + note.trim().replace(/\s+/g, " ") : "")
     + (hasDocs ? " Supporting documentation is attached." : "")
-    + " Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString() + "."
-    + " A formatted copy of this verification is on the sender's clipboard for pasting if preferred.";
+    + " Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString() + ".";
 }
 
 export function buildEmailSubject(item, section, settings) {

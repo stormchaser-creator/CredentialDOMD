@@ -7,6 +7,7 @@ import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
 import { generateId, downscalePhoto } from "../../utils/helpers";
+import { bundleShareText } from "../../utils/shareText";
 import { analyzeDocument, analyzePDF, analyzeDocText, CV_DOC_TYPE, OTHER_DOC_TYPE } from "../../utils/documentScanner";
 import { liveCategories, findCategory, buildCategory, packRecord } from "../../utils/customCategories";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -70,10 +71,10 @@ function DocumentsSection() {
     if (docs.length === 0) return;
     const missing = docs.filter(d => !d.data);
     if (missing.length > 0) {
-      setBundleMsg(`${missing.length} file(s) haven't downloaded to this device yet — try again in a moment.`);
+      setBundleMsg(`${missing.length} file(s) haven't downloaded to this device yet. Try again in a moment.`);
       return;
     }
-    const files = docs.map(doc => {
+    const built = docs.map(doc => {
       try {
         const [head, b64] = doc.data.split(",");
         const mime = docMime(doc) || head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
@@ -82,30 +83,28 @@ function DocumentsSection() {
         for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
         return new File([arr], doc.name || "document", { type: mime });
       } catch { return null; }
-    }).filter(Boolean);
+    });
+    const files = built.filter(Boolean);
+    if (!files.length) {
+      setBundleMsg("Those files could not be read on this device. Open one to check it, then try again.");
+      return;
+    }
+    // The letter and blurb list only what actually rides in the share.
+    const sentDocs = docs.filter((_, i) => built[i]);
 
-    const sName = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
-    const text = [
-      "To whom it may concern,",
-      "",
-      `Please find attached the credential document packet for ${sName}${data.settings?.npi ? " (NPI " + data.settings.npi + ")" : ""}:`,
-      "",
-      ...docs.map((d, i) => `  ${i + 1}. ${d.name}`),
-      "",
-      `Sent via CredentialDOMD · ${new Date().toLocaleDateString()}`,
-    ].join("\n");
-    const title = `Credential packet — ${sName} (${docs.length} documents)`;
     // iOS Mail promotes the first text line to the subject and strips
-    // newlines — share a flowing blurb, formatted letter to the clipboard.
-    const blurb = `Credential packet for ${sName}${data.settings?.npi ? " (NPI " + data.settings.npi + ")" : ""}, ${docs.length} document${docs.length === 1 ? "" : "s"} attached: ${docs.map((d, i) => `${i + 1}. ${d.name}.`).join(" ")} A formatted cover letter is on the sender's clipboard for pasting. Sent via CredentialDOMD.`;
-    try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ }
+    // newlines from a share that carries files: share a flowing blurb, and
+    // put the formatted letter on the clipboard (the sender is told below).
+    const { title, letter, blurb } = bundleShareText(data.settings, sentDocs);
+    let letterCopied = false;
+    try { await navigator.clipboard.writeText(letter); letterCopied = true; } catch { /* clipboard unavailable */ }
 
     if (navigator.share && navigator.canShare?.({ files })) {
       try {
         await navigator.share({ files, title, text: blurb });
       } catch (err) {
         if (err?.name === "AbortError") return;
-        setBundleMsg("Sharing failed — try fewer or smaller files.");
+        setBundleMsg("Sharing failed. Try fewer or smaller files.");
         return;
       }
     } else {
@@ -115,11 +114,11 @@ function DocumentsSection() {
     addItem("shareLog", {
       id: generateId(),
       itemId: null,
-      itemName: `Packet (${docs.length} documents)`,
+      itemName: `Packet (${files.length} documents)`,
       section: "documents", method: "share", recipient: "",
       sentAt: new Date().toISOString(),
     });
-    setBundleMsg(`Sent ${docs.length} documents as one packet.`);
+    setBundleMsg(`Sent ${files.length} documents as one packet.${letterCopied ? " The formatted cover letter is on your clipboard if you want to paste it over the short intro." : ""}`);
     setSelectMode(false);
     setSelectedIds(new Set());
   }, [data.documents, data.settings, selectedIds, addItem]);

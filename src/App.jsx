@@ -61,6 +61,7 @@ import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, Set
 import { useIsAdmin } from "./lib/admin";
 import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
+import { referencesShareTitle, followUpEmail } from "./utils/shareText";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
 import { claimBetaAccess, touchLastSeen, supabase } from "./lib/supabase";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
@@ -542,11 +543,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const shareManyReferences = useCallback(async (refs) => {
     if (offlineMode) { window.alert("You're offline. Sharing needs a connection. Try again once you're back online."); return; }
     if (!refs.length) return;
-    const sName = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
-    const { full, text } = referenceSharePayload(refs);
+    // No file rides along, so the share carries the multi-line list itself
+    // (the iOS Mail newline strip was seen on shares that carry a file).
+    const { full } = referenceSharePayload(refs);
     let method = "share";
     if (navigator.share) {
-      try { await navigator.share({ title: `Peer references — ${sName} (${refs.length})`, text }); }
+      try { await navigator.share({ title: referencesShareTitle(data.settings, refs.length), text: full }); }
       catch (err) {
         if (err?.name !== "AbortError") window.alert("Sharing did not complete. Try again or use Vera's Copy draft button.");
         return;
@@ -652,9 +654,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const recipient = followUpRecipient.trim();
     const note = followUpNote.trim();
     if (emailed) {
-      const subject = `Following up: ${describeItem(followUpItem, data.settings.name)}`;
-      const body = `Hi${recipient ? " " + recipient : ""},\n\nFollowing up on ${describeItem(followUpItem, data.settings.name)}, which expires ${formatDate(followUpItem.expirationDate)}.${note ? "\n\n" + note : ""}`;
-      window.open(mailtoHref(recipient.includes("@") ? recipient : "", subject, body));
+      // An address in the recipient field goes in To:, never in "Hi <address>,".
+      const mail = followUpEmail({
+        label: describeItem(followUpItem, data.settings.name),
+        expirationDate: followUpItem.expirationDate, recipient, note,
+      });
+      window.open(mailtoHref(mail.to, mail.subject, mail.body));
     }
     addItem("followUps", {
       id: generateId(), itemId: followUpItem.id, itemName: describeItem(followUpItem, data.settings.name),

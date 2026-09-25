@@ -3,39 +3,15 @@ import { composeText } from "../../utils/notifications";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
 import { mailtoHref } from "../../utils/helpers";
+import { peerHeadsUp, smsCutNotice } from "../../utils/shareText";
 
 function PeerNotify({ peer }) {
   const { data, theme: T } = useApp();
   const [show, setShow] = useState(null); // "email" | "text" | null
+  const [cutNote, setCutNote] = useState("");
 
-  const userName = data.settings?.name || "Dr. [Your Name]";
-  const userDegree = data.settings?.degreeType || "";
-  const userFull = userDegree ? `${userName}, ${userDegree}` : userName;
-
-  // Extract last name: handles "Jane Smith, MD" -> "Smith", "Smith" -> "Smith", "Jane Smith" -> "Smith"
-  const peerLastName = (() => {
-    if (!peer.name) return "Colleague";
-    const beforeComma = peer.name.split(",")[0].trim();
-    const parts = beforeComma.split(/\s+/);
-    return parts.length > 1 ? parts[parts.length - 1] : parts[0];
-  })();
-
-  const emailSubject = `Upcoming Reference Request \u2014 ${userName}`;
-
-  const emailBody = `Dear Dr. ${peerLastName},
-
-I hope this message finds you well. I am writing to let you know that you may be contacted in the near future as part of a credentialing or privileging process on my behalf.
-
-A representative from the credentialing organization may reach out to you via email or phone to verify our professional relationship and to ask about my clinical competence, character, and qualifications.
-
-I truly appreciate your willingness to serve as a reference for me. Your support means a great deal, and I am grateful for the professional relationship we have built over the years.
-
-If you have any questions or concerns, please do not hesitate to reach out to me directly.
-
-With sincere gratitude,
-${userFull}`;
-
-  const textBody = `Hi, this is ${userName}. I wanted to give you a heads up that someone from a credentialing organization may be reaching out to you soon for a professional reference on my behalf. I truly appreciate your willingness to vouch for me. Thank you so much for your support!`;
+  // The wording lives in shareText.peerHeadsUp (pure, unit-tested).
+  const { emailSubject, emailBody, textBody } = peerHeadsUp(data.settings, peer);
 
   const handleEmail = useCallback(() => {
     if (peer.email) {
@@ -48,7 +24,8 @@ ${userFull}`;
   const handleText = useCallback(() => {
     if (peer.phone) {
       const cleaned = peer.phone.replace(/\D/g, "");
-      composeText(cleaned, textBody);
+      const { truncated, copied } = composeText(cleaned, textBody, { copyFullOnCut: true });
+      if (truncated) copied.then(ok => setCutNote(smsCutNotice(ok)));
     } else {
       setShow("text");
     }
@@ -76,11 +53,12 @@ ${userFull}`;
           {"\ud83d\udcac"} Text Heads-Up
         </button>
       </div>
+      {cutNote && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>{cutNote}</div>}
 
       {/* Show draft in modal when no email/phone */}
       <Modal open={show === "email"} onClose={() => setShow(null)} title="Email Draft">
         <div style={{ fontSize: 13, color: T.textDim, marginBottom: 8 }}>
-          {peer.email ? `To: ${peer.email}` : "No email on file \u2014 copy this draft and send manually."}
+          {peer.email ? `To: ${peer.email}` : "No email on file. Copy this draft and send it yourself."}
         </div>
         <div style={{ fontSize: 12, fontWeight: 600, color: T.accent, marginBottom: 4 }}>
           Subject: {emailSubject}
@@ -106,7 +84,7 @@ ${userFull}`;
 
       <Modal open={show === "text"} onClose={() => setShow(null)} title="Text Draft">
         <div style={{ fontSize: 13, color: T.textDim, marginBottom: 8 }}>
-          {peer.phone ? `To: ${peer.phone}` : "No phone on file \u2014 copy this draft and send manually."}
+          {peer.phone ? `To: ${peer.phone}` : "No phone on file. Copy this draft and send it yourself."}
         </div>
         <div style={{
           whiteSpace: "pre-wrap", fontSize: 13, color: T.text, lineHeight: 1.6,

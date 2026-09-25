@@ -8,6 +8,7 @@ import CredentialPortalLauncher from "./CredentialPortalModal.jsx";
 import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared/Icons";
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
 import { composeText } from "../../utils/notifications";
+import { credentialLetter, credentialSharePayload, smsCutNotice } from "../../utils/shareText";
 
 function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const { data, theme: T } = useApp();
@@ -17,6 +18,9 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const [note, setNote] = useState("");
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(null);
+  // What the SENDER needs to know after a send (never put in the message).
+  const [hint, setHint] = useState("");
+  const flashHint = (msg) => { setHint(msg); setTimeout(() => setHint(h => (h === msg ? "" : h)), 12000); };
   // "Email with attachments": the server sends the linked files as real
   // attachments from docs@credentialdomd.com (reply_to = the physician).
   // share_log for that path is written by the server, not here.
@@ -26,16 +30,13 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
 
   const credText = buildCredentialText(item, section, data.settings);
   const subject = buildEmailSubject(item, section, data.settings);
-  const physician = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "the physician";
   const hasDocs = (linkedDocs?.length ?? 0) > 0;
-  // A letter-shaped body — recipients are credentialing staff, not the app.
-  const full = section === "peerReferences" ? [note.trim(), credText].filter(Boolean).join("\n\n") : [
-    "To whom it may concern,",
-    "",
-    note || `Please find the credential verification for ${physician} below${hasDocs ? ", with supporting documentation attached" : ""}.`,
-    "",
-    credText,
-  ].join("\n");
+  // A letter-shaped body: recipients are credentialing staff, not the app.
+  // `full` goes where nothing can be attached (mailto:, SMS, Copy, a share
+  // with no file), so it never claims attachments. `withDocs` goes with the
+  // files (the clipboard copy beside a file share, Email with attachments).
+  const full = credentialLetter(item, section, data.settings, { note });
+  const withDocs = credentialLetter(item, section, data.settings, { note, attached: hasDocs });
 
   const log = (method, to) => {
     onLogShare?.({
@@ -69,18 +70,20 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
       } catch { return null; }
     }).filter(Boolean);
 
-    // iOS Mail drops the title and flattens newlines in shared text — the
-    // letter-shaped `full` became one giant run-on with the salutation as
-    // the subject. Share a flowing one-paragraph blurb instead, and put the
-    // formatted letter on the clipboard for pasting.
-    const blurb = buildCredentialBlurb(item, section, data.settings, files.length > 0, note);
-    await copyToClipboard(full);
-    const payload = files.length && navigator.canShare?.({ files })
-      ? { files, title: subject, text: blurb }
-      : { title: subject, text: blurb };
+    // With files, iOS Mail drops the title and flattens newlines in shared
+    // text (the letter became one giant run-on with the salutation as the
+    // subject), so a file share carries a flowing one-paragraph blurb and the
+    // formatted letter goes on the clipboard. With no file, the share IS the
+    // letter, line breaks and all.
+    const attach = files.length > 0 && !!navigator.canShare?.({ files });
+    const blurb = buildCredentialBlurb(item, section, data.settings, attach, note);
+    const copied = attach ? await copyToClipboard(withDocs) : false;
+    const payload = credentialSharePayload({ files: attach ? files : [], subject, blurb, letter: full });
+    setHint("");
     try {
       await navigator.share(payload);
       setSent("share"); setTimeout(() => setSent(null), 3000);
+      if (copied) flashHint("The formatted letter is on your clipboard if you want to paste it over the short intro.");
       log("share", email);
     } catch (err) {
       if (err?.name !== "AbortError") setSent(null);
@@ -93,7 +96,9 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   };
 
   const doText = () => {
-    composeText(phone || "", full);
+    const { truncated, copied } = composeText(phone || "", full, { copyFullOnCut: true });
+    setHint("");
+    if (truncated) copied.then(ok => flashHint(smsCutNotice(ok)));
     setSent("text"); setTimeout(() => setSent(null), 3000); log("text", phone);
   };
 
@@ -185,6 +190,10 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
         </button>
       </div>
 
+      {hint && (
+        <div role="status" style={{ marginTop: 10, fontSize: 13, color: T.textMuted, lineHeight: 1.45 }}>{hint}</div>
+      )}
+
       {history.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, marginBottom: 6, textTransform: "uppercase" }}>
@@ -217,7 +226,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
           request={null}
           initialTo={email}
           initialSubject={subject}
-          initialNote={full}
+          initialNote={withDocs}
           initialDocIds={linkedDocs.map(d => d.id)}
         />
       )}
