@@ -217,7 +217,10 @@ test('the form sets both settings, and a contract loaded with them saves them ba
   find(setting, n => n.type === 'input' && n.props.type === 'checkbox', 'checkbox').props.onChange({ target: { checked: true } });
   find(field(m.render(), 'Start of the call day'), n => n.type === 'select', 'hour').props.onChange({ target: { value: '8' } });
   tree = m.render();
-  assert.match(field(tree, 'Coverage dates').props.hint, /An entry that runs past it is split/);
+  assert.match(field(tree, 'Coverage dates').props.hint, /An entry that runs past it is split between the two call days \(a side too short to earn a billing increment stays with the other side\)\./);
+  // R2 can keep a crossing entry whole on either day, so "only the part
+  // after it bills hourly" was false both ways.
+  assert.doesNotMatch(field(tree, 'Coverage dates').props.hint, /only the part after it bills hourly/);
   assert.match(field(tree, 'Coverage dates').props.hint, /8:00 AM/);
   click(m, 'Save');
   const saved = m.calls.find(c => c[0] === 'edit')[2];
@@ -238,7 +241,10 @@ test('the coverage hint no longer claims a crossing call bills hourly', () => {
   const hint = field(m.render(), 'Coverage dates').props.hint;
   assert.doesNotMatch(hint, /work after that final 7 AM bills hourly/);
   assert.match(hint, /Work that starts after that final 7:00 AM bills hourly with no stipend/);
-  assert.match(hint, /counts whole toward Aug 9, inside the stipend, unless you turn on splitting below/);
+  // Whole toward Aug 9, but inside the stipend only while its hours last:
+  // once Aug 9's allowance is used, the crossing entry bills at the overage rate.
+  assert.match(hint, /An entry that starts before it and runs past it counts whole toward Aug 9's call day: inside its stipend hours while any are left, then at the after-stipend rate\./);
+  assert.doesNotMatch(hint, /inside the stipend, unless/);
   assert.doesNotMatch(hint, /\u{2014}/u, 'no em dash');
   const setting = field(m.render(), 'Start of the call day').props.hint;
   assert.match(setting, /bills the same total minutes it would whole/);
