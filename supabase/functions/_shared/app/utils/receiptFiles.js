@@ -102,6 +102,9 @@ const REASON_TEXT = {
   // files and 25 MB, the same caps as send-packet-email.
   too_large: "the email would be over its 25 MB limit",
   too_many: "one email carries at most 10 files",
+  // On this device but not (yet) in the account the server reads: the upload
+  // or the expense's invoice link is still queued.
+  not_synced: "this device has not finished saving them to your account",
 };
 
 /**

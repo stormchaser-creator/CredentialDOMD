@@ -15,18 +15,26 @@
  *   { action: "check", invoiceId, pdfBytes }
  *     Nothing is sent and nothing is reserved. Answers who the email is from
  *     (sender), which of the invoice's receipts can ride and which cannot and
- *     why (receipts.attachable / receipts.missing), and when and to whom this
- *     invoice was last emailed (lastSend). The app builds its preview from
- *     this, so a receipt that cannot be attached is named BEFORE the Send tap
- *     and the letter never counts it.
+ *     why (receipts.attachable / receipts.missing), when and to whom this
+ *     invoice was last emailed (lastSend), its most recent attempt that did
+ *     not fail (lastAttempt: sent, unknown or sending, with a 'sending' row
+ *     older than SENDING_STALE_MS reported as unknown), and the address to
+ *     pre-fill (suggestedTo: this invoice's last recipient, else the most
+ *     recent recipient of another invoice billed to the same party). The app
+ *     builds its preview from this, so a receipt that cannot be attached is
+ *     named BEFORE the Send tap and the letter never counts it.
  *
  *   { action: "send", invoiceId, requestId, to, subject, letter, receiptIds,
- *     pdf: { name, base64 }, preview }
+ *     pdf: { name, base64 }, preview, confirmResend? }
  *     `preview` is the message the physician looked at (from, to, cc,
  *     replyTo, subject, text, attachment names). The function composes the
  *     message itself with the same shared code (app/utils/invoiceEmail.js)
  *     and refuses (409 preview_stale) unless the two are identical, so what
  *     goes out is exactly what was on the screen.
+ *     When the invoice's most recent attempt under ANOTHER request id is
+ *     unconfirmed (unknown, or still sending), a new send is refused (409
+ *     recent_attempt_unconfirmed) unless `confirmResend` is true: the
+ *     physician was shown that attempt and chose to send again anyway.
  *
  * Mail: from "<Name>, <Degree> via CredentialDOMD" <docs@credentialdomd.com>,
  * reply_to and cc the physician's own mailbox (profiles.verified_email when
@@ -45,10 +53,14 @@
  * public.invoice_email_sends is unique on (user_id, client_request_id):
  *   sent     a retry answers 200 { replay: true } with the original
  *            recipient and time, and nothing is mailed again;
- *   sending  another tap is in flight: 409 send_in_progress;
+ *   sending  another tap is in flight: 409 send_in_progress. A 'sending'
+ *            row older than SENDING_STALE_MS belongs to a run that was killed
+ *            (a platform limit, a lost finish write): it is marked unknown and
+ *            answered as unknown, never "in progress" forever;
  *   unknown  the POST to Resend did not come back, the email may exist:
  *            409 send_unconfirmed, and only a NEW requestId (a deliberate new
- *            send) can mail it again;
+ *            send, confirmed over the warning the check shows) can mail it
+ *            again;
  *   failed   nothing went out (Resend refused, a receipt vanished): the same
  *            requestId may try again, with a fresh Resend Idempotency-Key.
  *
@@ -61,21 +73,34 @@
  * Record: after a confirmed send the invoice row gets last_emailed_at and
  * last_emailed_to, written alone (updated_at untouched, like a favorite star)
  * and never moved backwards, so an edit on another device is not overwritten
- * and the Resend screen can say when and to whom it last went.
+ * and the Resend screen can say when and to whom it last went. The two
+ * columns are server-owned: the app never writes them (SERVER_OWNED_FIELDS in
+ * src/lib/supabase.js) and the database keeps them on any user-token write
+ * (trigger invoices_keep_last_emailed), so a stale device cannot erase or
+ * roll them back, and the address pre-filled from them is the server's.
  */
 
 import { accessWriteDecision } from "./accessWrite.mjs";
 import { isOwnStorageObjectForSubjects } from "./storagePath.ts";
 import {
   INVOICE_EMAIL_CAPS as CAPS, invoiceEmailSender, recipientProblem, composeInvoiceEmail,
-  receiptClaimProblem, safeAttachmentName, invoicePdfName, base64Length,
+  receiptClaimProblem, safeAttachmentName, invoicePdfName, base64Length, normalizeAddress,
 } from "./app/utils/invoiceEmail.js";
 import { billedReceiptDocs } from "./app/utils/receiptFiles.js";
+import { agencyKey } from "./app/utils/contractsForDate.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // A 5 MB PDF is 6.7 MB of base64; the rest of the body is a letter and ids.
 export const MAX_BODY_BYTES = 8 * 1024 * 1024;
 export const SEND_WINDOW_MS = 60 * 60 * 1000;
+// From the claim to the POST: reading the receipts from Storage has this long.
+// Past it nothing is posted (the row becomes 'failed', the same Send may try
+// again), so a run's POST always starts inside this bound.
+export const DELIVER_DEADLINE_MS = 90 * 1000;
+// A 'sending' row older than this was left by a run that no longer exists.
+// It must exceed DELIVER_DEADLINE_MS plus the 60 s Resend timeout
+// (invoiceEmailDependencies.ts) plus the ledger writes, with room to spare.
+export const SENDING_STALE_MS = 5 * 60 * 1000;
 const PREVIEW_FIELDS = ["from", "to", "cc", "replyTo", "subject", "text", "attachments"];
 
 const CORS = {
@@ -169,6 +194,26 @@ export function reservationVerdict(result) {
   return { send: true };
 }
 
+/**
+ * A 'sending' row whose run is gone: last touched (claimed) more than
+ * SENDING_STALE_MS ago. A time that cannot be read counts as stale, so no row
+ * can answer "still being sent" forever.
+ */
+export function isStaleSending(row, now = Date.now(), staleMs = SENDING_STALE_MS) {
+  if (row?.status !== "sending") return false;
+  const touched = Date.parse(row.updated_at || row.created_at || "");
+  return !Number.isFinite(touched) || now - touched > staleMs;
+}
+
+/** A ledger row as the app is told about it: a stale 'sending' reads as unknown. */
+export function attemptOf(row, now = Date.now()) {
+  if (!row) return null;
+  const status = isStaleSending(row, now) ? "unknown" : row.status;
+  return { status, at: row.sent_at || row.updated_at || row.created_at || null, to: row.recipient || "", cc: row.cc || "" };
+}
+
+const checkYourCopy = (cc) => `Check your copy${cc ? ` at ${cc}` : ""} before sending again.`;
+
 const ACCESS_TEXT = {
   membership_read_only: "Your membership does not include sending Practice records right now. Your invoices are still readable.",
   membership_unavailable: "Your membership could not be confirmed. Sign in again and retry.",
@@ -217,6 +262,27 @@ export function createInvoiceEmailHandler(deps) {
     return invoice.last_emailed_at ? { at: invoice.last_emailed_at, to: invoice.last_emailed_to || "" } : null;
   };
 
+  /**
+   * The address to pre-fill: this invoice's last recipient, else the most
+   * recent recipient of another invoice billed to the same party (the same
+   * agreement, or, for an invoice with none such as an expense invoice, the
+   * same agency by name, spelling-insensitive). Read here from the stamps
+   * only this function writes, never from a device's copy, which can be stale.
+   */
+  async function suggestedRecipient(profileId, invoice, lastSend, own) {
+    // A test send to the physician's own mailbox is never offered back as the
+    // billing office's address.
+    const usable = (to) => !!to && !own.has(normalizeAddress(to));
+    if (usable(lastSend?.to)) return lastSend.to;
+    const party = invoice.contract_id ? null : agencyKey(invoice.bill_to_label);
+    if (!invoice.contract_id && !party) return "";
+    const rows = (await deps.store.emailedInvoices(profileId)) || [];
+    const same = rows.filter((r) => r && r.id !== invoice.id && r.last_emailed_at && usable(r.last_emailed_to)
+      && (invoice.contract_id ? r.contract_id === invoice.contract_id : !r.contract_id && agencyKey(r.bill_to_label) === party));
+    same.sort((a, b) => String(b.last_emailed_at).localeCompare(String(a.last_emailed_at)));
+    return same[0]?.last_emailed_to || "";
+  }
+
   const stamp = async (profileId, invoiceId, at, to) => {
     try { await deps.store.stampInvoice(profileId, invoiceId, at, to); } catch (e) { log(`invoice stamp failed for ${invoiceId}: ${e?.message || e}`); }
   };
@@ -230,11 +296,18 @@ export function createInvoiceEmailHandler(deps) {
       await stamp(profileId, invoice.id, existing.sent_at, existing.recipient);
       return json(200, { ok: true, replay: true, emailId: existing.provider_id || null, sentAt: existing.sent_at, to: existing.recipient, cc: existing.cc || "" });
     }
+    if (existing.status === "sending" && isStaleSending(existing, nowMs())) {
+      // The run that claimed this row is gone. Whether it reached Resend is
+      // unknowable, so the row becomes unknown (only if it is still this
+      // same stale claim) and the physician is sent to their copy.
+      try { await deps.store.finishSend(existing, "unknown"); } catch (e) { log(`invoice_email_sends expire failed for ${existing.id}: ${e?.message || e}`); }
+      return json(409, { code: "send_unconfirmed", error: `The send could not be confirmed. ${checkYourCopy(existing.cc)}` });
+    }
     if (existing.status === "sending") {
       return json(409, { code: "send_in_progress", error: "This email is still being sent. Check again in a moment; it will not be sent twice." });
     }
     if (existing.status === "unknown") {
-      return json(409, { code: "send_unconfirmed", error: `The send could not be confirmed. Check your copy${existing.cc ? ` at ${existing.cc}` : ""} before sending again.` });
+      return json(409, { code: "send_unconfirmed", error: `The send could not be confirmed. ${checkYourCopy(existing.cc)}` });
     }
     return null;
   }
@@ -262,18 +335,23 @@ export function createInvoiceEmailHandler(deps) {
       total += base64Length(size);
       attachable.push({ ...base, size });
     }
+    const lastSend = await lastSendOf(who.profileId, invoice);
+    const own = new Set([sender.replyTo, sender.cc, profile.email, profile.verified_email].map(normalizeAddress).filter(Boolean));
     return json(200, {
       ok: true,
       sender: { from: sender.from, fromName: sender.fromName, displayName: sender.displayName, replyTo: sender.replyTo, cc: sender.cc },
       receipts: { attachable, missing },
-      lastSend: await lastSendOf(who.profileId, invoice),
+      lastSend,
+      lastAttempt: attemptOf(await deps.store.lastAttempt(who.profileId, invoice.id, null), nowMs()),
+      suggestedTo: await suggestedRecipient(who.profileId, invoice, lastSend, own),
     });
   }
 
   async function send(who, input, profile, sender, invoice) {
-    onlyFields(input, ["action", "invoiceId", "requestId", "to", "subject", "letter", "receiptIds", "pdf", "preview"]);
+    onlyFields(input, ["action", "invoiceId", "requestId", "to", "subject", "letter", "receiptIds", "pdf", "preview", "confirmResend"]);
     const requestId = String(input.requestId ?? "").toLowerCase();
     if (!UUID.test(requestId)) refuse(400, "invalid_request", "Bad request.");
+    if (input.confirmResend !== undefined && typeof input.confirmResend !== "boolean") refuse(400, "invalid_request", "Bad request.");
     if (typeof input.to !== "string" || typeof input.subject !== "string" || typeof input.letter !== "string") refuse(400, "invalid_request", "Bad request.");
     const problem = recipientProblem(input.to);
     if (problem) refuse(400, "recipient_invalid", problem);
@@ -328,6 +406,19 @@ export function createInvoiceEmailHandler(deps) {
         { missing: unreachable.map((r) => ({ id: r.id, name: r.name, linkedTo: r.linkedTo, reason: "unavailable" })) });
     }
 
+    // A new request id is a new opening of the email screen. If the invoice's
+    // latest attempt under another id may have gone (unknown) or may still be
+    // going (sending), mailing it again needs the physician's explicit say-so,
+    // given over the warning the check showed. Without this, closing and
+    // reopening the screen after "could not be confirmed" mailed the billing
+    // office a second time with nothing said.
+    const prior = attemptOf(await deps.store.lastAttempt(who.profileId, invoice.id, requestId), nowMs());
+    if (prior && prior.status !== "sent" && input.confirmResend !== true) {
+      refuse(409, "recent_attempt_unconfirmed",
+        `An earlier send of this invoice to ${prior.to} could not be confirmed, so it may already have arrived. ${checkYourCopy(prior.cc)}`,
+        { attempt: prior });
+    }
+
     // The hourly budget, taken before any bytes are read and before the claim.
     let reservation;
     try { reservation = await deps.reserveSend(who.profileId, sendWindowStart(nowMs())); } catch (e) { reservation = { error: e }; }
@@ -363,6 +454,7 @@ export function createInvoiceEmailHandler(deps) {
       try { await deps.store.finishSend(claim, status, extra); } catch (e) { log(`invoice_email_sends finish (${status}) failed for ${claim.id}: ${e?.message || e}`); }
     };
     let attempted = false;
+    const claimedAt = nowMs();
     try {
       // Receipt bytes from Storage, within the caps. A receipt that cannot be
       // read now was listed in the preview and counted by the letter, so the
@@ -394,6 +486,15 @@ export function createInvoiceEmailHandler(deps) {
         attachments,
       };
       if (email.cc) payload.cc = [email.cc];
+
+      // Storage was slow enough that this run might outlive the stale bound
+      // of its own claim. Nothing has been posted, so stop cleanly: the same
+      // Send may try again.
+      if (nowMs() - claimedAt > DELIVER_DEADLINE_MS) {
+        log(`send-invoice-email: receipts took over ${DELIVER_DEADLINE_MS} ms to read; not posting ${claim.id}`);
+        await finish("failed");
+        return json(503, { code: "unavailable", error: "The receipts took too long to read, so nothing was sent. Try again." });
+      }
 
       attempted = true;
       let outcome;

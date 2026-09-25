@@ -5,7 +5,8 @@
  *
  * Tables touched (service role):
  *   profiles, invoices, travel_expenses, documents      read
- *   invoices.last_emailed_at / last_emailed_to          written alone after a confirmed send
+ *   invoices.last_emailed_at / last_emailed_to          written alone after a confirmed send (server-owned:
+ *                                                       trigger invoices_keep_last_emailed refuses user tokens)
  *   invoice_email_sends                                 the sent-once ledger (migration 20260925130000)
  *   send_reservations via reserve_send()                the hourly cap shared with send-packet-email
  */
@@ -123,8 +124,15 @@ export function invoiceEmailDependencies() {
         .select("id, name, degree_type, email, verified_email, auth_user_id").eq("id", id).maybeSingle(), "profile read"),
 
       invoice: (profileId: string, id: string) => checked(db().from("invoices")
-        .select("id, user_id, number, kind, entry_ids, contract_id, last_emailed_at, last_emailed_to")
+        .select("id, user_id, number, kind, entry_ids, contract_id, bill_to_label, last_emailed_at, last_emailed_to")
         .eq("id", id).eq("user_id", profileId).maybeSingle(), "invoice read"),
+
+      // The account's invoices that have been emailed, for the recipient the
+      // email screen pre-fills (the handler matches the same party).
+      emailedInvoices: (profileId: string) => checked(db().from("invoices")
+        .select("id, contract_id, bill_to_label, last_emailed_at, last_emailed_to")
+        .eq("user_id", profileId).not("last_emailed_at", "is", null)
+        .order("last_emailed_at", { ascending: false }).limit(200), "emailed invoices read"),
 
       expenses: (profileId: string, invoiceId: string) => checked(db().from("travel_expenses")
         .select("id, invoice_id").eq("user_id", profileId).eq("invoice_id", invoiceId), "expense read"),
@@ -138,6 +146,17 @@ export function invoiceEmailDependencies() {
       lastSend: (profileId: string, invoiceId: string) => checked(db().from("invoice_email_sends")
         .select("sent_at, recipient").eq("user_id", profileId).eq("invoice_id", invoiceId).eq("status", "sent")
         .order("sent_at", { ascending: false }).limit(1).maybeSingle(), "last send read"),
+
+      // The invoice's most recent attempt that did not fail (sent, unknown or
+      // sending), other than `exceptRequestId`'s own row. Rows are finished
+      // and reclaimed with a fresh updated_at, so that orders them.
+      async lastAttempt(profileId: string, invoiceId: string, exceptRequestId: string | null) {
+        let query = db().from("invoice_email_sends")
+          .select("client_request_id, status, recipient, cc, sent_at, created_at, updated_at")
+          .eq("user_id", profileId).eq("invoice_id", invoiceId).in("status", ["sent", "unknown", "sending"]);
+        if (exceptRequestId) query = query.neq("client_request_id", exceptRequestId);
+        return checked(query.order("updated_at", { ascending: false }).limit(1).maybeSingle(), "last attempt read");
+      },
 
       findSend: (profileId: string, requestId: string) => checked(db().from("invoice_email_sends")
         .select("*").eq("user_id", profileId).eq("client_request_id", requestId).maybeSingle(), "send ledger read"),

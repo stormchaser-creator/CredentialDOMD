@@ -10,9 +10,11 @@ import { fmtBytes } from "../../../utils/docLabel";
 import { money } from "../../../utils/invoiceCover";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../../utils/invoicePdf";
 import { invoiceDocumentArgs } from "../../../utils/invoiceArgs";
-import { INVOICE_EMAIL_FROM_ADDRESS, isEmailAddress, recipientProblem } from "../../../utils/invoiceEmail";
+import { billedReceiptDocs } from "../../../utils/receiptFiles";
+import { INVOICE_EMAIL_FROM_ADDRESS, isEmailAddress, normalizeAddress, recipientProblem } from "../../../utils/invoiceEmail";
 import {
   invoiceEmailDocuments, invoiceEmailDraft, invoiceEmailSendBody, callInvoiceEmail, afterRefusal, fileToBase64, sentWhen,
+  unconfirmedAttempt, unconfirmedAttemptText,
 } from "../../../utils/invoiceEmailSend";
 
 /**
@@ -23,11 +25,20 @@ import {
  * letter, every attachment) and nothing goes until they tap Send.
  *
  * The server is asked first which receipts it can attach. A receipt it cannot
- * is named here BEFORE the tap, and the letter and PDF never claim it.
+ * is named here BEFORE the tap, and the letter and PDF never claim it. So is
+ * a receipt this device holds that the server cannot see yet (an upload or
+ * an expense link still queued).
  *
  * One request id per opening of this screen, reused by every retry of Send,
  * so a tap retried on a slow network is answered "already sent" instead of
- * mailing the billing office twice.
+ * mailing the billing office twice. A reopening after a send that could not
+ * be confirmed shows that attempt and sends again only once the physician
+ * says so (the server enforces the same rule).
+ *
+ * To is pre-filled from the agreement's invoice email, else from the server's
+ * suggestion (this invoice's last recipient, else the last recipient of an
+ * invoice billed to the same party), never from this device's copy of the
+ * invoice, which can be stale.
  *
  * `invoke` is injectable for tests; the app uses the Supabase client.
  */
@@ -42,8 +53,12 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
   const [save, setSave] = useState(true);
   const [message, setMessage] = useState("");
   const [stopped, setStopped] = useState(false);
+  // Which unconfirmed earlier attempt the physician chose to send over ("" = none).
+  const [confirmedAttempt, setConfirmedAttempt] = useState("");
   const requestIdRef = useRef("");
   const runRef = useRef(0);
+  // Set once the physician types in To: a server suggestion never replaces it.
+  const toEditedRef = useRef(false);
 
   const readOnly = !!limitedLaunch?.enabled && !canWritePractice;
   const invoke = invokeProp || ((name, options) => invokeFn(supabase, name, options));
@@ -73,12 +88,15 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
       const r = await callInvoiceEmail(invoke, { action: "check", invoiceId: invoice.id, pdfBytes: provisional.size });
       if (token !== runRef.current) return;
       if (!r.ok) { setMessage(r.message); setPhase("error"); return; }
-      const docs = invoiceEmailDocuments({ args, check: r.data, pdfFor });
+      const localReceipts = billedReceiptDocs(invoice, data?.travelExpenses, data?.documents);
+      const docs = invoiceEmailDocuments({ args, check: r.data, pdfFor, localReceipts });
       const b64 = await fileToBase64(docs.pdf);
       if (token !== runRef.current) return;
       setCheck(r.data);
       setDocuments(docs);
       setPdfBase64(b64);
+      const suggested = normalizeAddress(r.data?.suggestedTo);
+      if (!toEditedRef.current && !isEmailAddress(contractBillTo) && isEmailAddress(suggested)) setTo(suggested);
       setPhase("ready");
     } catch {
       if (token !== runRef.current) return;
@@ -96,8 +114,11 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
     setPdfBase64("");
     setStopped(false);
     setSave(true);
-    const lastTo = String(invoice.lastEmailedTo || "").trim();
-    setTo(isEmailAddress(contractBillTo) ? contractBillTo : isEmailAddress(lastTo) ? lastTo : "");
+    setConfirmedAttempt("");
+    toEditedRef.current = false;
+    // The agreement's invoice email now; otherwise the server's suggestion
+    // once the check answers (prepare), not this device's lastEmailedTo.
+    setTo(isEmailAddress(contractBillTo) ? contractBillTo : "");
     if (readOnly) {
       setMessage("Sending invoices needs Practice access. Your invoices are still readable.");
       setPhase("error");
@@ -116,20 +137,30 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
     [documents, check, to],
   );
   const problem = to.trim() ? recipientProblem(to) : "Enter the billing office's email address.";
-  const canSend = phase === "ready" && !!draft && !!pdfBase64 && !problem && !stopped && !readOnly;
+  // An earlier send that may already have arrived: Send waits for an explicit
+  // "send it again anyway" tied to that very attempt.
+  const attempt = unconfirmedAttempt(check);
+  const attemptKey = attempt ? `${attempt.status}|${attempt.at}|${attempt.to}` : "";
+  const attemptConfirmed = !attempt || confirmedAttempt === attemptKey;
+  const canSend = phase === "ready" && !!draft && !!pdfBase64 && !problem && !stopped && !readOnly && attemptConfirmed;
+  // The physician's own mailbox (a test send to themselves) is never saved as
+  // the agreement's invoice email: every later invoice would print it under
+  // BILL TO and pre-fill it here.
+  const ownAddresses = new Set([check?.sender?.replyTo, check?.sender?.cc, settings?.email].map(normalizeAddress).filter(Boolean));
+  const saveShown = saveOffered && !ownAddresses.has(normalizeAddress(to));
 
   const send = async () => {
     if (!canSend) return;
     setPhase("sending");
     setMessage("");
     const r = await callInvoiceEmail(invoke, invoiceEmailSendBody({
-      invoiceId: invoice.id, requestId: requestIdRef.current, draft, pdfBase64,
+      invoiceId: invoice.id, requestId: requestIdRef.current, draft, pdfBase64, confirmResend: !!attempt && attemptConfirmed,
     }));
     if (r.ok) {
       setPhase("ready");
       onSent?.({
         invoice, at: r.data.sentAt, to: r.data.to, cc: r.data.cc || "", replay: !!r.data.replay,
-        saveBillTo: saveOffered && save && !r.data.replay ? draft.email.to : null,
+        saveBillTo: saveShown && save && !r.data.replay ? draft.email.to : null,
       });
       return;
     }
@@ -144,7 +175,9 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
 
   const muted = { fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 };
   const label = { fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 };
-  const last = check?.lastSend?.at ? check.lastSend : invoice.lastEmailedAt ? { at: invoice.lastEmailedAt, to: invoice.lastEmailedTo } : null;
+  // The server's answer once it is in; this device's copy only until then.
+  const last = check ? (check.lastSend?.at ? check.lastSend : null)
+    : invoice.lastEmailedAt ? { at: invoice.lastEmailedAt, to: invoice.lastEmailedTo } : null;
   const email = draft?.email;
 
   return (
@@ -160,13 +193,26 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
         </div>
       )}
 
+      {attempt && (
+        <div data-invoice-email-attempt="" style={{ marginBottom: 14 }}>
+          <div role="alert" style={{ fontSize: 13, fontWeight: 600, color: T.warning, lineHeight: 1.45, marginBottom: 6 }}>
+            {unconfirmedAttemptText(attempt)}
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: T.text, cursor: "pointer" }}>
+            <input type="checkbox" data-confirm-resend="" checked={attemptConfirmed}
+              onChange={(e) => setConfirmedAttempt(e.target.checked ? attemptKey : "")} disabled={phase === "sending"} />
+            I checked. Send it again anyway.
+          </label>
+        </div>
+      )}
+
       <Field label="To" hint={contractBillTo && !isEmailAddress(contractBillTo)
         ? `The agreement's invoice recipient (${contractBillTo}) is not an email address, so type one here.`
         : undefined}>
-        <input type="email" value={to} onChange={(e) => setTo(e.target.value)} style={iS}
+        <input type="email" value={to} onChange={(e) => { toEditedRef.current = true; setTo(e.target.value); }} style={iS}
           placeholder="billing@hospital.org" autoCapitalize="off" autoCorrect="off" disabled={phase === "sending"} />
       </Field>
-      {saveOffered && (
+      {saveShown && (
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: T.text, marginTop: -6, marginBottom: 14, cursor: "pointer" }}>
           <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
           Save as the invoice email for {contract.facility || "this agreement"}

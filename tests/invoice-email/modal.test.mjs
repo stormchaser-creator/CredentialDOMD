@@ -208,13 +208,12 @@ test("Send by email: a missing receipt is named before the tap and nothing claim
     const alert = textOf(find(tree, (n) => n.props?.role === "alert"));
     assert.match(alert, /1 receipt could not be attached \(hotel\.jpg\)/);
     assert.match(alert, /It is not in this email: the letter does not count it and the invoice lists it as on file\./);
-    assert.equal(button(tree, "Send").props.disabled, true, "no recipient on the agreement yet");
-    // Type the address once; offer to save it on the agreement.
+    assert.equal(button(tree, "Send").props.disabled, true, "nothing to pre-fill: never emailed, no agency history");
+    // An expense invoice has no agreement (contractId null), so there is none
+    // to save the address on; the server remembers it from the send instead.
     find(tree, (n) => n.type === "input" && n.props.type === "email").props.onChange({ target: { value: "AP@Agency.Example" } });
     tree = modal.render();
-    const saveBox = find(tree, (n) => n.type === "input" && n.props.type === "checkbox");
-    assert.equal(saveBox.props.checked, true);
-    assert.match(textOf(tree), /Save as the invoice email for Synthetic Hospital/);
+    assert.equal(find(tree, (n) => n.type === "input" && n.props.type === "checkbox"), null);
     const shown = textOf(find(tree, (n) => n.props && "data-invoice-email-body" in n.props));
     assert.match(shown, /The receipt is attached\./);
     await button(tree, "Send to ap@agency.example").props.onClick();
@@ -227,9 +226,161 @@ test("Send by email: a missing receipt is named before the tap and nothing claim
     assert.match(pdf, /receipt on file/, "the hotel line: its receipt did not");
     assert.match(pdf, /BALANCE DUE/);
     assert.match(pdf, /\$600\.00/, "the partial payment is still shown");
-    const saved = ctx.calls.find(([k, c]) => k === "editItem" && c === "locumContracts")?.[2];
-    assert.equal(saved.billTo, "ap@agency.example", "the typed address is saved to the agreement");
-    assert.equal(saved.facility, "Synthetic Hospital");
+    assert.ok(!ctx.calls.some(([k, c]) => k === "editItem" && c === "locumContracts"), "no agreement is touched");
+  });
+});
+
+/** The second expense invoice for the same agency, spelled the way another contract spells it. */
+const secondExpenseInvoice = () => ({
+  ...expenseInvoice(), id: IDS.secondExpenseInvoice, number: "EXP-0008", billToLabel: "Synthetic Locums, LLC.",
+  entryIds: [], lines: [{ date: "2026-09-01", label: "Mileage", detail: "", amount: 50 }], totalAmount: 50, payments: [],
+});
+const openModal = async (props) => {
+  const modal = harness("InvoiceEmailModal", { open: true, contract: undefined, billName: "", onClose() {}, onSent() {}, ...props });
+  modal.render();
+  await flush();
+  return modal;
+};
+const toField = (tree) => find(tree, (n) => n.type === "input" && n.props.type === "email");
+
+test("Send by email: an agency's billing address is typed once; its next expense invoice opens with it", async () => {
+  const env = fakeWorld();
+  env.world.invoices.push({ id: IDS.secondExpenseInvoice, user_id: IDS.profile, number: "EXP-0008", kind: "expenses", entry_ids: [],
+    contract_id: null, bill_to_label: "Synthetic Locums, LLC.", total_amount: 50, updated_at: "2026-09-10T00:00:00.000Z", last_emailed_at: null, last_emailed_to: null });
+  const ctx = context(env, { invoices: [expenseInvoice(), secondExpenseInvoice()], locumContracts: [contract("")] });
+  await withApp(env, ctx, async () => {
+    const first = await openModal({ invoice: expenseInvoice(), billName: "Synthetic Locums" });
+    toField(first.render()).props.onChange({ target: { value: "ap@agency.example" } });
+    await button(first.render(), "Send to ap@agency.example").props.onClick();
+    await flush();
+    assert.equal(env.world.mails.length, 1);
+
+    // Production: every expense invoice has contractId null, so this used to
+    // open blank and the physician retyped the agency's address every time.
+    const second = await openModal({ invoice: secondExpenseInvoice(), billName: "Synthetic Locums, LLC." });
+    const tree = second.render();
+    assert.equal(toField(tree).props.value, "ap@agency.example", "pre-filled from the same agency's last send, spelling aside");
+    assert.equal(button(tree, "Send to ap@agency.example").props.disabled, false);
+  });
+});
+
+test("Send by email: the address is pre-filled from the server's record, not this device's stale copy", async () => {
+  const env = fakeWorld();
+  // The phone corrected the address and sent to the right office...
+  env.world.invoices[0].last_emailed_at = "2026-09-24T10:00:00.000Z";
+  env.world.invoices[0].last_emailed_to = "right@agency.example";
+  // ...while this desktop tab still holds the earlier, wrong one.
+  const stale = { ...expenseInvoice(), lastEmailedAt: "2026-09-20T10:00:00.000Z", lastEmailedTo: "wrong@agency.example" };
+  const ctx = context(env, { invoices: [stale], locumContracts: [contract("")] });
+  await withApp(env, ctx, async () => {
+    const modal = await openModal({ invoice: stale, billName: "Synthetic Locums" });
+    const tree = modal.render();
+    assert.equal(toField(tree).props.value, "right@agency.example");
+    assert.match(textOf(tree), /Last emailed Sep 24, 2026 at .* to right@agency\.example\./);
+    assert.doesNotMatch(textOf(tree), /wrong@agency\.example/);
+    // A typed address is never replaced by a later check (a recheck after a refusal).
+    toField(tree).props.onChange({ target: { value: "other@agency.example" } });
+    env.world.storage.delete(`${SUBJECT}/${IDS.docHotel}`);
+    await button(modal.render(), "Send to other@agency.example").props.onClick();
+    await flush();
+    assert.equal(toField(modal.render()).props.value, "other@agency.example");
+  });
+});
+
+test("Send by email: a receipt only this device holds is named before Send, and its line says on file", async () => {
+  const env = fakeWorld();
+  const local = "aaaaaaaa-0000-4000-8000-0000000000f1";
+  // A parking receipt whose upload is still queued: on the device with its
+  // bytes, no cloud row. And the hotel expense's link to this invoice has not
+  // synced either, so the server finds no receipts for it.
+  env.world.expenses[1].invoice_id = null;
+  const ctx = context(env, {
+    invoices: [expenseInvoice()], locumContracts: [contract("")],
+    travelExpenses: [{ id: IDS.expAir, invoiceId: IDS.invoice }, { id: IDS.expHotel, invoiceId: IDS.invoice }],
+    documents: [
+      { id: IDS.docAir, name: "airfare.pdf", linkedTo: `travelExpenses:${IDS.expAir}`, storagePath: `${SUBJECT}/${IDS.docAir}` },
+      { id: local, name: "parking.jpg", linkedTo: `travelExpenses:${IDS.expAir}`, data: "data:image/jpeg;base64,/9j/4AAQ" },
+      { id: IDS.docHotel, name: "hotel.jpg", linkedTo: `travelExpenses:${IDS.expHotel}`, storagePath: `${SUBJECT}/${IDS.docHotel}` },
+    ],
+  });
+  await withApp(env, ctx, async () => {
+    const modal = await openModal({ invoice: expenseInvoice(), billName: "Synthetic Locums" });
+    toField(modal.render()).props.onChange({ target: { value: "ap@agency.example" } });
+    const tree = modal.render();
+    const alert = textOf(find(tree, (n) => n.props?.role === "alert"));
+    assert.match(alert, /2 receipts could not be attached \(parking\.jpg, hotel\.jpg\) because this device has not finished saving them to your account\./);
+    const shown = textOf(find(tree, (n) => n.props && "data-invoice-email-body" in n.props));
+    assert.match(shown, /The receipt is attached\./, "the letter counts the one that rides");
+    await button(tree, "Send to ap@agency.example").props.onClick();
+    await flush();
+    const mail = env.world.mails[0];
+    assert.deepEqual(mail.attachments.map((a) => a.filename), ["EXP-0007.pdf", "airfare.pdf"]);
+    const pdf = pdfText(mail.attachments[0].content);
+    assert.doesNotMatch(pdf, /receipt attached/, "airfare's parking receipt did not ride, so its line may not say attached");
+    assert.match(pdf, /receipt on file/);
+  });
+});
+
+test("Send by email: your own address is never offered or saved as the agreement's invoice email", async () => {
+  for (const own of ["doc.verified@example.test", "Doc@Example.test"]) {
+    const env = fakeWorld();
+    const ctx = context(env, { invoices: [workInvoice()], locumContracts: [contract("")] });
+    await withApp(env, ctx, async () => {
+      const modal = await openModal({ invoice: workInvoice(), contract: contract(""), billName: "Synthetic Hospital", onSent: (r) => ctx.calls.push(["sent", r]) });
+      toField(modal.render()).props.onChange({ target: { value: own } });
+      const tree = modal.render();
+      assert.equal(find(tree, (n) => n.type === "input" && n.props.type === "checkbox"), null, `${own}: a test send to yourself offers no save`);
+      await button(tree, "Send to").props.onClick();
+      await flush();
+      assert.equal(env.world.mails.length, 1);
+      assert.equal(ctx.calls.find(([k]) => k === "sent")[1].saveBillTo, null, `${own}: nothing to save`);
+    });
+  }
+  // The billing office's address is still offered, ticked.
+  const env = fakeWorld();
+  const ctx = context(env, { invoices: [workInvoice()], locumContracts: [contract("")] });
+  await withApp(env, ctx, async () => {
+    const modal = await openModal({ invoice: workInvoice(), contract: contract(""), billName: "Synthetic Hospital", onSent: (r) => ctx.calls.push(["sent", r]) });
+    toField(modal.render()).props.onChange({ target: { value: "billing@hospital.example" } });
+    const tree = modal.render();
+    assert.equal(find(tree, (n) => n.type === "input" && n.props.type === "checkbox").props.checked, true);
+    await button(tree, "Send to").props.onClick();
+    await flush();
+    assert.equal(ctx.calls.find(([k]) => k === "sent")[1].saveBillTo, "billing@hospital.example");
+  });
+});
+
+test("Send by email: reopening after an unconfirmed send shows it and sends again only when the physician says so", async () => {
+  const env = fakeWorld({ mailOutcome: () => ({ state: "unknown" }) });
+  const ctx = context(env, { invoices: [workInvoice()], locumContracts: [contract("billing@hospital.example")] });
+  await withApp(env, ctx, async (invocations) => {
+    const first = await openModal({ invoice: workInvoice(), contract: contract("billing@hospital.example") });
+    await button(first.render(), "Send to").props.onClick();
+    await flush();
+    assert.match(textOf(first.render()), /could not be confirmed/);
+    assert.equal(env.world.mails.length, 1, "it may well have gone");
+
+    // Close, open again: a new request id.
+    env.world.mailOutcome = () => ({ state: "sent", providerId: "re_2" });
+    const again = await openModal({ invoice: workInvoice(), contract: contract("billing@hospital.example") });
+    let tree = again.render();
+    const warning = textOf(find(tree, (n) => n.props && "data-invoice-email-attempt" in n.props));
+    assert.match(warning, /A send of this invoice to billing@hospital\.example on Sep 25, 2026 at .* could not be confirmed, so it may already have arrived\. Check your copy at doc\.verified@example\.test before sending it again\./);
+    assert.equal(button(tree, "Send to").props.disabled, true, "not until the physician confirms");
+    await button(tree, "Send to").props.onClick();
+    await flush();
+    assert.equal(env.world.mails.length, 1);
+
+    find(tree, (n) => n.type === "input" && "data-confirm-resend" in n.props).props.onChange({ target: { checked: true } });
+    tree = again.render();
+    assert.equal(button(tree, "Send to").props.disabled, false);
+    await button(tree, "Send to").props.onClick();
+    await flush();
+    assert.equal(env.world.mails.length, 2);
+    const sends = invocations.filter((b) => b.action === "send");
+    assert.notEqual(sends[0].requestId, sends[1].requestId);
+    assert.equal(sends[0].confirmResend, undefined);
+    assert.equal(sends[1].confirmResend, true);
   });
 });
 

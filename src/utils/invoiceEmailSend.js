@@ -1,5 +1,5 @@
 import { invoiceCoverEmail, invoiceSubject, expenseReceiptLines } from "./invoiceCover.js";
-import { composeInvoiceEmail, invoicePdfName, INVOICE_EMAIL_FUNCTION } from "./invoiceEmail.js";
+import { composeInvoiceEmail, invoicePdfName, safeAttachmentName, INVOICE_EMAIL_FUNCTION } from "./invoiceEmail.js";
 import { attachedExpenseIds, missingReceiptMessage } from "./receiptFiles.js";
 import { formatDate } from "./helpers.js";
 
@@ -33,10 +33,21 @@ export async function fileToBase64(file) {
  *  - the letter counts only the receipts the server can attach;
  *  - an expense line says "receipt attached" only when every receipt of that
  *    expense rides in this email, "on file" otherwise.
+ *
+ * `localReceipts` are the receipts THIS DEVICE says the invoice bills
+ * (billedReceiptDocs over the local expenses and documents). The server sees
+ * only the account's cloud rows, so a receipt whose upload is still queued, or
+ * whose expense's link to this invoice has not synced, is in neither of its
+ * lists. Such a receipt is named here as not_synced, so the physician is told
+ * before Send and its line says "on file", instead of it silently vanishing.
  */
-export function invoiceEmailDocuments({ args, check, pdfFor }) {
+export function invoiceEmailDocuments({ args, check, pdfFor, localReceipts = [] }) {
   const attachable = check?.receipts?.attachable || [];
-  const missing = check?.receipts?.missing || [];
+  const known = new Set([...attachable, ...(check?.receipts?.missing || [])].map((r) => r.id));
+  const unsynced = (localReceipts || [])
+    .filter((d) => d?.id && !known.has(d.id))
+    .map((d) => ({ id: d.id, name: safeAttachmentName(d.name, "receipt"), linkedTo: d.linkedTo || "", reason: "not_synced" }));
+  const missing = [...(check?.receipts?.missing || []), ...unsynced];
   const docs = [...attachable, ...missing].map((r) => ({ id: r.id, linkedTo: r.linkedTo }));
   const complete = attachedExpenseIds(docs, missing);
   const docArgs = args.kind === "expenses" && Array.isArray(args.lines)
@@ -65,8 +76,12 @@ export function invoiceEmailDraft({ documents, sender, to }) {
   };
 }
 
-/** The request body for the Send tap: the draft exactly as previewed, and the key that makes a retried tap safe. */
-export function invoiceEmailSendBody({ invoiceId, requestId, draft, pdfBase64 }) {
+/**
+ * The request body for the Send tap: the draft exactly as previewed, and the
+ * key that makes a retried tap safe. `confirmResend` is sent only when the
+ * physician ticked "send it again anyway" over an unconfirmed earlier attempt.
+ */
+export function invoiceEmailSendBody({ invoiceId, requestId, draft, pdfBase64, confirmResend = false }) {
   return {
     action: "send",
     invoiceId,
@@ -77,7 +92,28 @@ export function invoiceEmailSendBody({ invoiceId, requestId, draft, pdfBase64 })
     receiptIds: draft.receiptIds,
     pdf: { name: draft.pdfName, base64: pdfBase64 },
     preview: draft.email,
+    ...(confirmResend ? { confirmResend: true } : {}),
   };
+}
+
+/**
+ * The check's lastAttempt when it may already have reached the billing office
+ * without being confirmed (unknown, or still sending), else null. Sending
+ * again over it needs the physician's explicit confirmation.
+ */
+export function unconfirmedAttempt(check) {
+  const a = check?.lastAttempt;
+  return a && (a.status === "unknown" || a.status === "sending") ? a : null;
+}
+
+/** The warning shown above Send for an unconfirmed earlier attempt. */
+export function unconfirmedAttemptText(attempt) {
+  if (!attempt) return "";
+  const when = sentWhen(attempt.at);
+  const copy = `Check your copy${attempt.cc ? ` at ${attempt.cc}` : ""} before sending it again.`;
+  return attempt.status === "sending"
+    ? `A send of this invoice to ${attempt.to}${when ? ` started on ${when} and` : ""} has not finished, so it may be on its way. ${copy}`
+    : `A send of this invoice to ${attempt.to}${when ? ` on ${when}` : ""} could not be confirmed, so it may already have arrived. ${copy}`;
 }
 
 /**
@@ -106,10 +142,12 @@ export async function callInvoiceEmail(invoke, body) {
  * request id (the server said nothing went out, or the same id will answer
  * with what did); `recheck` means the preview is out of date and must be
  * rebuilt before anything else is sent; `stop` means the outcome is unknown
- * and a second send has to be a deliberate new one.
+ * and a second send has to be a deliberate new one. An unconfirmed attempt
+ * the screen did not know about (made on another device after the check) is
+ * a recheck too: the check then shows it and asks before sending again.
  */
 export function afterRefusal(code) {
-  if (code === "receipts_changed" || code === "preview_stale") return "recheck";
+  if (code === "receipts_changed" || code === "preview_stale" || code === "recent_attempt_unconfirmed") return "recheck";
   if (code === "send_unconfirmed") return "stop";
   return "retry";
 }

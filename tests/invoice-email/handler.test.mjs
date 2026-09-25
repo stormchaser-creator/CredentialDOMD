@@ -16,15 +16,20 @@ import { reservationVerdict, sendWindowStart, fromBase64, toBase64 } from "../..
 const REQUEST = "bbbbbbbb-0000-4000-8000-000000000001";
 const TO = "billing@hospital.example";
 
+// As Invoices.jsx passes them: the invoice's agreement when it has one (an
+// expense invoice never does), and billToLabel as the payer's name.
+const contractOf = (invoice) => (invoice.contractId ? contract() : undefined);
+const argsOf = (invoice) => invoiceDocumentArgs(invoice, contractOf(invoice), settings(), invoice.billToLabel || "Synthetic Hospital");
+
 /** What the app does: check, build the documents and the draft, then the Send body. */
-async function prepare(env, { invoice = expenseInvoice(), to = TO, requestId = REQUEST } = {}) {
-  const args = invoiceDocumentArgs(invoice, contract(), settings(), "Synthetic Locums");
+async function prepare(env, { invoice = expenseInvoice(), to = TO, requestId = REQUEST, confirmResend = false } = {}) {
+  const args = argsOf(invoice);
   const provisional = fakePdfFor(args);
   const check = await env.call({ action: "check", invoiceId: invoice.id, pdfBytes: provisional.size });
   assert.equal(check.status, 200, JSON.stringify(check.body));
   const documents = invoiceEmailDocuments({ args, check: check.body, pdfFor: fakePdfFor });
   const draft = invoiceEmailDraft({ documents, sender: check.body.sender, to });
-  const body = invoiceEmailSendBody({ invoiceId: invoice.id, requestId, draft, pdfBase64: await fileToBase64(documents.pdf) });
+  const body = invoiceEmailSendBody({ invoiceId: invoice.id, requestId, draft, pdfBase64: await fileToBase64(documents.pdf), confirmResend });
   return { args, check: check.body, documents, draft, body };
 }
 const decodeText = (b64) => new TextDecoder().decode(fromBase64(b64));
@@ -60,7 +65,7 @@ test("the preview is what is sent: from, to, cc, reply_to, subject and every att
   assert.deepEqual(mail.cc, [e.cc]);
   assert.deepEqual(mail.reply_to, [e.replyTo]);
   assert.equal(mail.subject, e.subject);
-  assert.equal(mail.subject, invoiceSubject(invoiceDocumentArgs(expenseInvoice(), contract(), settings(), "")));
+  assert.equal(mail.subject, invoiceSubject(argsOf(expenseInvoice())));
   assert.deepEqual(mail.attachments.map((a) => a.filename), e.attachments);
   assert.deepEqual(e.attachments, ["EXP-0007.pdf", "airfare.pdf", "hotel.jpg"]);
   assert.deepEqual(res.body.sent, { ...e }, "the response echoes the composed message, field for field");
@@ -198,7 +203,7 @@ test("only receipts this invoice bills can ride, from this account", async () =>
   // A client that claims the foreign-path receipt anyway (a consistent draft
   // built from a doctored check) is refused, and the foreign object is never read.
   const doctored = { ...c3.check, receipts: { attachable: [...c3.check.receipts.attachable, { id: IDS.docHotel, name: "hotel.jpg", linkedTo: `travelExpenses:${IDS.expHotel}`, size: 3 }], missing: [] } };
-  const args = invoiceDocumentArgs(expenseInvoice(), contract(), settings(), "Synthetic Locums");
+  const args = argsOf(expenseInvoice());
   const docs = invoiceEmailDocuments({ args, check: doctored, pdfFor: fakePdfFor });
   const forged = invoiceEmailSendBody({ invoiceId: IDS.invoice, requestId: REQUEST, draft: invoiceEmailDraft({ documents: docs, sender: doctored.sender, to: TO }), pdfBase64: await fileToBase64(docs.pdf) });
   const res = await env3.call(forged);
@@ -254,6 +259,121 @@ test("idempotency: an unconfirmed send is never retried under the same request i
   assert.equal(retry.body.code, "send_unconfirmed");
   assert.equal(env.world.keys.length, 1, "the billing office is not mailed a second time");
   assert.equal(env.world.invoices[0].last_emailed_at, null, "an unconfirmed send is not recorded as sent");
+});
+
+const REQUEST_2 = "bbbbbbbb-0000-4000-8000-000000000002";
+const REQUEST_3 = "bbbbbbbb-0000-4000-8000-000000000003";
+const ledgerRow = (env, fields) => {
+  const row = { id: `ledger-manual-${env.world.ledger.length}`, user_id: IDS.profile, invoice_id: IDS.invoice, client_request_id: REQUEST,
+    status: "sending", attempts: 1, recipient: TO, cc: "doc.verified@example.test", reply_to: "doc.verified@example.test", subject: "Invoice EXP-0007",
+    provider_id: null, sent_at: null, created_at: new Date(env.world.now).toISOString(), updated_at: new Date(env.world.now).toISOString(), ...fields };
+  env.world.ledger.push(row);
+  return row;
+};
+const minutesAgo = (env, m) => new Date(env.world.now - m * 60 * 1000).toISOString();
+
+test("a reopened screen (a new request id) after an unconfirmed send is refused until the physician confirms", async () => {
+  const env = fakeWorld({ mailOutcome: () => ({ state: "unknown" }) });
+  const first = await prepare(env);
+  assert.equal((await env.call(first.body)).body.code, "send_unconfirmed");
+  env.world.mailOutcome = () => ({ state: "sent", providerId: "re_2" });
+  env.world.now += 60 * 1000;
+
+  // The check the reopened screen runs names the unconfirmed attempt.
+  const reopened = await prepare(env, { requestId: REQUEST_2 });
+  assert.deepEqual(reopened.check.lastAttempt, { status: "unknown", at: new Date(env.world.now - 60 * 1000).toISOString(), to: TO, cc: "doc.verified@example.test" });
+  assert.equal(reopened.check.lastSend, null, "nothing confirmed, so no 'Last emailed' line");
+  const refused = await env.call(reopened.body);
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.code, "recent_attempt_unconfirmed");
+  assert.match(refused.body.error, /An earlier send of this invoice to billing@hospital\.example could not be confirmed, so it may already have arrived\. Check your copy at doc\.verified@example\.test before sending again\./);
+  assert.equal(refused.body.attempt.status, "unknown");
+  assert.equal(env.world.keys.length, 1, "the billing office is not mailed again without a word");
+  assert.equal(env.world.reservations, 1, "no hourly budget spent on the refusal");
+
+  const confirmed = await prepare(env, { requestId: REQUEST_2, confirmResend: true });
+  const sent = await env.call(confirmed.body);
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  assert.equal(env.world.keys.length, 2);
+
+  // Once a later send is confirmed, the next opening is not held up.
+  env.world.now += 60 * 1000;
+  const later = await prepare(env, { requestId: REQUEST_3 });
+  assert.equal(later.check.lastAttempt.status, "sent");
+  assert.equal((await env.call(later.body)).status, 200);
+  // And the flag must be a boolean when present.
+  assert.equal((await env.call({ ...later.body, requestId: "bbbbbbbb-0000-4000-8000-000000000004", confirmResend: "yes" })).body.code, "invalid_request");
+});
+
+test("a send still in flight under another request id also needs the physician's say-so", async () => {
+  const env = fakeWorld();
+  ledgerRow(env, { client_request_id: REQUEST_2, status: "sending", updated_at: minutesAgo(env, 1) });
+  const { check, body } = await prepare(env);
+  assert.equal(check.lastAttempt.status, "sending");
+  const res = await env.call(body);
+  assert.equal(res.body.code, "recent_attempt_unconfirmed");
+  assert.equal(env.world.keys.length, 0);
+});
+
+test("a 'sending' row whose run was killed is not 'still being sent' forever: past the bound it is unconfirmed", async () => {
+  const env = fakeWorld();
+  const { body } = await prepare(env);
+  // Fresh: another tap really is in flight.
+  const live = ledgerRow(env, { updated_at: minutesAgo(env, 1) });
+  const inFlight = await env.call(body);
+  assert.equal(inFlight.status, 409);
+  assert.equal(inFlight.body.code, "send_in_progress");
+  assert.equal(live.status, "sending");
+
+  // Six minutes on, the run that claimed it is gone (a platform limit, a lost
+  // finish write). Whether it reached Resend is unknowable.
+  live.updated_at = minutesAgo(env, 6);
+  const check = await env.call({ action: "check", invoiceId: IDS.invoice, pdfBytes: 100 });
+  assert.equal(check.body.lastAttempt.status, "unknown", "the check reports it as unconfirmed");
+  const retry = await env.call(body);
+  assert.equal(retry.status, 409);
+  assert.equal(retry.body.code, "send_unconfirmed");
+  assert.match(retry.body.error, /Check your copy at doc\.verified@example\.test before sending again/);
+  assert.equal(live.status, "unknown", "the stale claim is marked, so the screen stops");
+  assert.equal(env.world.keys.length, 0, "and nothing is mailed");
+});
+
+test("a run whose receipts take too long to read posts nothing, and the same Send may try again", async () => {
+  const env = fakeWorld();
+  const { body } = await prepare(env);
+  const read = env.deps.readFile;
+  env.deps.readFile = async (...args) => { env.world.now += 50 * 1000; return read(...args); };
+  const slow = await env.call(body);
+  assert.equal(slow.status, 503);
+  assert.equal(slow.body.code, "unavailable");
+  assert.equal(env.world.keys.length, 0, "past the deadline nothing is posted");
+  assert.equal(env.world.ledger[0].status, "failed");
+  env.deps.readFile = read;
+  const again = await env.call(body);
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(env.world.keys.length, 1);
+});
+
+test("the suggested recipient: this invoice's last, else the same party's last, never the physician's own mailbox", async () => {
+  const env = fakeWorld();
+  const suggested = async (invoiceId) => (await env.call({ action: "check", invoiceId, pdfBytes: 100 })).body.suggestedTo;
+  assert.equal(await suggested(IDS.invoice), "", "never emailed, no history");
+  // Another expense invoice for the same agency, spelled differently, went to the agency.
+  env.world.invoices.push({ id: IDS.secondExpenseInvoice, user_id: IDS.profile, number: "EXP-0008", kind: "expenses", entry_ids: [],
+    contract_id: null, bill_to_label: "SYNTHETIC LOCUMS, Inc.", last_emailed_at: "2026-09-20T00:00:00.000Z", last_emailed_to: "ap@agency.example" });
+  assert.equal(await suggested(IDS.invoice), "ap@agency.example");
+  assert.equal(await suggested(IDS.workInvoice), "", "a work invoice is billed under its agreement, not the agency's expense address");
+  // A test send of this invoice to the physician's own mailbox is never offered back.
+  env.world.invoices[0].last_emailed_at = "2026-09-24T00:00:00.000Z";
+  env.world.invoices[0].last_emailed_to = "doc.verified@example.test";
+  assert.equal(await suggested(IDS.invoice), "ap@agency.example");
+  // A real send of this invoice wins.
+  env.world.invoices[0].last_emailed_to = "billing@agency.example";
+  assert.equal(await suggested(IDS.invoice), "billing@agency.example");
+  // A work invoice takes the last address used under the same agreement.
+  env.world.invoices.push({ id: "aaaaaaaa-0000-4000-8000-00000000000b", user_id: IDS.profile, number: "INV-20260901-01", kind: null, entry_ids: [],
+    contract_id: IDS.contract, bill_to_label: null, last_emailed_at: "2026-09-02T00:00:00.000Z", last_emailed_to: "billing@hospital.example" });
+  assert.equal(await suggested(IDS.workInvoice), "billing@hospital.example");
 });
 
 test("idempotency: a send Resend refused may be retried with the same request id", async () => {

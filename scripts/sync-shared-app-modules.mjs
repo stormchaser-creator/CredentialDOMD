@@ -38,6 +38,9 @@ export const ROOTS = Object.freeze([
   // previews it with, and finds an invoice's receipts with the app's rule.
   "utils/invoiceEmail.js",
   "utils/receiptFiles.js",
+  // ...and matches invoices billed to the same agency with the app's
+  // spelling-insensitive agencyKey, for the address it pre-fills.
+  "utils/contractsForDate.js",
 ]);
 
 export const banner = (rel) =>

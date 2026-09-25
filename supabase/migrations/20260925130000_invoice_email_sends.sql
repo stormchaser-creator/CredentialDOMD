@@ -6,17 +6,25 @@
 --
 -- 1. invoices.last_emailed_at, invoices.last_emailed_to
 --    When, and to whom, the invoice was last emailed, so the Resend screen can
---    say so. Written ONLY by the function, after a confirmed send, as those
---    two columns alone (updated_at untouched, never moved backwards), the same
---    narrow shape as the favorite star. Nullable, no default, no check:
---    toSnakeObj sends "" as null and a NOT NULL or CHECK failure would reject
---    the whole row.
+--    say so and the email screen can pre-fill the address. Written ONLY by
+--    the function, after a confirmed send, as those two columns alone
+--    (updated_at untouched, never moved backwards), the same narrow shape as
+--    the favorite star. Nullable, no default, no check.
 --
---    APPLY BEFORE THE CLIENT SHIPS, and before the function deploys. The app
---    loads invoices with select *, so once these columns exist every client
---    (old ones included) carries the keys in its cached rows and writes them
---    back on the next edit. That is harmless while the columns exist; it is
---    also why the rollback must revert the client first.
+--    Server-owned, and enforced here: trigger invoices_keep_last_emailed
+--    silently keeps the stored values on any write by a user token (anon,
+--    authenticated), so the rest of that write (a payment, a write-off) still
+--    lands. Without it, the app's full-row writes (updateItem, the self-heal
+--    bulkSync, a queued replay) put a device's cached copy back: a desktop tab
+--    opened before an email went out from the phone would record a payment
+--    and erase the stamp, or roll it back to an older recipient. The current
+--    app strips the two keys from every write (SERVER_OWNED_FIELDS in
+--    src/lib/supabase.js); the trigger also covers app versions still cached
+--    on devices, which load invoices with select * and write every key back.
+--    service_role (the function), postgres and supabase_admin pass untouched.
+--
+--    APPLY BEFORE the function deploys, and before the client that offers
+--    Send by email ships (the client itself never writes these columns).
 --
 -- 2. public.invoice_email_sends, the sent-once ledger.
 --    The app sends a client request id with every Send and reuses it on a
@@ -60,6 +68,46 @@ begin
     raise exception 'invoice_email_sends: wrong column type: %', bad;
   end if;
 end $$;
+
+-- The stamp is the server's. A user token can neither set it on INSERT nor
+-- change it on UPDATE (an upsert is both: the INSERT half nulls it, the
+-- UPDATE half puts the stored value back). Reverted, not raised, so the
+-- write that carried it still succeeds. SECURITY INVOKER, so current_user is
+-- the role PostgREST switched to for the request (the same test
+-- support_guard_actor uses).
+create or replace function public.invoices_keep_last_emailed()
+returns trigger
+language plpgsql security invoker set search_path = public, pg_temp
+as $$
+begin
+  if current_user in ('postgres', 'service_role', 'supabase_admin') then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    new.last_emailed_at := null;
+    new.last_emailed_to := null;
+  else
+    new.last_emailed_at := old.last_emailed_at;
+    new.last_emailed_to := old.last_emailed_to;
+  end if;
+  return new;
+end;
+$$;
+
+-- Nobody calls a trigger function; it fires regardless of EXECUTE. Postgres
+-- grants EXECUTE to PUBLIC on creation, so take it away the way
+-- 20260913_view_and_rpc_lockdown.sql does for the other trigger functions.
+revoke execute on function public.invoices_keep_last_emailed() from public;
+revoke execute on function public.invoices_keep_last_emailed() from anon, authenticated;
+grant execute on function public.invoices_keep_last_emailed() to postgres, service_role;
+
+comment on function public.invoices_keep_last_emailed() is
+  'BEFORE INSERT OR UPDATE on invoices: last_emailed_at / last_emailed_to are written only by send-invoice-email (service_role). A user token cannot set or change them; its write lands with the stored values kept, so a stale device cannot erase or roll back when and to whom an invoice was emailed.';
+
+drop trigger if exists invoices_keep_last_emailed on public.invoices;
+create trigger invoices_keep_last_emailed
+  before insert or update on public.invoices
+  for each row execute function public.invoices_keep_last_emailed();
 
 create table if not exists public.invoice_email_sends (
   id uuid primary key default gen_random_uuid(),

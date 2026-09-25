@@ -250,6 +250,25 @@ export const COLLECTION_KEYS = Object.keys(TABLE_MAP);
 // Fields to skip when writing to Supabase (not in DB schema)
 const SKIP_FIELDS = new Set(["data"]); // document base64 data stays local
 
+// Columns only a server function writes. The app reads them with select * and
+// shows them, but never sends them back: every write here carries the whole
+// cached row, so a device that has not reloaded since the server wrote them
+// would put its stale copy (or null) over the server's value. The database
+// refuses such a write too (trigger invoices_keep_last_emailed, migration
+// 20260925130000), which also covers older app versions.
+export const SERVER_OWNED_FIELDS = Object.freeze({
+  // send-invoice-email, after a confirmed send.
+  invoices: Object.freeze(["last_emailed_at", "last_emailed_to"]),
+});
+
+/** The row the app may write for `item`: snake_case, without device-only or server-owned fields. */
+function clientRow(collectionKey, item) {
+  const row = toSnakeObj(item);
+  for (const f of SKIP_FIELDS) delete row[f];
+  for (const f of SERVER_OWNED_FIELDS[collectionKey] || []) delete row[f];
+  return row;
+}
+
 // ─── Profile / Settings ──────────────────────────────────────
 // Maps settings keys → profiles columns
 const SETTINGS_TO_PROFILE = {
@@ -639,8 +658,7 @@ function queuePendingOp(op, collectionKey, payload, owner) {
 async function sbUpsertRow(userId, collectionKey, item, owner) {
   if (!item?.id) return true; // nothing addressable — drop it
   const table = tableName(collectionKey);
-  const row = toSnakeObj(item);
-  for (const f of SKIP_FIELDS) delete row[f];
+  const row = clientRow(collectionKey, item);
   row.user_id = userId;
   row.created_at = row.created_at || new Date().toISOString();
   row.updated_at = row.updated_at || new Date().toISOString();
@@ -1063,9 +1081,8 @@ export async function insertItem(userId, collectionKey, item) {
   // No cloud target yet (offline / local dev): queue so it isn't lost.
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
   const table = tableName(collectionKey);
-  const row = toSnakeObj(item);
-  // Remove fields not in DB
-  for (const f of SKIP_FIELDS) delete row[f];
+  // Without fields not in DB, or written only by the server
+  const row = clientRow(collectionKey, item);
   row.user_id = userId;
   row.created_at = row.created_at || new Date().toISOString();
   row.updated_at = new Date().toISOString();
@@ -1090,8 +1107,7 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
   const owner = recordContext(collectionKey, item, previous, true, authUserId);
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
   const table = tableName(collectionKey);
-  const row = toSnakeObj(item);
-  for (const f of SKIP_FIELDS) delete row[f];
+  const row = clientRow(collectionKey, item);
   delete row.user_id;
   delete row.created_at;
   row.updated_at = new Date().toISOString();
@@ -1168,8 +1184,7 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
   const table = tableName(collectionKey);
   const now = new Date().toISOString();
   const rows = items.map((item) => {
-    const row = toSnakeObj(item);
-    for (const f of SKIP_FIELDS) delete row[f];
+    const row = clientRow(collectionKey, item);
     row.user_id = userId;
     if (!row.created_at) row.created_at = now;
     if (!row.updated_at) row.updated_at = now;

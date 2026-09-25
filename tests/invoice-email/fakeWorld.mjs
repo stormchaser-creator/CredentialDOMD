@@ -15,15 +15,20 @@ export const IDS = Object.freeze({
   contract: "aaaaaaaa-0000-4000-8000-000000000007",
   workInvoice: "aaaaaaaa-0000-4000-8000-000000000008",
   otherProfile: "aaaaaaaa-0000-4000-8000-000000000009",
+  secondExpenseInvoice: "aaaaaaaa-0000-4000-8000-00000000000a",
 });
 export const SUBJECT = "user_synthetic";
 const DOT = String.fromCodePoint(0xb7);
 const tick = () => new Promise((r) => setImmediate(r));
 const pdfBytes = (label) => new TextEncoder().encode(`%PDF-1.4\n% synthetic ${label}\n`);
 
-/** The client's copy of the expense invoice (camelCase, as the app holds it). */
+/**
+ * The client's copy of the expense invoice (camelCase, as the app holds it).
+ * No contract: Expenses.jsx creates every expense invoice with contractId
+ * null and names the agency in billToLabel, and all of production's do.
+ */
 export const expenseInvoice = () => ({
-  id: IDS.invoice, number: "EXP-0007", kind: "expenses", contractId: IDS.contract, billToLabel: "Synthetic Locums",
+  id: IDS.invoice, number: "EXP-0007", kind: "expenses", contractId: null, billToLabel: "Synthetic Locums",
   periodStart: "2026-08-01", periodEnd: "2026-08-02", entryIds: [IDS.expAir, IDS.expHotel],
   totalAmount: 700, totalMinutes: 0, sentAt: "2026-08-05T12:00:00Z", terms: "Reimbursable travel expenses per agreement.",
   payments: [{ amount: 100, date: "2026-08-20", note: "partial" }],
@@ -55,10 +60,10 @@ export function fakeWorld(opts = {}) {
     },
     invoices: [
       { id: IDS.invoice, user_id: IDS.profile, number: "EXP-0007", kind: "expenses", entry_ids: [IDS.expAir, IDS.expHotel],
-        contract_id: IDS.contract, total_amount: 700, terms: "Reimbursable travel expenses per agreement.",
+        contract_id: null, bill_to_label: "Synthetic Locums", total_amount: 700, terms: "Reimbursable travel expenses per agreement.",
         updated_at: "2026-09-01T00:00:00.000Z", last_emailed_at: null, last_emailed_to: null },
       { id: IDS.workInvoice, user_id: IDS.profile, number: "INV-20260920-01", kind: null, entry_ids: [],
-        contract_id: IDS.contract, total_amount: 12500.5, updated_at: "2026-09-21T00:00:00.000Z", last_emailed_at: null, last_emailed_to: null },
+        contract_id: IDS.contract, bill_to_label: null, total_amount: 12500.5, updated_at: "2026-09-21T00:00:00.000Z", last_emailed_at: null, last_emailed_to: null },
     ],
     expenses: [
       { id: IDS.expAir, user_id: IDS.profile, invoice_id: IDS.invoice },
@@ -86,6 +91,7 @@ export function fakeWorld(opts = {}) {
   };
   let seq = 0;
   const note = (name) => world.reads.push(name);
+  const at = () => new Date(world.now).toISOString();
   const deps = {
     configured: () => true,
     now: () => world.now,
@@ -121,6 +127,17 @@ export function fakeWorld(opts = {}) {
       expenses: async (profileId, invoiceId) => world.expenses.filter((e) => e.user_id === profileId && e.invoice_id === invoiceId).map((e) => ({ ...e })),
       receiptDocuments: async (profileId, links) => world.documents.filter((d) => d.user_id === profileId && links.includes(d.linked_to)).map((d) => ({ ...d })),
       storageSubjects: async () => [SUBJECT],
+      // Newest first by updated_at, later rows first on a tie (the fake clock
+      // only moves when a test moves it).
+      lastAttempt: async (profileId, invoiceId, exceptRequestId) => {
+        const rows = world.ledger.map((r, i) => [r, i])
+          .filter(([r]) => r.user_id === profileId && r.invoice_id === invoiceId && ["sent", "unknown", "sending"].includes(r.status)
+            && (!exceptRequestId || r.client_request_id !== exceptRequestId))
+          .sort(([a, ai], [b, bi]) => String(b.updated_at).localeCompare(String(a.updated_at)) || bi - ai);
+        return rows[0] ? { ...rows[0][0] } : null;
+      },
+      emailedInvoices: async (profileId) => world.invoices.filter((r) => r.user_id === profileId && r.last_emailed_at)
+        .map((r) => ({ id: r.id, contract_id: r.contract_id, bill_to_label: r.bill_to_label, last_emailed_at: r.last_emailed_at, last_emailed_to: r.last_emailed_to })),
       lastSend: async (profileId, invoiceId) => {
         const rows = world.ledger.filter((r) => r.user_id === profileId && r.invoice_id === invoiceId && r.status === "sent")
           .sort((a, b) => b.sent_at.localeCompare(a.sent_at));
@@ -130,7 +147,7 @@ export function fakeWorld(opts = {}) {
       insertSend: async (row) => {
         await tick();
         if (world.ledger.some((x) => x.user_id === row.user_id && x.client_request_id === row.client_request_id)) return { conflict: true };
-        const full = { id: `ledger-${++seq}`, provider_id: null, sent_at: null, ...row };
+        const full = { id: `ledger-${++seq}`, provider_id: null, sent_at: null, created_at: at(), updated_at: at(), ...row };
         world.ledger.push(full);
         return { ...full };
       },
@@ -138,13 +155,14 @@ export function fakeWorld(opts = {}) {
         await tick();
         const r = world.ledger.find((x) => x.id === existing.id && x.status === "failed" && x.attempts === existing.attempts);
         if (!r) return null;
-        Object.assign(r, fields, { status: "sending", attempts: existing.attempts + 1, provider_id: null });
+        Object.assign(r, fields, { status: "sending", attempts: existing.attempts + 1, provider_id: null, updated_at: at() });
         return { ...r };
       },
       finishSend: async (claim, status, extra = {}) => {
         const r = world.ledger.find((x) => x.id === claim.id && x.attempts === claim.attempts && x.status === "sending");
         if (!r) return;
         r.status = status;
+        r.updated_at = at();
         if (extra.providerId !== undefined) r.provider_id = extra.providerId;
         if (extra.sentAt) r.sent_at = extra.sentAt;
       },

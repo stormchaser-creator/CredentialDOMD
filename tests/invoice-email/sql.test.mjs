@@ -8,8 +8,9 @@ import { promisify } from "node:util";
 import { pgBin, pgSkip } from "../credential-portal/postgresFixture.mjs";
 
 // Migration 20260925130000_invoice_email_sends.sql against a real PostgreSQL:
-// the two invoice columns the app will cache and write back, and the
-// server-only sent-once ledger behind send-invoice-email's idempotency.
+// the two server-owned invoice columns (a user token's write keeps them, so a
+// stale device cannot erase or roll back the stamp), and the server-only
+// sent-once ledger behind send-invoice-email's idempotency.
 //
 // Own port: node --test runs files in parallel and the other PostgreSQL
 // suites hold their own.
@@ -50,6 +51,7 @@ const BASE = `
 `;
 const P = "00000000-0000-4000-8000-0000000000a1";
 const INV = "00000000-0000-4000-8000-0000000000b1";
+const INV2 = "00000000-0000-4000-8000-0000000000b2";
 const REQ = "00000000-0000-4000-8000-0000000000c1";
 const insertRow = (status = "sending", request = REQ) => `insert into public.invoice_email_sends
   (user_id, invoice_id, client_request_id, status, recipient, subject) values ('${P}', '${INV}', '${request}', '${status}', 'billing@hospital.example', 'Invoice INV-1')`;
@@ -74,10 +76,34 @@ test("invoice email migration: shape, rerun, server-only ledger, one row per req
     assert.match(once, /invoice_email_sends\.status:text:NO/);
   });
 
-  await t.test("the app's full-row invoice write, with the new keys null or set, still lands and changes no amount", async () => {
-    await pg.sql(`update public.invoices set last_emailed_at = null, last_emailed_to = null, total_amount = 700, terms = 'Net 30' where id = '${INV}'`);
-    await pg.sql(`update public.invoices set last_emailed_at = '2026-09-25T15:00:00Z', last_emailed_to = 'billing@hospital.example' where id = '${INV}'`);
-    assert.equal(await pg.sql(`select total_amount || '|' || terms || '|' || (updated_at = '2026-09-01T00:00:00Z') from public.invoices`), "700.00|Net 30|true");
+  await t.test("the stamp is the server's: a user token's full-row write lands but keeps it; only service_role moves it", async () => {
+    const asUser = (q) => pg.sql(`set role authenticated; ${q}`, "app_user");
+    const asEdge = (q) => pg.sql(`set role service_role; ${q}`, "edge");
+    const row = () => pg.sql(`select (last_emailed_at = '2026-09-25T15:00:00Z') || '|' || coalesce(last_emailed_to, 'null') || '|' || coalesce(payments::text, 'null') || '|' || total_amount
+      from public.invoices where id = '${INV}'`);
+    // send-invoice-email stamps it after a confirmed send.
+    await asEdge(`update public.invoices set last_emailed_at = '2026-09-25T15:00:00Z', last_emailed_to = 'billing@hospital.example' where id = '${INV}'`);
+    // A tab opened before that email went out records a payment with its
+    // cached stamp: null (erase), then an older one (roll back).
+    await asUser(`update public.invoices set payments = '[{"amount": 100}]', total_amount = 700, terms = 'Net 30', last_emailed_at = null, last_emailed_to = null where id = '${INV}'`);
+    await asUser(`update public.invoices set last_emailed_at = '2026-09-20T00:00:00Z', last_emailed_to = 'wrong@agency.example' where id = '${INV}'`);
+    // The self-heal push and a queued replay are upserts: both trigger halves.
+    await asUser(`insert into public.invoices (id, user_id, number, total_amount, payments, last_emailed_at, last_emailed_to)
+      values ('${INV}', '${P}', 'INV-1', 700, '[{"amount": 100}]', null, null)
+      on conflict (id) do update set payments = excluded.payments, last_emailed_at = excluded.last_emailed_at, last_emailed_to = excluded.last_emailed_to`);
+    assert.equal(await row(), 'true|billing@hospital.example|[{"amount": 100}]|700.00', "the payment landed and the stamp is untouched");
+    assert.equal(await pg.sql(`select updated_at = '2026-09-01T00:00:00Z' from public.invoices where id = '${INV}'`), "t");
+    // Nor can a user token seed one on a new invoice.
+    await asUser(`insert into public.invoices (id, user_id, number, last_emailed_at, last_emailed_to) values ('${INV2}', '${P}', 'INV-2', '2026-09-25T15:00:00Z', 'x@agency.example')`);
+    assert.equal(await pg.sql(`select coalesce(last_emailed_at::text, 'null') || '|' || coalesce(last_emailed_to, 'null') from public.invoices where id = '${INV2}'`), "null|null");
+    // The function moves it.
+    await asEdge(`update public.invoices set last_emailed_at = '2026-09-26T09:00:00Z', last_emailed_to = 'ap@agency.example' where id = '${INV}'`);
+    assert.equal(await pg.sql(`select (last_emailed_at = '2026-09-26T09:00:00Z') || '|' || last_emailed_to from public.invoices where id = '${INV}'`), "true|ap@agency.example");
+    // Nobody but postgres and service_role may execute the trigger function directly.
+    const acl = await pg.sql(`select coalesce(array_to_string(proacl, ','), '') from pg_proc where proname = 'invoices_keep_last_emailed'`);
+    assert.doesNotMatch(acl, /(^|,)=X/, "no PUBLIC execute");
+    assert.doesNotMatch(acl, /anon=|authenticated=/);
+    await pg.sql(`delete from public.invoices where id = '${INV2}'`);
   });
 
   await t.test("the ledger is service_role only: RLS on, no policy, nothing for anon or authenticated", async () => {
@@ -123,6 +149,9 @@ test("invoice email migration: shape, rerun, server-only ledger, one row per req
     await pg.sql(`update public.invoices set last_emailed_at = null, last_emailed_to = null`);
     await pg.sql(ROLLBACK);
     assert.equal(await shape(pg), "");
+    assert.equal(await pg.sql(`select count(*) from pg_trigger where tgname = 'invoices_keep_last_emailed'`), "0", "the trigger goes with the columns");
+    await pg.sql(`set role authenticated; update public.invoices set terms = 'Net 45' where id = '${INV}'`, "app_user");
+    assert.equal(await pg.sql(`select terms from public.invoices where id = '${INV}'`), "Net 45", "invoice writes still work afterwards");
     await pg.sql(MIGRATION);
     assert.notEqual(await shape(pg), "", "and it applies again afterwards");
   });
