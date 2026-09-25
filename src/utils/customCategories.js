@@ -190,13 +190,19 @@ const IDENTIFIER_LABELS = [
   [/\bchart\s*(#|no\.?|number)/i, "a medical record number"],
   [/^\s*(patient|pt)(\s+name)?\s*:?\s*$|\bpt\s+(name|id|number)\b/i, "a patient identifier"],
   [/\bpatient\s+(name|id|identifier|number|no\.?|dob|date\s+of\s+birth|sticker|label|address|phone)\b/i, "a patient identifier"],
+  // The spellings hospital exports use: "Patient Last Name", "PatientLastName",
+  // "Patient's Name", "Pt. ID", "Patient #". Still a phrase, so "Patient
+  // Safety Committee" is never caught.
+  [/\b(patient|pt)(?:[^\sa-z0-9]?s)?\.?\s*(?:(?:first|last|full|middle|legal|given|family|sur)\s*)?(?:name|id|identifier|number|no)\b|\b(patient|pt)\.?\s*#/i, "a patient identifier"],
   [/\b(social\s+security|ssn|soc\.?\s*sec\.?|ss\s*no\.?)\b|\bss\s*#/i, "a Social Security number"],
   // An individual's taxpayer ID is their SSN; a W-9 is uploaded constantly by
   // locum physicians. Withheld on the label, whatever the number looks like.
   [/\b(tin|taxpayer\s+id(entification)?(\s+(number|no\.?))?|tax\s*id(\s+(number|no\.?))?)\b/i, "a Social Security number"],
   [/\b(date\s+of\s+birth|birth\s*date|dob|d\s*o\s*b)\b|^\s*(born|birthday)\s*$/i, "a full date of birth"],
-  [/\b(account|acct)\.?\s*(number|no\.?|#)\b/i, "an account number"],
-  [/\bencounter\s+(number|no\.?|#)\b/i, "an encounter number"],
+  // A "#" that ends the cell has no word boundary after it, so the tail is
+  // spelled out: "Acct #", "Hospital Account #" and "Encounter #" all match.
+  [/\b(account|acct)\.?\s*(?:number\b|no\b|#)/i, "an account number"],
+  [/\bencounter\s*(?:number\b|no\b|id\b|#)/i, "an encounter number"],
   [/\b(driver'?s?\s+licen[cs]e|passport)\s*(number|no\.?|#)?\b/i, "a driver's licence or passport number"],
 ];
 // Three digit groups split by any separator: 123-45-6789, 123 45 6789,

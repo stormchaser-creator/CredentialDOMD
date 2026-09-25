@@ -7,6 +7,7 @@ import { useAiAvailable, describeAiStatus } from "../../../utils/aiClient";
 import { mergeExtracted, findDuplicateDoc, attachExistingDoc } from "../../../utils/docPrefill";
 import { checkStorageQuota } from "../../../utils/storageQuota";
 import { screenDocument, phiWarningText } from "../../../utils/phiGuard";
+import { isPhotoOrPdf, notPhotoOrPdf } from "../../../utils/photoOrPdf";
 import { SHARED_KEY_NOTE } from "./DateFixList";
 
 /**
@@ -119,8 +120,15 @@ export default function CaptureRun({
     if (!file || !rec) return;
     setProblem(""); setNote(""); setStage("reading");
     try {
-      // The guard runs before anything is read, and a refusal pauses the run
-      // at this record rather than dropping the queue.
+      // The guards run before anything is read, and a refusal pauses the run
+      // at this record rather than dropping the queue. A photo or a PDF only:
+      // the picker's accept list is a hint a desktop dialog lets anyone
+      // override, and a spreadsheet picked that way would be stored as proof.
+      if (!isPhotoOrPdf(file)) {
+        setProblem(`${notPhotoOrPdf(file)} The run is paused here. Your finished records are saved.`);
+        setStage("paused");
+        return;
+      }
       const quota = checkStorageQuota(data.documents, [file]);
       if (!quota.ok) {
         setProblem(`${quota.message} The run is paused here. Your finished records are saved.`);

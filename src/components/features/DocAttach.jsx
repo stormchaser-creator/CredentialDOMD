@@ -9,7 +9,7 @@ import { mergeExtracted, mergeScanned, findDuplicateDoc } from "../../utils/docP
 import { docMime } from "../../utils/inboxDocs";
 import { docAttachedLabel, fmtBytes, docBytes } from "../../utils/docLabel";
 import { checkStorageQuota } from "../../utils/storageQuota";
-import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
+import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
 
 /**
  * DocAttach — the ONE way to attach + scan documents from inside any
@@ -104,10 +104,14 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
     const staged = (attachedDocs || []).filter((d) => !d.existingId);
     const quota = checkStorageQuota(data.documents, [...staged, ...Array.from(files)]);
     if (!quota.ok) { setIsError(true); setMsg(quota.message); return; }
+    // Every refusal in this pick, shown again after the loop so the next
+    // file's "Document read" cannot replace it.
+    const refused = [];
+    const refuse = (text) => { refused.push(text); setIsError(true); setMsg(refused.join(" ")); };
     for (const file of Array.from(files)) {
       // A spreadsheet with a patient-identifier column is never attached.
       const sheetRefusal = await spreadsheetGuard(file);
-      if (sheetRefusal) { setIsError(true); setMsg(`"${file.name}" was not attached. ${sheetRefusal}`); continue; }
+      if (sheetRefusal) { refuse(`"${file.name}" was not attached. ${sheetRefusal}`); continue; }
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result);
@@ -121,8 +125,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
           const preview = await extractOfficeText({ name: file.name, type: file.type, file });
           const screen = screenDocument(`${file.name}\n${preview}`);
           if (screen?.level === "clinical") {
-            setIsError(true);
-            setMsg(`"${file.name}" was not attached. ${phiWarningText(screen)}`);
+            refuse(`"${file.name}" was not attached. ${phiWarningText(screen)}`);
             continue;
           }
         } catch { /* unreadable — normal path reports it */ }
@@ -144,6 +147,7 @@ function DocAttach({ setForm, attachedDocs, setAttachedDocs, analyzer, textAnaly
         : " This file was already in Files, so it is linked here instead of uploaded again.";
       await readIntoForm({ name: file.name, type: file.type, dataUrl, file }, dupNote);
     }
+    if (refused.length) { setMsg(withRefusals(refused)); setIsError(true); }
   }, [data.documents, attachedDocs, setAttachedDocs, readIntoForm]);
 
   // Pick a document that is already in Files: same read, same fill, and an

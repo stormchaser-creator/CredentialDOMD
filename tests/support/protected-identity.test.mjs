@@ -252,6 +252,36 @@ test('the mail, text-message, clipboard and share paths scrub, and the error rep
   assert.match(emailPacket, /filter\(\(d\) => !isIdentityLink\(d\?\.linkedTo\)\)/, 'no file linked to Protected Identity is offered for sending');
   assert.equal((support.match(/body: scrubSsn\(/g) || []).length, 4, 'ticket create and reply, both paths');
 
+  // Vera's packet: the model writes the cover note from the conversation, so
+  // an SSN typed or pasted there reaches the note, the blurb and the clipboard.
+  const { veraPacketText, bundlePacketText } = await import('../../src/utils/helpers.js');
+  const vera = veraPacketText(`Send my license to creds@example.invalid; they need my SSN ${SSN}`);
+  assert.doesNotMatch(vera.note + vera.blurb, /123-45-6789/);
+  assert.match(vera.note, /\[SSN removed\]/);
+  assert.equal(vera.blurb, `Credential packet: Send my license to creds@example.invalid. they need my SSN ${SSN_REMOVED}. Sent from CredentialDOMD.`);
+  assert.doesNotMatch(vera.note + vera.blurb, /\u{2014}/u, 'no em dash in outgoing text');
+  assert.equal(veraPacketText('').note, 'Credential documents enclosed.\n\nSent from CredentialDOMD.');
+  // The Files bundle: a file name can carry an SSN into the letter, the title and the blurb.
+  const bundle = bundlePacketText([{ name: `W-9 ${SSN}.pdf` }, { name: 'License.pdf' }], { name: 'Dr Synthetic', degreeType: 'MD', npi: '1234567890' }, new Date('2026-09-25T12:00:00Z'));
+  for (const [part, text] of Object.entries(bundle)) {
+    assert.doesNotMatch(text, /123-45-6789|\u{2014}/u, part);
+  }
+  assert.match(bundle.text, /1\. W-9 \[SSN removed\]\.pdf/);
+  assert.match(bundle.blurb, /1\. W-9 \[SSN removed\]\.pdf\./);
+  assert.match(bundle.text, /\(NPI 1234567890\)/, 'the NPI (ten digits) is kept');
+  assert.equal(bundle.title, 'Credential packet for Dr Synthetic, MD (2 documents)');
+  const [assistant, documents] = await Promise.all(['src/components/features/AssistantSection.jsx', 'src/components/features/DocumentsSection.jsx'].map(read));
+  const packet = assistant.slice(assistant.indexOf('action.kind === "send_packet"'), assistant.indexOf('action.kind === "export_data"'));
+  assert.match(packet, /const \{ note, blurb \} = veraPacketText\(action\.coverNote\);/);
+  assert.doesNotMatch(packet, /navigator\.clipboard\.writeText/, 'the clipboard is written through copyToClipboard, which scrubs');
+  assert.equal((packet.match(/await copyToClipboard\(note\)/g) || []).length, 2, 'share path and download fallback');
+  assert.match(packet, /navigator\.share\(\{ title: "Credential packet", text: blurb, files \}\)/);
+  const sendBundle = documents.slice(documents.indexOf('const sendBundle = useCallback('), documents.indexOf('const openCamera = useCallback('));
+  assert.match(sendBundle, /const \{ text, title, blurb \} = bundlePacketText\(docs, data\.settings\);/);
+  assert.doesNotMatch(sendBundle, /navigator\.clipboard\.writeText/);
+  assert.match(sendBundle, /await copyToClipboard\(text\)/);
+  assert.match(sendBundle, /navigator\.share\(\{ files, title, text: blurb \}\)/);
+
   const source = await read('src/lib/errorReport.js');
   const reports = [];
   const module = { exports: {} };

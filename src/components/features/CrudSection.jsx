@@ -23,7 +23,7 @@ import { STATE_NAMES } from "../../constants/states";
 import CPTCodePicker from "./CPTCodePicker";
 import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
 import { checkStorageQuota } from "../../utils/storageQuota";
-import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
+import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
 
 // Every billed code, spelled out — number, what it entails, units, value.
 // Structured detail from the import wins; a hand-typed code string still
@@ -264,10 +264,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     const quota = checkStorageQuota(data.documents, [...attachedDocs, ...Array.from(files)]);
     if (!quota.ok) { setScanIsError(true); setScanMsg(quota.message); return; }
 
+    // Every refusal in this pick, shown again after the loop so a later
+    // file's "fields filled" cannot replace it.
+    const refused = [];
     for (const file of Array.from(files)) {
       // A spreadsheet with a patient-identifier column is never attached.
       const sheetRefusal = await spreadsheetGuard(file);
-      if (sheetRefusal) { setScanIsError(true); setScanMsg(`"${file.name}" was not attached. ${sheetRefusal}`); continue; }
+      if (sheetRefusal) { refused.push(`"${file.name}" was not attached. ${sheetRefusal}`); setScanIsError(true); setScanMsg(refused.join(" ")); continue; }
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result);
@@ -322,6 +325,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         setScanningDoc(false);
       }
     }
+    if (refused.length) { setScanMsg(withRefusals(refused)); setScanIsError(true); }
   }, [aiOn, data.settings.apiKey, data.settings.degreeType, fields, data.documents, attachedDocs]);
 
   /** Every route in puts the same fields on the form and says where it came from. */
