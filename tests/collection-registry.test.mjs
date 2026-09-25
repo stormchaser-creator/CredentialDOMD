@@ -72,7 +72,9 @@ test("BUILT_IN_SECTIONS is exactly TABLE_MAP, so Vera can tell a real section fr
 });
 
 test("the scanner's 'other' type never swallows certificates that belong in Licenses or Education", () => {
-  const scan = read("src/utils/documentScanner.js");
+  // The prompt moved to scannerCore.js (2026-09-25) so the email-inbound edge
+  // function reads a forwarded file with the very same words.
+  const scan = read("src/utils/scannerCore.js");
   const line = scan.split("\n").find(l => l.startsWith('- "other":')) || "";
   assert.ok(line, "the other type is described in the prompt");
   assert.doesNotMatch(line, /course certificate WITHOUT|fellowship or course/i);

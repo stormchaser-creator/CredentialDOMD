@@ -29,7 +29,10 @@ ok("snapFields only touches the keys it is given",
 // The guard. Every value the scanner is told to return must appear verbatim
 // in a form select, or the scan can never match the list.
 {
-  const scan = fs.readFileSync("src/utils/documentScanner.js", "utf8");
+  // The scanner prompt lives in scannerCore.js since 2026-09-25 (shared with
+  // the email-inbound edge function); reading documentScanner.js here would
+  // find no vocabulary at all and pass on nothing.
+  const scan = fs.readFileSync("src/utils/scannerCore.js", "utf8");
   const app = fs.readFileSync("src/App.jsx", "utf8");
   const unescape = (s) => s.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
   const formValues = new Set();
@@ -38,7 +41,9 @@ ok("snapFields only touches the keys it is given",
   }
   ok("the form select vocabularies were found at all", formValues.size > 10, `${formValues.size}`);
   const missing = [];
-  for (const m of scan.matchAll(/\(MUST be one of: ([^)]*)\)/g)) {
+  const lists = [...scan.matchAll(/\(MUST be one of: ([^)]*)\)/g)];
+  ok("the scanner's closed vocabularies were found at all", lists.length >= 2, `${lists.length}`);
+  for (const m of lists) {
     for (const o of m[1].matchAll(/"([^"]+)"/g)) {
       const v = unescape(o[1]);
       if (!formValues.has(v)) missing.push(v);
