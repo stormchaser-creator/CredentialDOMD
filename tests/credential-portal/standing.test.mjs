@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import { createCredentialPortalHandler } from '../../supabase/functions/_shared/credentialPortalHandler.mjs';
 import { CREDENTIAL_PORTAL_POLICY, createPortalCrypto, digest } from '../../supabase/functions/_shared/credentialPortalCrypto.mjs';
 import { ADMIN_ACCESS_SECTION_KEYS, ADMIN_ACCESS_DENIED, standingInvitationEmail, ownerAllowed } from '../../supabase/functions/_shared/credentialPortalView.mjs';
+import { parseStandingView, documentActions } from '../../public/credential-access/portal.mjs';
 import { postgresFixture, pgSkip, quote as q } from './postgresFixture.mjs';
 
 const MIGRATION = fs.readFileSync(new URL('../../supabase/migrations/20260925040000_credential_portal_admin_access.sql', import.meta.url), 'utf8');
@@ -247,6 +248,9 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     assert.ok(!json.includes('SECRET'), json.match(/.{40}SECRET.{40}/)?.[0]);
     assert.ok(!json.includes('enc1:'));
     for (const key of allKeys(body)) assert.ok(!FORBIDDEN_KEYS.includes(key), key);
+    // The recipient page accepts exactly what the server sends.
+    const parsed = parseStandingView(body);
+    assert.equal(parsed.documentCount, 3); assert.equal(parsed.sections.length, body.sections.length);
     const dea = body.sections[0].records.find(r => r.id === R.L3);
     assert.equal(dea.title, 'DEA Registration'); assert.ok(!dea.fields.some(f => f.label === 'Number'));
     const vaccine = body.sections.find(s => s.key === 'healthRecords').records.find(r => r.id === R.H1);
@@ -309,7 +313,9 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     assert.equal((await call({ action: 'update', inviteId: main.id, allowDownload: false }, 'alice')).status, 200);
     assert.equal((await file('download', D.lic, mainSession)).status, 403);
     assert.equal((await file('view', D.lic, mainSession)).status, 200);
-    assert.equal((await summary(mainSession)).body.grant.allowDownload, false);
+    const offView = parseStandingView((await summary(mainSession)).body);
+    assert.equal(offView.grant.allowDownload, false);
+    assert.ok(offView.sections.flatMap(s => s.records.flatMap(r => r.documents)).every(d => !documentActions(d, offView.grant.allowDownload).includes('download')));
     const events = (await call({ action: 'list' }, 'alice')).body.invites.find(i => i.id === main.id).audit;
     assert.ok(events.some(e => e.event === 'download_refused' && e.documentName === 'Colorado license.pdf'));
     assert.ok(events.some(e => e.event === 'document_response_prepared' && e.documentName === 'Colorado license.pdf'));

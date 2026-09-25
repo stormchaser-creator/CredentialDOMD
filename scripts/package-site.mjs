@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One reviewed static artifact for GitHub Pages today and Cloudflare Pages later.
 import { cp, mkdir, readdir, readFile, rm, writeFile, access } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadVideoCatalog, copyVideoAssets } from './help-videos.mjs';
 import { renderHelp } from './build-help.mjs';
@@ -21,7 +21,17 @@ const landingImages = [
   'physician-learning-v3-600.webp', 'eric-whitney-120.webp', 'eric-whitney-400.webp',
 ];
 
-export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MODE, { supabaseUrl = process.env.VITE_SUPABASE_URL } = {}) {
+// The recipient page ships disabled in source (tests pin that). The deploy
+// flag that turns on the owner UI, VITE_CREDENTIAL_PORTAL_ENABLED, turns on the
+// packaged recipient page too, so activation is one workflow flag rather than
+// a code edit. The server stays independently gated by its own secrets.
+export function enablePortalConfig(source) {
+  const disabled = /(export const PORTAL_CONFIG = Object\.freeze\(\{\n  enabled: )false(,\n)/;
+  if ((source.match(new RegExp(disabled.source, 'g')) || []).length !== 1) throw new Error('Recipient portal config shape changed; refusing to enable it by rewrite');
+  return source.replace(disabled, '$1true$2');
+}
+
+export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MODE, { supabaseUrl = process.env.VITE_SUPABASE_URL, portalEnabled = process.env.VITE_CREDENTIAL_PORTAL_ENABLED === 'true' } = {}) {
   // Paid marketing must never ship with only some CTAs/forms migrated.
   assertPublicLaunchReady(launchMode);
   const liveOffer = { offerEndpoint: launchMode.enabled ? publicMembershipEndpoint(supabaseUrl) : null };
@@ -74,6 +84,10 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   await cp(resolve(root, 'dist'), resolve(output, 'app'), { recursive: true });
+  // Vite copies public/ into the app build, which published an unheadered
+  // duplicate of the private page at /app/credential-access/. Only the root
+  // route, with its headers, may exist.
+  await rm(resolve(output, 'app', 'credential-access'), { recursive: true, force: true });
   // Existing /app/privacy.html and /app/terms.html links must match root and app UI.
   for (const page of ['privacy', 'terms']) await writeFile(resolve(output, 'app', `${page}.html`), pageOutput.get(page));
   // An old root registration only checks its original script URL for updates.
@@ -96,7 +110,13 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   for (const name of publicSiteAssets) await cp(resolve(root, 'public', name), resolve(output, name));
   await mkdir(resolve(output, 'images'), { recursive: true });
   for (const name of landingImages) await cp(resolve(root, 'landing/images', name), resolve(output, 'images', name));
-  await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true });
+  // Never publish the vendor .gitignore ("*"): the deploy's git add -A would
+  // then drop every PDF.js file from gh-pages and previews fall back to Download.
+  await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true, filter: source => basename(source) !== '.gitignore' });
+  if (portalEnabled) {
+    const portal = resolve(output, 'credential-access/portal.mjs');
+    await writeFile(portal, enablePortalConfig(await readFile(portal, 'utf8')));
+  }
   await cp(resolve(root, 'public/knowledge'), resolve(output, 'knowledge'), { recursive: true });
   if (launchMode.enabled) {
     const helpJson = JSON.stringify(publishedHelp, null, 2) + '\n';

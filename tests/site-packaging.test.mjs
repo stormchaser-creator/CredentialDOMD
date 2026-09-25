@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import vm from "node:vm";
-import { packageSite } from "../scripts/package-site.mjs";
+import { packageSite, enablePortalConfig } from "../scripts/package-site.mjs";
 import { renderHelp } from "../scripts/build-help.mjs";
 import { renderCme } from "../scripts/build-cme.mjs";
 import { renderLegalPages } from "../scripts/generate-legal-pages.mjs";
@@ -421,4 +421,39 @@ test("normal app offline navigation still receives its cached shell", async () =
   assert.equal(await response.text(), "cached app shell");
   assert.equal(worker.calls.fetch[0].options.cache, "no-cache");
   assert.deepEqual(worker.calls.cache, ["./index.html"]);
+});
+
+// What reaches gh-pages is what git commits, not what site-dist holds: a
+// published vendor/.gitignore ("*") made the deploy's git add -A drop every
+// PDF.js file, so production previews fell back to Download.
+test("the packaged portal survives a real git commit and has no unheadered /app copy", async t => {
+  const root = await siteFixture(t);
+  // Vite copies public/ into the app build; simulate that duplicate.
+  await cp(resolve(root, "public/credential-access"), resolve(root, "dist/credential-access"), { recursive: true });
+  const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE, { portalEnabled: false });
+  await assert.rejects(readdir(resolve(output, "app/credential-access")), { code: "ENOENT" });
+  const repo = await mkdtemp(resolve(tmpdir(), "credentialdo-ghpages-"));
+  t.after(() => rm(repo, { recursive: true, force: true }));
+  await cp(output, repo, { recursive: true });
+  const git = (...args) => execFileSync("git", args, { cwd: repo, stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.test", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.test" } }).toString();
+  git("init", "-q"); git("add", "-A"); git("commit", "-q", "-m", "synthetic deploy");
+  const committed = new Set(git("ls-files").split("\n").filter(Boolean));
+  const manifest = JSON.parse(await read(resolve(output, "credential-access/vendor/manifest.json")));
+  for (const file of ["manifest.json", ...Object.keys(manifest.files)]) assert.ok(committed.has(`credential-access/vendor/${file}`), file);
+  for (const file of ["portal.mjs", "portal.css", "pdf-preview.mjs", "index.html"]) assert.ok(committed.has(`credential-access/${file}`), file);
+  assert.ok(![...committed].some(path => path.endsWith(".gitignore")));
+  assert.ok(![...committed].some(path => path.startsWith("app/credential-access")));
+});
+
+test("the deploy flag enables the packaged recipient page and changes nothing else", async t => {
+  const root = await siteFixture(t);
+  const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE, { portalEnabled: true });
+  const source = await read(resolve(root, "public/credential-access/portal.mjs"));
+  const published = await read(resolve(output, "credential-access/portal.mjs"));
+  const before = source.split("\n"), after = published.split("\n");
+  assert.equal(before.length, after.length);
+  assert.deepEqual(before.map((line, i) => [line, after[i]]).filter(([a, b]) => a !== b), [["  enabled: false,", "  enabled: true,"]]);
+  const config = await import(pathToFileURL(resolve(output, "credential-access/portal.mjs")).href + "?enabled");
+  assert.equal(config.PORTAL_CONFIG.enabled, true);
+  assert.throws(() => enablePortalConfig(published), /shape changed/);
 });

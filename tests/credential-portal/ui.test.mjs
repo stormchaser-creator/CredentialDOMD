@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import vm from "node:vm";
-import { PORTAL_CONFIG, parseDocuments, previewAllowed, downloadName } from "../../public/credential-access/portal.mjs";
+import { PORTAL_CONFIG, parseDocuments, previewAllowed, downloadName, parseStandingView, documentActions, renderStandingView, standingHeader, expiryStatus } from "../../public/credential-access/portal.mjs";
 
 const html = await readFile(new URL("../../landing/credential-access.html", import.meta.url), "utf8");
 const source = await readFile(new URL("../../public/credential-access/portal.mjs", import.meta.url), "utf8");
@@ -66,4 +66,80 @@ test("download names cannot introduce paths or control characters", () => {
   assert.equal(downloadName("../license\r\n.pdf"), "__license__.pdf");
   assert.equal(downloadName("folder\\license.pdf"), "folder_license.pdf");
   assert.equal(downloadName("x".repeat(200)).length, 160);
+});
+
+// Standing administrator access: the page renders the server's shaped view with
+// text nodes only. A tiny synthetic DOM stands in for the browser.
+function fakeDocument() {
+  const make = tag => ({
+    tagName: tag.toUpperCase(), className: "", textContent: "", type: "", children: [], attributes: {}, listeners: {},
+    append(...nodes) { this.children.push(...nodes); }, replaceChildren(...nodes) { this.children = nodes; },
+    setAttribute(name, value) { this.attributes[name] = String(value); }, addEventListener(event, handler) { this.listeners[event] = handler; },
+  });
+  return { createElement: make };
+}
+const walk = node => [node, ...(node.children || []).flatMap(walk)];
+const textOf = node => [node.textContent, ...(node.children || []).map(textOf)].join(" ");
+const A = "00000000-0000-4000-8000-00000000000a", B = "00000000-0000-4000-8000-00000000000b", C = "00000000-0000-4000-8000-00000000000c";
+const standingResponse = (allowDownload = true) => ({
+  expiresAt: new Date(Date.now() + 3600000).toISOString(),
+  grant: { purpose: "Reappointment, Synthetic General", accessEndsAt: "2026-10-25T12:00:00.000Z", allowDownload },
+  physician: { name: "Synthetic Physician", degreeType: "DO", npi: "1234567890", specialties: ["Neurosurgery"], primaryState: "CO", additionalStates: ["ND", "CA"], email: "doc@example.test", address: "must be dropped" },
+  sections: [{ key: "licenses", label: "Licenses, DEA and certifications", records: [
+    { id: A, title: "Colorado medical license", expirationDate: "2020-01-01", fields: [{ label: "Number", value: "DR.1" }, { label: "Issued", value: "2019-01-01" }], documents: [
+      { id: B, name: "License.pdf", mimeType: "application/pdf", sizeBytes: 2048, storagePath: "never" },
+      { id: C, name: "License.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", sizeBytes: null },
+    ] },
+  ] }],
+  documentCount: 2,
+});
+
+test("standing view contract: bounded, stripped to what the page renders, and refuses malformed shapes", () => {
+  const view = parseStandingView(standingResponse());
+  assert.equal(view.physician.address, undefined);
+  assert.equal(view.sections[0].records[0].documents[0].storagePath, undefined);
+  assert.equal(view.documentCount, 2);
+  assert.equal(view.grant.allowDownload, true);
+  const bad = [null, {}, { ...standingResponse(), grant: {} }, { ...standingResponse(), sections: "x" }];
+  const duplicate = standingResponse(); duplicate.sections[0].records[0].documents[1].id = B; bad.push(duplicate);
+  const badId = standingResponse(); badId.sections[0].records[0].id = "../x"; bad.push(badId);
+  for (const value of bad) assert.throws(() => parseStandingView(value));
+});
+
+test("recipient UI hides every Download button when downloads are off and keeps Preview", () => {
+  for (const allowDownload of [true, false]) {
+    const doc = fakeDocument(), container = doc.createElement("div"), opened = [];
+    const view = parseStandingView(standingResponse(allowDownload));
+    renderStandingView(container, view, { doc, onOpen: (item, action) => opened.push([item.id, action]) });
+    const buttons = walk(container).filter(n => n.tagName === "BUTTON");
+    assert.deepEqual(buttons.map(b => b.textContent).sort(), allowDownload ? ["Download", "Download", "Preview"] : ["Preview"]);
+    buttons.find(b => b.textContent === "Preview").listeners.click();
+    assert.deepEqual(opened, [[B, "view"]]);
+    const text = textOf(container);
+    assert.match(text, /Licenses, DEA and certifications \(1\)/); assert.match(text, /Expired Jan 1, 2020/); assert.match(text, /Jan 1, 2019/);
+    if (!allowDownload) assert.match(text, /downloads are off/);
+  }
+  assert.deepEqual(documentActions({ mimeType: "application/pdf", sizeBytes: 1 }, false), ["view"]);
+  assert.deepEqual(documentActions({ mimeType: "application/msword", sizeBytes: 1 }, false), []);
+  assert.deepEqual(documentActions({ mimeType: "image/png", sizeBytes: 11 * 1024 * 1024 }, true), []);
+});
+
+test("standing header names the physician, identifiers, states, purpose and end date; badges read plainly", () => {
+  const header = standingHeader(parseStandingView(standingResponse(false)));
+  assert.equal(header.name, "Synthetic Physician, DO");
+  assert.equal(header.detail, "NPI 1234567890 \u{b7} Neurosurgery \u{b7} Licensed in CO (primary), ND, CA \u{b7} doc@example.test");
+  assert.equal(header.grant, "Shared for: Reappointment, Synthetic General. Access ends Oct 25, 2026.");
+  assert.match(header.downloads, /turned off downloads/);
+  const now = Date.parse("2026-09-25T12:00:00Z");
+  assert.deepEqual(expiryStatus("2026-10-05", now), { tone: "soon", label: "Expires in 10 days" });
+  assert.equal(expiryStatus("2027-09-25", now).tone, "current");
+  assert.equal(expiryStatus("2026-09-01", now).tone, "expired");
+  assert.equal(expiryStatus(null, now), null);
+});
+
+test("recipient page carries the standing view, frame refusal and visit copy", () => {
+  for (const id of ["standing-view", "physician-name", "physician-detail", "grant-detail", "visit-detail", "download-note", "section-list", "refresh-standing", "end-standing"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(source, /window\.top !== window\.self/);
+  assert.match(html, /open the link in your email again and ask for a new code/);
+  assert.ok(!/\u{2014}|\u{2013}/u.test(html + source), "no en or em dashes in recipient copy");
 });

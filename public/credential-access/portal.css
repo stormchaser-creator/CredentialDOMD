@@ -49,6 +49,26 @@ input { display:block; width:100%; min-height:50px; border:1px solid #607c80; bo
 .document-meta { color:var(--muted); font-size:13px; margin:5px 0 10px; }
 .document-actions { display:flex; flex-wrap:wrap; gap:10px; }
 .unavailable { color:var(--error); font-size:13px; margin-top:10px; }
+.grant-detail { font-weight:650; margin-top:6px; overflow-wrap:anywhere; }
+.section-list { margin:18px 0 8px; }
+.record-section { border-top:1px solid var(--line); padding:18px 0 6px; }
+.record-section h3 { font-size:17px; margin:0 0 10px; }
+.record-list, .record-files { list-style:none; margin:0; padding:0; }
+.record { border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:0 0 10px; background:var(--bg); }
+.record-head { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 12px; }
+.record-title { font-size:15px; overflow-wrap:anywhere; }
+.badge { font-size:12px; font-weight:700; border-radius:999px; padding:2px 10px; border:1px solid currentColor; white-space:nowrap; }
+.badge.current { color:var(--accent); }
+.badge.soon { color:#ffd27a; }
+.badge.expired { color:var(--error); }
+.record-fields { display:grid; grid-template-columns:minmax(110px,max-content) 1fr; gap:4px 14px; margin:10px 0 0; font-size:14px; }
+.record-fields dt { color:var(--muted); }
+.record-fields dd { margin:0; overflow-wrap:anywhere; }
+.record-files { margin-top:12px; border-top:1px dashed var(--line); padding-top:10px; }
+.record-file { display:grid; gap:4px; padding:8px 0; }
+.record-file .document-name { font-size:14px; }
+.record-file .document-meta { margin:0; }
+.record-more summary { cursor:pointer; color:var(--accent); margin-bottom:10px; }
 .preview-panel { margin-top:20px; }
 .preview-panel iframe { width:100%; height:65vh; min-height:300px; border:1px solid var(--line); border-radius:8px; background:#fff; }
 .pdf-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin:16px 0; }
@@ -63,5 +83,7 @@ footer nav { display:flex; gap:18px; }
   .intro { padding-top:30px; }
   .panel { padding:22px 18px; border-radius:14px; }
   .section-heading { align-items:flex-start; flex-wrap:wrap; }
+  .record-fields { grid-template-columns:1fr; gap:0; }
+  .record-fields dd { margin-bottom:6px; }
   .primary { width:100%; }
 }
