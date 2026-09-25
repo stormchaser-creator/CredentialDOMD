@@ -4,6 +4,10 @@ export function adminControlRequest(change, reason, requestId) {
   const row = change.row;
   if (!row?.id || !row.updated_at) throw new Error('Refresh this section before changing access.');
   if (change.kind === 'profile') {
+    // Approve or Pause only. Every activation path finishes a pending
+    // account, so an administrator's "pending" never held (the server
+    // refuses it too: 20260925110000_admin_access_regrant_guard.sql).
+    if (!['active', 'revoked'].includes(change.status)) throw new Error('Approve or Pause the account.');
     return { name: 'admin_change_profile_access', args: {
       p_profile_id: row.id, p_status: change.status, p_expected_status: row.access_status,
       p_expected_updated_at: row.updated_at, p_expected_subject: row.auth_user_id,

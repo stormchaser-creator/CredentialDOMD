@@ -258,7 +258,8 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
 
         # Independent requests race on the same expected version; only one commits.
         snapshot = profile_state(3)
-        expressions = [profile_call(3,status,snapshot) for status in ['revoked','pending']]
+        # Two independent reviewed Pauses of the same version (pending is no longer an administrator decision).
+        expressions = [profile_call(3,'revoked',snapshot,reason=reason) for reason in ['Reviewed administrative account restriction','Second reviewer paused the same account']]
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             races = list(pool.map(lambda q: role('select '+q,ok=False),expressions))
         check('concurrent conflicting writes have one winner', sum(r.returncode == 0 for r in races) == 1)
@@ -288,39 +289,71 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         check('unlinked invitation removal names whose invitation it was', value(f"(select before_state->>'email' from admin_operations_audit where id='{receipt['audit_id']}')") == 'remove@example.invalid'
               and value(f"(select before_state ?& array['name','lead_id','invited_by','invited_at','invite_sent_at'] from admin_operations_audit where id='{receipt['audit_id']}')") is True)
 
-        # "Back to pending" never leaves a claimable invitation (2026-09-25).
-        # Reproduces the finding: pause, back to pending, then the member's own
-        # claim_beta_access() used to return 'active' with no audit row.
-        for n, status in [(14, 'active'), (15, 'active'), (16, 'active'), (17, 'pending')]:
+        # An administrator decides Approve or Pause, never pending (2026-09-25).
+        # Pending is the state every activation path finishes (the self-claim
+        # below, clerk-webhook, send-invite, bootstrap_limited_signup and the
+        # billing functions), so an administrator's pending never held.
+        for n, status in [(14, 'active'), (15, 'active'), (16, 'active'), (17, 'pending'), (18, 'pending'), (19, 'pending')]:
             sql(f"insert into profiles(id,auth_user_id,email,access_status) values('{pid(n)}','user_Member{n}','member{n}@example.invalid','{status}')")
         sql(f"""insert into beta_access(id,email,status,profile_id,activated_at) values
-          ('{pid(1014)}','member14@example.invalid','active','{pid(14)}',now()),('{pid(1015)}','member15@example.invalid','active','{pid(15)}',now()),
-          ('{pid(1016)}','member16@example.invalid','active','{pid(16)}',now()),('{pid(1017)}','member17@example.invalid','invited',null,null)""")
-        def claim(n):
-            return value('claim_beta_access()', subject=f'user_Member{n}', email=f'member{n}@example.invalid')
+          ('{pid(1014)}','member14@example.invalid','active','{pid(14)}',now()),
+          ('{pid(1015)}','member15@example.invalid','invited',null,null),
+          ('{pid(1016)}','member16@example.invalid','active','{pid(16)}',now()),('{pid(1116)}','second16@example.invalid','invited',null,null),
+          ('{pid(1017)}','member17@example.invalid','active','{pid(17)}',now()),
+          ('{pid(1018)}','member18@example.invalid','invited',null,null)""")
+        def claim(n, email=None):
+            return value('claim_beta_access()', subject=f'user_Member{n}', email=email or f'member{n}@example.invalid')
+        def audit_count():
+            return value('(select count(*) from admin_operations_audit)')
+        audits = audit_count()
+        for n in [14, 15]:
+            before = (profile_state(n), invite_state(1000 + n))
+            refused = role('select ' + profile_call(n, 'pending'), ok=False)
+            check(f'active account {n} cannot be sent to pending', refused.returncode != 0 and 'Pending is not an administrator decision' in refused.stderr
+                  and (profile_state(n), invite_state(1000 + n)) == before and audit_count() == audits)
         value(profile_call(14, 'revoked'))
-        check('pause revokes the linked invitation', invite_state(1014)['status'] == 'revoked')
-        back = value(profile_call(14, 'pending'))
-        check('back to pending keeps the linked invitation revoked', profile_state(14)['status'] == 'pending' and invite_state(1014)['status'] == 'revoked')
-        before_claim = (profile_state(14), invite_state(1014)); audits = value('(select count(*) from admin_operations_audit)')
-        check('revoke then pending then self-claim stays pending', claim(14) == 'pending' and (profile_state(14), invite_state(1014)) == before_claim)
-        after = value(f"(select after_state from admin_operations_audit where id='{back['audit_id']}')")
-        check('audit after_state matches the final state', after['profile']['access_status'] == profile_state(14)['status'] == 'pending'
-              and [i['status'] for i in after['invites']] == [invite_state(1014)['status']] and value('(select count(*) from admin_operations_audit)') == audits)
-        value(profile_call(15, 'pending'))
-        check('active then pending revokes the linked invitation', invite_state(1015)['status'] == 'revoked')
-        check('active then pending then self-claim stays pending', claim(15) == 'pending' and profile_state(15)['status'] == 'pending' and invite_state(1015)['status'] == 'revoked')
-        # An invitation some older path left 'active' after it was used: the
-        # self-claim refuses a consumed invitation for the same profile.
-        sql(f"update profiles set access_status='pending' where id='{pid(16)}'")
-        consumed = (profile_state(16), invite_state(1016))
-        check('consumed invitation left active cannot re-grant a pending profile', consumed[1]['status'] == 'active' and claim(16) == 'pending'
-              and (profile_state(16), invite_state(1016)) == consumed)
-        check('a fresh invitation still activates on first claim', claim(17) == 'active' and profile_state(17)['status'] == 'active'
+        check('pause revokes the linked invitation', profile_state(14)['status'] == 'revoked' and invite_state(1014)['status'] == 'revoked')
+        paused = (profile_state(14), invite_state(1014)); audits = audit_count()
+        check('a paused account cannot be sent to pending either', role('select ' + profile_call(14, 'pending'), ok=False).returncode != 0
+              and (profile_state(14), invite_state(1014)) == paused and audit_count() == audits)
+        check('a paused member cannot claim access back', claim(14) == 'revoked' and (profile_state(14), invite_state(1014)) == paused)
+        # The unlinked invitation send-invite leaves for an address whose
+        # account is already active: pausing does not touch it, and the self-
+        # claim still refuses, because the account itself is revoked.
+        value(profile_call(15, 'revoked'))
+        unlinked = (profile_state(15), invite_state(1015))
+        check('an unlinked invitation for the address cannot re-grant a paused account', unlinked[1]['status'] == 'invited' and unlinked[1]['profile'] is None
+              and claim(15) == 'revoked' and (profile_state(15), invite_state(1015)) == unlinked and audit_count() == audits + 1)
+        # A second verified address with its own unlinked invitation.
+        value(profile_call(16, 'revoked'))
+        second = (profile_state(16), invite_state(1016), invite_state(1116))
+        check('pause revokes the linked invitation and leaves the other address unlinked', second[1]['status'] == 'revoked' and second[2]['status'] == 'invited')
+        check('an invitation for another verified address cannot re-grant a paused account', claim(16, 'second16@example.invalid') == 'revoked'
+              and (profile_state(16), invite_state(1016), invite_state(1116)) == second)
+        # A half-applied activation (invitation stamped, profile write failed)
+        # completes on the next claim instead of stranding the invitee.
+        check('a consumed invitation whose profile write failed finishes activating', claim(17) == 'active' and profile_state(17)['status'] == 'active'
               and invite_state(1017)['status'] == 'active' and invite_state(1017)['profile'] == pid(17))
+        check('a fresh invitation still activates on first claim', claim(18) == 'active' and profile_state(18)['status'] == 'active'
+              and invite_state(1018)['status'] == 'active' and invite_state(1018)['profile'] == pid(18))
         approved = value(profile_call(14, 'active'))
         check('only an audited Approve restores access and its invitation', approved['profile']['access_status'] == 'active' and invite_state(1014)['status'] == 'active'
               and value(f"(select action from admin_operations_audit where id='{approved['audit_id']}')") == 'profile_access')
+        after = value(f"(select after_state from admin_operations_audit where id='{approved['audit_id']}')")
+        check('audit after_state matches the final state', after['profile']['access_status'] == profile_state(14)['status'] == 'active'
+              and [i['status'] for i in after['invites']] == [invite_state(1014)['status']])
+        # An account an administrator set to pending under 20260924020000 and
+        # left unpaused stops the migration until someone decides it again.
+        synthetic = uuid.uuid4()
+        sql(f"""insert into admin_operations_audit(id,request_id,actor_profile_id,target_profile_id,action,reason,before_state,after_state,request_hash,result)
+          values('{synthetic}',gen_random_uuid(),'{pid(1)}','{pid(19)}','profile_access','Synthetic legacy pending decision',
+          '{{"profile":{{"access_status":"revoked"}}}}','{{"profile":{{"access_status":"pending"}}}}','synthetic','{{}}')""")
+        regrant = (ROOT / 'supabase/migrations/20260925110000_admin_access_regrant_guard.sql').read_text()
+        blocked = sql(regrant, ok=False)
+        check('the migration refuses to apply over an administrator pending that was never re-decided', blocked.returncode != 0 and '1 account(s) were set to pending' in blocked.stderr)
+        sql(f"update profiles set access_status='revoked' where id='{pid(19)}'")
+        check('once that account is paused the migration applies again', sql(regrant, ok=False).returncode == 0)
+        sql(f"delete from admin_operations_audit where id='{synthetic}'")
 
         # Attention counts behind the tab labels and the Overview cards.
         sql(f"""update profiles set admin_inbox_seen_at=now()-interval '1 hour',admin_errors_seen_at=now()-interval '1 day' where id='{pid(1)}';

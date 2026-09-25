@@ -28,7 +28,7 @@ export default function AdminAccessChange({ change, T, onClose, onSaved }) {
     dialog?.addEventListener('keydown', trap);
     return () => { mounted.current = false; dialog?.removeEventListener('keydown', trap); if (previous?.isConnected) previous.focus(); };
   }, []);
-  const title = change.action === 'remove' ? 'Remove invitation' : change.status === 'revoked' ? 'Pause app access' : change.status === 'pending' ? 'Return account to pending' : change.kind === 'invite' ? 'Restore invitation' : 'Approve app access';
+  const title = change.action === 'remove' ? 'Remove invitation' : change.status === 'revoked' ? 'Pause app access' : change.kind === 'invite' ? 'Restore invitation' : 'Approve app access';
   const save = async () => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError('');

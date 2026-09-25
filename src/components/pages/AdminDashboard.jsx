@@ -977,7 +977,6 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               {!u.deleted_at && u.id !== myProfileId && u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
               {!u.deleted_at && u.id !== myProfileId && u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
-              {!u.deleted_at && u.id !== myProfileId && u.access_status === "revoked" && chip("Back to pending", T.textDim, () => setAccess(u, "pending"), false)}
               {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
                 && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
             </div>

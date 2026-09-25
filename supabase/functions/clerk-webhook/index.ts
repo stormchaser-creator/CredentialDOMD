@@ -87,7 +87,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyVerifiedMailbox } from "./verifiedMailbox.ts";
 import { PRODUCTION_CLERK_ISSUER, readProductionIdentity, initializeProductionProfile } from "../_shared/clerkContinuity.ts";
 import { canDeferReservedContinuity } from "./reservedContinuity.ts";
-import { decideBetaActivation } from "./betaActivation.ts";
+import { applyBetaDecision, decideBetaActivation } from "./betaActivation.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("CLERK_WEBHOOK_SECRET");
 if (!WEBHOOK_SECRET) {
@@ -303,34 +303,15 @@ async function activateBetaAccess(
     return { error: null };
   }
 
-  // Revoked, unknown, or already used by this profile before an administrator
-  // moved it off active: no write. See betaActivation.ts.
+  // Revoked or unknown: no write. See betaActivation.ts.
   const decision = decideBetaActivation(match, profile, now);
   if (decision.action === "none") {
     (decision.warn ? console.warn : console.log)(decision.log);
     return { error: null };
   }
-
-  const { betaPatch } = decision;
-  if (Object.keys(betaPatch).length > 0) {
-    const { error: bErr } = await supabase.from("beta_access").update(betaPatch).eq("id", match.id);
-    if (bErr) return { error: `update beta_access: ${bErr.message}` };
-    console.log(`beta: invite ${match.id} for ${match.email} → active (profile ${profile.id})`);
-  }
-
-  if (!decision.activateProfile) {
-    (decision.warn ? console.warn : console.log)(decision.log);
-    return { error: null };
-  }
-
-  const { error: pErr } = await supabase
-    .from("profiles")
-    .update({ access_status: "active", updated_at: now })
-    .eq("id", profile.id)
-    .or("access_status.is.null,access_status.neq.revoked");
-  if (pErr) return { error: `update profiles.access_status: ${pErr.message}` };
-  console.log(`beta: profile ${profile.id} access_status → active (${match.email})`);
-  return { error: null };
+  // Profile first, then the invitation, so a retry after a partial failure
+  // always finishes (applyBetaDecision).
+  return await applyBetaDecision(supabase, match, profile, decision, now);
 }
 
 serve(async (req) => {

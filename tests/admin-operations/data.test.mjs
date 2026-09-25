@@ -57,6 +57,19 @@ test('missing version and invalid audit reason are rejected before RPC', () => {
   assert.throws(()=>adminControlRequest(change,'x'.repeat(501),'key'),/reason/);
   assert.throws(()=>adminControlRequest({...change,row:{...change.row,updated_at:null}},'Synthetic reason','key'),/Refresh/);
 });
+test('an account change is Approve or Pause; pending is refused before the RPC', () => {
+  assert.equal(adminControlRequest({...change,status:'active',row:{...change.row,access_status:'revoked'}},'Synthetic reviewed approval','key').args.p_status,'active');
+  for (const status of ['pending', undefined, 'invited']) {
+    assert.throws(()=>adminControlRequest({...change,status,row:{...change.row,access_status:'revoked'}},'Synthetic reviewed return','key'),/Approve or Pause/);
+  }
+});
+test('the Accounts panel offers no "Back to pending"', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const dashboard = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
+  const change = await readFile(new URL('../../src/components/pages/AdminAccessChange.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(dashboard, /Back to pending|setAccess\(u, "pending"\)/);
+  assert.doesNotMatch(change, /Return account to pending/);
+});
 test('invite removal passes null target status and bound profile expectation', () => {
   const request=adminControlRequest({kind:'invite',row:{id:'invite',status:'invited',updated_at:change.row.updated_at,profile_id:null},action:'remove'},'Synthetic removal','key');
   assert.equal(request.args.p_status,null); assert.equal(request.args.p_expected_profile_id,null); assert.equal(request.name,'admin_change_invite');

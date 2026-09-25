@@ -1,25 +1,54 @@
--- "Back to pending" must not make an invitation claimable again (2026-09-25).
+-- An administrator decides Approve or Pause, never "pending" (2026-09-25).
 --
--- 20260924020000 mapped a change to 'pending' onto every linked invitation as
--- status 'invited' (`else 'invited'`). claim_beta_access() and clerk-webhook
--- only refuse an invitation whose status is 'revoked', so the paused member
--- could call /rpc/claim_beta_access (still granted to authenticated), or wait
--- for any Clerk user.updated event, and come back active with no reason, no
--- audit row, and Control history still saying 'pending'. An invitation left at
--- 'active' has the same hole, which is why keeping the old status is not
--- enough either.
+-- 20260924020000 let an administrator move an account to 'pending' ("Back to
+-- pending"). Pending is the state every activation path is built to finish:
+-- claim_beta_access(), clerk-webhook, send-invite, bootstrap_limited_signup
+-- (a lifetime grant, including an admin gift, or an active beta grant, on
+-- every app open), the billing bind and settle functions, and the reviewed
+-- lifetime gift all move 'pending' to 'active', and none of them writes an
+-- audit row. So an administrator's 'pending' did not hold: the member opened
+-- the app, or Clerk sent any user.updated, and the account was active again
+-- while Control history still said pending. Guarding those paths one at a
+-- time is how the first version of this file missed bootstrap-launch-access.
 --
--- Two guards:
--- 1. admin_change_profile_access sets linked invitations to 'revoked' for BOTH
---    'pending' and 'revoked'. Only an audited Approve (p_status='active')
---    turns them back on.
--- 2. claim_beta_access() never re-grants from a consumed invitation: one that
---    was already activated (activated_at set) for this same profile, while the
---    profile is not active. It answers with the profile's own status instead.
---    clerk-webhook applies the same rule (betaActivation.ts).
+-- 'revoked' is refused by every one of them. So an administrator now has two
+-- decisions: Approve ('active') and Pause ('revoked'). Pause sets the
+-- account's linked invitations to 'revoked', and only an audited Approve turns
+-- the account and those invitations back on. 'pending' stays what it was
+-- before any administrator acted: an account nobody has decided on yet, which
+-- every activation path may legitimately finish.
 --
--- Rerunnable: CREATE OR REPLACE only; existing grants are restated.
+-- Precondition: an account an administrator already set to 'pending' through
+-- 20260924020000 would stay exposed to those paths. This file refuses to apply
+-- while any account's latest administrator decision is 'pending' and the
+-- account is not paused. Record a new decision for each first (Pause, or
+-- Approve if it is still pending).
+--
+-- claim_beta_access() is restated exactly as 20260902h_access_grant_flag.sql
+-- left it. The first version of this file refused an invitation this same
+-- profile had already consumed. With no administrator 'pending' left, that
+-- guard only stranded a new invitee whose activation had half-applied (the
+-- invitation stamped, the profile write failed), so it is gone here and in
+-- clerk-webhook.
+--
+-- Rerunnable: a read-only precondition, then CREATE OR REPLACE and grants.
 begin;
+
+do $$
+declare held integer;
+begin
+  select count(*) into held
+    from (select distinct on (a.target_profile_id) a.target_profile_id, a.after_state->'profile'->>'access_status' as decided
+            from public.admin_operations_audit a
+           where a.action='profile_access' and a.target_profile_id is not null
+           order by a.target_profile_id, a.created_at desc, a.id desc) latest
+    join public.profiles p on p.id=latest.target_profile_id
+   where latest.decided='pending' and p.access_status is distinct from 'revoked';
+  if held>0 then
+    raise exception '% account(s) were set to pending by an administrator and are not paused. Record a new decision for each under Admin > Accounts (Pause, or Approve if still pending), then apply this migration.', held
+      using errcode='55000';
+  end if;
+end $$;
 
 create or replace function public.admin_change_profile_access(
   p_profile_id uuid,p_status text,p_expected_status text,p_expected_updated_at timestamptz,
@@ -30,7 +59,10 @@ declare actor uuid; target public.profiles%rowtype; prior public.admin_operation
   previous_flag text; changed_at timestamptz; linked_before jsonb; linked_after jsonb;
 begin
   actor:=public.admin_operations_actor();
-  if p_profile_id is null or p_request_id is null or p_status is null or p_status not in ('pending','active','revoked')
+  if p_status='pending' then
+    raise exception 'Approve or Pause the account. Pending is not an administrator decision' using errcode='22023';
+  end if;
+  if p_profile_id is null or p_request_id is null or p_status is null or p_status not in ('active','revoked')
     or p_expected_status is null or p_expected_status not in ('pending','active','revoked')
     or p_expected_updated_at is null or p_expected_subject is null or p_expected_subject !~ '^user_[A-Za-z0-9]+$'
     or p_reason is null or length(btrim(p_reason)) not between 10 and 500 then
@@ -67,9 +99,7 @@ begin
   perform set_config('credentialdomd.access_grant','1',true);
   update public.profiles set access_status=p_status,updated_at=changed_at where id=target.id returning * into target;
   if target.access_status is distinct from p_status then raise exception 'Account access update was not applied'; end if;
-  -- Pending and paused both leave the invitation unclaimable. The self-claim
-  -- RPC and the Clerk webhook refuse only 'revoked', so 'invited' or 'active'
-  -- here would let the member re-grant themselves with no audit row.
+  -- Pause leaves every linked invitation unclaimable; Approve turns them back on.
   update public.beta_access set status=case p_status when 'active' then 'active' else 'revoked' end,
     activated_at=case when p_status='active' then coalesce(activated_at,changed_at) else activated_at end,updated_at=changed_at
     where profile_id=target.id;
@@ -88,14 +118,11 @@ begin
 end;
 $$;
 comment on function public.admin_change_profile_access(uuid,text,text,timestamptz,text,text,uuid) is
-  'Audited account-status block/restore with optimistic concurrency and idempotency. Pending and revoked both set linked invitations to revoked, so only an audited Approve restores access. Never modifies lifetime/trial grants, identity, prices, subscriptions, or payment. Active account status alone does not establish paid entitlement.';
+  'Audited account-status Approve (active) or Pause (revoked) with optimistic concurrency and idempotency. Pause sets linked invitations to revoked, and every activation path refuses a revoked account, so only an audited Approve restores access. An administrator cannot set pending: every activation path finishes a pending account. Never modifies lifetime/trial grants, identity, prices, subscriptions, or payment. Active account status alone does not establish paid entitlement.';
 revoke all on function public.admin_change_profile_access(uuid,text,text,timestamptz,text,text,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.admin_change_profile_access(uuid,text,text,timestamptz,text,text,uuid) to authenticated;
 
--- Same body as 20260902h_access_grant_flag.sql plus the consumed-invitation
--- guard. An invitation that already activated THIS profile has been used; a
--- profile that is no longer active got there through an administrator, and
--- only an audited Approve may undo that.
+-- Exactly the 20260902h_access_grant_flag.sql body (see the header).
 create or replace function public.claim_beta_access()
 returns text
 language plpgsql
@@ -120,7 +147,6 @@ begin
   if jwt_email = '' then return 'pending'; end if;
   select * into ba from beta_access where lower(email)=jwt_email;
   if not found then return 'pending'; end if;
-  if ba.activated_at is not null and ba.profile_id = pid then return coalesce(cur, 'pending'); end if;
   if ba.status = 'revoked' then return 'revoked'; end if;
   update beta_access set status='active', activated_at=coalesce(activated_at, now()), profile_id=pid, updated_at=now() where id=ba.id;
   update profiles set access_status='active', updated_at=now() where id=pid;
