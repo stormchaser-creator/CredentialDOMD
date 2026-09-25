@@ -66,9 +66,11 @@ import {
   TICKETS_FOLDER,
   USER_TABLES,
   chunk,
+  isMissingTableError,
   isSafePrefix,
   storagePrefixes,
   tombstonePatch,
+  type UserTable,
 } from "./lib.ts";
 
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") ?? "";
@@ -89,14 +91,18 @@ const json = (status: number, body: unknown) =>
 interface ProfileRow { id: string; auth_user_id: string | null; deleted_at: string | null }
 interface Footprint { tables: Record<string, number>; storage: Record<string, number>; tombstoned: boolean }
 
-async function countRows(db: SupabaseClient, table: string, column: string, value: string): Promise<number> {
+// optional: a table that may not exist yet (USER_TABLES says which). Only a
+// missing-relation error is skipped; anything else still stops the deletion.
+async function countRows(db: SupabaseClient, table: string, column: string, value: string, optional = false): Promise<number> {
   const { count, error } = await db.from(table).select("*", { count: "exact", head: true }).eq(column, value);
+  if (error && optional && isMissingTableError(error)) { console.warn(`delete-account: ${table} does not exist yet; nothing to count`); return 0; }
   if (error) throw new Error(`could not count ${table}: ${error.message}`);
   return count ?? 0;
 }
 
-async function deleteRows(db: SupabaseClient, table: string, column: string, value: string): Promise<void> {
+async function deleteRows(db: SupabaseClient, table: string, column: string, value: string, optional = false): Promise<void> {
   const { error } = await db.from(table).delete().eq(column, value);
+  if (error && optional && isMissingTableError(error)) { console.warn(`delete-account: ${table} does not exist yet; nothing to delete`); return; }
   if (error) throw new Error(`could not delete from ${table}: ${error.message}`);
 }
 
@@ -175,9 +181,9 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
 
   // 1. Count everything first, in both modes: the counts are the audit row.
   const tables: Record<string, number> = {};
-  const toCount = [...COLLECTION_TABLES.map((table) => ({ table, column: "user_id" })), ...USER_TABLES];
+  const toCount: UserTable[] = [...COLLECTION_TABLES.map((table) => ({ table, column: "user_id" })), ...USER_TABLES];
   for (const batch of chunk(toCount, COUNT_BATCH)) {
-    const counts = await Promise.all(batch.map(({ table, column }) => countRows(db, table, column, userId)));
+    const counts = await Promise.all(batch.map(({ table, column, optional }) => countRows(db, table, column, userId, optional === true)));
     batch.forEach(({ table }, i) => { tables[table] = counts[i]; });
   }
   tables.support_messages += await ticketMessages(db, ticketIds, userId, false);
@@ -217,7 +223,7 @@ async function footprint(db: SupabaseClient, profile: ProfileRow, dryRun: boolea
   //    tickets), then everything keyed by the profile id.
   await ticketMessages(db, ticketIds, userId, true);
   for (const t of COLLECTION_TABLES) await deleteRows(db, t, "user_id", userId);
-  for (const { table, column } of USER_TABLES) await deleteRows(db, table, column, userId);
+  for (const { table, column, optional } of USER_TABLES) await deleteRows(db, table, column, userId, optional === true);
   for (const subject of ownedSubjects) await unresolvedErrors(db, subject, userId, true);
 
   // 4. Every mailbox this account routed is closed TERMINALLY, before the
