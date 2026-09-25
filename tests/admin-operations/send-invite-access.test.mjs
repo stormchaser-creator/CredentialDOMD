@@ -15,7 +15,8 @@ function database(state) {
   const writes = [];
   const rows = table => state[table] || [];
   const matches = (row, filters) => filters.every(([kind, column, value]) => kind === 'eq'
-    ? row[column] === value : String(row[column] || '').toLowerCase() === String(value).toLowerCase());
+    ? row[column] === value : kind === 'is' ? (row[column] ?? null) === value
+      : String(row[column] || '').toLowerCase() === String(value).toLowerCase());
   function query(table) {
     const filters = []; let op = 'select', patch = null, returning = false;
     const run = () => {
@@ -35,6 +36,7 @@ function database(state) {
       select() { returning = true; return q; },
       eq(column, value) { filters.push(['eq', column, value]); return q; },
       ilike(column, value) { filters.push(['ilike', column, value]); return q; },
+      is(column, value) { filters.push(['is', column, value]); return q; },
       insert(value) { op = 'insert'; patch = value; return q; },
       update(value) { op = 'update'; patch = value; return q; },
       async maybeSingle() { const data = run(); return { data: data[0] ?? null, error: null }; },
@@ -77,14 +79,16 @@ function handlerFor(state) {
   return { call, writes, mail, state };
 }
 
-const profile = over => ({ id: PROFILE, email: EMAIL, access_status: 'pending', deleted_at: null, ...over });
+// verified_email is the Clerk-verified mailbox; email is the editable Settings box.
+const profile = over => ({ id: PROFILE, email: EMAIL, verified_email: EMAIL, access_status: 'pending', deleted_at: null, ...over });
 const lead = { id: 'lead', email: EMAIL, waitlist: true };
 
 for (const [label, state, pattern] of [
   ['a paused account', { profiles: [profile({ access_status: 'revoked' })] }, /paused or closed/],
   ['a deleted account', { profiles: [profile({ deleted_at: '2026-09-01T00:00:00Z' })] }, /paused or closed/],
   ['a closed account', { profiles: [profile()], closed: [PROFILE] }, /paused or closed/],
-  ['a paused invitation linked to an account', { profiles: [profile()], beta_access: [{ id: 'invite', email: EMAIL, status: 'revoked', profile_id: PROFILE }] }, /invitation is paused/],
+  ['a paused invitation linked to an account', { profiles: [profile()], beta_access: [{ id: 'invite', email: EMAIL, status: 'revoked', profile_id: PROFILE }] }, /paused with the account it belongs to.*\(Approve\)/],
+  ['a paused invitation linked to an account under another address', { beta_access: [{ id: 'invite', email: EMAIL, status: 'revoked', profile_id: PROFILE }] }, /paused with the account it belongs to/],
   ['a paused invitation with no account', { beta_access: [{ id: 'invite', email: EMAIL, status: 'revoked', profile_id: null }] }, /invitation is paused/],
 ]) {
   for (const resend of [false, true]) {
@@ -95,6 +99,8 @@ for (const [label, state, pattern] of [
       assert.equal(result.status, 409);
       assert.match(result.body.error, pattern);
       assert.match(result.body.error, /Admin > Accounts/);
+      // A linked invitation has no Restore control in Admin > Accounts.
+      if (state.beta_access?.[0]?.profile_id) assert.doesNotMatch(result.body.error, /Restore invitation/);
       assert.deepEqual(h.writes, []);
       assert.deepEqual(h.mail, []);
       assert.deepEqual(h.state, before);
@@ -132,12 +138,45 @@ test('a status that changed at the same moment is not overwritten and the invita
   assert.equal(h.state.beta_access[0].profile_id, undefined);
 });
 
-test('an active account and a new address need no access write', async () => {
-  for (const state of [{ profiles: [profile({ access_status: 'active' })] }, {}]) {
-    const h = handlerFor({ early_access_leads: [lead], ...state });
+test('an active account needs no access write, and its invitation is linked to it', async () => {
+  const h = handlerFor({ early_access_leads: [lead], profiles: [profile({ access_status: 'active' })] });
+  assert.equal((await h.call({ email: EMAIL })).status, 200);
+  assert.equal(h.writes.filter(w => w.table === 'profiles').length, 0);
+  // Linked, so a later Pause revokes it with the account instead of leaving
+  // an unlinked invitation that still matches this mailbox.
+  assert.equal(h.state.beta_access[0].profile_id, PROFILE);
+  assert.equal(h.state.beta_access[0].status, 'active');
+  assert.deepEqual(h.writes.find(w => w.table === 'beta_access' && w.op === 'update' && 'profile_id' in w.patch).filters, [['id', 'new-1'], ['profile_id', null]]);
+  assert.equal(h.mail.length, 1);
+});
+
+test('a new address needs no access write and stays an unlinked invitation', async () => {
+  const h = handlerFor({ early_access_leads: [lead] });
+  assert.equal((await h.call({ email: EMAIL })).status, 200);
+  assert.equal(h.writes.filter(w => w.table === 'profiles').length, 0);
+  assert.equal(h.state.beta_access[0].status, 'invited');
+  assert.equal(h.state.beta_access[0].profile_id, undefined);
+  assert.equal(h.mail.length, 1);
+});
+
+test('the Settings email proves nothing: a different pending account that typed the address is not let in', async () => {
+  const OTHER = '00000000-0000-4000-8000-000000000099';
+  for (const verified of [null, 'someone-else@example.invalid']) {
+    const h = handlerFor({ early_access_leads: [lead], profiles: [profile({ id: OTHER, verified_email: verified })] });
     assert.equal((await h.call({ email: EMAIL })).status, 200);
+    assert.equal(h.state.profiles[0].access_status, 'pending', 'no activation from an editable email');
     assert.equal(h.writes.filter(w => w.table === 'profiles').length, 0);
     assert.equal(h.state.beta_access[0].status, 'invited');
-    assert.equal(h.mail.length, 1);
+    assert.equal(h.state.beta_access[0].profile_id, undefined, 'the invitation is not linked to that account');
   }
+  // Nor does a paused account that merely typed it block a real invitation.
+  const h = handlerFor({ early_access_leads: [lead], profiles: [profile({ id: OTHER, verified_email: null, access_status: 'revoked' })] });
+  assert.equal((await h.call({ email: EMAIL })).status, 200);
+});
+
+test('the account lookup reads the verified mailbox, never profiles.email', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../../supabase/functions/send-invite/index.ts', import.meta.url), 'utf8');
+  assert.match(source, /\.from\("profiles"\)\s*\.select\("id, access_status, verified_email, deleted_at"\)\.eq\("verified_email", email\)/);
+  assert.doesNotMatch(source, /\.eq\("email", email\)\.maybeSingle\(\);\n\s*if \(profError\)/);
 });

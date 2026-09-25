@@ -6,10 +6,12 @@
  * Auth: Clerk JWT of an admin (verified against Clerk JWKS in _shared/clerkAuth.ts).
  * Deploys with verify_jwt=false (Clerk RS256 tokens fail the gateway check).
  *
- * Access it may change: only a profile that is exactly 'pending' under this
- * email is let in. A paused, closed or deleted account, and a paused
- * invitation, answer 409 before any write; those change through the audited
- * Admin > Accounts controls, never through a free-text invite.
+ * Access it may change: only a profile whose Clerk-verified mailbox
+ * (profiles.verified_email) is this address, and that is exactly 'pending', is
+ * let in. A paused, closed or deleted account, and a paused invitation, answer
+ * 409 before any write; those change through the audited Admin > Accounts
+ * controls, never through a free-text invite. The editable Settings email
+ * (profiles.email) proves nothing and is never read here.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
@@ -97,10 +99,17 @@ serve(async (req) => {
   // (admin_change_profile_access / admin_change_invite). This function used
   // to flip them back to active with neither. Every check here runs before
   // any write, and whether or not this is a resend.
+  //
+  // The account is the one whose Clerk-verified mailbox is this address.
+  // verified_email is written only by clerk-webhook with the service role,
+  // lowercased and unique. profiles.email is a Settings text box: a pending
+  // user who typed a waitlisted physician's address there would otherwise be
+  // let in by that physician's invitation (the same rule
+  // bootstrap_limited_signup follows).
   const { data: prof, error: profError } = await db.from("profiles")
-    .select("id, access_status, email, deleted_at").eq("email", email).maybeSingle();
+    .select("id, access_status, verified_email, deleted_at").eq("verified_email", email).maybeSingle();
   if (profError) return json(503, { error: "Could not check for an existing account" });
-  const account = prof && String(prof.email || "").trim().toLowerCase() === email ? prof : null;
+  const account = prof && String(prof.verified_email || "").trim().toLowerCase() === email ? prof : null;
   if (account) {
     let closed = !!account.deleted_at;
     if (!closed) {
@@ -113,7 +122,11 @@ serve(async (req) => {
     }
   }
   if (existing?.status === "revoked") {
-    return json(409, { error: "This invitation is paused. Restore it under Admin > Accounts (Restore invitation), which records the reason, then send it again. No invitation was sent." });
+    // A linked invitation has no Restore control: it follows its account,
+    // which Pause revoked and only Approve turns back on.
+    return json(409, { error: existing.profile_id
+      ? "This invitation was paused with the account it belongs to. Change that account's access under Admin > Accounts (Approve), which records the reason. No invitation was sent."
+      : "This invitation is paused. Restore it under Admin > Accounts (Restore invitation), which records the reason, then send it again. No invitation was sent." });
   }
 
   let row = existing;
@@ -125,7 +138,7 @@ serve(async (req) => {
     row = data;
   }
 
-  // An account already waiting under this email is let in now. Only 'pending'
+  // An account already waiting under this verified address is let in now. Only 'pending'
   // qualifies, and the update re-checks it, so a status an administrator
   // changes at the same moment is never overwritten.
   if (account && account.access_status === "pending") {
@@ -135,6 +148,16 @@ serve(async (req) => {
     if (activated?.length === 1) {
       await db.from("beta_access").update({ status: "active", profile_id: account.id, activated_at: new Date().toISOString() }).eq("id", row.id);
     }
+  }
+
+  // An account that is already active under this verified address owns the
+  // invitation now. Linking it means a later Pause revokes it with the
+  // account, instead of leaving an unlinked invitation for the same mailbox.
+  if (account && account.access_status === "active" && !row.profile_id) {
+    const { error: linkError } = await db.from("beta_access")
+      .update({ status: "active", profile_id: account.id, activated_at: row.activated_at || new Date().toISOString() })
+      .eq("id", row.id).is("profile_id", null);
+    if (linkError) console.warn(`send-invite: invitation ${row.id} not linked to active account ${account.id}: ${linkError.message}`);
   }
 
   // Send the invitation.
