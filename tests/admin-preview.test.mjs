@@ -191,7 +191,7 @@ test('applyAdminPreview keeps the real refresh timing', () => {
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('..', import.meta.url));
 const bundled = await build({
-  stdin: { contents: 'export { default as Banner, AdminPreviewPicker as Picker } from "./src/components/pages/AdminPreview.jsx";', resolveDir: root, loader: 'jsx' },
+  stdin: { contents: 'export { default as Banner, AdminPreviewPicker as Picker, ADMIN_PREVIEW_BANNER_CLEARANCE } from "./src/components/pages/AdminPreview.jsx";', resolveDir: root, loader: 'jsx' },
   bundle: true, define: { 'import.meta.env': '{}' }, platform: 'node', format: 'cjs', write: false, jsx: 'automatic', external: ['react', 'react/jsx-runtime'], logLevel: 'silent',
   plugins: [{ name: 'fixture-app', setup(b) {
     b.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'context', namespace: 'fixture' }));
@@ -256,6 +256,41 @@ test('Admin is hidden while previewing and the banner renders outside AppInner',
   assert.match(app, /const adminPreview = limitedLaunch\.access\?\.adminPreview \|\| null;/);
   assert.match(app, /\{isAdmin && !adminPreview && \(/);
   assert.match(app, /if \(subPage === "admin" && !adminPreview\) return/);
-  // Both providers (online and offline) render the banner beside AppInner.
-  assert.equal(app.match(/<AdminPreviewBanner \/>/g)?.length, 2);
+  // Both providers (online and offline) render the banner beside AppInner;
+  // offline it stacks above the offline banner.
+  assert.equal(app.match(/<AdminPreviewBanner \/>/g)?.length, 1);
+  assert.equal(app.match(/<AdminPreviewBanner aboveOffline \/>/g)?.length, 1);
+});
+
+// The banner used to be fixed at the top over the top bar (Back, the bell,
+// the avatar that opens Settings) and over every dialog's Close button.
+const styleOf = html => html.match(/<div[^>]*data-admin-preview-banner=""[^>]*style="([^"]*)"/)?.[1] ?? html.match(/<div[^>]*style="([^"]*)"[^>]*data-admin-preview-banner=""/)?.[1];
+test('the banner sits at the bottom, never over the top bar or a dialog', () => {
+  const f = setup(); f.store.start(ACCOUNT, 'paused');
+  for (const isDesktop of [false, true]) {
+    const style = styleOf(render(Banner, { isDesktop, limitedLaunch: { enabled: true, access: f.authority.state(ACCOUNT) } }, { store: f.store }));
+    assert.ok(style, 'banner rendered');
+    assert.match(style, /position:fixed/);
+    assert.doesNotMatch(style, /(^|;)top:/, 'not anchored to the top');
+    assert.match(style, /bottom:calc\((78|16)px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    const z = Number(style.match(/z-index:(\d+)/)[1]);
+    // Under every dialog (Modal 1000, full-screen sheets 200) and the update
+    // prompt (150), over the tab bar (100) it sits above.
+    assert.ok(z > 100 && z < 150, `z-index ${z}`);
+  }
+  const phone = styleOf(render(Banner, { isDesktop: false, limitedLaunch: { enabled: true, access: f.authority.state(ACCOUNT) } }, { store: f.store }));
+  assert.match(phone, /bottom:calc\(78px/, 'above the phone tab bar, where OfflineBanner sits');
+  const stacked = styleOf(render(Banner, { isDesktop: false, limitedLaunch: { enabled: true, access: f.authority.state(ACCOUNT) } }, { store: f.store, aboveOffline: true }));
+  assert.match(stacked, /bottom:calc\(150px/, 'above the offline banner when both show');
+});
+
+test('every screen reserves the banner clearance while a preview is on', async () => {
+  const app = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  assert.match(app, /const previewClearance = adminPreview \? ADMIN_PREVIEW_BANNER_CLEARANCE : 0;/);
+  // The membership (pending) screen and the paused/invite screen.
+  assert.equal(app.match(/padding: `24px 24px \$\{24 \+ previewClearance\}px`/g)?.length, 2);
+  // The main shell: a spacer after the page content.
+  assert.match(app, /\{renderContent\(\)\}\n\s*\{previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style=\{\{ height: previewClearance \}\} \/>\}/);
+  const { ADMIN_PREVIEW_BANNER_CLEARANCE } = mod.exports;
+  assert.ok(ADMIN_PREVIEW_BANNER_CLEARANCE >= 96, 'taller than the banner at phone width');
 });

@@ -46,13 +46,32 @@ export function AdminPreviewPicker({ T = {}, store = adminPreviewStore }) {
   </section>;
 }
 
-/** Shown on every screen while a preview is on, including the pending and paused screens. */
-export default function AdminPreviewBanner({ store = adminPreviewStore }) {
-  const { limitedLaunch } = useApp();
+/**
+ * Space the app reserves at the end of every screen while a preview is on, so
+ * nothing scrolls to a stop underneath the banner (App.jsx).
+ */
+export const ADMIN_PREVIEW_BANNER_CLEARANCE = 112;
+
+/**
+ * Shown on every screen while a preview is on, including the pending and
+ * paused screens.
+ *
+ * At the bottom, where OfflineBanner sits, never over the top bar: that bar
+ * holds Back, the notification bell and the avatar that opens Settings, and
+ * every dialog's Close button is near the top. It stacks under every dialog
+ * (Modal 1000, the full-screen sheets 200) and the update prompt (150), and
+ * over the tab bar (100) it sits above, so it never covers a control; the app
+ * reserves ADMIN_PREVIEW_BANNER_CLEARANCE below the content. With the offline
+ * banner also showing, it sits above that one.
+ */
+export default function AdminPreviewBanner({ store = adminPreviewStore, aboveOffline = false }) {
+  const { limitedLaunch, isDesktop } = useApp();
   const preview = limitedLaunch?.access?.adminPreview;
   if (!preview) return null;
-  return <div role="status" aria-live="polite" style={{
-    position: "fixed", left: 12, right: 12, top: "calc(8px + env(safe-area-inset-top, 0px))", zIndex: 10000,
+  const lift = (isDesktop ? 16 : 78) + (aboveOffline ? 72 : 0);
+  return <div role="status" aria-live="polite" data-admin-preview-banner="" style={{
+    position: "fixed", bottom: `calc(${lift}px + env(safe-area-inset-bottom, 0px))`, zIndex: 120,
+    ...(isDesktop ? { right: 16, maxWidth: 520 } : { left: 12, right: 12 }),
     display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 12,
     backgroundColor: "#4c1d95", border: "1px solid #a78bfa", color: "#fff", fontSize: 13, lineHeight: 1.45,
     boxShadow: "0 6px 24px rgba(0,0,0,0.35)",

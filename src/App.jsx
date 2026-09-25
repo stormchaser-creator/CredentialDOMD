@@ -59,7 +59,7 @@ import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { useIsAdmin } from "./lib/admin";
-import AdminPreviewBanner from "./components/pages/AdminPreview";
+import AdminPreviewBanner, { ADMIN_PREVIEW_BANNER_CLEARANCE } from "./components/pages/AdminPreview";
 import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
@@ -138,7 +138,7 @@ export default function App() {
         <AppProvider onNavigate={handleNavigate} offlineSession={offlineSession}>
           <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
           <OfflineBanner />
-          <AdminPreviewBanner />
+          <AdminPreviewBanner aboveOffline />
         </AppProvider>
       ) : (
         <>
@@ -845,7 +845,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
   if (recordsLoadIssue) return <AccountRecordsLoadError theme={T} onRetry={() => window.location.reload()} />;
 
-  if (limitedLaunch.enabled && access !== "active" && access !== "revoked" && access !== null) return <div style={{ minHeight: "100vh", padding: 24, background: T.bg, display: "grid", placeItems: "center" }}>
+  // While an admin preview is on, every screen keeps room for its banner at the bottom.
+  const previewClearance = adminPreview ? ADMIN_PREVIEW_BANNER_CLEARANCE : 0;
+  if (limitedLaunch.enabled && access !== "active" && access !== "revoked" && access !== null) return <div style={{ minHeight: "100vh", padding: `24px 24px ${24 + previewClearance}px`, background: T.bg, display: "grid", placeItems: "center" }}>
     <div style={{ width: "100%", maxWidth: 620, padding: 24, background: T.card, borderRadius: 16 }}>
       <LimitedLaunchMembership onActivated={recheckAccess} />
       <button style={{ marginTop: 20 }} onClick={() => { void limitedLaunch.refresh(); void recheckAccess(); }}>Check access again</button>
@@ -854,7 +856,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   </div>;
 
   if (access !== "active") return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.text, padding: 24 }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: T.bg, color: T.text, padding: `24px 24px ${24 + previewClearance}px` }}>
       <div style={{ maxWidth: 420, textAlign: "center" }}>
         <AsclepiusIcon size={44} color={T.accent} />
         {access === null ? (
@@ -2879,6 +2881,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               check still needs an explanation while changes are paused. */}
           {(!limitedLaunch.access || limitedLaunch.error || limitedLaunch.access.needsRefresh) && <LaunchAccessNotice />}
           {renderContent()}
+          {previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style={{ height: previewClearance }} />}
         </div>
       </div>
     </>
