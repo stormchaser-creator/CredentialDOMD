@@ -32,7 +32,7 @@ function load(responses) {
     '../../utils/adminWaitlist': adminWaitlist, '../../utils/adminLabels': adminLabels };
   const module = { exports: {} };
   const ctx = vm.createContext({ module, exports: module.exports, require: n => imports[n] || {}, console, window: { confirm: () => true } });
-  vm.runInContext(transformSync(source + '\nexport { MessagesPanel, WaitlistList, FieldProposals };', { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
+  vm.runInContext(transformSync(source + '\nexport { MessagesPanel, WaitlistList, FieldProposals, SignupsList };', { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
   const render = (component, props) => { cursor = 0; return module.exports[component](props); };
   return { render, calls };
 }
@@ -118,4 +118,13 @@ test('a field proposal status changes only after the server confirms one row', a
   await approve().props.onClick();
   assert.equal(rows.value[0].status, 'approved');
   assert.equal(f.calls[0].returning, 'id');
+});
+
+test('the Traffic "New accounts" total states its 90-day window and how it differs from the Overview', () => {
+  const f = load([]);
+  const shown = text(f.render('SignupsList', { rows: [{ day: '2026-09-24T00:00:00Z', signups: 2 }, { day: '2026-09-23T00:00:00Z', signups: 1 }], T }));
+  assert.match(shown, /Last 90 days \(rolling; server view limit\)/);
+  assert.match(shown, /Includes deleted and closed accounts/);
+  assert.match(shown, /New signup profiles/);
+  assert.match(text(f.render('SignupsList', { rows: [], T })), /No new accounts in the last 90 days/);
 });

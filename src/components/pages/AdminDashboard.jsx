@@ -724,7 +724,9 @@ function FeedbackList({ rows, T }) {
 }
 
 function SignupsList({ rows, T, onReload, reloadedAt }) {
-  if (!rows.length) return <Empty T={T} text="No account creation days were returned." />;
+  // admin_signups_daily only ever returns the last 90 days (created_at >
+  // now() - 90 days), so "Load more" cannot widen it; say so on the total.
+  if (!rows.length) return <Empty T={T} text="No new accounts in the last 90 days." />;
   const total = rows.reduce((s, r) => s + (r.signups || 0), 0);
   // The old number added these three together and called the sum "signups",
   // which is how a panel showing four physicians read 8.
@@ -738,9 +740,10 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Account creation in the loaded history</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days (rolling; server view limit)</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
             <div style={{ fontSize: 11, color: T.textMuted }}>account records with email on file, excluding administrators</div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>Includes deleted and closed accounts. "New signup profiles" in Overview &amp; reports leaves those out and uses the window you pick there, so the two numbers can differ.</div>
           </div>
           {onReload && (
             <button onClick={onReload} style={{
