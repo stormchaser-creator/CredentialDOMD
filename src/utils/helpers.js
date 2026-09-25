@@ -93,49 +93,6 @@ export function normalizeMultilineNote(text) {
   return bySemicolon.length > 2 ? bySemicolon.join("\n") : raw;
 }
 
-// The words that go out with a packet Vera sends: the cover note for the
-// clipboard and the blurb for the share sheet. The model writes the note
-// from the conversation, so an SSN a physician typed or pasted there can be
-// in it; both are scrubbed on the way out (src/utils/outgoingText.js).
-// iOS Mail and the share sheet flatten newlines into one paragraph, so the
-// blurb re-splits the note into lines and makes each its own sentence.
-export function veraPacketText(coverNote) {
-  const normalized = normalizeMultilineNote(coverNote) || "Credential documents enclosed.";
-  const sentences = normalized.split("\n").map(l => l.trim()).filter(Boolean)
-    .map(l => /[.!?]$/.test(l) ? l : `${l}.`).join(" ");
-  return {
-    note: scrubSsn(`${normalized}\n\nSent from CredentialDOMD.`),
-    blurb: scrubSsn(`Credential packet: ${sentences} Sent from CredentialDOMD.`),
-  };
-}
-
-// The cover letter (clipboard), share title and share-sheet blurb for a
-// bundle sent from Files. File names are typed by people and can carry an
-// SSN ("W-9 123-45-6789.pdf"), so all three are scrubbed on the way out.
-export function bundlePacketText(docs, settings = {}, date = new Date()) {
-  const npi = settings?.npi ? ` (NPI ${settings.npi})` : "";
-  const sName = settings?.name ? `${settings.name}${settings.degreeType ? `, ${settings.degreeType}` : ""}` : "Physician";
-  const n = docs.length;
-  const text = [
-    "To whom it may concern,",
-    "",
-    `Please find attached the credential document packet for ${sName}${npi}:`,
-    "",
-    ...docs.map((d, i) => `  ${i + 1}. ${d.name}`),
-    "",
-    `Sent via CredentialDOMD \u{00b7} ${date.toLocaleDateString()}`,
-  ].join("\n");
-  // iOS Mail promotes the first text line to the subject and strips
-  // newlines, so the share sheet gets a flowing blurb and the formatted
-  // letter goes to the clipboard.
-  const blurb = `Credential packet for ${sName}${npi}, ${n} document${n === 1 ? "" : "s"} attached: ${docs.map((d, i) => `${i + 1}. ${d.name}.`).join(" ")} A formatted cover letter is on the sender's clipboard for pasting. Sent via CredentialDOMD.`;
-  return {
-    text: scrubSsn(text),
-    title: scrubSsn(`Credential packet for ${sName} (${n} documents)`),
-    blurb: scrubSsn(blurb),
-  };
-}
-
 // RFC 6068: a mailto body needs CRLF line breaks — a bare "\n" reads as one
 // continuous line in several mail clients. Every mailto in the app goes
 // through here so no send path can miss the conversion again. It is also

@@ -170,7 +170,8 @@ test('Notification Center: a digest cut for one text says so and keeps the full 
     assert.match(status(tree), /Text shortened to fit one message/);
     assert.match(status(tree), /full list is on your clipboard/);
     assert.equal(log.clipboard.length, 1);
-    assert.match(log.clipboard[0], /Synthetic State Medical License 24/, 'the clipboard holds the whole digest');
+    // Alerts use the canonical label (type and state), so count the items.
+    assert.equal((log.clipboard[0].match(/\u{23f3}/gu) || []).length, 24, 'the clipboard holds the whole digest');
     const sent = decodeURIComponent(log.opened[0].split('&body=')[1]);
     assert.ok(sent.length <= 1400);
     assert.match(sent, /Open CredentialDOMD for the full list\.$/);

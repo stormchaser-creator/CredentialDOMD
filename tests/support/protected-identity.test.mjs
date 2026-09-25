@@ -101,6 +101,8 @@ test('AppContext saves, edits, stars and deletes a device-only record without an
     sbInsert: record('sbInsert'), sbUpdate: record('sbUpdate'), sbSetFavorite: record('sbSetFavorite'),
     sbDelete: record('sbDelete'), recordTombstone: record('recordTombstone'),
     isDeviceOnlySection,
+    // Every add and edit is shaped by the real storage rules (src/utils/recordWrite.js).
+    prepareRecord: (await import('../../src/utils/recordWrite.js')).prepareRecord,
   };
   vm.createContext(context);
   vm.runInContext(transformSync(`${source.slice(start, end)}\nglobalThis.api = { addItem, editItem, toggleFavorite, deleteItemFn };`, { loader: 'jsx' }).code, context);

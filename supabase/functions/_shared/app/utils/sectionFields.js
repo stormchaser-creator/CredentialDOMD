@@ -8,9 +8,11 @@
 // assistant.js re-exports it, so existing imports keep working.
 
 export const SECTION_FIELDS = {
-  licenses: ["type", "name", "licenseNumber", "state", "issuedDate", "expirationDate", "notes"],
-  privileges: ["type", "name", "facility", "city", "state", "appointmentDate", "expirationDate", "notes"],
-  insurance: ["type", "name", "provider", "policyNumber", "coveragePerClaim", "coverageAggregate", "effectiveDate", "expirationDate", "notes"],
+  // Lifecycle keys (ticket 2c819309) are real columns on these three tables
+  // (migration 20260925030000); normalizeLifecycle cleans them on every write.
+  licenses: ["type", "name", "licenseNumber", "state", "issuedDate", "expirationDate", "notes", "lifecycleStatus", "dateUnknown", "supersededBy", "statusSource"],
+  privileges: ["type", "name", "facility", "city", "state", "appointmentDate", "expirationDate", "notes", "lifecycleStatus", "dateUnknown", "supersededBy", "statusSource"],
+  insurance: ["type", "name", "provider", "policyNumber", "coveragePerClaim", "coverageAggregate", "effectiveDate", "expirationDate", "notes", "lifecycleStatus", "dateUnknown", "supersededBy", "statusSource"],
   healthRecords: ["category", "type", "name", "dateAdministered", "expirationDate", "result", "resultValue", "resultUnits", "referenceRange", "collectedDate", "reportedDate", "lab", "specimenId", "orderedBy", "lotNumber", "facility", "notes"],
   education: ["type", "name", "institution", "startDate", "graduationDate", "fieldOfStudy", "honors", "notes"],
   cme: ["title", "category", "hours", "date", "provider", "certificateNumber", "topics", "notes"],
