@@ -12,17 +12,10 @@ import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { money } from "../../../utils/invoiceCover";
 import { callPeriodsOf } from "../../../utils/dutyPay";
+// The Work tab's own call-day rule: the saved stamp first, then the wall clock.
+import { callDayOf } from "../../../utils/billing";
 
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
-
-// Same 7am call-day boundary as the Work tab
-const callDayOf = (e) => {
-  if (e.startTime) {
-    const x = new Date(new Date(e.startTime).getTime() - 7 * 3600 * 1000);
-    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
-  }
-  return e.date;
-};
 
 // Payments are a ledger, not a flag — agencies sometimes pay an invoice in
 // pieces. Legacy invoices marked paid before the ledger existed count as

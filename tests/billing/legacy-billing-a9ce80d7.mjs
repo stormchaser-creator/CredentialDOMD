@@ -1,4 +1,9 @@
-import { formatDate } from "./helpers.js";
+// FROZEN COPY of src/utils/billing.js at a9ce80d7 (2026-09-25), before the
+// call-day split and the daylight-saving fix. tests/billing/call-day-boundary.test.mjs
+// runs it beside the live engine to prove that, with splitting off, billing is
+// unchanged. Never edit it to make a test pass: it is the reference.
+
+import { formatDate } from "../../src/utils/helpers.js";
 
 /**
  * Locum time-engine billing math — shared between WorkLog (invoice
@@ -19,14 +24,8 @@ export function localDate(d) {
 // 24-hour call runs 7:00am–7:00am, so work before 7am belongs to the
 // PREVIOUS day's call coverage (and its stipend).
 const CALL_DAY_START_HOUR = 7;
-// The call day is decided on the WALL CLOCK. Subtracting 7 hours of elapsed
-// time (the old rule) is wrong on the two daylight-saving Sundays: after the
-// November fall-back, 6:00 to 6:59 filed under the new day, and after the
-// March spring-forward, 7:00 to 7:59 filed under the day before.
 export function deriveCallDay(startTime) {
-  const d = new Date(startTime);
-  if (d.getHours() >= CALL_DAY_START_HOUR) return localDate(d);
-  return localDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 12));
+  return localDate(new Date(new Date(startTime).getTime() - CALL_DAY_START_HOUR * 3600 * 1000));
 }
 export function callDayOf(e) {
   // The stamp wins: it froze the call day in the timezone where the work
