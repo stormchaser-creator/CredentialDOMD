@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadScreens, mount as mountScreen, nodes, textOf, find, field, click, pinClock } from './harness/component-harness.mjs';
+import { computeBilling } from '../src/utils/billing.js';
 
 // The three Work Log save paths (timer, new entry, edit), the group edit and
 // delete, and the contract form's call-day settings, driven through the real
@@ -118,6 +119,46 @@ test('editing a piece of a partly invoiced entry warns about the invoice first',
   save(m, 'Save changes');
   assert.match(m.dialogs.map(d => d[1]).join('\n'), /Part of this entry is already billed on INV-SYN-1/);
   assert.equal(m.calls.length, 0, 'declined: nothing written');
+});
+
+// Invoiced work keeps the pieces and call days its invoice billed. Re-splitting
+// an invoiced entry on save handed a new piece the invoice id, and an invoiced
+// row on a day reads as that day's stipend already billed.
+test('an invoiced whole entry saved unchanged after splitting is turned on stays whole, and the next day still bills its stipend', () => {
+  const contract = { ...CONTRACT, splitAtDayStart: true, coveragePeriods: [{ start: '2026-07-28', end: '2026-08-12' }], endDate: '2026-08-12' };
+  // Aug 9 06:40 to 07:10, logged before splitting was on: call day Aug 8,
+  // billed on INV-SYN-1 for Aug 2 to 8.
+  const whole = { id: 'w1', createdAt: '2026-08-09T13:20:00Z', contractId: 'c1', type: 'Call', date: '2026-08-09', callDay: '2026-08-08', startTime: '2026-08-09T12:40:00.000Z', endTime: '2026-08-09T13:10:00.000Z', durationMin: 30, billedMin: 30, description: 'ED consult', privateNote: '', invoiceId: 'inv1' };
+  const billedDays = ['2026-08-02', '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08'];
+  const inv = { id: 'inv1', number: 'INV-SYN-1', contractId: 'c1', entryIds: ['w1'], dayOverMin: Object.fromEntries(billedDays.map(d => [d, 0])), lines: billedDays.map(d => ({ date: d, label: 'On-call coverage (daily total)', amount: 3000 })) };
+  const aug9 = (data) => computeBilling(contract, data.workLog.filter(e => !e.invoiceId), true, data.workLog, data.invoices, new Set(['2026-08-09'])).total;
+  const m = mount('WorkLog', { contracts: [contract], workLog: [whole], invoices: [inv] });
+  assert.equal(aug9(m.data), 3000, 'before the save');
+  editRow(m, 'w1');
+  save(m, 'Save changes');
+  assert.match(m.dialogs.map(d => d[1]).join('\n'), /already billed on INV-SYN-1/);
+  assert.equal(m.calls.filter(c => c[0] === 'add').length, 0, 'no new row');
+  const written = m.calls.filter(c => c[0] === 'edit').map(c => c[2]);
+  assert.equal(written.length, 1);
+  assert.equal(`${hhmm(written[0].startTime)}-${hhmm(written[0].endTime)} ${written[0].callDay} ${written[0].billedMin} ${written[0].invoiceId}`, '06:40-07:10 2026-08-08 30 inv1');
+  assert.ok(m.data.workLog.every(e => e.invoiceId !== 'inv1' || e.callDay === '2026-08-08'), 'the invoice id stays on the day it billed');
+  assert.equal(aug9(m.data), 3000, 'Aug 9 still bills its stipend');
+});
+
+test('an invoiced split entry is never split another way on save: it waits for the invoice to be deleted', () => {
+  // Invoiced on Aug 9 (the 06:45 piece), then splitting was turned off:
+  // saving would join the pieces and put the Aug 10 minutes on that invoice.
+  const pieces = PIECES.map((p, i) => (i === 0 ? { ...p, invoiceId: 'inv1' } : p));
+  const m = mount('WorkLog', { contracts: [CONTRACT], workLog: pieces, invoices: [{ id: 'inv1', number: 'INV-SYN-1', contractId: 'c1' }] });
+  editRow(m, 'p1');
+  save(m, 'Save changes');
+  assert.match(m.dialogs.map(d => d[1]).join('\n'), /split this entry differently from the way INV-SYN-1 billed it\. Delete that invoice in the Invoices tab first/);
+  assert.equal(m.calls.length, 0, 'nothing written');
+  // Same pieces, splitting still on: the edit goes through piece for piece.
+  const on = mount('WorkLog', { contracts: [{ ...CONTRACT, splitAtDayStart: true }], workLog: pieces, invoices: [{ id: 'inv1', number: 'INV-SYN-1', contractId: 'c1' }] });
+  editRow(on, 'p1');
+  save(on, 'Save changes');
+  assert.deepEqual(on.calls.map(c => `${c[0]} ${c[2].id} ${c[2].invoiceId}`), ['edit p1 inv1', 'edit p2 null']);
 });
 
 test('editing a split entry back under one day, with splitting now off, leaves one whole row', () => {

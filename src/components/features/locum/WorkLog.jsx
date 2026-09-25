@@ -471,11 +471,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         // piece is checked for an invoice, and the pieces are written again.
         const oldPieces = splitGroupOf(orig, entries);
         const billedPieces = oldPieces.filter(x => x.invoiceId);
-        if (billedPieces.length) {
-          const nums = [...new Set(billedPieces.map(x => (data.invoices || []).find(i => i.id === x.invoiceId)?.number).filter(Boolean))];
-          const partly = oldPieces.length > 1 && billedPieces.length < oldPieces.length ? "Part of this entry is" : "This entry is";
-          if (!window.confirm(`${partly} already billed${nums.length ? ` on ${nums.join(" and ")}` : ""}. Editing updates your records but NOT the invoice that was sent. To change the invoice too, delete it in the Invoices tab (entries become unbilled) and generate it again. Edit anyway?`)) return;
-        }
         const f = finalizeEntry(type, s2, e2, rawMin, target);
         const edited = {
           ...orig, contractId: target.id, type, date: manual.date,
@@ -487,28 +482,34 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         };
         // Split again from scratch; a stale group id never survives the edit.
         if (orig.splitGroupId) edited.splitGroupId = null;
-        const rows = splitRows(edited, target, generateId);
-        // Fewer pieces than before removes the last ones. A billed piece is
-        // never removed that way: its invoice lists it.
-        const dropped = oldPieces.slice(rows.length).filter(x => x.invoiceId);
-        if (dropped.length) {
-          const num = (data.invoices || []).find(i => i.id === dropped[0].invoiceId)?.number;
-          window.alert(`This change would remove the part of this entry that is on ${num || "a sent invoice"}. Delete that invoice in the Invoices tab first (its entries become unbilled), then edit.`);
+        // Invoiced work keeps the pieces its invoice billed. An invoiced entry
+        // logged whole stays whole: splitting it (or moving it to the later
+        // call day under R2) would put its invoice id on a call day that
+        // invoice never billed, and an invoiced row on a day reads as that
+        // day's stipend already billed.
+        const rows = billedPieces.length && oldPieces.length === 1 ? [edited] : splitRows(edited, target, generateId);
+        if (billedPieces.length && rows.length !== oldPieces.length) {
+          const num = (data.invoices || []).find(i => i.id === billedPieces[0].invoiceId)?.number;
+          window.alert(`This change would split this entry differently from the way ${num || "a sent invoice"} billed it. Delete that invoice in the Invoices tab first (its entries become unbilled), then edit.`);
           return;
+        }
+        if (billedPieces.length) {
+          const nums = [...new Set(billedPieces.map(x => (data.invoices || []).find(i => i.id === x.invoiceId)?.number).filter(Boolean))];
+          const partly = oldPieces.length > 1 && billedPieces.length < oldPieces.length ? "Part of this entry is" : "This entry is";
+          if (!window.confirm(`${partly} already billed${nums.length ? ` on ${nums.join(" and ")}` : ""}. Editing updates your records but NOT the invoice that was sent. To change the invoice too, delete it in the Invoices tab (entries become unbilled) and generate it again. Edit anyway?`)) return;
         }
         if (oldPieces.length === 1 && rows.length === 1) {
           editItem("workLog", rows[0]);
         } else {
           // Piece i lands on old piece i, keeping that piece's own id, invoice
-          // and star; extra new pieces are added (carrying the last old
-          // piece's invoice, since that invoice billed their minutes), and
-          // leftover old pieces are removed.
-          const tailInvoice = oldPieces[oldPieces.length - 1].invoiceId || null;
+          // and star; extra new pieces are added unbilled (only an unbilled
+          // entry gains pieces, see above), and leftover old pieces are
+          // removed.
           for (let i = 0; i < rows.length; i++) {
             const old = oldPieces[i];
             const ok = old
               ? editItem("workLog", { ...old, ...pickEditKeys(rows[i]) })
-              : addItem("workLog", { ...rows[i], createdAt: new Date().toISOString(), invoiceId: tailInvoice });
+              : addItem("workLog", { ...rows[i], createdAt: new Date().toISOString(), invoiceId: null });
             if (ok === false) break;
           }
           for (const old of oldPieces.slice(rows.length)) {
