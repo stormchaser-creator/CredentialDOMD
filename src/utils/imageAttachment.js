@@ -1,5 +1,6 @@
 import { compressImage } from "./documentScanner";
 import { MAX_TICKET_IMAGE_BYTES, TICKET_MIME_BY_EXT, dataUrlBytes } from "./ticketAttachments";
+import { spreadsheetGuard } from "./spreadsheetGuard";
 
 /**
  * One file on a ticket or a ticket reply.
@@ -37,6 +38,10 @@ export async function readTicketAttachment(file) {
   if (!mime || !Object.values(TICKET_MIME_BY_EXT).includes(mime)) {
     throw new Error("Attach an image, a PDF, or a document (Word, Excel, CSV, or text).");
   }
+  // A spreadsheet whose header names a patient identifier never leaves the
+  // device, here as on every other upload path.
+  const refusal = await spreadsheetGuard(file);
+  if (refusal) throw new Error(refusal);
 
   const dataUrl = await readAsDataUrl(file);
 

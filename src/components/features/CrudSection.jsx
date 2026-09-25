@@ -23,6 +23,7 @@ import { STATE_NAMES } from "../../constants/states";
 import CPTCodePicker from "./CPTCodePicker";
 import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
 import { checkStorageQuota } from "../../utils/storageQuota";
+import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 
 // Every billed code, spelled out — number, what it entails, units, value.
 // Structured detail from the import wins; a hand-typed code string still
@@ -264,6 +265,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     if (!quota.ok) { setScanIsError(true); setScanMsg(quota.message); return; }
 
     for (const file of Array.from(files)) {
+      // A spreadsheet with a patient-identifier column is never attached.
+      const sheetRefusal = await spreadsheetGuard(file);
+      if (sheetRefusal) { setScanIsError(true); setScanMsg(`"${file.name}" was not attached. ${sheetRefusal}`); continue; }
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result);

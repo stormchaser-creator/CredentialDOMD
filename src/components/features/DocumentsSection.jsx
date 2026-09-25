@@ -18,6 +18,7 @@ import Modal from "../shared/Modal";
 import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
+import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -234,6 +235,11 @@ function DocumentsSection() {
         setScanError(`"${file.name}" isn't a file type this app reads (${file.type || "unknown type"}). Photos, PDFs, Word, Excel, CSV and text work.`);
         continue;
       }
+      // A spreadsheet whose header row names a patient identifier (MRN,
+      // patient name, DOB, SSN...) is refused here, before it is read or
+      // stored, with the column named (utils/spreadsheetGuard.js).
+      const sheetRefusal = await spreadsheetGuard(file);
+      if (sheetRefusal) { setScanError(`"${file.name}" was not uploaded. ${sheetRefusal}`); continue; }
       // Anything we can read before storing gets screened first — a patient
       // chart must never reach the server, so refusing beats deleting.
       if (isOfficeFile(file)) {

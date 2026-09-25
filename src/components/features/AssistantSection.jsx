@@ -15,6 +15,7 @@ import Modal from "../shared/Modal";
 import EmailPacketModal from "./EmailPacketModal";
 import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../../utils/storageScope";
 import { checkStorageQuota } from "../../utils/storageQuota";
+import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
@@ -538,6 +539,9 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const handleFile = useCallback(async (file) => {
     setErr(null);
     try {
+      // A spreadsheet with a patient-identifier column never reaches Vera.
+      const sheetRefusal = await spreadsheetGuard(file);
+      if (sheetRefusal) { setErr(sheetRefusal); return; }
       if (isOfficeFile(file)) {
         const text = await extractOfficeText({ name: file.name, type: file.type, file });
         setAttachment({ text, name: file.name, kind: "office" });

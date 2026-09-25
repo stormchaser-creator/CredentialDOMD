@@ -14,6 +14,7 @@ import { checkStorageQuota } from "../../utils/storageQuota";
 import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import { isReadableDoc } from "../../utils/docPrefill";
 import { CV_FILENAME_RE } from "../../utils/cvImport";
+import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 
 /**
  * Start from your CV.
@@ -117,6 +118,8 @@ function CvImportReview({ source = null, onSaved, onClose }) {
     }
     const quota = checkStorageQuota(data.documents || [], [file]);
     if (!quota.ok) { setError(quota.message); return; }
+    const sheetRefusal = await spreadsheetGuard(file);
+    if (sheetRefusal) { setError(sheetRefusal); return; }
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (ev) => resolve(ev.target.result);

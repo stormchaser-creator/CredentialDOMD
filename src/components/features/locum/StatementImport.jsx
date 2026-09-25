@@ -6,6 +6,7 @@ import { analyzeStatement, categorizeStatementRows } from "../../../utils/docume
 import { aiAvailable } from "../../../utils/aiClient";
 import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
 import * as XLSX from "xlsx";
+import { spreadsheetGuard } from "../../../utils/spreadsheetGuard";
 
 /**
  * StatementImport — turn the business card's statement into deduction lines.
@@ -221,6 +222,10 @@ function StatementImport({ open, onClose }) {
   const handleFile = async (file) => {
     setError(null); setDone(null); setBusy(true);
     try {
+      // Same rule as every other upload: a header naming an identifier column
+      // (an account number included) is refused with the column named.
+      const sheetRefusal = await spreadsheetGuard(file);
+      if (sheetRefusal) { setError(sheetRefusal); return; }
       if (/csv|text/.test(file.type) || /\.csv$/i.test(file.name)) {
         await toReview(parseCsv(await file.text()));
       } else if (/spreadsheet|ms-excel|officedocument\.spreadsheetml/.test(file.type) || /\.(xlsx|xls|xlsm)$/i.test(file.name)) {
