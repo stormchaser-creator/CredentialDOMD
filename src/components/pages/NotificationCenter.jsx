@@ -2,13 +2,15 @@ import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";
 import { EmailIcon, TextMsgIcon, AlertIcon } from "../shared/Icons";
-import { generateAlerts, buildNotificationMessage, composeEmail, composeText } from "../../utils/notifications";
+import { generateAlerts, buildNotificationMessage, composeEmail, textAlert } from "../../utils/notifications";
 import { getItemLabel, formatDate, MS_PER_DAY } from "../../utils/helpers";
 
 function NotificationCenter({ open, onClose }) {
   const { data, updateSettings, addItem, theme: T } = useApp();
   const [sending, setSending] = useState(null);
   const [sent, setSent] = useState(false);
+  // Said when the text had to be shortened (textAlert); never silent.
+  const [textNotice, setTextNotice] = useState("");
 
   const s = data.settings;
   const alerts = useMemo(() => generateAlerts(data), [data]);
@@ -143,7 +145,7 @@ function NotificationCenter({ open, onClose }) {
                     }}><EmailIcon /> Email to {s.email}</button>
                   )}
                   {hasPhone && s.notifyText !== false && (
-                    <button onClick={() => { composeText(s.phone, msg.body); markSent("text"); }} style={{
+                    <button onClick={() => { setTextNotice(""); textAlert(s.phone, msg.body, setTextNotice); markSent("text"); }} style={{
                       padding: "12px", borderRadius: 12, border: "none", backgroundColor: T.success, color: "#fff",
                       fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                     }}><TextMsgIcon /> Text to {s.phone}</button>
@@ -155,8 +157,10 @@ function NotificationCenter({ open, onClose }) {
                   )}
                 </div>
               ) : (
-                <div style={{ fontSize: 12, color: T.success, textAlign: "center", padding: "8px" }}>
-                  Your {sending === "email" ? "email" : "text message"} app should open with the full alert report.
+                <div role="status" style={{ fontSize: 12, color: T.success, textAlign: "center", padding: "8px" }}>
+                  {sending === "text" && textNotice
+                    ? textNotice
+                    : `Your ${sending === "email" ? "email" : "text message"} app should open with the alert report.`}
                 </div>
               )}
             </div>

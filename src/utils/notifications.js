@@ -1,6 +1,6 @@
 import { complianceFor } from "./compliance";
 import { getItemLabel, formatDate, MS_PER_DAY, mailtoHref } from "./helpers";
-import { smsBody } from "./shareText";
+import { smsBody, alertTextBody, alertCutNotice } from "./shareText";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -193,5 +193,25 @@ export function composeText(phone, body, { copyFullOnCut = false } = {}) {
     `sms:${cleaned}${isIOS ? "&body=" : "?body="}${encodeURIComponent(text)}`,
     "_blank"
   );
+  return { truncated, copied };
+}
+
+/**
+ * The alert screens' Text button (Notification Center, the home banner, the
+ * Settings test). The digest goes to the physician's own phone. One too long
+ * for a message is cut before an item and says the rest is in the app
+ * (shareText.alertTextBody), the full digest goes to the clipboard first,
+ * inside the same tap, and `onCut` receives the notice for the screen once
+ * the copy settles. It used to be cut mid-list with nothing said anywhere.
+ * Returns { truncated, copied: Promise<boolean> }.
+ */
+export function textAlert(phone, body, onCut) {
+  const { text, truncated } = alertTextBody(body);
+  let copied = Promise.resolve(false);
+  if (truncated && navigator.clipboard?.writeText) {
+    copied = navigator.clipboard.writeText(String(body)).then(() => true, () => false);
+  }
+  composeText(phone, text);
+  if (truncated && onCut) copied.then((ok) => onCut(alertCutNotice(ok)));
   return { truncated, copied };
 }

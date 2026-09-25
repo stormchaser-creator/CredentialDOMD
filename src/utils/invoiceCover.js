@@ -180,10 +180,52 @@ export function invoiceTextOnlyShare(inv = {}, text = "") {
  * send site says where it is. null when there is nothing to say.
  */
 export const INVOICE_COVER_ON_CLIPBOARD = "The full cover letter is on your clipboard: paste it over Mail's short intro if you want the long form.";
+export const INVOICE_COVER_FOR_EMAIL = "The cover letter is on your clipboard, ready to paste into your email.";
 export function invoiceCoverNotice(how) {
   const h = String(how || "");
   if (!h.includes("+cover") || h.startsWith("share-text")) return null;
   if (h.startsWith("share")) return `Sent with a short intro that reads correctly in Mail. ${INVOICE_COVER_ON_CLIPBOARD}`;
-  if (h.startsWith("download")) return "The invoice file downloaded. The cover letter is on your clipboard, ready to paste into your email.";
+  if (h.startsWith("download")) return `The invoice file downloaded. ${INVOICE_COVER_FOR_EMAIL}`;
   return null;
+}
+
+// ── Expense invoices: what the document says about receipts ──
+//
+// The invoice PDF itself used to print "receipts attached" in its terms and
+// "receipt attached" on every line whose expense had a receipt on file,
+// whether or not the file rode in the message. When the OS refused the
+// bundle, a receipt could not be read, or the invoice was resent as Word or
+// Excel, the agency got a bill claiming proof it never received (the same
+// failure as the earlier incident). The terms no longer mention receipts,
+// and each line says "attached" only for an expense whose receipts are all
+// in this send, "on file" otherwise.
+
+export const EXPENSE_INVOICE_TERMS = "Reimbursable travel expenses per agreement.";
+
+const RECEIPT_STATUS = /^receipts? (?:attached|on file)$/;
+const DETAIL_SEP = ` ${String.fromCodePoint(0xb7)} `;
+
+/** A new expense line's detail: the physician's note, then its receipt status. */
+export function expenseLineDetail(notes, receiptCount, attached = false) {
+  const n = Math.max(0, Math.floor(Number(receiptCount) || 0));
+  const status = n ? `${n > 1 ? "receipts" : "receipt"} ${attached ? "attached" : "on file"}` : "no receipt";
+  return [String(notes || "").trim(), status].filter(Boolean).join(DETAIL_SEP);
+}
+
+/**
+ * Rewrite expense lines for the files this send actually carries. A line
+ * with an expenseId says "attached" only when that id is in
+ * attachedExpenseIds. A line saved before lines carried expenseId says
+ * "attached" only when `allAttached` (every receipt of the invoice is in
+ * this send). Only the trailing receipt status is touched, never the note.
+ */
+export function expenseReceiptLines(lines = [], attachedExpenseIds = new Set(), { allAttached = false } = {}) {
+  return (lines || []).map((line) => {
+    const parts = String(line?.detail || "").split(DETAIL_SEP);
+    const last = parts[parts.length - 1];
+    if (!RECEIPT_STATUS.test(last)) return line;
+    const attached = line.expenseId ? attachedExpenseIds.has(line.expenseId) : allAttached;
+    parts[parts.length - 1] = `${last.startsWith("receipts") ? "receipts" : "receipt"} ${attached ? "attached" : "on file"}`;
+    return { ...line, detail: parts.join(DETAIL_SEP) };
+  });
 }

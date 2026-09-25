@@ -101,7 +101,9 @@ export function buildCvContent(data, template = "clinical") {
           return db - da;
         }).map(w => ({
           primary: `${w.employer || w.position || "Position"}${w.startDate || w.endDate || isTrue(w.current ?? w.isCurrent) ? ` (${range(w.startDate, w.endDate, w.current ?? w.isCurrent)})` : ""}`,
-          secondary: [w.position, [w.city, w.state].filter(Boolean).join(", ")].filter(Boolean).join(" \u2014 "),
+          // A comma, not an em dash: this line is printed in the Copy text
+          // and the CV PDF a credentialing office receives.
+          secondary: [w.position, [w.city, w.state].filter(Boolean).join(", ")].filter(Boolean).join(", "),
           detail: w.description || "",
           date: "",
         })),

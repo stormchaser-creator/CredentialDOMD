@@ -5,12 +5,13 @@ import Modal from "../../shared/Modal";
 import DeskTable from "../../shared/DeskTable";
 import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon, ExternalLinkIcon, DollarIcon, UndoIcon } from "../../shared/Icons";
-import { sortInvoiceLines, invoiceSubject, shareInvoiceText, invoicePdfFile, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
-import { resolveDocuments, missingReceiptMessage, billedReceiptDocs } from "../../../utils/receiptFiles";
+import { sortInvoiceLines, invoiceSubject, shareInvoiceText, invoicePdfFile } from "../../../utils/invoicePdf";
+import { copyInvoiceCover, shareInvoiceFiles } from "../../../utils/expenseInvoiceSend";
+import { resolveDocuments, missingReceiptMessage, billedReceiptDocs, attachedExpenseIds } from "../../../utils/receiptFiles";
 import { downloadDocumentBlob } from "../../../lib/supabase";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
-import { money, invoiceCoverNotice, INVOICE_COVER_ON_CLIPBOARD } from "../../../utils/invoiceCover";
+import { money, invoiceCoverNotice, INVOICE_COVER_ON_CLIPBOARD, expenseReceiptLines } from "../../../utils/invoiceCover";
 import { callPeriodsOf } from "../../../utils/dutyPay";
 
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
@@ -256,7 +257,7 @@ function Invoices({ onOpenContract }) {
     const docs = receiptDocsFor(inv);
     if (!docs.length) return;
     const { files, missing } = await resolveDocuments(docs, { download: downloadDocumentBlob });
-    setResendReceipts({ files, missing, forId: inv.id });
+    setResendReceipts({ files, missing, attachedIds: attachedExpenseIds(docs, missing), forId: inv.id });
   };
   const resend = async (inv, format = "pdf") => {
     const c = contracts.find(x => x.id === inv.contractId);
@@ -283,29 +284,35 @@ function Invoices({ onOpenContract }) {
       // user gesture is still live.
       const ready = resendReceipts.forId === inv.id ? resendReceipts : { files: [], missing: [] };
       if (format === "pdf" && ready.files.length) {
-        const bundle = [invoicePdfFile(args), ...ready.files];
-        // The cover counts only the receipts riding in this share.
-        const withReceipts = { ...args, receipts: ready.files.length };
-        let coverCopied = false;
-        try { await navigator.clipboard.writeText(invoiceCoverEmail(withReceipts)); coverCopied = true; } catch { /* clipboard unavailable */ }
-        if (navigator.canShare?.({ files: bundle })) {
-          try {
-            await navigator.share({ title: subject, text: invoiceCoverBlurb(withReceipts), files: bundle });
-            const pasteNote = coverCopied ? ` ${INVOICE_COVER_ON_CLIPBOARD}` : "";
-            setNotice(ready.missing.length
-              ? `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"}. ${missingReceiptMessage(ready.missing)}${pasteNote}`
-              : `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"} attached.${pasteNote}`);
-            setTimeout(() => setNotice(null), 12000);
-            return;
-          } catch (err) {
-            if (err?.name === "AbortError") return;
-            // Anything else falls through to the unchanged single-document
-            // path below, so a resend can never deliver less than it did
-            // before receipts were added.
-          }
+        // The PDF marks "attached" only the expenses whose receipts are in
+        // this bundle; lines saved before lines carried expenseId only when
+        // every receipt is. The clipboard letter is count-free: it is written
+        // before the share and could not be taken back if the share fails
+        // (src/utils/expenseInvoiceSend.js). The share text counts the files.
+        const withReceipts = {
+          ...args,
+          lines: expenseReceiptLines(args.lines, ready.attachedIds, { allAttached: !ready.missing.length }),
+        };
+        const bundle = [invoicePdfFile(withReceipts), ...ready.files];
+        const coverCopied = await copyInvoiceCover(args, navigator.clipboard);
+        const shared = await shareInvoiceFiles(withReceipts, bundle, ready.files.length, navigator);
+        if (shared === "abort") return;
+        if (shared) {
+          const pasteNote = coverCopied ? ` ${INVOICE_COVER_ON_CLIPBOARD}` : "";
+          setNotice(ready.missing.length
+            ? `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"}. ${missingReceiptMessage(ready.missing)}${pasteNote}`
+            : `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"} attached.${pasteNote}`);
+          setTimeout(() => setNotice(null), 12000);
+          return;
         }
+        // Anything else falls through to the single-document path below, so
+        // a resend can never deliver less than it did before receipts were
+        // added.
       }
-      const how = await exportInvoice(args, format, subject, inv.text);
+      // No receipt rides with the single document (or with Word/Excel), so
+      // no line of it may say one is attached.
+      const single = args.kind === "expenses" ? { ...args, lines: expenseReceiptLines(args.lines) } : args;
+      const how = await exportInvoice(single, format, subject, inv.text);
       if (how === null) return; // share sheet cancelled
       const coverMsg = invoiceCoverNotice(how);
       if (ready.missing.length || (ready.files.length && format === "pdf")) {

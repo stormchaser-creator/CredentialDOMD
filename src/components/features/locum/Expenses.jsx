@@ -5,15 +5,28 @@ import EmptyState from "../../shared/EmptyState";
 import Modal from "../../shared/Modal";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber } from "../../../utils/helpers";
-import { invoicePdfFile, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
-import { money, INVOICE_COVER_ON_CLIPBOARD } from "../../../utils/invoiceCover";
+import { invoicePdfFile } from "../../../utils/invoicePdf";
+import {
+  money, INVOICE_COVER_ON_CLIPBOARD, INVOICE_COVER_FOR_EMAIL, EXPENSE_INVOICE_TERMS, expenseLineDetail,
+} from "../../../utils/invoiceCover";
+import { sendExpenseInvoiceFiles } from "../../../utils/expenseInvoiceSend";
 import { checkStorageQuota } from "../../../utils/storageQuota";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
 import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCategories";
-import { resolveDocuments, missingReceiptMessage } from "../../../utils/receiptFiles";
+import { resolveDocuments, missingReceiptMessage, attachedExpenseIds } from "../../../utils/receiptFiles";
 import { downloadDocumentBlob } from "../../../lib/supabase";
 import { docMime } from "../../../utils/inboxDocs";
 
+
+// Desktop fallback when the share sheet cannot take files.
+const downloadFiles = (files) => {
+  for (const f of files) {
+    const url = URL.createObjectURL(f);
+    const a = document.createElement("a");
+    a.href = url; a.download = f.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+  }
+};
 
 /**
  * Travel expenses — billed to the LOCUMS AGENCY, not the hospital. Each
@@ -186,8 +199,11 @@ function Expenses() {
       const lines = [...sel].sort((a, b) => String(a.date).localeCompare(String(b.date))).map(e => ({
         date: e.date,
         label: `${e.category || "Expense"}${e.vendor ? `: ${e.vendor}` : ""}`,
-        detail: [e.notes, receiptsOf(e).length ? `receipt${receiptsOf(e).length > 1 ? "s" : ""} attached` : "no receipt"].filter(Boolean).join(" · "),
+        // "on file" here; the send marks "attached" only for the expenses
+        // whose receipts actually ride in it (expenseReceiptLines).
+        detail: expenseLineDetail(e.notes, receiptsOf(e).length),
         amount: e.amount,
+        expenseId: e.id,
       }));
       const total = sel.reduce((t, e) => t + (parseFloat(e.amount) || 0), 0);
       const dates = sel.map(e => e.date).sort();
@@ -198,10 +214,9 @@ function Expenses() {
         npi: s.npi, email: s.email,
         facility: invAgency || "Locums agency", // BILL TO: the agency itself
         periodStart: dates[0], periodEnd: dates[dates.length - 1],
-        terms: "Reimbursable travel expenses per agreement; receipts attached.",
+        terms: EXPENSE_INVOICE_TERMS,
         lines, totalMin: 0, total,
       };
-      const pdf = invoicePdfFile(inv);
       // Receipts ride along in the same share, proof travels with the bill.
       // They were resolved when this modal opened, so nothing is awaited here:
       // a download inside the tap would spend the user gesture and make the OS
@@ -214,56 +229,22 @@ function Expenses() {
         if (f) attached.push(f);
         else missingDocs.push({ id: d.id, name: d.name || "receipt", reason: d.storagePath ? "unavailable" : "never_uploaded" });
       }
-      const files = [pdf, ...attached];
-      // The cover may only count receipts that ride in the same share.
-      const covering = (n) => ({ ...inv, receipts: n });
-      // Cover letter to clipboard, flowing blurb as share text: otherwise
-      // iOS Mail sends the attachments with an empty body.
-      let coverCopied = false;
-      try { await navigator.clipboard.writeText(invoiceCoverEmail(covering(attached.length))); coverCopied = true; } catch { /* clipboard unavailable */ }
-      let how = null;
-      let droppedForSize = 0;
-      // The invoice itself must never be held hostage by its receipts. If the
-      // OS refuses the whole bundle, on count or size, fall back to the invoice
-      // alone rather than silently dropping to a path that sends nothing.
-      const trySend = async (bundle) => {
-        if (!(navigator.canShare && navigator.canShare({ files: bundle }))) return null;
-        try {
-          await navigator.share({ title: invoiceSubject(inv), text: invoiceCoverBlurb(covering(bundle.length - 1)), files: bundle });
-          return "share";
-        } catch (err) {
-          if (err?.name === "AbortError") return "abort";
-          return null;
-        }
-      };
-      const first = await trySend(files);
-      if (first === "abort") { setBusy(false); return; }   // cancelled: record nothing
-      how = first;
-      if (!how && attached.length) {
-        // The letter on the clipboard counted receipts this send will not
-        // carry. Replace it, and stop pointing at it if that fails.
-        if (coverCopied) {
-          try { await navigator.clipboard.writeText(invoiceCoverEmail(covering(0))); } catch { coverCopied = false; }
-        }
-        const second = await trySend([pdf]);
-        if (second === "abort") { setBusy(false); return; }
-        if (second) { how = second; droppedForSize = attached.length; }
-      }
-      if (!how) {
-        for (const f of files) {
-          const url = URL.createObjectURL(f);
-          const a = document.createElement("a");
-          a.href = url; a.download = f.name; a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 15000);
-        }
-        how = "download";
-      }
+      // Clipboard letter (count-free), share text and PDF each claim only the
+      // receipts that ride in that attempt; the invoice goes alone if the OS
+      // refuses the bundle, and downloads when files cannot be shared.
+      const sent = await sendExpenseInvoiceFiles({
+        inv, files: attached, attachedExpenseIds: attachedExpenseIds(receiptDocs, missingDocs),
+        nav: navigator, pdfFor: invoicePdfFile, download: downloadFiles,
+      });
+      if (!sent) { setBusy(false); return; }   // cancelled: record nothing
+      const { how, coverCopied, droppedForSize } = sent;
       const invoiceId = generateId();
       addItem("invoices", {
         id: invoiceId, number, contractId: null, kind: "expenses",
         billToLabel: invAgency || "Locums agency",
         periodStart: dates[0], periodEnd: dates[dates.length - 1],
-        lines, totalAmount: total, totalMinutes: 0,
+        // The lines of the PDF that went, so a resend starts from the truth.
+        lines: sent.lines, totalAmount: total, totalMinutes: 0,
         entryIds: sel.map(e => e.id),
         sentAt: new Date().toISOString(),
         text: `Invoice ${number}: ${invAgency || "Locums agency"}, ${money(total)} (${sel.length} item${sel.length > 1 ? "s" : ""})`,
@@ -272,7 +253,14 @@ function Expenses() {
       setInvOpen(false);
       // Same clipboard notice as every other invoice send (ticket e8cc2a02).
       const pasteNote = how === "share" && coverCopied ? ` ${INVOICE_COVER_ON_CLIPBOARD}` : "";
-      if (droppedForSize) {
+      if (how === "download") {
+        // Nothing was sent: the files are on the device for an email.
+        const n = attached.length;
+        showNotice(`Invoice ${number}${n ? ` and ${n} receipt${n === 1 ? "" : "s"}` : ""} downloaded, ready to attach to your email.`
+          + (missingDocs.length ? ` ${missingReceiptMessage(missingDocs)}` : "")
+          + (coverCopied ? ` ${INVOICE_COVER_FOR_EMAIL}` : "")
+          + " Tracked on the Invoices tab.");
+      } else if (droppedForSize) {
         showNotice(`Invoice ${number} sent on its own. The ${droppedForSize} receipt${droppedForSize === 1 ? "" : "s"} were too large for one message, so send them from the expense, or resend from the Invoices tab.${pasteNote}`);
       } else if (missingDocs.length) {
         showNotice(`Invoice ${number} sent. ${missingReceiptMessage(missingDocs)} Resend from the Invoices tab once they are available.${pasteNote}`);
@@ -511,10 +499,10 @@ function Expenses() {
           <span>Total</span>
           <span>{money(unbilled.filter(e => checked[e.id]).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0))}</span>
         </div>
-        {/* Say what will actually attach BEFORE the send. The invoice itself
-            prints "receipts attached" from the count of receipts on file, so a
-            silent shortfall is how an agency receives a bill claiming proof it
-            never got. */}
+        {/* Say what will actually attach BEFORE the send. The invoice marks
+            a receipt "attached" only when it rides in the message and "on
+            file" otherwise, so the agency is never told it has proof it did
+            not get; the physician still hears about a shortfall here. */}
         {(() => {
           const sel = unbilled.filter(e => checked[e.id]);
           const docs = sel.flatMap(receiptsOf);
@@ -529,7 +517,7 @@ function Expenses() {
           return (
             <div style={{ marginTop: 8, padding: "9px 11px", borderRadius: 10, fontSize: 12.5, lineHeight: 1.5,
               backgroundColor: T.dangerDim, color: T.danger, border: `1px solid ${T.danger}55` }}>
-              Only {ready} of {docs.length} receipts can be attached right now. The invoice says receipts are attached, so send it once the rest are available, or tell the agency what is coming separately.
+              Only {ready} of {docs.length} receipts can be attached right now. The invoice marks the others "receipt on file", so send it once the rest are available, or tell the agency what is coming separately.
             </div>
           );
         })()}

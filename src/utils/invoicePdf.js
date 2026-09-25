@@ -291,5 +291,7 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
   a.download = file.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  return "download";
+  // Tagged like shareOrDownload's Word/Excel download, so every send site
+  // tells the physician the cover letter is on the clipboard.
+  return coverCopied ? "download+cover" : "download";
 }

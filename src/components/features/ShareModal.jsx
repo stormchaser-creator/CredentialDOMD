@@ -1,4 +1,4 @@
-import { useState, memo } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
@@ -9,6 +9,8 @@ import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
 import { composeText } from "../../utils/notifications";
 import { credentialLetter, credentialSharePayload, smsCutNotice } from "../../utils/shareText";
+import { resolveDocuments, missingReceiptMessage } from "../../utils/receiptFiles";
+import { downloadDocumentBlob } from "../../lib/supabase";
 
 function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const { data, theme: T } = useApp();
@@ -19,8 +21,36 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(null);
   // What the SENDER needs to know after a send (never put in the message).
-  const [hint, setHint] = useState("");
-  const flashHint = (msg) => { setHint(msg); setTimeout(() => setHint(h => (h === msg ? "" : h)), 12000); };
+  // App keeps this sheet mounted and only toggles `open`, so a hint is tied
+  // to the credential it was written for and cleared on close: credential
+  // B's sheet must never say "the formatted letter is on your clipboard"
+  // while the clipboard holds credential A's letter.
+  const hintKey = open && item ? String(item.id ?? "") : "";
+  const [hintState, setHintState] = useState({ key: "", text: "" });
+  const hintTimer = useRef(null);
+  const hint = hintState.key === hintKey ? hintState.text : "";
+  const clearHint = () => { clearTimeout(hintTimer.current); setHintState({ key: "", text: "" }); };
+  const flashHint = (msg) => {
+    clearTimeout(hintTimer.current);
+    setHintState({ key: hintKey, text: msg });
+    hintTimer.current = setTimeout(() => setHintState({ key: "", text: "" }), 12000);
+  };
+  const close = () => { clearHint(); onClose?.(); };
+  // The linked files, resolved when the sheet opens. `doc.data` is stripped
+  // from the device once a document has a storagePath, so reading only
+  // `doc.data` found nothing and "Send with 2 documents attached" went out
+  // as the letter alone. Resolving here, not in the tap, keeps the user
+  // gesture live for the share sheet.
+  const docsKey = hintKey && linkedDocs?.length ? `${hintKey}|${linkedDocs.map((d) => d.id).join(",")}` : "";
+  const [resolved, setResolved] = useState({ key: "", files: [], missing: [] });
+  useEffect(() => {
+    if (!docsKey) return undefined;
+    let live = true;
+    resolveDocuments(linkedDocs, { download: downloadDocumentBlob })
+      .then(({ files, missing }) => { if (live) setResolved({ key: docsKey, files, missing }); });
+    return () => { live = false; };
+  }, [docsKey, linkedDocs]);
+  const docFiles = resolved.key === docsKey ? resolved : null; // null while resolving
   // "Email with attachments": the server sends the linked files as real
   // attachments from docs@credentialdomd.com (reply_to = the physician).
   // share_log for that path is written by the server, not here.
@@ -58,28 +88,33 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   // send happens from their own account.
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
   const doShare = async () => {
-    const files = (linkedDocs || []).map((doc) => {
-      try {
-        const [head, b64] = (doc.data || "").split(",");
-        if (!b64) return null;
-        const mime = doc.type || head.match(/data:(.*?)[;,]/)?.[1] || "application/octet-stream";
-        const bin = atob(b64);
-        const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return new File([arr], doc.name || "document", { type: mime });
-      } catch { return null; }
-    }).filter(Boolean);
+    // A button that says "Send with N documents attached" never sends the
+    // letter alone: if any linked file is not in hand, or this browser cannot
+    // share files, nothing opens and the sender is told why.
+    const files = hasDocs ? (docFiles?.files || []) : [];
+    if (hasDocs && !docFiles) {
+      flashHint("The linked documents are still loading. Try again in a moment, or use Email with attachments.");
+      return;
+    }
+    if (hasDocs && docFiles.missing.length) {
+      flashHint(`${missingReceiptMessage(docFiles.missing, { one: "document", many: "documents" })} Nothing was sent. Use Email with attachments, or send again once they are available.`);
+      return;
+    }
+    const attach = files.length > 0 && !!navigator.canShare?.({ files });
+    if (hasDocs && !attach) {
+      flashHint("This browser cannot attach files to a share, so nothing was sent. Use Email with attachments, or send from the app on your phone.");
+      return;
+    }
 
     // With files, iOS Mail drops the title and flattens newlines in shared
     // text (the letter became one giant run-on with the salutation as the
     // subject), so a file share carries a flowing one-paragraph blurb and the
     // formatted letter goes on the clipboard. With no file, the share IS the
     // letter, line breaks and all.
-    const attach = files.length > 0 && !!navigator.canShare?.({ files });
     const blurb = buildCredentialBlurb(item, section, data.settings, attach, note);
     const copied = attach ? await copyToClipboard(withDocs) : false;
     const payload = credentialSharePayload({ files: attach ? files : [], subject, blurb, letter: full });
-    setHint("");
+    clearHint();
     try {
       await navigator.share(payload);
       setSent("share"); setTimeout(() => setSent(null), 3000);
@@ -97,7 +132,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
 
   const doText = () => {
     const { truncated, copied } = composeText(phone || "", full, { copyFullOnCut: true });
-    setHint("");
+    clearHint();
     if (truncated) copied.then(ok => flashHint(smsCutNotice(ok)));
     setSent("text"); setTimeout(() => setSent(null), 3000); log("text", phone);
   };
@@ -108,7 +143,7 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Send Credential">
+    <Modal open={open} onClose={close} title="Send Credential">
       <div style={{
         backgroundColor: T.input, border: `1px solid ${T.inputBorder}`, borderRadius: 12,
         padding: 14, marginBottom: 16, maxHeight: 160, overflow: "auto",

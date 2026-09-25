@@ -97,14 +97,17 @@ const REASON_TEXT = {
   corrupt: "the saved file could not be read",
 };
 
-/** One honest sentence naming what did not attach and why. */
-export function missingReceiptMessage(missing) {
+/**
+ * One honest sentence naming what did not attach and why. `nouns` lets the
+ * credential Send sheet say "documents" instead of "receipts".
+ */
+export function missingReceiptMessage(missing, nouns = { one: "receipt", many: "receipts" }) {
   if (!missing?.length) return "";
   const names = missing.map(m => m.name).slice(0, 3).join(", ");
   const more = missing.length > 3 ? ` and ${missing.length - 3} more` : "";
   const reasons = [...new Set(missing.map(m => REASON_TEXT[m.reason] || "they could not be read"))];
   const why = reasons.length === 1 ? reasons[0] : reasons.join(", and ");
-  const noun = missing.length === 1 ? "receipt" : "receipts";
+  const noun = missing.length === 1 ? nouns.one : nouns.many;
   return `${missing.length} ${noun} could not be attached (${names}${more}) because ${why}.`;
 }
 
@@ -122,4 +125,21 @@ export function billedReceiptDocs(invoice, expenses, documents) {
   const mine = (expenses || []).filter(e => e && e.invoiceId === invoice.id && billed.has(e.id));
   const ids = new Set(mine.map(e => `travelExpenses:${e.id}`));
   return (documents || []).filter(d => d && ids.has(d.linkedTo));
+}
+
+/**
+ * The expenses whose receipts are ALL in hand for a send: `docs` are the
+ * receipt documents (linkedTo "travelExpenses:<id>"), `missing` the ones that
+ * could not be resolved. An expense with even one missing receipt is left
+ * out, so its invoice line says "on file", never "attached".
+ */
+export function attachedExpenseIds(docs, missing) {
+  const gone = new Set((missing || []).map(m => m?.id).filter(Boolean));
+  const complete = new Map();
+  for (const d of docs || []) {
+    const m = /^travelExpenses:(.+)$/.exec(d?.linkedTo || "");
+    if (!m) continue;
+    complete.set(m[1], (complete.get(m[1]) ?? true) && !gone.has(d.id));
+  }
+  return new Set([...complete].filter(([, ok]) => ok).map(([id]) => id));
 }

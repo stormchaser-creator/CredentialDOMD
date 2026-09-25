@@ -106,10 +106,15 @@ export function daysUntil(dateStr) {
 }
 
 // Outgoing text never carries an em dash (ticket 821d2f76). On-screen labels
-// from describeItem join their parts with one; a letter or subject line gets
-// a comma instead.
+// from describeItem join their parts with one, and an LLM-written cover note
+// can carry them anywhere. A dash that opens a line is dropped, one right
+// before punctuation or at a line's end is dropped, and one between words
+// becomes a comma. Line breaks are kept; en dashes (ranges) are untouched.
 export function plainDashes(text) {
-  return String(text ?? "").replace(/\s*\u{2014}\s*/gu, ", ");
+  return String(text ?? "")
+    .replace(/^[ \t]*\u{2014}[ \t]*/gmu, "")
+    .replace(/[ \t]*\u{2014}[ \t]*(?=[,.;:!?)]|$)/gmu, "")
+    .replace(/[ \t]*\u{2014}[ \t]*/gu, ", ");
 }
 
 function getSectionFacts(item, section) {
@@ -222,7 +227,9 @@ export function buildCredentialText(item, section, settings) {
     }
   }
 
-  if (item.notes) lines.push("", "Notes: " + item.notes);
+  // item.notes is the physician's own memo ("board portal login, fee paid on
+  // AmEx", a staff-office phone tree, case details) and never goes out. The
+  // Send sheet's Note field is where a per-send message belongs.
   lines.push("", div, "Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString());
   return lines.join("\n");
 }

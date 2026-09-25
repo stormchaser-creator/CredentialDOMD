@@ -71,12 +71,21 @@ export function bundleShareText(settings = {}, docs = [], date = new Date()) {
 }
 
 /**
- * Vera's packet approve. The cover note an LLM wrote is re-split onto lines
- * for the clipboard, and turned into one sentence per line for the share
- * text so a stripped newline never glues two lines into a run-on.
+ * The cover note Vera (an LLM) wrote, as it may go to a recipient: re-split
+ * onto lines, and with no em dash (the model writes them freely). Used by the
+ * packet share and by "Reply by email", which seeds the same note.
+ */
+export function veraCoverNote(coverNote) {
+  return normalizeMultilineNote(plainDashes(coverNote));
+}
+
+/**
+ * Vera's packet approve. The cover note is re-split onto lines for the
+ * clipboard, and turned into one sentence per line for the share text so a
+ * stripped newline never glues two lines into a run-on.
  */
 export function veraPacketShareText(coverNote) {
-  const body = normalizeMultilineNote(coverNote) || "Credential documents enclosed.";
+  const body = veraCoverNote(coverNote) || "Credential documents enclosed.";
   const blurb = "Credential packet: "
     + body.split("\n").map((l) => l.trim()).filter(Boolean).map(asSentence).join(" ")
     + " Sent from CredentialDOMD.";
@@ -180,4 +189,38 @@ export function smsCutNotice(copied) {
   return copied
     ? "Text shortened to fit one message. The full text is on your clipboard."
     : "Text shortened to fit one message. Use Copy for the full text.";
+}
+
+// The last line of an alert digest that did not fit one text message, so the
+// message itself says it is incomplete instead of just stopping.
+export const ALERT_TEXT_TAIL = "More alerts did not fit in this text. Open CredentialDOMD for the full list.";
+
+/**
+ * The alert digest (notifications.buildNotificationMessage) as one text
+ * message. A long list (a multi-state locums physician with 16 or more
+ * expiring items) is cut before an item, never between an item and its
+ * indented "State:" or issue lines, and ends with ALERT_TEXT_TAIL.
+ */
+export function alertTextBody(body, max = SMS_BODY_MAX) {
+  const full = String(body ?? "");
+  if (full.length <= max) return { text: full, truncated: false };
+  const lines = full.split("\n");
+  const room = max - ALERT_TEXT_TAIL.length - 2;
+  let used = 0;
+  let safe = 0;
+  for (let i = 0; i < lines.length; i++) {
+    used += (i ? 1 : 0) + lines[i].length;
+    if (used > room) break;
+    // Stopping after line i is safe unless the next line continues its item.
+    if (!/^ {4}/.test(lines[i + 1] ?? "")) safe = i + 1;
+  }
+  const head = lines.slice(0, safe).join("\n").replace(/\s+$/, "");
+  return { text: head ? `${head}\n\n${ALERT_TEXT_TAIL}` : ALERT_TEXT_TAIL, truncated: true };
+}
+
+/** What the physician is told when their own alert text had to be shortened. */
+export function alertCutNotice(copied) {
+  return copied
+    ? "Text shortened to fit one message: it lists what fits and says the rest is in the app. The full list is on your clipboard."
+    : "Text shortened to fit one message: it lists what fits and says the rest is in the app.";
 }

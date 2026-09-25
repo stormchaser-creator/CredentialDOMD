@@ -1,7 +1,7 @@
 import { useState, useMemo, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { AlertIcon, EmailIcon, TextMsgIcon } from "../shared/Icons";
-import { generateAlerts, buildNotificationMessage, composeEmail, composeText } from "../../utils/notifications";
+import { generateAlerts, buildNotificationMessage, composeEmail, textAlert } from "../../utils/notifications";
 import { MS_PER_DAY } from "../../utils/helpers";
 
 function NotificationBanner({ onOpenCenter, onGoSettings }) {
@@ -12,6 +12,8 @@ function NotificationBanner({ onOpenCenter, onGoSettings }) {
   const [showInlineSetup, setShowInlineSetup] = useState(false);
   const [inlineEmail, setInlineEmail] = useState(s.email || "");
   const [inlinePhone, setInlinePhone] = useState(s.phone || "");
+  // Said when the alert text had to be shortened (textAlert); never silent.
+  const [textNotice, setTextNotice] = useState("");
 
   if (!alerts) return null;
 
@@ -108,7 +110,13 @@ function NotificationBanner({ onOpenCenter, onGoSettings }) {
 
   const sendQuick = (method) => {
     if (method === "email" && s.email) composeEmail(s.email, msg.subject, msg.body);
-    if (method === "text" && s.phone) composeText(s.phone, msg.body);
+    if (method === "text" && s.phone) {
+      setTextNotice("");
+      textAlert(s.phone, msg.body, (notice) => {
+        setTextNotice(notice);
+        setTimeout(() => setTextNotice((n) => (n === notice ? "" : n)), 12000);
+      });
+    }
     updateSettings({ lastNotified: new Date().toISOString(), alertsFingerprint: alerts.fingerprint, snoozedUntil: null });
     addItem("notificationLog", { id: crypto.randomUUID(), date: new Date().toISOString(), method, alertCount: alerts.count });
   };
@@ -169,6 +177,9 @@ function NotificationBanner({ onOpenCenter, onGoSettings }) {
           color: fgColor, fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>Details</button>
       </div>
+      {textNotice && (
+        <div role="status" style={{ fontSize: 11.5, color: T.text, marginTop: 8, lineHeight: 1.4 }}>{textNotice}</div>
+      )}
     </div>
   );
 }
