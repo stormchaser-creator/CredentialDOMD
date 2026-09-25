@@ -255,6 +255,22 @@ test('Work Log: the archived fellowship and the ended July block are in no picke
   assert.ok(!again.includes('c-4aee869f'), 'archived stays out; Unarchive is on Agreements');
 });
 
+test('Work Log: an archived contract with unbilled work opens when picked, as "Needs invoicing" does', () => {
+  // Invoices' "Needs invoicing" lists every contract with unbilled entries,
+  // archived ones included, and opens one by remembering it as the pick.
+  const archivedGoodSam = { ...GOODSAM, customFields: { archivedAt: '2026-09-22T00:00:00Z' } };
+  const contracts = CONTRACTS.map(c => (c.id === GOODSAM.id ? archivedGoodSam : c));
+  const unbilled = { id: 'w-unbilled', createdAt: '2026-09-20T15:00:00Z', contractId: GOODSAM.id, type: 'Call', date: '2026-09-20', callDay: '2026-09-20', startTime: '2026-09-20T15:00:00.000Z', endTime: '2026-09-20T15:30:00.000Z', durationMin: 30, billedMin: 30, description: '', privateNote: '', invoiceId: null };
+  const picker = (m) => find(m.render(), n => n.type === 'select' && nodes(n).some(o => o.type === 'option' && textOf(o).includes('Synthetic Fargo')), 'Logging against');
+  const m = mount(screens.WorkLog, { data: { locumContracts: contracts, workLog: [unbilled] }, storage: { lastContract: GOODSAM.id } });
+  assert.equal(picker(m).props.value, GOODSAM.id, 'the archived contract opens');
+  assert.ok(nodes(picker(m)).some(o => o.type === 'option' && o.props.value === GOODSAM.id), 'and is listed while it is the one open');
+  assert.ok(nodes(m.render()).some(n => n.key === 'w-unbilled'), 'its unbilled entry is on screen to invoice');
+  // Once that work is invoiced, the archived pick no longer holds.
+  const done = mount(screens.WorkLog, { data: { locumContracts: contracts, workLog: [{ ...unbilled, invoiceId: 'inv-1' }] }, storage: { lastContract: GOODSAM.id } });
+  assert.notEqual(picker(done).props.value, GOODSAM.id);
+});
+
 test('Documents: archived agreements are labelled and listed after current ones', () => {
   const doc = { id: 'd1', name: 'synthetic-agreement.pdf', type: 'application/pdf', uploadedAt: '2026-09-01T00:00:00Z', linkedTo: '' };
   const m = mount(screens.DocumentsSection, { data: { locumContracts: CONTRACTS, documents: [doc], licenses: [], privileges: [], insurance: [], cme: [], healthRecords: [], education: [], deductibles: [], customCategories: [], customRecords: [] } });

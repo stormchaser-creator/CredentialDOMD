@@ -140,11 +140,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const dictTextRef = useRef("");
   useEffect(() => () => { try { dictRecRef.current?.stop(); } catch { /* stopped */ } }, []);
 
-  // The remembered pick holds unless it has since been archived (a running
-  // timer's contract always holds). The fallbacks never land on an archived
-  // or long-ended contract while any other is on file.
+  // The remembered pick holds unless it has since been archived with nothing
+  // left to invoice (a running timer's contract always holds). Invoices'
+  // "Needs invoicing" opens a contract by remembering it, archived ones
+  // included, so an archived contract with unbilled work must still open.
+  // The fallbacks never land on an archived or long-ended contract while any
+  // other is on file.
+  const hasUnbilled = (id) => entries.some(e => e.contractId === id && !e.invoiceId)
+    || (data.dutyDays || []).some(d => d.contractId === id && !d.invoiceId);
   const pickable = pickableContracts(contracts, null);
-  const contract = contracts.find(c => c.id === contractId && (!isArchived(c) || c.id === timer?.contractId))
+  const contract = contracts.find(c => c.id === contractId && (!isArchived(c) || c.id === timer?.contractId || hasUnbilled(c.id)))
     || pickable.find(c => c.id === lastLoggedContractId)
     || pickable[0]
     || contracts.find(c => !isArchived(c)) || contracts[0] || null;
