@@ -2,7 +2,7 @@
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
-import { scrubSsn } from "./outgoingText.js";
+import { scrubSsn, plainDashes } from "./outgoingText.js";
 import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
 
 export const MS_PER_DAY = 86400000;
@@ -109,17 +109,9 @@ export function daysUntil(dateStr) {
   return Math.ceil((new Date(dateStr) - new Date()) / MS_PER_DAY);
 }
 
-// Outgoing text never carries an em dash (ticket 821d2f76). On-screen labels
-// from describeItem join their parts with one, and an LLM-written cover note
-// can carry them anywhere. A dash that opens a line is dropped, one right
-// before punctuation or at a line's end is dropped, and one between words
-// becomes a comma. Line breaks are kept; en dashes (ranges) are untouched.
-export function plainDashes(text) {
-  return String(text ?? "")
-    .replace(/^[ \t]*\u{2014}[ \t]*/gmu, "")
-    .replace(/[ \t]*\u{2014}[ \t]*(?=[,.;:!?)]|$)/gmu, "")
-    .replace(/[ \t]*\u{2014}[ \t]*/gu, ", ");
-}
+// plainDashes lives in outgoingText.js (dependency-free, so the edge
+// functions share it) and is re-exported here for the existing importers.
+export { plainDashes };
 
 function getSectionFacts(item, section) {
   const facts = [];

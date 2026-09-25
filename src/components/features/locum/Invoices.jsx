@@ -13,22 +13,16 @@ import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { money, invoiceCoverNotice, INVOICE_COVER_ON_CLIPBOARD, expenseReceiptLines } from "../../../utils/invoiceCover";
 import { callPeriodsOf } from "../../../utils/dutyPay";
+import { paidOf, balanceOf, invoiceDocumentArgs } from "../../../utils/invoiceArgs";
+import { invoiceEmailedNotice, sentWhen } from "../../../utils/invoiceEmailSend";
+import InvoiceEmailModal from "./InvoiceEmailModal";
 // The Work tab's own call-day rule: the saved stamp first, then the wall clock.
 import { callDayOf } from "../../../utils/billing";
 
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
 
-// Payments are a ledger, not a flag — agencies sometimes pay an invoice in
-// pieces. Legacy invoices marked paid before the ledger existed count as
-// paid in full.
-const paidOf = (inv) => {
-  const fromLedger = (inv.payments || []).reduce((s2, p) => s2 + (parseFloat(p.amount) || 0), 0);
-  if (fromLedger > 0) return fromLedger;
-  return inv.paidAt ? (parseFloat(inv.totalAmount) || 0) : 0;
-};
-// Written off = closed out without counting as money received, so tax
-// estimates (which read paidOf/payments) never see a write-off as income.
-const balanceOf = (inv) => inv.writeOffAt ? 0 : Math.max(0, (parseFloat(inv.totalAmount) || 0) - paidOf(inv));
+// paidOf / balanceOf live in utils/invoiceArgs.js: the share-sheet resend and
+// the server-sent email build their documents from the same numbers.
 
 /**
  * One invoice's standing, worked out in one place so the phone card and the
@@ -89,7 +83,7 @@ function StandingBadge({ tone, style }) {
  * slips. Deleting an invoice releases its work entries back to unbilled.
  */
 function Invoices({ onOpenContract }) {
-  const { data, editItem, deleteItem, theme: T, isDesktop } = useApp();
+  const { data, editItem, deleteItem, updateSection, theme: T, isDesktop, limitedLaunch, canWritePractice } = useApp();
   const [viewInv, setViewInv] = useState(null);
   const [notice, setNotice] = useState(null);
   const contracts = data.locumContracts || [];
@@ -254,21 +248,9 @@ function Invoices({ onOpenContract }) {
   };
   const resend = async (inv, format = "pdf") => {
     const c = contracts.find(x => x.id === inv.contractId);
-    const s = data.settings || {};
-    const args = {
-      number: inv.number,
-      physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
-      npi: s.npi, email: s.email,
-      facility: c?.facility || billNameOf(inv), agency: c?.agency, location: c?.location, billTo: c?.billTo,
-      periodStart: inv.periodStart, periodEnd: inv.periodEnd,
-      terms: inv.terms, lines: inv.lines,
-      totalMin: inv.totalMinutes, total: inv.totalAmount,
-      // A resend can follow a payment — the document and cover must say so
-      paid: paidOf(inv), balance: balanceOf(inv),
-      issuedDate: inv.sentAt?.slice(0, 10),
-      // An expense invoice's cover says travel expenses, not physician services
-      kind: inv.kind,
-    };
+    // The same arguments the server-sent email builds from (utils/invoiceArgs.js):
+    // a resend after a payment says so, an expense invoice says travel expenses.
+    const args = invoiceDocumentArgs(inv, c, data.settings || {}, billNameOf(inv));
     const subject = invoiceSubject(args);
     // Rebuild the document from the stored line items when we have them
     if (inv.lines?.length) {
@@ -331,6 +313,29 @@ function Invoices({ onOpenContract }) {
       setNotice("This invoice is longer than Mail accepts from a link, so the composer opened with the cover letter. The full invoice is on your clipboard: paste it in below the letter.");
       setTimeout(() => setNotice(null), 12000);
     }
+  };
+
+  // Server-sent email (send-invoice-email): paragraphs intact, receipts from
+  // the account's storage, replies and a copy to the physician. Read-only
+  // memberships never see the option; the server refuses them regardless.
+  const canEmail = !limitedLaunch?.enabled || !!canWritePractice;
+  const [emailFor, setEmailFor] = useState(null);
+  const lastEmailedNote = (inv) => (inv?.lastEmailedAt
+    ? `Last emailed ${sentWhen(inv.lastEmailedAt)}${inv.lastEmailedTo ? ` to ${inv.lastEmailedTo}` : ""}.`
+    : "");
+  const onEmailed = ({ invoice: inv, at, to, cc, replay, saveBillTo }) => {
+    // The server already wrote these two columns alone; mirror them here
+    // without an edit (no updatedAt, no cloud write), so a stale copy of the
+    // invoice on this device cannot overwrite anything.
+    if (at && to) {
+      updateSection?.("invoices", items => (items || []).map(x => (x.id === inv.id && !(x.lastEmailedAt && x.lastEmailedAt >= at)
+        ? { ...x, lastEmailedAt: at, lastEmailedTo: to } : x)));
+    }
+    const c = contracts.find(x => x.id === inv.contractId);
+    if (saveBillTo && c && !String(c.billTo || "").trim()) editItem("locumContracts", { ...c, billTo: saveBillTo });
+    setEmailFor(null);
+    setNotice(invoiceEmailedNotice({ number: inv.number, to, cc, at, replay }));
+    setTimeout(() => setNotice(null), 12000);
   };
 
   const removeInvoice = (inv) => {
@@ -548,6 +553,9 @@ function Invoices({ onOpenContract }) {
               {viewInv.sentAt && ` · sent ${formatDate(viewInv.sentAt.slice(0, 10))}`}
               {viewInv.paidAt && ` · paid ${formatDate(viewInv.paidAt.slice(0, 10))}`}
             </div>
+            {viewInv.lastEmailedAt && (
+              <div style={{ fontSize: 12.5, color: T.textMuted, marginTop: -6, marginBottom: 10 }}>{lastEmailedNote(viewInv)}</div>
+            )}
             {(viewInv.payments || []).length > 0 && (
               <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, border: `1px solid ${T.border}` }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Payments received</div>
@@ -609,6 +617,12 @@ function Invoices({ onOpenContract }) {
               </div>
             )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+              {canEmail && (
+                <button onClick={() => { const inv = viewInv; setViewInv(null); setEmailFor(inv); }} style={{
+                  padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.accent}`,
+                  backgroundColor: "transparent", color: T.accent, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>Send by email</button>
+              )}
               <button onClick={() => (viewInv.lines?.length ? openSendFor(viewInv) : resend(viewInv))} style={{
                 padding: "12px 18px", borderRadius: 10, border: "none",
                 backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
@@ -694,7 +708,12 @@ function Invoices({ onOpenContract }) {
                 )}
               </>
             ) },
-            { key: "sentAt", label: "Sent", type: "date", width: "12%", render: inv => inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "\u2014" },
+            { key: "sentAt", label: "Sent", type: "date", width: "12%", render: inv => (
+              <>
+                <div style={deskMain}>{inv.sentAt ? formatDate(inv.sentAt.slice(0, 10)) : "\u2014"}</div>
+                {inv.lastEmailedAt && <div style={deskSub} title={lastEmailedNote(inv)}>emailed {formatDate(inv.lastEmailedAt)}</div>}
+              </>
+            ) },
             { key: "age", label: "Age (days)", type: "number", width: "11.5%", align: "right",
               value: inv => { const st = standingOf(inv); return st.isPaid || st.writtenOff ? null : st.age; },
               render: inv => { const st = standingOf(inv); return st.isPaid || st.writtenOff ? "\u2014" : st.age; },
@@ -776,6 +795,11 @@ function Invoices({ onOpenContract }) {
                     {isPaid && inv.paidAt && ` · paid ${formatDate(inv.paidAt.slice(0, 10))}`}
                     {writtenOff && ` · written off ${formatDate(inv.writeOffAt.slice(0, 10))}`}
                   </div>
+                  {inv.lastEmailedAt && (
+                    <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>
+                      Emailed {formatDate(inv.lastEmailedAt)}{inv.lastEmailedTo ? ` to ${inv.lastEmailedTo}` : ""}
+                    </div>
+                  )}
                   {isPartial && (
                     <div style={{ fontSize: 12, fontWeight: 700, color: T.warning, marginTop: 2 }}>
                       {money(paid)} received · {money(balance)} still owed
@@ -830,7 +854,14 @@ function Invoices({ onOpenContract }) {
       )}
 
       <InvoiceFormatChooser open={!!sendFor} onClose={() => setSendFor(null)}
-        onPick={(f) => { const inv = sendFor; setSendFor(null); resend(inv, f); }} />
+        onPick={(f) => { const inv = sendFor; setSendFor(null); resend(inv, f); }}
+        onEmail={canEmail ? () => { const inv = sendFor; setSendFor(null); setEmailFor(inv); } : undefined}
+        emailNote={lastEmailedNote(sendFor)} />
+
+      <InvoiceEmailModal open={!!emailFor} invoice={emailFor}
+        contract={emailFor ? contracts.find(x => x.id === emailFor.contractId) : null}
+        billName={emailFor ? billNameOf(emailFor) : ""}
+        onClose={() => setEmailFor(null)} onSent={onEmailed} />
     </div>
   );
 }

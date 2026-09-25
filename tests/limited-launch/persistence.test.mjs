@@ -526,3 +526,35 @@ test('a registered collection still queues a failed write for replay', async () 
   assert.equal(f.queue().length, 1);
   assert.equal(f.queue()[0].collectionKey, 'licenses');
 });
+
+// send-invoice-email owns invoices.last_emailed_at / last_emailed_to. Every
+// write here carries the whole cached row, so a tab opened before an email
+// went out from the phone would put its stale copy (or null) over the
+// server's stamp when it records a payment. No write path may send them; the
+// rest of the edit still goes.
+test('no write path sends the server-owned invoice email stamp, and the rest of the edit still goes', async () => {
+  const f = fixture();
+  const invoice = { id: 'inv-1', number: 'INV-1', payments: [{ amount: 100, date: '2026-09-25' }],
+    lastEmailedAt: '2026-09-20T10:00:00.000Z', lastEmailedTo: 'wrong@agency.example' };
+  await f.api.insertItem('profileA', 'invoices', invoice);
+  await f.api.updateItem('profileA', 'invoices', { ...invoice, lastEmailedAt: null, lastEmailedTo: null }, invoice, 'user_syntheticA');
+  await f.api.bulkSync('profileA', 'invoices', [invoice], 'user_syntheticA');
+  f.values.set('ops:user_syntheticA', JSON.stringify([{ op: 'upsert', collectionKey: 'invoices', payload: invoice, ts: 1, queueId: 'q1' }]));
+  await f.api.replayPendingOps('profileA', 'user_syntheticA');
+  const writes = f.requests.filter(r => r.table === 'invoices');
+  assert.deepEqual(writes.map(r => r.method), ['insert', 'update', 'upsert', 'upsert'], 'insert, edit, self-heal, queued replay');
+  for (const w of writes) {
+    for (const row of [].concat(w.value)) {
+      assert.equal('last_emailed_at' in row, false, `${w.method} carries no last_emailed_at`);
+      assert.equal('last_emailed_to' in row, false, `${w.method} carries no last_emailed_to`);
+      // (A replayed row was parsed inside the module's realm: compare as JSON.)
+      assert.equal(JSON.stringify(row.payments), JSON.stringify(invoice.payments), `${w.method} still carries the payment`);
+      assert.equal(row.number, 'INV-1');
+    }
+  }
+  assert.deepEqual(f.queue(), []);
+  assert.equal(JSON.stringify(f.api.SERVER_OWNED_FIELDS.invoices), '["last_emailed_at","last_emailed_to"]');
+  // Only the owning table: a same-named key elsewhere is not stripped.
+  await f.api.updateItem('profileA', 'licenses', { id: 'lic', lastEmailedAt: 'x' }, null, 'user_syntheticA');
+  assert.equal(f.requests.at(-1).value.last_emailed_at, 'x');
+});

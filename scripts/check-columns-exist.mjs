@@ -26,6 +26,10 @@ export const REQUIRED_COLUMNS = {
   // 20260925120000_call_day_split.sql (ticket 73202ae8)
   locum_contracts: ["split_at_day_start", "day_start_hour"],
   work_log: ["split_group_id"],
+  // Not listed: invoices.last_emailed_at / last_emailed_to
+  // (20260925130000_invoice_email_sends.sql). send-invoice-email writes them
+  // and the app only reads them; src/lib/supabase.js strips them from every
+  // write (SERVER_OWNED_FIELDS), so a client never sends a key for them.
 };
 
 /** Classify one PostgREST answer. Only a definite "no such column" is missing. */

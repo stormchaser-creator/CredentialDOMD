@@ -48,7 +48,7 @@ eq("no duplicate collection table", new Set(COLLECTION_TABLES).size, COLLECTION_
 const userTables = USER_TABLES.map((t) => t.table);
 for (const t of ["assistant_log", "support_tickets", "support_messages", "feedback", "document_requests",
   "inbound_emails", "ai_usage", "client_errors", "backups", "deleted_items", "field_proposals", "user_events",
-  "admin_messages", "admin_message_replies", "credential_portal_invites"]) {
+  "admin_messages", "admin_message_replies", "credential_portal_invites", "invoice_email_sends"]) {
   ok(`USER_TABLES covers ${t}`, userTables.includes(t));
 }
 ok("no table is in both lists", !userTables.some((t) => COLLECTION_TABLES.includes(t)));
@@ -62,9 +62,12 @@ eq("admin_message_replies is matched by user_id (the thread owner, not the reply
   USER_TABLES.find((t) => t.table === "admin_message_replies").column, "user_id");
 eq("administrator access grants are matched by owner_profile_id (their sessions, mail and audit cascade)",
   USER_TABLES.find((t) => t.table === "credential_portal_invites").column, "owner_profile_id");
-// The portal tables arrive at activation, not with this function. A deploy of
-// delete-account before then must not fail every deletion on a missing table.
-eq("only the administrator access table may be absent", USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites"]);
+// The portal tables arrive at activation, and the invoice email ledger with its
+// own migration, not with this function. A deploy of delete-account before
+// then must not fail every deletion on a missing table.
+eq("only the administrator access table and the invoice email ledger may be absent",
+  USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "invoice_email_sends"]);
+eq("the invoice email ledger is matched by user_id", USER_TABLES.find((t) => t.table === "invoice_email_sends").column, "user_id");
 ok("a missing table (PostgREST PGRST205) is recognised", isMissingTableError({ code: "PGRST205", message: "Could not find the table 'public.credential_portal_invites' in the schema cache" }));
 ok("a missing relation (Postgres 42P01) is recognised", isMissingTableError({ code: "42P01", message: 'relation "public.credential_portal_invites" does not exist' }));
 ok("a permission error is NOT treated as a missing table", !isMissingTableError({ code: "42501", message: "permission denied for table credential_portal_invites" }));

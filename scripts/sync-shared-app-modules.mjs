@@ -2,7 +2,8 @@
 // Copy the app modules the edge functions share into supabase/functions/_shared/app/.
 //
 // The email-inbound function files a forwarded document with the same prompt,
-// validator, category rules and identifier gate the app uses. A Supabase edge
+// validator, category rules and identifier gate the app uses, and
+// send-invoice-email sends the invoice email the app previews. A Supabase edge
 // function is bundled from supabase/functions/ and cannot import from src/, so
 // those modules are copied, not forked: each copy is its source verbatim under
 // a generated banner, at the same path relative to src/ (src/utils/x.js ->
@@ -33,6 +34,13 @@ export const ROOTS = Object.freeze([
   "utils/scanSplit.js",
   "utils/phiGuard.js",
   "utils/geminiModel.js",
+  // send-invoice-email composes the message with the same code the app
+  // previews it with, and finds an invoice's receipts with the app's rule.
+  "utils/invoiceEmail.js",
+  "utils/receiptFiles.js",
+  // ...and matches invoices billed to the same agency with the app's
+  // spelling-insensitive agencyKey, for the address it pre-fills.
+  "utils/contractsForDate.js",
 ]);
 
 export const banner = (rel) =>

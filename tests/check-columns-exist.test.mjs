@@ -64,6 +64,8 @@ test("every required column is created by a migration in this repo", () => {
 test("the lifecycle columns are required exactly as src/utils/lifecycle.js lists them", async () => {
   const { LIFECYCLE_COLUMNS } = await import("../src/utils/lifecycle.js");
   for (const [table, cols] of Object.entries(LIFECYCLE_COLUMNS)) assert.deepEqual(REQUIRED_COLUMNS[table], cols, table);
+  // 13 lifecycle + 3 call-day split. The invoice email stamp is server-owned
+  // and never written by the client, so it is not a client-written column.
   assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 16);
 });
 
@@ -72,6 +74,12 @@ test("the client keys these columns stand for are the ones it writes", () => {
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.splitAtDayStart =/);
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.dayStartHour =/);
   assert.match(read("utils/billing.js"), /splitGroupId/);
+  // The invoice email stamp: written by send-invoice-email and mirrored into
+  // the device cache by Invoices.jsx, but stripped from every client write,
+  // so it is not required here (tests/limited-launch/persistence.test.mjs
+  // proves the strip on each write path).
+  assert.equal(REQUIRED_COLUMNS.invoices, undefined);
+  assert.match(read("lib/supabase.js"), /invoices: Object\.freeze\(\["last_emailed_at", "last_emailed_to"\]\)/);
 });
 
 test("CI runs this check before it builds", () => {
