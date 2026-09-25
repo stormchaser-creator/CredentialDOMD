@@ -12,7 +12,7 @@
 // runs them through the Deno copy too, so this file only runs its checks
 // when it is the script node was started with.
 // Run: node scripts/request-packet.test.mjs
-import { realpathSync } from "node:fs";
+import { realpathSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
   parseAsks, classifyAsk, describeEntry, matchAsk, catalogueFromRows, buildProposal, noteForSelection, KINDS, isReportKind,
@@ -323,6 +323,17 @@ For the Colorado file we need the following.
 
 Thanks,
 Kyle`,
+  },
+  // Sanford Health Plan's credentialing approval, forwarded to docs@ on
+  // 2026-09-25, body verbatim from the document_requests row it produced. The
+  // forward wrapped its Subject: line, so the body opens with the tail
+  // "E. Whitney, DO" and a stray "To:" line, and the old reading took "E." for
+  // a lettered list item asking for "Whitney, DO".
+  sanfordApproval: {
+    subject: "Sanford Health Plan Initial Application Approval Letter for Eric",
+    fromName: null,
+    fromAddr: "verificationservices@sanfordhealth.org",
+    body: readFileSync(new URL("./fixtures/intake/sanford-approval-body.txt", import.meta.url), "utf8"),
   },
 };
 
@@ -802,6 +813,28 @@ if (isMain) {
       noteForSelection({ items: [{ ask: "DEA", status: "found", docIds: ["a"] }, { ask: "x", status: "weird" }, null] }, ["a"], PHYSICIAN, "Sam"),
       "Hello Sam,\n\nAttached are the documents you asked for:\n- Document\n\nI could not tell from your email what you meant by:\n- x\nReply with details and I will send what is needed.\n\nRegards,\nEric Whitney, DO");
     ok("no em dash in a trimmed note from em-dashed input", !noteForSelection(buildProposal(REQUESTS.emDashes, CATALOGUE, PHYSICIAN, NOW), [], PHYSICIAN, "Marisol \u2014 RUHS").includes("\u2014"));
+  }
+
+  // -- Signature and header lines are never asks ----------------------------
+  {
+    const asks = parseAsks(REQUESTS.sanfordApproval.body, REQUESTS.sanfordApproval.subject);
+    ok("Sanford: no ask names the physician", !asks.some((a) => /whitney/i.test(a)), JSON.stringify(asks));
+    ok("Sanford: no ask is a header or a contact line", !asks.some((a) => /^to\b|@|\d{3}\)?[ .-]\d{3}/i.test(a)), JSON.stringify(asks));
+    eq("Sanford: with no ask in the body, the subject stands in", asks, ["Sanford Health Plan Initial Application Approval Letter for Eric"]);
+    const p = buildProposal(REQUESTS.sanfordApproval, CATALOGUE, PHYSICIAN, NOW);
+    ok("Sanford: the cover note never asks what 'Whitney, DO' means", !/whitney, do/i.test(p.coverNote.split("\n").slice(0, -1).join("\n")), p.coverNote);
+    const none = [
+      "E. Whitney, DO", "Whitney, DO", "Eric E. Whitney, DO", "Dr. Eric Whitney, DO, FAANS", "Tara Domalewski, CPCS",
+      "Madeline Castorena, CPMSM", "Sincerely,", "Best regards,", "To: Credentialing Committee", "Cc: Medical Staff Office",
+      "Subject: Reappointment", "Fax: 605-328-6877", "Phone: (605) 328-6877", "(800) 601-5086",
+    ];
+    for (const line of none) eq(`"${line}" alone is not an ask`, parseAsks(line, ""), []);
+    eq("a lettered name line inside a list is dropped, the list kept",
+      parseAsks("Please send:\na. DEA\nb. CSR\n\nE. Whitney, DO", ""), ["DEA", "CSR"]);
+    eq("a name line among bullets is dropped",
+      parseAsks("- DEA\n- Eric E. Whitney, DO\n- Board certificate", ""), ["DEA", "Board certificate"]);
+    eq("a state written as a degree is still an ask when the kind is known",
+      parseAsks("a. State license, MD\nb. DEA", ""), ["State license, MD", "DEA"]);
   }
 
   // ── House rules: no em dash in anything the module can produce ───────────

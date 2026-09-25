@@ -1,5 +1,5 @@
 import { buildProposal, catalogueFromRows } from "./requestPacket.js";
-import { docMime, INBOX_DOC_TYPE, REQUEST_INBOX_DOC_TYPE } from "./inboxDocs.js";
+import { docMime, INBOX_DOC_TYPES as INBOX_TYPES } from "./inboxDocs.js";
 
 // Proposals the server did not make, or made against a file that has since
 // changed, rebuilt on the client.
@@ -19,12 +19,13 @@ import { docMime, INBOX_DOC_TYPE, REQUEST_INBOX_DOC_TYPE } from "./inboxDocs.js"
 // apart in the data. Nothing here reads a clock unless the caller leaves
 // `now` out, so the tests pin a date.
 
-// Neither kind of emailed-in document is the physician's answer to a
-// request, so neither reaches the matcher: the CV rule matches any unlinked
+// No emailed-in document that is still in the inbox is the physician's answer
+// to a request, so none reaches the matcher: the CV rule matches any unlinked
 // file by name, and the requester's own "Provider_CV_Request_Form.pdf" was
-// once proposed back to them as the CV. Same exclusion as email-inbound's
-// loadCatalogue.
-const INBOX_DOC_TYPES = new Set([REQUEST_INBOX_DOC_TYPE, INBOX_DOC_TYPE]);
+// once proposed back to them as the CV. Once filed, a document carries its
+// MIME type and joins the catalogue like any upload. Same exclusion as
+// email-inbound's loadCatalogue.
+const INBOX_DOC_TYPES = new Set(INBOX_TYPES);
 
 // The matcher reads mime_type | mime and linked_to | linkedTo. App-state rows
 // are camelCased (mimeType) or, for a file added on this device, carry the

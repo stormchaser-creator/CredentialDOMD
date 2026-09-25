@@ -505,7 +505,7 @@ export function parseAsks(text, subject = "") {
   }
   lines = kept;
 
-  const itemAt = lines.map((l) => LIST_ITEM_RE.test(l));
+  const itemAt = lines.map((l) => LIST_ITEM_RE.test(l) && !isSignatureLine(l));
   const lastItem = itemAt.lastIndexOf(true);
   // A "Thanks!" above the list is a pleasantry; the one below it is the
   // sign-off. Only a marker past the last list item ends the message.
@@ -521,9 +521,9 @@ export function parseAsks(text, subject = "") {
   const items = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(LIST_ITEM_RE);
-    if (!m) continue;
+    if (!m || !itemAt[i]) continue;
     const txt = m[1].trim();
-    if (!txt || NOISE_LINE_RE.test(txt)) continue;
+    if (!txt || NOISE_LINE_RE.test(txt) || isSignatureLine(txt)) continue;
     if (/:$/.test(txt)) {
       // "Immunizations:" over sub-bullets is a heading, not an ask of its own.
       const next = lines.slice(i + 1).find((l) => l.trim());
@@ -563,6 +563,24 @@ export function parseAsks(text, subject = "") {
 // "CAQH ID" are not caught, since "ID" is not a capitalised word.
 const NAME_LINE_RE = /^[A-Z][a-z'-]+(?: [A-Z][a-z'-]+){0,2}(?:, ?[A-Z][A-Za-z.]{1,6})?[.,]?$/;
 
+// A line that is somebody's name with a degree after it, a header copied into
+// the body, or a bare sign-off. None of them is an ask, wherever it sits.
+// "E. Whitney, DO" at the top of a forwarded letter (the tail of a wrapped
+// Subject: line) read as the lettered list item "E." asking for "Whitney, DO",
+// and the physician was emailed "I could not tell from your email what you
+// meant by: Whitney, DO". A name line is dropped only when the rules cannot
+// name a kind in it, so "State license, MD" (Maryland) is still an ask.
+const DEGREE_SUFFIX = "(?:DO|MD|D\\.O\\.|M\\.D\\.|PhD|Ph\\.D\\.|MBA|MHA|MPH|MS|MSN|BSN|RN|NP|PA|PA-C|APRN|FNP|CRNA|CPCS|CPMSM|CPMS|CPC|CPHQ|FACS|FAANS|FACOS|FACP|FAAFP|FACEP|JD|DDS|DMD|DPM)";
+const PERSON_SIGNATURE_RE = new RegExp(`^(?:[Dd]r\\.?\\s+)?(?:[A-Z]\\.\\s*){0,3}[A-Z][A-Za-z'-]+(?:\\s+(?:[A-Z]\\.|[A-Z][A-Za-z'-]+)){0,3}\\s*,\\s*${DEGREE_SUFFIX}(?:\\s*,\\s*${DEGREE_SUFFIX})*[.,]?$`);
+const HEADER_COPY_RE = /^(?:to|cc|bcc|from|sent|date|subject|reply-to)\s*:/i;
+
+function isSignatureLine(line) {
+  const t = String(line ?? "").trim().replace(/^[*_]+|[*_]+$/g, "").trim();
+  if (!t) return false;
+  if (HEADER_COPY_RE.test(t) || SIGNOFF_RE.test(t)) return true;
+  return PERSON_SIGNATURE_RE.test(t) && classifyAsk(cleanAsk(t)).kind === "unknown";
+}
+
 /**
  * No list and no asking sentence: a body of one to three short lines IS the
  * ask ("DEA and CSR please"). Longer bodies do not get this treatment, because
@@ -578,7 +596,7 @@ const NAME_LINE_RE = /^[A-Z][a-z'-]+(?: [A-Z][a-z'-]+){0,2}(?:, ?[A-Z][A-Za-z.]{
 function shortLineAsks(lines) {
   const short = lines.map((l) => l.trim()).filter(Boolean);
   if (!short.length || short.length > 3) return [];
-  return short.filter((l) => l.length <= 100 && !NOISE_LINE_RE.test(l) && (classifyAsk(l).kind !== "unknown" || !NAME_LINE_RE.test(cleanAsk(l))));
+  return short.filter((l) => l.length <= 100 && !NOISE_LINE_RE.test(l) && !isSignatureLine(l) && (classifyAsk(l).kind !== "unknown" || !NAME_LINE_RE.test(cleanAsk(l))));
 }
 
 /** No list: the sentences that ask for something, greeting and pleasantries left out. */
@@ -587,7 +605,7 @@ function sentenceAsks(lines) {
   let cur = [];
   for (const l of lines) {
     if (!l.trim()) { if (cur.length) paras.push(cur.join(" ")); cur = []; continue; }
-    if (NOISE_LINE_RE.test(l)) continue;
+    if (NOISE_LINE_RE.test(l) || isSignatureLine(l)) continue;
     cur.push(l.trim());
   }
   if (cur.length) paras.push(cur.join(" "));
