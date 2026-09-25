@@ -16,6 +16,8 @@
  * something the list does not have and the form shows it as "(from document)".
  */
 
+import { STATES, STATE_NAMES } from "../constants/states.js";
+
 const FOLD = (s) => String(s ?? "")
   .replace(/[‘’ʼ′]/g, "'")
   .replace(/[“”]/g, '"')
@@ -42,6 +44,56 @@ export function snapFields(fields, optionsByKey) {
   const out = { ...(fields || {}) };
   for (const [key, options] of Object.entries(optionsByKey || {})) {
     if (key in out) out[key] = snapToOption(out[key], options);
+  }
+  return out;
+}
+
+/**
+ * The two-letter code for a state the way a document or a scan wrote it:
+ * "ND", "nd", "N.D.", "North Dakota", "north dakota ", "State of Colorado".
+ * Null when nothing matches, so the caller can refuse the value instead of
+ * saving free text that every state-keyed lookup (renewal box, CME window,
+ * state matrix) then silently misses.
+ */
+export function canonicalState(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed) return null;
+  const code = trimmed.replace(/\./g, "").replace(/\s+/g, "").toUpperCase();
+  if (code.length === 2 && STATES.includes(code)) return code;
+  const folded = FOLD(trimmed).replace(/^state of /, "").replace(/^commonwealth of /, "");
+  const hit = Object.entries(STATE_NAMES).find(([, name]) => FOLD(name) === folded);
+  return hit && STATES.includes(hit[0]) ? hit[0] : null;
+}
+
+/**
+ * A scanned value for one form select, snapped to the option it means. The
+ * state field also accepts full names. A value that matches nothing is
+ * returned untouched so the form can show it and the physician can choose.
+ */
+export function canonicalizeSelectValue(fieldDef, raw) {
+  if (!fieldDef || fieldDef.type !== "select" || typeof raw !== "string") return raw;
+  const options = fieldDef.groups ? fieldDef.groups.flatMap(g => g.options) : (fieldDef.options || []);
+  if (fieldDef.key === "state") {
+    const code = canonicalState(raw);
+    if (code && options.includes(code)) return code;
+  }
+  return snapToOption(raw, options);
+}
+
+/**
+ * A scan result for a licence, privilege or policy with its State and Type
+ * snapped onto the form's own options. Anything that does not match is left
+ * as read, and the review card refuses to save it until the physician picks.
+ */
+export function canonicalScanFields(fields, { typeOptions } = {}) {
+  const out = { ...(fields || {}) };
+  if (typeof out.state === "string" && out.state.trim()) {
+    const code = canonicalState(out.state);
+    if (code) out.state = code;
+  }
+  if (typeof out.type === "string" && out.type.trim() && Array.isArray(typeOptions)) {
+    out.type = snapToOption(out.type, typeOptions);
   }
   return out;
 }

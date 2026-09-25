@@ -251,15 +251,28 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
     + " A formatted copy of this verification is on the sender's clipboard for pasting if preferred.";
 }
 
+// The subject a credentialing office sees. It carries the record's canonical
+// label ("DEA Registration, CO"), never the Display Name: scans put the
+// physician's own name there, so three DEA shares went out headed with the
+// physician's name, the physician's name again, and "DEA ND".
 export function buildEmailSubject(item, section, settings) {
   if (section === "peerReferences") return `Professional reference: ${item.name || "Reference"}`;
-  const label = item.name || item.type || item.title || item.category || "Credential";
-  const physician = settings.name || "Physician";
+  const label = plainLabel(item, settings?.name, section) || "Credential";
+  const physician = settings?.name || "Physician";
   return `Credential Verification: ${label} - ${physician}`;
 }
 
-export function getItemLabel(item) {
-  return item.name || item.type || item.title || item.category || item.facility || "Credential";
+// A record's label for alerts and notification text: the same canonical label
+// the cards use, written with a comma so it reads cleanly in plain text.
+export function getItemLabel(item, physicianName, sectionKey) {
+  if (!item) return "Credential";
+  return plainLabel(item, physicianName, sectionKey || item._sec) || "Credential";
+}
+
+/** describeItem with its separators written as commas, for plain text and pickers. */
+export function plainLabel(item, physicianName, sectionKey) {
+  if (!item) return "";
+  return String(describeItem(item, physicianName, sectionKey) || "").replace(/\s*\u{2014}\s*/gu, ", ");
 }
 
 /**
@@ -274,7 +287,7 @@ export function getItemLabel(item) {
  * variant of the person's name (case, commas, middle names/initials, degree
  * suffixes) and label by type + state instead.
  */
-function isPersonName(name, physicianName) {
+export function isPersonName(name, physicianName) {
   if (!name || !physicianName) return false;
   const strip = (s) => s.toLowerCase().replace(/[.,()]/g, " ").split(/\s+/)
     .filter(t => t && !["do", "md", "jr", "sr", "ii", "iii", "iv", "phd", "np", "pa"].includes(t));
@@ -289,6 +302,24 @@ function isPersonName(name, physicianName) {
     || (t.length === 1 && u.startsWith(t))
     || (u.length === 1 && t.startsWith(u));
   return short.every(t => long.some(u => matches(t, u)));
+}
+
+// Sections whose Display Name is only ever noise when it is the physician's
+// own name: every card in them titles by type and state, facility, carrier or
+// school instead. Peer references are absent on purpose, the person IS the
+// record there.
+export const PERSON_NAME_SECTIONS = Object.freeze(["licenses", "privileges", "insurance", "education", "healthRecords", "travelDocs"]);
+
+/**
+ * The record with a Display Name that is just the physician's own name
+ * cleared, so the canonical label applies everywhere (share subjects,
+ * notifications, pickers) and not only on the card. Anything else is
+ * returned unchanged.
+ */
+export function withoutPersonName(sectionKey, item, physicianName) {
+  if (!item || typeof item !== "object" || !PERSON_NAME_SECTIONS.includes(sectionKey)) return item;
+  if (typeof item.name !== "string" || !isPersonName(item.name, physicianName)) return item;
+  return { ...item, name: null };
 }
 
 // Every category titles CANONICALLY — the same fields in the same order for

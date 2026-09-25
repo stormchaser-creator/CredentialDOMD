@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, memo, useCallback } from "react";
-import { snapToOption } from "../../utils/snapOption";
+import { snapToOption, canonicalizeSelectValue } from "../../utils/snapOption";
 import { useApp } from "../../context/AppContext";
 import { CPT_DESCS } from "../../constants/cptDescs";
 import { CPT_BY_CODE } from "../../constants/cpt";
@@ -13,13 +13,12 @@ import { pushModal, popModal } from "../../utils/deskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon, StarIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, isPersonName, PERSON_NAME_SECTIONS } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { splitScanned } from "../../utils/docPrefill";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { isContactPickerSupported, pickContact, parseVCard, parseContactText, CONTACT_EMAIL } from "../../utils/contactImport";
-import { STATE_NAMES } from "../../constants/states";
 import CPTCodePicker from "./CPTCodePicker";
 import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
 import { checkStorageQuota } from "../../utils/storageQuota";
@@ -51,24 +50,6 @@ function billedCodes(item) {
 }
 
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
-
-// AI-scanned text for a select field (e.g. a DEA card's "Florida" instead of
-// "FL") won't exact-match its dropdown options, which breaks state-keyed
-// lookups elsewhere (RenewalInfo, MultiStateMatrix). Snap it to the matching
-// option when one exists; otherwise leave the raw text so the "(from
-// document)" fallback below can still show and preserve it for review.
-function canonicalizeSelectValue(fieldDef, raw) {
-  if (!fieldDef || fieldDef.type !== "select" || typeof raw !== "string") return raw;
-  const options = fieldDef.groups ? fieldDef.groups.flatMap(g => g.options) : (fieldDef.options || []);
-  const trimmed = raw.trim();
-  const ciMatch = options.find(o => o.toLowerCase() === trimmed.toLowerCase());
-  if (ciMatch) return ciMatch;
-  if (fieldDef.key === "state") {
-    const byName = Object.entries(STATE_NAMES).find(([, name]) => name.toLowerCase() === trimmed.toLowerCase());
-    if (byName && options.includes(byName[0])) return byName[0];
-  }
-  return raw;
-}
 
 // label/placeholder can vary by the record being edited (e.g. Certification
 // asks a different question than a license does) — same function-of-form
@@ -293,6 +274,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             setForm(prev => {
               const merged = { ...prev };
               for (const [key, value] of Object.entries(placed)) {
+                // A scan often reads the physician's own name as the display
+                // name. It is never information, so it never fills the form.
+                if (key === "name" && PERSON_NAME_SECTIONS.includes(sectionKey) && isPersonName(String(value ?? ""), data.settings.name)) continue;
                 if (value != null && value !== "" && !merged[key]) {
                   // Handle arrays (like topics) properly
                   const strValue = Array.isArray(value) ? value : String(value);
@@ -318,7 +302,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         setScanningDoc(false);
       }
     }
-  }, [aiOn, data.settings.apiKey, data.settings.degreeType, fields, data.documents, attachedDocs]);
+  }, [aiOn, data.settings.apiKey, data.settings.degreeType, data.settings.name, sectionKey, fields, data.documents, attachedDocs]);
 
   /** Every route in puts the same fields on the form and says where it came from. */
   const applyContact = useCallback((contact, source) => {
@@ -921,7 +905,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         {viewItem && (
           <>
             {renderFollowUps(viewItem)}
-            {fields.filter(f => viewItem[f.key]).map(f => (
+            {fields.filter(f => viewItem[f.key] && !(f.key === "name" && PERSON_NAME_SECTIONS.includes(sectionKey) && isPersonName(String(viewItem.name), data.settings.name))).map(f => (
               <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
                 <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{resolveFieldProp(f, "label", viewItem)}</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>

@@ -15,6 +15,7 @@ import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
 import { reconcileDocumentLinks } from "../utils/documentLinks.js";
+import { prepareRecord } from "../utils/recordWrite.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { MS_PER_DAY } from "../utils/helpers";
 import {
@@ -650,13 +651,17 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return true;
   }, [guardedSetData, user?.id]);
 
-  const addItem = useCallback((key, item) => {
+  // Every add and edit is shaped once here (src/utils/recordWrite.js), so no
+  // path in (forms, the scanner, Vera, importers) can skip a storage rule.
+  const addItem = useCallback((key, raw) => {
+    const item = prepareRecord(key, raw, dataRef.current?.settings?.name);
     if (!updateSection(key, items => [...(items || []), item])) { window.alert(membershipWriteError().message); return false; }
     // Sync to Supabase
     sbInsert(userIdRef.current, key, item).catch(() => {});
   }, [updateSection]);
 
-  const editItem = useCallback((key, item) => {
+  const editItem = useCallback((key, raw) => {
+    const item = prepareRecord(key, raw, dataRef.current?.settings?.name);
     const previous = (dataRef.current[key] || []).find(record => record.id === item.id);
     // Stamp the edit time so the self-heal pass can tell a newer local edit
     // (whose cloud write may have failed) from an older cloud row.

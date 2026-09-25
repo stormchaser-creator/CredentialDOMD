@@ -66,7 +66,7 @@ function NotificationCenter({ open, onClose }) {
                 {alerts.expired.map((item, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, backgroundColor: T.dangerDim, marginBottom: 4 }}>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{getItemLabel(item)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{getItemLabel(item, s.name, item._sec)}</div>
                       <div style={{ fontSize: 11, color: T.danger }}>Expired {fmtDate(item.expirationDate)}{item.state ? ` \u00b7 ${item.state}` : ""}</div>
                     </div>
                     <div style={{ fontSize: 18, color: T.danger }}>{"\u2717"}</div>
@@ -89,7 +89,7 @@ function NotificationCenter({ open, onClose }) {
                       marginBottom: 4, border: `1px solid ${daysLeft <= 14 ? T.warning : T.border}`,
                     }}>
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{getItemLabel(item)}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{getItemLabel(item, s.name, item._sec)}</div>
                         <div style={{ fontSize: 11, color: T.textDim }}>{fmtDate(item.expirationDate)}{item.state ? ` \u00b7 ${item.state}` : ""}</div>
                       </div>
                       <div style={{ textAlign: "right" }}>

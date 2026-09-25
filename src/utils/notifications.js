@@ -105,7 +105,7 @@ export function buildNotificationMessage(data, alerts) {
   if (alerts.expired.length > 0) {
     lines.push("", `\u26a0 EXPIRED (${alerts.expired.length}):`);
     alerts.expired.forEach(item => {
-      lines.push(`  \u2717 ${getItemLabel(item)} \u2014 expired ${fmtDate(item.expirationDate)}`);
+      lines.push(`  \u2717 ${getItemLabel(item, data.settings.name, item._sec)} \u2014 expired ${fmtDate(item.expirationDate)}`);
       if (item.state) lines.push(`    State: ${item.state}`);
     });
   }
@@ -115,7 +115,7 @@ export function buildNotificationMessage(data, alerts) {
     alerts.soon.forEach(item => {
       const daysLeft = Math.ceil((new Date(item.expirationDate) - now) / MS_PER_DAY);
       const urgency = daysLeft <= 14 ? "URGENT" : daysLeft <= 30 ? "Soon" : "";
-      lines.push(`  \u23f3 ${getItemLabel(item)} \u2014 ${fmtDate(item.expirationDate)} (${daysLeft} day${daysLeft !== 1 ? "s" : ""}) ${urgency}`);
+      lines.push(`  \u23f3 ${getItemLabel(item, data.settings.name, item._sec)} \u2014 ${fmtDate(item.expirationDate)} (${daysLeft} day${daysLeft !== 1 ? "s" : ""}) ${urgency}`);
       if (item.state) lines.push(`    State: ${item.state}`);
     });
   }
