@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { classify, tableMapTables, checkTables } from "../scripts/check-tables-exist.mjs";
+import { classify, tableMapTables, checkTables, CLIENT_READ_TABLES } from "../scripts/check-tables-exist.mjs";
 
 // The deploy preflight that stops a client shipping before its migration.
 // These run offline; the live check runs in CI against production.
@@ -48,5 +48,15 @@ test("existing tables, including ones anon may not read, pass", async () => {
   const r = await checkTables({ url: "https://x.test", key: "k", source: SRC,
     fetchImpl: fakeFetch({ custom_records: [401, { code: "42501" }] }) });
   assert.deepEqual(r.missing, []);
+  assert.deepEqual(r.unsure, []);
+});
+
+test("tables the client reads outside TABLE_MAP are checked too", async () => {
+  assert.deepEqual([...CLIENT_READ_TABLES], ["member_view_grants", "member_view_events"]);
+  const r = await checkTables({ url: "https://x.test", key: "k", source: SRC, extra: CLIENT_READ_TABLES,
+    fetchImpl: fakeFetch({ member_view_events: [404, { code: "PGRST205" }], member_view_grants: [401, { code: "42501" }] }) });
+  assert.deepEqual(r.missing, ["member_view_events"], "the view log must exist before Settings reads it");
+  assert.ok(r.tables.includes("member_view_grants"));
+  // A server-only table (RLS on, no anon grant) answers permission denied: present.
   assert.deepEqual(r.unsure, []);
 });

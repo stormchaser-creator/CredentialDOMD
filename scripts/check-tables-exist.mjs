@@ -49,8 +49,15 @@ async function probe(url, key, table, fetchImpl = fetch) {
   return last;
 }
 
-export async function checkTables({ url, key, source, fetchImpl }) {
-  const tables = tableMapTables(source);
+// Tables the client reads OUTSIDE TABLE_MAP. A missing one does not fail the
+// account load, but the screen that reads it breaks, so it too must exist in
+// production before the client ships.
+//   member_view_grants, member_view_events: Settings > Support access and
+//   Admin > Control history (20260925130000_member_support_view.sql).
+export const CLIENT_READ_TABLES = Object.freeze(["member_view_grants", "member_view_events"]);
+
+export async function checkTables({ url, key, source, fetchImpl, extra = [] }) {
+  const tables = [...new Set([...tableMapTables(source), ...extra])];
   const results = await Promise.all(tables.map(async t => [t, await probe(url, key, t, fetchImpl)]));
   const missing = results.filter(([, s]) => s === "missing").map(([t]) => t);
   const unsure = results.filter(([, s]) => s !== "missing" && s !== "present").map(([t, s]) => `${t} (${s})`);
@@ -66,15 +73,15 @@ if (invokedDirectly) {
     process.exit(1);
   }
   const source = readFileSync(resolve(here, "../src/lib/supabase.js"), "utf8");
-  const { tables, missing, unsure } = await checkTables({ url, key, source });
+  const { tables, missing, unsure } = await checkTables({ url, key, source, extra: CLIENT_READ_TABLES });
   if (missing.length) {
-    console.error(`check-tables-exist: the client syncs ${missing.length} table(s) production does not have: ${missing.join(", ")}`);
-    console.error("Apply the migration and verify it BEFORE deploying a client that lists these in TABLE_MAP, or every account load fails.");
+    console.error(`check-tables-exist: the client syncs or reads ${missing.length} table(s) production does not have: ${missing.join(", ")}`);
+    console.error("Apply the migration and verify it BEFORE deploying a client that lists these in TABLE_MAP or CLIENT_READ_TABLES; a missing TABLE_MAP table fails every account load.");
     process.exit(1);
   }
   if (unsure.length) {
     console.error(`check-tables-exist: could not confirm ${unsure.join(", ")}. Refusing to deploy blind.`);
     process.exit(1);
   }
-  console.log(`check-tables-exist: all ${tables.length} synced tables exist in production.`);
+  console.log(`check-tables-exist: all ${tables.length} synced and client-read tables exist in production.`);
 }

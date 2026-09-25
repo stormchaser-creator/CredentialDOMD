@@ -57,7 +57,8 @@ export const COLLECTION_TABLES: string[] = [
  * admin_message_replies is the thread under each, keyed by the physician it
  * belongs to whoever wrote the reply (user_id).
  * credential_portal_invites are the physician's administrator access grants
- * (owner_profile_id).
+ * (owner_profile_id). member_view_grants and member_view_events are the
+ * support access the physician allowed and its log (profile_id).
  */
 export interface UserTable { table: string; column: string; optional?: boolean }
 export const USER_TABLES: UserTable[] = [
@@ -89,6 +90,12 @@ export const USER_TABLES: UserTable[] = [
   // missing-relation error is tolerated (isMissingTableError); any other
   // error still stops the deletion.
   { table: "credential_portal_invites", column: "owner_profile_id", optional: true },
+  // Support access the member allowed (ticket d45e857c, phase 2): the log of
+  // every support view and file opened, then the grants (their visit rows
+  // cascade). optional for the same reason as above: migration 20260925130000
+  // is applied before the client that uses it, not with this function.
+  { table: "member_view_events", column: "profile_id", optional: true },
+  { table: "member_view_grants", column: "profile_id", optional: true },
 ];
 
 /**
