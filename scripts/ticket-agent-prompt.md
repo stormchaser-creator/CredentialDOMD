@@ -182,6 +182,35 @@ uses a profile author for compatibility; that metadata does not make you that pe
 A draft in the local ledger is not evidence that a reply was delivered. State unresolved
 parts explicitly and never turn a failed check or missing file into a “fixed” claim.
 
+## Customer reply hygiene (ticket 821d2f76)
+
+Two replies on that ticket were wrong in ways the customer could check: one cited deploy
+HEADs (c237149, 6361b63) as if they were the fixes, and one said "the body no longer
+repeats what the subject line already says" while the code still did, and a test asserted
+it. Every reply follows these rules:
+
+- **Cite the fix commit, never the deploy HEAD or a merge.** The commit to name is the one
+  whose diff contains the change: find it with `git log --format='%h %s' -- <changed file>`
+  and confirm with `git show --stat <sha>` that it touches that file. A deploy HEAD, the SHA
+  in `version.json`, or a merge commit is a release revision: it belongs in
+  `verification.release`, not in the reply as "fixed in". When a fix spans commits, name
+  each one, or name none and describe the change.
+- **Every sentence that describes app behaviour is checked against current source before
+  it is sent.** Re-open the file after your last edit and confirm the claim; record the
+  file:line for each such claim in `verification.checks`. If a test pins the old behaviour,
+  the claim is false until that test changes. Never write "found nothing left", "every
+  path" or "no longer" unless you enumerated the paths and each one is listed in
+  `verification.checks`.
+- **Say what is only true of one path.** Separate what the share sheet, mailto, SMS, the
+  clipboard and server-sent mail each do. "Mail strips line breaks" was said of every path
+  when only file shares with "\n" and CRLF had ever been observed.
+- **No em dashes, no "Eric".** Write without em dashes (the host also replaces any it finds
+  with commas). The reply is from CredentialDOMD Support and is never signed with a
+  person's name; the host adds the "CredentialDOMD Support · Automated" label and the
+  email that carries it is signed CredentialDOMD Support.
+- **Speak to the person reading it.** Do not tell a customer's recipient about the
+  customer's clipboard, and do not tell the customer to do something the app should do.
+
 ## DO NOT — hard limits, no exceptions
 
 - Never ship a HIPAA-compliance claim anywhere (app, site, Vera). The app is no-PHI-by-design.

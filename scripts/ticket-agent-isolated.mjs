@@ -69,6 +69,20 @@ function secret(service, label = false) {
 function sqlText(s) {
   return `convert_from(decode('${Buffer.from(s, 'utf8').toString('hex')}', 'hex'), 'UTF8')`;
 }
+// Customer-facing hygiene applied on the host, where the model cannot skip it
+// (ticket 821d2f76). The model sometimes echoes the label it was told the host
+// adds; strip any leading copies so a customer never sees the header twice
+// (seen on two replies 2026-09-21). Em dashes read as machine-written to this
+// product's customers: a dash at the start of a line is dropped and one
+// between words becomes a comma, as does a spaced en dash. A numeric range
+// ("9\u{2013}5") has no spaces and is kept.
+export function customerReplyText(reply) {
+  return String(reply)
+    .replace(/^(?:\s*CredentialDOMD Support · Automated\s*)+/u, '')
+    .replace(/^[ \t]*\u{2014}[ \t]*/gmu, '')
+    .replace(/[ \t]*\u{2014}[ \t]*|[ \t]+\u{2013}[ \t]+/gu, ', ')
+    .replace(/,[ \t]*([,.;:!?)])/g, '$1');
+}
 export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   if (!/^[a-f0-9-]{36}$/.test(ticket.id)) throw Error('Invalid ticket id');
   if (!/^[a-f0-9-]{36}$/.test(ticket.owner_id || '')) throw Error('Invalid ticket owner');
@@ -82,9 +96,8 @@ export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   // Legacy rows require a profile author. Keep storage compatibility until the
   // reviewed support-job actor is installed; the body identifies automation and
   // must never present this profile ID as a human author. No actor is fabricated.
-  // The model sometimes echoes the label it was told the host adds; strip any leading copies
-  // so a customer never sees the header twice (seen on two replies 2026-09-21).
-  const body = String(reply).replace(/^(?:\s*CredentialDOMD Support · Automated\s*)+/u, '');
+  const body = customerReplyText(reply);
+  if (!body.trim() || body.length > 4000) throw Error('Invalid reply');
   const labeledReply = `CredentialDOMD Support · Automated\n\n${body}`;
   const awaiting = includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;
   const messageId = randomUUID();
