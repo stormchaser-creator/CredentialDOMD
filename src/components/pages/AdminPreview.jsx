@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { ADMIN_PREVIEW_PRESETS, adminPreviewStore } from "../../utils/adminPreview.js";
+import { adminViewBannerStyle, ADMIN_VIEW_BANNER_BUTTON_STYLE } from "../shared/adminViewBanner.js";
 
 /**
  * Admin > Preview as: pick a membership and see the app the way a member
@@ -69,19 +70,10 @@ export default function AdminPreviewBanner({ store = adminPreviewStore, aboveOff
   const preview = limitedLaunch?.access?.adminPreview;
   if (!preview) return null;
   const lift = (isDesktop ? 16 : 78) + (aboveOffline ? 72 : 0);
-  return <div role="status" aria-live="polite" data-admin-preview-banner="" style={{
-    position: "fixed", bottom: `calc(${lift}px + env(safe-area-inset-bottom, 0px))`, zIndex: 120,
-    ...(isDesktop ? { right: 16, maxWidth: 520 } : { left: 12, right: 12 }),
-    display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 12,
-    backgroundColor: "#4c1d95", border: "1px solid #a78bfa", color: "#fff", fontSize: 13, lineHeight: 1.45,
-    boxShadow: "0 6px 24px rgba(0,0,0,0.35)",
-  }}>
+  return <div role="status" aria-live="polite" data-admin-preview-banner="" style={adminViewBannerStyle({ isDesktop, lift, zIndex: 120 })}>
     <span style={{ flex: 1 }}>
       <strong>Previewing as {preview.label}.</strong> Your own records, shown as this membership sees them.
     </span>
-    <button type="button" onClick={() => store.exit()} style={{
-      flexShrink: 0, minHeight: 36, padding: "7px 14px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.5)",
-      backgroundColor: "rgba(255,255,255,0.14)", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer",
-    }}>Exit preview</button>
+    <button type="button" onClick={() => store.exit()} style={ADMIN_VIEW_BANNER_BUTTON_STYLE}>Exit preview</button>
   </div>;
 }

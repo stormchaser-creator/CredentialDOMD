@@ -73,11 +73,15 @@ test("a drifted or stray copy is reported", () => {
     cpSync(path.join(REPO_ROOT, TARGET_DIR), path.join(dir, TARGET_DIR), { recursive: true });
     assert.deepEqual(driftProblems(dir), []);
 
-    const target = path.join(dir, TARGET_DIR, "utils/customCategories.js");
-    writeFileSync(target, readFileSync(target, "utf8").replace("mrn|medical", "medical"));
-    assert.deepEqual(driftProblems(dir), [`${TARGET_DIR}/utils/customCategories.js differs from ${SOURCE_DIR}/utils/customCategories.js`]);
+    // The identifier gate is where a drifted copy would hurt most: one fewer
+    // pattern and a forwarded chart number files, or the support view shows it.
+    const target = path.join(dir, TARGET_DIR, "utils/identifierGate.js");
+    const tampered = readFileSync(target, "utf8").replace("mrn|medical", "medical");
+    assert.notEqual(tampered, readFileSync(target, "utf8"), "the gate's MRN pattern is in the copy");
+    writeFileSync(target, tampered);
+    assert.deepEqual(driftProblems(dir), [`${TARGET_DIR}/utils/identifierGate.js differs from ${SOURCE_DIR}/utils/identifierGate.js`]);
 
-    writeFileSync(target, banner("utils/customCategories.js") + readFileSync(path.join(dir, SOURCE_DIR, "utils/customCategories.js"), "utf8"));
+    writeFileSync(target, banner("utils/identifierGate.js") + readFileSync(path.join(dir, SOURCE_DIR, "utils/identifierGate.js"), "utf8"));
     mkdirSync(path.join(dir, TARGET_DIR, "utils"), { recursive: true });
     writeFileSync(path.join(dir, TARGET_DIR, "utils/forked.js"), "export const x = 1;\n");
     assert.deepEqual(driftProblems(dir), [`${TARGET_DIR}/utils/forked.js has no source in the copy set`]);

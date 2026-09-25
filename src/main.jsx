@@ -73,7 +73,10 @@ if (import.meta.env.PROD) {
     "connect-src " + connectSources.join(" "),
     "img-src 'self' data: blob: https://img.clerk.com",
     // Turnstile renders the challenge in an iframe from challenges.cloudflare.com.
-    "frame-src https://*.clerk.accounts.dev https://*.clerk.com https://clerk.credentialdomd.com https://accounts.credentialdomd.com https://challenges.cloudflare.com",
+    // blob: is a PDF this page built itself and shows in a frame: a receipt in
+    // Expenses, and a file opened in the read-only support view (ticket
+    // d45e857c). Only same-origin script can create a blob URL.
+    "frame-src blob: https://*.clerk.accounts.dev https://*.clerk.com https://clerk.credentialdomd.com https://accounts.credentialdomd.com https://challenges.cloudflare.com",
     "worker-src 'self' blob:",
   ].join("; ");
   document.head.prepend(csp);

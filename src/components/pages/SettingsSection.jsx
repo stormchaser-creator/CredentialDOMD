@@ -24,6 +24,7 @@ import { CODER_MODELS } from "../../utils/cptCoder";
 import FoundingMemberBadge from "../shared/FoundingMemberBadge";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
 import SignInMethodsCard from "./SignInMethodsCard";
+import SupportAccessCard from "./SupportAccessCard";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
 import {
   addProblem, normalizeAddress, pendingLine, resendBlockedReason, rowForAddress,
@@ -210,6 +211,10 @@ function SettingsSection({ onUpgrade }) {
       </div>}
 
       <SignInMethodsCard theme={T} />
+
+      {/* Support access (ticket d45e857c): the member lets support view the
+          account, read-only, for 24 hours, and sees every view logged. */}
+      <SupportAccessCard theme={T} />
 
       {/* Profile */}
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>

@@ -234,7 +234,8 @@ test('Start stores the chosen preset for this account and returns to Home; Exit 
   const hooks = []; let cursor = 0;
   const react = { useState(initial) { const i = cursor++; if (!(i in hooks)) hooks[i] = initial; return [hooks[i], v => { hooks[i] = typeof v === 'function' ? v(hooks[i]) : v; }]; } };
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
-    '../../context/AppContext': { useApp: () => app }, '../../utils/adminPreview.js': await import('../src/utils/adminPreview.js') };
+    '../../context/AppContext': { useApp: () => app }, '../../utils/adminPreview.js': await import('../src/utils/adminPreview.js'),
+    '../shared/adminViewBanner.js': await import('../src/components/shared/adminViewBanner.js') };
   const module = { exports: {} };
   vm.runInContext(transformSync(source, { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, vm.createContext({ module, exports: module.exports, require: n => imports[n] }));
   const nodes = tree => { const out = []; const visit = n => { if (Array.isArray(n)) n.forEach(visit); else if (n?.props) { out.push(n); visit(n.props.children); } }; visit(tree); return out; };

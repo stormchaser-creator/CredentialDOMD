@@ -48,7 +48,7 @@ eq("no duplicate collection table", new Set(COLLECTION_TABLES).size, COLLECTION_
 const userTables = USER_TABLES.map((t) => t.table);
 for (const t of ["assistant_log", "support_tickets", "support_messages", "feedback", "document_requests",
   "inbound_emails", "ai_usage", "client_errors", "backups", "deleted_items", "field_proposals", "user_events",
-  "admin_messages", "admin_message_replies", "credential_portal_invites", "invoice_email_sends"]) {
+  "admin_messages", "admin_message_replies", "credential_portal_invites", "invoice_email_sends", "member_view_events", "member_view_grants"]) {
   ok(`USER_TABLES covers ${t}`, userTables.includes(t));
 }
 ok("no table is in both lists", !userTables.some((t) => COLLECTION_TABLES.includes(t)));
@@ -62,12 +62,18 @@ eq("admin_message_replies is matched by user_id (the thread owner, not the reply
   USER_TABLES.find((t) => t.table === "admin_message_replies").column, "user_id");
 eq("administrator access grants are matched by owner_profile_id (their sessions, mail and audit cascade)",
   USER_TABLES.find((t) => t.table === "credential_portal_invites").column, "owner_profile_id");
-// The portal tables arrive at activation, and the invoice email ledger with its
-// own migration, not with this function. A deploy of delete-account before
-// then must not fail every deletion on a missing table.
-eq("only the administrator access table and the invoice email ledger may be absent",
-  USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "invoice_email_sends"]);
+// The portal tables arrive at activation, and the invoice email ledger and the
+// support access tables with their own migrations, not with this function. A
+// deploy of delete-account before then must not fail every deletion on a
+// missing table.
+eq("only the administrator access, invoice email and support access tables may be absent",
+  USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "invoice_email_sends", "member_view_grants", "member_view_events"]);
 eq("the invoice email ledger is matched by user_id", USER_TABLES.find((t) => t.table === "invoice_email_sends").column, "user_id");
+eq("the support view log is matched by profile_id (the member it is about)", USER_TABLES.find((t) => t.table === "member_view_events").column, "profile_id");
+eq("support access grants are matched by profile_id (their visits cascade)", USER_TABLES.find((t) => t.table === "member_view_grants").column, "profile_id");
+// The grants go first: while a grant is open an administrator can still start a
+// view and write a log row, so deleting the log first can leave one behind.
+ok("the support access grants are deleted before their log", userTables.indexOf("member_view_grants") < userTables.indexOf("member_view_events"));
 ok("a missing table (PostgREST PGRST205) is recognised", isMissingTableError({ code: "PGRST205", message: "Could not find the table 'public.credential_portal_invites' in the schema cache" }));
 ok("a missing relation (Postgres 42P01) is recognised", isMissingTableError({ code: "42P01", message: 'relation "public.credential_portal_invites" does not exist' }));
 ok("a permission error is NOT treated as a missing table", !isMissingTableError({ code: "42501", message: "permission denied for table credential_portal_invites" }));
@@ -82,7 +88,7 @@ ok("a timeout or no error is NOT treated as a missing table", !isMissingTableErr
     index.includes("countRows(db, table, column, userId, optional === true)") && index.includes("deleteRows(db, table, column, userId, optional === true)"));
 }
 ok("every other user table is matched by user_id",
-  USER_TABLES.filter((t) => !["support_messages", "inbound_emails", "client_errors", "admin_messages", "credential_portal_invites"].includes(t.table))
+  USER_TABLES.filter((t) => !["support_messages", "inbound_emails", "client_errors", "admin_messages", "credential_portal_invites", "member_view_events", "member_view_grants"].includes(t.table))
     .every((t) => t.column === "user_id"));
 ok("profiles is never in a delete list (it is tombstoned, not deleted)",
   !userTables.includes("profiles") && !COLLECTION_TABLES.includes("profiles"));

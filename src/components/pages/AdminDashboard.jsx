@@ -20,6 +20,8 @@ import { loadAdminSupportThread } from "../../utils/adminSupportThread";
 import { ADMIN_TICKET_CATEGORIES, adminTicketDraftProblem } from "../../utils/adminTicketDraft";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
+import AdminMemberView from "./AdminMemberView";
+import { readActiveGrants, memberViewAvailability } from "../../utils/memberViewClient.js";
 
 /**
  * AdminDashboard — displayed for server-verified administrators only.
@@ -862,8 +864,20 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
   const [accessChange, setAccessChange] = useState(null);
   const [search, setSearch] = useState("");
   const [accessFilter, setAccessFilter] = useState(initialAccess);
+  // Members who have allowed support access right now (Settings > Support
+  // access). "View as member" is offered only for them; the server checks
+  // the grant again when a view starts.
+  const [memberGrants, setMemberGrants] = useState(() => new Map());
+  const [grantsError, setGrantsError] = useState(null);
+  const [grantsRevision, setGrantsRevision] = useState(0);
+  const [memberViewTarget, setMemberViewTarget] = useState(null);
+  useEffect(() => {
+    let active = true;
+    readActiveGrants(supabase).then(result => { if (active) { setMemberGrants(result.grants); setGrantsError(result.error); } });
+    return () => { active = false; };
+  }, [grantsRevision]);
 
-  const refresh = async () => { onRefresh(); };
+  const refresh = async () => { onRefresh(); setGrantsRevision(n => n + 1); };
 
   const invite = async () => {
     const e = email.trim().toLowerCase();
@@ -1004,11 +1018,26 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
               {!u.deleted_at && u.id !== myProfileId && u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
               {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
                 && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
+              {(() => {
+                const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
+                if (!view.show) return null;
+                return <button key="view-as-member" type="button" disabled={!view.enabled} title={view.note} onClick={() => setMemberViewTarget(u)} style={{
+                  fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, border: `1px solid ${view.enabled ? "#a78bfa" : T.border}`,
+                  backgroundColor: "transparent", color: view.enabled ? "#a78bfa" : T.textDim, cursor: view.enabled ? "pointer" : "not-allowed",
+                }}>View as member</button>;
+              })()}
             </div>
+            {(() => {
+              const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
+              return view.show && (view.enabled || view.unchecked) ? <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{view.note}</div> : null;
+            })()}
           </div>
         );
       })}
       {!shown.length && <Empty T={T} text="No loaded accounts match these filters. Load more records above to widen the search." />}
+      {grantsError && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6 }}>Support access grants could not be loaded, so View as member is off. Refresh to try again.</div>}
+      {memberViewTarget && <AdminMemberView target={memberViewTarget} grant={memberGrants.get(memberViewTarget.id) || null}
+        onClose={() => { setMemberViewTarget(null); setGrantsRevision(n => n + 1); }} />}
       {accessChange && <AdminAccessChange key={`${accessChange.kind}:${accessChange.row.id}:${accessChange.status || accessChange.action}`} change={accessChange} T={T} onClose={() => setAccessChange(null)} onSaved={() => { setMsg("Access change saved in Control history."); refresh(); }} />}
       {lifetimeTarget && <AdminLifetimeAccess target={lifetimeTarget} onClose={() => setLifetimeTarget(null)} onGranted={result => {
         setUsers(rows => rows.map(row => row.id === result.target.profileId && row.auth_user_id === result.target.clerkSubject ? { ...row, access_status: "active" } : row));
