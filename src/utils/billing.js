@@ -72,6 +72,13 @@ export function fmtTime(iso) {
  * separately. Ties on identical spans keep the earlier-created entry
  * billing. Orientation can CONTAIN other work but is never itself contained
  * (it bills wall-clock under its own terms).
+ *
+ * A piece of a split entry is judged on BOTH sides as the entry it was
+ * logged as: its whole span decides whether it sits inside other work and
+ * how big it is, and the entry's creation time and id break ties. Splitting
+ * only moves minutes between call days; it never changes which work is
+ * contained. (Sizing a piece by its own length let a piece and another entry
+ * each count as inside the other, so the overlap billed to neither.)
  */
 export function findContainer(e, siblings) {
   if (!e.startTime || !e.endTime || e.type === "Orientation" || e.type === "CallDay") return null;
@@ -80,6 +87,7 @@ export function findContainer(e, siblings) {
   // it is contained whenever that instant falls inside a sibling's span.
   // Skipping these let a call logged mid-procedure bill a full 15 minutes.
   const zeroLen = !(en > s);
+  const me = loggedAs(e, siblings);
   for (const o of siblings) {
     if (o.id === e.id || !o.startTime || !o.endTime || o.type === "CallDay") continue;
     // Pieces of one split entry never contain each other: they are one piece
@@ -91,32 +99,37 @@ export function findContainer(e, siblings) {
     // 5:00 to 9:00 procedure split at 7:00 still covers a 6:50 to 7:05 call
     // that stayed in one piece. Only the piece holding the contained work's
     // start answers, so the group is reported once.
-    const span = o.splitGroupId ? splitGroupSpan(o, siblings) : null;
-    const os = span ? span.start : ps, oe = span ? span.end : pe;
-    if (span && !(ps <= s && s < pe)) continue;
-    const contained = zeroLen ? (os <= s && s < oe) : (os <= s && en <= oe);
+    if (o.splitGroupId && !(ps <= s && s < pe)) continue;
+    const them = loggedAs(o, siblings);
+    const contained = zeroLen ? (them.start <= s && s < them.end) : (them.start <= me.start && me.end <= them.end);
     if (!contained) continue;
-    const dur = en - s, odur = oe - os;
+    const dur = me.end - me.start, odur = them.end - them.start;
     const bigger = odur > dur
-      || (odur === dur && ((o.createdAt || "") < (e.createdAt || "")
-        || ((o.createdAt || "") === (e.createdAt || "") && String(o.id || "") < String(e.id || ""))));
+      || (odur === dur && (them.createdAt < me.createdAt || (them.createdAt === me.createdAt && them.id < me.id)));
     if (!bigger) continue;
     // Report the whole logged span ("during Procedure 5:00 AM–9:00 AM"), not
     // the piece. Same id, invoice and call day as the piece itself.
-    return span ? { ...o, startTime: new Date(os).toISOString(), endTime: new Date(oe).toISOString() } : o;
+    return o.splitGroupId ? { ...o, startTime: new Date(them.start).toISOString(), endTime: new Date(them.end).toISOString() } : o;
   }
   return null;
 }
 
-// Earliest start and latest end of the pieces of o's split group found in list.
-function splitGroupSpan(o, list) {
-  let start = new Date(o.startTime).getTime(), end = new Date(o.endTime).getTime();
-  for (const x of list) {
-    if (x.splitGroupId !== o.splitGroupId || !x.startTime || !x.endTime) continue;
-    start = Math.min(start, new Date(x.startTime).getTime());
-    end = Math.max(end, new Date(x.endTime).getTime());
+// The entry x was logged as: x itself, or for a piece of a split entry, its
+// group's pieces found in list: earliest start, latest end, earliest
+// creation time, and the id of the first piece (which keeps the entry's own
+// id, see splitRows). Every piece of one group gets the same answer.
+function loggedAs(x, list) {
+  let start = new Date(x.startTime).getTime(), end = new Date(x.endTime).getTime();
+  let createdAt = x.createdAt || "", id = String(x.id || "");
+  if (!x.splitGroupId) return { start, end, createdAt, id };
+  for (const p of list) {
+    if (p.splitGroupId !== x.splitGroupId || !p.startTime || !p.endTime) continue;
+    const ps = new Date(p.startTime).getTime();
+    if (ps < start) { start = ps; id = String(p.id || ""); }
+    end = Math.max(end, new Date(p.endTime).getTime());
+    if ((p.createdAt || "") < createdAt) createdAt = p.createdAt || "";
   }
-  return { start, end };
+  return { start, end, createdAt, id };
 }
 
 // Containers can cross the 7am call-day boundary (a 6:30–8:30am procedure

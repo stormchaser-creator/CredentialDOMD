@@ -284,6 +284,74 @@ test('calls inside a split procedure are still no charge, split or not', () => {
   assert.equal(findContainer(call[0], [call[1]]), null);
 });
 
+// Containment is decided on the spans the work was LOGGED as, on both sides:
+// splitting only moves minutes between call days, it never changes which
+// work sits inside which. Sizing a piece by its own length let a piece and
+// the other entry each count as inside the other, so neither billed.
+const TIGHT = { ...ON, stipendHours: 0.25 };
+const minutesBilled = (contract, rows, filter) => bill(contract, rows, filter).totalMin;
+
+test('two identical split calls: exactly one bills, the later-created one is no charge', () => {
+  const a = entry('Call', '2026-08-05 06:45', '2026-08-05 07:15', TIGHT);
+  const b = entry('Call', '2026-08-05 06:45', '2026-08-05 07:15', TIGHT);
+  const aRows = rowsFor(a, TIGHT), bRows = rowsFor(b, TIGHT);
+  const rows = [...aRows, ...bRows];
+  const both = bill(TIGHT, rows, days('2026-08-04', '2026-08-05'));
+  assert.equal(both.totalMin, 30, 'one call worth of minutes, not 0');
+  assert.equal(both.total, bill(TIGHT, aRows, days('2026-08-04', '2026-08-05')).total, 'the duplicate adds nothing and takes nothing away');
+  for (const p of aRows) assert.equal(findContainer(p, rows), null, `${p.id} bills`);
+  for (const p of bRows) assert.equal(findContainer(p, rows)?.id, aRows.find(x => x.callDay === p.callDay).id, `${p.id} is inside the first call`);
+  // The same pair logged whole: the same one call's worth.
+  const w = [entry('Call', '2026-08-05 06:45', '2026-08-05 07:15', STIPEND), entry('Call', '2026-08-05 06:45', '2026-08-05 07:15', STIPEND)];
+  assert.equal(minutesBilled({ ...STIPEND, stipendHours: 0.25 }, w, days('2026-08-04', '2026-08-05')), 30);
+});
+
+test('a partial overlap bills the same minutes split as whole', () => {
+  const pair = (c) => [...rowsFor(entry('Call', '2026-08-05 06:30', '2026-08-05 07:15', c), c), ...rowsFor(entry('Procedure', '2026-08-05 06:45', '2026-08-05 07:30', c), c)];
+  assert.equal(pair(TIGHT).length, 4, 'both entries split');
+  assert.equal(minutesBilled(TIGHT, pair(TIGHT), days('2026-08-04', '2026-08-05')), 90);
+  assert.equal(minutesBilled(STIPEND, pair(STIPEND), days('2026-08-04', '2026-08-05')), 90);
+});
+
+test('a whole call inside a split procedure is no charge, and the procedure is not inside the call', () => {
+  // After coverage (Aug 10 and 11 bill hourly at $300). The call stays whole
+  // under Aug 10 (R2); the procedure splits at 7:00.
+  const filter = days('2026-08-10', '2026-08-11');
+  const build = (c) => [...rowsFor(entry('Call', '2026-08-11 06:30', '2026-08-11 07:05', c), c), ...rowsFor(entry('Procedure', '2026-08-11 06:30', '2026-08-11 07:30', c), c)];
+  assert.deepEqual(shape(build(ON)), ['06:30-07:05 2026-08-10 45', '06:30-07:00 2026-08-10 30', '07:00-07:30 2026-08-11 30']);
+  assert.equal(bill(STIPEND, build(STIPEND), filter).total, 300);
+  const split = bill(ON, build(ON), filter);
+  assert.equal(split.total, 300, 'the procedure bills all 60 minutes');
+  assert.equal(split.lines.filter(l => /during/.test(l.detail)).length, 1, 'only the call is "during" anything');
+  assert.match(split.lines.find(l => /during/.test(l.detail)).label, /^Call/);
+  // A whole call logged BEFORE the procedure, on the same half hour.
+  const early = (c) => [...rowsFor(entry('Call', '2026-08-11 06:30', '2026-08-11 07:00', c), c), ...rowsFor(entry('Procedure', '2026-08-11 06:30', '2026-08-11 07:30', c), c)];
+  assert.equal(bill(STIPEND, early(STIPEND), filter).total, 300);
+  assert.equal(bill(ON, early(ON), filter).total, 300);
+});
+
+test('splitting never changes which work is contained: a grid of overlapping pairs bills the same minutes split and whole', () => {
+  const starts = ['06:00', '06:20', '06:40', '06:50', '07:00', '07:10'];
+  const lengths = [10, 20, 30, 45, 60, 90, 120];
+  const spans = [];
+  for (const s of starts) for (const len of lengths) {
+    const [h, m] = s.split(':').map(Number);
+    const end = new RealDate(2026, 7, 5, h, m + len);
+    spans.push([`2026-08-05 ${s}`, `2026-08-05 ${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`]);
+  }
+  const filter = days('2026-08-04', '2026-08-05');
+  let pairs = 0;
+  for (const [i, x] of spans.entries()) {
+    for (const y of spans) {
+      const types = i % 2 ? ['Call', 'Procedure'] : ['Procedure', 'Call'];
+      const build = (c) => [...rowsFor(entry(types[0], x[0], x[1], c), c), ...rowsFor(entry(types[1], y[0], y[1], c), c)];
+      assert.equal(minutesBilled(TIGHT, build(TIGHT), filter), minutesBilled(STIPEND, build(STIPEND), filter), `${types[0]} ${x.join('-')} + ${types[1]} ${y.join('-')}`);
+      pairs += 1;
+    }
+  }
+  assert.equal(pairs, spans.length * spans.length);
+});
+
 test('invoicing only Aug 9 leaves the 7:00 piece for Aug 10 unbilled', () => {
   const rows = rowsFor(entry('Call', '2026-08-10 06:45', '2026-08-10 07:15'));
   const pick = days('2026-08-09');
