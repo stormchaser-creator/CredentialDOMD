@@ -220,7 +220,7 @@ function Contracts() {
             }}>+ Add a date block</button>
           </div>
         </Field>
-        <Field label="Start of the call day" hint={`Each call day runs from this time to the same time the next morning. Off: an entry that crosses it counts whole toward the call day it started in. On: the minutes before it count toward the ending call day and the minutes after toward the new one, and the entry bills the same total minutes it would whole (a side too short to earn a billing increment stays with the other side). Only stipend contracts split. Changing either setting never moves entries already logged.`}>
+        <Field label="Start of the call day" hint={`Each call day runs from this time to the same time the next morning. Off: an entry that crosses it counts whole toward the call day it started in. On: the minutes before it count toward the ending call day and the minutes after toward the new one, and the entry bills the same total minutes it would whole (a side too short to earn a billing increment stays with the other side). Only stipend contracts split. Entries already logged keep their call day unless you edit them.`}>
           <select value={String(callDayStartHour(form))} onChange={e => setForm(f => ({ ...f, dayStartHour: parseInt(e.target.value, 10) }))} style={{ ...iS, appearance: "auto" }}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
           </select>

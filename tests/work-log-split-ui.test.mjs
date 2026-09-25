@@ -199,4 +199,8 @@ test('the coverage hint no longer claims a crossing call bills hourly', () => {
   assert.match(hint, /Work that starts after that final 7:00 AM bills hourly with no stipend/);
   assert.match(hint, /counts whole toward Aug 9, inside the stipend, unless you turn on splitting below/);
   assert.doesNotMatch(hint, /\u{2014}/u, 'no em dash');
+  const setting = field(m.render(), 'Start of the call day').props.hint;
+  assert.match(setting, /bills the same total minutes it would whole/);
+  assert.match(setting, /Entries already logged keep their call day unless you edit them/);
+  assert.doesNotMatch(setting, /\u{2014}/u, 'no em dash');
 });
