@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="theme-color" content="#0a1014">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-PhkkJvVbXiKN6V2cO8Y1liCK/0lvAFYbaDo7QcTYIOs='; style-src 'self'; connect-src 'self' https://hkpnnsjcwprrwobmpqyy.supabase.co; worker-src 'self'; frame-src blob:; img-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-KrYZLifVz6esGVuHcze6aZKk9o9Z/j82BjNWJqEBpc0='; style-src 'self'; connect-src 'self' https://hkpnnsjcwprrwobmpqyy.supabase.co; worker-src 'self'; frame-src blob:; img-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>Private credential access | CredentialDOMD</title>
   <script id="portal-bootstrap">
 (() => {
@@ -30,7 +30,7 @@
     }).catch(() => {
       if (current !== startup) return;
       inviteToken = "";
-      document.getElementById("loading-message").textContent = "This page could not open. Check your connection, then reopen the original invitation email. If you already verified a code, ask the physician for a new invitation.";
+      document.getElementById("loading-message").textContent = "This page could not open. Check your connection, then open the link in your invitation email again.";
     });
   };
   addEventListener("hashchange", () => {
@@ -48,10 +48,10 @@
 <body>
   <a class="skip" href="#main">Skip to document access</a>
   <div class="wrap">
-    <header class="topbar"><a class="brand" href="/">Credential<span>DOMD</span></a><span class="private-label">Private document access</span></header>
+    <header class="topbar"><a class="brand" href="/">Credential<span>DOMD</span></a><span class="private-label">Private credential access</span></header>
     <main id="main">
-      <header class="intro"><p class="eyebrow">Shared with you</p><h1>Credential documents.<br>A private handoff.</h1><p class="lead">Verify your invited email address to access only the documents the physician selected.</p></header>
-      <ol id="steps" class="steps" aria-label="Access steps" hidden><li data-step="email">1 <span>Email</span></li><li data-step="code">2 <span>Code</span></li><li data-step="documents">3 <span>Documents</span></li></ol>
+      <header class="intro"><p class="eyebrow">Shared with you</p><h1>Credential file.<br>View only.</h1><p class="lead">Verify your invited email address to open the credential records and files the physician shared with you.</p></header>
+      <ol id="steps" class="steps" aria-label="Access steps" hidden><li data-step="email">1 <span>Email</span></li><li data-step="code">2 <span>Code</span></li><li data-step="documents">3 <span>File</span></li></ol>
       <section class="panel" id="access-panel" aria-busy="true">
         <p id="loading-message" role="status">Opening private access…</p>
         <noscript><p>JavaScript is needed to verify your email and open these documents. Ask the physician for another way to receive them if you cannot enable it.</p></noscript>
@@ -66,10 +66,18 @@
           <h2>Check your inbox</h2><p class="muted">If this invitation is available for <strong id="code-email"></strong>, a code will arrive. Check your spam folder too.</p>
           <label for="verification-code">Six-digit code</label><input id="verification-code" name="code" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required aria-describedby="code-help">
           <p id="code-help" class="hint">Use the latest code. It expires after 10 minutes. Never share it with anyone.</p>
-          <button class="primary" type="submit">Verify and open documents</button>
+          <button class="primary" type="submit">Verify and open</button>
           <div class="secondary-actions"><button id="resend-code" class="text-button" type="button">Send another code</button><button id="change-email" class="text-button" type="button">Change email</button></div>
-          <p class="hint">Keep this page open. Once verified, reloading or closing it ends your access. You will need a new invitation from the physician.</p>
+          <p class="hint">Keep this page open. Reloading or closing it ends this visit. To come back later, open the link in your email again and ask for a new code.</p>
         </form>
+        <section id="standing-view" hidden aria-labelledby="physician-name">
+          <div class="section-heading"><div><p class="eyebrow">Credential file</p><h2 id="physician-name" tabindex="-1"></h2><p id="physician-detail" class="muted"></p></div><button id="end-standing" class="secondary" type="button">End visit</button></div>
+          <p id="grant-detail" class="grant-detail"></p>
+          <p id="visit-detail" class="muted"></p>
+          <p id="download-note" class="hint"></p>
+          <div id="section-list" class="section-list"></div>
+          <button id="refresh-standing" class="text-button" type="button">Refresh</button>
+        </section>
         <section id="documents-view" hidden aria-labelledby="documents-title">
           <div class="section-heading"><div><h2 id="documents-title" tabindex="-1">Your shared documents</h2><p id="session-detail" class="muted"></p></div><button id="end-access" class="secondary" type="button">End access</button></div>
           <p class="hint">Downloads save a copy on your device. That copy remains after this access ends. These are shared records; CredentialDOMD does not certify their accuracy or current standing.</p>
