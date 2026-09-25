@@ -18,8 +18,8 @@ import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
 const PORT = '58677';
 const run = promisify(execFile);
 const read = name => fs.readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8');
-const MIGRATION = read('supabase/migrations/20260925130000_member_support_view.sql');
-const ROLLBACK = read('docs/rollback/20260925130000_member_support_view.rollback.sql');
+const MIGRATION = read('supabase/migrations/20260925131000_member_support_view.sql');
+const ROLLBACK = read('docs/rollback/20260925131000_member_support_view.rollback.sql');
 const extract = (source, pattern, label) => { const found = source.match(pattern); if (!found) throw new Error(`fixture could not find ${label}`); return found[0]; };
 // The production definitions this migration leans on, read out of their own
 // migrations so a change to either reaches this test.
@@ -287,9 +287,22 @@ test('member support view: grants, visits, refusals and the member log', { skip:
     assert.deepEqual(await start(pg, { member: B }), { state: 'member_unavailable' });
   });
 
-  await t.test('account deletion (service role) removes the log and the grants; visits cascade', async () => {
-    await pg.sql(service(`delete from public.member_view_events where profile_id = '${A}'; delete from public.member_view_grants where profile_id = '${A}'`));
+  await t.test('account deletion, in delete-account\'s order: a view started between the two deletes leaves no log row', async () => {
+    // delete-account runs USER_TABLES one request at a time, not in one
+    // transaction, so an administrator can act between the two deletes.
+    const order = [...read('supabase/functions/delete-account/lib.ts').matchAll(/table: "(member_view_(?:grants|events))"/g)].map(m => m[1]);
+    assert.equal(order.length, 2, 'delete-account names both support access tables');
+    assert.equal(json(await pg.sql(as(A, 'select public.member_view_status()'))).grant.state, 'active', 'the member still has support access open');
+    const visit = await start(pg);
+    assert.equal(visit.state, 'active');
+    await pg.sql(service(`delete from public.${order[0]} where profile_id = '${A}'`));
+    const between = await start(pg);
+    const fileBetween = await recordFile(pg, visit.session.id);
+    await pg.sql(service(`delete from public.${order[1]} where profile_id = '${A}'`));
+    assert.deepEqual(between, { state: 'no_grant' }, 'no view can start once the first delete ran');
+    assert.deepEqual(fileBetween, { state: 'not_found' }, 'no file open can be logged once the first delete ran');
     assert.equal(await pg.sql(`select count(*) from public.member_view_sessions where profile_id = '${A}'`), '0');
+    assert.equal(await pg.sql(`select count(*) from public.member_view_events where profile_id = '${A}'`), '0', 'no log row outlives the account');
     assert.equal(await pg.sql(`select count(*) from public.member_view_events`), '0');
   });
 

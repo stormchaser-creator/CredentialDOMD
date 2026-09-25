@@ -2,7 +2,7 @@
 // administrator may see of a member's account, and in what shape.
 //
 // The member turns it on in Settings for 24 hours and can end it at any time
-// (migration 20260925130000_member_support_view.sql). While it is on, an
+// (migration 20260925131000_member_support_view.sql). While it is on, an
 // administrator can open a read-only view of the account for at most 15
 // minutes, with a written reason, and every view and every file opened is
 // logged where the member can read it.
@@ -17,9 +17,17 @@
 //      that is not named is never read from the database.
 //   2. shapeSnapshot keeps only the keys a section names, drops every string
 //      that starts with "enc1:" (secretBox ciphertext) wherever it sits, and
-//      drops custom_fields keys that look like secrets or patient details.
+//      runs the app's own identifier gate (src/utils/identifierGate.js, copied
+//      to ./app/utils/ by scripts/sync-shared-app-modules.mjs) over what is
+//      left: a custom_fields or fieldValues entry whose label or value is a
+//      patient identifier, a Social Security or taxpayer number, a full date
+//      of birth or an account, encounter, licence or passport number is
+//      dropped, and a line of free text that holds one is withheld. Rows the
+//      write-time gate never saw (imports from before it, JSON restores) are
+//      screened here all the same.
 // Collections in MEMBER_VIEW_NEVER have no entry at all, so there is no code
 // path that reads them.
+import { identifierReason } from './app/utils/identifierGate.js';
 
 export const MEMBER_VIEW_POLICY = Object.freeze({
   grantHours: 24,
@@ -46,8 +54,11 @@ export const MEMBER_VIEW_NEVER_FIELDS = Object.freeze({
   healthRecords: ['specimenId'],
   malpracticeHistory: ['settlementAmount'],
   memberships: ['cost'],
+  // notes is the Contracts form's "Key terms / notes" field ("Cancellation
+  // clause, guaranteed hours, travel, etc."): where a physician writes the
+  // rates in words, so it is withheld with them.
   locumContracts: ['hourlyRate', 'callHourlyRate', 'callStipend', 'overageHourlyRate', 'orientationFee', 'orientationBilled',
-    'orientationHourlyRate', 'dayRate', 'callRateGrid', 'scholarlyRate', 'clinicalDayRate', 'customFields'],
+    'orientationHourlyRate', 'dayRate', 'callRateGrid', 'scholarlyRate', 'clinicalDayRate', 'customFields', 'notes'],
   workLog: ['invoiceId', 'privateNote'],
   dutyDays: ['amount', 'invoiceId', 'customFields'],
   scheduleDays: ['expected', 'sourceKey'],
@@ -55,7 +66,7 @@ export const MEMBER_VIEW_NEVER_FIELDS = Object.freeze({
 });
 
 // What the viewer tells the administrator is withheld. Fixed text, no counts.
-export const MEMBER_VIEW_WITHHELD_LINE = 'Never shown: passport and travel IDs, taxes, invoices, expenses, deductions, contract rates and pay, encounter coding, portal logins, Protected Identity, encrypted values, and uploads that are not filed to a record shown here.';
+export const MEMBER_VIEW_WITHHELD_LINE = 'Never shown: passport and travel IDs, taxes, invoices, expenses, deductions, contract rates, pay and terms, encounter coding, portal logins, Protected Identity, encrypted values, text the identifier check flags as a patient identifier or tax ID, and uploads that are not filed to a record shown here.';
 
 const f = (key, label, kind = 'text') => Object.freeze({ key, label, kind });
 const LIFECYCLE = [f('lifecycleStatus', 'Status', 'lifecycle'), f('dateUnknown', 'Date not known yet', 'yes'), f('supersededBy', 'Replaced by'), f('statusSource', 'Status source')];
@@ -81,7 +92,7 @@ export const MEMBER_VIEW_SECTIONS = Object.freeze([
   { key: 'caseLogs', table: 'case_logs', label: 'Case Logs', group: 'credentials', fields: [f('category', 'Category'), f('title', 'Description'), f('date', 'Date', 'date'), f('facility', 'Facility'), f('role', 'Role'), f('attending', 'Attending / Supervising Surgeon'), f('cptCodes', 'CPT Code(s)'), f('wRvu', 'wRVU', 'number'), f('complication', 'Complication (if any)'), f('source', 'Source'), NOTES, CUSTOM] },
   { key: 'customCategories', table: 'custom_categories', label: 'Your categories', group: 'credentials', fields: [f('name', 'Name'), f('description', 'Description', 'long'), f('icon', 'Icon'), f('fields', 'Fields', 'fieldDefs'), f('sortOrder', 'Order', 'number'), f('archivedAt', 'Archived', 'date'), CUSTOM] },
   { key: 'customRecords', table: 'custom_records', label: 'Other records', group: 'credentials', fields: [f('categoryId', 'Category id', 'hidden'), f('categoryName', 'Category'), f('name', 'Name'), f('issuer', 'Issued by'), f('number', 'Number / ID'), f('issuedDate', 'Issued', 'date'), f('expirationDate', 'Expires', 'date'), f('fieldLabels', 'Field labels', 'hidden'), f('fieldValues', 'Details', 'values'), f('documentIds', 'Files', 'hidden'), NOTES, CUSTOM] },
-  { key: 'locumContracts', table: 'locum_contracts', label: 'Contracts', group: 'work', fields: [f('facility', 'Facility'), f('shortName', 'Short name'), f('agency', 'Agency'), f('location', 'Location'), f('workState', 'Work state'), f('billTo', 'Bill to'), f('startDate', 'Start', 'date'), f('endDate', 'End', 'date'), f('termStart', 'Term start', 'date'), f('termEnd', 'Term end', 'date'), f('coveragePeriods', 'Coverage periods', 'periods'), f('payModel', 'Pay model'), f('incrementMinutes', 'Billing increment (minutes)', 'number'), f('minCallMinutes', 'Minimum call (minutes)', 'number'), f('stipendHours', 'Stipend hours', 'number'), f('splitAtDayStart', 'Split call at day start', 'yes'), f('dayStartHour', 'Day starts at hour', 'number'), NOTES] },
+  { key: 'locumContracts', table: 'locum_contracts', label: 'Contracts', group: 'work', fields: [f('facility', 'Facility'), f('shortName', 'Short name'), f('agency', 'Agency'), f('location', 'Location'), f('workState', 'Work state'), f('billTo', 'Bill to'), f('startDate', 'Start', 'date'), f('endDate', 'End', 'date'), f('termStart', 'Term start', 'date'), f('termEnd', 'Term end', 'date'), f('coveragePeriods', 'Coverage periods', 'periods'), f('payModel', 'Pay model'), f('incrementMinutes', 'Billing increment (minutes)', 'number'), f('minCallMinutes', 'Minimum call (minutes)', 'number'), f('stipendHours', 'Stipend hours', 'number'), f('splitAtDayStart', 'Split call at day start', 'yes'), f('dayStartHour', 'Day starts at hour', 'number')] },
   { key: 'workLog', table: 'work_log', label: 'Work Log', group: 'work', fields: [f('contractId', 'Contract', 'contract'), f('type', 'Type'), f('date', 'Date', 'date'), f('startTime', 'Start', 'datetime'), f('endTime', 'End', 'datetime'), f('durationMin', 'Minutes', 'number'), f('billedMin', 'Billed minutes', 'number'), f('description', 'Description', 'long'), f('callDay', 'Call day', 'date'), f('splitGroupId', 'Split entry', 'hidden')] },
   { key: 'dutyDays', table: 'duty_days', label: 'Duty Days', group: 'work', fields: [f('contractId', 'Contract', 'contract'), f('date', 'Date', 'date'), f('workedDay', 'Worked day', 'yes'), f('scholarly', 'Scholarly', 'yes'), f('callHospital', 'Call hospital'), f('callRole', 'Call role'), f('callPeriods', 'Call periods', 'periods'), f('placementOk', 'Placement confirmed', 'yes'), NOTES] },
   { key: 'scheduleDays', table: 'schedule_days', label: 'Schedule', group: 'work', fields: [f('contractId', 'Contract', 'contract'), f('date', 'Date', 'date'), f('kind', 'Kind'), f('note', 'Note', 'long'), f('source', 'Source')] },
@@ -138,16 +149,48 @@ const MAX_TEXT = 5000;
 
 export const isSecretValue = value => typeof value === 'string' && value.trimStart().startsWith('enc1:');
 
+/** Why a labelled value is withheld (identifierGate's reason), or null. */
+export function withheldReason(label, value) {
+  const text = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+  return identifierReason(String(label ?? ''), text);
+}
+
+// A line written "Label: value" is judged like a field with that label, so
+// "Pt Name: Jane Q" or "Tax ID: 12-3456789" typed into notes is caught as
+// well as "MRN 00481234".
+function lineReason(line) {
+  const labelled = /^\s*([^:\n]{1,60}):\s*(\S.*)$/.exec(line);
+  return (labelled && identifierReason(labelled[1], labelled[2])) || identifierReason('', line);
+}
+
+/**
+ * Free text with every line that holds an identifier replaced by a note of
+ * what was withheld. The rest of the text is kept, so support still reads
+ * "Renew online" beside a withheld chart number.
+ */
+export function withholdIdentifiers(text) {
+  if (typeof text !== 'string' || !text) return text;
+  const lines = text.split('\n');
+  let changed = false;
+  const out = lines.map(line => {
+    const why = lineReason(line);
+    if (!why) return line;
+    changed = true;
+    return `[Withheld: ${why}]`;
+  });
+  return changed ? out.join('\n') : text;
+}
+
 /**
  * One value, cleaned for the snapshot: ciphertext and control characters out,
- * long text cut, objects filtered by key, depth and size bounded. Returns
- * undefined for anything that is dropped.
+ * identifiers withheld, long text cut, objects filtered by key, depth and
+ * size bounded. Returns undefined for anything that is dropped.
  */
 export function cleanValue(value, depth = 0) {
   if (value === null || value === undefined) return undefined;
   if (typeof value === 'string') {
     if (isSecretValue(value)) return undefined;
-    const clean = value.replace(CONTROL, ' ');
+    const clean = withholdIdentifiers(value.replace(CONTROL, ' '));
     return clean.length > MAX_TEXT ? clean.slice(0, MAX_TEXT) : clean;
   }
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
@@ -160,13 +203,28 @@ export function cleanValue(value, depth = 0) {
   if (typeof value === 'object') {
     const out = {};
     for (const [key, item] of Object.entries(value).slice(0, 100)) {
-      if (SECRET_KEY.test(key)) continue;
+      // A key is a label: "Medical Record #", "Pt Name", "Tax ID". Judged
+      // with its value, the way the app judges a field on the way in.
+      if (SECRET_KEY.test(key) || withheldReason(key, item)) continue;
       const clean = cleanValue(item, depth + 1);
       if (clean !== undefined) out[key] = clean;
     }
     return out;
   }
   return undefined;
+}
+
+// A custom record's fieldValues are keyed by a generated key ("f1",
+// "badgeNumber"); the physician's label is in fieldLabels. Judge each value
+// by its label as well, and drop the label with a withheld value.
+function screenFieldValues(record) {
+  const values = record.fieldValues;
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return;
+  const labels = record.fieldLabels && typeof record.fieldLabels === 'object' && !Array.isArray(record.fieldLabels) ? record.fieldLabels : {};
+  for (const [key, value] of Object.entries(values)) {
+    const label = typeof labels[key] === 'string' && labels[key].trim() ? labels[key] : key;
+    if (withheldReason(label, value)) { delete values[key]; delete labels[key]; }
+  }
 }
 
 const PERIOD_KEYS = ['start', 'end', 'startDate', 'endDate', 'from', 'to', 'label', 'hospital', 'role', 'kind'];
@@ -199,6 +257,7 @@ function shapeRecord(section, row) {
     if (typeof value === 'string' && !value.trim()) continue;
     record[field.key] = value;
   }
+  screenFieldValues(record);
   return record;
 }
 
@@ -268,10 +327,19 @@ export function shapeSnapshot(raw) {
   return { schemaVersion: 1, member: shapeProfile(raw?.profile), sections, documents, truncated, withheld: MEMBER_VIEW_WITHHELD_LINE };
 }
 
+/**
+ * The reason as it will be stored, whatever its length: one line, runs of
+ * whitespace collapsed. The admin screen counts and checks this same string,
+ * so the counter and the server never disagree.
+ */
+export function collapseReason(value) {
+  if (typeof value !== 'string') return '';
+  return value.replace(CONTROL, ' ').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** The reason the administrator typed, as stored: one line, 10 to 500 characters, or null. */
 export function normalizeReason(value) {
-  if (typeof value !== 'string') return null;
-  const reason = value.replace(CONTROL, ' ').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const reason = collapseReason(value);
   return reason.length >= MEMBER_VIEW_POLICY.reasonMin && reason.length <= MEMBER_VIEW_POLICY.reasonMax ? reason : null;
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MEMBER_VIEW_WITHHELD_LINE, memberViewSection } from "../../../supabase/functions/_shared/memberView.mjs";
-import { createReadOnlyView, recordCard, recordDetails, profileDetails, documentsFor, groupSections, sectionRecords, homeSummary, formatCountdown, VIEWER_GROUPS, READ_ONLY_MESSAGE } from "../../utils/memberViewer.js";
-import { MEMBER_VIEW_MESSAGES } from "../../utils/memberViewClient.js";
+import { createReadOnlyView, recordCard, recordDetails, profileDetails, documentsFor, groupSections, sectionRecords, homeSummary, formatCountdown, memberDisplayName, VIEWER_GROUPS, READ_ONLY_MESSAGE } from "../../utils/memberViewer.js";
+import { MEMBER_VIEW_MESSAGES, MEMBER_VIEW_MAX_FAILED_CHECKS } from "../../utils/memberViewClient.js";
 import { adminViewBannerStyle, ADMIN_VIEW_BANNER_BUTTON_STYLE } from "../shared/adminViewBanner.js";
 import { STATUS_COLORS, formatDate } from "../../utils/helpers.js";
 
@@ -23,16 +23,18 @@ const DEFAULT_T = { bg: "#0f172a", card: "#111827", border: "#334155", text: "#f
  * control. The one thing it asks the server for is a file, one at a time,
  * which the server logs for the member.
  *
- * Closes itself when the 15 minutes are up, when the member ends access, or
- * when the member's grant runs out, whichever is first, and drops the
- * snapshot and every opened file.
+ * Closes itself when the 15 minutes are up, when the member ends access,
+ * when the member's grant runs out, or when the server cannot confirm the
+ * access, whichever is first, and drops the snapshot and every opened file.
  */
-export default function MemberViewer({ opened, client, T: theme, isDesktop = false, onClose }) {
+export default function MemberViewer({ opened, client, T: theme, isDesktop = false, fallbackName = "", onClose }) {
   const T = { ...DEFAULT_T, ...(theme || {}) };
   const sessionId = opened?.session?.id;
   const view = useMemo(() => createReadOnlyView(opened?.snapshot), [opened]);
   const snapshot = view.data;
-  const memberName = opened?.member?.name || snapshot?.member?.name || "this member";
+  // The banner must say whose account is open, also for a profile with no
+  // name yet: the name, else the account email the Accounts row showed.
+  const memberName = memberDisplayName(opened, snapshot, fallbackName);
   // Counted down from the server's seconds, not its timestamp: an office
   // clock that is minutes out does not change when the view closes.
   const [deadline, setDeadline] = useState(() => Date.now() + Math.max(0, Number(opened?.session?.expiresInSeconds) || 0) * 1000);
@@ -69,15 +71,25 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
     return () => clearInterval(timer);
   }, []);
 
-  // The server's word on whether the visit may continue.
+  // The server's word on whether the visit may continue. Fails closed: a
+  // refusal that ends the visit closes it at once, and any other failure
+  // (network, timeout, a blocked request) closes it after
+  // MEMBER_VIEW_MAX_FAILED_CHECKS in a row, so the records never stay on
+  // screen while the grant cannot be confirmed.
+  const failedChecks = useRef(0);
   useEffect(() => {
     if (!sessionId) return undefined;
     const timer = setInterval(async () => {
       try {
         const state = await client.check(sessionId);
+        failedChecks.current = 0;
         const serverEnd = Date.now() + state.session.expiresInSeconds * 1000;
         setDeadline(current => Math.min(current, serverEnd));
-      } catch (error) { if (error?.closes) closeRef.current(error.message); }
+      } catch (error) {
+        failedChecks.current += 1;
+        if (error?.closes) closeRef.current(error.message);
+        else if (failedChecks.current >= MEMBER_VIEW_MAX_FAILED_CHECKS) closeRef.current(MEMBER_VIEW_MESSAGES.access_unconfirmed);
+      }
     }, MEMBER_VIEW_HEARTBEAT_MS);
     return () => clearInterval(timer);
   }, [client, sessionId]);
@@ -183,6 +195,31 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
     </div>;
   };
 
+  // One state's CME card, as the member's Home draws it (App.jsx
+  // renderStateCard), without its Find CME and Renewal packet buttons.
+  const stateCard = (state) => {
+    const tone = { danger: T.danger, warning: "#f59e0b", ok: T.accent }[state.urgency] || T.textMuted;
+    const mark = state.status === "met" ? "\u{2713}" : state.status === "confirm" ? "?" : "!";
+    return <div key={state.st} data-member-view-state={state.st} style={{ borderTop: `1px solid ${T.border}`, padding: "10px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
+          {state.st}{state.primary && <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, marginLeft: 8 }}>PRIMARY</span>}
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: state.comp.totalMet ? T.accent : T.text }}>{state.hoursLine} <span aria-label={state.status === "met" ? "Met" : state.status === "confirm" ? "Needs confirmation" : "Gaps"}>{mark}</span></span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: T.textDim, marginTop: 4 }}>
+        <span>{state.renews}</span>
+        {state.daysLabel && <span style={{ fontWeight: 800, color: tone }}>{state.daysLabel}</span>}
+      </div>
+      <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.4, marginTop: 4 }}>
+        {state.window}
+        {state.cycleStartIgnored && <span style={{ color: "#f59e0b", fontWeight: 700 }}> CME cycle start on this license is on or after the renewal date, so it was not used.</span>}
+      </div>
+      <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>{state.assessment}</div>
+      {[...state.unmetTopics, state.cat1, state.mate].filter(Boolean).map((line, index) => <div key={`${index}:${line}`} style={{ fontSize: 12, color: "#f59e0b", marginTop: 2 }}>{line}</div>)}
+    </div>;
+  };
+
   const home = () => {
     const summary = homeSummary(snapshot);
     return <div>
@@ -194,9 +231,16 @@ export default function MemberViewer({ opened, client, T: theme, isDesktop = fal
           <span style={{ fontSize: 14, color: T.text }}>{item.label}: {item.type ? `${item.type} ` : ""}{item.mainLine}<span style={{ color: T.textDim }}> {item.subLine}</span></span>
         </div>)}
       </div>
+      <div style={card} data-member-view-cme="">
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>CME progress</div>
+        <p style={{ ...quiet, margin: "4px 0 6px" }}>The member&apos;s Home cards, counted the same way: hours inside each state&apos;s current renewal window.</p>
+        {summary.cmePartial && <p style={quiet}>Only the newest records were loaded, so these hours can read lower than the member&apos;s.</p>}
+        {!summary.cmeStates.length && <p style={quiet}>No state is tracked: no primary state in Settings and no medical license on file.</p>}
+        {summary.cmeStates.map(state => stateCard(state))}
+      </div>
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>On file</div>
-        <p style={{ ...quiet, margin: "6px 0" }}>{summary.cmeHours} CME hours recorded. {summary.documents} file{summary.documents === 1 ? "" : "s"} in this view.</p>
+        <p style={{ ...quiet, margin: "6px 0" }}>{summary.documents} file{summary.documents === 1 ? "" : "s"} in this view.</p>
         {summary.counts.map(row => <div key={row.key} style={{ fontSize: 14, color: T.text, padding: "2px 0" }}>{row.label}: {row.count}</div>)}
       </div>
     </div>;

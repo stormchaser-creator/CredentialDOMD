@@ -180,7 +180,8 @@ test('only allowlisted tables and columns are ever selected', async () => {
   const selected = new Map(f.calls.rows.map(c => [c.table, c.columns]));
   const forbidden = { licenses: ['renewal_cost'], privileges: ['portal_url', 'login_username', 'login_secret'], health_records: ['specimen_id'],
     malpractice_history: ['settlement_amount'], professional_memberships: ['cost'],
-    locum_contracts: ['hourly_rate', 'call_hourly_rate', 'call_stipend', 'overage_hourly_rate', 'orientation_fee', 'orientation_billed', 'orientation_hourly_rate', 'day_rate', 'call_rate_grid', 'scholarly_rate', 'clinical_day_rate', 'custom_fields'],
+    // notes: the Contracts form's "Key terms / notes", where rates are written in words.
+    locum_contracts: ['hourly_rate', 'call_hourly_rate', 'call_stipend', 'overage_hourly_rate', 'orientation_fee', 'orientation_billed', 'orientation_hourly_rate', 'day_rate', 'call_rate_grid', 'scholarly_rate', 'clinical_day_rate', 'custom_fields', 'notes'],
     work_log: ['invoice_id', 'private_note'], duty_days: ['amount', 'invoice_id', 'custom_fields'], schedule_days: ['expected', 'source_key'], documents: ['storage_path'] };
   for (const [table, columns] of Object.entries(forbidden)) for (const column of columns) assert.ok(!selected.get(table).includes(column), `${table}.${column} is never selected`);
   for (const column of ['api_key', 'anthropic_api_key', 'tax_prep', 'device_id', 'profile_photo']) assert.ok(!f.calls.profile[0].includes(column), `profiles.${column} is never selected`);
@@ -231,6 +232,10 @@ test('the snapshot never carries an excluded collection, column, secret or file 
   assert.equal(snapshot.sections.cme[0].notes, 'Notes for cme');
   assert.deepEqual(snapshot.sections.cme[0].customFields, { badge: 'B-1', cptDetail: [{ code: '61519', desc: 'Craniotomy' }] });
   assert.deepEqual(snapshot.sections.customRecords[0].fieldValues, { badgeNumber: 'PX-1182' });
+  // A contract's "Key terms / notes" carries the rates in words: never read, never shown.
+  assert.equal(snapshot.sections.locumContracts[0].notes, undefined);
+  assert.ok(!text.includes('Notes for locum_contracts'), 'contract notes leaked');
+  assert.ok(MEMBER_VIEW_NEVER_FIELDS.locumContracts.includes('notes'));
   // Rates riding inside the period lists are dropped too.
   assert.deepEqual(snapshot.sections.locumContracts[0].coveragePeriods, [{ start: '2026-10-01', end: '2026-10-07' }]);
   assert.deepEqual(snapshot.sections.dutyDays[0].callPeriods, [{ start: '2026-10-02T07:00', end: '2026-10-03T07:00', hospital: 'Mercy' }]);

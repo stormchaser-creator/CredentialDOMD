@@ -9,6 +9,8 @@
 //
 // Nothing here stores anything: no localStorage, no sessionStorage. The
 // snapshot and the file bytes live in the viewer's memory until Exit.
+import { collapseReason, normalizeReason, MEMBER_VIEW_POLICY } from "../../supabase/functions/_shared/memberView.mjs";
+
 const ENV = import.meta.env || {};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_JSON_BYTES = 8 * 1024 * 1024;
@@ -36,9 +38,17 @@ export const MEMBER_VIEW_MESSAGES = Object.freeze({
   snapshot_unavailable: "The member's records could not be read. Try again.",
   support_view_disabled: "Support view is turned off on the server.",
   origin_not_allowed: "Open Admin from credentialdomd.com to use support view.",
+  access_unconfirmed: "Support access could not be confirmed, so the view is closed. Open it again to continue.",
 });
-// A refusal that means the view must close.
-export const MEMBER_VIEW_CLOSING = new Set(["no_active_grant", "session_not_found", "session_ended", "session_expired", "grant_ended", "grant_expired", "admin_required", "unauthorized", "session_changed", "member_unavailable"]);
+// A refusal that means the view must close. support_view_disabled is the
+// operator's kill switch, and origin_not_allowed means no later call can
+// succeed from this page either: both close at once rather than leaving the
+// member's records on screen until the local 15 minutes run out.
+export const MEMBER_VIEW_CLOSING = new Set(["no_active_grant", "session_not_found", "session_ended", "session_expired", "grant_ended", "grant_expired", "admin_required", "unauthorized", "session_changed", "member_unavailable", "support_view_disabled", "origin_not_allowed"]);
+// Checks in a row that may fail for any other reason (network, timeout, a
+// blocked request) before the viewer closes. The view fails closed: when it
+// cannot confirm the grant, it does not keep showing the member's records.
+export const MEMBER_VIEW_MAX_FAILED_CHECKS = 2;
 
 export function memberViewFailure(code) {
   const known = Object.hasOwn(MEMBER_VIEW_MESSAGES, code);
@@ -88,9 +98,12 @@ export function createMemberViewClient({
   return {
     async start({ profileId, reason }) {
       if (!UUID.test(profileId || "")) throw memberViewFailure("invalid_request");
-      const trimmed = typeof reason === "string" ? reason.trim() : "";
-      if (trimmed.length < 10 || trimmed.length > 500) throw memberViewFailure("invalid_reason");
-      const value = await call({ action: "start", profileId, reason: trimmed, requestId: uuid() });
+      // The server's own rule (normalizeReason): newlines and runs of spaces
+      // collapse before the length is checked, so nothing the screen allows
+      // comes back invalid_reason.
+      const clean = normalizeReason(reason);
+      if (!clean) throw memberViewFailure("invalid_reason");
+      const value = await call({ action: "start", profileId, reason: clean, requestId: uuid() });
       if (!value?.session || !UUID.test(value.session.id || "") || !Number.isFinite(value.session.expiresInSeconds) || !value.snapshot || typeof value.snapshot !== "object") throw memberViewFailure();
       return value;
     },
@@ -178,9 +191,27 @@ export async function readActiveGrants(client) {
   return { grants: new Map(data.filter(row => UUID.test(row?.profile_id || "")).map(row => [row.profile_id, { grantId: row.grant_id, expiresAt: row.expires_at }])), error: null };
 }
 
-/** Whether Admin > Accounts may offer "View as member" for this row, and what it says. */
-export function memberViewAvailability(grants, user, myProfileId) {
+/**
+ * The reason box as the server will judge it: the collapsed text, its length
+ * and whether it may be sent. The counter and the Open button read this, not
+ * the raw textarea, so "CME\n\nissue" counts as the 9 characters it is stored as.
+ */
+export function reasonCheck(value) {
+  const text = collapseReason(value);
+  return { text, length: text.length, ok: text.length >= MEMBER_VIEW_POLICY.reasonMin && text.length <= MEMBER_VIEW_POLICY.reasonMax };
+}
+
+export const GRANTS_UNCHECKED_NOTE = "Could not check support access. Refresh to try again.";
+
+/**
+ * Whether Admin > Accounts may offer "View as member" for this row, and what
+ * it says. `grantsError` is readActiveGrants' error: when the list did not
+ * load, no row can be said to lack a grant, so each says the check failed
+ * instead of "not allowed by the member".
+ */
+export function memberViewAvailability(grants, user, myProfileId, grantsError = null) {
   if (!user || user.deleted_at || user.id === myProfileId) return { show: false, enabled: false, note: "" };
+  if (grantsError) return { show: true, enabled: false, note: GRANTS_UNCHECKED_NOTE, unchecked: true };
   const grant = grants instanceof Map ? grants.get(user.id) : null;
   if (!grant) return { show: true, enabled: false, note: "Support access not allowed by the member" };
   return { show: true, enabled: true, note: `Support access allowed until ${formatWhen(grant.expiresAt)}` };

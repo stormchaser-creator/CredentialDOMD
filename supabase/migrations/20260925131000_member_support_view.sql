@@ -19,7 +19,7 @@
 -- browser role can read of another account.
 --
 -- Idempotent: safe to run twice. Rollback:
--- docs/rollback/20260925130000_member_support_view.rollback.sql
+-- docs/rollback/20260925131000_member_support_view.rollback.sql
 begin;
 
 create table if not exists public.member_view_grants (

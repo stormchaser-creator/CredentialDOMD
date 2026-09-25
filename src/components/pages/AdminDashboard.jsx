@@ -1019,7 +1019,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
               {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
                 && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
               {(() => {
-                const view = memberViewAvailability(memberGrants, u, myProfileId);
+                const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
                 if (!view.show) return null;
                 return <button key="view-as-member" type="button" disabled={!view.enabled} title={view.note} onClick={() => setMemberViewTarget(u)} style={{
                   fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, border: `1px solid ${view.enabled ? "#a78bfa" : T.border}`,
@@ -1028,8 +1028,8 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
               })()}
             </div>
             {(() => {
-              const view = memberViewAvailability(memberGrants, u, myProfileId);
-              return view.show && view.enabled ? <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{view.note}</div> : null;
+              const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
+              return view.show && (view.enabled || view.unchecked) ? <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{view.note}</div> : null;
             })()}
           </div>
         );

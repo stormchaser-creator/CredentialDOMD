@@ -5,8 +5,11 @@ import { readSupportAccess, allowSupportAccess, endSupportAccess, grantStatus, f
 /**
  * Settings > Support access (ticket d45e857c, phase 2).
  *
- * CredentialDOMD support cannot open a member's account unless the member
- * allows it here. Allowing it lasts 24 hours and can be ended at any time.
+ * Support can open a read-only view of a member's account in the app only if
+ * the member allows it here. That says nothing about the service
+ * administrator's database and storage access for running the service, which
+ * the Privacy Policy (section 7) describes, so the card points there rather
+ * than promising more. Allowing it lasts 24 hours and can be ended at any time.
  * While it is on, an administrator can open a read-only view of the account
  * for up to 15 minutes at a time, with a written reason. Every view and every
  * file opened is listed below, with who, when and why.
@@ -57,10 +60,11 @@ export default function SupportAccessCard({ theme: T, client = supabase }) {
   return <div data-support-access="" style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: T.shadow1 }}>
     <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: "0 0 8px" }}>Support access</h3>
     <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.6, margin: "0 0 10px" }}>
-      CredentialDOMD support cannot open your account unless you allow it here. If you ask for help, you can let support
-      see your account the way you see it, read-only, for 24 hours. Support cannot add, change, delete, send or share
-      anything. Passport and travel IDs, taxes, invoices, expenses, deductions, contract rates and Protected Identity are
-      never shown. Every view and every file opened is listed below.
+      Support can open a read-only view of your account in the app only if you allow it here. The service
+      administrator&apos;s database access for running the service is described in the Privacy Policy. If you ask for
+      help, you can let support view your account, read-only, for 24 hours. Support cannot add, change, delete, send or
+      share anything. Passport and travel IDs, taxes, invoices, expenses, deductions, contract rates and terms, and
+      Protected Identity are never shown. Every view and every file opened is listed below.
     </p>
     {status && <div role="status" style={{ fontSize: 14, color: T.text, background: active ? T.accentDim : "transparent", border: `1px solid ${active ? T.accent : T.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
       {active

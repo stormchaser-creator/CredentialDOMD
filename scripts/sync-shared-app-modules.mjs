@@ -29,6 +29,9 @@ export const TARGET_DIR = "supabase/functions/_shared/app";
 export const ROOTS = Object.freeze([
   "utils/scannerCore.js",
   "utils/customCategories.js",
+  // The support view (memberView.mjs) screens what an administrator may read
+  // with the same identifier gate the app writes through.
+  "utils/identifierGate.js",
   "utils/sectionFields.js",
   "utils/scanSplit.js",
   "utils/phiGuard.js",

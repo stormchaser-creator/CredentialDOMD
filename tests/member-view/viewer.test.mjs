@@ -19,7 +19,7 @@ import * as adminViewBanner from '../../src/components/shared/adminViewBanner.js
 import * as helpers from '../../src/utils/helpers.js';
 
 const { createReadOnlyView, READ_ONLY_ACTIONS, ReadOnlyViewError, recordCard, recordDetails, homeSummary, formatCountdown } = memberViewer;
-const { createMemberViewClient, grantStatus, viewLogLine, memberViewAvailability, readActiveGrants, MEMBER_VIEW_MESSAGES } = memberViewClient;
+const { createMemberViewClient, grantStatus, viewLogLine, memberViewAvailability, readActiveGrants, reasonCheck, MEMBER_VIEW_MESSAGES } = memberViewClient;
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const day = offset => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
@@ -104,6 +104,22 @@ test('the banner names the member, says read-only, and counts down the time left
   assert.equal(formatCountdown(-5), '0:00');
 });
 
+test('the banner names the member even when the profile has no name', () => {
+  const banner = html => html.match(/<div role="status"[^>]*data-member-view-banner=""[^>]*>([\s\S]*?)<\/div>/)?.[1] || '';
+  const session = { id: uuid(60), expiresInSeconds: 900 };
+  const nameless = memberView.shapeSnapshot({ profile: { id: uuid(1), name: '', email: 'dana@example.invalid' }, collections: {} });
+  const withEmail = markup({ opened: { session, member: { profileId: uuid(1), name: '', degreeType: '' }, snapshot: nameless } });
+  assert.match(banner(withEmail), /Viewing dana@example\.invalid(&#x27;|')s account, read-only\./);
+  // No name and no email on the profile (3 of 11 live profiles on 2026-09-25):
+  // the email the Accounts row showed, and failing that the account id.
+  const bare = memberView.shapeSnapshot({ profile: { id: uuid(1) }, collections: {} });
+  const fromRow = markup({ opened: { session, member: { profileId: uuid(1), name: '' }, snapshot: bare }, fallbackName: 'row@example.invalid' });
+  assert.match(banner(fromRow), /Viewing row@example\.invalid(&#x27;|')s account/);
+  const byId = markup({ opened: { session, member: { profileId: uuid(1), name: '' }, snapshot: bare } });
+  assert.match(banner(byId), /Viewing member 00000000(&#x27;|')s account/);
+  for (const html of [withEmail, fromRow, byId]) assert.doesNotMatch(banner(html), /Viewing (this member)?(&#x27;|')s/);
+});
+
 test('no add, edit, delete, star, send, share, upload, scan or AI control anywhere in the viewer', () => {
   const html = markup();
   const buttons = [...html.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map(m => m[1].replace(/<[^>]+>/g, '').trim());
@@ -130,7 +146,105 @@ test('records read the way the member\'s cards read them', () => {
   assert.deepEqual(recordDetails('customRecords', s.sections.customRecords[0], s).find(d => d.label === 'Badge number'), { label: 'Badge number', value: 'PX-1182' });
   const home = homeSummary(s);
   assert.deepEqual(home.attention.map(a => a.id), [uuid(10)]);
-  assert.equal(home.cmeHours, 2.5);
+  assert.equal(home.cmeHours, undefined, 'no all-time CME sum: the member\'s Home never shows one');
+  assert.deepEqual(home.cmeStates.map(c => c.st), ['CO'], 'the one state the member tracks (the CA licence is historical)');
+});
+
+// ─── Home: the member's CME cards ─────────────────────────────────────────
+
+test('Home shows each state\'s CME exactly as the member\'s Home computes it, not an all-time sum', async () => {
+  const { complianceFor, trackedStates } = await import('../../src/utils/compliance.js');
+  const { totalHoursLabel } = await import('../../src/utils/cmePresentation.js');
+  // The member's records in the app's own shape...
+  const licenses = [
+    { id: uuid(10), type: 'Medical License', state: 'CA', licenseNumber: 'A12345', issuedDate: '2016-01-04', expirationDate: day(200) },
+    { id: uuid(11), type: 'Medical License', state: 'CO', licenseNumber: 'DR.1', expirationDate: day(500) },
+    { id: uuid(12), type: 'DEA', state: 'CA', licenseNumber: 'FR1234567', expirationDate: day(300) },
+  ];
+  const cme = [
+    { id: uuid(20), title: 'Neurosurgery update', category: 'AMA PRA Category 1', hours: 38, date: day(-30) },
+    { id: uuid(21), title: 'Five years ago', category: 'AMA PRA Category 1', hours: 174, date: day(-2000) },
+    { id: uuid(22), title: 'Pain management', category: 'AMA PRA Category 1', hours: 2, date: day(-10), topics: ['Pain Management'] },
+  ];
+  const settings = { degreeType: 'MD', primaryState: 'CA', additionalStates: ['NY'] };
+  const data = { licenses, cme, settings };
+  // ...and the same records as the database hands them to the function.
+  const snake = row => Object.fromEntries(Object.entries(row).map(([k, v]) => [memberView.camelToSnake(k), v]));
+  const snap = memberView.shapeSnapshot({
+    profile: { id: uuid(1), name: 'Dana Reyes', degree_type: 'MD', primary_state: 'CA', additional_states: ['NY'], reminder_lead_days: 90 },
+    collections: { licenses: licenses.map(snake), cme: cme.map(snake) },
+  });
+  const cards = memberViewer.stateCmeCards(snap);
+  const expected = trackedStates('CA', ['NY'], licenses).map(st => complianceFor(data, st)).sort((a, b) => (a.daysLeft ?? 9e9) - (b.daysLeft ?? 9e9));
+  assert.deepEqual(cards.map(c => c.st), expected.map(c => c.state), 'the same states, soonest renewal first');
+  for (const [i, card] of cards.entries()) {
+    const want = expected[i];
+    assert.equal(card.comp.totalEarned, want.totalEarned, card.st);
+    assert.equal(card.comp.totalRequired, want.totalRequired, card.st);
+    assert.equal(card.comp.cat1Earned, want.cat1Earned, card.st);
+    assert.equal(card.comp.daysLeft, want.daysLeft, card.st);
+    assert.equal(card.comp.assessmentStatus, want.assessmentStatus, card.st);
+    assert.deepEqual(card.comp.topicResults.map(t => [t.topic, t.earned, t.met]), want.topicResults.map(t => [t.topic, t.earned, t.met]), card.st);
+    assert.deepEqual(card.comp.mate, want.mate, card.st);
+    assert.equal(card.hoursLine, want.noGeneralReq ? 'Topic-specific' : totalHoursLabel(want), card.st);
+  }
+  const ca = cards.find(c => c.st === 'CA');
+  assert.equal(ca.primary, true);
+  assert.equal(ca.comp.totalEarned, 40, 'the current cycle only: the 174 hours from five years ago do not count');
+  assert.equal(cards.find(c => c.st === 'NY').renews, 'No NY license on file, tracking a rolling ' + cards.find(c => c.st === 'NY').comp.cycle + '-yr window');
+  // Drawn on the viewer's Home, with the member's labels.
+  const html = markup({ opened: { ...opened(), snapshot: snap } });
+  const home = html.match(/data-member-view-cme=""[\s\S]*?On file/)?.[0] || '';
+  for (const card of cards) {
+    assert.match(home, new RegExp(`data-member-view-state="${card.st}"`));
+    assert.ok(home.includes(card.hoursLine), `${card.st}: ${card.hoursLine}`);
+  }
+  assert.ok(html.includes(totalHoursLabel(complianceFor(data, 'CA'))));
+  assert.doesNotMatch(html, /214|CME hours recorded/, 'no all-time total anywhere');
+  assert.doesNotMatch(html, /—/);
+});
+
+// ─── Identifiers the app's own gate withholds ─────────────────────────────
+
+test('the support view withholds what the app\'s identifier gate flags: in keys, in labelled values and in free text', async () => {
+  const { identifierReason } = await import('../../src/utils/customCategories.js');
+  // A case log written before the gate existed (the August 2026 import is how
+  // 1,380 MRNs reached case logs), or brought back by a JSON restore.
+  const customFields = { 'Pt Name': 'Jane Q', 'Medical Record #': '00481234', 'Chart #': '771', 'Acct #': '99812', 'Encounter #': 'E55',
+    'Tax ID': '12-3456789', "Driver's License": 'D1234567', Note: 'MRN 00481234', Approach: 'Retrosigmoid' };
+  for (const [label, value] of Object.entries(customFields)) {
+    assert.equal(!!identifierReason(label, value), label !== 'Approach', `the app's gate on ${label}`);
+  }
+  const snap = memberView.shapeSnapshot({
+    profile: { id: uuid(1), name: 'Dana Reyes' },
+    collections: {
+      caseLogs: [{ id: uuid(50), category: 'Cranial', title: 'Craniotomy MRN 00481234', date: day(-5),
+        notes: 'Uneventful\nMRN 00481234\nPt Name: Jane Q\nTax ID: 12-3456789', custom_fields: customFields }],
+      // A custom record keyed f1..f4: the label, not the key, says what it is.
+      customRecords: [{ id: uuid(51), category_id: uuid(52), category_name: 'Hospital forms', name: 'Intake form',
+        field_labels: { f1: 'Medical Record #', f2: 'Acct #', f3: 'Badge number', f4: 'Tax ID', f5: 'Pt Name' },
+        field_values: { f1: '00481234', f2: '99812', f3: 'PX-1182', f4: '12-3456789', f5: 'Jane Q' } }],
+    },
+  });
+  const text = JSON.stringify(snap);
+  for (const leaked of ['Jane Q', '00481234', '"771"', '99812', 'E55', '12-3456789', 'D1234567']) assert.ok(!text.includes(leaked), `${leaked} reached the snapshot`);
+  const log = snap.sections.caseLogs[0];
+  assert.deepEqual(log.customFields, { Approach: 'Retrosigmoid' });
+  assert.equal(log.notes, 'Uneventful\n[Withheld: a medical record number]\n[Withheld: a patient identifier]\n[Withheld: a Social Security number]');
+  assert.equal(log.title, '[Withheld: a medical record number]');
+  const record = snap.sections.customRecords[0];
+  assert.deepEqual(record.fieldValues, { f3: 'PX-1182' });
+  assert.deepEqual(recordDetails('customRecords', record, snap).filter(d => d.label === 'Badge number'), [{ label: 'Badge number', value: 'PX-1182' }]);
+  const shown = recordDetails('caseLogs', log, snap).map(d => `${d.label}: ${d.value}`).join('\n');
+  for (const leaked of ['Jane Q', '00481234', '99812', '12-3456789']) assert.ok(!shown.includes(leaked), leaked);
+  // Phrases, not bare words: a real reappointment item survives.
+  const kept = memberView.shapeSnapshot({ collections: { privileges: [{ id: uuid(53), facility: 'Mercy', notes: 'Patient Safety Committee: attended',
+    custom_fields: { Committee: 'Patient Safety Committee', 'Badge #': 'PX-1182' } }] } });
+  assert.equal(kept.sections.privileges[0].notes, 'Patient Safety Committee: attended');
+  assert.deepEqual(kept.sections.privileges[0].customFields, { Committee: 'Patient Safety Committee', 'Badge #': 'PX-1182' });
+  // The support view's gate is the app's gate, not a copy of its rules.
+  const shared = await readFile(new URL('../../supabase/functions/_shared/memberView.mjs', import.meta.url), 'utf8');
+  assert.match(shared, /import \{ identifierReason \} from '\.\/app\/utils\/identifierGate\.js';/);
 });
 
 // ─── Driven: open a file, heartbeat refusal, exit ─────────────────────────
@@ -247,6 +361,30 @@ test('a refused file closes the viewer when access is over, and otherwise just s
   assert.equal(closedWith, MEMBER_VIEW_MESSAGES.grant_expired);
 });
 
+test('the viewer fails closed: the kill switch closes it at once, and two failed checks in a row close it', async () => {
+  // The operator unsets MEMBER_SUPPORT_VIEW_ENABLED: the next check says so.
+  let closedWith = null;
+  const off = await mountViewer({ client: { check: async () => { throw memberViewClient.memberViewFailure('support_view_disabled'); }, openFile: async () => ({}), end: async () => {} },
+    onClose: note => { closedWith = note; } });
+  await off.intervals[1](); await settle();
+  assert.equal(closedWith, MEMBER_VIEW_MESSAGES.support_view_disabled);
+  assert.ok(memberViewClient.MEMBER_VIEW_CLOSING.has('origin_not_allowed'));
+  // The check cannot get through (network drop, request blocked).
+  closedWith = null;
+  let answer = 'fail';
+  const client = { check: async () => { if (answer === 'fail') throw memberViewClient.memberViewFailure(); return { state: 'active', session: { expiresInSeconds: 600 } }; },
+    openFile: async () => ({}), end: async () => {} };
+  const v = await mountViewer({ client, onClose: note => { closedWith = note; } });
+  await v.intervals[1](); await settle();
+  assert.equal(closedWith, null, 'one failed check is not enough to close');
+  answer = 'ok'; await v.intervals[1](); await settle();
+  answer = 'fail'; await v.intervals[1](); await settle();
+  assert.equal(closedWith, null, 'a confirmed check in between starts the count again');
+  await v.intervals[1](); await settle();
+  assert.equal(closedWith, MEMBER_VIEW_MESSAGES.access_unconfirmed, 'two in a row close the view');
+  assert.doesNotMatch(MEMBER_VIEW_MESSAGES.access_unconfirmed, /—/);
+});
+
 test('Exit ends the visit on the server and hands control back', async () => {
   const calls = [];
   let closedWith = null;
@@ -302,6 +440,21 @@ test('the admin transport: start carries a request id and the reason; refusals t
   for (const message of Object.values(MEMBER_VIEW_MESSAGES)) assert.doesNotMatch(message, /—/);
 });
 
+test('the reason is counted and sent the way the server stores it', async () => {
+  for (const raw of ['CME\n\nissue', 'CME  issue', ' CME\tissue ']) {
+    assert.equal(memberView.normalizeReason(raw), null, `the server refuses ${JSON.stringify(raw)}`);
+    assert.deepEqual(reasonCheck(raw), { text: 'CME issue', length: 9, ok: false }, 'so the screen does not offer it');
+  }
+  for (const raw of ['Ticket 4411: CME hours', 'Ticket 4411:\n\nCME   hours', 'x'.repeat(500), `${'x'.repeat(499)}\n\ny`, '', 'CME issue.']) {
+    assert.equal(reasonCheck(raw).ok, memberView.normalizeReason(raw) !== null, `screen and server agree on ${JSON.stringify(raw).slice(0, 40)}`);
+  }
+  const t = transport([jsonResponse(200, { session: { id: uuid(60), expiresInSeconds: 900 }, member: { name: 'Dana Reyes' }, snapshot: snapshot() })]);
+  await assert.rejects(t.client.start({ profileId: uuid(1), reason: 'CME\n\nissue' }), error => error.code === 'invalid_reason');
+  assert.equal(t.sent.length, 0, 'refused before any request');
+  await t.client.start({ profileId: uuid(1), reason: 'Ticket 4411:\n\nCME   hours' });
+  assert.equal(t.sent[0].body.reason, 'Ticket 4411: CME hours');
+});
+
 // ─── Admin > Accounts ─────────────────────────────────────────────────────
 
 test('View as member is enabled only while that member has an active grant', async () => {
@@ -317,8 +470,17 @@ test('View as member is enabled only while that member has an active grant', asy
   const refused = await readActiveGrants({ rpc: async () => ({ data: null, error: { code: '42501' } }) });
   assert.equal(refused.grants.size, 0);
   assert.equal(refused.error, 'unavailable');
+  // When the list did not load, no row is said to lack a grant: a member who
+  // did allow access is not shown to the admin as one who did not.
+  for (const user of [{ id: uuid(1) }, { id: uuid(2) }]) {
+    const unchecked = memberViewAvailability(refused.grants, user, uuid(99), refused.error);
+    assert.equal(unchecked.show, true);
+    assert.equal(unchecked.enabled, false);
+    assert.equal(unchecked.note, 'Could not check support access. Refresh to try again.');
+  }
+  assert.equal(memberViewAvailability(refused.grants, { id: uuid(99) }, uuid(99), refused.error).show, false, 'still never on your own row');
   const dashboard = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
-  assert.match(dashboard, /memberViewAvailability\(memberGrants, u, myProfileId\)/);
+  assert.equal([...dashboard.matchAll(/memberViewAvailability\(memberGrants, u, myProfileId, grantsError\)/g)].length, 2, 'the button and the note both hear about a failed load');
   assert.match(dashboard, /disabled=\{!view\.enabled\}/);
   assert.match(dashboard, /<AdminMemberView target=\{memberViewTarget\} grant=\{memberGrants\.get\(memberViewTarget\.id\) \|\| null\}/);
 });
@@ -356,6 +518,11 @@ test('the member allows support access for 24 hours and can end it at any time',
   const card = await mountCard(client);
   assert.match(card.pageText(), /Support access is off\./);
   assert.match(card.pageText(), /never shown/);
+  // Scoped to the in-app view: the service administrator's database access
+  // (Privacy Policy section 7) is not something this card can promise away.
+  assert.doesNotMatch(card.pageText(), /cannot open your account unless|the way you see it/);
+  assert.match(card.pageText(), /Support can open a read-only view of your account in the app only if you allow it here\./);
+  assert.match(card.pageText(), /database access for running the service is described in the Privacy Policy/);
   assert.doesNotMatch(card.pageText(), /HIPAA|—/);
   const allow = buttonNamed(card.nodes(), 'Allow CredentialDOMD support to view my account for 24 hours');
   allow.props.onClick(); await settle();
@@ -396,14 +563,17 @@ test('Settings shows the card; the privacy policy describes the access plainly, 
   assert.match(settings, /<SupportAccessCard theme=\{T\} \/>/);
   const { PRIVACY } = await import('../../src/content/legalText.js');
   const text = JSON.stringify(PRIVACY);
-  assert.match(text, /CredentialDOMD support, only if you allow it/);
+  assert.match(text, /A read-only support view, only if you allow it/);
   assert.match(text, /allow support to view your account for 24 hours, and end that at any time/);
-  assert.match(text, /read-only view of your account/);
+  assert.match(text, /read-only view of your account in the app/);
+  assert.match(text, /This view is separate from the administrative access to the database and storage described above/);
+  assert.ok(text.indexOf('has administrative access to the database and storage') < text.indexOf('A read-only support view'), 'the database access is disclosed first');
+  assert.doesNotMatch(text, /as you see it/, 'the view is not a copy of every screen');
   assert.match(text, /15 minutes at a time and only after entering a reason/);
   assert.match(text, /Each view and each file opened is logged with the reason, and you can read that log in Settings/);
   assert.doesNotMatch(text, /HIPAA[ -]compliant|compliant with HIPAA|—/);
   for (const page of ['landing/privacy.html', 'public/privacy.html']) {
-    assert.match(await readFile(new URL(`../../${page}`, import.meta.url), 'utf8'), /CredentialDOMD support, only if you allow it/);
+    assert.match(await readFile(new URL(`../../${page}`, import.meta.url), 'utf8'), /A read-only support view, only if you allow it/);
   }
 });
 
@@ -412,7 +582,7 @@ test('Settings shows the card; the privacy policy describes the access plainly, 
 test('View as member needs a typed reason, then opens the isolated viewer with the snapshot', async () => {
   const starts = [];
   const fakeClient = { start: async input => { starts.push(input); return opened(); }, end: async () => {}, check: async () => ({}), openFile: async () => ({}) };
-  const target = { id: uuid(1), name: 'Dana Reyes' };
+  const target = { id: uuid(1), name: 'Dana Reyes', email: 'dana@example.invalid' };
   const grant = { grantId: uuid(70), expiresAt: new Date(Date.now() + 3600000).toISOString() };
   let closed = 0;
   const mounted = await mountComponent('src/components/pages/AdminMemberView.jsx', {
@@ -426,6 +596,10 @@ test('View as member needs a typed reason, then opens the isolated viewer with t
   assert.match(mounted.pageText(), /Your reason is shown to the member in their log/);
   mounted.nodes().find(n => n.type === 'textarea').props.onChange({ target: { value: 'short' } });
   assert.equal(open().props.disabled, true, 'under 10 characters');
+  // Ten characters as typed, nine as stored: the server would refuse it.
+  mounted.nodes().find(n => n.type === 'textarea').props.onChange({ target: { value: 'CME\n\nissue' } });
+  assert.equal(open().props.disabled, true, 'counted after newlines and spaces collapse');
+  assert.match(mounted.pageText(), /9 of 500 characters, at least 10\./);
   mounted.nodes().find(n => n.type === 'textarea').props.onChange({ target: { value: 'Ticket 4411: CME hours on Home look wrong' } });
   assert.equal(open().props.disabled, false);
   open().props.onClick();
@@ -436,6 +610,7 @@ test('View as member needs a typed reason, then opens the isolated viewer with t
   assert.equal(tree.type.name, 'MemberViewer', 'the viewer replaces the dialog');
   assert.equal(tree.props.opened.session.id, uuid(60));
   assert.equal(tree.props.client, fakeClient);
+  assert.equal(tree.props.fallbackName, 'dana@example.invalid', 'the banner can fall back to the email the Accounts row showed');
   tree.props.onClose(MEMBER_VIEW_MESSAGES.grant_ended);
   assert.match(mounted.pageText(), /The member ended support access, so the view is closed\./);
   assert.equal(closed, 0);

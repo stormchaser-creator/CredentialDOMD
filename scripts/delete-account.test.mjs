@@ -64,10 +64,12 @@ eq("administrator access grants are matched by owner_profile_id (their sessions,
   USER_TABLES.find((t) => t.table === "credential_portal_invites").column, "owner_profile_id");
 // The portal tables arrive at activation, not with this function. A deploy of
 // delete-account before then must not fail every deletion on a missing table.
-eq("only the administrator access and support access tables may be absent", USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "member_view_events", "member_view_grants"]);
+eq("only the administrator access and support access tables may be absent", USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "member_view_grants", "member_view_events"]);
 eq("the support view log is matched by profile_id (the member it is about)", USER_TABLES.find((t) => t.table === "member_view_events").column, "profile_id");
 eq("support access grants are matched by profile_id (their visits cascade)", USER_TABLES.find((t) => t.table === "member_view_grants").column, "profile_id");
-ok("the log is deleted before the grants", userTables.indexOf("member_view_events") < userTables.indexOf("member_view_grants"));
+// The grants go first: while a grant is open an administrator can still start a
+// view and write a log row, so deleting the log first can leave one behind.
+ok("the support access grants are deleted before their log", userTables.indexOf("member_view_grants") < userTables.indexOf("member_view_events"));
 ok("a missing table (PostgREST PGRST205) is recognised", isMissingTableError({ code: "PGRST205", message: "Could not find the table 'public.credential_portal_invites' in the schema cache" }));
 ok("a missing relation (Postgres 42P01) is recognised", isMissingTableError({ code: "42P01", message: 'relation "public.credential_portal_invites" does not exist' }));
 ok("a permission error is NOT treated as a missing table", !isMissingTableError({ code: "42501", message: "permission denied for table credential_portal_invites" }));

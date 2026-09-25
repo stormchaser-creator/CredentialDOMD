@@ -1,5 +1,5 @@
--- docs/rollback/20260925130000_member_support_view.rollback.sql
--- Rollback for 20260925130000_member_support_view.sql (ticket d45e857c, phase 2).
+-- docs/rollback/20260925131000_member_support_view.rollback.sql
+-- Rollback for 20260925131000_member_support_view.sql (ticket d45e857c, phase 2).
 --
 -- ORDER MATTERS. First stop the edge function (unset
 -- MEMBER_SUPPORT_VIEW_ENABLED, or undeploy admin-member-view), then revert

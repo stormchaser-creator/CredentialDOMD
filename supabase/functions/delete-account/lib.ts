@@ -90,12 +90,18 @@ export const USER_TABLES: UserTable[] = [
   // missing-relation error is tolerated (isMissingTableError); any other
   // error still stops the deletion.
   { table: "credential_portal_invites", column: "owner_profile_id", optional: true },
-  // Support access the member allowed (ticket d45e857c, phase 2): the log of
-  // every support view and file opened, then the grants (their visit rows
-  // cascade). optional for the same reason as above: migration 20260925130000
-  // is applied before the client that uses it, not with this function.
-  { table: "member_view_events", column: "profile_id", optional: true },
+  // Support access the member allowed (ticket d45e857c, phase 2): the grants
+  // FIRST, then the log. Each delete here is its own request, not one
+  // transaction. Deleting the grant cascades its visits, and from then on
+  // member_view_session_start answers no_grant and member_view_file_record
+  // not_found, so no new log row can be written before the log is deleted.
+  // The other order leaves a window where the grant is still open after the
+  // log is gone: a view started in it writes a view_started row (no foreign
+  // key, so the grant delete does not take it) that outlives the account.
+  // optional for the same reason as above: migration 20260925131000 is
+  // applied before the client that uses it, not with this function.
   { table: "member_view_grants", column: "profile_id", optional: true },
+  { table: "member_view_events", column: "profile_id", optional: true },
 ];
 
 /**

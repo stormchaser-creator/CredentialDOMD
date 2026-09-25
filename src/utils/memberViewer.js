@@ -9,8 +9,10 @@
 //
 // Pure: plain node tests import it (tests/member-view/viewer.test.mjs).
 import { MEMBER_VIEW_SECTIONS, MEMBER_VIEW_PROFILE_FIELDS, memberViewSection } from "../../supabase/functions/_shared/memberView.mjs";
-import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring } from "./helpers.js";
+import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring, plainDashes } from "./helpers.js";
 import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote } from "./lifecycle.js";
+import { complianceFor, findStateLicense, trackedStates } from "./compliance.js";
+import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel } from "./cmePresentation.js";
 
 export const READ_ONLY_MESSAGE = "This is a read-only support view. Nothing can be changed here.";
 
@@ -199,7 +201,67 @@ export function sectionRecords(snapshot, sectionKey) {
   return records.sort((a, b) => rank(a) - rank(b) || (rank(a) < 2 ? when(a).localeCompare(when(b)) : when(b).localeCompare(when(a))) || String(a.id).localeCompare(String(b.id)));
 }
 
-/** Home: what the member's dashboard would flag, and how much is on file. */
+// ─── Home: the member's CME cards, from the member's own helpers ──────────
+
+/**
+ * The snapshot in the shape the app's pure helpers read (data.licenses,
+ * data.cme, data.settings), with the settings those helpers depend on taken
+ * from the member's profile. Nothing here recomputes a rule: the viewer calls
+ * the very functions the member's Home calls.
+ */
+export function snapshotData(snapshot) {
+  const member = snapshot?.member || {};
+  const lead = Number(member.reminderLeadDays);
+  return {
+    licenses: [...(snapshot?.sections?.licenses || [])],
+    cme: [...(snapshot?.sections?.cme || [])],
+    settings: {
+      name: typeof member.name === "string" ? member.name : "",
+      degreeType: typeof member.degreeType === "string" ? member.degreeType : "",
+      primaryState: typeof member.primaryState === "string" ? member.primaryState : "",
+      additionalStates: Array.isArray(member.additionalStates) ? member.additionalStates : [],
+      reminderLeadDays: Number.isFinite(lead) && lead > 0 ? lead : 90,
+    },
+  };
+}
+
+/**
+ * Per-state CME as the member's Home shows it (App.jsx stateComps and
+ * renderStateCard): the tracked states, complianceFor on each, soonest
+ * renewal first, with the same labels. So "CA: Total logged: 38/50h" in the
+ * viewer is the number on the member's card, counted over the current cycle
+ * only, never an all-time sum. Em dashes in the shared labels read as
+ * commas here, as they do in everything the app sends.
+ */
+export function stateCmeCards(snapshot) {
+  const data = snapshotData(snapshot);
+  return trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses)
+    .map(st => ({ st, comp: complianceFor(data, st), lic: findStateLicense(data.licenses, st) }))
+    .sort((a, b) => (a.comp.daysLeft ?? 9e9) - (b.comp.daysLeft ?? 9e9))
+    .map(({ st, comp, lic }) => {
+      const dl = comp.daysLeft;
+      const oneAOnly = (comp.cat1Keywords || []).every(k => String(k).startsWith("AOA Category"));
+      return {
+        st,
+        comp,
+        primary: st === data.settings.primaryState,
+        hoursLine: comp.noGeneralReq ? "Topic-specific" : totalHoursLabel(comp),
+        status: comp.fullyCompliant ? "met" : comp.assessmentStatus === "needs-confirmation" ? "confirm" : "gaps",
+        renews: comp.windowAnchored ? `License renews ${formatDate(lic.expirationDate)}` : `No ${st} license on file, tracking a rolling ${comp.cycle}-yr window`,
+        daysLeft: dl,
+        daysLabel: dl == null ? "" : dl <= 0 ? "OVERDUE" : `${dl} days`,
+        urgency: dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok",
+        window: `${comp.windowLabel}.${comp.windowSource === "custom" ? " Start set on this license." : ""}`,
+        cycleStartIgnored: !!comp.cycleStartIgnored,
+        assessment: plainDashes(cmeAssessmentLabel(comp)),
+        unmetTopics: comp.topicResults.filter(t => !t.met).map(topicRecordLabel),
+        cat1: !comp.cat1Met && comp.cat1Required > 0 ? `${oneAOnly ? "AOA Cat 1" : "Cat 1"}: ${comp.cat1Earned}/${comp.cat1Required}h recorded` : "",
+        mate: comp.mate && !comp.mate.met ? `MATE Act (one-time): ${comp.mate.earned}/${comp.mate.required}h recorded` : "",
+      };
+    });
+}
+
+/** Home: what the member's dashboard would flag, their CME cards, and how much is on file. */
 export function homeSummary(snapshot) {
   const attention = [];
   for (const sectionKey of ["licenses", "privileges", "insurance", "healthRecords", "screenings", "memberships", "customRecords"]) {
@@ -209,11 +271,27 @@ export function homeSummary(snapshot) {
     }
   }
   attention.sort((a, b) => String(a.expirationDate).localeCompare(String(b.expirationDate)));
-  const cmeHours = (snapshot?.sections?.cme || []).reduce((sum, item) => sum + (Number(item.hours) || 0), 0);
   const counts = MEMBER_VIEW_SECTIONS.filter(section => section.group === "credentials")
     .map(section => ({ key: section.key, label: section.label, count: (snapshot?.sections?.[section.key] || []).length }))
     .filter(row => row.count > 0);
-  return { attention, cmeHours: Math.round(cmeHours * 100) / 100, counts, documents: (snapshot?.documents || []).length };
+  // A cut CME or license list would make the cards read lower than the member's.
+  const cmePartial = (snapshot?.truncated || []).some(key => key === "cme" || key === "licenses");
+  return { attention, cmeStates: stateCmeCards(snapshot), cmePartial, counts, documents: (snapshot?.documents || []).length };
+}
+
+/**
+ * Whose account the banner names, never a blank: the member's name, else the
+ * email on the account, else the email the Accounts row showed, else the
+ * start of the account id. On 2026-09-25, 3 of 11 live profiles had no name
+ * and no email at all, so the id is what tells two such accounts apart.
+ */
+export function memberDisplayName(opened, snapshot = opened?.snapshot, fallback = "") {
+  const member = snapshot?.member || {};
+  for (const value of [opened?.member?.name, member.name, member.email, member.verifiedEmail, fallback]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  const id = String(opened?.member?.profileId || "");
+  return /^[0-9a-f]{8}-/i.test(id) ? `member ${id.slice(0, 8)}` : "this member";
 }
 
 /** "14:05" for a countdown; "0:00" once over. */
