@@ -3,7 +3,7 @@ import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
-import { ADMIN_SOURCES, ADMIN_TAB_SOURCES, readAdminSource, readAdminAttention, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
+import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
 import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
@@ -36,7 +36,8 @@ function AdminDashboardContent() {
   const [rowLimits, setRowLimits] = useState({});
   const [ticketPreset, setTicketPreset] = useState({});
   const [accountPreset, setAccountPreset] = useState("all");
-  const [tickets, setTickets] = useState([]);
+  const [tickets, setTickets] = useState([]);   // unarchived tickets, all of them
+  const [archivedRows, setArchivedRows] = useState([]); // archived tickets, loaded on demand
   const [feedback, setFeedback] = useState([]);
   const [signups, setSignups] = useState([]);
   const [visits, setVisits] = useState([]);
@@ -267,8 +268,8 @@ function AdminDashboardContent() {
       return;
     }
     let cancelled = false;
-    const keys = ADMIN_TAB_SOURCES[tab] || [];
-    const setters = { tickets: setTickets, feedback: setFeedback, signups: setSignups, visits: setVisits,
+    const keys = adminTabSources(tab, { showArchived });
+    const setters = { tickets: setTickets, archivedTickets: setArchivedRows, feedback: setFeedback, signups: setSignups, visits: setVisits,
       waitlist: setWaitlist, attempts: setAttempts, fields: setFields, users: setUsers,
       invites: setInvites, errors: setErrors, messages: setMessages };
     setLoading(keys.length > 0); setError("");
@@ -284,7 +285,7 @@ function AdminDashboardContent() {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [isAdmin, reloadKey, tab, rowLimits]);
+  }, [isAdmin, reloadKey, tab, rowLimits, showArchived]);
 
   // Counts for the tab labels: unread physician replies, new error reports,
   // people waiting on the waitlist and field proposals to review. Read on
@@ -314,7 +315,8 @@ function AdminDashboardContent() {
     );
   }
 
-  const hasSectionData = (ADMIN_TAB_SOURCES[tab] || []).every(key => coverage[key]?.rows && !coverage[key]?.error);
+  const sectionKeys = adminTabSources(tab, { showArchived });
+  const hasSectionData = sectionKeys.every(key => coverage[key]?.rows && !coverage[key]?.error);
   // Opening a panel reads again (every number here used to age for the whole
   // app session), and opening Messages or Errors marks them seen.
   const openTab = (id) => {
@@ -329,7 +331,8 @@ function AdminDashboardContent() {
   const selectTab = (id) => { setTicketPreset({}); setAccountPreset("all"); setShowArchived(false); openTab(id); };
   const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(nextTab); };
   const activeTickets = tickets.filter(t => !t.archived_at);
-  const archivedTickets = tickets.filter(t => t.archived_at);
+  const archivedTickets = archivedRows.filter(t => t.archived_at);
+  const archivedCount = coverage.archivedTickets?.count;
   const TABS = [
     { id: "reports", label: "Overview & reports" },
     { id: "tickets", label: "Tickets" },
@@ -384,10 +387,10 @@ function AdminDashboardContent() {
         </div>
       )}
 
-      {!loading && !error && (ADMIN_TAB_SOURCES[tab] || []).length > 0 && (
+      {!loading && !error && sectionKeys.length > 0 && (
         <div aria-label="List coverage" style={{ padding: "10px 12px", marginBottom: 12, border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMuted, fontSize: 12 }}>
           <div>List counts describe loaded records. Overview & reports contains full-database totals.</div>
-          {(ADMIN_TAB_SOURCES[tab] || []).map(key => {
+          {sectionKeys.map(key => {
             const item = coverage[key]; if (!item || item.error) return null;
             return <div key={key} style={{ marginTop: 5 }}>
               {ADMIN_SOURCES[key].label}: {item.rows.length} loaded{item.count !== null ? ` of ${item.count}` : " (total unavailable)"}
@@ -409,7 +412,7 @@ function AdminDashboardContent() {
               padding: "11px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
               backgroundColor: showArchived ? T.card : "transparent", color: showArchived ? T.text : T.textMuted,
               fontSize: 13, fontWeight: 700, cursor: "pointer",
-            }}>{showArchived ? "Back to active" : `Archived (${archivedTickets.length})`}</button>
+            }}>{showArchived ? "Back to active" : Number.isSafeInteger(archivedCount) ? `Archived (${archivedCount})` : "Archived"}</button>
           </div>
           <TicketsList key={JSON.stringify(ticketPreset) + String(showArchived)} initialFilters={showArchived ? {} : ticketPreset} rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
           {feedback.length > 0 && (

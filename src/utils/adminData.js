@@ -2,7 +2,11 @@ import { normalizeAdminAttention } from './adminOperationsReport.js';
 
 /** Scoped admin reads. Each list has an explicit coverage count, never a business KPI. */
 export const ADMIN_SOURCES = {
-  tickets: { table: 'admin_tickets_open', label: 'Tickets', order: 'updated_at', size: 200 },
+  // Unarchived tickets are read on their own, so the oldest ticket still
+  // waiting can never fall behind newer activity in a shared recency page.
+  // Archived tickets load only when the Archived view is opened.
+  tickets: { table: 'admin_tickets_open', label: 'Active tickets', order: 'updated_at', size: 500, filter: query => query.is('archived_at', null) },
+  archivedTickets: { table: 'admin_tickets_open', label: 'Archived tickets', order: 'updated_at', size: 200, filter: query => query.not('archived_at', 'is', null) },
   feedback: { table: 'admin_feedback_recent', label: 'Legacy feedback', order: 'created_at', size: 50 },
   signups: { table: 'admin_signups_daily', label: 'Account creation days', order: 'day', size: 100, daily: true },
   visits: { table: 'admin_visits_daily', label: 'Traffic days', order: 'day', size: 100, daily: true },
@@ -20,6 +24,11 @@ export const ADMIN_TAB_SOURCES = {
   waitlist: ['waitlist', 'attempts', 'users', 'invites'], fields: ['fields'], ai: ['users'], audit: [],
 };
 
+/** The sources a tab reads; the Tickets tab adds the archive only while it is open. */
+export function adminTabSources(tab, { showArchived = false } = {}) {
+  return [...(ADMIN_TAB_SOURCES[tab] || []), ...(tab === 'tickets' && showArchived ? ['archivedTickets'] : [])];
+}
+
 export async function readAdminSource(client, key, requested) {
   const spec = ADMIN_SOURCES[key];
   if (!spec) throw new Error('Unknown administrative data source.');
@@ -30,8 +39,9 @@ export async function readAdminSource(client, key, requested) {
     // Small pages also work with Supabase's default per-request row ceiling.
     for (let offset = 0; offset < limit;) {
       const take = Math.min(500, limit - offset);
-      let query = client.from(spec.table).select(spec.columns || '*', { count: 'exact' })
-        .order(spec.order, { ascending: false });
+      let query = client.from(spec.table).select(spec.columns || '*', { count: 'exact' });
+      if (spec.filter) query = spec.filter(query);
+      query = query.order(spec.order, { ascending: false });
       if (!spec.daily) query = query.order('id', { ascending: false });
       const result = await query.range(offset, offset + take - 1);
       if (result.error) throw result.error;

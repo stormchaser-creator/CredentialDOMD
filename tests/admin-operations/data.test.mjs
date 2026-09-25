@@ -29,8 +29,9 @@ test('failure of any page discards partial data, never reports an empty healthy 
 });
 test('rejected network reads and malformed responses settle visibly', async () => {
   for (const mode of ['throw', 'malformed']) {
-    const db = { from() { const q = { select() { return q; }, order() { return q; }, async range() { if (mode === 'throw') throw Error('offline'); return {}; } }; return q; } };
+    const db = { from() { const q = { select() { return q; }, is() { return q; }, order() { return q; }, async range() { if (mode === 'throw') throw Error('offline'); return {}; } }; return q; } };
     const result = await readAdminSource(db, 'tickets'); assert.ok(result.error); assert.equal(result.rows, null);
+    assert.match(result.error, mode === 'throw' ? /offline/ : /did not return a list/);
   }
 });
 test('reports do not eagerly download personal working lists', () => {
@@ -87,4 +88,44 @@ test('attention counts pass the seen stamps along and fail quietly to no counts'
   for (const response of [{ error: { code: 'PGRST202' } }, { data: { unread_replies: 1 } }, { data: null }, new Error('offline')]) {
     assert.equal(await readAdminAttention(client(response)), null);
   }
+});
+test('the oldest open ticket stays loaded however much newer archived activity there is', async () => {
+  const { adminTabSources } = await import('../../src/utils/adminData.js');
+  // 300 archived tickets updated after the one open ticket still waiting.
+  const table = [{ id: 'waiting', status: 'open', archived_at: null, updated_at: '2026-06-01T00:00:00Z' },
+    ...Array.from({ length: 300 }, (_, n) => ({ id: `archived-${n}`, status: 'resolved', archived_at: '2026-09-01T00:00:00Z', updated_at: `2026-09-${String(1 + (n % 28)).padStart(2, '0')}T00:00:00Z` }))];
+  const calls = [];
+  const db = { from(name) {
+    const steps = [];
+    const q = {
+      select(_columns, options) { steps.push(['select', options.count]); return q; },
+      is(column, value) { steps.push(['is', column, value]); return q; },
+      not(column, operator, value) { steps.push(['not', column, operator, value]); return q; },
+      order(column) { steps.push(['order', column]); return q; },
+      async range(start, end) {
+        calls.push({ name, steps: [...steps], start, end });
+        let rows = table;
+        for (const [kind, column, a, b] of steps) {
+          if (kind === 'is') rows = rows.filter(row => row[column] === a);
+          if (kind === 'not') { assert.equal(a, 'is'); rows = rows.filter(row => row[column] !== b); }
+        }
+        rows = [...rows].sort((x, y) => y.updated_at.localeCompare(x.updated_at) || y.id.localeCompare(x.id));
+        return { data: rows.slice(start, end + 1), count: rows.length };
+      },
+    };
+    return q;
+  } };
+  const active = await readAdminSource(db, 'tickets');
+  assert.deepEqual(active.rows.map(row => row.id), ['waiting']);
+  assert.equal(active.count, 1);
+  const filterAt = calls[0].steps.findIndex(step => step[0] === 'is'), orderAt = calls[0].steps.findIndex(step => step[0] === 'order');
+  assert.ok(filterAt > 0 && filterAt < orderAt, 'the archive filter is applied before ordering and paging');
+  assert.equal(calls[0].end, 499);
+  const archived = await readAdminSource(db, 'archivedTickets');
+  assert.equal(archived.rows.length, 200);
+  assert.equal(archived.count, 300);
+  assert.ok(archived.rows.every(row => row.archived_at));
+  assert.deepEqual(adminTabSources('tickets'), ['tickets', 'feedback']);
+  assert.deepEqual(adminTabSources('tickets', { showArchived: true }), ['tickets', 'feedback', 'archivedTickets']);
+  assert.deepEqual(adminTabSources('users', { showArchived: true }), ['users', 'invites']);
 });
