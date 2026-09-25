@@ -5,7 +5,7 @@ import Modal from "../../shared/Modal";
 import Field from "../../shared/Field";
 import { generateId, formatDate } from "../../../utils/helpers";
 import { iso, actualByDate, contractDayAverage, contractDayKindAverages, yearOutlook } from "../../../utils/forecast";
-import { contractsForDate, termLabel, selectableContracts } from "../../../utils/contractsForDate";
+import { contractsForDate, termLabel, selectableContracts, pickableContracts, hiddenEndedCount, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const short = (n) => {
@@ -88,11 +88,14 @@ function Forecast() {
   // Month detail — tapping the summary line or a reconciliation row shows
   // the day-by-day est/billed entries feeding that month's totals.
   const [detailMonth, setDetailMonth] = useState(null); // "YYYY-MM"
-  const contractsForDay = (date, currentId) => contractsForDate(selectableContracts(contracts, currentId), date);
+  // The day editor offers no archived or long-ended contract unless it is in
+  // force on that date, already chosen, or asked for.
+  const [showEnded, setShowEnded] = useState(false);
+  const contractsForDay = (date, currentId) => contractsForDate(pickableContracts(contracts, currentId, { showEnded, date }), date);
   const termLabelFor = (c) => termLabel(c);
 
   const blankEntry = (date) => {
-    const cid = contractsForDay(date).ordered[0]?.id || selectableContracts(contracts)[0]?.id || "";
+    const cid = contractsForDay(date).ordered[0]?.id || pickableContracts(contracts, null)[0]?.id || "";
     const defKind = (contracts.find(c => c.id === cid)?.payModel === "daily") ? "day" : "call";
     return { date, contractId: cid, kind: defKind, expected: suggestFor(cid, defKind) || "" };
   };
@@ -357,15 +360,18 @@ function Forecast() {
         <Field label="Contract">
           <select value={form?.contractId || ""} onChange={e => {
             const cid = e.target.value;
+            if (cid === SHOW_ENDED) { setShowEnded(true); return; }
             setForm(f => ({ ...f, contractId: cid, expected: suggestFor(cid, f.kind) || "" }));
           }} style={{ ...iS, appearance: "auto" }}>
             {(() => {
               const { covering, rest } = contractsForDay(editDay, form?.contractId);
+              const hidden = hiddenEndedCount(contracts, form?.contractId, { showEnded, date: editDay });
               const label = (c) => `${c.facility}${termLabelFor(c) ? ` · ${termLabelFor(c)}` : ""}`;
               return (
                 <>
                   {covering.map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}
                   {rest.map(c => <option key={c.id} value={c.id}>{label(c)} (not scheduled then)</option>)}
+                  {hidden > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hidden)}</option>}
                 </>
               );
             })()}

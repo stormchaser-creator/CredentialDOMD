@@ -5,6 +5,7 @@ import { generateId } from "../../../utils/helpers";
 import { analyzeStatement, categorizeStatementRows } from "../../../utils/documentScanner";
 import { aiAvailable } from "../../../utils/aiClient";
 import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
+import { agencyOptions, agencyForDate } from "../../../utils/contractsForDate";
 import * as XLSX from "xlsx";
 
 /**
@@ -179,7 +180,8 @@ function StatementImport({ open, onClose }) {
   const [error, setError] = useState(null);
   const [rows, setRows] = useState(null); // review set
   const [done, setDone] = useState(null);
-  const agencies = [...new Set((data.locumContracts || []).map(c => c.agency).filter(Boolean))];
+  // One suggestion per agency, none from archived or long-ended contracts.
+  const agencies = agencyOptions(data.locumContracts);
 
   const dedupKey = (d, a, m) => `${d}|${(parseFloat(a) || 0).toFixed(2)}|${String(m).toLowerCase().slice(0, 20)}`;
   const existing = new Set((data.deductibles || []).map(x => dedupKey(x.date, x.amount, x.merchant || x.description)));
@@ -197,7 +199,8 @@ function StatementImport({ open, onClose }) {
           include: t.isCharge !== false && !dup,
           duplicate: dup,
           alsoBill: false,
-          agency: agencies[0] || "",
+          // The agency of the contract in force on the charge's date.
+          agency: agencyForDate(data.locumContracts, t.date),
         };
       })
       .sort((a, b) => (a.date || "").localeCompare(b.date || ""));

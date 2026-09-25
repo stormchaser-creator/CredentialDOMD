@@ -1,9 +1,9 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import { useInputStyle } from "../../shared/useInputStyle";
 import Field from "../../shared/Field";
 import { formatDate } from "../../../utils/helpers";
-import { selectableContracts, termLabel } from "../../../utils/contractsForDate";
+import { pickableContracts, hiddenEndedCount, termLabel, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
 import { CALLSYNC_SOURCE, detectContract, parseFeedUrl, describeSync, iso } from "../../../utils/callsync";
 import { useCallSync } from "../../../hooks/useCallSync";
 
@@ -27,7 +27,10 @@ function CallSyncPanel() {
   const detected = useMemo(() => detectContract(data.locumContracts), [data.locumContracts]);
   const contracts = data.locumContracts || [];
   const contractId = s.callsyncContractId || detected?.id || "";
-  const pickable = selectableContracts(contracts, contractId);
+  // No archived or long-ended agreements unless asked for (or already chosen).
+  const [showEnded, setShowEnded] = useState(false);
+  const pickable = pickableContracts(contracts, contractId, { showEnded });
+  const hiddenEnded = hiddenEndedCount(contracts, contractId, { showEnded });
   const linkOk = !!parseFeedUrl(s.callsyncFeedUrl);
   const today = iso(new Date());
 
@@ -94,11 +97,12 @@ function CallSyncPanel() {
 
       {pickable.length > 0 && (
         <Field label="Lands on" hint={detected && !s.callsyncContractId ? "Your ANMG agreement, found by name. Each shift is priced from its call-rate grid." : "Each synced shift becomes a call day on this agreement, priced from its call-rate grid."}>
-          <select value={contractId} onChange={e => updateSettings({ callsyncContractId: e.target.value })} style={{ ...iS, appearance: "auto" }}>
+          <select value={contractId} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : updateSettings({ callsyncContractId: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
             {!contractId && <option value="">Pick the ANMG agreement</option>}
             {pickable.map(c => (
               <option key={c.id} value={c.id}>{c.shortName || c.facility || "Agreement"}{termLabel(c) ? ` · ${termLabel(c)}` : ""}</option>
             ))}
+            {hiddenEnded > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEnded)}</option>}
           </select>
         </Field>
       )}

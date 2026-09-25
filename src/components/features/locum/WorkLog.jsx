@@ -19,7 +19,7 @@ import { parseWorkDictation } from "../../../utils/workDictation";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import DeskTable from "../../shared/DeskTable";
 import DutyLog from "./DutyLog";
-import { selectableContracts } from "../../../utils/contractsForDate";
+import { pickableContracts, hiddenEndedCount, isArchived, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
 import {
   localDate, callDayOf, deriveCallDay, entryOrder, fmtTime, findContainer, overlapSiblings,
   money, billedSpan, isStipendDay as isStipendDayPure, rateFor as rateForPure, computeBilling as computeBillingPure,
@@ -93,7 +93,11 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   // Contracts a TIME entry can bill against. A day-rate agreement has no
   // hourly price — its work is logged as days and call periods, not clock
   // time — so it never appears in a time-entry dropdown.
-  const timeContracts = useMemo(() => contracts.filter(c => c.payModel !== "daily"), [contracts]);
+  const billableContracts = useMemo(() => contracts.filter(c => c.payModel !== "daily"), [contracts]);
+  // Pickers leave out archived contracts and ones that ended more than 30
+  // days ago, until "Show ended contracts" is chosen (ticket 8360f6e6).
+  const [showEnded, setShowEnded] = useState(false);
+  const timeContracts = useMemo(() => pickableContracts(billableContracts, null, { showEnded }), [billableContracts, showEnded]);
 
   // Default to: running timer's contract → explicitly remembered pick →
   // the contract of the most recent log entry → first contract.
@@ -136,9 +140,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const dictTextRef = useRef("");
   useEffect(() => () => { try { dictRecRef.current?.stop(); } catch { /* stopped */ } }, []);
 
-  const contract = contracts.find(c => c.id === contractId)
-    || contracts.find(c => c.id === lastLoggedContractId)
-    || contracts[0] || null;
+  // The remembered pick holds unless it has since been archived (a running
+  // timer's contract always holds). The fallbacks never land on an archived
+  // or long-ended contract while any other is on file.
+  const pickable = pickableContracts(contracts, null);
+  const contract = contracts.find(c => c.id === contractId && (!isArchived(c) || c.id === timer?.contractId))
+    || pickable.find(c => c.id === lastLoggedContractId)
+    || pickable[0]
+    || contracts.find(c => !isArchived(c)) || contracts[0] || null;
 
   // Tap-anywhere detail view for a work entry
   const [viewEntry, setViewEntry] = useState(null);
@@ -414,7 +423,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     // the dropdown pick isn't billable, the entry keeps its own binding
     // (silently re-homing a saved entry would invoice the wrong facility).
     const editOrig = manual.editId ? entries.find(x => x.id === manual.editId) : null;
-    const target = timeContracts.find(x => x.id === manual.contractId)
+    const target = billableContracts.find(x => x.id === manual.contractId)
       || (editOrig
         // Edits resolve to the entry's OWN contract — and if that contract
         // is gone, they stop rather than fall through to a different one.
@@ -423,7 +432,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (!target) {
       // alert, not the notice banner: the banner renders under the open
       // modal and auto-clears — the user would never see it.
-      window.alert(editOrig && timeContracts.length
+      window.alert(editOrig && billableContracts.length
         ? "This entry's original contract is no longer on file — pick a contract in the dropdown before saving."
         : "This needs a time-priced contract to bill against — add one on the Contracts tab.");
       return;
@@ -536,7 +545,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, timeContracts, manual, entries, addItem, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
+  }, [contract, contracts, billableContracts, timeContracts, manual, entries, addItem, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
 
   // A finished to-do arrives with the times HE typed on the finish form —
   // use them as given rather than re-deriving anything from timestamps.
@@ -548,7 +557,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     // the first billable one. If the picker sits on the day-rate agreement,
     // it flips to the draft's target so the view behind the modal is the
     // time engine that entry will actually land in.
-    const draftTarget = timeContracts.some(c => c.id === billDraft.contractId)
+    const draftTarget = billableContracts.some(c => c.id === billDraft.contractId)
       ? billDraft.contractId
       : ((contract?.payModel !== "daily" ? contract?.id : null) || timeContracts[0]?.id || "");
     if (contract?.payModel === "daily" && draftTarget) rememberContract(draftTarget);
@@ -567,7 +576,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     });
     setShowManual(true);
     onBillDraftDone?.();
-  }, [billDraft, onBillDraftDone, timeContracts, contract, rememberContract]);
+  }, [billDraft, onBillDraftDone, billableContracts, timeContracts, contract, rememberContract]);
 
   const openEditEntry = useCallback((e) => {
     // A piece of a split entry opens as the whole entry it was logged as:
@@ -1027,8 +1036,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 4 }}>
         Logging against
       </div>
-      <select value={contract?.id || ""} onChange={e => rememberContract(e.target.value)} style={{ ...iS, appearance: "auto" }}>
-        {selectableContracts(contracts, contract?.id).map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
+      <select value={contract?.id || ""} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : rememberContract(e.target.value))} style={{ ...iS, appearance: "auto" }}>
+        {pickableContracts(contracts, contract?.id, { showEnded }).map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
+        {hiddenEndedCount(contracts, contract?.id, { showEnded }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, contract?.id, { showEnded }))}</option>}
       </select>
     </div>
   );
@@ -1095,6 +1105,13 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       </div>
     );
   }
+
+  // The manual form's contract picker: what it shows selected, what it offers
+  // (a contract in force on the entry's date stays offered even if it ended),
+  // and how many ended ones it is holding back.
+  const manualValue = manual.contractId || (contract?.payModel !== "daily" ? contract?.id : timeContracts[0]?.id) || "";
+  const manualOptions = pickableContracts(billableContracts, manualValue, { showEnded, date: manual.date });
+  const manualHidden = hiddenEndedCount(billableContracts, manualValue, { showEnded, date: manual.date });
 
   // Desk table cell and button styles, the same set Invoices uses.
   const deskMain = { overflow: "hidden", textOverflow: "ellipsis" };
@@ -1270,23 +1287,26 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             })()}
           </div>
         )}>
-        {(timeContracts.length > 1 || (manual.editId && manual.contractId && !timeContracts.some(c => c.id === manual.contractId))) && (
+        {(manualOptions.length > 1 || manualHidden > 0 || (manual.editId && manual.contractId && !billableContracts.some(c => c.id === manual.contractId))) && (
           <Field label="Contract">
             {/* Only time-priced contracts — the day-rate agreement logs days
                 and call periods on its own tab, never begin/end times. An
                 entry already bound to a non-billable contract shows its true
                 home (disabled) rather than a lying blank — even when there
-                is only one billable contract to move it to. */}
+                is only one billable contract to move it to. Archived and
+                long-ended contracts stay out unless in force on the date,
+                already chosen, or shown on request. */}
             <select
-              value={manual.contractId || (contract?.payModel !== "daily" ? contract?.id : timeContracts[0]?.id) || ""}
-              onChange={e => setManual(m2 => ({ ...m2, contractId: e.target.value }))}
+              value={manualValue}
+              onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : setManual(m2 => ({ ...m2, contractId: e.target.value })))}
               style={{ ...iS, appearance: "auto" }}>
-              {manual.editId && manual.contractId && !timeContracts.some(c => c.id === manual.contractId) && (
+              {manual.editId && manual.contractId && !billableContracts.some(c => c.id === manual.contractId) && (
                 <option value={manual.contractId} disabled>
                   {(contracts.find(c => c.id === manual.contractId)?.facility || "Original contract")} (day-rate — time doesn't bill here)
                 </option>
               )}
-              {timeContracts.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+              {manualOptions.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+              {manualHidden > 0 && <option value={SHOW_ENDED}>{showEndedLabel(manualHidden)}</option>}
             </select>
           </Field>
         )}

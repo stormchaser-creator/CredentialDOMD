@@ -13,6 +13,8 @@ import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCate
 import { resolveDocuments, missingReceiptMessage } from "../../../utils/receiptFiles";
 import { downloadDocumentBlob } from "../../../lib/supabase";
 import { docMime } from "../../../utils/inboxDocs";
+import { agencyOptions, agencyForDate, sameAgency, agencyKey } from "../../../utils/contractsForDate";
+import { localDate } from "../../../utils/billing";
 
 
 /**
@@ -28,17 +30,21 @@ function Expenses() {
     () => [...(data.travelExpenses || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
     [data.travelExpenses]
   );
-  const contracts = data.locumContracts || [];
-  const agencies = useMemo(
-    () => [...new Set(contracts.map(c => c.agency).filter(Boolean))],
-    [contracts]
-  );
+  const contracts = useMemo(() => data.locumContracts || [], [data.locumContracts]);
+  // One chip per agency: no archived or long-ended contracts, and one chip
+  // for "MPLT Healthcare" and "MPLT Healthcare, LLC." (stored names are left
+  // as they are).
+  const agencies = useMemo(() => agencyOptions(contracts), [contracts]);
 
   const receiptsOf = (exp) => (data.documents || []).filter(d => d.linkedTo === `travelExpenses:${exp.id}`);
 
   // ── add / edit ──
   const [editing, setEditing] = useState(null); // "new" | expense id
   const [form, setForm] = useState({});
+  // True while a new expense's agency is still the one assumed from its date:
+  // changing the date then re-picks it. Kept out of `form`, which is saved
+  // as the row (an unknown key would reject the whole row).
+  const [agencyAuto, setAgencyAuto] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]); // receipts staged before save
   const [notice, setNotice] = useState(null);
   // Receipt bytes, resolved ahead of the tap. The tap itself must stay
@@ -52,11 +58,18 @@ function Expenses() {
   const uploadRef = useRef(null);
   const showNotice = (t) => { setNotice(t); setTimeout(() => setNotice(null), 6000); };
 
+  // The agency defaults to the one on the contract in force on the expense
+  // date, not whichever contract happens to be listed first (the form used to
+  // offer Weatherby for an MPLT trip).
   const openNew = () => {
     setEditing("new");
     setPendingFiles([]);
-    setForm({ date: new Date().toISOString().slice(0, 10), category: "Airfare", agency: agencies[0] || "" });
+    const date = localDate(new Date());
+    setForm({ date, category: "Airfare", agency: agencyForDate(contracts, date) });
+    setAgencyAuto(true);
   };
+  const setDate = (date) => setForm(f => ({ ...f, date, ...(agencyAuto ? { agency: agencyForDate(contracts, date) } : {}) }));
+  const setAgency = (agency) => { setAgencyAuto(false); setForm(f => ({ ...f, agency })); };
   // Pull the receipt bytes in as soon as the editor opens, so tapping a receipt
   // is instant and, more importantly, synchronous.
   const hydrateReceipts = async (docs) => {
@@ -70,7 +83,7 @@ function Expenses() {
   };
 
   const openEdit = (exp) => {
-    setEditing(exp.id); setPendingFiles([]); setForm({ ...exp });
+    setEditing(exp.id); setPendingFiles([]); setForm({ ...exp }); setAgencyAuto(false);
     setReceiptState("idle");
     hydrateReceipts(receiptsOf(exp));
   };
@@ -154,15 +167,22 @@ function Expenses() {
   };
 
   // ── invoicing ──
-  const unbilled = expenses.filter(e => !e.invoiceId);
+  const unbilled = useMemo(() => expenses.filter(e => !e.invoiceId), [expenses]);
   const unbilledTotal = unbilled.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const [invOpen, setInvOpen] = useState(false);
   const [invAgency, setInvAgency] = useState("");
   const [checked, setChecked] = useState({});
+  // Bill-to chips: the contract agencies plus any agency an unbilled expense
+  // names, one per agency. Picking one checks every expense billed to that
+  // agency under either spelling.
+  const invAgencies = useMemo(() => agencyOptions(contracts, { extra: unbilled.map(e => e.agency) }), [contracts, unbilled]);
+  // A blank bill-to still gathers the expenses that name no agency.
+  const billsTo = (e, ag) => (agencyKey(ag) ? sameAgency(e.agency, ag) : !agencyKey(e.agency));
   const openInvoice = () => {
-    const ag = unbilled[0]?.agency || agencies[0] || "";
+    const first = unbilled[0]?.agency || "";
+    const ag = invAgencies.find(a => sameAgency(a, first)) || first || invAgencies[0] || "";
     setInvAgency(ag);
-    setChecked(Object.fromEntries(unbilled.map(e => [e.id, (e.agency || "") === ag])));
+    setChecked(Object.fromEntries(unbilled.map(e => [e.id, billsTo(e, ag)])));
     setInvOpen(true);
     // Fetch the proof now, while the physician is still choosing. Downloading
     // inside the Send tap would spend the user gesture and make the OS refuse
@@ -172,7 +192,7 @@ function Expenses() {
   };
   const pickAgency = (ag) => {
     setInvAgency(ag);
-    setChecked(Object.fromEntries(unbilled.map(e => [e.id, (e.agency || "") === ag])));
+    setChecked(Object.fromEntries(unbilled.map(e => [e.id, billsTo(e, ag)])));
   };
 
   const [busy, setBusy] = useState(false);
@@ -350,7 +370,7 @@ function Expenses() {
       {/* Add / edit */}
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing === "new" ? "New expense" : "Expense"}>
         <div style={{ display: "flex", gap: 8 }}>
-          <input type="date" value={form.date || ""} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={{ ...iS, flex: 1 }} />
+          <input type="date" value={form.date || ""} onChange={e => setDate(e.target.value)} style={{ ...iS, flex: 1 }} />
           <input type="number" inputMode="decimal" placeholder="$ amount" value={form.amount ?? ""} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} style={{ ...iS, flex: 1 }} />
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "10px 0" }}>
@@ -367,16 +387,16 @@ function Expenses() {
         {agencies.length > 0 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
             {agencies.map(a => (
-              <button key={a} onClick={() => setForm(f => ({ ...f, agency: a }))} style={{
+              <button key={a} onClick={() => setAgency(a)} style={{
                 padding: "7px 11px", borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${form.agency === a ? T.accent : T.border}`,
-                backgroundColor: form.agency === a ? T.accent : "transparent",
-                color: form.agency === a ? "#fff" : T.textMuted,
+                border: `1px solid ${sameAgency(form.agency, a) ? T.accent : T.border}`,
+                backgroundColor: sameAgency(form.agency, a) ? T.accent : "transparent",
+                color: sameAgency(form.agency, a) ? "#fff" : T.textMuted,
               }}>{a}</button>
             ))}
           </div>
         )}
-        <input placeholder="Bill to agency (e.g. MPLT Healthcare)" value={form.agency || ""} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} style={{ ...iS, width: "100%", boxSizing: "border-box", marginBottom: 10 }} />
+        <input placeholder="Bill to agency (e.g. MPLT Healthcare)" value={form.agency || ""} onChange={e => setAgency(e.target.value)} style={{ ...iS, width: "100%", boxSizing: "border-box", marginBottom: 10 }} />
         <textarea placeholder="Notes (trip, assignment, confirmation #)" value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, width: "100%", boxSizing: "border-box", minHeight: 60, fontFamily: "inherit", marginBottom: 10 }} />
 
         {/* receipts */}
@@ -473,14 +493,14 @@ function Expenses() {
 
       <Modal open={invOpen} onClose={() => !busy && setInvOpen(false)} title="Invoice expenses">
         <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Bill to</div>
-        {agencies.length > 0 && (
+        {invAgencies.length > 0 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            {agencies.map(a => (
+            {invAgencies.map(a => (
               <button key={a} onClick={() => pickAgency(a)} style={{
                 padding: "7px 11px", borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${invAgency === a ? T.accent : T.border}`,
-                backgroundColor: invAgency === a ? T.accent : "transparent",
-                color: invAgency === a ? "#fff" : T.textMuted,
+                border: `1px solid ${sameAgency(invAgency, a) ? T.accent : T.border}`,
+                backgroundColor: sameAgency(invAgency, a) ? T.accent : "transparent",
+                color: sameAgency(invAgency, a) ? "#fff" : T.textMuted,
               }}>{a}</button>
             ))}
           </div>
@@ -491,7 +511,7 @@ function Expenses() {
             <input type="checkbox" checked={!!checked[e.id]} onChange={ev => setChecked(c => ({ ...c, [e.id]: ev.target.checked }))} />
             <span style={{ flex: 1, fontSize: 13.5, color: T.text }}>
               {formatDate(e.date)} · {e.category}{e.vendor ? ` — ${e.vendor}` : ""}
-              {(e.agency || "") !== invAgency && e.agency ? ` (${e.agency})` : ""}
+              {e.agency && !sameAgency(e.agency, invAgency) ? ` (${e.agency})` : ""}
             </span>
             <span style={{ fontSize: 13.5, fontWeight: 800, color: T.text }}>{money(e.amount)}</span>
           </label>

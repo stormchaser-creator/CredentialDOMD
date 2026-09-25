@@ -7,7 +7,8 @@ import { SECTION_META, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INS
 import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getStateEntry } from "../../constants/stateRequirements";
 import { STATES } from "../../constants/states";
-import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, normalizeReceipt, receiptSaveIssues } from "../../utils/receiptScan";
+import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, normalizeReceipt, receiptSaveIssues, toISODate } from "../../utils/receiptScan";
+import { agencyOptions, agencyForDate, sameAgency } from "../../utils/contractsForDate";
 
 const FIELD_DEFS = {
   license: [
@@ -174,16 +175,17 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
   // applies: a reimbursed expense is not also a deduction, and the ledger
   // picks up the unreimbursed share on its own once the invoice settles.
   const isReceipt = docType === RECEIPT_DOC_TYPE;
-  const agencies = useMemo(
-    () => [...new Set((data.locumContracts || []).map(c => c.agency).filter(Boolean))],
-    [data.locumContracts]
-  );
+  // One chip per agency, none from archived or long-ended contracts.
+  const agencies = useMemo(() => agencyOptions(data.locumContracts), [data.locumContracts]);
   // A blank category (the reclassify path carries none over) must not hide
   // the agency option: the save path keyword-guesses it from the merchant
   // anyway. A ledger-only category still forces the deduction path.
   const billable = isReceipt && (!edited.category || isBillableCategory(normalizeReceipt(edited).category));
   const [destChoice, setDestChoice] = useState(null);
-  const [agency, setAgency] = useState(() => agencies[0] || "");
+  // Until the physician picks one, the agency is the one on the contract in
+  // force on the receipt's date, and follows that date as it is corrected.
+  const [agencyPick, setAgency] = useState(null);
+  const agency = agencyPick ?? agencyForDate(data.locumContracts, toISODate(edited.date));
   const destination = billable ? (destChoice || (agencies.length ? "expense" : "deduction")) : "deduction";
   const receiptIssues = isReceipt ? receiptSaveIssues(edited, destination, agency) : [];
   const receiptBlocked = receiptIssues.length > 0;
@@ -405,7 +407,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                     {agencies.length > 0 && (
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
                         {agencies.map(a => (
-                          <button key={a} onClick={() => setAgency(a)} style={{ ...chip(agency === a), padding: "7px 11px", fontSize: 12 }}>{a}</button>
+                          <button key={a} onClick={() => setAgency(a)} style={{ ...chip(sameAgency(agency, a)), padding: "7px 11px", fontSize: 12 }}>{a}</button>
                         ))}
                       </div>
                     )}

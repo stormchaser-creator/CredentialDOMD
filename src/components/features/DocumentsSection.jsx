@@ -18,6 +18,7 @@ import Modal from "../shared/Modal";
 import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
+import { isArchived } from "../../utils/contractsForDate";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -190,7 +191,10 @@ function DocumentsSection() {
     ...data.cme.map(c => ({ value: `cme:${c.id}`, label: `CME: ${c.title || c.category}` })),
     ...(data.healthRecords || []).map(h => ({ value: `healthRecords:${h.id}`, label: `Health: ${h.name || h.type || h.category}` })),
     ...(data.education || []).map(e => ({ value: `education:${e.id}`, label: `Education: ${e.name || e.type || e.institution}` })),
-    ...(data.locumContracts || []).map(c => ({ value: `locumContracts:${c.id}`, label: `Agreement: ${c.facility || "Contract"}` })),
+    // Archived agreements stay linkable (an old agreement's paperwork still
+    // belongs to it) but say so and come after the current ones.
+    ...[...(data.locumContracts || [])].sort((a, b) => Number(isArchived(a)) - Number(isArchived(b)))
+      .map(c => ({ value: `locumContracts:${c.id}`, label: `Agreement: ${c.facility || "Contract"}${isArchived(c) ? " (archived)" : ""}` })),
     ...(data.travelExpenses || []).map(e => ({ value: `travelExpenses:${e.id}`, label: `Expense: ${e.category || "Expense"}${e.vendor ? ` - ${e.vendor}` : ""}${e.date ? ` (${e.date})` : ""}` })),
     ...(data.deductibles || []).map(d => ({ value: `deductibles:${d.id}`, label: `Deduction: ${d.merchant || d.description || d.category || "Deduction"}${d.date ? ` (${d.date})` : ""}` })),
   ];
@@ -336,7 +340,7 @@ function DocumentsSection() {
       const toExpense = destination === "expense";
       const section = toExpense ? "travelExpenses" : "deductibles";
       const entry = toExpense ? receiptToExpense(receipt, { id, agency }) : receiptToDeduction(receipt, { id });
-      addItem(section, entry);
+      if (addItem(section, entry) === false) { setScanError("Could not save that receipt. Nothing was changed."); return; }
       const doc = data.documents.find(d => d.id === docId);
       if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });
       const money = `$${entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -5,7 +5,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import { Modal, Field } from "../../shared";
 import SmartTimeField from "../../shared/SmartTimeField";
 import { generateId } from "../../../utils/helpers";
-import { selectableContracts } from "../../../utils/contractsForDate";
+import { pickableContracts, hiddenEndedCount, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
 
 /**
  * The interrupted-work list. A call comes in mid-case: capture it in one
@@ -38,6 +38,8 @@ function TaskNotes({ onBill }) {
   useDeskAddShortcut(() => captureRef.current?.focus());
   const [finishing, setFinishing] = useState(null); // the task being completed
   const [form, setForm] = useState({});
+  // The contract picker leaves out archived and long-ended contracts until asked.
+  const [showEnded, setShowEnded] = useState(false);
   const [editTask, setEditTask] = useState(null); // open item being reworded
   const [editText, setEditText] = useState("");
 
@@ -251,9 +253,10 @@ function TaskNotes({ onBill }) {
 
             {contracts.length > 1 && (
               <Field label="Contract">
-                <select value={form.contractId || ""} onChange={e => setForm(f => ({ ...f, contractId: e.target.value || null }))} style={{ ...iS, appearance: "auto" }}>
+                <select value={form.contractId || ""} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : setForm(f => ({ ...f, contractId: e.target.value || null })))} style={{ ...iS, appearance: "auto" }}>
                   <option value="">— none —</option>
-                  {selectableContracts(contracts, form.contractId).map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+                  {pickableContracts(contracts, form.contractId, { showEnded, date: form.date }).map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+                  {hiddenEndedCount(contracts, form.contractId, { showEnded, date: form.date }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, form.contractId, { showEnded, date: form.date }))}</option>}
                 </select>
               </Field>
             )}
