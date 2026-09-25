@@ -2,6 +2,7 @@ import { useState, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { AsclepiusIcon } from "../shared/Icons";
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy";
+import ShareFormatProbe from "../features/ShareFormatProbe";
 
 const FAQ_DATA = [
   {
@@ -246,6 +247,9 @@ function FAQSection() {
         Answers to common questions about CredentialDOMD.
         {" "}<a href="/help" style={{ color: T.accent }}>Open step-by-step written guides</a>.
       </p>
+
+      {/* Renders for admins only (the share-sheet line-break probe). */}
+      <ShareFormatProbe />
 
       {/* Search */}
       <div style={{ position: "relative", marginBottom: 14 }}>
