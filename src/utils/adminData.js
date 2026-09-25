@@ -78,15 +78,22 @@ export function filterAdminUsers(rows, { query = '', access = 'all', showEmpty =
  * The tab-label counts (unread replies, new errors, waiting leads, pending
  * fields) without loading any list. The seen stamps the client just wrote are
  * passed along so a tab opened a moment ago does not read as unread while
- * that settings write syncs; the server uses the later of the two. Null when
- * the server cannot answer (for example before its database update), in which
- * case the labels simply show no count.
+ * that settings write syncs; the server uses the later of the two.
+ *
+ * Three outcomes, kept apart so a failure never reads like zero:
+ * - the counts;
+ * - null when the server has no such function yet (PGRST202 / 42883, before
+ *   its database update), where the labels show no count, as they always did;
+ * - { error } when the read failed or came back malformed, where the labels
+ *   say the count is unavailable.
  */
+const ADMIN_ATTENTION_NOT_DEPLOYED = ['PGRST202', '42883'];
 export async function readAdminAttention(client, { messagesSeenAt = null, errorsSeenAt = null } = {}) {
   try {
     const { data, error } = await client.rpc('admin_attention_counts', { p_messages_seen_at: messagesSeenAt, p_errors_seen_at: errorsSeenAt });
-    return error ? null : normalizeAdminAttention(data);
-  } catch {
-    return null;
+    if (error) return ADMIN_ATTENTION_NOT_DEPLOYED.includes(error.code) ? null : { error: error.message || 'The unread counts could not be read.' };
+    return normalizeAdminAttention(data) || { error: 'The server sent unreadable counts.' };
+  } catch (failure) {
+    return { error: failure?.message || 'The unread counts could not be read.' };
   }
 }

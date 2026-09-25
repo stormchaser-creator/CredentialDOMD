@@ -348,15 +348,23 @@ function AdminDashboardContent() {
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = archivedRows.filter(t => t.archived_at);
   const archivedCount = coverage.archivedTickets?.count;
+  // A failed count read is marked "(?)", never shown as a plain label that
+  // reads the same as zero (readAdminAttention). No function yet: plain.
+  const counts = attention && !attention.error ? attention : null;
+  const countFailed = (label, noun) => ({ label: `${label} (?)`, title: `${noun} unavailable, open to check` });
   const TABS = [
     { id: "reports", label: "Overview & reports" },
     { id: "tickets", label: "Tickets" },
-    { id: "messages", label: attention?.unread_replies > 0 ? `Messages (${attention.unread_replies})` : "Messages" },
+    attention?.error ? { id: "messages", ...countFailed("Messages", "Unread count") }
+      : { id: "messages", label: counts?.unread_replies > 0 ? `Messages (${counts.unread_replies})` : "Messages" },
     { id: "users", label: "Accounts" },
-    { id: "errors", label: attention?.new_errors_since_seen > 0 ? `Errors (${attention.new_errors_since_seen})` : "Errors" },
+    attention?.error ? { id: "errors", ...countFailed("Errors", "New error count") }
+      : { id: "errors", label: counts?.new_errors_since_seen > 0 ? `Errors (${counts.new_errors_since_seen})` : "Errors" },
     { id: "signups", label: "Traffic history" },
-    { id: "waitlist", label: attention ? `Waitlist (${attention.waitlist_waiting})` : "Waitlist" },
-    { id: "fields", label: attention?.fields_pending > 0 ? `Fields (${attention.fields_pending} pending)` : "Fields" },
+    attention?.error ? { id: "waitlist", ...countFailed("Waitlist", "Waiting count") }
+      : { id: "waitlist", label: counts ? `Waitlist (${counts.waitlist_waiting})` : "Waitlist" },
+    attention?.error ? { id: "fields", ...countFailed("Fields", "Pending field count") }
+      : { id: "fields", label: counts?.fields_pending > 0 ? `Fields (${counts.fields_pending} pending)` : "Fields" },
     { id: "ai", label: "AI" },
     { id: "audit", label: "Control history" },
     { id: "preview", label: "Preview as" },
@@ -377,6 +385,7 @@ function AdminDashboardContent() {
           <button
             key={t.id}
             aria-current={tab === t.id ? "page" : undefined}
+            title={t.title}
             onClick={() => selectTab(t.id)}
             style={{
               flex: "0 0 auto", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 8, border: "none",

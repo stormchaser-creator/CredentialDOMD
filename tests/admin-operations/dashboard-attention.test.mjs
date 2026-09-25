@@ -14,7 +14,7 @@ const tick = () => new Promise(done => setImmediate(done));
 const anchor = '    { id: "preview", label: "Preview as" },\n  ];\n';
 assert.ok(source.includes(anchor), 'TABS anchor moved');
 
-function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, fields_pending: 1 }, full = false } = {}) {
+function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, fields_pending: 1 }, response = null, full = false } = {}) {
   const hooks = [], effects = [], rpcs = [], settingsWrites = [];
   let cursor = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
@@ -26,7 +26,7 @@ function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitl
   const app = { theme: {}, user: { id: 'synthetic-owner' }, data: { settings: {} }, userIdRef: { current: 'owner' },
     updateSettings(patch) { settingsWrites.push(patch); app.data = { ...app.data, settings: { ...app.data.settings, ...patch } }; } };
   const db = {
-    async rpc(name, args) { rpcs.push({ name, args }); return { data: counts }; },
+    async rpc(name, args) { rpcs.push({ name, args }); return response || { data: counts }; },
     from() { const q = { select: () => q, order: () => q, is: () => q, not: () => q, range: async () => ({ data: [], count: 0 }) }; return q; },
   };
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },
@@ -54,11 +54,29 @@ test('tab labels show unread replies, new errors, waiting leads and pending fiel
   assert.equal(f.rpcs[0].name, 'admin_attention_counts');
 });
 
-test('zero counts and an unavailable server leave plain labels', async () => {
+test('zero counts and a server without the count function leave plain labels', async () => {
   const quiet = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 0, fields_pending: 0 } }).render();
   assert.deepEqual(['messages', 'errors', 'fields'].map(id => label(quiet, id)), ['Messages', 'Errors', 'Fields']);
-  const missing = await fixture({ counts: null }).render();
-  assert.deepEqual(['messages', 'errors', 'waitlist', 'fields'].map(id => label(missing, id)), ['Messages', 'Errors', 'Waitlist', 'Fields']);
+  const notDeployed = await fixture({ response: { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } } }).render();
+  assert.deepEqual(['messages', 'errors', 'waitlist', 'fields'].map(id => label(notDeployed, id)), ['Messages', 'Errors', 'Waitlist', 'Fields']);
+});
+
+test('a failed count read is marked on the labels, never shown the same as zero', async () => {
+  const zero = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 0, fields_pending: 0 } }).render();
+  for (const response of [{ data: null, error: { code: '42501', message: 'permission denied' } }, { data: null }, { data: { unread_replies: 1 } }]) {
+    const view = await fixture({ response }).render();
+    assert.deepEqual(['messages', 'errors', 'waitlist', 'fields'].map(id => label(view, id)), ['Messages (?)', 'Errors (?)', 'Waitlist (?)', 'Fields (?)']);
+    for (const id of ['messages', 'errors', 'fields']) assert.notEqual(label(view, id), label(zero, id));
+    assert.equal(view.TABS.find(t => t.id === 'messages').title, 'Unread count unavailable, open to check');
+  }
+});
+
+test('the tab button carries the unavailable-count title', async () => {
+  const f = fixture({ full: true, response: { data: null, error: { code: '42501', message: 'permission denied' } } });
+  const nodes = tree => { const out = []; const visit = n => { if (Array.isArray(n)) n.forEach(visit); else if (n && typeof n === 'object' && n.props) { out.push(n); visit(n.props.children); } }; visit(tree); return out; };
+  const tree = await f.render();
+  const messages = nodes(tree).find(n => n.type === 'button' && n.props.children === 'Messages (?)');
+  assert.equal(messages.props.title, 'Unread count unavailable, open to check');
 });
 
 test('opening Messages marks it seen, keeps the old stamp for NEW REPLY badges, and re-reads with the new stamp', async () => {
