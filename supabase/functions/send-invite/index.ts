@@ -5,6 +5,11 @@
  * Body: { email, name?, note?, lead_id?, resend?: boolean }
  * Auth: Clerk JWT of an admin (verified against Clerk JWKS in _shared/clerkAuth.ts).
  * Deploys with verify_jwt=false (Clerk RS256 tokens fail the gateway check).
+ *
+ * Access it may change: only a profile that is exactly 'pending' under this
+ * email is let in. A paused, closed or deleted account, and a paused
+ * invitation, answer 409 before any write; those change through the audited
+ * Admin > Accounts controls, never through a free-text invite.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
@@ -84,7 +89,33 @@ serve(async (req) => {
   const lead = (leads || []).find(lead => String(lead.email).trim().toLowerCase() === email);
   if (requestedLeadId && requestedLeadId !== lead?.id) return json(400, { error: "Waitlist entry does not match this email" });
   const leadId = lead?.id || null;
-  const { data: existing } = await db.from("beta_access").select("*").eq("email", email).maybeSingle();
+  const { data: existing, error: existingError } = await db.from("beta_access").select("*").eq("email", email).maybeSingle();
+  if (existingError) return json(503, { error: "Could not check the invitation list" });
+
+  // Paused, closed and deleted accounts, and paused invitations, change only
+  // through Admin > Accounts, which records a reason and an audit row
+  // (admin_change_profile_access / admin_change_invite). This function used
+  // to flip them back to active with neither. Every check here runs before
+  // any write, and whether or not this is a resend.
+  const { data: prof, error: profError } = await db.from("profiles")
+    .select("id, access_status, email, deleted_at").eq("email", email).maybeSingle();
+  if (profError) return json(503, { error: "Could not check for an existing account" });
+  const account = prof && String(prof.email || "").trim().toLowerCase() === email ? prof : null;
+  if (account) {
+    let closed = !!account.deleted_at;
+    if (!closed) {
+      const { data: isClosed, error: closedError } = await db.rpc("account_is_closed", { p_profile: account.id });
+      if (closedError) return json(503, { error: "Could not check the account's status" });
+      closed = isClosed === true;
+    }
+    if (closed || account.access_status === "revoked") {
+      return json(409, { error: "This email belongs to an account that is paused or closed. Change its access under Admin > Accounts, which records the reason. No invitation was sent." });
+    }
+  }
+  if (existing?.status === "revoked") {
+    return json(409, { error: "This invitation is paused. Restore it under Admin > Accounts (Restore invitation), which records the reason, then send it again. No invitation was sent." });
+  }
+
   let row = existing;
   if (!existing) {
     const { data, error } = await db.from("beta_access")
@@ -92,18 +123,18 @@ serve(async (req) => {
       .select().single();
     if (error) return json(500, { error: error.message });
     row = data;
-  } else if (existing.status === "revoked" && !body.resend) {
-    // Re-inviting a revoked address is explicit: flip it back to invited.
-    const { data } = await db.from("beta_access").update({ status: "invited", name: name || existing.name, note: note || existing.note, updated_at: new Date().toISOString() }).eq("id", existing.id).select().single();
-    row = data || existing;
   }
 
-  // If they already have a profile under this email, activate it now.
-    // Exact, and re-checked below: this branch flips an account to active.
-  const { data: prof } = await db.from("profiles").select("id, access_status, email").eq("email", email).maybeSingle();
-  if (prof && String(prof.email || "").trim().toLowerCase() === email && prof.access_status !== "active") {
-    await db.from("profiles").update({ access_status: "active" }).eq("id", prof.id);
-    await db.from("beta_access").update({ status: "active", profile_id: prof.id, activated_at: new Date().toISOString() }).eq("id", row.id);
+  // An account already waiting under this email is let in now. Only 'pending'
+  // qualifies, and the update re-checks it, so a status an administrator
+  // changes at the same moment is never overwritten.
+  if (account && account.access_status === "pending") {
+    const { data: activated, error: activateError } = await db.from("profiles").update({ access_status: "active" })
+      .eq("id", account.id).eq("access_status", "pending").select("id");
+    if (activateError) return json(500, { error: "Could not activate the existing account" });
+    if (activated?.length === 1) {
+      await db.from("beta_access").update({ status: "active", profile_id: account.id, activated_at: new Date().toISOString() }).eq("id", row.id);
+    }
   }
 
   // Send the invitation.
