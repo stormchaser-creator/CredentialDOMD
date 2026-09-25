@@ -126,9 +126,30 @@ function admin({ archiveErrors = [] } = {}) {
   const react = { useState(initial) { const i = cursor++; if (!(i in hooks)) hooks[i] = typeof initial === 'function' ? initial() : initial; return [hooks[i], v => { hooks[i] = typeof v === 'function' ? v(hooks[i]) : v; }]; },
     useRef(initial) { const i = cursor++; if (!(i in hooks)) hooks[i] = { current: initial }; return hooks[i]; }, useEffect() {} };
   const invokeResults = [];
+  // The ticket row: reply-ticket sets its status, an archive update sets
+  // archived_at, and an update filtered on status only lands when it matches.
+  const ticket = { status: 'open', archived_at: null };
   const db = {
-    from() { const q = { select() { return q; }, update() { return q; }, async eq() { archives.push(1); return { error: archiveErrors.shift() || null }; } }; return q; },
-    functions: { async invoke(name, args) { invokes.push({ name, body: args.body }); return invokeResults.shift() || { data: { ok: true } }; } },
+    from() {
+      const filters = {}; let patch = null, returning = false;
+      const run = () => {
+        archives.push({ ...filters });
+        const error = archiveErrors.shift() || null;
+        if (error) return { data: null, error };
+        const hit = Object.entries(filters).every(([column, value]) => column === 'id' || ticket[column] === value);
+        if (hit) Object.assign(ticket, patch);
+        return { data: returning ? (hit ? [{ id: TICKET }] : []) : null, error: null };
+      };
+      const q = { update(value) { patch = value; return q; }, eq(column, value) { filters[column] = value; return q; }, select() { returning = true; return q; },
+        then(resolve, reject) { try { resolve(run()); } catch (error) { reject(error); } } };
+      return q;
+    },
+    functions: { async invoke(name, args) {
+      invokes.push({ name, body: args.body });
+      const result = invokeResults.shift() || { data: { ok: true } };
+      if (name === 'reply-ticket' && !result.error && args.body.status) ticket.status = args.body.status;
+      return result;
+    } },
   };
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     '../../context/AppContext': { useApp: () => ({ theme: {}, user: { id: 'owner' }, data: {}, userIdRef: { current: 'owner' } }) },
@@ -142,7 +163,7 @@ function admin({ archiveErrors = [] } = {}) {
     crypto: { randomUUID: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}` } });
   vm.runInContext(transformSync(injected, { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
   const render = () => { cursor = 0; module.exports.AdminDashboardContent(); return ctx.current; };
-  return { render, invokes, archives, invokeResults };
+  return { render, invokes, archives, invokeResults, ticket };
 }
 const replies = f => f.invokes.filter(i => i.name === 'reply-ticket');
 
@@ -185,6 +206,51 @@ test('Resolve & archive: when only the archive fails, the retry archives without
   assert.equal(replies(f).length, 1, 'no second reply and no second email');
   assert.equal(f.archives.length, 2);
   assert.equal(f.render().ticketMsg, 'Resolved and archived.');
+});
+
+test('Resolve & archive: a reply that moved the ticket off resolved means the retry resolves it again', async () => {
+  const f = admin({ archiveErrors: [{ message: 'Synthetic archive failure' }] });
+  await f.render().openTicketDetail({ id: TICKET });
+  await f.render().resolveAndArchive();
+  assert.equal(f.ticket.status, 'resolved');
+  assert.equal(f.ticket.archived_at, null);
+  // A follow-up that changes the status, sent from this same session.
+  f.render().setReply('Reopening while I check one more thing.');
+  await f.render().sendReply('in_progress');
+  assert.equal(f.ticket.status, 'in_progress');
+  await f.render().resolveAndArchive();
+  const sent = replies(f);
+  assert.equal(sent.length, 3);
+  assert.equal(sent[2].body.status, 'resolved', 'the physician is told it is resolved again');
+  assert.equal(f.ticket.status, 'resolved');
+  assert.ok(f.ticket.archived_at, 'archived only once it is resolved');
+  assert.equal(f.render().ticketMsg, 'Resolved and archived.');
+});
+
+test('Resolve & archive: a physician reply that reopened the ticket means the retry resolves it again', async () => {
+  const f = admin({ archiveErrors: [{ message: 'Synthetic archive failure' }] });
+  await f.render().openTicketDetail({ id: TICKET });
+  await f.render().resolveAndArchive();
+  f.ticket.status = 'open'; // support_intake reopens the ticket on a physician reply
+  await f.render().resolveAndArchive();
+  assert.equal(replies(f).length, 2);
+  assert.equal(replies(f)[1].body.status, 'resolved');
+  assert.equal(f.ticket.status, 'resolved');
+  assert.ok(f.ticket.archived_at);
+});
+
+test('Resolve & archive: the archive-only retry is keyed to its own ticket', async () => {
+  const OTHER = '33333333-3333-4333-8333-333333333333';
+  const f = admin({ archiveErrors: [{ message: 'Synthetic archive failure' }] });
+  await f.render().openTicketDetail({ id: TICKET });
+  await f.render().resolveAndArchive();
+  // Another ticket in between, then back: the first still only archives.
+  await f.render().openTicketDetail({ id: OTHER });
+  await f.render().openTicketDetail({ id: TICKET });
+  await f.render().resolveAndArchive();
+  assert.equal(replies(f).length, 1, 'no second reply after looking at another ticket');
+  assert.deepEqual(f.archives.at(-1), { id: TICKET, status: 'resolved' });
+  assert.ok(f.ticket.archived_at);
 });
 
 test('Resolve & archive: a lost reply response retries with the same request ID', async () => {

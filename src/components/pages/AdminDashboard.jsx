@@ -78,9 +78,9 @@ function AdminDashboardContent() {
   // reply, so a reply whose response was lost is not saved (and emailed to
   // the physician) twice. A different body, status or file gets a new one.
   const replyRequest = useRef(null);
-  // A Resolve & archive whose reply was saved but whose archive failed: the
-  // retry only archives.
-  const archivePending = useRef(null);
+  // Tickets whose Resolve & archive saved its reply but failed to archive: a
+  // retry with an empty box only archives, while the ticket is still resolved.
+  const archivePending = useRef(new Set());
   useEffect(() => () => { threadGeneration.current += 1; activeTicketId.current = null; }, []);
   const currentThread = (ticketId) => {
     const generation = threadGeneration.current;
@@ -189,11 +189,23 @@ function AdminDashboardContent() {
     const isCurrent = currentThread(ticketId);
     const body = reply.trim();
     setBusy(true); setTicketMsg("");
+    const archiveFailed = (message) => new Error(`Your reply was sent and the ticket marked resolved, but it could not be archived (${message}). Tap Resolve & archive again to archive it.`);
     try {
       // The reply already went out on an earlier tap and only the archive
-      // failed: archive, do not answer the physician a second time.
-      const replySaved = archivePending.current === ticketId && !body && !replyAttachment.length;
-      if (!replySaved) {
+      // failed: archive, do not answer the physician a second time. Only
+      // while the ticket is still resolved, though. A physician reply reopens
+      // it and a reply sent here since can move it, so the row itself is
+      // checked; if it moved, it is resolved again below.
+      let archived = false;
+      if (archivePending.current.has(ticketId) && !body && !replyAttachment.length) {
+        const { data: stillResolved, error: e2 } = await supabase.from("support_tickets")
+          .update({ archived_at: new Date().toISOString() })
+          .eq("id", ticketId).eq("status", "resolved").select("id");
+        if (e2) throw archiveFailed(e2.message);
+        archived = (stillResolved || []).length > 0;
+        if (!archived) archivePending.current.delete(ticketId);
+      }
+      if (!archived) {
         const replyBody = body || "Status set to resolved.";
         const requestId = replyRequestId(ticketId, replyBody, "resolved", replyAttachment);
         const res = await supabase.functions.invoke("reply-ticket", {
@@ -205,14 +217,14 @@ function AdminDashboardContent() {
         });
         if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
         replyRequest.current = null;
-        archivePending.current = ticketId;
+        archivePending.current.add(ticketId);
         if (isCurrent()) { setReply(""); setReplyAttachment([]); }
+        const { error: e2 } = await supabase.from("support_tickets")
+          .update({ archived_at: new Date().toISOString() })
+          .eq("id", ticketId);
+        if (e2) throw archiveFailed(e2.message);
       }
-      const { error: e2 } = await supabase.from("support_tickets")
-        .update({ archived_at: new Date().toISOString() })
-        .eq("id", ticketId);
-      if (e2) throw new Error(`Your reply was sent and the ticket marked resolved, but it could not be archived (${e2.message}). Tap Resolve & archive again to archive it.`);
-      archivePending.current = null;
+      archivePending.current.delete(ticketId);
       if (!isCurrent()) { await refreshTickets(); return; }
       setTicketMsg("Resolved and archived.");
       await refreshTickets();
