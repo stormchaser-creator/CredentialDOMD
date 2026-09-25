@@ -1,5 +1,6 @@
 import { compressImage } from "./documentScanner";
-import { MAX_TICKET_IMAGE_BYTES, TICKET_MIME_BY_EXT, dataUrlBytes } from "./ticketAttachments";
+import { MAX_TICKET_IMAGE_BYTES, dataUrlBytes, resolveTicketMime, withDataUrlMime } from "./ticketAttachments";
+import { spreadsheetGuard } from "./spreadsheetGuard";
 
 /**
  * One file on a ticket or a ticket reply.
@@ -15,14 +16,6 @@ import { MAX_TICKET_IMAGE_BYTES, TICKET_MIME_BY_EXT, dataUrlBytes } from "./tick
  * needs at full size. Everything else goes as it is and is simply measured.
  */
 
-/** The MIME type to trust for a file, falling back to its extension. */
-function mimeOf(file) {
-  const given = String(file?.type || "").toLowerCase();
-  if (given) return given;
-  const ext = (String(file?.name || "").match(/\.([a-z0-9]{1,5})$/i) || [])[1];
-  return TICKET_MIME_BY_EXT[String(ext || "").toLowerCase()] || "";
-}
-
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -33,12 +26,22 @@ function readAsDataUrl(file) {
 }
 
 export async function readTicketAttachment(file) {
-  const mime = mimeOf(file);
-  if (!mime || !Object.values(TICKET_MIME_BY_EXT).includes(mime)) {
+  // The browser's type when the server stores it, otherwise the extension's
+  // (resolveTicketMime). It used to be the browser's type whenever there was
+  // one, so an .rtf that macOS calls text/rtf was refused here although the
+  // server stores it, and a Windows .csv went up as an Excel file.
+  const mime = resolveTicketMime(file);
+  if (!mime) {
     throw new Error("Attach an image, a PDF, or a document (Word, Excel, CSV, or text).");
   }
+  // A spreadsheet whose header names a patient identifier never leaves the
+  // device, here as on every other upload path.
+  const refusal = await spreadsheetGuard(file);
+  if (refusal) throw new Error(refusal);
 
-  const dataUrl = await readAsDataUrl(file);
+  // FileReader labels the data with the browser's guess (or with nothing);
+  // the server stores the file under whatever type the data URL declares.
+  const dataUrl = withDataUrlMime(await readAsDataUrl(file), mime);
 
   // A HEIC from an iPhone is an image no browser canvas will draw, so it is
   // carried through untouched rather than failing in the compressor.

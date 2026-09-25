@@ -54,6 +54,15 @@ test('expired Credential remains readable and its archive excludes Practice reco
   assert.match(html, /Saved license/); assert.doesNotMatch(html, /SAVED-001|Saved agreement.pdf/);
 });
 
+test('the read-only archive never lists Protected Identity or a file linked to it (ticket d49088c7)', () => {
+  const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;
+  value.data.identityVault = [{ id: 'identity', label: 'Synthetic application', legalLastName: 'Synthetic Legalname', ssn: 'enc1:SYNTHETIC' }];
+  value.data.documents = [...value.data.documents, { id: 'identity-doc', name: 'Signed identity page.pdf', linkedTo: 'identityVault:identity', storagePath: 'synthetic' }];
+  const html = render(Archive, {scope:'credential'});
+  assert.match(html, /Saved license/);
+  assert.doesNotMatch(html, /Synthetic Legalname|Synthetic application|enc1:|Signed identity page|Identity Vault/);
+});
+
 test('paid Credential with expired Practice gives an honest support path without an unavailable checkout', () => {
   const value = fixture(); globalThis.__limitedLaunchRenderFixture = value;
   Object.assign(value.limitedLaunch.access, { purchasedOfferId: 'core', accessStatus: 'active', practiceTrial: {state: 'expired'}, freeBeta: {state: 'none'} });

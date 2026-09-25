@@ -1,5 +1,6 @@
 import { complianceFor } from "./compliance";
 import { getItemLabel, formatDate, MS_PER_DAY, mailtoHref } from "./helpers";
+import { scrubSsn } from "./outgoingText.js";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -173,7 +174,9 @@ export function composeEmail(email, subject, body) {
   window.open(mailtoHref(email, subject, body), "_blank");
 }
 
-export function composeText(phone, body) {
+export function composeText(phone, raw) {
+  // Anything SSN-shaped is taken out before it reaches the Messages app.
+  const body = scrubSsn(String(raw ?? ""));
   const cleaned = phone.replace(/[^0-9+]/g, "");
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   // A hard character cut can land mid-word or mid-line on a long body; back

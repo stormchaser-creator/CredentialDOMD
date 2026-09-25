@@ -33,6 +33,14 @@ const MAX_REPORTS_PER_SESSION = 25;
 const SECRET_RE =
   /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{6,}|\bsk-[A-Za-z0-9_-]{16,}|\bAIza[0-9A-Za-z_-]{20,}|\bAQ\.[A-Za-z0-9._-]{20,}|\bre_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|"?(?:apikey|authorization|x-api-key)"?\s*[:=]\s*"?[^",\s}]{6,}/gi;
 
+// A Social Security number or a date of birth that rode into an error
+// (a form value echoed in an exception, a URL, a JSON payload). No payload
+// carries one today; this is the second wall. Written out here rather than
+// imported, because this module keeps its dependencies to the minimum.
+const DASH = "\\-\u{2010}-\u{2015}";
+const SSN_RE = new RegExp(`(?<![\\d${DASH}])\\d{3}[\\s.${DASH}]\\d{2}[\\s.${DASH}]\\d{4}(?![\\d${DASH}])`, "g");
+const LABELLED_ID_RE = /\b((?:full_?)?dob|d\.o\.b\.?|date[\s_]*of[\s_]*birth|birth_?date|ssn|ss\s*#|social[\s_]*security(?:[\s_]*(?:no\.?|number))?|tin)(["']?\s*[:=#]?\s*["']?)\d[\d/.-]{5,}/gi;
+
 let currentUserId = null;
 let installed = false;
 let sent = 0;
@@ -44,7 +52,8 @@ export function setErrorUser(id) {
 }
 
 function scrub(s) {
-  return redactLaunchInvitation(s).replace(SECRET_RE, "[redacted]");
+  return redactLaunchInvitation(s).replace(SECRET_RE, "[redacted]")
+    .replace(LABELLED_ID_RE, "$1$2[redacted]").replace(SSN_RE, "[redacted]");
 }
 
 function clip(s, max) {

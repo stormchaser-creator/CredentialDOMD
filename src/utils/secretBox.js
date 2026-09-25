@@ -43,6 +43,53 @@ export function saveLockCode(code, uid = activeUid) {
   localStorage.setItem(slot(uid), JSON.stringify(cur));
 }
 
+/**
+ * Protected Identity (an SSN, a full date of birth) needs a longer code than
+ * a portal password. A 4-character code is guessable offline in minutes if a
+ * backup holding the ciphertext ever leaks.
+ *
+ * The saved-password lock code keeps working for passwords whatever its
+ * length. When it is at least IDENTITY_LOCK_MIN long it opens Protected
+ * Identity too; when it is shorter, Protected Identity has its own code in
+ * the same device slot, set the first time an SSN or date of birth is saved
+ * or revealed. Neither code ever leaves the device.
+ */
+export const IDENTITY_LOCK_MIN = 8;
+
+function readSlot(uid) {
+  try { return JSON.parse(localStorage.getItem(slot(uid)) || "{}") || {}; } catch { return {}; }
+}
+
+/** The code that opens Protected Identity on this device, or null. */
+export function getIdentityLockCode(uid = activeUid) {
+  const cur = readSlot(uid);
+  if (typeof cur.identityLockCode === "string" && cur.identityLockCode.length >= IDENTITY_LOCK_MIN) return cur.identityLockCode;
+  if (typeof cur.lockCode === "string" && cur.lockCode.length >= IDENTITY_LOCK_MIN) return cur.lockCode;
+  return null;
+}
+
+/** The saved-password code when it is too short for Protected Identity. */
+export function getShortLockCode(uid = activeUid) {
+  const code = readSlot(uid).lockCode;
+  return typeof code === "string" && code && code.length < IDENTITY_LOCK_MIN ? code : null;
+}
+
+/**
+ * Remember a code for Protected Identity. Refuses one shorter than
+ * IDENTITY_LOCK_MIN. A device with no lock code at all takes it as its lock
+ * code (long enough for both); a device whose lock code is shorter keeps that
+ * one for passwords and holds this one beside it.
+ */
+export function saveIdentityLockCode(code, uid = activeUid) {
+  if (!uid || typeof code !== "string" || code.length < IDENTITY_LOCK_MIN) return false;
+  const cur = readSlot(uid);
+  if (!cur.lockCode) { cur.lockCode = code; delete cur.identityLockCode; }
+  else if (cur.lockCode !== code) cur.identityLockCode = code;
+  else delete cur.identityLockCode;
+  try { localStorage.setItem(slot(uid), JSON.stringify(cur)); } catch { return false; }
+  return true;
+}
+
 const te = new TextEncoder(), td = new TextDecoder();
 const b64 = (u8) => btoa(String.fromCharCode(...u8));
 const unb64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));

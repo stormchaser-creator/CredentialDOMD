@@ -9,9 +9,10 @@
 // Run: node scripts/ticket-attachments-client.test.mjs
 import {
   MAX_TICKET_IMAGES, MAX_TICKET_IMAGE_BYTES, MAX_TICKET_TOTAL_BYTES,
-  TICKET_ATTACH_ACCEPT, TICKET_MIME_BY_EXT,
+  TICKET_ATTACH_ACCEPT, TICKET_MIME_BY_EXT, TICKET_MIMES,
   dataUrlBytes, totalBytes, addImages, attachmentsPayload, linksFor,
   attachmentKind, attachmentLabel, mimeOfDataUrl,
+  resolveTicketMime, withDataUrlMime, ticketAttachmentShortfall,
 } from "../src/utils/ticketAttachments.js";
 
 const server = await import("../supabase/functions/_shared/ticketAttachment.ts");
@@ -105,15 +106,72 @@ eq("the same total cap", MAX_TICKET_TOTAL_BYTES, server.MAX_TOTAL_ATTACHMENT_BYT
   // round. A picker that accepts a type the function refuses is a failure the
   // physician meets after writing the message.
   const serverMimes = new Set(Object.keys(server.MIME_EXT));
-  const clientMimes = new Set(Object.values(TICKET_MIME_BY_EXT));
+  const clientMimes = TICKET_MIMES;
   const unstorable = [...clientMimes].filter((m) => !serverMimes.has(m));
   eq("nothing offered that the server would refuse", unstorable, []);
-  const unofferable = [...serverMimes].filter((m) => !clientMimes.has(m) && m !== "text/rtf");
+  // No exemptions: text/rtf used to be waved through here, and that is the
+  // gap that refused a Mac .rtf on the phone while the server would store it.
+  const unofferable = [...serverMimes].filter((m) => !clientMimes.has(m));
   eq("nothing stored that the picker never offers", unofferable, []);
+  ok("every extension the client maps is one the server stores",
+    Object.values(TICKET_MIME_BY_EXT).every((m) => serverMimes.has(m)));
 
   ok("neither side takes SVG or HTML, which a browser executes",
     !serverMimes.has("image/svg+xml") && !serverMimes.has("text/html")
     && !/svg|text\/html/.test(TICKET_ATTACH_ACCEPT));
+}
+
+// ── Which type a picked file is sent as ───────────────────────────────────
+// The browser's word is taken only when the server stores that type. A Mac
+// reports an .rtf as text/rtf (refused here while the server accepted it),
+// and Windows with Excel installed reports a .csv as application/vnd.ms-excel
+// (stored as .xls). The extension is the better witness in both cases.
+{
+  const f = (name, type) => ({ name, type });
+  eq("an .rtf the Mac calls text/rtf is accepted as text/rtf", resolveTicketMime(f("notes.rtf", "text/rtf")), "text/rtf");
+  eq("and the server stores that type", server.MIME_EXT["text/rtf"], "rtf");
+  eq("an .rtf with an unfamiliar rtf type falls back to the extension", resolveTicketMime(f("notes.rtf", "application/x-rtf")), "application/rtf");
+  eq("a .csv that Windows calls an Excel file is sent as CSV", resolveTicketMime(f("hours.csv", "application/vnd.ms-excel")), "text/csv");
+  eq("and stored as .csv, not .xls", server.MIME_EXT[resolveTicketMime(f("hours.csv", "application/vnd.ms-excel"))], "csv");
+  eq("a .csv called application/csv is sent as CSV", resolveTicketMime(f("hours.csv", "application/csv")), "text/csv");
+  eq("a .csv called text/x-csv is sent as CSV", resolveTicketMime(f("HOURS.CSV", "text/x-csv")), "text/csv");
+  eq("a real Excel file keeps its type", resolveTicketMime(f("hours.xls", "application/vnd.ms-excel")), "application/vnd.ms-excel");
+  eq("a file with no type is read by its extension", resolveTicketMime(f("note.txt", "")), "text/plain");
+  eq("octet-stream is read by its extension", resolveTicketMime(f("letter.docx", "application/octet-stream")),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  eq("a known type is taken as given", resolveTicketMime(f("scan", "application/pdf")), "application/pdf");
+  eq("an unknown type with no known extension is refused", resolveTicketMime(f("clip.mov", "video/quicktime")), "");
+  eq("no type and no extension is refused", resolveTicketMime(f("README", "")), "");
+  eq("an SVG is refused even when its name says png", resolveTicketMime(f("shot.png", "image/svg+xml")), "");
+  eq("HTML is refused even when its name says csv", resolveTicketMime(f("table.csv", "text/html")), "");
+  eq("an SVG by name alone is refused", resolveTicketMime(f("logo.svg", "")), "");
+
+  eq("the data URL is relabelled with the resolved type",
+    withDataUrlMime("data:application/vnd.ms-excel;base64,QUJD", "text/csv"), "data:text/csv;base64,QUJD");
+  eq("a data URL the browser left untyped gets the type",
+    withDataUrlMime("data:application/octet-stream;base64,QUJD", "text/plain"), "data:text/plain;base64,QUJD");
+  eq("a charset parameter is dropped, as the server's parser expects",
+    withDataUrlMime("data:text/plain;charset=utf-8;base64,QUJD", "text/plain"), "data:text/plain;base64,QUJD");
+  eq("Safari's empty type is filled", withDataUrlMime("data:;base64,QUJD", "application/rtf"), "data:application/rtf;base64,QUJD");
+  eq("nothing to relabel is left alone", withDataUrlMime("not a data url", "text/plain"), "not a data url");
+  {
+    const relabelled = withDataUrlMime("data:application/csv;base64,QUJD", resolveTicketMime(f("a.csv", "application/csv")));
+    const parsed = server.parseAttachment({ data: relabelled });
+    eq("the server stores the relabelled CSV under .csv", parsed.ext, "csv");
+    eq("with its bytes intact", new TextDecoder().decode(parsed.bytes), "ABC");
+  }
+}
+
+// ── A ticket saved without all of its files ───────────────────────────────
+{
+  eq("one lost file is named in the singular", ticketAttachmentShortfall({ ok: true, attachments_failed: 1 }),
+    "Your ticket was sent, but 1 file did not attach. Add it as a reply.");
+  eq("two are counted", ticketAttachmentShortfall({ ok: true, attachments_failed: 2 }),
+    "Your ticket was sent, but 2 files did not attach. Add them as a reply.");
+  eq("nothing lost says nothing", ticketAttachmentShortfall({ ok: true, attachments_failed: 0 }), "");
+  eq("a function that does not report it claims nothing", ticketAttachmentShortfall({ ok: true, id: "x" }), "");
+  eq("no response claims nothing", ticketAttachmentShortfall(null), "");
+  ok("no em dash in the shortfall", !ticketAttachmentShortfall({ attachments_failed: 3 }).includes("\u{2014}"));
 }
 
 // ── Telling a picture from a file ─────────────────────────────────────────

@@ -31,7 +31,7 @@ function CancellationPage() {
     setExporting(true);
     setError(null);
     try {
-      const blob = await generateCredentialZip(data);
+      const blob = await generateCredentialZip(data, { scope: "account" });
       const date = new Date().toISOString().split("T")[0];
       downloadBlob(blob, `CredentialDOMD_Export_${date}.zip`);
       setExported(true);

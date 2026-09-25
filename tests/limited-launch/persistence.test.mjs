@@ -480,3 +480,49 @@ test('starring with no profile yet queues the narrow op offline, and never a wid
   assert.deepEqual({ ...queued[0].payload }, { id: 'license', favorite: true },
     'the queued payload must carry the id and the flag only');
 });
+
+// Ticket d49088c7. Protected Identity (identityVault) is kept on the device
+// and has no cloud table. tableName() used to fall back to the raw key, so a
+// save during the 2026-09-18 live window was "inserted" into a table that does
+// not exist, failed, was queued, and was replayed on every load, sending the
+// legal name and SSN ciphertext to the REST API each time.
+const identity = { id: 'identity-1', label: 'Synthetic application', legalLastName: 'Synthetic', ssn: 'enc1:SYNTHETIC', fullDob: 'enc1:SYNTHETICDATE' };
+
+test('a queued identityVault upsert is never sent and is removed from the queue', async () => {
+  const f = fixture();
+  f.values.set('ops:user_syntheticA', JSON.stringify([
+    { op: 'upsert', collectionKey: 'identityVault', payload: identity, ts: 1 },
+    { op: 'tombstone', collectionKey: 'identityVault', payload: 'identity-0', ts: 2 },
+    oldOp('license-1'),
+  ]));
+  await f.api.replayPendingOps('profileA', 'user_syntheticA');
+  assert.deepEqual(f.requests.map(r => r.table), ['licenses'], 'only the registered collection is sent');
+  assert.doesNotMatch(JSON.stringify(f.requests), /identity|enc1:|Synthetic application/);
+  assert.deepEqual(f.queue(), [], 'the identity ops are gone, not waiting for another try');
+});
+
+test('no write path sends or queues an unregistered collection', async () => {
+  const f = fixture();
+  f.onRequest = async () => ({ error: { message: 'synthetic failure that would normally queue' } });
+  await f.api.insertItem('profileA', 'identityVault', identity);
+  await f.api.updateItem('profileA', 'identityVault', identity, identity, 'user_syntheticA');
+  await f.api.setFavorite('profileA', 'identityVault', identity, true, 'user_syntheticA');
+  await f.api.deleteItem('profileA', 'identityVault', identity.id, identity);
+  await f.api.recordTombstone('profileA', 'identityVault', identity.id, identity);
+  await f.api.bulkSync('profileA', 'identityVault', [identity], 'user_syntheticA');
+  await f.api.insertItem('profileA', 'someUnregisteredKey', { id: 'x' });
+  assert.equal(f.requests.length, 0);
+  assert.deepEqual(f.queue(), []);
+  assert.equal(f.api.isSyncedCollection('identityVault'), false);
+  assert.equal(f.api.isSyncedCollection('licenses'), true);
+  assert.equal(f.api.isSyncedCollection('__proto__'), false);
+  assert.equal(f.api.COLLECTION_KEYS.includes('identityVault'), false);
+});
+
+test('a registered collection still queues a failed write for replay', async () => {
+  const f = fixture();
+  f.onRequest = async () => ({ error: { message: 'synthetic outage' } });
+  await f.api.insertItem('profileA', 'licenses', { id: 'license-2' });
+  assert.equal(f.queue().length, 1);
+  assert.equal(f.queue()[0].collectionKey, 'licenses');
+});

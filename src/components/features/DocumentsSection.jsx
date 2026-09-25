@@ -6,7 +6,7 @@ import { useInputStyle } from "../shared/useInputStyle";
 import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
-import { generateId, downscalePhoto } from "../../utils/helpers";
+import { generateId, downscalePhoto, bundlePacketText, copyToClipboard } from "../../utils/helpers";
 import { analyzeDocument, analyzePDF, analyzeDocText, CV_DOC_TYPE, OTHER_DOC_TYPE } from "../../utils/documentScanner";
 import { liveCategories, findCategory, buildCategory, packRecord } from "../../utils/customCategories";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -19,6 +19,8 @@ import { CME_INBOX_ADDRESS, DOCS_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox 
 import { isReadableDoc } from "../../utils/docPrefill";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
+import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
+import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -67,7 +69,8 @@ function DocumentsSection() {
   // Bundle-send: one share sheet carrying ALL selected files, with a cover
   // note listing the contents — instead of sharing documents one by one.
   const sendBundle = useCallback(async () => {
-    const docs = data.documents.filter(d => selectedIds.has(d.id));
+    // A file linked to Protected Identity never goes out in a bundle.
+    const docs = data.documents.filter(d => selectedIds.has(d.id) && !isIdentityLink(d.linkedTo));
     if (docs.length === 0) return;
     const missing = docs.filter(d => !d.data);
     if (missing.length > 0) {
@@ -85,21 +88,10 @@ function DocumentsSection() {
       } catch { return null; }
     }).filter(Boolean);
 
-    const sName = data.settings?.name ? `${data.settings.name}${data.settings.degreeType ? `, ${data.settings.degreeType}` : ""}` : "Physician";
-    const text = [
-      "To whom it may concern,",
-      "",
-      `Please find attached the credential document packet for ${sName}${data.settings?.npi ? " (NPI " + data.settings.npi + ")" : ""}:`,
-      "",
-      ...docs.map((d, i) => `  ${i + 1}. ${d.name}`),
-      "",
-      `Sent via CredentialDOMD · ${new Date().toLocaleDateString()}`,
-    ].join("\n");
-    const title = `Credential packet — ${sName} (${docs.length} documents)`;
-    // iOS Mail promotes the first text line to the subject and strips
-    // newlines — share a flowing blurb, formatted letter to the clipboard.
-    const blurb = `Credential packet for ${sName}${data.settings?.npi ? " (NPI " + data.settings.npi + ")" : ""}, ${docs.length} document${docs.length === 1 ? "" : "s"} attached: ${docs.map((d, i) => `${i + 1}. ${d.name}.`).join(" ")} A formatted cover letter is on the sender's clipboard for pasting. Sent via CredentialDOMD.`;
-    try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ }
+    // Cover letter to the clipboard, a flowing blurb to the share sheet;
+    // all of it scrubbed of anything shaped like an SSN on the way out.
+    const { text, title, blurb } = bundlePacketText(docs, data.settings);
+    try { await copyToClipboard(text); } catch { /* clipboard unavailable */ }
 
     if (navigator.share && navigator.canShare?.({ files })) {
       try {
@@ -235,6 +227,11 @@ function DocumentsSection() {
         setScanError(`"${file.name}" isn't a file type this app reads (${file.type || "unknown type"}). Photos, PDFs, Word, Excel, CSV and text work.`);
         continue;
       }
+      // A spreadsheet whose header row names a patient identifier (MRN,
+      // patient name, DOB, SSN...) is refused here, before it is read or
+      // stored, with the column named (utils/spreadsheetGuard.js).
+      const sheetRefusal = await spreadsheetGuard(file);
+      if (sheetRefusal) { setScanError(`"${file.name}" was not uploaded. ${sheetRefusal}`); continue; }
       // Anything we can read before storing gets screened first — a patient
       // chart must never reach the server, so refusing beats deleting.
       if (isOfficeFile(file)) {

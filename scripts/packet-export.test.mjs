@@ -12,7 +12,7 @@
 //
 // Run: node scripts/packet-export.test.mjs   (pure node, no runner)
 import {
-  FOLDER_MAP, PACKET_FOLDERS, categorizeDocument,
+  FOLDER_MAP, PACKET_FOLDERS, PACKET_SECTIONS, categorizeDocument,
   packetDocuments, packetSummary, packetSummaryLine, packetPendingLine, generateCredentialZip,
 } from "../src/utils/credentialExport.js";
 
@@ -127,7 +127,8 @@ eq("no documents yet says so, and claims nothing", packetSummaryLine({ lineItems
 ok("no em dash in the ending", !packetSummaryLine(summary).includes("—"));
 
 // A file sitting in Files unattached, and a link pointing at a record that
-// was deleted, are both in the ZIP and neither is described as proof.
+// was deleted, are neither described as proof nor sent in the packet; only
+// the physician's own account export carries them.
 const loose = {
   ...data,
   documents: [
@@ -188,8 +189,67 @@ ok("a duplicate filename does not drop a file", collideZip.size > zip.size * 0);
     entries.some((n) => n.includes("Board_Certifications/cert.pdf")));
   ok("the summary spreadsheet is in the ZIP",
     entries.some((n) => n.endsWith("credentials_summary.xlsx")));
-  const backup = await full.file("CredentialDOMD_Export/credentialdomd_backup.json").async("string");
+  ok("the packet carries no JSON backup of the whole account",
+    !entries.some((n) => n.endsWith("credentialdomd_backup.json")));
+  ok("the packet leaves out the unattached file and the dead link",
+    !entries.some((n) => n.endsWith("/scan.pdf") && n.includes("Other_Documents")) && !entries.some((n) => n.includes("old.pdf")));
+
+  const own = await JSZip.loadAsync(await (await generateCredentialZip(loose, { scope: "account" })).arrayBuffer());
+  const ownEntries = Object.keys(own.files);
+  const backup = await own.file("CredentialDOMD_Export/credentialdomd_backup.json").async("string");
+  ok("the account export keeps its JSON backup", backup.length > 0);
   ok("the backup carries no API key", !backup.includes("SECRET"));
+  ok("the account export keeps the unattached file", ownEntries.some((n) => n.includes("Other_Documents/scan.pdf")));
+}
+
+// ── Ticket d49088c7: only credentialing sections, never Protected Identity ──
+// The packet ZIP is the file Setup tells the physician to send whole to a
+// credentialing office, and "Send it" preselects the same list. A receipt
+// linked to an expense rode along in both, and so would anything linked to
+// Protected Identity.
+{
+  eq("the packet sections are the ones with a folder", [...PACKET_SECTIONS].sort(), Object.keys(FOLDER_MAP).sort());
+  const legal = "Synthetic Legalname";
+  const withPrivate = {
+    ...data,
+    travelExpenses: [{ id: "x1", category: "Lodging", amount: 212 }],
+    invoices: [{ id: "inv1", number: "INV-1" }],
+    identityVault: [{ id: "iv1", label: "Liability application", legalFirstName: legal, ssn: "enc1:SYNTHETICCIPHER", fullDob: "enc1:SYNTHETICDATE" }],
+    customRecords: [{ id: "cr1", categoryId: "c1", name: "Badge" }],
+    documents: [
+      ...data.documents,
+      { id: "r1", name: "hotel-receipt.pdf", type: "application/pdf", data: b64("receipt"), linkedTo: "travelExpenses:x1" },
+      { id: "r2", name: "invoice.pdf", type: "application/pdf", data: b64("invoice"), linkedTo: "invoices:inv1" },
+      { id: "r3", name: "signed-application.pdf", type: "application/pdf", data: b64("identity"), linkedTo: "identityVault:iv1" },
+      { id: "r4", name: "badge.pdf", type: "application/pdf", data: b64("badge"), linkedTo: "customRecords:cr1" },
+    ],
+  };
+  const ids = packetDocuments(withPrivate).map((d) => d.id);
+  ok("an expense receipt is not a packet document", !ids.includes("r1"));
+  ok("an invoice is not a packet document", !ids.includes("r2"));
+  ok("a file linked to Protected Identity is not a packet document", !ids.includes("r3"));
+  ok("a custom-category file is not a packet document", !ids.includes("r4"));
+  // The passport scan stays: Setup's packet asks for a government photo ID
+  // (setupTasks "Photo ID"), and Travel_and_IDs is its folder.
+  ok("the passport scan is still in the packet", ids.includes("d10"));
+  eq("and every credentialing file is still counted", packetSummary(withPrivate).documents, 15);
+
+  const JSZip = (await import("jszip")).default;
+  for (const scope of ["packet", "account"]) {
+    const zipped = await JSZip.loadAsync(await (await generateCredentialZip(withPrivate, { scope })).arrayBuffer());
+    const names = Object.keys(zipped.files);
+    let text = "";
+    for (const n of names) if (!zipped.files[n].dir) text += await zipped.file(n).async("string");
+    ok(`the ${scope} ZIP holds no legal name from Protected Identity`, !text.includes(legal));
+    ok(`the ${scope} ZIP holds no ciphertext from Protected Identity`, !text.includes("enc1:SYNTHETIC"));
+    ok(`the ${scope} ZIP holds no file linked to Protected Identity`, !names.some((n) => n.includes("signed-application")));
+    if (scope === "packet") {
+      ok("the packet ZIP holds no receipt", !names.some((n) => n.includes("hotel-receipt")));
+      ok("the packet ZIP holds no invoice", !names.some((n) => n.includes("invoice.pdf")));
+    } else {
+      ok("the account export still holds the receipt, for the physician's own keeping", names.some((n) => n.includes("hotel-receipt")));
+    }
+  }
 }
 
 console.log(`${pass} passed, ${fail} failed`);

@@ -201,9 +201,9 @@ const TABLE_MAP = {
   dutyDays: "duty_days",
   memberships: "professional_memberships",
   invoices: "invoices",
-  // Was missing: rows were written (tableName() falls back to the key) but
-  // never loaded back, so the deduction ledger only lived in the device
-  // cache and vanished on a fresh load.
+  // Was missing: rows were written (tableName() used to fall back to the
+  // key) but never loaded back, so the deduction ledger only lived in the
+  // device cache and vanished on a fresh load.
   deductibles: "deductibles",
   rotations: "rotations",
   // Categories a physician, Vera or the uploader created, and the records in
@@ -213,8 +213,33 @@ const TABLE_MAP = {
   customRecords: "custom_records",
 };
 
+/**
+ * Whether a collection has a cloud table. Only a TABLE_MAP key does.
+ *
+ * tableName() used to fall back to the raw key, so a collection nobody had
+ * registered was still "written": Protected Identity (identityVault, kept on
+ * the device by design) went to a table named identityVault that does not
+ * exist, the failure was queued, and every later load replayed it, sending the
+ * legal name and the SSN ciphertext to the REST API again each time. An
+ * unregistered key now has no table: nothing is sent, nothing is queued, and
+ * anything already queued for one is dropped unsent on the next replay.
+ */
+export function isSyncedCollection(key) {
+  return typeof key === "string" && Object.hasOwn(TABLE_MAP, key);
+}
+
 function tableName(key) {
-  return TABLE_MAP[key] || key;
+  if (!isSyncedCollection(key)) {
+    const error = new Error(`${key} has no cloud table; it stays on this device.`);
+    error.code = "unsynced_collection";
+    throw error;
+  }
+  return TABLE_MAP[key];
+}
+
+/** The quiet refusal every write path gives an unregistered collection. */
+function refuseUnsynced(collectionKey) {
+  console.warn(`Not sent: ${collectionKey} is kept on this device only.`);
 }
 
 // Single source of truth for the syncable collection keys. Every consumer
@@ -594,6 +619,9 @@ const pendingOpsSlot = (authUserId) =>
 const PENDING_OPS_CAP = 500;
 
 function queuePendingOp(op, collectionKey, payload, owner) {
+  // A device-only collection is never queued: a queued op is a promise to
+  // send it later.
+  if (op !== "settings" && !isSyncedCollection(collectionKey)) return;
   owner.check();
   const key = pendingOpsSlot(owner.accountId);
   if (!key) return; // no account context yet — nothing safe to namespace under
@@ -680,6 +708,9 @@ async function replayForOwner(profileId, authUserId) {
   const completed = new Set();
   for (const op of ops) {
     try { owner.guard(); } catch { break; }
+    // Queued before collections were checked (identityVault from the
+    // 2026-09-18 live window): dropped from the queue without being sent.
+    if (op.op !== "settings" && !isSyncedCollection(op.collectionKey)) { completed.add(op.queueId); continue; }
     // Keep denied operations in their original account queue for a later authorized sync.
     const permitted = op.op === "settings" ? allowsSettingsChange(op.payload)
       : accessAuthority.allowsMutation(op.collectionKey, typeof op.payload === "object" ? op.payload : { id: op.payload }, null, owner.accountId);
@@ -1027,6 +1058,7 @@ export async function downloadDocumentFile(storagePath) {
 
 // ─── Collection CRUD ─────────────────────────────────────────
 export async function insertItem(userId, collectionKey, item) {
+  if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, item);
   // No cloud target yet (offline / local dev): queue so it isn't lost.
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
@@ -1054,6 +1086,7 @@ export async function insertItem(userId, collectionKey, item) {
 }
 
 export async function updateItem(userId, collectionKey, item, previous, authUserId) {
+  if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, item, previous, true, authUserId);
   if (!supabase || !userId) { queuePendingOp("upsert", collectionKey, item, owner); return; }
   const table = tableName(collectionKey);
@@ -1085,6 +1118,7 @@ export async function updateItem(userId, collectionKey, item, previous, authUser
 // the whole row, so one rejected column would reject the record's other edits
 // with it. The queued replay op is narrow for the same reason.
 export async function setFavorite(userId, collectionKey, item, favorite, authUserId) {
+  if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const payload = { id: item?.id, favorite: !!favorite };
   const owner = recordContext(collectionKey, { ...item, favorite: !!favorite }, item, true, authUserId);
   if (!supabase || !userId) { queuePendingOp("favorite", collectionKey, payload, owner); return; }
@@ -1097,6 +1131,7 @@ export async function setFavorite(userId, collectionKey, item, favorite, authUse
 }
 
 export async function deleteItem(userId, collectionKey, itemId, previous) {
+  if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
   if (!supabase || !userId) { queuePendingOp("delete", collectionKey, itemId, owner); return; }
   if (collectionKey === "documents") {
@@ -1124,6 +1159,7 @@ export async function deleteItem(userId, collectionKey, itemId, previous) {
 
 // ─── Bulk sync (for initial migration from localStorage) ─────
 export async function bulkSync(userId, collectionKey, items, authUserId) {
+  if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = writeContext(authUserId);
   const previous = items.map(item => accessAuthority.previousRecord(collectionKey, item?.id, owner.accountId));
   owner.check = () => items.forEach((item, index) => guardRecord(owner, collectionKey, item, previous[index], true));
@@ -1157,6 +1193,8 @@ export async function bulkSync(userId, collectionKey, items, authUserId) {
 // A delete recorded here is final across all devices: loads prune these ids
 // and the self-healing push skips them, so stale devices can't resurrect.
 export async function recordTombstone(userId, collectionKey, itemId, previous) {
+  // A device-only record has nothing in the cloud to keep deleted.
+  if (!isSyncedCollection(collectionKey)) return refuseUnsynced(collectionKey);
   const owner = recordContext(collectionKey, previous || { id: itemId }, previous, true);
   if (!itemId) return;
   if (!supabase || !userId) { queuePendingOp("tombstone", collectionKey, itemId, owner); return; }

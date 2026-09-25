@@ -7,6 +7,7 @@ import { analyzeDocument, analyzePDF } from "../../../utils/documentScanner";
 import { useAiAvailable, describeAiStatus } from "../../../utils/aiClient";
 import { mergeExtracted, findDuplicateDoc, attachExistingDoc } from "../../../utils/docPrefill";
 import { checkStorageQuota } from "../../../utils/storageQuota";
+import { isPhotoOrPdf, notPhotoOrPdf } from "../../../utils/photoOrPdf";
 
 /**
  * The date strip: one row per license the app cannot warn about, with a
@@ -55,6 +56,9 @@ export function DateRow({ rec, onCaptured, onOpenRecord }) {
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
+    // A photo or a PDF only: the picker's accept list is a hint a desktop
+    // dialog lets anyone override, and nothing else is read or stored here.
+    if (!isPhotoOrPdf(file)) { setErr(true); setMsg(notPhotoOrPdf(file)); return; }
     setBusy(true); setMsg(""); setErr(false);
     try {
       const quota = checkStorageQuota(data.documents, [file]);

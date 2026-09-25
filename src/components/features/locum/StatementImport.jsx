@@ -6,6 +6,7 @@ import { analyzeStatement, categorizeStatementRows } from "../../../utils/docume
 import { aiAvailable } from "../../../utils/aiClient";
 import { deductionCategoryLabel } from "../../../utils/deductionCategoryLabel";
 import * as XLSX from "xlsx";
+import { spreadsheetGuard } from "../../../utils/spreadsheetGuard";
 
 /**
  * StatementImport — turn the business card's statement into deduction lines.
@@ -62,7 +63,15 @@ const RULES = [
 ];
 const categorize = (merchant) => (RULES.find(([re]) => re.test(merchant)) || [null, "Other deductible expense"])[1];
 
-// Bank CSV headers vary; find columns by intent. Handles quoted fields.
+// A statement's header row: a date column plus a description or amount.
+const looksLikeHeader = (r) => {
+  const h = (r || []).map(x => String(x ?? "").trim().toLowerCase());
+  return h.some(x => /date/.test(x)) && h.some(x => /description|merchant|payee|details?$|name|amount|debit/.test(x));
+};
+
+// Bank CSV headers vary; find columns by intent. Handles quoted fields, and
+// skips the bank's lines above the table ("Account Number:", "Statement
+// Period:") the same way the Excel reader does.
 function parseCsv(text) {
   const rows = [];
   let row = [], field = "", inQ = false;
@@ -80,7 +89,12 @@ function parseCsv(text) {
     } else field += ch;
   }
   if (field !== "" || row.length) { row.push(field); rows.push(row); }
-  return parseGrid(rows);
+  // Only lines that are not transactions are skipped: a headerless export
+  // whose tenth merchant happens to read like a header keeps every row.
+  const start = rows.slice(0, 10).findIndex(looksLikeHeader);
+  const preamble = rows.slice(0, Math.max(start, 0));
+  const isTransaction = (r) => /\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/.test(String(r[0] || ""));
+  return parseGrid(start > 0 && !preamble.some(isTransaction) ? rows.slice(start) : rows);
 }
 
 /**
@@ -91,10 +105,6 @@ function parseCsv(text) {
  */
 function parseExcel(arrayBuffer) {
   const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: false });
-  const looksLikeHeader = (r) => {
-    const h = (r || []).map(x => String(x ?? "").trim().toLowerCase());
-    return h.some(x => /date/.test(x)) && h.some(x => /description|merchant|payee|details?$|name|amount|debit/.test(x));
-  };
   for (const name of wb.SheetNames) {
     const ws = wb.Sheets[name];
     if (!ws) continue;
@@ -221,6 +231,11 @@ function StatementImport({ open, onClose }) {
   const handleFile = async (file) => {
     setError(null); setDone(null); setBusy(true);
     try {
+      // CSV and Excel are read here on the device and the file goes nowhere:
+      // only each row's date, description and amount are kept. The bank's
+      // own lines above the table ("Account Number:", "Statement Period:")
+      // are expected and never stored, so the spreadsheet guard, which
+      // judges a file on its way to storage or the AI, does not run here.
       if (/csv|text/.test(file.type) || /\.csv$/i.test(file.name)) {
         await toReview(parseCsv(await file.text()));
       } else if (/spreadsheet|ms-excel|officedocument\.spreadsheetml/.test(file.type) || /\.(xlsx|xls|xlsm)$/i.test(file.name)) {
@@ -228,6 +243,10 @@ function StatementImport({ open, onClose }) {
         if (!parsed.length) throw new Error("No transactions found in that workbook. Export the statement as CSV, or make sure the sheet has Date, Description, and Amount columns.");
         await toReview(parsed);
       } else {
+        // The whole file goes to the AI reader: same rule as every other
+        // upload, so a spreadsheet naming an identifier column stops here.
+        const sheetRefusal = await spreadsheetGuard(file);
+        if (sheetRefusal) { setError(sheetRefusal); return; }
         const dataUrl = await new Promise((res, rej) => {
           const r = new FileReader();
           r.onload = () => res(r.result); r.onerror = rej;

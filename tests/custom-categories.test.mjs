@@ -274,3 +274,18 @@ test("a record with no category stays uncategorised when edited", () => {
   assert.equal(record.categoryId, null, "the stand-in category's id must never be saved");
   assert.equal(record.categoryName, "");
 });
+
+// ── Regressions found by the spreadsheet-guard review, 2026-09-25 ────────────
+test("a trailing # and the export spellings of a patient's name or ID are identifiers", () => {
+  // A "#" ending the label has no word boundary after it; these all slipped through.
+  for (const label of ["Acct #", "Account #", "Acct#", "Hospital Account #", "Patient Acct #", "Encounter #", "Encounter ID",
+    "Patient Last Name", "Patient First Name", "Patient Full Name", "Patient_Last_Name", "PatientLastName",
+    "Patient's Name", "Patient" + cp(0x2019) + "s Name", "Pt. Name", "Pt. ID", "Pt Last Name", "Patient #", "Pt #",
+    "Account No.", "Acct. No."]) {
+    assert.ok(identifierReason(label, ""), `${label} must be withheld`);
+  }
+  for (const label of ["Patient Safety Committee", "Patient Satisfaction Score", "Patient Notes", "Account Manager",
+    "Accounting", "Member ID", "PTAN", "PT License Number", "Opt Out Number", "Encounters"]) {
+    assert.equal(identifierReason(label, ""), null, `${label} must be kept`);
+  }
+});

@@ -12,6 +12,7 @@ import {
   structureTranscriptWithAI,
 } from "../../utils/cmeImport";
 import { useAiAvailable } from "../../utils/aiClient";
+import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 
 /**
  * CMEImport: file picker (or paste) -> parse -> review every row -> add to
@@ -120,6 +121,9 @@ function CMEImport({ open, onClose }) {
   const handleFile = useCallback(async (file) => {
     setError(""); setBusy(true); setBusyLabel("Reading file");
     try {
+      // A transcript spreadsheet with a patient-identifier column is refused.
+      const sheetRefusal = await spreadsheetGuard(file);
+      if (sheetRefusal) { setError(sheetRefusal); return; }
       const r = await readImportFile(file);
       if (r.kind === "table") { handleTable(r.table); return; }
       if (r.kind === "text") { await handleText(r.text, "Text file loaded."); return; }

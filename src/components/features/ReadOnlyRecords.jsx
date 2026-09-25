@@ -4,6 +4,7 @@ import { COLLECTION_KEYS, downloadDocumentFile } from "../../lib/supabase";
 import { scopeForCollection } from "../../utils/limitedLaunchAccess.js";
 import { downloadBlob } from "../../utils/credentialExport";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../utils/invoicePdf";
+import { isIdentitySection, isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 
 const label = value => String(value).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, ch => ch.toUpperCase());
 const title = record => record.name || record.title || record.number || record.facility || record.type || record.date || "Saved record";
@@ -13,7 +14,14 @@ const fields = record => Object.entries(record).filter(([key]) => !["id", "userI
 export default function ReadOnlyRecords({ scope }) {
   const { data, theme: T, navigate } = useApp();
   const [message, setMessage] = useState(null);
-  const groups = [...new Set([...COLLECTION_KEYS, ...Object.keys(data).filter(key => Array.isArray(data[key]))])].map(key => [key, (data[key] || []).filter(record => scopeForCollection(key, record) === scope)])
+  // Every array in data used to be listed, Protected Identity included: its
+  // legal names and notes printed in full, and "Download saved records"
+  // wrote them to a file. Identity records, and files linked to them, are
+  // never part of this view.
+  const groups = [...new Set([...COLLECTION_KEYS, ...Object.keys(data).filter(key => Array.isArray(data[key]))])]
+    .filter(key => !isIdentitySection(key))
+    .map(key => [key, (data[key] || []).filter(record => scopeForCollection(key, record) === scope
+      && !(key === "documents" && isIdentityLink(record?.linkedTo)))])
     .filter(([, records]) => records.length);
   const button = { border: `1px solid ${T.border}`, borderRadius: 8, background: T.card, color: T.text, padding: "9px 12px", cursor: "pointer" };
   const exportRecords = () => {

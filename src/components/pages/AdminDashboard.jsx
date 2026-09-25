@@ -13,7 +13,7 @@ import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
 import { leadNoteLabel } from "../../utils/adminLabels";
 import { waitlistView, leadState } from "../../utils/adminWaitlist";
-import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
+import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
@@ -127,7 +127,11 @@ function AdminDashboardContent() {
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
-      setNewOpen(false); setNewSubject(""); setNewBody(""); setNewAttachment([]);
+      // Saved, but maybe not every file: then the form stays open, emptied,
+      // saying how many to add as a reply, instead of closing as if all landed.
+      const shortfall = ticketAttachmentShortfall(res.data);
+      setNewSubject(""); setNewBody(""); setNewAttachment([]);
+      if (shortfall) setTicketMsg(shortfall); else setNewOpen(false);
       await refreshTickets();
     } catch (e2) { setTicketMsg(e2.message); }
     setCreating(false);

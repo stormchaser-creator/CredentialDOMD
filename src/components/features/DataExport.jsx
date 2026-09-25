@@ -3,6 +3,7 @@ import { exportVault, importVault, vaultCount, clearVault } from "../../utils/pr
 import { useApp } from "../../context/AppContext";
 import { STORAGE_KEY } from "../../constants/defaults";
 import { bulkSync, saveSettings, COLLECTION_KEYS, redactForExport } from "../../lib/supabase";
+import { mergeIdentityRestore, SECTION as IDENTITY_SECTION } from "../../utils/protectedIdentity";
 import BackupPanel from "./BackupPanel";
 
 function DataExport() {
@@ -10,6 +11,7 @@ function DataExport() {
   const fileRef = useRef(null);
   const vaultFileRef = useRef(null);
   const [importStatus, setImportStatus] = useState(null);
+  const [importNote, setImportNote] = useState("");
   const [exportStatus, setExportStatus] = useState(null);
 
   const counts = {
@@ -96,6 +98,7 @@ function DataExport() {
   const handleImportJSON = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImportNote("");
 
     const MAX_IMPORT_SIZE = 50 * 1024 * 1024; // 50 MB
     if (file.size > MAX_IMPORT_SIZE) {
@@ -184,7 +187,22 @@ function DataExport() {
           ...filtered,
           settings: { ...data.settings, ...(filtered.settings || {}) },
         };
+
+        // Protected Identity lives on this device only, so this file is the
+        // one way it comes back after a sign-out or on a new device. Records
+        // already here are kept as they are and new ones are added; nothing
+        // is ever sent to the cloud (it is not a synced collection, so the
+        // bulkSync loop below never sees it). An SSN or date of birth that is
+        // not ciphertext is not restored in the clear.
+        let identityNote = "";
+        if (Array.isArray(raw[IDENTITY_SECTION])) {
+          const restored = mergeIdentityRestore(data[IDENTITY_SECTION], raw[IDENTITY_SECTION]);
+          merged[IDENTITY_SECTION] = restored.records;
+          if (restored.added) identityNote = `${restored.added} Protected Identity record${restored.added === 1 ? "" : "s"} restored to this device.`;
+          if (restored.droppedPlainSecret) identityNote = `${identityNote} An SSN or date of birth that was not encrypted in the file was left out.`.trim();
+        }
         if (setData(merged) === false) {
+          setImportNote("");
           setImportStatus("error");
           window.alert("Restore is unavailable while records are read-only. Your saved records and exports have not changed.");
           return;
@@ -197,6 +215,7 @@ function DataExport() {
           }
           if (merged.settings) saveSettings(uid, merged.settings).catch(() => {});
         }
+        setImportNote(identityNote);
         setImportStatus("success");
         setTimeout(() => setImportStatus(null), 3000);
       } catch {
@@ -359,6 +378,11 @@ function DataExport() {
           <div>
             <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Export JSON Backup</div>
             <div style={{ fontSize: 13, color: T.textDim }}>Download all data as a JSON file</div>
+            {(data[IDENTITY_SECTION] || []).length > 0 && (
+              <div style={{ fontSize: 12.5, color: T.textDim, marginTop: 2 }}>
+                Includes your Protected Identity records, which exist only on this device. The SSN and date of birth stay encrypted with your lock code; names and notes are plain text.
+              </div>
+            )}
           </div>
           <span style={{ fontSize: 14, fontWeight: 600, color: exportStatus === "saved" ? T.success : T.accent }}>
             {exportStatus === "saved" ? "Saved!" : "Download"}
@@ -389,6 +413,7 @@ function DataExport() {
           cursor: "pointer",
         }}>Choose File...</button>
         {importStatus === "success" && <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: T.success }}>Data imported successfully!</div>}
+        {importNote && <div role="status" style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: T.textMuted }}>{importNote}</div>}
         {importStatus === "invalid" && <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: T.danger }}>Invalid file format. Please select a CredentialDOMD backup.</div>}
         {importStatus === "error" && <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: T.danger }}>Error reading file. Please try again.</div>}
       </div>

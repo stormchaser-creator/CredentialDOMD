@@ -5,7 +5,7 @@ import { build } from 'esbuild';
 import React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PAUSED_APPLICATION_SECTIONS, preservePausedApplicationRecords, pausedApplicationLinks } from '../../src/utils/pausedApplicationRecords.js';
+import { PAUSED_APPLICATION_SECTIONS, DEVICE_ONLY_SECTIONS, IDENTITY_SECTIONS, isDeviceOnlySection, isIdentityLink, withoutIdentityRecords, preservePausedApplicationRecords, pausedApplicationLinks } from '../../src/utils/pausedApplicationRecords.js';
 
 test('paused records survive a cloud merge byte-for-byte without joining unrelated data or mutating the cache', () => {
   const cached = { answerBank: [{ id: 'answer-a', answer: 'No', notes: 'Private answer' }], identityVault: [{ id: 'identity-a', legalFirstName: 'Synthetic name', ssn: 'enc1:SYNTHETIC', fullDob: 'enc1:DATE' }], licenses: [{ id: 'stale-license' }], settings: { name: 'Stale name' } };
@@ -35,7 +35,17 @@ test('a missing, malformed or other account cache never retains previous account
   assert.deepEqual(preservePausedApplicationRecords(previous, null), { answerBank: [], identityVault: [] });
   assert.deepEqual(preservePausedApplicationRecords(previous, { answerBank: {}, identityVault: 'invalid' }), { answerBank: [], identityVault: [] });
   assert.deepEqual(preservePausedApplicationRecords(previous, { answerBank: [{ id: 'account-b' }] }), { answerBank: [{ id: 'account-b' }], identityVault: [] });
-  assert.deepEqual(Object.keys(PAUSED_APPLICATION_SECTIONS), ['answerBank', 'identityVault']);
+  // Both stay device only; only the Answer Bank editor is still paused.
+  // Protected Identity is live again, device only (ticket d49088c7).
+  assert.deepEqual(Object.keys(DEVICE_ONLY_SECTIONS), ['answerBank', 'identityVault']);
+  assert.deepEqual(Object.keys(PAUSED_APPLICATION_SECTIONS), ['answerBank']);
+  assert.deepEqual([...IDENTITY_SECTIONS], ['identityVault']);
+  assert.equal(isDeviceOnlySection('identityVault'), true);
+  assert.equal(isDeviceOnlySection('licenses'), false);
+  assert.equal(isDeviceOnlySection('__proto__'), false);
+  assert.equal(isIdentityLink('identityVault:abc'), true);
+  assert.equal(isIdentityLink('licenses:abc'), false);
+  assert.deepEqual(withoutIdentityRecords({ identityVault: [{ id: 'x' }], answerBank: [{ id: 'y' }], licenses: [] }), { answerBank: [{ id: 'y' }], licenses: [] });
 });
 
 test('actual availability UI exposes no editor, sharing control or record contents and describes backup limits', async () => {
@@ -50,7 +60,6 @@ test('actual availability UI exposes no editor, sharing control or record conten
       assert.match(html, /cannot restore them yet/);
       assert.match(html, /signing out clears the local copy/);
       assert.doesNotMatch(html, /<(?:input|textarea|select|button|form)\b/);
-      if (section === 'identityVault') assert.match(html, /Legal names and notes are plain text/);
     }
     const empty = renderToStaticMarkup(React.createElement(Gate, { section: 'answerBank', count: 0, theme: {} }));
     assert.doesNotMatch(empty, /This browser has/);
@@ -63,6 +72,10 @@ test('production wiring gates both editors and preserves the exact local collect
   assert.match(app, /Object\.hasOwn\(PAUSED_APPLICATION_SECTIONS, sub\)/);
   assert.match(app, /<ApplicationRecordsPaused section=\{sub\}/);
   assert.doesNotMatch(app, /sectionKey="(?:answerBank|identityVault)"/);
+  // Protected Identity has its own device-only screen, reached before the
+  // paused gate, and never a CrudSection (no scan, attachment, star or Send).
+  const identityRoute = app.indexOf('if (sub === "identityVault") return <ProtectedIdentitySection />;');
+  assert.ok(identityRoute > 0 && identityRoute < app.indexOf('Object.hasOwn(PAUSED_APPLICATION_SECTIONS, sub)'));
   const preserve = context.indexOf('merged = preservePausedApplicationRecords(merged, local, tombstones)');
   assert.ok(preserve > context.indexOf('await listTombstones(profileId)'));
   // The link pass (src/utils/documentLinks.js) must run after paused records
