@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createCredentialPortalHandler } from '../../supabase/functions/_shared/credentialPortalHandler.mjs';
 import { CREDENTIAL_PORTAL_POLICY, createPortalCrypto, digest } from '../../supabase/functions/_shared/credentialPortalCrypto.mjs';
-import { ADMIN_ACCESS_SECTION_KEYS, ADMIN_ACCESS_DENIED, standingInvitationEmail, ownerAllowed } from '../../supabase/functions/_shared/credentialPortalView.mjs';
+import { ADMIN_ACCESS_SECTIONS, ADMIN_ACCESS_SECTION_KEYS, ADMIN_ACCESS_DENIED, standingInvitationEmail, ownerAllowed } from '../../supabase/functions/_shared/credentialPortalView.mjs';
 import { parseStandingView, documentActions } from '../../public/credential-access/portal.mjs';
 import { postgresFixture, pgSkip, quote as q } from './postgresFixture.mjs';
 
@@ -31,10 +31,12 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     L1: id(101), L2: id(102), L3: id(103), L4: id(104), I1: id(111), I2: id(112), P1: id(121), H1: id(131), H2: id(132), H3: id(133), H4: id(134),
     W1: id(141), S1: id(151), M1: id(161), MH1: id(171), PR1: id(181), C1: id(191), E1: id(201), CC1: id(211), CC2: id(212), CR1: id(221), CR2: id(222),
     T1: id(231), X1: id(241), BL1: id(251), PH1: id(261), PB1: id(271), ED1: id(281), CM1: id(291),
+    L5: id(105), L6: id(106), S2: id(152), S3: id(153),
   };
   const D = {
     lic: id(501), licLegacy: id(502), driver: id(503), travel: id(504), expense: id(505), unfiled: id(506), inbox: id(507), caseFile: id(508),
     healthIns: id(509), custom: id(510), custom2: id(511), foreign: id(512), wrongId: id(513), bobLegacy: id(514), vaccine: id(515), bls: id(516), otherId: id(517),
+    certDriver: id(518), drug: id(519), docx: id(520), fakeJpeg: id(521),
   };
   const files = new Map();
   const doc = (docId, owner, subject, linked, name, extra = {}) => {
@@ -54,6 +56,8 @@ test('administrator access: standing grants on the real migrations', { timeout: 
      (${q(R.L2)},${q(alice.id)},'Driver License','Colorado driver license','SECRET-DL-NUMBER','CO',null,'2030-01-01',null,'{"Date of Birth":"SECRET-DOB"}',null),
      (${q(R.L3)},${q(alice.id)},'DEA Registration',null,'enc1:SECRET-SEALED','CO',null,'2027-06-30',null,null,null),
      (${q(R.L4)},${q(alice.id)},'Other','SECRET-OTHER-LICENSE',null,null,null,null,null,null,null),
+     (${q(R.L5)},${q(alice.id)},'Certification','Colorado Driver''s License','SECRET-DL-99','CO',null,'2030-01-01',null,null,null),
+     (${q(R.L6)},${q(alice.id)},'Marriage Certificate','SECRET-MARRIAGE',null,'CO',null,null,null,null,null),
      (${q(R.BL1)},${q(bob.id)},'State Medical License','Texas',null,'TX',null,null,null,null,null);
     insert into insurance(id,user_id,type,provider,policy_number,expiration_date,notes) values
      (${q(R.I1)},${q(alice.id)},'Professional Liability - Claims Made','Synthetic Mutual','POL-1','2027-01-01','SECRET-INS-NOTE'),
@@ -68,7 +72,9 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     insert into work_history(id,user_id,type,position,employer,start_date,reason_for_leaving,notes) values
      (${q(R.W1)},${q(alice.id)},'Full-Time Employed','Attending','Synthetic Health','2019-07-01','SECRET-REASON','SECRET-WORK-NOTE');
     insert into screenings(id,user_id,type,agency,requested_by,assignment,result) values
-     (${q(R.S1)},${q(alice.id)},'Background Screening Report','Synthetic Screening','SECRET-REQUESTER','SECRET-ASSIGNMENT','Clear');
+     (${q(R.S1)},${q(alice.id)},'Background Screening Report','Synthetic Screening','SECRET-REQUESTER','SECRET-ASSIGNMENT','Clear'),
+     (${q(R.S2)},${q(alice.id)},'Drug Screen Report','SECRET-DRUG-LAB',null,null,'Clear'),
+     (${q(R.S3)},${q(alice.id)},'Background Screening Report','SECRET-REVIEW-AGENCY',null,null,'Review');
     insert into professional_memberships(id,user_id,name,organization,role,cost) values (${q(R.M1)},${q(alice.id)},'Member','Synthetic Society','Member',999);
     insert into malpractice_history(id,user_id,date_filed,state,outcome,settlement_amount,facility,notes) values
      (${q(R.MH1)},${q(alice.id)},'2018-01-01','CO','Dismissed','SECRET-SETTLEMENT','Synthetic General','SECRET-MAL-NOTE');
@@ -103,7 +109,9 @@ test('administrator access: standing grants on the real migrations', { timeout: 
      ${doc(D.foreign, alice.id, bob.subject, `licenses:${R.L1}`, 'SECRET foreign path.pdf')},
      ${doc(D.wrongId, alice.id, alice.subject, `licenses:${R.L1}`, 'SECRET wrong id.pdf', { path: `${alice.subject}/${D.otherId}` })},
      ${doc(D.bobLegacy, bob.id, bob.legacy, `licenses:${R.BL1}`, 'Bob legacy.pdf')},
-     ${doc(D.vaccine, alice.id, alice.subject, `healthRecords:${R.H1}`, 'Vaccine card.pdf')};
+     ${doc(D.vaccine, alice.id, alice.subject, `healthRecords:${R.H1}`, 'Vaccine card.pdf')},
+     ${doc(D.certDriver, alice.id, alice.subject, `licenses:${R.L5}`, 'SECRET DL scan.pdf')},
+     ${doc(D.drug, alice.id, alice.subject, `screenings:${R.S2}`, 'SECRET drug screen.pdf')};
   `, 'postgres');
 
   const row = async query => (await db.rows(query))[0] || null;
@@ -146,7 +154,10 @@ test('administrator access: standing grants on the real migrations', { timeout: 
   const call = async (input, owner, session) => { const response = await handler(request(input, owner, session)); return { status: response.status, body: await response.json(), headers: response.headers }; };
   const file = async (action, documentId, session) => { const response = await handler(request({ action, documentId }, null, session)); return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()) }; };
   const DEFAULT = ['cme', 'education', 'healthRecords', 'insurance', 'licenses', 'memberships', 'privileges', 'professionalPhotos', 'publications', 'screenings', 'workHistory'];
+  // This suite makes more than the 20 grants a day one owner may send.
+  const resetDailyQuota = () => db.sql(`delete from credential_portal_limits where scope='owner_invites'`);
   const grant = async (overrides = {}, owner = 'alice') => {
+    await resetDailyQuota();
     const recipient = overrides.recipientEmail || `admin-${crypto.randomUUID().slice(0, 8)}@example.test`;
     const input = { action: 'create', kind: 'standing', recipientEmail: recipient, purpose: 'Reappointment, Synthetic General', accessDays: 30, allowDownload: true, sections: DEFAULT, customCategories: [], requestId: crypto.randomUUID(), ...overrides };
     const result = await call(input, owner);
@@ -195,7 +206,7 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     assert.equal(main.kind, 'standing'); assert.equal(main.status, 'active'); assert.equal(main.allowDownload, true);
     const { payload } = main.mail;
     assert.equal(payload.replyTo, alice.email);
-    assert.match(payload.text, /^Alice Example, DO has given you view access to their credential file\.\n\nPurpose: Reappointment, Synthetic General\nAccess ends: [A-Z][a-z]+ \d{1,2}, \d{4}\n/);
+    assert.match(payload.text, /^Alice Example, DO has given you view access to their credential file\.\n\nPurpose: Reappointment, Synthetic General\nAccess ends: [A-Z][a-z]+ \d{1,2}, \d{4} at \d{1,2}:\d{2} [AP]M [A-Z]+\n/);
     assert.match(payload.subject, /Alice Example, DO/);
     assert.ok(!/[\u{2013}\u{2014}]/u.test(payload.text + payload.subject), 'no en or em dashes');
     assert.ok(!payload.text.includes('\\n'));
@@ -283,7 +294,7 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     assert.equal(legacy.status, 200); assert.deepEqual(legacy.bytes, files.get(`${alice.legacy}/${D.licLegacy}`));
     assert.equal((await file('download', D.lic, mainSession)).status, 200);
     const count = fileReads;
-    for (const denied of [D.driver, D.travel, D.expense, D.unfiled, D.inbox, D.caseFile, D.healthIns, D.custom, D.custom2, D.foreign, D.wrongId, D.bobLegacy]) {
+    for (const denied of [D.driver, D.travel, D.expense, D.unfiled, D.inbox, D.caseFile, D.healthIns, D.custom, D.custom2, D.foreign, D.wrongId, D.bobLegacy, D.certDriver, D.drug]) {
       for (const action of ['view', 'download']) assert.equal((await file(action, denied, mainSession)).status, 401, `${action} ${denied}`);
     }
     assert.equal(fileReads, count);
@@ -316,8 +327,8 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     const fromSession = (await summary(mainSession)).body;
     const preview = await call({ action: 'preview', inviteId: main.id }, 'alice');
     assert.equal(preview.status, 200);
-    const { expiresAt, ...administratorView } = fromSession;
-    assert.ok(expiresAt);
+    const { expiresAt, expiresInSeconds, ...administratorView } = fromSession;
+    assert.ok(expiresAt); assert.ok(expiresInSeconds > 0);
     assert.deepEqual(preview.body, administratorView);
     const proposed = await call({ action: 'preview', sections: main.input.sections, customCategories: [] }, 'alice');
     const { grant: _grant, ...content } = administratorView;
@@ -384,6 +395,150 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     assert.deepEqual(caseRecord.fields.map(f => f.label), ['Date', 'Facility', 'Role', 'CPT codes']);
     assert.ok(!JSON.stringify(view).includes('SECRET'));
     assert.equal((await file('view', D.caseFile, session)).status, 401);
+  });
+
+  await t.test('the invitation states the end date AND time in the physician\'s own zone, named, not a bare UTC date', async () => {
+    // A 30-day grant made at 7pm MDT on Sep 25 ends at 01:00 UTC on Oct 26:
+    // a UTC date would tell the office "October 26", a day late.
+    const zoned = standingInvitationEmail({ physician: { name: 'Eric Whitney', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-26T01:00:00Z', allowDownload: true, link: 'https://credentialdomd.com/credential-access/#invite=x', replyTo: null, timeZone: 'America/Denver' }).text;
+    assert.match(zoned, /\nAccess ends: October 25, 2026 at 7:00 PM MDT\n/);
+    const unzoned = standingInvitationEmail({ physician: { name: 'Eric Whitney', degreeType: 'DO' }, purpose: 'Synthetic', accessEndsAt: '2026-10-26T01:00:00Z', allowDownload: true, link: 'x', replyTo: null, timeZone: 'Not/AZone' }).text;
+    assert.match(unzoned, /\nAccess ends: October 26, 2026 at 1:00 AM UTC\n/, 'an unknown zone falls back to UTC, named');
+    assert.ok(!/[^\x00-\x7f]/.test(zoned + unzoned), 'plain ASCII (no narrow no-break space before PM)');
+    // End to end: the zone the owner's browser sends reaches the email, and a resent link carries it too.
+    const g = await grant({ sections: ['licenses'], timeZone: 'America/Denver' });
+    const end = new Date(g.expiresAt);
+    const want = `${end.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Denver' })} at ${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: 'America/Denver' })}`.replace(/[\u{a0}\u{202f}]/gu, ' ');
+    assert.ok(g.mail.payload.text.includes(`Access ends: ${want}\n`), g.mail.payload.text);
+    assert.equal((await call({ action: 'resend-link', inviteId: g.id, timeZone: 'America/Denver' }, 'alice')).status, 200); await settle();
+    assert.ok(mails.findLast(m => m.payload.to === g.email && m.payload.text.includes('#invite=')).payload.text.includes(`Access ends: ${want}\n`));
+  });
+
+  await t.test('verify and summary say how many seconds the visit has left, so a recipient clock that is minutes out does not matter', async () => {
+    const g = await grant({ sections: ['licenses'] });
+    const code = await requestCode(g);
+    const verified = await verify(g, code);
+    assert.equal(verified.status, 200);
+    assert.ok(Number.isInteger(verified.body.expiresInSeconds) && verified.body.expiresInSeconds > 3500 && verified.body.expiresInSeconds <= 3600, String(verified.body.expiresInSeconds));
+    const view = await summary(verified.body.sessionToken);
+    assert.ok(Number.isInteger(view.body.expiresInSeconds) && view.body.expiresInSeconds > 3500 && view.body.expiresInSeconds <= 3600);
+  });
+
+  await t.test('a category the server does not have (never synced, or archived elsewhere) is a 409 naming it, never a 503, and creates nothing', async () => {
+    const unsynced = id(299);
+    const invitesBefore = (await db.rows(`select id from credential_portal_invites`)).length, mailsBefore = mails.length;
+    const created = await call({ action: 'create', kind: 'standing', recipientEmail: 'unsynced@example.test', purpose: 'X', accessDays: 30, allowDownload: true, sections: ['licenses'], customCategories: [R.CC1, unsynced], requestId: crypto.randomUUID() }, 'alice');
+    assert.equal(created.status, 409, JSON.stringify(created.body));
+    assert.deepEqual(created.body, { error: 'category_unavailable', categories: [unsynced] });
+    await db.sql(`update custom_categories set archived_at=now() where id=${q(R.CC2)}`, 'postgres');
+    try {
+      const archived = await call({ action: 'create', kind: 'standing', recipientEmail: 'archived@example.test', purpose: 'X', accessDays: 30, allowDownload: true, sections: [], customCategories: [R.CC2], requestId: crypto.randomUUID() }, 'alice');
+      assert.equal(archived.status, 409); assert.deepEqual(archived.body.categories, [R.CC2]);
+      // The owner's live counts: the same answer, so the screen can ask again without it.
+      const preview = await call({ action: 'preview', sections: ['licenses'], customCategories: [R.CC1, R.CC2, unsynced] }, 'alice');
+      assert.equal(preview.status, 409); assert.deepEqual(preview.body.categories, [R.CC2, unsynced].sort());
+      assert.equal((await call({ action: 'preview', sections: ['licenses'], customCategories: [R.CC1] }, 'alice')).status, 200);
+    } finally { await db.sql(`update custom_categories set archived_at=null where id=${q(R.CC2)}`, 'postgres'); }
+    await settle();
+    assert.equal((await db.rows(`select id from credential_portal_invites`)).length, invitesBefore, 'nothing was created');
+    assert.equal(mails.length, mailsBefore, 'nothing was mailed');
+  });
+
+  await t.test('a grant whose shared category was archived can still turn downloads off and be narrowed; widening still refused', async () => {
+    const g = await grant({ sections: ['licenses', 'cme'], customCategories: [R.CC1] });
+    await db.sql(`update custom_categories set archived_at=now() where id=${q(R.CC1)}`, 'postgres');
+    try {
+      // What the screen sent before it sent only changes: the full stored scope with downloads off.
+      const off = await call({ action: 'update', inviteId: g.id, allowDownload: false, sections: ['cme', 'licenses'], customCategories: [R.CC1] }, 'alice');
+      assert.equal(off.status, 200, JSON.stringify(off.body)); assert.equal(off.body.invite.allowDownload, false);
+      const narrowed = await call({ action: 'update', inviteId: g.id, sections: ['licenses'], customCategories: [] }, 'alice');
+      assert.equal(narrowed.status, 200, JSON.stringify(narrowed.body));
+      assert.deepEqual(narrowed.body.invite.scope, { sections: ['licenses'], customCategories: [] });
+      assert.equal((await call({ action: 'update', inviteId: g.id, sections: ['licenses'], customCategories: [R.CC2] }, 'alice')).status, 409);
+      assert.equal((await call({ action: 'update', inviteId: g.id, sections: ['licenses', 'cme'] }, 'alice')).status, 409);
+    } finally { await db.sql(`update custom_categories set archived_at=null where id=${q(R.CC1)}`, 'postgres'); }
+  });
+
+  await t.test("a Certification named as a driver's license, and a marriage certificate, are never shown or served", async () => {
+    const g = await grant({ sections: ['licenses'] });
+    const session = await visit(g);
+    const view = (await summary(session)).body;
+    const ids = recordIds(view);
+    assert.ok(ids.includes(R.L1) && !ids.includes(R.L5) && !ids.includes(R.L6), JSON.stringify(ids));
+    assert.ok(!JSON.stringify(view).includes('SECRET'));
+    assert.equal((await file('view', D.certDriver, session)).status, 401);
+    const ok = async (type, name) => (await db.sql(`select public.credential_portal_license_ok(${q(type)}, ${q(name)})`)) === 't';
+    assert.equal(await ok('Certification', "Colorado Driver's License"), false);
+    assert.equal(await ok('Certification', 'State ID card'), false);
+    assert.equal(await ok('Marriage Certificate', null), false);
+    assert.equal(await ok('Certification', 'Name change certificate'), false);
+    assert.equal(await ok('ACLS Certification', 'ACLS'), true);
+    assert.equal(await ok('Board Certification', 'American Board of Neurological Surgery'), true);
+    assert.equal(await ok('State Medical License (DO)', 'Colorado'), true);
+  });
+
+  await t.test('drug screen reports and Flagged or Review screenings are held back by default and shown only when the owner opts in', async () => {
+    const byDefault = await grant({ sections: ['screenings'] });
+    let session = await visit(byDefault);
+    let view = (await summary(session)).body;
+    assert.deepEqual(recordIds(view), [R.S1]);
+    assert.ok(!JSON.stringify(view).includes('SECRET'));
+    assert.equal((await file('view', D.drug, session)).status, 401);
+    const optIn = await grant({ sections: ['screeningsSensitive'] });
+    session = await visit(optIn);
+    view = (await summary(session)).body;
+    assert.deepEqual(view.sections.map(x => x.key), ['screeningsSensitive']);
+    assert.deepEqual(new Set(recordIds(view)), new Set([R.S2, R.S3]));
+    assert.deepEqual(docIds(view), [D.drug]);
+    assert.equal((await file('view', D.drug, session)).status, 200);
+    // The owner copy no longer promises something the screenings section does not do.
+    const hint = key => ADMIN_ACCESS_SECTIONS.find(x => x.key === key).hint;
+    assert.ok(!/drug screens never appear/i.test(hint('healthRecords')));
+    assert.match(hint('screenings'), /Drug screens and any Flagged or Review result are left out/);
+    assert.equal(ADMIN_ACCESS_SECTIONS.find(x => x.key === 'screeningsSensitive').optIn, true);
+  });
+
+  await t.test('downloads off: a file that cannot be shown inline is refused on view too (403, audited), never sent as an attachment', async () => {
+    const docx = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    await db.sql(`insert into documents(id,user_id,name,mime_type,size_bytes,storage_path,linked_to) values
+      (${q(D.docx)},${q(alice.id)},'License letter.docx',${q(docx)},20,${q(`${alice.subject}/${D.docx}`)},${q(`licenses:${R.L1}`)}),
+      (${q(D.fakeJpeg)},${q(alice.id)},'Scan.jpg','image/jpeg',20,${q(`${alice.subject}/${D.fakeJpeg}`)},${q(`licenses:${R.L1}`)});`, 'postgres');
+    files.set(`${alice.subject}/${D.docx}`, new TextEncoder().encode('PK\u{3}\u{4}synthetic docx'));
+    files.set(`${alice.subject}/${D.fakeJpeg}`, pdf('not a jpeg'));
+    try {
+      const off = await grant({ sections: ['licenses'], allowDownload: false });
+      const session = await visit(off);
+      const reads = fileReads;
+      const refused = await file('view', D.docx, session);
+      assert.equal(refused.status, 403); assert.equal(refused.bytes.length < 200, true);
+      assert.equal(fileReads, reads, 'refused on its declared type before any storage read');
+      assert.equal((await file('view', D.fakeJpeg, session)).status, 403, 'a JPEG whose bytes are not a JPEG');
+      assert.equal((await file('view', D.lic, session)).status, 200, 'a real PDF still previews');
+      const audit = await db.rows(`select event,intent,document_id from credential_portal_audit where invite_id=${q(off.id)} and event in ('download_refused','document_response_prepared') order by created_at`);
+      assert.deepEqual(audit.map(a => [a.event, a.intent, a.document_id]), [['download_refused', 'view', D.docx], ['download_refused', 'view', D.fakeJpeg], ['document_response_prepared', 'view', D.lic]]);
+      const on = await grant({ sections: ['licenses'], allowDownload: true });
+      const onSession = await visit(on);
+      const response = await handler(request({ action: 'view', documentId: D.docx }, null, onSession));
+      assert.equal(response.status, 200); assert.match(response.headers.get('content-disposition'), /^attachment;/);
+    } finally {
+      await db.sql(`delete from documents where id in (${q(D.docx)},${q(D.fakeJpeg)})`, 'postgres');
+    }
+  });
+
+  await t.test('the owner still sees which files were opened after hundreds of later summary loads', async () => {
+    const g = await grant({ sections: ['licenses'] });
+    const session = await visit(g);
+    assert.equal((await file('view', D.lic, session)).status, 200);
+    assert.equal((await file('download', D.lic, session)).status, 200);
+    // Every summary load writes a row; 250 of them push the file events out of the 200-row recent list.
+    await db.sql(`insert into credential_portal_audit(invite_id,event) select ${q(g.id)},'summary_listed' from generate_series(1,250)`, 'postgres');
+    const listed = (await call({ action: 'list' }, 'alice')).body.invites.find(i => i.id === g.id);
+    assert.ok(!listed.audit.some(e => e.documentId), 'the recent list alone has lost them');
+    assert.equal(listed.visitCount, 1);
+    assert.equal(listed.documentActivity.length, 1);
+    const [row] = listed.documentActivity;
+    assert.equal(row.documentId, D.lic); assert.equal(row.documentName, 'Colorado license.pdf');
+    assert.equal(row.views, 1); assert.equal(row.downloads, 1); assert.equal(row.refused, 0); assert.ok(row.last);
   });
 
   await t.test('every visit gets a fresh code and its own session until the end date; a new visit replaces the last; then 401', async () => {
@@ -523,10 +678,46 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     } finally { ownerSetting = alice.id; }
   });
 
+  await t.test('selection invitations: allowlisted owners only, healthcare files only, checked live', async () => {
+    await resetDailyQuota();
+    // An owner outside CREDENTIAL_PORTAL_OWNER_PROFILES cannot mail anyone.
+    let before = mails.length;
+    const outsider = await call({ action: 'create', recipientEmail: 'victim@example.test', documentIds: [D.bobLegacy], requestId: crypto.randomUUID() }, 'bob');
+    assert.equal(outsider.status, 403); assert.equal(outsider.body.error, 'administrator_access_unavailable');
+    // A passport scan, a receipt or an unfiled upload is never selectable, even by the owner.
+    for (const denied of [D.travel, D.expense, D.unfiled, D.driver, D.certDriver, D.custom]) {
+      const refused = await call({ action: 'create', recipientEmail: 'office@example.test', documentIds: [denied], requestId: crypto.randomUUID() }, 'alice');
+      assert.equal(refused.status, 409, denied); assert.equal(refused.body.error, 'document_not_shareable', denied);
+    }
+    assert.equal(mails.length, before, 'no invitation was mailed');
+    assert.equal((await db.rows(`select 1 from credential_portal_invites where kind='selection' and recipient_email in ('victim@example.test','office@example.test')`)).length, 0);
+    before = mails.length;
+    const selection = await call({ action: 'create', recipientEmail: 'selection@example.test', documentIds: [D.licLegacy], requestId: crypto.randomUUID() }, 'alice');
+    assert.equal(selection.status, 201);
+    const token = mails.slice(before).find(m => m.payload.to === 'selection@example.test').payload.text.match(/#invite=([A-Za-z0-9_-]{43})/)[1];
+    const g = { id: selection.body.invite.id, token, email: 'selection@example.test' };
+    const session = await visit(g);
+    assert.equal((await file('view', D.licLegacy, session)).status, 200);
+    // Removed from the allowlist: a selection session stops too.
+    ownerSetting = bob.id;
+    assert.equal((await call({ action: 'documents' }, null, session)).status, 401);
+    assert.equal((await file('view', D.licLegacy, session)).status, 401);
+    ownerSetting = alice.id;
+    // Re-filed to travel after the invitation: no longer served.
+    await db.sql(`update documents set linked_to=${q(`travelDocs:${R.T1}`)} where id=${q(D.licLegacy)}`, 'postgres');
+    assert.equal((await file('view', D.licLegacy, session)).status, 401);
+    assert.deepEqual((await call({ action: 'documents' }, null, session)).body.documents, []);
+    await db.sql(`update documents set linked_to=${q(`licenses:${R.L3}`)} where id=${q(D.licLegacy)}`, 'postgres');
+  });
+
   await t.test('selection invitations also accept a bound legacy subject and refuse an unbound one', async () => {
+    await resetDailyQuota();
     const created = await call({ action: 'create', recipientEmail: 'legacy@example.test', documentIds: [D.licLegacy], requestId: crypto.randomUUID() }, 'alice');
     assert.equal(created.status, 201);
-    const refused = await call({ action: 'create', recipientEmail: 'legacy@example.test', documentIds: [D.bobLegacy], requestId: crypto.randomUUID() }, 'bob');
+    ownerSetting = `${alice.id},${bob.id}`;
+    let refused;
+    try { refused = await call({ action: 'create', recipientEmail: 'legacy@example.test', documentIds: [D.bobLegacy], requestId: crypto.randomUUID() }, 'bob'); }
+    finally { ownerSetting = alice.id; }
     assert.equal(refused.status, 409);
     const sqlOwned = await db.sql(`select public.credential_portal_owned_path(${q(bob.id)}, ${q(`${bob.legacy}/${D.bobLegacy}`)}, ${q(D.bobLegacy)})`);
     assert.equal(sqlOwned, 'f');

@@ -18,6 +18,11 @@
 --   * Files are owned when storage_path is "<one of clerk_storage_subjects>/<id>"
 --     (legacy Clerk subjects count), for both kinds.
 --   * Every owner check also asks account_is_closed().
+--   * Selection invitations must pass the same healthcare allowlist, checked
+--     at creation and on every later request.
+--   * Scope refusals (a category not on the server, a malformed scope) are
+--     returned as states, never raised, so the owner gets a 4xx they can act on.
+--   * The owner list counts file activity and visits over every audit row.
 --   * Outbox payloads live at most 1 hour; credential_portal_prune runs every
 --     5 minutes through pg_cron and removes closed accounts' grants.
 begin;
@@ -91,19 +96,33 @@ $$;
 -- locumContracts, workLog, encounters, scheduleDays, dutyDays, rotations,
 -- taskNotes, shareLog, notificationLog, alertAcks, followUps, identityVault,
 -- answerBank.
+-- screeningsSensitive (opt-in) holds the screenings the default section leaves
+-- out: drug screen reports and any Flagged or Review result.
 create or replace function public.credential_portal_shareable_sections()
 returns text[] language sql immutable set search_path=public,pg_temp as $$
  select array['licenses','cme','privileges','insurance','education','workHistory','healthRecords','screenings',
-  'professionalPhotos','publications','memberships','malpracticeHistory','peerReferences','caseLogs']::text[]
+  'screeningsSensitive','professionalPhotos','publications','memberships','malpracticeHistory','peerReferences','caseLogs']::text[]
 $$;
 
 -- Licences: professional licences, registrations and certifications only.
--- Anything that reads as a driver's licence, passport or identity card is out
--- even when filed under licences (production holds one such row).
-create or replace function public.credential_portal_license_ok(p_type text)
+-- The type must read as one; then the type AND the name are checked for
+-- anything that reads as a driver's licence, passport, identity card or civil
+-- record, because "Certification" is a first-class type whose name is free
+-- text (production holds a driver's licence filed under licences).
+drop function if exists public.credential_portal_license_ok(text);
+create or replace function public.credential_portal_license_ok(p_type text, p_name text)
 returns boolean language sql immutable set search_path=public,pg_temp as $$
  select coalesce(p_type,'') ~* '(medical licen[cs]e|state medical|osteopathic|\mdea\M|controlled substance|board|ecfmg|usmle|comlex|\mbls\M|\macls\M|\matls\M|\mpals\M|\mnrp\M|fluoroscop|laser|certif)'
-  and coalesce(p_type,'') !~* '(driver|passport|state id|photo id|id card|identification|real id|\mtsa\M|precheck|global entry|nexus|\mvisa\M|travel|boarding|social security|\mssn\M|birth|green card|citizenship|naturali[sz]ation)'
+  and coalesce(p_type,'')||' '||coalesce(p_name,'') !~* '(driver|passport|state id|photo id|id card|identification|real id|\mtsa\M|precheck|global entry|nexus|\mvisa\M|travel|boarding|social security|\mssn\M|birth|green card|citizenship|naturali[sz]ation|marriage|divorce|name change)'
+$$;
+
+-- Screenings: the default section shows background, exclusion and similar
+-- reports with a clean or pending result. Drug screen reports and Flagged or
+-- Review results appear only under the opt-in screeningsSensitive section.
+create or replace function public.credential_portal_screening_ok(p_type text, p_name text, p_result text)
+returns boolean language sql immutable set search_path=public,pg_temp as $$
+ select coalesce(p_type,'')||' '||coalesce(p_name,'') !~* 'drug'
+  and coalesce(p_result,'') !~* '(flag|review)'
 $$;
 
 -- Insurance: malpractice / professional liability / tail only, matched by
@@ -148,31 +167,58 @@ returns jsonb language sql immutable set search_path=public,pg_temp as $$
  where jsonb_typeof(v)='string' and btrim(v #>> '{}')<>'' and (v #>> '{}') not like 'enc1:%'
 $$;
 
--- Owner-supplied scope, checked against the allowlist and the owner's own
--- live categories. Always returns {"sections":[...],"customCategories":[...]}.
-create or replace function public.credential_portal_normalize_scope(p_owner uuid, p_scope jsonb)
-returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $$
-declare k text; sections jsonb; categories jsonb;
+-- Owner-supplied scope. Refusals are ANSWERS, not exceptions: an exception
+-- reaches the owner as "not available" (503) and leaves their form stuck on a
+-- retry that can never succeed. A category that exists only on the owner's
+-- device (its sync failed) or was archived from another device is the usual
+-- case, so the answer names the categories.
+--
+-- Shape only: known keys, arrays of allowlisted section keys and category
+-- UUIDs, and not empty.
+create or replace function public.credential_portal_scope_shape_ok(p_scope jsonb)
+returns boolean language plpgsql immutable set search_path=public,pg_temp as $$
+declare k text;
 begin
- if p_scope is null or jsonb_typeof(p_scope)<>'object' then raise exception 'invalid scope'; end if;
+ if p_scope is null or jsonb_typeof(p_scope)<>'object' then return false; end if;
  for k in select jsonb_object_keys(p_scope) loop
-  if k not in ('sections','customCategories') then raise exception 'invalid scope'; end if;
+  if k not in ('sections','customCategories') then return false; end if;
  end loop;
  if jsonb_typeof(coalesce(p_scope->'sections','[]'::jsonb))<>'array' or jsonb_typeof(coalesce(p_scope->'customCategories','[]'::jsonb))<>'array' then
-  raise exception 'invalid scope';
+  return false;
  end if;
  if exists(select 1 from jsonb_array_elements(coalesce(p_scope->'sections','[]'::jsonb)) e
    where jsonb_typeof(e)<>'string' or not ((e #>> '{}')=any(public.credential_portal_shareable_sections()))) then
-  raise exception 'section not shareable';
+  return false;
  end if;
  if exists(select 1 from jsonb_array_elements(coalesce(p_scope->'customCategories','[]'::jsonb)) e
-   where jsonb_typeof(e)<>'string' or (e #>> '{}') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    or not exists(select 1 from custom_categories c where c.id=(e #>> '{}')::uuid and c.user_id=p_owner and c.archived_at is null)) then
-  raise exception 'category unavailable';
+   where jsonb_typeof(e)<>'string' or (e #>> '{}') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') then
+  return false;
  end if;
+ return jsonb_array_length(coalesce(p_scope->'sections','[]'::jsonb)) + jsonb_array_length(coalesce(p_scope->'customCategories','[]'::jsonb)) > 0;
+end $$;
+
+-- Null when the scope can be granted; otherwise {"state":"invalid_scope"} or
+-- {"state":"category_unavailable","categories":[ids not live on the server]}.
+create or replace function public.credential_portal_scope_problem(p_owner uuid, p_scope jsonb)
+returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $$
+declare missing jsonb;
+begin
+ if not public.credential_portal_scope_shape_ok(p_scope) then return jsonb_build_object('state','invalid_scope'); end if;
+ select jsonb_agg(distinct c order by c) into missing from jsonb_array_elements_text(coalesce(p_scope->'customCategories','[]'::jsonb)) c
+  where not exists(select 1 from custom_categories x where x.id=c::uuid and x.user_id=p_owner and x.archived_at is null);
+ if missing is not null then return jsonb_build_object('state','category_unavailable','categories',missing); end if;
+ return null;
+end $$;
+
+-- Sorted, de-duplicated {"sections":[...],"customCategories":[...]}. Callers
+-- ask credential_portal_scope_problem first; this raises only as a backstop.
+create or replace function public.credential_portal_normalize_scope(p_owner uuid, p_scope jsonb)
+returns jsonb language plpgsql stable security invoker set search_path=public,pg_temp as $$
+declare problem jsonb:=public.credential_portal_scope_problem(p_owner,p_scope); sections jsonb; categories jsonb;
+begin
+ if problem is not null then raise exception 'scope refused: %', problem->>'state'; end if;
  select coalesce(jsonb_agg(distinct s order by s), '[]'::jsonb) into sections from jsonb_array_elements_text(coalesce(p_scope->'sections','[]'::jsonb)) s;
  select coalesce(jsonb_agg(distinct c order by c), '[]'::jsonb) into categories from jsonb_array_elements_text(coalesce(p_scope->'customCategories','[]'::jsonb)) c;
- if jsonb_array_length(sections)=0 and jsonb_array_length(categories)=0 then raise exception 'empty scope'; end if;
  return jsonb_build_object('sections',sections,'customCategories',categories);
 end $$;
 
@@ -185,7 +231,7 @@ returns table(section text, record_id uuid, payload jsonb)
 language sql stable security invoker set search_path=public,pg_temp as $$
  select 'licenses'::text, l.id, public.credential_portal_clean(jsonb_build_object('type',l.type,'name',l.name,'licenseNumber',l.license_number,
    'state',l.state,'issuedDate',l.issued_date,'expirationDate',l.expiration_date))
- from licenses l where l.user_id=p_owner and coalesce(p_scope->'sections','[]'::jsonb) ? 'licenses' and public.credential_portal_license_ok(l.type)
+ from licenses l where l.user_id=p_owner and coalesce(p_scope->'sections','[]'::jsonb) ? 'licenses' and public.credential_portal_license_ok(l.type, l.name)
  union all
  select 'cme', c.id, public.credential_portal_clean(jsonb_build_object('title',c.title,'category',c.category,'hours',c.hours,'date',c.date,
    'provider',c.provider,'certificateNumber',c.certificate_number,'topics',public.credential_portal_string_array(c.topics)))
@@ -216,10 +262,15 @@ language sql stable security invoker set search_path=public,pg_temp as $$
    'city',w.city,'state',w.state,'startDate',w.start_date,'endDate',w.end_date,'current',coalesce(w.is_current,w.current),'description',w.description))
  from work_history w where w.user_id=p_owner and coalesce(p_scope->'sections','[]'::jsonb) ? 'workHistory'
  union all
- select 'screenings', s.id, public.credential_portal_clean(jsonb_build_object('type',s.type,'name',s.name,'agency',s.agency,
+ -- Default: no drug screens, no Flagged or Review result. The opt-in
+ -- screeningsSensitive section is exactly the rows this one leaves out; its
+ -- files are still linked as "screenings:<id>".
+ select case when public.credential_portal_screening_ok(s.type, s.name, s.result) then 'screenings' else 'screeningsSensitive' end, s.id,
+   public.credential_portal_clean(jsonb_build_object('type',s.type,'name',s.name,'agency',s.agency,
    'fileNumber',s.file_number,'orderDate',s.order_date,'reportDate',s.report_date,'result',s.result,'expirationDate',s.expiration_date,
    'components',public.credential_portal_pick_array(s.components, array['name','scope','status','date'])))
- from screenings s where s.user_id=p_owner and coalesce(p_scope->'sections','[]'::jsonb) ? 'screenings'
+ from screenings s where s.user_id=p_owner
+  and coalesce(p_scope->'sections','[]'::jsonb) ? (case when public.credential_portal_screening_ok(s.type, s.name, s.result) then 'screenings' else 'screeningsSensitive' end)
  union all
  select 'professionalPhotos', f.id, public.credential_portal_clean(jsonb_build_object('name',f.name,'dateTaken',f.date_taken))
  from professional_photos f where f.user_id=p_owner and coalesce(p_scope->'sections','[]'::jsonb) ? 'professionalPhotos'
@@ -271,7 +322,8 @@ language sql stable security invoker set search_path=public,pg_temp as $$
  select d.id, d.name, coalesce(d.mime_type,'application/octet-stream'),
   coalesce(d.size_bytes, case when d.size between 0 and 2147483647 then d.size::integer end), r.section, r.record_id, d.storage_path
  from documents d
- join public.credential_portal_records(p_owner, p_scope) r on d.linked_to = r.section||':'||r.record_id::text
+ join public.credential_portal_records(p_owner, p_scope) r
+  on d.linked_to = (case when r.section='screeningsSensitive' then 'screenings' else r.section end)||':'||r.record_id::text
  where d.user_id=p_owner and (p_document is null or d.id=p_document)
   and r.section <> 'caseLogs'
   and coalesce(d.type,'') not in ('request-attachment-inbox','cme-certificate-inbox')
@@ -299,6 +351,21 @@ returns jsonb language sql stable security invoker set search_path=public,pg_tem
 $$;
 
 -- Selection kind: the same path rule and closed-account checks -------------
+-- A selected file must pass the same healthcare allowlist a standing grant
+-- uses: linked to a record in any shareable section that passes its filter
+-- right now. Custom categories are not included (a selection has no category
+-- choice, and uploader-made categories can hold anything). Checked at
+-- creation, at verification and on every file request, so a passport scan or
+-- an unfiled upload can never be selected, and a file re-filed out of scope
+-- after the invitation stops being served. caseLogs is left out of the scope
+-- only because its files are never served anyway (scope_documents), and its
+-- records are the largest table to build on every call.
+create or replace function public.credential_portal_selection_document_ok(p_owner uuid, p_document uuid)
+returns boolean language sql stable security invoker set search_path=public,pg_temp as $$
+ select exists(select 1 from public.credential_portal_scope_documents(p_owner,
+  jsonb_build_object('sections',to_jsonb(array_remove(public.credential_portal_shareable_sections(),'caseLogs')),'customCategories','[]'::jsonb), p_document))
+$$;
+
 create or replace function public.credential_portal_creation_capacity(p_owner uuid,p_subject text)
 returns boolean language sql security invoker set search_path=public,pg_temp as $$
  select public.credential_portal_owner_ready(p_owner,p_subject)
@@ -311,13 +378,19 @@ create or replace function public.credential_portal_create(
 declare existing credential_portal_invites%rowtype; d jsonb; expiry timestamptz:=clock_timestamp()+interval '7 days'; total bigint:=0;
 begin
  perform 1 from profiles where id=p_owner and auth_user_id=p_subject and access_status='active' and deleted_at is null for update;
- if not found or public.account_is_closed(p_owner) then raise exception 'owner unavailable'; end if;
+ if not found or public.account_is_closed(p_owner) then return jsonb_build_object('state','unavailable'); end if;
  select * into existing from credential_portal_invites where owner_profile_id=p_owner and request_id=p_request;
  if found then
   if existing.request_fingerprint<>p_fingerprint then return jsonb_build_object('state','conflict'); end if;
   return jsonb_build_object('state','existing','id',existing.id);
  end if;
  if jsonb_typeof(p_documents)<>'array' or jsonb_array_length(p_documents) not between 1 and 10 then raise exception 'invalid selection'; end if;
+ -- Before the daily quota, so a refused selection costs nothing.
+ if exists(select 1 from jsonb_array_elements(p_documents) sel(item)
+   where case when jsonb_typeof(sel.item)='object' and coalesce(sel.item->>'id','') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    then not public.credential_portal_selection_document_ok(p_owner,(sel.item->>'id')::uuid) else true end) then
+  return jsonb_build_object('state','not_shareable');
+ end if;
  if not credential_portal_limit('owner_invites',p_owner::text,date_trunc('day',clock_timestamp()),20) then return jsonb_build_object('state','limited'); end if;
  insert into credential_portal_invites(id,owner_profile_id,owner_subject,recipient_email,request_id,request_fingerprint,token_digest,expires_at)
  values(p_id,p_owner,p_subject,p_email,p_request,p_fingerprint,p_token_digest,expiry);
@@ -341,10 +414,10 @@ create or replace function public.credential_portal_create_standing(
  p_id uuid,p_owner uuid,p_subject text,p_email text,p_request uuid,p_fingerprint text,p_token_digest text,
  p_purpose text,p_days integer,p_allow_download boolean,p_scope jsonb,p_mail_id uuid,p_encrypted_payload text
 ) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
-declare existing credential_portal_invites%rowtype; started timestamptz:=clock_timestamp(); normalized jsonb; expiry timestamptz;
+declare existing credential_portal_invites%rowtype; started timestamptz:=clock_timestamp(); normalized jsonb; expiry timestamptz; problem jsonb;
 begin
  perform 1 from profiles where id=p_owner and auth_user_id=p_subject and access_status='active' and deleted_at is null for update;
- if not found or public.account_is_closed(p_owner) then raise exception 'owner unavailable'; end if;
+ if not found or public.account_is_closed(p_owner) then return jsonb_build_object('state','unavailable'); end if;
  select * into existing from credential_portal_invites where owner_profile_id=p_owner and request_id=p_request;
  if found then
   if existing.request_fingerprint<>p_fingerprint then return jsonb_build_object('state','conflict'); end if;
@@ -353,6 +426,8 @@ begin
  if p_days is null or p_days not in (14,30,90,180) then raise exception 'invalid duration'; end if;
  if p_purpose is null or char_length(btrim(p_purpose)) not between 1 and 120 then raise exception 'invalid purpose'; end if;
  if p_allow_download is null then raise exception 'invalid download setting'; end if;
+ problem:=public.credential_portal_scope_problem(p_owner,p_scope);
+ if problem is not null then return problem; end if;
  normalized:=public.credential_portal_normalize_scope(p_owner,p_scope);
  if not credential_portal_limit('owner_invites',p_owner::text,date_trunc('day',started),20) then return jsonb_build_object('state','limited'); end if;
  expiry:=started+make_interval(days=>p_days);
@@ -367,6 +442,11 @@ end $$;
 -- Narrow a live grant: fewer sections or categories, downloads off, or a new
 -- end date of 14/30/90/180 days from now (extend or shorten, never past the
 -- 180-day cap). Adding anything back needs a new grant.
+--
+-- Narrowing only ever removes, so the proposed scope is checked for shape and
+-- for being a subset of the grant's own scope, never for its categories still
+-- being live: a grant whose shared category was later archived must still be
+-- narrowable, and must still be able to have downloads turned off.
 create or replace function public.credential_portal_update(p_owner uuid,p_subject text,p_invite uuid,p_days integer,p_allow_download boolean,p_scope jsonb)
 returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
 declare i credential_portal_invites%rowtype; next_scope jsonb; started timestamptz:=clock_timestamp();
@@ -379,11 +459,15 @@ begin
  if p_days is not null and p_days not in (14,30,90,180) then raise exception 'invalid duration'; end if;
  if p_allow_download is true and not i.allow_download then return jsonb_build_object('state','widening'); end if;
  if p_scope is not null then
-  next_scope:=public.credential_portal_normalize_scope(p_owner,p_scope);
-  if exists(select 1 from jsonb_array_elements_text(next_scope->'sections') s where not (coalesce(i.scope->'sections','[]'::jsonb) ? s))
-   or exists(select 1 from jsonb_array_elements_text(next_scope->'customCategories') c where not (coalesce(i.scope->'customCategories','[]'::jsonb) ? c)) then
+  if not public.credential_portal_scope_shape_ok(p_scope) then return jsonb_build_object('state','invalid_scope'); end if;
+  if exists(select 1 from jsonb_array_elements_text(coalesce(p_scope->'sections','[]'::jsonb)) s where not (coalesce(i.scope->'sections','[]'::jsonb) ? s))
+   or exists(select 1 from jsonb_array_elements_text(coalesce(p_scope->'customCategories','[]'::jsonb)) c where not (coalesce(i.scope->'customCategories','[]'::jsonb) ? c)) then
    return jsonb_build_object('state','widening');
   end if;
+  select jsonb_build_object(
+   'sections',(select coalesce(jsonb_agg(distinct x order by x),'[]'::jsonb) from jsonb_array_elements_text(coalesce(p_scope->'sections','[]'::jsonb)) x),
+   'customCategories',(select coalesce(jsonb_agg(distinct x order by x),'[]'::jsonb) from jsonb_array_elements_text(coalesce(p_scope->'customCategories','[]'::jsonb)) x))
+   into next_scope;
  end if;
  update credential_portal_invites set
   allow_download=coalesce(p_allow_download,allow_download),
@@ -511,6 +595,7 @@ begin
   from credential_portal_documents x join documents o on o.id=x.document_id where x.invite_id=i.id and o.user_id=i.owner_profile_id
    and o.storage_path=x.storage_path and public.credential_portal_owned_path(i.owner_profile_id,x.storage_path,x.document_id)
    and o.name=x.name and coalesce(o.mime_type,'application/octet-stream')=x.mime_type
+   and public.credential_portal_selection_document_ok(i.owner_profile_id,x.document_id)
  ),'[]'::jsonb));
 end $$;
 
@@ -538,7 +623,8 @@ begin
  select x.* into d from credential_portal_documents x join documents o on o.id=x.document_id
   where x.invite_id=i.id and x.document_id=p_document_id and o.user_id=i.owner_profile_id
   and o.storage_path=x.storage_path and public.credential_portal_owned_path(i.owner_profile_id,x.storage_path,x.document_id)
-  and o.name=x.name and coalesce(o.mime_type,'application/octet-stream')=x.mime_type;
+  and o.name=x.name and coalesce(o.mime_type,'application/octet-stream')=x.mime_type
+  and public.credential_portal_selection_document_ok(i.owner_profile_id,x.document_id);
  if not found then return null; end if;
  return base||jsonb_build_object('document',to_jsonb(d));
 end $$;
@@ -589,7 +675,7 @@ end $$;
 -- administrator would see it right now.
 create or replace function public.credential_portal_preview(p_owner uuid,p_subject text,p_scope jsonb,p_invite uuid default null)
 returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
-declare i credential_portal_invites%rowtype;
+declare i credential_portal_invites%rowtype; problem jsonb;
 begin
  if not public.credential_portal_owner_ready(p_owner,p_subject) then return null; end if;
  if p_invite is not null then
@@ -598,11 +684,17 @@ begin
   return jsonb_build_object('grant',jsonb_build_object('purpose',i.purpose,'accessEndsAt',i.expires_at,'allowDownload',i.allow_download),
    'view',public.credential_portal_view(p_owner,i.scope));
  end if;
+ problem:=public.credential_portal_scope_problem(p_owner,p_scope);
+ if problem is not null then return problem; end if;
  return jsonb_build_object('view',public.credential_portal_view(p_owner,public.credential_portal_normalize_scope(p_owner,p_scope)));
 end $$;
 
 -- Owner list: status, end date, last visit and per-document activity with the
 -- owner's own document names (joined at read time, never copied into audit).
+-- documentActivity and visitCount are computed over EVERY audit row of the
+-- grant: every summary load writes a row, so a window of recent rows would
+-- let ordinary use (or a recipient on purpose) push file activity out of the
+-- physician's view. "audit" is only the recent-events list.
 create or replace function public.credential_portal_owner_grants(p_owner uuid,p_subject text,p_invite uuid default null)
 returns jsonb language sql stable security invoker set search_path=public,pg_temp as $$
  select coalesce(jsonb_agg(g.item order by g.created_at desc, g.id), '[]'::jsonb) from (
@@ -615,6 +707,16 @@ returns jsonb language sql stable security invoker set search_path=public,pg_tem
    'allowDownload',i.allow_download,'scope',i.scope,'lastVisitAt',i.last_verified_at,
    'deliveryState',coalesce((select o.state from credential_portal_outbox o where o.invite_id=i.id and o.kind='invite'),'unavailable'),
    'documentCount',(select count(*) from credential_portal_documents x where x.invite_id=i.id),
+   'visitCount',(select count(*) from credential_portal_audit x where x.invite_id=i.id and x.event='session_verified'),
+   'documentActivity',coalesce((select jsonb_agg(jsonb_build_object('documentId',s.document_id,'documentName',doc.name,
+      'views',s.views,'downloads',s.downloads,'refused',s.refused,'last',s.last) order by s.last desc, s.document_id)
+     from (select x.document_id,
+       count(*) filter (where x.event='document_response_prepared' and x.intent is distinct from 'download') views,
+       count(*) filter (where x.event='document_response_prepared' and x.intent='download') downloads,
+       count(*) filter (where x.event='download_refused') refused, max(x.created_at) last
+      from credential_portal_audit x where x.invite_id=i.id and x.document_id is not null
+       and x.event in ('document_response_prepared','download_refused') group by x.document_id) s
+     left join documents doc on doc.id=s.document_id and doc.user_id=i.owner_profile_id), '[]'::jsonb),
    'audit',coalesce((select jsonb_agg(jsonb_build_object('event',a.event,'intent',a.intent,'documentId',a.document_id,
       'documentName',doc.name,'createdAt',a.created_at) order by a.created_at desc, a.id desc)
      from (select * from credential_portal_audit x where x.invite_id=i.id order by x.created_at desc, x.id desc limit 200) a

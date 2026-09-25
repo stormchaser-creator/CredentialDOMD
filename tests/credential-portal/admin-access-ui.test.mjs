@@ -110,12 +110,13 @@ test('owner UI offers only the allowlisted sections, opt-ins off, categories one
   const view = screen({ request: server() });
   const tree = await view.settle();
   const keys = boxes(tree).map(n => n.props['data-section']);
-  assert.deepEqual(keys.filter(k => !k.startsWith('custom:')), [...catalog.ADMIN_ACCESS_SECTION_KEYS]);
+  // Default-on sections first, then the opt-in ones, each in catalog order.
+  assert.deepEqual(keys.filter(k => !k.startsWith('custom:')), [...catalog.ADMIN_ACCESS_SECTIONS.filter(x => !x.optIn), ...catalog.ADMIN_ACCESS_SECTIONS.filter(x => x.optIn)].map(x => x.key));
   assert.deepEqual(keys.filter(k => k.startsWith('custom:')), [`custom:${CATEGORY}`], 'only live, synced categories');
   for (const denied of catalog.ADMIN_ACCESS_DENIED) assert.ok(!keys.includes(denied), denied);
   const checked = boxes(tree).filter(n => n.props.checked).map(n => n.props['data-section']);
   assert.deepEqual(checked, [...catalog.ADMIN_ACCESS_DEFAULT_SECTIONS]);
-  for (const optIn of ['malpracticeHistory', 'peerReferences', 'caseLogs']) assert.ok(!checked.includes(optIn));
+  for (const optIn of ['malpracticeHistory', 'peerReferences', 'caseLogs', 'screeningsSensitive']) assert.ok(!checked.includes(optIn));
   const words = text(tree);
   assert.ok(words.includes(`Never shared: ${catalog.ADMIN_ACCESS_NEVER_SHARED}.`));
   assert.match(words, /can still be photographed/);
@@ -155,6 +156,7 @@ test('preview renders exactly the server response for the chosen scope, then the
   assert.equal(created.accessDays, 30); assert.equal(created.allowDownload, false);
   assert.deepEqual(created.sections, [...catalog.ADMIN_ACCESS_DEFAULT_SECTIONS, 'caseLogs'].sort());
   assert.match(created.requestId, /^[0-9a-f-]{36}$/);
+  assert.equal(created.timeZone, Intl.DateTimeFormat().resolvedOptions().timeZone, 'the invitation states the end in the physician\'s zone');
   assert.match(text(view.render()), /Access created for office@example\.test/);
 });
 
@@ -190,7 +192,7 @@ test('each grant shows status, end date, per-document activity by name, and the 
   assert.match(words, /1 visit, 1 file opened/);
   for (const label of ['Revoke', 'Resend link', 'Narrow']) button(tree, label);
   await button(tree, 'Resend link').props.onClick();
-  assert.deepEqual(view.calls.at(-2), { action: 'resend-link', inviteId: GRANT });
+  assert.deepEqual(view.calls.at(-2), { action: 'resend-link', inviteId: GRANT, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
   button(view.render(), 'Narrow').props.onClick();
   tree = view.render();
   const narrowing = nodes(tree).filter(n => n.props?.['data-narrow']).map(n => n.props['data-narrow']);
@@ -228,4 +230,93 @@ test('per-document activity groups by document name and never shows ids', () => 
     { name: 'A.pdf', views: 1, downloads: 0, refused: 1, last: '2026-09-25T12:00:00Z' },
     { name: 'A file you have since deleted', views: 0, downloads: 1, refused: 0, last: '2026-09-24T10:00:00Z' },
   ]);
+});
+
+const fill = view => {
+  nodes(view.render()).find(n => n.type === 'input' && n.props.type === 'email').props.onChange({ target: { value: 'office@example.test' } });
+  nodes(view.render()).find(n => n.type === 'input' && n.props.maxLength === 120).props.onChange({ target: { value: 'Mercy' } });
+};
+const unavailable = categories => Object.assign(new Error('Private credential access is not available yet.'), { status: 409, code: 'category_unavailable', categories });
+
+test('a category the server does not have releases the form with plain words and is marked, never a locked retry', async () => {
+  const view = screen({ request: server({ create: () => { throw unavailable([CATEGORY]); } }) });
+  await view.settle();
+  fill(view);
+  nodes(view.render()).find(n => n.props?.['data-section'] === `custom:${CATEGORY}`).props.onChange();
+  await button(view.render(), 'Send access link').props.onClick();
+  const tree = view.render();
+  const words = text(tree);
+  assert.match(words, /One of your categories is not synced to your account yet/);
+  assert.match(words, /Not synced to your account yet, so it cannot be shared/);
+  assert.ok(!/Retry the same request/.test(words), 'no retry of a request that can never succeed');
+  assert.equal(nodes(tree).find(n => n.type === 'input' && n.props.type === 'email').props.disabled, false);
+  assert.equal(nodes(tree).find(n => n.props?.['data-section'] === `custom:${CATEGORY}`).props.disabled, false, 'the category can be unticked');
+});
+
+test('one unsynced category never blanks the section counts: they are asked for again without it', async () => {
+  const view = screen({ request: server({ preview: body => { if (body.customCategories.includes(CATEGORY)) throw unavailable([CATEGORY]); return syntheticView; } }) });
+  const tree = await view.settle();
+  const words = text(tree);
+  assert.match(words, /1 record, 1 file/);
+  assert.match(words, /Not synced to your account yet/);
+  const previews = view.calls.filter(c => c.action === 'preview');
+  assert.deepEqual(previews.map(c => c.customCategories), [[CATEGORY], []]);
+  const failing = screen({ request: server({ preview: () => { throw Object.assign(new Error('x'), { status: 503 }); } }) });
+  assert.match(text(await failing.settle()), /Record counts could not be loaded/);
+});
+
+test('a failed grant list never says there is no access; it says so and offers Retry', async () => {
+  let fails = true;
+  const view = screen({ request: server({ list: () => { if (fails) throw Object.assign(new Error('Private credential access is not available yet.'), { status: 503 }); return { invites: [standingGrant] }; } }) });
+  let tree = await view.settle();
+  let words = text(tree);
+  assert.ok(!/No administrator access yet/.test(words), words);
+  assert.match(words, /Your existing access links could not be loaded/);
+  fails = false;
+  await button(tree, 'Retry').props.onClick();
+  words = text(view.render());
+  assert.match(words, /office@example\.test/);
+  assert.ok(!/could not be loaded/.test(words));
+  const empty = screen({ request: server({ list: () => ({ invites: [] }) }) });
+  assert.match(text(await empty.settle()), /No administrator access yet/);
+});
+
+test('every text control on the screen is at least 16px, so iOS Safari never zooms on focus', async () => {
+  const view = screen({ request: server() });
+  const tree = await view.settle();
+  const controls = nodes(tree).filter(n => n.type === 'select' || (n.type === 'input' && !['checkbox', 'radio'].includes(n.props.type)));
+  assert.ok(controls.length >= 4);
+  for (const control of controls) assert.ok(control.props.style?.fontSize >= 16, `${control.type} ${control.props['aria-label'] || control.props.type}: ${control.props.style?.fontSize}`);
+});
+
+test('narrowing sends only what changed: turning downloads off never resends the stored sections', async () => {
+  const view = screen({ request: server() });
+  let tree = await view.settle();
+  button(tree, 'Narrow').props.onClick();
+  tree = view.render();
+  const downloadBox = nodes(tree).filter(n => n.type === 'label').find(l => text(l).trim() === 'Allow downloads' && nodes(l).some(n => n.type === 'input' && !n.props['data-control']));
+  nodes(downloadBox).find(n => n.type === 'input').props.onChange();
+  await button(view.render(), 'Save').props.onClick();
+  assert.deepEqual(view.calls.find(c => c.action === 'update'), { action: 'update', inviteId: GRANT, allowDownload: false });
+});
+
+test("file activity comes from the server's full count, not the capped recent-events list", async () => {
+  const grant = { ...standingGrant, audit: [], visitCount: 4,
+    documentActivity: [{ documentId: CATEGORY, documentName: 'License.pdf', views: 3, downloads: 2, refused: 1, last: '2026-09-25T11:00:00Z' }] };
+  const view = screen({ request: server({ list: () => ({ invites: [grant] }) }) });
+  const words = text(await view.settle());
+  assert.match(words, /Activity: 4 visits, 1 file opened/);
+  assert.match(words, /License\.pdf: previewed 3, downloaded 2, download refused 1/);
+  assert.deepEqual(helpers.grantFileActivity({ audit: standingGrant.audit }), helpers.documentActivity(standingGrant.audit), 'an older response still works');
+});
+
+test('the client passes the categories a refusal names', async () => {
+  const client = evaluate(clientSource, {
+    define: { 'import.meta.env.VITE_CREDENTIAL_PORTAL_ENABLED': JSON.stringify('true'), 'import.meta.env.VITE_SUPABASE_URL': JSON.stringify('https://synthetic.invalid') },
+    globals: { window: { Clerk: { session: { getToken: async () => 'synthetic' } } }, fetch: async () => ({ ok: false, status: 409, json: async () => ({ error: 'category_unavailable', categories: [CATEGORY, 7] }) }) },
+  });
+  const error = await client.credentialPortalRequest({ action: 'preview' }).catch(e => e);
+  assert.equal(error.code, 'category_unavailable'); assert.deepEqual(error.categories, [CATEGORY]);
+  assert.equal(client.isAdminAccessRejection(error), true, 'a 4xx releases the form');
+  assert.match(client.adminAccessErrorMessage(error), /not synced/);
 });

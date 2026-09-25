@@ -6,12 +6,38 @@ import {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
-class PortalError extends Error { constructor(status, code) { super(code); this.status = status; } }
-const fail = (status, code) => { throw new PortalError(status, code); };
+// Declared types the page can show inline (safeInlineMime then checks the bytes).
+const INLINE_DECLARED = new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain']);
+class PortalError extends Error { constructor(status, code, extra = null) { super(code); this.status = status; this.extra = extra; } }
+const fail = (status, code, extra) => { throw new PortalError(status, code, extra); };
 const publicDocument = d => ({ id: d.document_id ?? d.id, name: d.name, mimeType: d.mime_type ?? d.mimeType, sizeBytes: d.size_bytes ?? d.sizeBytes });
 const genericCodeResponse = { message: 'If this invitation is available, a code has been sent.' };
 const physicianOf = profile => ({ name: profile?.name, degreeType: profile?.degree_type });
-const clientAddress = req => (req.headers.get('x-forwarded-for') || '').split(',')[0].trim().slice(0, 100);
+// The address the S5 code-request throttle is keyed on. The edge-set headers
+// first (report-error does the same): X-Forwarded-For is appended to, not
+// replaced, so its FIRST entry is whatever the caller sent and a script could
+// take a fresh bucket on every request. Its LAST entry is the one the proxy
+// in front of us added.
+const clientAddress = req => {
+  const edge = (req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || '').trim();
+  const forwarded = (req.headers.get('x-forwarded-for') || '').split(',').map(v => v.trim()).filter(Boolean);
+  return (edge || forwarded.at(-1) || '').slice(0, 100);
+};
+// Seconds left on a visit, from the server's clock. The recipient page counts
+// down from this instead of comparing the server's timestamp with its own
+// clock, which on an office PC can be minutes out.
+const secondsUntil = value => { const at = Date.parse(value); return Number.isFinite(at) ? Math.max(0, Math.floor((at - Date.now()) / 1000)) : 0; };
+// Scope refusals the database answers with (never an exception, which would
+// reach the owner as 503 and lock the form on a retry that cannot succeed).
+const UUID_ANY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function scopeRefusal(result) {
+  if (result?.state === 'category_unavailable') {
+    const categories = (Array.isArray(result.categories) ? result.categories : []).filter(id => typeof id === 'string' && UUID_ANY.test(id)).slice(0, 50);
+    fail(409, 'category_unavailable', { categories });
+  }
+  if (result?.state === 'invalid_scope') fail(400, 'invalid_scope');
+  if (result?.state === 'unavailable') fail(403, 'administrator_access_unavailable');
+}
 
 export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_POLICY) {
   const origin = policy.origin;
@@ -94,29 +120,31 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
   }
   async function listDocuments(sessionDigest, initialAccess) {
     const access = initialAccess || await deps.store.access(sessionDigest, null, true);
-    if (!access) fail(401, 'session_unavailable');
+    if (!access || !allowedOwner(access.ownerId)) fail(401, 'session_unavailable');
     const documents = [];
     for (const d of await deps.store.manifest(access.inviteId)) {
       if (await deps.store.access(sessionDigest, d.document_id, false)) documents.push(publicDocument(d));
     }
     if (!await deps.store.record(sessionDigest, null, 'documents_listed', null, null, null)) fail(401, 'session_unavailable');
-    return { documents, expiresAt: access.expiresAt };
+    return { documents, expiresAt: access.expiresAt, expiresInSeconds: secondsUntil(access.expiresAt) };
   }
   async function sessionView(sessionDigest, event) {
     const raw = await deps.store.sessionView(sessionDigest, event);
     if (!raw || !allowedOwner(raw.ownerId)) fail(401, 'session_unavailable');
-    return { grant: shapeGrant(raw.grant), ...shapeView(raw.view), expiresAt: raw.expiresAt };
+    return { grant: shapeGrant(raw.grant), ...shapeView(raw.view), expiresAt: raw.expiresAt, expiresInSeconds: secondsUntil(raw.expiresAt) };
   }
-  async function invitationPayload(identity, email, accessEndsAt, allowDownload, purpose, inviteToken) {
+  async function invitationPayload(identity, email, accessEndsAt, allowDownload, purpose, inviteToken, timeZone) {
     const profile = await deps.store.ownerProfile(identity.profileId);
     // Administrators treat an unnamed invitation as phishing; the name is required.
     if (!physicianDisplayName(physicianOf(profile))) fail(409, 'profile_name_required');
     const replyTo = normalizePortalEmail(profile.verified_email) || null;
-    const message = standingInvitationEmail({ physician: physicianOf(profile), purpose, accessEndsAt, allowDownload, link: `${origin}/credential-access/#invite=${inviteToken}`, replyTo });
+    // The end date and time in the physician's own zone, named, so the office
+    // does not plan around a UTC date that is a day later than the real end.
+    const message = standingInvitationEmail({ physician: physicianOf(profile), purpose, accessEndsAt, allowDownload, link: `${origin}/credential-access/#invite=${inviteToken}`, replyTo, timeZone });
     return { to: email, subject: message.subject, text: message.text, ...(replyTo ? { replyTo } : {}) };
   }
   async function createStanding(req, input) {
-    fields(input, ['kind', 'recipientEmail', 'purpose', 'accessDays', 'allowDownload', 'sections', 'customCategories', 'requestId']);
+    fields(input, ['kind', 'recipientEmail', 'purpose', 'accessDays', 'allowDownload', 'sections', 'customCategories', 'requestId', 'timeZone']);
     const identity = await administratorOwner(req);
     const email = normalizePortalEmail(input.recipientEmail);
     const request = normalizeStandingInput(input);
@@ -131,7 +159,7 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
     if (!await deps.store.creationCapacity(identity.profileId, identity.subject)) fail(429, 'invitation_limit');
     const id = crypto.randomUUID(), mailId = crypto.randomUUID(), inviteToken = token();
     const accessEndsAt = new Date(Date.now() + request.accessDays * 86400000).toISOString();
-    const payload = await invitationPayload(identity, email, accessEndsAt, request.allowDownload, request.purpose, inviteToken);
+    const payload = await invitationPayload(identity, email, accessEndsAt, request.allowDownload, request.purpose, inviteToken, input.timeZone);
     const encrypted = await deps.crypto.seal(mailId, payload);
     const created = await deps.store.createStanding({
       id, owner: identity.profileId, subject: identity.subject, email, request: request.requestId, fingerprint, tokenDigest: await digest(inviteToken),
@@ -139,6 +167,7 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
     });
     if (created?.state === 'limited') fail(429, 'invitation_limit');
     if (created?.state === 'conflict') fail(409, 'request_conflict');
+    scopeRefusal(created);
     if (!['created', 'existing'].includes(created?.state)) fail(503, 'credential_portal_unavailable');
     // Sent after the response: the owner sees "queued" and the list shows the outcome.
     background(async () => deliver(await deps.store.inviteMailId(created.id)));
@@ -166,15 +195,22 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
     fields(input, ['documentId']); if (!UUID.test(input.documentId || '')) fail(400, 'invalid_request');
     const sessionDigest = await digest(bearer(req));
     const access = await deps.store.access(sessionDigest, input.documentId, true);
-    if (!access?.document || (access.kind === 'standing' && !allowedOwner(access.ownerId))) fail(401, 'document_unavailable');
+    if (!access?.document || !allowedOwner(access.ownerId)) fail(401, 'document_unavailable');
     const d = access.document;
     const subjects = Array.isArray(access.storageSubjects) ? access.storageSubjects : [access.ownerSubject];
     if (!ownedDocumentPath(subjects, d.storage_path, input.documentId)) fail(401, 'document_unavailable');
     const standing = access.kind === 'standing';
-    if (standing && input.action === 'download' && access.allowDownload !== true) {
-      await deps.store.record(sessionDigest, input.documentId, 'download_refused', 'download', null, null);
+    const downloadsOff = standing && access.allowDownload !== true;
+    // With downloads off, nothing leaves as an attachment: not a download, and
+    // not a "view" of a file the page cannot show inline (a .docx, a HEIC, or a
+    // JPEG whose bytes are not a JPEG), which would otherwise be answered with
+    // the original file. The declared type is checked before any storage read;
+    // the bytes are checked below, before anything is prepared.
+    const refuse = async intent => {
+      await deps.store.record(sessionDigest, input.documentId, 'download_refused', intent, null, null);
       fail(403, 'download_disabled');
-    }
+    };
+    if (downloadsOff && (input.action === 'download' || !INLINE_DECLARED.has(d.mime_type))) await refuse(input.action);
     let bytes;
     try { bytes = await deps.readFile(d.storage_path, policy.maxFileBytes); } catch { bytes = null; }
     if (!(bytes instanceof Uint8Array) || bytes.byteLength > policy.maxFileBytes
@@ -183,9 +219,10 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
       if (standing) fail(409, 'document_unreadable');
       fail(409, 'document_changed_request_new_invitation');
     }
+    const mime = input.action === 'view' ? safeInlineMime(bytes, d.mime_type) : null;
+    if (downloadsOff && !mime) await refuse(input.action);
     // Recheck after storage I/O so revocation, re-filing or row changes during the read fail closed.
     if (!await deps.store.record(sessionDigest, input.documentId, 'document_response_prepared', input.action, bytes.byteLength, await digest(bytes))) fail(401, 'document_unavailable');
-    const mime = input.action === 'view' ? safeInlineMime(bytes, d.mime_type) : null;
     const filename = String(d.name || 'credential').replace(/[\r\n"\\/\u{0}-\u{1f}\u{7f}-\u{10ffff}]/gu, '_').slice(0, 160) || 'credential';
     return new Response(bytes, { status: 200, headers: { ...headers, 'Content-Type': mime || 'application/octet-stream', 'Content-Length': String(bytes.byteLength), 'Content-Disposition': `${mime ? 'inline' : 'attachment'}; filename="${filename}"` } });
   }
@@ -205,7 +242,10 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
       if (input.action === 'create' && input.kind === 'standing') return await createStanding(req, input);
       if (input.action === 'create') {
         fields(input, ['recipientEmail', 'documentIds', 'requestId']);
-        const identity = await owner(req, true);
+        // The same gate as a standing grant: active, not closed, and inside
+        // CREDENTIAL_PORTAL_OWNER_PROFILES. Without it any active account could
+        // mail an invitation to any address during the first release.
+        const identity = await administratorOwner(req);
         const email = normalizePortalEmail(input.recipientEmail);
         if (!email || !UUID.test(input.requestId || '') || !Array.isArray(input.documentIds) || input.documentIds.length < 1 || input.documentIds.length > policy.maxDocuments
           || input.documentIds.some(id => typeof id !== 'string' || !UUID.test(id)) || new Set(input.documentIds).size !== input.documentIds.length) fail(400, 'invalid_invitation');
@@ -234,9 +274,13 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
         const id = crypto.randomUUID(), mailId = crypto.randomUUID(), inviteToken = token();
         const encrypted = await deps.crypto.seal(mailId, { to: email, subject: 'Private credential document invitation', text: `A physician has invited you to access selected credential documents privately.\n\nOpen ${origin}/credential-access/#invite=${inviteToken}\n\nThe link expires in 7 days and can be verified once. You must receive a fresh code at this exact email address. Do not forward the link. No documents are attached.\n\nIf you did not expect this invitation, ignore it.` });
         const created = await deps.store.createInvite({ id, owner: identity.profileId, subject: identity.subject, email, request: input.requestId, fingerprint, tokenDigest: await digest(inviteToken), documents: snapshots, mailId, encrypted });
-        if (created.state === 'limited') fail(429, 'invitation_limit');
-        if (created.state === 'conflict') fail(409, 'request_conflict');
-        if (!['created', 'existing'].includes(created.state)) fail(503, 'credential_portal_unavailable');
+        if (created?.state === 'limited') fail(429, 'invitation_limit');
+        if (created?.state === 'conflict') fail(409, 'request_conflict');
+        // A passport scan, an unfiled upload or anything outside the healthcare
+        // allowlist (credential_portal_selection_document_ok) is never selectable.
+        if (created?.state === 'not_shareable') fail(409, 'document_not_shareable');
+        if (created?.state === 'unavailable') fail(403, 'administrator_access_unavailable');
+        if (!['created', 'existing'].includes(created?.state)) fail(503, 'credential_portal_unavailable');
         await deliver(await deps.store.inviteMailId(created.id));
         return json(created.state === 'created' ? 201 : 200, { invite: await ownerResult(created.id, identity) });
       }
@@ -263,19 +307,20 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
           || (scopeGiven && !scope) || (days === null && allowDownload === null && !scopeGiven)) fail(400, 'invalid_update');
         const result = await deps.store.update({ owner: identity.profileId, subject: identity.subject, invite: input.inviteId, days, allowDownload, scope });
         if (result?.state === 'widening') fail(409, 'widening_requires_new_grant');
+        if (result?.state === 'invalid_scope') fail(400, 'invalid_update');
         if (result?.state === 'ended') fail(409, 'grant_ended');
         if (result?.state !== 'updated') fail(404, 'invitation_unavailable');
         return json(200, { invite: await ownerResult(input.inviteId, identity) });
       }
       if (input.action === 'resend-link') {
-        fields(input, ['inviteId']);
+        fields(input, ['inviteId', 'timeZone']);
         const identity = await administratorOwner(req);
         if (!UUID.test(input.inviteId || '')) fail(400, 'invalid_request');
         const grant = await ownerResult(input.inviteId, identity);
         if (grant.kind !== 'standing') fail(404, 'invitation_unavailable');
         if (grant.status === 'revoked' || grant.status === 'expired') fail(409, 'grant_ended');
         const mailId = crypto.randomUUID(), inviteToken = token();
-        const payload = await invitationPayload(identity, grant.recipientEmail, grant.expiresAt, grant.allowDownload, grant.purpose, inviteToken);
+        const payload = await invitationPayload(identity, grant.recipientEmail, grant.expiresAt, grant.allowDownload, grant.purpose, inviteToken, input.timeZone);
         const result = await deps.store.resendLink({ owner: identity.profileId, subject: identity.subject, invite: input.inviteId, tokenDigest: await digest(inviteToken), mailId, encrypted: await deps.crypto.seal(mailId, payload) });
         if (result?.state === 'limited') fail(429, 'invitation_limit');
         if (result?.state === 'ended') fail(409, 'grant_ended');
@@ -295,6 +340,7 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
           if (!scope) fail(400, 'invalid_request');
           raw = await deps.store.preview({ owner: identity.profileId, subject: identity.subject, scope });
         }
+        scopeRefusal(raw);
         if (!raw?.view) fail(404, 'invitation_unavailable');
         // Exactly the shaping the administrator's summary uses.
         return json(200, { ...(raw.grant ? { grant: shapeGrant(raw.grant) } : {}), ...shapeView(raw.view) });
@@ -322,8 +368,9 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
         const verified = await deps.store.redeem(usable ? tokenDigest : await digest(token()), email, version,
           await deps.crypto.otpDigest(usable ? invite.id : crypto.randomUUID(), version, input.code), await digest(sessionToken));
         if (!usable || !verified) fail(401, 'verification_failed');
-        if (verified.kind === 'standing') return json(200, { sessionToken, expiresAt: verified.expiresAt, kind: 'standing', documents: [] });
-        return json(200, { sessionToken, expiresAt: verified.expiresAt, documents: (verified.documents || []).map(publicDocument) });
+        const expiresInSeconds = secondsUntil(verified.expiresAt);
+        if (verified.kind === 'standing') return json(200, { sessionToken, expiresAt: verified.expiresAt, expiresInSeconds, kind: 'standing', documents: [] });
+        return json(200, { sessionToken, expiresAt: verified.expiresAt, expiresInSeconds, documents: (verified.documents || []).map(publicDocument) });
       }
       if (input.action === 'summary') {
         fields(input, []);
@@ -335,14 +382,15 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
         if (!access) fail(401, 'session_unavailable');
         if (access.kind === 'standing') {
           const view = await sessionView(sessionDigest, 'documents_listed');
-          return json(200, { documents: flatDocuments(view), expiresAt: view.expiresAt });
+          return json(200, { documents: flatDocuments(view), expiresAt: view.expiresAt, expiresInSeconds: view.expiresInSeconds });
         }
         return json(200, await listDocuments(sessionDigest, access));
       }
       if (['view', 'download'].includes(input.action)) return await fileResponse(req, input);
       fail(400, 'invalid_action');
     } catch (error) {
-      return json(error instanceof PortalError ? error.status : 503, { error: error instanceof PortalError ? error.message : 'credential_portal_unavailable' });
+      if (error instanceof PortalError) return json(error.status, { ...(error.extra || {}), error: error.message });
+      return json(503, { error: 'credential_portal_unavailable' });
     }
   };
 }

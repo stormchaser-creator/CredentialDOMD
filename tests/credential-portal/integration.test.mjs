@@ -11,8 +11,12 @@ test('private credential portal: actual migration, two recipients, atomic redemp
   const bob = { id: '10000000-0000-4000-8000-000000000002', subject: 'user_bob', email: 'bob-admin@example.com' };
   const aDoc = '20000000-0000-4000-8000-000000000001', bDoc = '20000000-0000-4000-8000-000000000002', htmlDoc = '20000000-0000-4000-8000-000000000003';
   const files = new Map([[`${alice.subject}/${aDoc}`, new TextEncoder().encode('%PDF-1.7\nSynthetic credential A')], [`${bob.subject}/${bDoc}`, new TextEncoder().encode('%PDF-1.7\nSynthetic credential B')], [`${alice.subject}/${htmlDoc}`, new TextEncoder().encode('<script>syntheticOnly()</script>')]]);
+  // Selected files must pass the healthcare allowlist, so each is filed under
+  // a medical licence record (credential_portal_selection_document_ok).
+  const aLicense = '30000000-0000-4000-8000-000000000001', bLicense = '30000000-0000-4000-8000-000000000002';
   await db.sql(`insert into profiles values(${q(alice.id)},${q(alice.subject)},'active'),(${q(bob.id)},${q(bob.subject)},'active');
-    insert into documents values(${q(aDoc)},${q(alice.id)},'Credential A.pdf','application/pdf',30,${q(`${alice.subject}/${aDoc}`)}),(${q(bDoc)},${q(bob.id)},'Credential B.pdf','application/pdf',30,${q(`${bob.subject}/${bDoc}`)}),(${q(htmlDoc)},${q(alice.id)},'Credential.html','text/html',30,${q(`${alice.subject}/${htmlDoc}`)});`, 'postgres');
+    insert into licenses(id,user_id,type,state) values(${q(aLicense)},${q(alice.id)},'State Medical License','CO'),(${q(bLicense)},${q(bob.id)},'State Medical License','TX');
+    insert into documents values(${q(aDoc)},${q(alice.id)},'Credential A.pdf','application/pdf',30,${q(`${alice.subject}/${aDoc}`)},${q(`licenses:${aLicense}`)}),(${q(bDoc)},${q(bob.id)},'Credential B.pdf','application/pdf',30,${q(`${bob.subject}/${bDoc}`)},${q(`licenses:${bLicense}`)}),(${q(htmlDoc)},${q(alice.id)},'Credential.html','text/html',30,${q(`${alice.subject}/${htmlDoc}`)},${q(`licenses:${aLicense}`)});`, 'postgres');
   const row = async query => (await db.rows(query))[0] || null;
   const mails = []; let mailState = 'sent', mailIdOverride, fileReads = 0, duringRead = null;
   const box = createPortalCrypto('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'); // Public synthetic fixture, never a runtime secret.
@@ -226,6 +230,27 @@ test('private credential portal: actual migration, two recipients, atomic redemp
       await assert.rejects(db.rpc('access', [await digest(aSession), aDoc, false], role));
       await assert.rejects(db.rpc('revoke', [alice.id, alice.subject, a.id], role));
     }
+  });
+  await t.test('the per-address code throttle keys on the edge-set address, never on a client-supplied X-Forwarded-For', async () => {
+    const keys = []; const original = store.limit;
+    store.limit = async (scope, key, ...rest) => { if (scope === 'code_address') keys.push(key); return original(scope, key, ...rest); };
+    const ask = async headers => {
+      const response = await handler(new Request('https://functions.example/credential-portal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ action: 'request-code', inviteToken: token(), email: 'nobody@example.com' }) }));
+      assert.equal(response.status, 202); await settle();
+      return keys.at(-1);
+    };
+    try {
+      // A script rotating the header it controls stays in one bucket.
+      const first = await ask({ 'cf-connecting-ip': '198.51.100.7', 'x-forwarded-for': '203.0.113.1' });
+      assert.equal(await ask({ 'cf-connecting-ip': '198.51.100.7', 'x-forwarded-for': '203.0.113.2' }), first);
+      assert.equal(await ask({ 'cf-connecting-ip': '198.51.100.7' }), first);
+      assert.notEqual(await ask({ 'cf-connecting-ip': '198.51.100.8', 'x-forwarded-for': '203.0.113.1' }), first);
+      assert.equal(await ask({ 'x-real-ip': '198.51.100.7', 'x-forwarded-for': '203.0.113.9' }), first);
+      // With only X-Forwarded-For, the proxy-appended (last) entry counts, not the caller's first one.
+      const proxied = await ask({ 'x-forwarded-for': '203.0.113.1, 198.51.100.7' });
+      assert.equal(proxied, first);
+      assert.equal(await ask({ 'x-forwarded-for': '203.0.113.99, 198.51.100.7' }), first);
+    } finally { store.limit = original; }
   });
   await t.test('body streaming and exact request fields reject oversized or forged recipient parameters', async () => {
     let canceled = false;

@@ -9,7 +9,7 @@ import {
   CREDENTIAL_PORTAL_ENABLED, credentialPortalRequest, portalDeliveryLabel, adminAccessErrorMessage, isAdminAccessRejection, standingGrantRequest,
 } from "../../utils/credentialPortalClient.js";
 import { useAdministratorAccessStatus } from "../../hooks/useAdministratorAccessStatus.js";
-import { documentActivity, formatDay, formatMoment } from "../../utils/administratorAccess.js";
+import { grantFileActivity, grantVisitCount, formatDay, formatMoment, localTimeZone } from "../../utils/administratorAccess.js";
 import {
   ADMIN_ACCESS_POLICY, ADMIN_ACCESS_SECTIONS, ADMIN_ACCESS_DEFAULT_SECTIONS, ADMIN_ACCESS_NEVER_SHARED, viewCounts,
 } from "../../../supabase/functions/_shared/credentialPortalView.mjs";
@@ -79,7 +79,14 @@ export default function AdministratorAccessPage() {
   const available = useAdministratorAccessStatus();
   const [form, setForm] = useState(emptyForm);
   const [grants, setGrants] = useState([]);
+  // "loading" | "loaded" | "failed". "No administrator access yet" is said only
+  // after a list that succeeded: a failed list must not tell a physician with
+  // live links that there are none.
+  const [listState, setListState] = useState("loading");
   const [counts, setCounts] = useState(null);
+  const [countsFailed, setCountsFailed] = useState(false);
+  // Categories the server does not have (never synced, or archived elsewhere).
+  const [unsynced, setUnsynced] = useState(() => new Set());
   const [preview, setPreview] = useState(null);
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -97,8 +104,13 @@ export default function AdministratorAccessPage() {
   const categoryName = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c.name])), [categories]);
 
   const refresh = useCallback(async () => {
-    const result = await credentialPortalRequest({ action: "list" });
-    if (current()) setGrants(result.invites || []);
+    try {
+      const result = await credentialPortalRequest({ action: "list" });
+      if (current()) { setGrants(result.invites || []); setListState("loaded"); }
+    } catch (e) {
+      if (current()) setListState("failed");
+      throw e;
+    }
   }, [current]);
   useEffect(() => {
     active.current = true;
@@ -106,14 +118,26 @@ export default function AdministratorAccessPage() {
     return () => { active.current = false; };
   }, [available, refresh, current]);
   // Live counts from the server's own allowlist (a driver's license filed as a
-  // license is not counted, because it would not be shared).
+  // license is not counted, because it would not be shared). A category the
+  // server does not have is named in the refusal: it is marked "not synced" and
+  // the counts are asked for again without it, so one unsynced category never
+  // blanks every section's count.
   useEffect(() => {
     if (!available) return;
     const ids = categoryIds ? categoryIds.split(",") : [];
-    credentialPortalRequest({ action: "preview", sections: ADMIN_ACCESS_SECTIONS.map(s => s.key), customCategories: ids })
-      .then(result => { if (current()) setCounts(viewCounts(result)); })
-      .catch(() => { if (current()) setCounts(null); });
+    const ask = customCategories => credentialPortalRequest({ action: "preview", sections: ADMIN_ACCESS_SECTIONS.map(s => s.key), customCategories });
+    (async () => {
+      let missing = new Set(), result;
+      try { result = await ask(ids); }
+      catch (e) {
+        if (e?.code !== "category_unavailable" || !e.categories?.length) throw e;
+        missing = new Set(e.categories);
+        result = await ask(ids.filter(id => !missing.has(id)));
+      }
+      if (current()) { setCounts(viewCounts(result)); setCountsFailed(false); setUnsynced(missing); }
+    })().catch(() => { if (current()) { setCounts(null); setCountsFailed(true); } });
   }, [available, categoryIds, current]);
+  const markUnsynced = e => { if (e?.code === "category_unavailable" && e.categories?.length) setUnsynced(prev => new Set([...prev, ...e.categories])); };
 
   const formScope = scopeKey(form.sections, form.customCategories);
   const scopeChosen = form.sections.size + form.customCategories.size > 0;
@@ -127,12 +151,12 @@ export default function AdministratorAccessPage() {
     try {
       const result = await credentialPortalRequest({ action: "preview", sections: [...form.sections].sort(), customCategories: [...form.customCategories].sort() });
       if (current()) setPreview({ scope: formScope, view: result, allowDownload: form.allowDownload });
-    } catch (e) { if (current()) setError(adminAccessErrorMessage(e)); }
+    } catch (e) { if (current()) { markUnsynced(e); setError(adminAccessErrorMessage(e)); } }
     finally { if (current()) setBusy(false); }
   };
   const create = async () => {
     if (busy || (!pending && !canCreate)) return;
-    const body = pending || standingGrantRequest(form, crypto.randomUUID());
+    const body = pending || standingGrantRequest(form, crypto.randomUUID(), localTimeZone());
     setPending(body); setBusy(true); setError(""); setNotice("");
     try {
       const result = await credentialPortalRequest(body);
@@ -144,7 +168,7 @@ export default function AdministratorAccessPage() {
       setPending(null); setForm(emptyForm()); setPreview(null);
     } catch (e) {
       if (!current()) return;
-      if (isAdminAccessRejection(e)) { setPending(null); setError(adminAccessErrorMessage(e)); }
+      if (isAdminAccessRejection(e)) { setPending(null); markUnsynced(e); setError(adminAccessErrorMessage(e)); }
       else setError(`${adminAccessErrorMessage(e)} Retrying sends the same request, so it cannot create a second link.`);
     } finally { if (current()) setBusy(false); }
   };
@@ -163,11 +187,18 @@ export default function AdministratorAccessPage() {
     if (typeof window !== "undefined" && window.confirm && !window.confirm(`End ${grant.recipientEmail}'s access now? Files they already downloaded stay with them.`)) return;
     return act({ action: "revoke", inviteId: grant.id }, "Access ended. The link no longer works.");
   };
+  // Sends only what changed: turning downloads off must never depend on the
+  // grant's sections or categories still being valid.
   const saveNarrow = () => {
     const grant = grants.find(g => g.id === editing.id);
-    const body = { action: "update", inviteId: editing.id, sections: [...editing.sections].sort(), customCategories: [...editing.customCategories].sort() };
+    const scope = grant?.scope || {};
+    const body = { action: "update", inviteId: editing.id };
+    if (scopeKey(editing.sections, editing.customCategories) !== scopeKey(scope.sections || [], scope.customCategories || [])) {
+      body.sections = [...editing.sections].sort(); body.customCategories = [...editing.customCategories].sort();
+    }
     if (grant?.allowDownload && !editing.allowDownload) body.allowDownload = false;
     setEditing(null);
+    if (Object.keys(body).length === 2) return undefined;
     return act(body, "Access narrowed. It applies to their very next page load.");
   };
 
@@ -176,7 +207,7 @@ export default function AdministratorAccessPage() {
   const label = { display: "block", color: T.text, fontSize: 13, fontWeight: 700 };
   const hint = { color: T.textMuted, fontSize: 12, margin: "2px 0 0" };
   const countText = key => { const c = counts?.[key]; return c ? `${c.records} record${c.records === 1 ? "" : "s"}${c.files ? `, ${c.files} file${c.files === 1 ? "" : "s"}` : ""}` : counts ? "Nothing to share yet" : ""; };
-  const sectionBox = (section, field = "sections", key = section.key, title = section.label, detail = section.hint) => <label key={key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: `1px solid ${T.border}`, color: T.text, fontSize: 14 }}>
+  const sectionBox = (section, field = "sections", key = section.key, title = section.label, detail = field === "customCategories" && unsynced.has(key) ? "Not synced to your account yet, so it cannot be shared." : section.hint) => <label key={key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: `1px solid ${T.border}`, color: T.text, fontSize: 14 }}>
     <input type="checkbox" data-section={field === "sections" ? key : `custom:${key}`} checked={form[field].has(key)} disabled={busy || !!pending} onChange={() => toggle(field, key)} style={{ marginTop: 3 }} />
     <span style={{ flex: 1 }}>
       <span style={{ fontWeight: 600 }}>{title}</span>
@@ -214,13 +245,14 @@ export default function AdministratorAccessPage() {
 
       <fieldset disabled={busy || !!pending} style={{ border: 0, padding: 0, margin: 0 }}>
         <legend style={{ ...label, marginBottom: 4 }}>Sections to share</legend>
+        {countsFailed && <p style={hint}>Record counts could not be loaded. Preview as administrator still shows exactly what would be shared.</p>}
         {ADMIN_ACCESS_SECTIONS.filter(s => !s.optIn).map(s => sectionBox(s))}
         <div style={{ ...label, marginTop: 14 }}>Only if you turn them on</div>
         {ADMIN_ACCESS_SECTIONS.filter(s => s.optIn).map(s => sectionBox(s))}
         {!!categories.length && <>
           <div style={{ ...label, marginTop: 14 }}>Your categories</div>
           <p style={hint}>Off unless you turn one on. Each category is shared on its own.</p>
-          {categories.map(c => sectionBox(c, "customCategories", c.id, `${c.icon ? `${c.icon} ` : ""}${c.name}`, null))}
+          {categories.map(c => sectionBox(c, "customCategories", c.id, `${c.icon ? `${c.icon} ` : ""}${c.name}`))}
         </>}
       </fieldset>
 
@@ -242,11 +274,16 @@ export default function AdministratorAccessPage() {
       <h3 style={{ color: T.text, fontSize: 16, margin: 0 }}>Access you have given</h3>
       <button type="button" style={button} disabled={busy} onClick={() => refresh().catch(e => setError(adminAccessErrorMessage(e)))}>Refresh</button>
     </div>
-    {!grants.length && <p style={{ color: T.textMuted, fontSize: 13 }}>No administrator access yet.</p>}
+    {listState === "failed" && <div role="alert" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 8 }}>
+      <p style={{ color: T.danger, fontSize: 13, margin: 0 }}>Your existing access links could not be loaded.</p>
+      <button type="button" style={button} disabled={busy} onClick={() => refresh().catch(e => setError(adminAccessErrorMessage(e)))}>Retry</button>
+    </div>}
+    {listState === "loading" && !grants.length && <p style={{ color: T.textMuted, fontSize: 13 }}>Loading your access links...</p>}
+    {listState === "loaded" && !grants.length && <p style={{ color: T.textMuted, fontSize: 13 }}>No administrator access yet.</p>}
     {grants.map(grant => {
       const live = grant.kind === "standing" && ["active", "locked"].includes(grant.status);
-      const files = documentActivity(grant.audit);
-      const visits = (grant.audit || []).filter(e => e.event === "session_verified").length;
+      const files = grantFileActivity(grant);
+      const visits = grantVisitCount(grant);
       const scope = grant.scope || {};
       const shared = [...(scope.sections || []).map(k => SECTION_LABEL[k] || k), ...(scope.customCategories || []).map(id => categoryName[id] || "A category you removed")];
       return <section key={grant.id} style={{ padding: 12, border: `1px solid ${T.border}`, borderRadius: 10, marginTop: 10, color: T.text, overflowWrap: "anywhere", background: T.card }}>
@@ -261,9 +298,10 @@ export default function AdministratorAccessPage() {
 
         {live && editing?.id !== grant.id && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
           <button type="button" style={button} disabled={busy} onClick={() => revoke(grant)}>Revoke</button>
-          <button type="button" style={button} disabled={busy} onClick={() => act({ action: "resend-link", inviteId: grant.id }, `A new link is on its way to ${grant.recipientEmail}. The old link no longer works.`)}>Resend link</button>
+          <button type="button" style={button} disabled={busy} onClick={() => { const timeZone = localTimeZone(); return act({ action: "resend-link", inviteId: grant.id, ...(timeZone ? { timeZone } : {}) }, `A new link is on its way to ${grant.recipientEmail}. The old link no longer works.`); }}>Resend link</button>
           <button type="button" style={button} disabled={busy} onClick={() => setEditing({ id: grant.id, sections: new Set(scope.sections || []), customCategories: new Set(scope.customCategories || []), allowDownload: grant.allowDownload })}>Narrow</button>
-          <select aria-label="New end date" value={newEnd[grant.id] || ""} disabled={busy} onChange={e => setNewEnd(v => ({ ...v, [grant.id]: Number(e.target.value) || "" }))} style={{ ...button, padding: "8px 10px" }}>
+          {/* 16px: anything smaller makes iOS Safari zoom the page on focus. */}
+          <select aria-label="New end date" value={newEnd[grant.id] || ""} disabled={busy} onChange={e => setNewEnd(v => ({ ...v, [grant.id]: Number(e.target.value) || "" }))} style={{ ...button, padding: "8px 10px", fontSize: 16 }}>
             <option value="">Change end date</option>
             {ADMIN_ACCESS_POLICY.durations.map(days => <option key={days} value={days}>{days} days from today</option>)}
           </select>

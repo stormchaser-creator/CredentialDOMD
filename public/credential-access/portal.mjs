@@ -54,6 +54,58 @@ export function formatDate(value) {
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }) : "";
 }
 
+/**
+ * When the access itself ends. That is a moment, not a date-only record field,
+ * so it is shown in the viewer's own zone with the time and zone name ("Oct
+ * 25, 2026, 7:00 PM MDT"). A UTC date would read a day late for a grant made
+ * on a US evening. timeZone is for tests; the page uses the browser's.
+ */
+export function formatEnd(value, timeZone) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const options = { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" };
+  try { return date.toLocaleString("en-US", timeZone ? { ...options, timeZone } : options).replace(/[\u{a0}\u{202f}]/gu, " "); }
+  catch { return date.toLocaleString("en-US", { ...options, timeZone: "UTC" }).replace(/[\u{a0}\u{202f}]/gu, " "); }
+}
+
+// A visit lasts at most 60 minutes (standing) or 30 (selection). The server
+// says how many seconds are left and the page counts down from its own clock,
+// so an office PC whose clock is minutes out neither rejects a good visit nor
+// keeps a dead one open. expiresAt is only a fallback, with generous slack.
+const CLOCK_SLACK_MS = 15 * 60 * 1000;
+export function sessionExpiry(value, kind, now = Date.now()) {
+  const longest = (kind === "standing" ? 60 : 30) * 60 * 1000;
+  const remaining = value?.expiresInSeconds;
+  if (remaining !== undefined) {
+    if (!Number.isInteger(remaining) || remaining <= 0 || remaining * 1000 > longest + 60 * 1000) throw new Error("invalid_response");
+    return now + remaining * 1000;
+  }
+  const expiry = Date.parse(value?.expiresAt);
+  if (!Number.isFinite(expiry) || expiry <= now - CLOCK_SLACK_MS || expiry > now + longest + CLOCK_SLACK_MS) throw new Error("invalid_response");
+  return Math.min(Math.max(expiry, now + 60 * 1000), now + longest);
+}
+
+/**
+ * What to tell the administrator when a file cannot be shown. The Download
+ * button is named only when it exists: with downloads off there is none, so
+ * the next step is asking the physician.
+ */
+export function fileMessage(reason, allowDownload) {
+  const off = allowDownload !== true;
+  if (reason === "not_previewable") return off
+    ? "This file cannot be shown here and downloads are turned off for this access. Ask the physician for a copy."
+    : "This file cannot be previewed here. Choose Download to save it to your device.";
+  if (reason === "pdf_ready") return off
+    ? "The PDF preview is below. If it does not display, ask the physician for a copy."
+    : "The PDF preview is below. Download the original if it cannot be displayed.";
+  if (reason === "pdf_failed") return off
+    ? "The PDF preview could not open, and downloads are turned off for this access. Ask the physician for a copy."
+    : "The PDF preview could not open. Choose Download to save the original.";
+  if (reason === "view_refused") return "This file cannot be shown here and downloads are turned off for this access. Ask the physician for a copy.";
+  if (reason === "download_refused") return "The physician has turned off downloads for this access. You can still preview files.";
+  return "";
+}
+
 /** The badge beside a record: expired, due within 90 days, or current. */
 export function expiryStatus(date, now = Date.now()) {
   if (typeof date !== "string" || !DATE.test(date)) return null;
@@ -110,12 +162,12 @@ export function parseStandingView(value) {
 }
 
 /** Header lines: who, their identifiers and states, and what this access is for. */
-export function standingHeader(view) {
+export function standingHeader(view, { timeZone } = {}) {
   const p = view.physician;
   const name = p.name && p.degreeType && !new RegExp(`[\\s,]${p.degreeType.replace(/[^A-Za-z]/g, "")}\\.?$`, "i").test(p.name) ? `${p.name}, ${p.degreeType}` : p.name || "Credential file";
   const states = [p.primaryState ? `${p.primaryState} (primary)` : "", ...p.additionalStates.filter(state => state !== p.primaryState)].filter(Boolean);
   const detail = [p.npi ? `NPI ${p.npi}` : "", p.specialties.join(", "), states.length ? `Licensed in ${states.join(", ")}` : "", p.email].filter(Boolean).join(DOT);
-  const grant = [view.grant.purpose ? `Shared for: ${view.grant.purpose}.` : "", `Access ends ${formatDate(view.grant.accessEndsAt)}.`].filter(Boolean).join(" ");
+  const grant = [view.grant.purpose ? `Shared for: ${view.grant.purpose}.` : "", `Access ends ${formatEnd(view.grant.accessEndsAt, timeZone)}.`].filter(Boolean).join(" ");
   const downloads = view.grant.allowDownload
     ? "View only: nothing here can be changed. Downloads save a copy on your device, and that copy stays after access ends."
     : "View only: nothing here can be changed. The physician has turned off downloads for this access.";
@@ -248,7 +300,7 @@ export function mountPortal({ inviteToken: initialInvite = "", config = PORTAL_C
   }
   // A standing link can be reopened until its end date; each visit gets a new code.
   const visitEnded = () => standing && Date.now() < standing.grant.accessEndsAt
-    ? ["This visit has ended", `Open the link in your email again to start a new visit. You will get a new code. The link works until ${formatDate(standing.grant.accessEndsAt)} unless the physician ends access sooner.`]
+    ? ["This visit has ended", `Open the link in your email again to start a new visit. You will get a new code. The link works until ${formatEnd(standing.grant.accessEndsAt)} unless the physician ends access sooner.`]
     : ["Your access has ended", "Ask the physician for a new invitation if you still need these documents. Files you already downloaded remain on your device."];
   function ensureSession() {
     if (sessionToken && Date.now() < expiresAt) return true;
@@ -342,20 +394,17 @@ export function mountPortal({ inviteToken: initialInvite = "", config = PORTAL_C
     });
   }
   function readSessionResponse(value, verifying = false) {
-    const expiry = Date.parse(value.expiresAt);
     const parsed = parseDocuments(value.documents);
     const nextKind = verifying ? (value.kind === "standing" ? "standing" : "selection") : kind;
     // A single-use selection visit lasts 30 minutes; a standing visit 60.
-    const longest = (nextKind === "standing" ? 61 : 31) * 60 * 1000;
-    if (!Number.isFinite(expiry) || expiry <= Date.now() || expiry > Date.now() + longest
-      || (verifying && !TOKEN.test(value.sessionToken || ""))) throw new Error("invalid_response");
+    const expiry = sessionExpiry(value, nextKind);
+    if (verifying && !TOKEN.test(value.sessionToken || "")) throw new Error("invalid_response");
     if (verifying) { sessionToken = value.sessionToken; kind = nextKind; }
     expiresAt = expiry; documents = parsed;
   }
   function readStanding(value) {
     const parsed = parseStandingView(value);
-    const expiry = Date.parse(value.expiresAt);
-    if (!Number.isFinite(expiry) || expiry <= Date.now() || expiry > Date.now() + 61 * 60 * 1000) throw new Error("invalid_response");
+    const expiry = sessionExpiry(value, "standing");
     standing = parsed; expiresAt = Math.min(expiresAt || expiry, expiry);
   }
   function renderStanding() {
@@ -413,8 +462,9 @@ export function mountPortal({ inviteToken: initialInvite = "", config = PORTAL_C
           return;
         }
         if (failure.status === 403 && kind === "standing") {
+          // Downloads are off: a download, or a file that could only leave as one.
           standing.grant.allowDownload = false; renderStanding();
-          status(""); error("The physician has turned off downloads for this access. You can still preview files."); return;
+          status(""); error(fileMessage(action === "view" ? "view_refused" : "download_refused", false)); return;
         }
         if (failure.status === 401) { finish("These documents are no longer available", "Your access may have expired or been revoked, or a document may have changed. Ask the physician for a new invitation."); return; }
         if (failure.status === 409 && kind === "standing") { status(""); error("This file could not be opened right now. Try again, or ask the physician for a copy."); return; }
@@ -427,8 +477,9 @@ export function mountPortal({ inviteToken: initialInvite = "", config = PORTAL_C
         throw failure;
       }
       if (!ensureSession()) return;
+      const canDownload = kind !== "standing" || standing?.grant.allowDownload === true;
       if (action === "view" && !previewAllowed(result.headers)) {
-        status("This file cannot be previewed here. Choose Download to save it to your device."); return;
+        status(fileMessage("not_previewable", canDownload)); return;
       }
       const mime = action === "view" ? result.headers.get("content-type").split(";")[0].trim().toLowerCase() : "application/octet-stream";
       if (action === "view" && mime === "application/pdf") {
@@ -444,9 +495,9 @@ export function mountPortal({ inviteToken: initialInvite = "", config = PORTAL_C
           if (previewOperation !== previewGeneration || sessionOperation !== generation || !ensureSession()) return;
           pdfPreview = createPdfPreview(elements["preview-frame"], bytes, item.name);
           await pdfPreview.ready;
-          if (previewOperation === previewGeneration && sessionOperation === generation) status("The PDF preview is below. Download the original if it cannot be displayed.");
+          if (previewOperation === previewGeneration && sessionOperation === generation) status(fileMessage("pdf_ready", canDownload));
         } catch {
-          if (previewOperation === previewGeneration && sessionOperation === generation) { closePreview(false); error("The PDF preview could not open. Choose Download to save the original."); status(""); }
+          if (previewOperation === previewGeneration && sessionOperation === generation) { closePreview(false); error(fileMessage("pdf_failed", canDownload)); status(""); }
         }
         return;
       }
@@ -478,15 +529,21 @@ export function mountPortal({ inviteToken: initialInvite = "", config = PORTAL_C
     if (!/^\d{6}$/.test(code)) { error("Enter the six digits from your latest email."); return; }
     operation(async () => {
       status("Verifying your code…");
+      let answeredKind = "";
       try {
         const result = await request("verify", { inviteToken, email, code });
+        answeredKind = result?.kind === "standing" ? "standing" : "selection";
         readSessionResponse(result, true);
       } catch (failure) {
         elements["verification-code"].value = "";
         if (failure.status === 401) { status(""); error("That code could not be verified. Check the latest code and the invited email address. The access may have ended or been revoked. Repeated incorrect attempts can lock it."); return; }
         if (failure.status === 503) throw failure;
         if (failure.message === "discarded") return;
-        finish("Verification was interrupted", "Ask the physician for a new invitation. To protect these documents, access cannot be recovered from an interrupted verification."); return;
+        // A standing link keeps working: a new visit needs only a new code.
+        // A single-use invitation is spent once a code is accepted.
+        finish("Verification was interrupted", answeredKind === "standing" ? "Open the link in your email again for a new code."
+          : answeredKind === "selection" ? "Ask the physician for a new invitation. To protect these documents, access cannot be recovered from an interrupted verification."
+          : "Open the link in your email again for a new code. If it no longer works, ask the physician for a new invitation."); return;
       }
       inviteToken = ""; email = "";
       elements["email-form"].reset(); elements["code-form"].reset(); elements["code-email"].textContent = "";

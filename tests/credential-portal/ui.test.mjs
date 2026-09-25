@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import vm from "node:vm";
-import { PORTAL_CONFIG, parseDocuments, previewAllowed, downloadName, parseStandingView, documentActions, renderStandingView, standingHeader, expiryStatus } from "../../public/credential-access/portal.mjs";
+import { PORTAL_CONFIG, parseDocuments, previewAllowed, downloadName, parseStandingView, documentActions, renderStandingView, standingHeader, expiryStatus, formatEnd, sessionExpiry, fileMessage } from "../../public/credential-access/portal.mjs";
 
 const html = await readFile(new URL("../../landing/credential-access.html", import.meta.url), "utf8");
 const source = await readFile(new URL("../../public/credential-access/portal.mjs", import.meta.url), "utf8");
@@ -125,10 +125,10 @@ test("recipient UI hides every Download button when downloads are off and keeps 
 });
 
 test("standing header names the physician, identifiers, states, purpose and end date; badges read plainly", () => {
-  const header = standingHeader(parseStandingView(standingResponse(false)));
+  const header = standingHeader(parseStandingView(standingResponse(false)), { timeZone: "UTC" });
   assert.equal(header.name, "Synthetic Physician, DO");
   assert.equal(header.detail, "NPI 1234567890 \u{b7} Neurosurgery \u{b7} Licensed in CO (primary), ND, CA \u{b7} doc@example.test");
-  assert.equal(header.grant, "Shared for: Reappointment, Synthetic General. Access ends Oct 25, 2026.");
+  assert.equal(header.grant, "Shared for: Reappointment, Synthetic General. Access ends Oct 25, 2026, 12:00 PM UTC.");
   assert.match(header.downloads, /turned off downloads/);
   const now = Date.parse("2026-09-25T12:00:00Z");
   assert.deepEqual(expiryStatus("2026-10-05", now), { tone: "soon", label: "Expires in 10 days" });
@@ -142,4 +142,52 @@ test("recipient page carries the standing view, frame refusal and visit copy", (
   assert.match(source, /window\.top !== window\.self/);
   assert.match(html, /open the link in your email again and ask for a new code/);
   assert.ok(!/\u{2014}|\u{2013}/u.test(html + source), "no en or em dashes in recipient copy");
+});
+
+test("the access end is a moment in the viewer's own zone with the time, not a UTC date a day late", () => {
+  // A 30-day grant made at 7pm MDT on Sep 25 ends at 01:00 UTC on Oct 26.
+  const view = parseStandingView({ ...standingResponse(), grant: { purpose: "X", accessEndsAt: "2026-10-26T01:00:00.000Z", allowDownload: true } });
+  assert.equal(standingHeader(view, { timeZone: "America/Denver" }).grant, "Shared for: X. Access ends Oct 25, 2026, 7:00 PM MDT.");
+  assert.equal(formatEnd("2026-10-26T01:00:00.000Z", "America/New_York"), "Oct 25, 2026, 9:00 PM EDT");
+  assert.ok(!/[^\x00-\x7f]/.test(formatEnd("2026-10-26T01:00:00.000Z", "America/Denver")));
+  // Date-only record fields stay calendar dates.
+  assert.match(expiryStatus("2027-09-25", Date.parse("2026-09-25T12:00:00Z")).label, /Sep 25, 2027/);
+});
+
+test("a visit's length comes from the server's remaining seconds, so a recipient clock minutes out still opens it", () => {
+  const now = Date.parse("2026-09-25T18:00:00Z");
+  // The office PC runs 2 minutes slow: the server's timestamp is 62 minutes ahead of it.
+  const slowClock = { expiresAt: new Date(now + 62 * 60000).toISOString(), expiresInSeconds: 3600 };
+  assert.equal(sessionExpiry(slowClock, "standing", now), now + 3600 * 1000);
+  assert.equal(sessionExpiry({ ...slowClock, expiresInSeconds: 1800 }, "selection", now), now + 1800 * 1000);
+  // Without the countdown (an older server) a few minutes of skew is tolerated.
+  assert.ok(sessionExpiry({ expiresAt: slowClock.expiresAt }, "standing", now) <= now + 3600 * 1000);
+  for (const bad of [{ expiresInSeconds: 0 }, { expiresInSeconds: -5 }, { expiresInSeconds: 7200 }, { expiresInSeconds: "3600" }, { expiresInSeconds: 3000 }, { expiresAt: "x" }, { expiresAt: new Date(now + 3 * 3600000).toISOString() }]) {
+    const kind = bad.expiresInSeconds === 3000 ? "selection" : "standing";
+    assert.throws(() => sessionExpiry(bad, kind, now), JSON.stringify(bad));
+  }
+});
+
+test("with downloads off, file messages never point at a Download button that is not there", () => {
+  for (const reason of ["not_previewable", "pdf_ready", "pdf_failed"]) {
+    const off = fileMessage(reason, false), on = fileMessage(reason, true);
+    assert.ok(off && !/Download/.test(off), `${reason}: ${off}`);
+    assert.match(off, /ask the physician for a copy/i);
+    assert.match(on, /Download/);
+  }
+  assert.match(fileMessage("view_refused", false), /downloads are turned off/);
+  // Every such message on the page goes through fileMessage.
+  const mounted = source.slice(source.indexOf("export function mountPortal"));
+  assert.ok(!/Choose Download|Download the original/.test(mounted), "no hard-coded Download wording inside the page");
+  assert.match(mounted, /fileMessage\("not_previewable", canDownload\)/);
+  assert.match(mounted, /fileMessage\("pdf_ready", canDownload\)/);
+  assert.match(mounted, /fileMessage\("pdf_failed", canDownload\)/);
+});
+
+test("an interrupted verification of a standing link tells the administrator to reopen the link, not to ask for a new invitation", () => {
+  const mounted = source.slice(source.indexOf("export function mountPortal"));
+  assert.match(mounted, /answeredKind === "standing" \? "Open the link in your email again for a new code\."/);
+  assert.match(mounted, /sessionExpiry\(value, nextKind\)/);
+  assert.match(mounted, /sessionExpiry\(value, "standing"\)/);
+  assert.ok(!/61 \* 60 \* 1000/.test(mounted), "no tight local-clock bound left");
 });

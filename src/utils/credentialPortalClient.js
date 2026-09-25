@@ -21,6 +21,8 @@ export async function credentialPortalRequest(body, { signal } = {}) {
     const error = new Error(message);
     error.status = response.status;
     error.code = typeof result?.error === "string" ? result.error : null;
+    // category_unavailable names the categories the server does not have.
+    error.categories = Array.isArray(result?.categories) ? result.categories.filter(id => typeof id === "string") : [];
     throw error;
   }
   return result;
@@ -54,6 +56,8 @@ const ADMIN_ACCESS_ERRORS = {
   invitation_limit: "You have sent the most access links allowed for today. Try again tomorrow.",
   request_conflict: "That request was already used with different details. Refresh the list and try again.",
   invitation_unavailable: "That access could not be found. Refresh the list.",
+  category_unavailable: "One of your categories is not synced to your account yet, so it cannot be shared. Untick it, or wait for it to sync, and try again.",
+  invalid_scope: "Those sections could not be used. Pick at least one section and try again.",
 };
 export function adminAccessErrorMessage(error) {
   return ADMIN_ACCESS_ERRORS[error?.code] || error?.message || "The request could not be completed.";
@@ -62,12 +66,14 @@ export function adminAccessErrorMessage(error) {
 export const isAdminAccessRejection = error => Boolean(error?.status) && error.status < 500 && error.status !== 408;
 
 /** The create body for a standing grant, from the owner's form. Pure. */
-export function standingGrantRequest(form, requestId) {
+export function standingGrantRequest(form, requestId, timeZone) {
   return {
     action: "create", kind: "standing", requestId,
     recipientEmail: String(form.email || "").trim(),
     purpose: String(form.purpose || "").replace(/\s+/g, " ").trim(),
     accessDays: form.days, allowDownload: form.allowDownload === true,
     sections: [...form.sections].sort(), customCategories: [...form.customCategories].sort(),
+    // The invitation states the end date and time in the physician's zone.
+    ...(timeZone ? { timeZone } : {}),
   };
 }

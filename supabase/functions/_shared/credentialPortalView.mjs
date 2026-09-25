@@ -31,6 +31,7 @@ export const ADMIN_ACCESS_DENIED = Object.freeze([
 ]);
 
 const f = (key, label, kind = 'text') => Object.freeze({ key, label, kind });
+const SCREENING_FIELDS = [f('name', 'Name'), f('agency', 'Agency'), f('fileNumber', 'File number'), f('orderDate', 'Ordered', 'date'), f('reportDate', 'Reported', 'date'), f('result', 'Result'), f('expirationDate', 'Expires', 'date'), f('components', 'Searches', 'components')];
 
 /** Every section a standing grant can include, in display order. optIn = off by default. */
 export const ADMIN_ACCESS_SECTIONS = Object.freeze([
@@ -46,10 +47,12 @@ export const ADMIN_ACCESS_SECTIONS = Object.freeze([
     titleKeys: ['institution', 'name', 'type'], fields: [f('type', 'Degree or program'), f('name', 'Name'), f('institution', 'Institution'), f('fieldOfStudy', 'Field'), f('startDate', 'Started', 'date'), f('graduationDate', 'Completed', 'date'), f('honors', 'Honors')] },
   { key: 'workHistory', label: 'Work history', hint: 'Employers, positions and dates. Reasons for leaving never appear.',
     titleKeys: ['employer', 'position'], fields: [f('position', 'Position'), f('type', 'Employment type'), f('city', 'City'), f('state', 'State'), f('startDate', 'Start', 'date'), f('endDate', 'End', 'date'), f('current', 'Current', 'yes'), f('description', 'Description')] },
-  { key: 'healthRecords', label: 'Health clearances', hint: 'Vaccinations, TB tests, fit tests and titers. Drug screens never appear.',
+  { key: 'healthRecords', label: 'Health clearances', hint: 'Vaccinations, TB tests, fit tests and titers. Drug screens are not in this section.',
     titleKeys: ['name', 'type', 'category'], fields: [f('category', 'Category'), f('type', 'Type'), f('dateAdministered', 'Date', 'date'), f('result', 'Result'), f('resultValue', 'Value'), f('resultUnits', 'Units'), f('referenceRange', 'Reference range'), f('collectedDate', 'Collected', 'date'), f('reportedDate', 'Reported', 'date'), f('lab', 'Lab'), f('lotNumber', 'Lot number'), f('facility', 'Facility'), f('expirationDate', 'Expires', 'date'), f('doses', 'Doses', 'doses')] },
-  { key: 'screenings', label: 'Background and screening reports', hint: 'Report type, agency, dates and result. Who requested a screening never appears.',
-    titleKeys: ['type', 'name'], fields: [f('name', 'Name'), f('agency', 'Agency'), f('fileNumber', 'File number'), f('orderDate', 'Ordered', 'date'), f('reportDate', 'Reported', 'date'), f('result', 'Result'), f('expirationDate', 'Expires', 'date'), f('components', 'Searches', 'components')] },
+  { key: 'screenings', label: 'Background and screening reports', hint: 'Report type, agency, dates and result. Drug screens and any Flagged or Review result are left out unless you turn them on below. Who requested a screening never appears.',
+    titleKeys: ['type', 'name'], fields: SCREENING_FIELDS },
+  { key: 'screeningsSensitive', optIn: true, label: 'Drug screens and flagged screenings', hint: 'Off unless you turn it on. Drug screen reports, and any screening whose result is Flagged or Review.',
+    titleKeys: ['type', 'name'], fields: SCREENING_FIELDS },
   { key: 'professionalPhotos', label: 'Professional photos', hint: 'Headshots for badges and directories.',
     titleKeys: ['name'], fallbackTitle: 'Professional photo', fields: [f('dateTaken', 'Taken', 'date')] },
   { key: 'publications', label: 'Publications', hint: 'Citations for your CV.',
@@ -133,21 +136,37 @@ export function physicianDisplayName(physician) {
   return `${name}, ${degree}`;
 }
 
-export function formatLongDate(value) {
+/** An IANA zone the runtime knows (the owner's browser sends it), or null. */
+export function validTimeZone(value) {
+  if (typeof value !== 'string' || value.length > 64 || !/^[A-Za-z][A-Za-z0-9_+\-]*(?:\/[A-Za-z0-9_+\-]+)*$/.test(value)) return null;
+  try { return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone || null; } catch { return null; }
+}
+
+/**
+ * When access ends, as the physician set it: the date AND time in their own
+ * zone, with the zone named ("October 25, 2026 at 7:00 PM MDT"). A bare UTC
+ * date reads a day late for a grant made on a US evening. Falls back to UTC,
+ * named as such. Narrow and ordinary no-break spaces some ICU builds put
+ * before AM/PM become plain spaces (this is plain-text email).
+ */
+export function formatAccessEnd(value, timeZone) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  const zone = validTimeZone(timeZone) || 'UTC';
+  const day = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: zone });
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: zone });
+  return `${day} at ${time}`.replace(/[\u{a0}\u{202f}]/gu, ' ');
 }
 
 /** The invitation. Plain text with real line breaks; no dashes as punctuation. */
-export function standingInvitationEmail({ physician, purpose, accessEndsAt, allowDownload, link, replyTo }) {
+export function standingInvitationEmail({ physician, purpose, accessEndsAt, allowDownload, link, replyTo, timeZone }) {
   const who = physicianDisplayName(physician);
   if (!who) throw new Error('physician_name_required');
   const lines = [
     `${who} has given you view access to their credential file.`,
     '',
     `Purpose: ${normalizePurpose(purpose) || ''}`,
-    `Access ends: ${formatLongDate(accessEndsAt)}`,
+    `Access ends: ${formatAccessEnd(accessEndsAt, timeZone)}`,
     '',
     'Open the file:',
     link,
