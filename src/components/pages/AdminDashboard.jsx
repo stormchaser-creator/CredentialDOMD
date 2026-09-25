@@ -613,6 +613,10 @@ function statusColor(s) {
   return "#94a3b8";
 }
 
+// 16px or larger: below that, iOS Safari zooms the page when a control gets
+// focus and leaves it zoomed (the same rule as shared/useInputStyle.js).
+const FORM_CONTROL = { fontSize: 16 };
+
 function TicketsList({ rows, T, onOpen, initialFilters = {} }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(initialFilters.status || "all");
@@ -622,10 +626,10 @@ function TicketsList({ rows, T, onOpen, initialFilters = {} }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: T.text }}>
-        <label>Search loaded tickets <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Subject, email or details" /></label>
-        <label>Status <select value={status} onChange={event => setStatus(event.target.value)}>{["all", "unresolved", "open", "in_progress", "waiting_user", "resolved", "closed"].map(value => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select></label>
-        <label>Priority <select value={priority} onChange={event => setPriority(event.target.value)}>{["all", "urgent", "high", "normal", "low"].map(value => <option key={value}>{value}</option>)}</select></label>
-        <label>Approval <select value={approval} onChange={event => setApproval(event.target.value)}><option value="all">All tickets</option><option value="needs_review">Needs owner approval</option></select></label>
+        <label>Search loaded tickets <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Subject, email or details" style={FORM_CONTROL} /></label>
+        <label>Status <select value={status} onChange={event => setStatus(event.target.value)} style={FORM_CONTROL}>{["all", "unresolved", "open", "in_progress", "waiting_user", "resolved", "closed"].map(value => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select></label>
+        <label>Priority <select value={priority} onChange={event => setPriority(event.target.value)} style={FORM_CONTROL}>{["all", "urgent", "high", "normal", "low"].map(value => <option key={value}>{value}</option>)}</select></label>
+        <label>Approval <select value={approval} onChange={event => setApproval(event.target.value)} style={FORM_CONTROL}><option value="all">All tickets</option><option value="needs_review">Needs owner approval</option></select></label>
       </div>
       <div style={{ color: T.textMuted, fontSize: 12 }}>{filtered.length} matching tickets in {rows.length} loaded records.</div>
       {!filtered.length && <Empty T={T} text="No loaded tickets match these filters." />}
@@ -915,8 +919,8 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
         Legacy founding badges: {foundingCount} (separate from paid founding memberships)
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-        <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" /></label>
-        <label>App access <select value={accessFilter} onChange={event => setAccessFilter(event.target.value)}><option value="all">All access states</option><option value="active">Active</option><option value="pending">Pending</option><option value="revoked">Paused</option></select></label>
+        <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" style={FORM_CONTROL} /></label>
+        <label>App access <select value={accessFilter} onChange={event => setAccessFilter(event.target.value)} style={FORM_CONTROL}><option value="all">All access states</option><option value="active">Active</option><option value="pending">Pending</option><option value="revoked">Paused</option></select></label>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
         Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}

@@ -85,7 +85,8 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
         <p style={{ color: T.textMuted, margin: 0 }}>Exact server counts across all records, independent of directory display limits.</p></div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <label htmlFor="admin-report-days">Window</label>
-        <select id="admin-report-days" value={days} onChange={event => reload(Number(event.target.value))} style={button}>
+        {/* 16px: a smaller control makes iOS Safari zoom the page on focus. */}
+        <select id="admin-report-days" value={days} onChange={event => reload(Number(event.target.value))} style={{ ...button, fontSize: 16 }}>
           {ADMIN_REPORT_DAYS.map(value => <option key={value} value={value}>Last {value} UTC days</option>)}
         </select>
         <button type="button" onClick={() => reload()} disabled={status === "loading"} style={button}>Refresh report</button>

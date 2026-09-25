@@ -7,6 +7,8 @@ import { transformSync } from 'esbuild';
 import vm from 'node:vm';
 import * as adminWaitlist from '../../src/utils/adminWaitlist.js';
 import * as adminLabels from '../../src/utils/adminLabels.js';
+import * as adminData from '../../src/utils/adminData.js';
+import * as setupTasks from '../../src/utils/setupTasks.js';
 
 const source = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
 
@@ -29,10 +31,11 @@ function load(responses) {
     return q;
   } };
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) }, '../../lib/supabase': { supabase: db },
-    '../../utils/adminWaitlist': adminWaitlist, '../../utils/adminLabels': adminLabels };
+    '../../utils/adminWaitlist': adminWaitlist, '../../utils/adminLabels': adminLabels, '../../utils/adminData': adminData,
+    '../../utils/setupTasks': setupTasks };
   const module = { exports: {} };
   const ctx = vm.createContext({ module, exports: module.exports, require: n => imports[n] || {}, console, window: { confirm: () => true } });
-  vm.runInContext(transformSync(source + '\nexport { MessagesPanel, WaitlistList, FieldProposals, SignupsList };', { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
+  vm.runInContext(transformSync(source + '\nexport { MessagesPanel, WaitlistList, FieldProposals, SignupsList, TicketsList, UsersPanel };', { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
   const render = (component, props) => { cursor = 0; return module.exports[component](props); };
   return { render, calls };
 }
@@ -127,4 +130,13 @@ test('the Traffic "New accounts" total states its 90-day window and how it diffe
   assert.match(shown, /Includes deleted and closed accounts/);
   assert.match(shown, /New signup profiles/);
   assert.match(text(f.render('SignupsList', { rows: [], T })), /No new accounts in the last 90 days/);
+});
+
+test('ticket and account filters are 16px so iPhone Safari does not zoom the page on focus', () => {
+  const f = load([]);
+  for (const [component, props] of [['TicketsList', { rows: [], T, onOpen() {} }], ['UsersPanel', { users: [], setUsers() {}, invites: [], T, onRefresh() {} }]]) {
+    const controls = nodes(f.render(component, props)).filter(n => ['select', 'textarea'].includes(n.type) || (n.type === 'input' && n.props.type === 'search'));
+    assert.ok(controls.length >= 2, component);
+    for (const control of controls) assert.ok(control.props.style?.fontSize >= 16, `${component} ${control.type} ${control.props.placeholder || ''}`);
+  }
 });

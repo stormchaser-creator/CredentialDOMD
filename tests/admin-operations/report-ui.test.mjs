@@ -117,3 +117,8 @@ test('attention counts appear as Overview cards that open their tabs', async () 
     f.button(label).props.onClick(); assert.equal(f.navigation.at(-1), tab);
   }
 });
+
+test('the report window select is 16px so iPhone Safari does not zoom on focus', () => {
+  const f = fixture(); f.render();
+  assert.ok(f.nodes().find(node => node.type === 'select').props.style.fontSize >= 16);
+});
