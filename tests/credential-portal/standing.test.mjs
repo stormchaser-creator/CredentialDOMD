@@ -234,6 +234,23 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     } finally { store.inviteByToken = original; }
   });
 
+  await t.test('verify makes the same database calls for a wrong address as for the invited one, and changes nothing', async () => {
+    const counts = { lookups: 0, redeems: 0 };
+    const lookup = store.inviteByToken, redeem = store.redeem;
+    store.inviteByToken = (...args) => { counts.lookups++; return lookup(...args); };
+    store.redeem = (...args) => { counts.redeems++; return redeem(...args); };
+    try {
+      const before = await row(`select otp_attempts,otp_failures_total from credential_portal_invites where id=${q(main.id)}`);
+      assert.equal((await call({ action: 'verify', inviteToken: main.token, email: 'not-invited@example.test', code: '123456' })).status, 401);
+      assert.deepEqual(counts, { lookups: 1, redeems: 1 });
+      ownerSetting = bob.id;
+      assert.equal((await call({ action: 'verify', inviteToken: main.token, email: main.email, code: '123456' })).status, 401);
+      assert.deepEqual(counts, { lookups: 2, redeems: 2 });
+      ownerSetting = alice.id;
+      assert.deepEqual(await row(`select otp_attempts,otp_failures_total from credential_portal_invites where id=${q(main.id)}`), before, 'nothing was counted against the grant');
+    } finally { store.inviteByToken = lookup; store.redeem = redeem; ownerSetting = alice.id; }
+  });
+
   await t.test('a verified visit shows the header, allowed sections and their files, and nothing else', async () => {
     mainSession = await visit(main);
     const { status, body } = await summary(mainSession);
@@ -492,6 +509,18 @@ test('administrator access: standing grants on the real migrations', { timeout: 
     for (const table of ['credential_portal_sessions', 'credential_portal_outbox', 'credential_portal_audit']) {
       assert.equal((await db.rows(`select 1 from ${table} where invite_id=${q(g.id)}`)).length, 0, table);
     }
+  });
+
+  await t.test('a standing grant never lists or serves a legacy-prefix file for an account with no bound legacy subject', async () => {
+    ownerSetting = `${alice.id},${bob.id}`;
+    try {
+      const g = await grant({ sections: ['licenses'] }, 'bob');
+      const session = await visit(g);
+      const view = (await summary(session)).body;
+      assert.deepEqual(recordIds(view), [R.BL1]);
+      assert.deepEqual(docIds(view), []);
+      assert.equal((await file('view', D.bobLegacy, session)).status, 401);
+    } finally { ownerSetting = alice.id; }
   });
 
   await t.test('selection invitations also accept a bound legacy subject and refuse an unbound one', async () => {

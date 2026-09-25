@@ -312,10 +312,16 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
         if (!email || !TOKEN.test(input.inviteToken || '') || !/^\d{6}$/.test(input.code || '')) fail(401, 'verification_failed');
         const tokenDigest = await digest(input.inviteToken);
         const invite = await deps.store.inviteByToken(tokenDigest, email);
-        if (!invite?.otp_version || (invite.owner_profile_id && !allowedOwner(invite.owner_profile_id))) fail(401, 'verification_failed');
+        const usable = !!invite?.otp_version && !(invite.owner_profile_id && !allowedOwner(invite.owner_profile_id));
+        // Same two database calls whether or not the link and address match, so
+        // the answer time does not confirm which address was invited. An
+        // unusable attempt redeems a random token digest, which matches no row
+        // and changes nothing.
+        const version = usable ? invite.otp_version : crypto.randomUUID();
         const sessionToken = token();
-        const verified = await deps.store.redeem(tokenDigest, email, invite.otp_version, await deps.crypto.otpDigest(invite.id, invite.otp_version, input.code), await digest(sessionToken));
-        if (!verified) fail(401, 'verification_failed');
+        const verified = await deps.store.redeem(usable ? tokenDigest : await digest(token()), email, version,
+          await deps.crypto.otpDigest(usable ? invite.id : crypto.randomUUID(), version, input.code), await digest(sessionToken));
+        if (!usable || !verified) fail(401, 'verification_failed');
         if (verified.kind === 'standing') return json(200, { sessionToken, expiresAt: verified.expiresAt, kind: 'standing', documents: [] });
         return json(200, { sessionToken, expiresAt: verified.expiresAt, documents: (verified.documents || []).map(publicDocument) });
       }
