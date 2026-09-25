@@ -71,10 +71,22 @@ function AdminDashboardContent() {
   const [newAttachment, setNewAttachment] = useState([]); // [{ data: dataURL, name }]
   const threadGeneration = useRef(0);
   const activeTicketId = useRef(null);
+  // One request ID per composed reply, reused on every retry of that same
+  // reply, so a reply whose response was lost is not saved (and emailed to
+  // the physician) twice. A different body, status or file gets a new one.
+  const replyRequest = useRef(null);
+  // A Resolve & archive whose reply was saved but whose archive failed: the
+  // retry only archives.
+  const archivePending = useRef(null);
   useEffect(() => () => { threadGeneration.current += 1; activeTicketId.current = null; }, []);
   const currentThread = (ticketId) => {
     const generation = threadGeneration.current;
     return () => activeTicketId.current === ticketId && threadGeneration.current === generation;
+  };
+  const replyRequestId = (ticketId, body, status, files) => {
+    const fingerprint = JSON.stringify([ticketId, body, status || null, files.map(f => [f.name || "", f.data?.length || 0, f.data?.slice(-64) || ""])]);
+    if (replyRequest.current?.fingerprint !== fingerprint) replyRequest.current = { fingerprint, id: globalThis.crypto?.randomUUID?.() ?? null };
+    return replyRequest.current.id;
   };
   const closeTicketDetail = () => {
     threadGeneration.current += 1; activeTicketId.current = null;
@@ -169,23 +181,35 @@ function AdminDashboardContent() {
   // One tap: mark resolved and archive, instead of two separate trips into the ticket.
   const resolveAndArchive = async () => {
     if (!openTicket) return;
-    const isCurrent = currentThread(openTicket.id);
+    const ticketId = openTicket.id;
+    const isCurrent = currentThread(ticketId);
     const body = reply.trim();
     setBusy(true); setTicketMsg("");
     try {
-      const res = await supabase.functions.invoke("reply-ticket", {
-        body: {
-          ticket_id: openTicket.id, body: body || "Status set to resolved.", status: "resolved",
-          ...attachmentsPayload(replyAttachment),
-        },
-      });
-      if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
+      // The reply already went out on an earlier tap and only the archive
+      // failed: archive, do not answer the physician a second time.
+      const replySaved = archivePending.current === ticketId && !body && !replyAttachment.length;
+      if (!replySaved) {
+        const replyBody = body || "Status set to resolved.";
+        const requestId = replyRequestId(ticketId, replyBody, "resolved", replyAttachment);
+        const res = await supabase.functions.invoke("reply-ticket", {
+          body: {
+            ticket_id: ticketId, body: replyBody, status: "resolved",
+            ...attachmentsPayload(replyAttachment),
+            ...(requestId ? { client_request_id: requestId } : {}),
+          },
+        });
+        if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
+        replyRequest.current = null;
+        archivePending.current = ticketId;
+        if (isCurrent()) { setReply(""); setReplyAttachment([]); }
+      }
       const { error: e2 } = await supabase.from("support_tickets")
         .update({ archived_at: new Date().toISOString() })
-        .eq("id", openTicket.id);
-      if (e2) throw new Error(e2.message);
+        .eq("id", ticketId);
+      if (e2) throw new Error(`Your reply was sent and the ticket marked resolved, but it could not be archived (${e2.message}). Tap Resolve & archive again to archive it.`);
+      archivePending.current = null;
       if (!isCurrent()) { await refreshTickets(); return; }
-      setReply(""); setReplyAttachment([]);
       setTicketMsg("Resolved and archived.");
       await refreshTickets();
       setTimeout(() => { if (isCurrent()) closeTicketDetail(); }, 900);
@@ -203,15 +227,19 @@ function AdminDashboardContent() {
     setBusy(true); setTicketMsg("");
     try {
       // A screenshot alone is a valid reply; reply-ticket gives it a stock body.
+      const replyBody = body || (newStatus ? `Status set to ${newStatus}.` : "");
+      const requestId = replyRequestId(openTicket.id, replyBody, newStatus, replyAttachment);
       const res = await supabase.functions.invoke("reply-ticket", {
         body: {
           ticket_id: openTicket.id,
-          body: body || (newStatus ? `Status set to ${newStatus}.` : ""),
+          body: replyBody,
           ...(newStatus ? { status: newStatus } : {}),
           ...attachmentsPayload(replyAttachment),
+          ...(requestId ? { client_request_id: requestId } : {}),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
+      replyRequest.current = null;
       if (!isCurrent()) { await refreshTickets(); return; }
       const { data, error: threadError } = await loadAdminSupportThread(supabase, openTicket.id);
       if (!isCurrent()) return;

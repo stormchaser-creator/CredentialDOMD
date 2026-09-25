@@ -173,7 +173,8 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         sql(migration); sql(migration)
         # The 2026-09-25 follow-ups apply on top, twice each, and every check
         # below runs against the final definitions.
-        for name in ['20260925110000_admin_access_regrant_guard.sql', '20260925111000_admin_operations_followups.sql']:
+        for name in ['20260925110000_admin_access_regrant_guard.sql', '20260925111000_admin_operations_followups.sql',
+                     '20260925112000_support_reply_idempotency.sql']:
             followup = (ROOT / 'supabase/migrations' / name).read_text()
             sql(followup); sql(followup)
         check('migration is rerunnable and creates no audit actions', sql('select count(*) from admin_operations_audit').stdout.strip() == '0')
@@ -346,6 +347,11 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         check('visits view counts the cutover day from both sources in one row', len({v['day'] for v in visits}) == len(visits) and visits[0]['visits'] == 1221 and visits[1]['visits'] == 1)
         check('visits view stays admin only', value("(select count(*) from admin_visits_daily)", subject='user_Admin2') == 0)
 
+        # Reply idempotency key: one row per (ticket, key); legacy null keys unconstrained.
+        ticket = sql("select id from support_tickets limit 1").stdout.strip(); key = uuid.uuid4()
+        sql(f"insert into support_messages(ticket_id,body,client_request_id) values('{ticket}','first','{key}'),('{ticket}','legacy',null),('{ticket}','legacy',null)")
+        check('a retried reply key cannot insert a second row', sql(f"insert into support_messages(ticket_id,body,client_request_id) values('{ticket}','again','{key}')", ok=False).returncode != 0)
+        check('the same key on another ticket is independent', sql(f"insert into support_messages(ticket_id,body,client_request_id) values(gen_random_uuid(),'other','{key}')", ok=False).returncode == 0)
         print(json.dumps({'passed':len(checks),'checks':checks},indent=2))
     finally:
         if started:

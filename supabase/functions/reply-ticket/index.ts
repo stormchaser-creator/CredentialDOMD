@@ -1,7 +1,7 @@
 /**
  * POST /functions/v1/reply-ticket
  *
- * Body: { ticket_id, body, status? (admin only),
+ * Body: { ticket_id, body, status? (admin only), client_request_id? (UUID),
  *         attachment?: { data: "data:<mime>;base64,...." } }
  * Auth: Required. Allowed if the account is admitted (active profile, or
  *       admin by app_admins membership) AND is the ticket owner OR is_admin().
@@ -17,6 +17,14 @@
  * ticket-attachment-url, which re-checks owner-or-admin. A reply that is
  * only a file gets a stock body, since the column is NOT NULL and the
  * email and Telegram paths both quote it.
+ *
+ * client_request_id makes a retry of the same composed reply safe. Before
+ * anything is uploaded or inserted, a row already saved for this ticket with
+ * the same key is returned as the answer (duplicate: true) and nothing else
+ * happens: no second row, so trg_notify_ticket_reply does not email the
+ * physician twice, and no second status change. The unique index
+ * support_messages_client_request_uniq (20260925112000) settles two racing
+ * requests on one row. A request without a key behaves as before.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -33,6 +41,17 @@ const corsHeaders = {
 
 const VALID_STATUSES = ["open", "in_progress", "waiting_user", "resolved", "closed"];
 const ATTACHMENT_ONLY_BODY = "File attached.";
+const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PG_UNIQUE_VIOLATION = "23505";
+
+// Deployed before 20260925112000 reached the database: answer without the
+// key rather than refuse every reply. Retries are then unprotected, as they
+// were before, until the column exists.
+function missingKeyColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "42703" || error.code === "PGRST204") return true;
+  return /client_request_id/.test(error.message || "") && /does not exist|schema cache/.test(error.message || "");
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -66,9 +85,15 @@ serve(async (req) => {
     const ticketId = body.ticket_id;
     let replyBody = (body.body || "").trim();
     const newStatus = body.status;
+    const requestKey = body.client_request_id ?? null;
 
     if (!ticketId) {
       return new Response(JSON.stringify({ error: "ticket_id is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (requestKey !== null && (typeof requestKey !== "string" || !REQUEST_ID.test(requestKey))) {
+      return new Response(JSON.stringify({ error: "client_request_id must be a UUID" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -101,6 +126,35 @@ serve(async (req) => {
       });
     }
 
+    // A retry of a reply that already landed: answer with that row and stop.
+    let keyed = !!requestKey;
+    const savedReply = async () => {
+      const { data, error } = await user.db.from("support_messages")
+        .select("id, author_id, attachment_path, attachment_paths")
+        .eq("ticket_id", ticketId).eq("client_request_id", requestKey).maybeSingle();
+      return { data, error };
+    };
+    const duplicateResponse = (row: { id: string; author_id: string; attachment_path: string | null; attachment_paths: string[] | null }) => {
+      if (row.author_id !== user.profileId) {
+        return new Response(JSON.stringify({ error: "That request ID belongs to another reply." }), {
+          status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ id: row.id, ok: true, duplicate: true, attachment_path: row.attachment_path ?? null, attachment_paths: row.attachment_paths ?? [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    };
+    if (keyed) {
+      const { data: prior, error: priorErr } = await savedReply();
+      if (priorErr) {
+        if (!missingKeyColumn(priorErr)) throw priorErr;
+        console.warn("reply-ticket: support_messages.client_request_id is missing; apply 20260925112000. Replying without retry protection.");
+        keyed = false;
+      } else if (prior) {
+        return duplicateResponse(prior);
+      }
+    }
+
     // The message id is minted here so the screenshot can be stored under it
     // before the row exists (see header).
     const messageId = crypto.randomUUID();
@@ -130,6 +184,7 @@ serve(async (req) => {
         is_admin_reply: isAdmin,
         ...(attachmentPath ? { attachment_path: attachmentPath } : {}),
         ...(attachmentPaths.length ? { attachment_paths: attachmentPaths } : {}),
+        ...(keyed ? { client_request_id: requestKey } : {}),
       })
       .select()
       .single();
@@ -138,6 +193,11 @@ serve(async (req) => {
       // Do not leave an orphan in the bucket for a reply that never landed.
       if (attachmentPaths.length) {
         try { await user.db.storage.from(ATTACHMENT_BUCKET).remove(attachmentPaths); } catch { /* best effort */ }
+      }
+      // Two copies of the same retry raced and the other one won.
+      if (keyed && msgErr.code === PG_UNIQUE_VIOLATION) {
+        const { data: winner } = await savedReply();
+        if (winner) return duplicateResponse(winner);
       }
       throw msgErr;
     }
