@@ -6,7 +6,7 @@ import Modal from "../../shared/Modal";
 import { useInputStyle } from "../../shared/useInputStyle";
 import { generateId, formatDate, nextInvoiceNumber } from "../../../utils/helpers";
 import { invoicePdfFile, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
-import { money } from "../../../utils/invoiceCover";
+import { money, INVOICE_COVER_ON_CLIPBOARD } from "../../../utils/invoiceCover";
 import { checkStorageQuota } from "../../../utils/storageQuota";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
 import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCategories";
@@ -193,6 +193,7 @@ function Expenses() {
       const dates = sel.map(e => e.date).sort();
       const inv = {
         number,
+        kind: "expenses", // the cover says travel expenses, not physician services
         physician: s.name ? `${s.name}${s.degreeType ? `, ${s.degreeType}` : ""}` : "Physician",
         npi: s.npi, email: s.email,
         facility: invAgency || "Locums agency", // BILL TO: the agency itself
@@ -214,9 +215,12 @@ function Expenses() {
         else missingDocs.push({ id: d.id, name: d.name || "receipt", reason: d.storagePath ? "unavailable" : "never_uploaded" });
       }
       const files = [pdf, ...attached];
-      // Cover letter to clipboard, flowing blurb as share text — otherwise
+      // The cover may only count receipts that ride in the same share.
+      const covering = (n) => ({ ...inv, receipts: n });
+      // Cover letter to clipboard, flowing blurb as share text: otherwise
       // iOS Mail sends the attachments with an empty body.
-      try { await navigator.clipboard.writeText(invoiceCoverEmail(inv)); } catch { /* clipboard unavailable */ }
+      let coverCopied = false;
+      try { await navigator.clipboard.writeText(invoiceCoverEmail(covering(attached.length))); coverCopied = true; } catch { /* clipboard unavailable */ }
       let how = null;
       let droppedForSize = 0;
       // The invoice itself must never be held hostage by its receipts. If the
@@ -225,7 +229,7 @@ function Expenses() {
       const trySend = async (bundle) => {
         if (!(navigator.canShare && navigator.canShare({ files: bundle }))) return null;
         try {
-          await navigator.share({ title: invoiceSubject(inv), text: invoiceCoverBlurb(inv), files: bundle });
+          await navigator.share({ title: invoiceSubject(inv), text: invoiceCoverBlurb(covering(bundle.length - 1)), files: bundle });
           return "share";
         } catch (err) {
           if (err?.name === "AbortError") return "abort";
@@ -236,6 +240,11 @@ function Expenses() {
       if (first === "abort") { setBusy(false); return; }   // cancelled: record nothing
       how = first;
       if (!how && attached.length) {
+        // The letter on the clipboard counted receipts this send will not
+        // carry. Replace it, and stop pointing at it if that fails.
+        if (coverCopied) {
+          try { await navigator.clipboard.writeText(invoiceCoverEmail(covering(0))); } catch { coverCopied = false; }
+        }
         const second = await trySend([pdf]);
         if (second === "abort") { setBusy(false); return; }
         if (second) { how = second; droppedForSize = attached.length; }
@@ -261,12 +270,14 @@ function Expenses() {
       });
       for (const e of sel) editItem("travelExpenses", { ...e, invoiceId });
       setInvOpen(false);
+      // Same clipboard notice as every other invoice send (ticket e8cc2a02).
+      const pasteNote = how === "share" && coverCopied ? ` ${INVOICE_COVER_ON_CLIPBOARD}` : "";
       if (droppedForSize) {
-        showNotice(`Invoice ${number} sent on its own. The ${droppedForSize} receipt${droppedForSize === 1 ? "" : "s"} were too large for one message, so send them from the expense, or resend from the Invoices tab.`);
+        showNotice(`Invoice ${number} sent on its own. The ${droppedForSize} receipt${droppedForSize === 1 ? "" : "s"} were too large for one message, so send them from the expense, or resend from the Invoices tab.${pasteNote}`);
       } else if (missingDocs.length) {
-        showNotice(`Invoice ${number} sent. ${missingReceiptMessage(missingDocs)} Resend from the Invoices tab once they are available.`);
+        showNotice(`Invoice ${number} sent. ${missingReceiptMessage(missingDocs)} Resend from the Invoices tab once they are available.${pasteNote}`);
       } else {
-        showNotice(`Invoice ${number} sent with ${attached.length} receipt${attached.length === 1 ? "" : "s"} attached. Tracked on the Invoices tab.`);
+        showNotice(`Invoice ${number} sent with ${attached.length} receipt${attached.length === 1 ? "" : "s"} attached. Tracked on the Invoices tab.${pasteNote}`);
       }
     } catch (err) {
       // Without this a throw looked exactly like a slow success: the button

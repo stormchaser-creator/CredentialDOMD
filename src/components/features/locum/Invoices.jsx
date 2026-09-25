@@ -10,7 +10,7 @@ import { resolveDocuments, missingReceiptMessage, billedReceiptDocs } from "../.
 import { downloadDocumentBlob } from "../../../lib/supabase";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
-import { money } from "../../../utils/invoiceCover";
+import { money, invoiceCoverNotice, INVOICE_COVER_ON_CLIPBOARD } from "../../../utils/invoiceCover";
 import { callPeriodsOf } from "../../../utils/dutyPay";
 
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
@@ -272,6 +272,8 @@ function Invoices({ onOpenContract }) {
       // A resend can follow a payment — the document and cover must say so
       paid: paidOf(inv), balance: balanceOf(inv),
       issuedDate: inv.sentAt?.slice(0, 10),
+      // An expense invoice's cover says travel expenses, not physician services
+      kind: inv.kind,
     };
     const subject = invoiceSubject(args);
     // Rebuild the document from the stored line items when we have them
@@ -282,14 +284,18 @@ function Invoices({ onOpenContract }) {
       const ready = resendReceipts.forId === inv.id ? resendReceipts : { files: [], missing: [] };
       if (format === "pdf" && ready.files.length) {
         const bundle = [invoicePdfFile(args), ...ready.files];
-        try { await navigator.clipboard.writeText(invoiceCoverEmail(args)); } catch { /* clipboard unavailable */ }
+        // The cover counts only the receipts riding in this share.
+        const withReceipts = { ...args, receipts: ready.files.length };
+        let coverCopied = false;
+        try { await navigator.clipboard.writeText(invoiceCoverEmail(withReceipts)); coverCopied = true; } catch { /* clipboard unavailable */ }
         if (navigator.canShare?.({ files: bundle })) {
           try {
-            await navigator.share({ title: subject, text: invoiceCoverBlurb(args), files: bundle });
+            await navigator.share({ title: subject, text: invoiceCoverBlurb(withReceipts), files: bundle });
+            const pasteNote = coverCopied ? ` ${INVOICE_COVER_ON_CLIPBOARD}` : "";
             setNotice(ready.missing.length
-              ? `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"}. ${missingReceiptMessage(ready.missing)}`
-              : `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"} attached.`);
-            setTimeout(() => setNotice(null), 9000);
+              ? `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"}. ${missingReceiptMessage(ready.missing)}${pasteNote}`
+              : `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"} attached.${pasteNote}`);
+            setTimeout(() => setNotice(null), 12000);
             return;
           } catch (err) {
             if (err?.name === "AbortError") return;
@@ -300,15 +306,18 @@ function Invoices({ onOpenContract }) {
         }
       }
       const how = await exportInvoice(args, format, subject, inv.text);
+      if (how === null) return; // share sheet cancelled
+      const coverMsg = invoiceCoverNotice(how);
       if (ready.missing.length || (ready.files.length && format === "pdf")) {
-        setNotice(ready.missing.length
+        setNotice((ready.missing.length
           ? `Invoice resent on its own. ${missingReceiptMessage(ready.missing)}`
-          : "Invoice resent on its own: the receipts were too large to send in the same message.");
-        setTimeout(() => setNotice(null), 9000);
+          : "Invoice resent on its own: the receipts were too large to send in the same message.")
+          + (coverMsg ? ` ${coverMsg}` : ""));
+        setTimeout(() => setNotice(null), 12000);
         return;
       }
-      if (how && how.includes("+cover")) {
-        setNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard: paste it over the intro if you want the long form.");
+      if (coverMsg) {
+        setNotice(coverMsg);
         setTimeout(() => setNotice(null), 9000);
       }
       return;

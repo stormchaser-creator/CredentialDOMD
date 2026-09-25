@@ -9,7 +9,10 @@ import { formatDate } from "./helpers.js";
  *
  * Channel facts this module is shaped by (verified on Eric's iPhone):
  *  - iOS Mail HTML-renders text shared with a file and drops every line
- *    break, CRLF included, so the blurb has to read as one paragraph.
+ *    break, CRLF included, so the blurb has to read as one paragraph. Only
+ *    "\n" and CRLF were ever tried; U+2028, U+2029 and <br> were not. The
+ *    in-app probe (src/utils/shareProbe.js, Help & FAQ for admins) settles
+ *    that; the blurb separator does not change until it has been run.
  *  - iOS Mail can promote the first line of shared text to the subject, so
  *    the blurb leads with a short subject-worthy line.
  *  - A mailto: body keeps its breaks only as CRLF (RFC 6068). mailtoHref does
@@ -71,9 +74,26 @@ export function invoiceSubject(inv = {}) {
   return `Invoice ${inv.number || ""}${who}${to}`.replace(/\s+/g, " ").trim();
 }
 
+// Expense invoices (kind "expenses", billed to the agency) are not physician
+// services and have no days of coverage; they say what they are.
+const isExpenses = (inv) => inv.kind === "expenses";
+
 const whereLine = (inv) => {
   const period = invoicePeriod(inv);
+  if (isExpenses(inv)) return `reimbursable travel expenses${period ? ` incurred ${period}` : ""}`;
   return `physician services at ${inv.facility || "your facility"}${inv.agency ? ` (via ${inv.agency})` : ""}${period ? `, covering ${period}` : ""}`;
+};
+
+const itemizes = (inv, lead) => (isExpenses(inv)
+  ? `${lead} lists each expense by date.`
+  : `${lead} itemizes each day of coverage and the work performed under the terms of our agreement.`);
+
+// Only a count of receipts that actually ride in this send may claim an
+// attachment; an agency was once told receipts were attached that never were.
+const receiptsLine = (inv) => {
+  const n = Math.max(0, Math.floor(Number(inv.receipts) || 0));
+  if (!isExpenses(inv) || !n) return "";
+  return n === 1 ? "The receipt is attached." : `${n} receipts are attached.`;
 };
 
 const signature = (inv) => [inv.physician || "", inv.npi ? `NPI ${inv.npi}` : "", inv.email || ""].filter(Boolean);
@@ -100,14 +120,18 @@ export function invoiceCoverBlurb(inv = {}, { attached = true } = {}) {
   const contact = sig.slice(1).join(", ");
   const thanks = `Thank you, ${sig[0] || "the physician"}${contact ? ` (${contact})` : ""}.`;
   const period = invoicePeriod(inv);
-  const coverageSentence = period
-    ? `${attached ? "The attached invoice" : "The invoice below"} covers ${period}.`
-    : `${attached ? "The attached invoice is ready for review." : "The invoice is below."}`;
+  const which = attached ? "The attached invoice" : "The invoice below";
+  const coverageSentence = isExpenses(inv)
+    ? `${which} covers ${whereLine(inv)}.`
+    : period
+      ? `${which} covers ${period}.`
+      : `${attached ? "The attached invoice is ready for review." : "The invoice is below."}`;
+  const receipts = receiptsLine(inv);
   // Trailing space after the lead: if Mail strips the newlines the lead and
   // the paragraph still read as two sentences.
   return `${invoiceSubject(inv)}. \n\n`
     + `${coverageSentence} ${moneyText} `
-    + "It itemizes each day of coverage and the work performed under the terms of our agreement. "
+    + `${itemizes(inv, "It")} ${receipts ? `${receipts} ` : ""}`
     + `Please reach out with any questions. ${thanks}`;
 }
 
@@ -125,12 +149,41 @@ export function invoiceCoverEmail(inv = {}, { attached = true } = {}) {
     : pay.settled
       ? [`Invoice total: ${money(pay.total)}`, "Paid in full. No balance is due."]
       : [`Total due: ${money(pay.total)}`];
+  const receipts = receiptsLine(inv);
   const paras = [
     "Hello,",
     `${attached ? "Attached" : "Below"} is invoice ${inv.number || ""} for ${whereLine(inv)}.`,
     moneyLines.join("\n"),
-    "The invoice itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out with any questions.",
+    `${itemizes(inv, "The invoice")} ${receipts ? `${receipts} ` : ""}Please reach out with any questions.`,
     ["Thank you,", ...signature(inv)].join("\n"),
   ];
   return paras.join("\n\n");
+}
+
+/**
+ * The share body when NO file can ride along (the installed app on a device
+ * whose share sheet refuses files). Nothing is attached, so the recipient
+ * gets the cover letter and the itemized invoice itself, multi-line, instead
+ * of a one-paragraph blurb that promises an invoice "below" and a paste
+ * instruction meant for the sender (ticket 821d2f76).
+ * Callers only take this path when they hold the invoice text.
+ */
+export function invoiceTextOnlyShare(inv = {}, text = "") {
+  const invoice = normalizeInvoiceText(text).trim();
+  return [invoiceCoverEmail(inv, { attached: false }), invoice].filter(Boolean).join("\n\n");
+}
+
+/**
+ * What the SENDER is told after an invoice send, from the method string the
+ * send helpers return ("share+cover", "download+cover", "share-text", ...).
+ * The long cover letter only reaches the recipient if it is pasted, so every
+ * send site says where it is. null when there is nothing to say.
+ */
+export const INVOICE_COVER_ON_CLIPBOARD = "The full cover letter is on your clipboard: paste it over Mail's short intro if you want the long form.";
+export function invoiceCoverNotice(how) {
+  const h = String(how || "");
+  if (!h.includes("+cover") || h.startsWith("share-text")) return null;
+  if (h.startsWith("share")) return `Sent with a short intro that reads correctly in Mail. ${INVOICE_COVER_ON_CLIPBOARD}`;
+  if (h.startsWith("download")) return "The invoice file downloaded. The cover letter is on your clipboard, ready to paste into your email.";
+  return null;
 }
