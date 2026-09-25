@@ -171,9 +171,9 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         """)
         migration = (ROOT / 'supabase/migrations/20260924020000_admin_operations.sql').read_text()
         sql(migration); sql(migration)
-        # The 2026-09-25 follow-up applies on top, twice, and every check
+        # The 2026-09-25 follow-ups apply on top, twice each, and every check
         # below runs against the final definitions.
-        for name in ['20260925110000_admin_access_regrant_guard.sql']:
+        for name in ['20260925110000_admin_access_regrant_guard.sql', '20260925111000_admin_operations_followups.sql']:
             followup = (ROOT / 'supabase/migrations' / name).read_text()
             sql(followup); sql(followup)
         check('migration is rerunnable and creates no audit actions', sql('select count(*) from admin_operations_audit').stdout.strip() == '0')
@@ -206,7 +206,10 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         check('future errors excluded and existing history counted', report['errors']['in_period'] == 2 and sum(d['errors'] for d in report['daily']) == 2)
         check('ticket snapshot excludes archive and terminal statuses', {k:v for k,v in report['support'].items() if k != 'oldest_open_at'} == {'open':3,'urgent':1,'waiting_approval':1})
         check('oldest unresolved age has real timestamp', report['support']['oldest_open_at'] is not None)
-        check('pageview cutover avoids overlap and sums counters', sum(d['page_views'] for d in report['daily']) == 1221)
+        # Raw rows count through the counter's first day: the two never
+        # recorded the same load (the /api/pv beacon replaced the raw write).
+        check('pageview cutover counts legacy rows through the cutover day', sum(d['page_views'] for d in report['daily']) == 1222)
+        check('cutover day sums both sources', report['daily'][-1]['page_views'] == 1221 and report['daily'][-2]['page_views'] == 1)
         check('daily includes all created tickets independently of current status', sum(d['tickets'] for d in report['daily']) == 6)
         for days in [30,90]:
             r = value(f'admin_operations_report({days})')
@@ -281,6 +284,9 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         # The pre-existing definer self-claim still owns its write capability.
         check('self-claim RPC execute preserved', value("has_function_privilege('authenticated','public.claim_beta_access()','EXECUTE')") is True)
         check('access grant escape flag is restored after operation', role('select '+profile_call(3,'revoked')+";select coalesce(current_setting('credentialdomd.access_grant',true),'')='1'").stdout.strip().endswith('f'))
+        check('unlinked invitation removal names whose invitation it was', value(f"(select before_state->>'email' from admin_operations_audit where id='{receipt['audit_id']}')") == 'remove@example.invalid'
+              and value(f"(select before_state ?& array['name','lead_id','invited_by','invited_at','invite_sent_at'] from admin_operations_audit where id='{receipt['audit_id']}')") is True)
+
         # "Back to pending" never leaves a claimable invitation (2026-09-25).
         # Reproduces the finding: pause, back to pending, then the member's own
         # claim_beta_access() used to return 'active' with no audit row.
@@ -314,6 +320,31 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         approved = value(profile_call(14, 'active'))
         check('only an audited Approve restores access and its invitation', approved['profile']['access_status'] == 'active' and invite_state(1014)['status'] == 'active'
               and value(f"(select action from admin_operations_audit where id='{approved['audit_id']}')") == 'profile_access')
+
+        # Attention counts behind the tab labels and the Overview cards.
+        sql(f"""update profiles set admin_inbox_seen_at=now()-interval '1 hour',admin_errors_seen_at=now()-interval '1 day' where id='{pid(1)}';
+          insert into admin_messages(id,sender_id,recipient_id) values('{pid(2001)}','{pid(1)}','{pid(2)}'),('{pid(2002)}','{pid(1)}',null),('{pid(2003)}','{pid(1)}','{pid(2)}');
+          insert into admin_message_replies(message_id,user_id,author_id,is_admin_reply,created_at) values
+            ('{pid(2001)}','{pid(2)}','{pid(2)}',false,now()),('{pid(2001)}','{pid(2)}','{pid(2)}',false,now()-interval '3 hours'),
+            ('{pid(2002)}','{pid(2)}','{pid(2)}',false,now()-interval '2 hours'),('{pid(2003)}','{pid(2)}','{pid(1)}',true,now());
+          insert into early_access_leads(email,waitlist) values(' Person2@Example.invalid ',true),('waiting@example.invalid',true),
+            ('person4@example.invalid',true),('guide@example.invalid',false);
+          insert into field_proposals(status) values('pending'),('pending'),('approved'),('dismissed');""")
+        attention = value('admin_attention_counts()')
+        check('attention counts unread replies, new errors, waiting leads and pending fields', attention == {'unread_replies': 1, 'new_errors_since_seen': 2, 'waitlist_waiting': 2, 'fields_pending': 2})
+        check('a seen stamp the client just wrote clears the unread counts', value("admin_attention_counts(now()+interval '2 days',now()+interval '2 days')") == {'unread_replies': 0, 'new_errors_since_seen': 0, 'waitlist_waiting': 2, 'fields_pending': 2})
+        check('an older client stamp never re-opens counts the profile marked seen', value("admin_attention_counts(now()-interval '30 days',now()-interval '30 days')") == attention)
+        check('report carries the same attention block and stays schema 1', value('admin_operations_report(7)')['attention'] == attention and value('admin_operations_report(7)')['schema_version'] == 1)
+        for who, subject in [('anon', ''), ('authenticated', 'user_Admin2')]:
+            check(f'{who}:{subject or "anonymous"} cannot read attention counts', role('select admin_attention_counts()', who, subject, False).returncode != 0)
+        check('attention snapshot is internal only', value("has_function_privilege('authenticated','public.admin_attention_snapshot(uuid,timestamptz,timestamptz)','EXECUTE')") is False)
+
+        # Traffic drill-down: one row per day, raw rows through the cutover day.
+        # PostgREST sessions run in UTC, which is how the view dates raw rows.
+        sql('grant select on page_views,page_visits to authenticated')
+        visits = json.loads(role("set local timezone='UTC';select jsonb_agg(v order by v.day desc) from admin_visits_daily v").stdout.strip())
+        check('visits view counts the cutover day from both sources in one row', len({v['day'] for v in visits}) == len(visits) and visits[0]['visits'] == 1221 and visits[1]['visits'] == 1)
+        check('visits view stays admin only', value("(select count(*) from admin_visits_daily)", subject='user_Admin2') == 0)
 
         print(json.dumps({'passed':len(checks),'checks':checks},indent=2))
     finally:

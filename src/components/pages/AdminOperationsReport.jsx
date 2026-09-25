@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabase";
 import { ADMIN_REPORT_DAYS, ADMIN_REPORT_FRESH_MS, ADMIN_REPORT_DEFINITIONS, adminReportCsv, adminReportErrorMessage, formatReportTimestamp, normalizeAdminReport } from "../../utils/adminOperationsReport";
 
 const emptySnapshot = () => ({ report: null, status: "loading", error: "", expiresAt: 0 });
+const TAB_NAMES = { users: "accounts", signups: "traffic history", errors: "errors", tickets: "tickets", messages: "messages", waitlist: "waitlist", fields: "field proposals" };
 const number = value => value.toLocaleString("en-US");
 
 export default function AdminOperationsReport({ T = {}, onNavigate }) {
@@ -69,6 +70,13 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
     { label: "Account profiles", value: report.accounts.total, detail: ADMIN_REPORT_DEFINITIONS.accounts, tab: "users" },
     { label: "Active account profiles", value: report.accounts.active, detail: ADMIN_REPORT_DEFINITIONS.active, tab: "users", filters: { access: "active" } },
     { label: "Retained error reports", value: report.errors.in_period, detail: ADMIN_REPORT_DEFINITIONS.errors, tab: "errors" },
+    // Present once the database update that restores these counts is applied.
+    ...(report.attention ? [
+      { label: "Unread message replies", value: report.attention.unread_replies, detail: ADMIN_REPORT_DEFINITIONS.unread_replies, tab: "messages" },
+      { label: "New error reports", value: report.attention.new_errors_since_seen, detail: ADMIN_REPORT_DEFINITIONS.new_errors, tab: "errors" },
+      { label: "Waiting on the waitlist", value: report.attention.waitlist_waiting, detail: ADMIN_REPORT_DEFINITIONS.waitlist_waiting, tab: "waitlist" },
+      { label: "Fields awaiting review", value: report.attention.fields_pending, detail: ADMIN_REPORT_DEFINITIONS.fields_pending, tab: "fields" },
+    ] : []),
   ] : [];
 
   return <section aria-label="Administrative operations report" style={{ color: T.text, fontSize: 14, lineHeight: 1.5 }}>
@@ -99,7 +107,7 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
           <h4 style={{ margin: 0, fontSize: 14 }}>{metric.label}</h4>
           <div style={{ fontSize: 30, fontWeight: 800, margin: "4px 0" }}>{number(metric.value)}</div>
           <p style={{ color: T.textMuted, fontSize: 12, margin: "0 0 12px" }}>{metric.detail}</p>
-          {onNavigate && <button type="button" onClick={() => onNavigate(metric.tab, metric.filters)} style={{ ...button, fontSize: 12 }}>Open {metric.tab === "users" ? "accounts" : metric.tab === "signups" ? "traffic history" : metric.tab === "errors" ? "errors" : "tickets"}</button>}
+          {onNavigate && <button type="button" onClick={() => onNavigate(metric.tab, metric.filters)} style={{ ...button, fontSize: 12 }}>Open {TAB_NAMES[metric.tab]}</button>}
         </article>)}
       </div>
       <p style={{ fontSize: 13 }}>Oldest open ticket: {report.support.oldest_open_at ? `created ${formatReportTimestamp(report.support.oldest_open_at)}` : "No open tickets in this snapshot."}</p>

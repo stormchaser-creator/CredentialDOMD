@@ -3,7 +3,7 @@ import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
-import { ADMIN_SOURCES, ADMIN_TAB_SOURCES, readAdminSource, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
+import { ADMIN_SOURCES, ADMIN_TAB_SOURCES, readAdminSource, readAdminAttention, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
 import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
@@ -258,6 +258,23 @@ function AdminDashboardContent() {
     return () => { cancelled = true; };
   }, [isAdmin, reloadKey, tab, rowLimits]);
 
+  // Counts for the tab labels: unread physician replies, new error reports,
+  // people waiting on the waitlist and field proposals to review. Read on
+  // mount and whenever a tab is opened, without loading any list, so a reply
+  // to a direct message shows up here before its thread is opened.
+  const [attention, setAttention] = useState(null);
+  const messagesSeenAt = data?.settings?.adminInboxSeenAt || null;
+  const errorsSeenAt = data?.settings?.adminErrorsSeenAt || null;
+  // The stamp from before Messages was opened, so the rows that brought a new
+  // reply can still be marked after opening the tab moves the stamp to now.
+  const [repliesSince, setRepliesSince] = useState(null);
+  useEffect(() => {
+    if (!isAdmin || !supabase) return;
+    let cancelled = false;
+    readAdminAttention(supabase, { messagesSeenAt, errorsSeenAt }).then(result => { if (!cancelled) setAttention(result); });
+    return () => { cancelled = true; };
+  }, [isAdmin, reloadKey, messagesSeenAt, errorsSeenAt]);
+
   if (!isAdmin) {
     return (
       <div style={{ textAlign: "center", padding: "60px 20px" }}>
@@ -270,15 +287,27 @@ function AdminDashboardContent() {
   }
 
   const hasSectionData = (ADMIN_TAB_SOURCES[tab] || []).every(key => coverage[key]?.rows && !coverage[key]?.error);
-  const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); setTab(nextTab); };
+  // Opening a panel reads again (every number here used to age for the whole
+  // app session), and opening Messages or Errors marks them seen.
+  const openTab = (id) => {
+    setTab(id);
+    setReloadKey((k) => k + 1);
+    if (id === "messages") { setRepliesSince(messagesSeenAt || ""); updateSettings({ adminInboxSeenAt: new Date().toISOString() }); }
+    if (id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
+  };
+  const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(nextTab); };
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = tickets.filter(t => t.archived_at);
   const TABS = [
     { id: "reports", label: "Overview & reports" },
-    { id: "tickets", label: "Tickets" }, { id: "messages", label: "Messages" },
-    { id: "users", label: "Accounts" }, { id: "errors", label: "Errors" },
-    { id: "signups", label: "Traffic history" }, { id: "waitlist", label: "Waitlist" },
-    { id: "fields", label: "Fields" }, { id: "ai", label: "AI" },
+    { id: "tickets", label: "Tickets" },
+    { id: "messages", label: attention?.unread_replies > 0 ? `Messages (${attention.unread_replies})` : "Messages" },
+    { id: "users", label: "Accounts" },
+    { id: "errors", label: attention?.new_errors_since_seen > 0 ? `Errors (${attention.new_errors_since_seen})` : "Errors" },
+    { id: "signups", label: "Traffic history" },
+    { id: "waitlist", label: attention ? `Waitlist (${attention.waitlist_waiting})` : "Waitlist" },
+    { id: "fields", label: attention?.fields_pending > 0 ? `Fields (${attention.fields_pending} pending)` : "Fields" },
+    { id: "ai", label: "AI" },
     { id: "audit", label: "Control history" },
   ];
 
@@ -297,14 +326,7 @@ function AdminDashboardContent() {
           <button
             key={t.id}
             aria-current={tab === t.id ? "page" : undefined}
-            onClick={() => {
-              setTab(t.id);
-              // Opening a panel reads again. Every number here aged for the
-              // whole app session before this.
-              setReloadKey((k) => k + 1);
-              if (t.id === "messages") updateSettings({ adminInboxSeenAt: new Date().toISOString() });
-              if (t.id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
-            }}
+            onClick={() => openTab(t.id)}
             style={{
               flex: "0 0 auto", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 8, border: "none",
               backgroundColor: tab === t.id ? T.card : "transparent",
@@ -369,7 +391,7 @@ function AdminDashboardContent() {
         </>
       )}
       {tab === "messages" && (!loading || hasSectionData) && !error && (
-        <MessagesPanel messages={messages} setMessages={setMessages} users={users} myProfileId={userIdRef.current} T={T} />
+        <MessagesPanel messages={messages} setMessages={setMessages} users={users} myProfileId={userIdRef.current} repliesSince={repliesSince} T={T} />
       )}
       {tab === "signups"  && (!loading || hasSectionData) && !error && (
         <>
@@ -1371,7 +1393,7 @@ function AiPanel({ users, ownKey, T }) {
  * Broadcast replies fan out into one thread per physician (admin_message_
  * reply_threads) so nobody sees anyone else's reply.
  */
-function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
+function MessagesPanel({ messages, setMessages, users, myProfileId, repliesSince, T }) {
   const [composeOpen, setComposeOpen] = useState(false);
   const [recipient, setRecipient] = useState(""); // "" = broadcast
   const [subject, setSubject] = useState("");
@@ -1471,7 +1493,13 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
               onKeyDown={(ev) => { if (ev.key === "Enter") openDetail(m); }}
               style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{m.subject || "(no subject)"}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>
+                  {m.subject || "(no subject)"}
+                  {/* repliesSince: "" means never opened before, so every physician reply is new. */}
+                  {repliesSince !== null && m.last_physician_reply_at && (!repliesSince || new Date(m.last_physician_reply_at) > new Date(repliesSince)) && (
+                    <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, color: "#fff", backgroundColor: "#7c3aed" }}>NEW REPLY</span>
+                  )}
+                </span>
                 <span style={{
                   fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 10, flexShrink: 0,
                   color: m.recipient_id ? T.accent : "#fff",

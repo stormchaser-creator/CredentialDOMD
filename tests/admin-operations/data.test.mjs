@@ -77,3 +77,14 @@ test('invitation receipts must identify the requested target and resulting state
   }
   await assert.rejects(submitAdminControl({rpc:async()=>({data:{audit_id:receipt.audit_id,duplicate:false}})}, {...invite,action:'remove'},'Synthetic removal','key'),/matching audited change/);
 });
+test('attention counts pass the seen stamps along and fail quietly to no counts', async () => {
+  const { readAdminAttention } = await import('../../src/utils/adminData.js');
+  const calls = [];
+  const counts = { unread_replies: 1, new_errors_since_seen: 0, waitlist_waiting: 4, fields_pending: 2 };
+  const client = response => ({ async rpc(name, args) { calls.push({ name, args }); if (response instanceof Error) throw response; return response; } });
+  assert.deepEqual(await readAdminAttention(client({ data: counts }), { messagesSeenAt: '2026-09-25T10:00:00Z', errorsSeenAt: null }), counts);
+  assert.deepEqual(calls[0], { name: 'admin_attention_counts', args: { p_messages_seen_at: '2026-09-25T10:00:00Z', p_errors_seen_at: null } });
+  for (const response of [{ error: { code: 'PGRST202' } }, { data: { unread_replies: 1 } }, { data: null }, new Error('offline')]) {
+    assert.equal(await readAdminAttention(client(response)), null);
+  }
+});

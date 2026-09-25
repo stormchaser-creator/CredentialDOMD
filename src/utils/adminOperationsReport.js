@@ -11,7 +11,24 @@ export const ADMIN_REPORT_DEFINITIONS = Object.freeze({
   page_views: "Recorded page-load events in the selected window. Repeated visits count again; this is not a unique visitor count.",
   tickets: "Tickets created in the selected window, including tickets later resolved or archived.",
   errors: "Retained client error reports in the selected window. Reports are pruned after 7 days and can be cleared by administrators; older days are incomplete. Zero does not prove that no errors occurred.",
+  unread_replies: "Your messages with a physician reply newer than the last time you opened Messages.",
+  new_errors: "Retained error reports newer than the last time you opened Errors.",
+  waitlist_waiting: "Waitlist signups whose email has no active account yet. Guide-only requests are not counted.",
+  fields_pending: "Fields Vera proposed that are waiting for your approve or dismiss.",
 });
+
+const ATTENTION_KEYS = ["unread_replies", "new_errors_since_seen", "waitlist_waiting", "fields_pending"];
+
+/** The attention counts behind the tab labels and Overview cards, or null when absent or malformed. */
+export function normalizeAdminAttention(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const result = {};
+  for (const key of ATTENTION_KEYS) {
+    if (!Number.isSafeInteger(input[key]) || input[key] < 0) return null;
+    result[key] = input[key];
+  }
+  return result;
+}
 
 const invalidReport = () => new Error("The reporting service returned an incomplete report. Refresh to try again; counts are unavailable until a valid report is received.");
 const count = value => {
@@ -36,6 +53,11 @@ export function normalizeAdminReport(input, expectedDays) {
   const accounts = { total: count(input.accounts?.total), active: count(input.accounts?.active), new_in_period: count(input.accounts?.new_in_period) };
   const support = { open: count(input.support?.open), urgent: count(input.support?.urgent), waiting_approval: count(input.support?.waiting_approval), oldest_open_at: input.support?.oldest_open_at === null ? null : timestamp(input.support?.oldest_open_at) };
   const errors = { in_period: count(input.errors?.in_period) };
+  // Additive and optional within schema 1: a server without the attention
+  // block still yields a complete report; a malformed block does not.
+  // (null is the normalized form of "absent", so a report can be re-checked.)
+  const attention = input.attention == null ? null : normalizeAdminAttention(input.attention);
+  if (input.attention != null && !attention) throw invalidReport();
   if (accounts.active > accounts.total || support.urgent > support.open || support.waiting_approval > support.open
     || (support.open === 0) !== (support.oldest_open_at === null)
     || (support.oldest_open_at && Date.parse(support.oldest_open_at) > Date.parse(generated_at))) throw invalidReport();
@@ -48,7 +70,7 @@ export function normalizeAdminReport(input, expectedDays) {
   });
   if (daily.reduce((sum, row) => sum + row.signups, 0) !== accounts.new_in_period
     || daily.reduce((sum, row) => sum + row.errors, 0) !== errors.in_period) throw invalidReport();
-  return { schema_version: 1, generated_at, period_start, period_end, days: expectedDays, accounts, support, errors, daily };
+  return { schema_version: 1, generated_at, period_start, period_end, days: expectedDays, accounts, support, errors, attention, daily };
 }
 
 export function adminReportErrorMessage(error) {
@@ -89,6 +111,12 @@ export function adminReportCsv(input, exportedAt = new Date().toISOString()) {
   add("Snapshot", "Tickets awaiting approval", report.support.waiting_approval, ADMIN_REPORT_DEFINITIONS.approval);
   add("Snapshot", "Oldest open ticket created at", report.support.oldest_open_at ?? "None", ADMIN_REPORT_DEFINITIONS.open);
   add("Window", "Retained error reports", report.errors.in_period, ADMIN_REPORT_DEFINITIONS.errors);
+  if (report.attention) {
+    add("Attention", "Unread message replies", report.attention.unread_replies, ADMIN_REPORT_DEFINITIONS.unread_replies);
+    add("Attention", "New error reports since last opened", report.attention.new_errors_since_seen, ADMIN_REPORT_DEFINITIONS.new_errors);
+    add("Attention", "Waiting on the waitlist", report.attention.waitlist_waiting, ADMIN_REPORT_DEFINITIONS.waitlist_waiting);
+    add("Attention", "Field proposals awaiting review", report.attention.fields_pending, ADMIN_REPORT_DEFINITIONS.fields_pending);
+  }
   for (const row of report.daily) {
     add("Daily", "New signup profiles", row.signups, ADMIN_REPORT_DEFINITIONS.signups, row.day);
     add("Daily", "Recorded page loads", row.page_views, ADMIN_REPORT_DEFINITIONS.page_views, row.day);

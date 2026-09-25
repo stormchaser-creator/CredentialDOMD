@@ -1,3 +1,5 @@
+import { normalizeAdminAttention } from './adminOperationsReport.js';
+
 /** Scoped admin reads. Each list has an explicit coverage count, never a business KPI. */
 export const ADMIN_SOURCES = {
   tickets: { table: 'admin_tickets_open', label: 'Tickets', order: 'updated_at', size: 200 },
@@ -60,4 +62,21 @@ export function filterAdminUsers(rows, { query = '', access = 'all', showEmpty =
   return rows.filter(row => (showEmpty || !!(row.email || row.name || row.npi || row.last_seen_at))
     && (!needle || [row.name, row.email, row.npi, row.primary_state].some(value => String(value || '').toLocaleLowerCase().includes(needle)))
     && (access === 'all' || row.access_status === access));
+}
+
+/**
+ * The tab-label counts (unread replies, new errors, waiting leads, pending
+ * fields) without loading any list. The seen stamps the client just wrote are
+ * passed along so a tab opened a moment ago does not read as unread while
+ * that settings write syncs; the server uses the later of the two. Null when
+ * the server cannot answer (for example before its database update), in which
+ * case the labels simply show no count.
+ */
+export async function readAdminAttention(client, { messagesSeenAt = null, errorsSeenAt = null } = {}) {
+  try {
+    const { data, error } = await client.rpc('admin_attention_counts', { p_messages_seen_at: messagesSeenAt, p_errors_seen_at: errorsSeenAt });
+    return error ? null : normalizeAdminAttention(data);
+  } catch {
+    return null;
+  }
 }
