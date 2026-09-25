@@ -9,19 +9,32 @@
  *     More > Settings > Email and opened the link sent to it), or
  *     profiles.verified_email, which only the Clerk webhook writes. The typed
  *     profiles.email is not a match and no longer routes anything. Every
- *     PDF / image attachment is copied into the `documents` Storage bucket at
- *     <auth_user_id>/<doc id> and a `documents` row is written with
- *     type = "cme-certificate-inbox" and no linked_to, so the app shows it under
- *     "From your inbox, not filed yet" with File-with-AI / link actions. The
- *     sender gets a confirmation. An unknown sender gets one short reply
- *     explaining how to register the address (rate-limited, never to bounces or
- *     auto-submitted mail).
+ *     PDF / image / office attachment is copied into the `documents` Storage
+ *     bucket at <auth_user_id>/<doc id> and a `documents` row is written with
+ *     type = "cme-certificate-inbox" and no linked_to. Each one is then READ
+ *     with the app's own scanner prompt on the shared Gemini key and FILED
+ *     where the app would file it (see "Filing" below); one that cannot be
+ *     filed stays under "From your inbox, not filed yet" with File-with-AI /
+ *     link actions. The sender gets a confirmation that says where each file
+ *     went. An unknown sender gets one short reply explaining how to register
+ *     the address (rate-limited, never to bounces or auto-submitted mail).
  *
- *   docs@ | requests@ | packets@credentialdomd.com   Document requests.
+ *   docs@ | requests@ | packets@credentialdomd.com   Documents and requests.
+ *     Same sender matching and authentication as cme@. The email is first
+ *     read for what it is FOR (_shared/intakeIntent.mjs):
+ *       "delivery"  a document forwarded to keep (an approval letter, a
+ *                   renewed card). Every attachment is stored with
+ *                   type = "email-inbox", read and filed as below, and the
+ *                   physician is told where each went. No document_requests
+ *                   row, no acknowledgement to anyone.
+ *       "both"      a document AND an ask. The finished documents are filed
+ *                   as a delivery; attachments named like a form stay with
+ *                   the request; then the request flow below runs.
+ *       "request"   everything below, unchanged. An email with no attachment
+ *                   is always a request.
  *     A credentialer asked the physician for documents; the physician forwards
  *     that email here from a mailbox the account has proved it can read, and
- *     that forward is the last thing they type. Same sender matching and
- *     authentication as cme@.
+ *     that forward is the last thing they type.
  *     The ORIGINAL requester (From:), subject and body are parsed out of the
  *     forwarded text (Gmail / Outlook / Apple Mail header blocks) and a
  *     `document_requests` row is written; PDF / image attachments (the
@@ -78,6 +91,26 @@
  *     forwarded to FORWARD_TO with reply_to set to the original sender, so a
  *     plain reply from Eric's inbox goes back to the physician.
  *
+ * Filing (cme@ and docs@ deliveries). Each kept attachment that Gemini can
+ * read (PDF, JPEG, PNG, WebP, HEIC) is scanned with the app's own prompt and
+ * validator (src/utils/scannerCore.js, copied to _shared/app/), with the
+ * physician's degree and category names as the app sends them, on
+ * app_secrets.gemini_shared_key when the account is active or an admin (the
+ * rule ai-proxy applies). Every call writes one ai_usage row the way ai-proxy
+ * does. _shared/intakeFiling.mjs turns the result into writes: the scan type
+ * picks the section, only real columns become columns and the rest goes to
+ * custom_fields past the identifier gate, an existing record of the same
+ * credential is added to (empty fields filled, expiration moved only
+ * forward) rather than duplicated, an "other" document goes into the
+ * physician's own category (found or created with origin "uploader"), and
+ * the document is linked as "<section>:<record id>" under a readable name. A
+ * receipt, a CV or anything unreadable stays in the inbox and the reply says
+ * so; a file that reads as a patient record is deleted, as the app does on
+ * upload. A failure on one attachment leaves that one unfiled and the rest
+ * carry on. A file already in Documents (same name and size, or same bytes)
+ * is not stored twice: filed, it is reported as already filed; unfiled, it
+ * is filed now.
+ *
  * Why a webhook and not the payload: Resend's email.received event carries only
  * metadata (from, to, subject, message_id, attachment names). Body and files
  * are fetched from the Receiving API:
@@ -120,6 +153,16 @@ import { buildProposal, catalogueFromRows } from "../_shared/requestPacket.ts";
 // confirmation subject); the bare name would have resolved to that string
 // at the ack's call site and thrown.
 import { ackAllowed, ackText, authEvidence, physicianSummaryText, replySubject as replySubjectFor, senderAuthFailure, senderPositivelyAuthenticated, type AuthEvidence, type Proposal } from "../_shared/requestFlow.ts";
+// What an email is for (a request, a document to keep, or both) and where a
+// kept document goes. Both pure and node-tested; the scanner prompt and its
+// validator are the app's own, copied under _shared/app/ by
+// scripts/sync-shared-app-modules.mjs so the two can never read a file
+// differently.
+import { classifyIntent, attachmentRole } from "../_shared/intakeIntent.mjs";
+import { planFiling, filingTarget, scannableMime, unfiledLine, filingReplyText, sectionScope, plain as plainText, EMAIL_INBOX_DOC_TYPE, SECTION_TABLE } from "../_shared/intakeFiling.mjs";
+import { scanRequestBody, validateResponse, parseModelJson, SCAN_IMAGE_TEXT, scanPdfText } from "../_shared/app/utils/scannerCore.js";
+import { GEMINI_MODEL } from "../_shared/app/utils/geminiModel.js";
+import { meterUsage } from "../_shared/aiPricing.ts";
 // The routing decision and the rules that hand a mailbox to an account are two
 // halves of one property: a mailbox routes mail only to the account that proved
 // it can read it. They live in one file so they cannot drift apart, and that
@@ -145,12 +188,15 @@ const FROM_RELAY = `CredentialDOMD Inbox <${FROM_ADDR}>`;
 const APP_URL = "https://credentialdomd.com/app/";
 const INBOX_DOC_TYPE = "cme-certificate-inbox";
 const REQUEST_DOC_TYPE = "request-attachment-inbox";
+// A document forwarded to docs@ to keep, until it is filed. Filing sets
+// linked_to and puts the MIME type back in `type`, as the app's leaveInbox does.
+const EMAIL_DOC_TYPE = EMAIL_INBOX_DOC_TYPE;
 // Documents that arrived by email and are not yet the physician's own
 // filed record. Kept out of the packet matcher's catalogue: the requester's
 // checklist is stored before the proposal is built, and the CV rule matches
 // any unlinked file by name, so "Provider_CV_Request_Form.pdf" was offered
 // straight back to the credentialer who attached it, as the physician's CV.
-const INBOX_DOC_TYPES = new Set([INBOX_DOC_TYPE, REQUEST_DOC_TYPE]);
+const INBOX_DOC_TYPES = new Set([INBOX_DOC_TYPE, REQUEST_DOC_TYPE, EMAIL_DOC_TYPE]);
 const STORAGE_BUCKET = "documents";
 const MAX_REQUEST_BODY_CHARS = 20_000;   // document_requests.body_text
 
@@ -179,6 +225,21 @@ const MAX_TOTAL_BYTES = 20 * 1024 * 1024;  // raw; base64 stays under Resend's 4
 const MIN_INLINE_IMAGE_BYTES = 40 * 1024;  // inline images under this are signature logos, not certificates
 const MAX_BODY_CHARS = 200_000;
 const MAX_CONTACTS_PER_EMAIL = 25;       // a multi-select share, not a mailing list
+
+// Reading a kept attachment. The shared Gemini key is app_secrets
+// gemini_shared_key, the model is the app's own constant, and every call
+// writes one ai_usage row exactly as ai-proxy does. One call may take
+// SCAN_TIMEOUT_MS; all of one email's calls together may take SCAN_BUDGET_MS,
+// so ten attachments cannot run the function past its wall-clock limit (a
+// file the budget does not reach is kept, unfiled, and the reply says so).
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/";
+const GEMINI_SECRET_NAME = "gemini_shared_key";
+const SCAN_TIMEOUT_MS = 45_000;
+const SCAN_BUDGET_MS = 100_000;
+const SCAN_CONCURRENCY = 3;
+// Same-size files compared byte for byte to find a duplicate that was renamed
+// when it was filed. More candidates than this is not a duplicate check any more.
+const MAX_CONTENT_COMPARES = 3;
 
 // ─── Env / clients ────────────────────────────────────────────────────────────
 
@@ -390,6 +451,11 @@ function guessMime(filename: string, fallback: string): string {
   const map: Record<string, string> = {
     pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
     webp: "image/webp", heic: "image/heic", heif: "image/heif", tif: "image/tiff", tiff: "image/tiff", bmp: "image/bmp",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    csv: "text/csv", txt: "text/plain", rtf: "application/rtf",
   };
   return map[ext] ?? fallback;
 }
@@ -419,8 +485,9 @@ async function listAttachments(emailId: string): Promise<ReceivedAttachment[]> {
 async function downloadAttachments(
   emailId: string,
   accept: (a: ReceivedAttachment) => boolean,
+  listed?: ReceivedAttachment[],
 ): Promise<{ files: Downloaded[]; skipped: number; total: number }> {
-  const all = await listAttachments(emailId);
+  const all = listed ?? await listAttachments(emailId);
   const wanted = all.filter(accept);
   const files: Downloaded[] = [];
   let skipped = 0;
@@ -629,8 +696,8 @@ async function intakeRefusal(profile: MatchedProfile | null, ledgerId: string, r
   return json({ ok: true, route, result: access.error });
 }
 
-async function assertIntakeWrite(profile: MatchedProfile) {
-  const access = await accessWriteDecision(db, profile.id, profile.auth_user_id, "credential");
+async function assertIntakeWrite(profile: MatchedProfile, scope: "credential" | "practice" = "credential") {
+  const access = await accessWriteDecision(db, profile.id, profile.auth_user_id, scope);
   if (!access.allowed) throw new Error(access.error);
 }
 
@@ -761,26 +828,112 @@ function acceptCertificateLike(a: ReceivedAttachment): boolean {
   return true;
 }
 
+// The Word, Excel, CSV, text and RTF files the app's own upload accepts
+// (src/utils/officeText.js UPLOAD_ACCEPT). They are kept and left for File
+// with AI in the app, which can read them; the server cannot.
+const OFFICE_EXT = /\.(docx?|xlsx?|csv|txt|rtf)$/i;
+const OFFICE_TYPES = new Set([
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv", "application/csv", "text/plain", "application/rtf", "text/rtf",
+]);
+
+/**
+ * Everything a physician could mean to keep: the certificate-like files above
+ * plus the office documents the app accepts. A forwarded file is never
+ * refused for its format when the app itself would take it; a calendar
+ * invite, a signature (.p7s) or an archive still is.
+ */
+function acceptKeepable(a: ReceivedAttachment): boolean {
+  if (acceptCertificateLike(a)) return true;
+  const name = safeFilename(a.filename, "");
+  const ct = (a.content_type ?? "").toLowerCase();
+  if ((a.content_disposition ?? "").toLowerCase() === "inline" && !name) return false;
+  return OFFICE_EXT.test(name) || OFFICE_TYPES.has(ct);
+}
+
+/**
+ * The sentence for attachments that were not kept at all (an archive, an
+ * attached .eml, a calendar invite), so a file is never dropped without the
+ * physician hearing about it. Inline images and S/MIME signatures are mail
+ * furniture, not documents, and are not mentioned.
+ */
+function notKeptNote(listed: ReceivedAttachment[]): string {
+  const names = listed
+    .filter((a) => !acceptKeepable(a))
+    .filter((a) => (a.content_disposition ?? "").toLowerCase() !== "inline")
+    .map((a) => safeFilename(a.filename, ""))
+    .filter((n) => n && !/\.(p7s|p7m|p7c)$/i.test(n));
+  if (!names.length) return "";
+  const list = names.slice(0, 5).join(", ") + (names.length > 5 ? `, and ${names.length - 5} more` : "");
+  return `Not kept: ${list}. Only PDFs, photos and Word, Excel or text files are saved; forward the document itself as one of those.`;
+}
+
+/** A documents row this user already has, as the dedupe reads it. */
+interface ExistingDoc {
+  id: string;
+  name: string;
+  size_bytes: number | null;
+  linked_to: string | null;
+  type: string | null;
+  mime_type: string | null;
+  storage_path: string | null;
+}
+
+/** One attachment after storeAsDocuments: the row it now is, new or already there. */
+interface StoredItem {
+  file: Downloaded;
+  docId: string;
+  existing: ExistingDoc | null;   // set when the file was already in Documents
+}
+
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.byteLength === b.byteLength && a.every((x, i) => x === b[i]);
+
 /**
  * Copy downloaded files into the physician's Documents (Storage + documents
- * row with the given type, no linked_to). Skips a file this user already has
- * (same name and size), same rule as the app.
+ * row with the given type, no linked_to). A file this user already has is not
+ * stored again: same name and size, the app's rule, or, since email filing
+ * renames a document to what it is, the same size and the same bytes. The
+ * row it matched comes back in `items` so a delivery can still file it (a
+ * letter forwarded before filing existed sits unfiled in the inbox until it
+ * is sent again).
  */
 async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], docType: string) {
-  const have = new Set<string>();
+  const known: ExistingDoc[] = [];
   if (files.length > 0) {
+    const sizes = [...new Set(files.map((f) => f.bytes.byteLength))];
     const { data: existingDocs } = await db.from("documents")
-      .select("name, size_bytes").eq("user_id", profile.id).in("name", files.map((f) => f.filename));
-    for (const d of (existingDocs ?? []) as { name: string; size_bytes: number | null }[]) have.add(`${d.name}|${d.size_bytes ?? ""}`);
+      .select("id, name, size_bytes, linked_to, type, mime_type, storage_path").eq("user_id", profile.id).in("size_bytes", sizes);
+    known.push(...((existingDocs ?? []) as ExistingDoc[]));
   }
+  // Files stored earlier in this same email, compared from memory.
+  const fresh: { bytes: Uint8Array; row: ExistingDoc }[] = [];
+
+  const findDuplicate = async (f: Downloaded): Promise<ExistingDoc | null> => {
+    const len = f.bytes.byteLength;
+    const byName = known.find((d) => d.name === f.filename && d.size_bytes === len);
+    if (byName) return byName;
+    const sameNow = fresh.find((x) => sameBytes(x.bytes, f.bytes));
+    if (sameNow) return sameNow.row;
+    const candidates = known.filter((d) => d.size_bytes === len && d.storage_path).slice(0, MAX_CONTENT_COMPARES);
+    for (const c of candidates) {
+      try {
+        const { data } = await db.storage.from(STORAGE_BUCKET).download(String(c.storage_path));
+        if (data && sameBytes(new Uint8Array(await data.arrayBuffer()), f.bytes)) return c;
+      } catch { /* unreadable: not a proven duplicate */ }
+    }
+    return null;
+  };
 
   const now = new Date().toISOString();
   const docIds: string[] = [];
+  const items: StoredItem[] = [];
   let stored = 0;
   let duplicates = 0;
   let failed = 0;
   for (const f of files) {
-    if (have.has(`${f.filename}|${f.bytes.byteLength}`)) { duplicates++; continue; }
+    const dup = await findDuplicate(f);
+    if (dup) { duplicates++; items.push({ file: f, docId: dup.id, existing: dup }); continue; }
     const docId = crypto.randomUUID();
     const path = `${profile.auth_user_id}/${docId}`; // app: documentStoragePath(docId) = <clerk sub>/<doc id>
     await assertIntakeWrite(profile);
@@ -810,11 +963,260 @@ async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], do
       failed++;
       continue;
     }
-    have.add(`${f.filename}|${f.bytes.byteLength}`);
+    const row: ExistingDoc = { id: docId, name: f.filename, size_bytes: f.bytes.byteLength, linked_to: null, type: docType, mime_type: f.content_type, storage_path: path };
+    known.push(row);
+    fresh.push({ bytes: f.bytes, row });
     docIds.push(docId);
+    items.push({ file: f, docId, existing: null });
     stored++;
   }
-  return { stored, duplicates, failed, docIds };
+  return { stored, duplicates, failed, docIds, items };
+}
+
+// ─── Reading and filing a kept attachment ─────────────────────────────────────
+
+/** What the scanner is told about this physician, and whether it may run on the shared key. */
+interface ScanContext {
+  degree: string;           // "DO" | "MD" | "" as the app passes it
+  categoryNames: string[];  // live custom categories, so a second badge files where the first went
+  key: string;              // the shared Gemini key, or "" when it may not be used
+  why: string;              // why the key is "" (for the ledger), else ""
+  deadline: number;         // epoch ms after which no new scan starts
+}
+
+/**
+ * The shared key is ai-proxy's, and so is the rule for using it: an active
+ * account or an admin. Anything else still has its files kept, unfiled, with
+ * File with AI waiting in the app.
+ */
+async function scanContext(profile: MatchedProfile): Promise<ScanContext> {
+  const deadline = Date.now() + SCAN_BUDGET_MS;
+  const [prof, admin, cats, secret] = await Promise.all([
+    db.from("profiles").select("degree_type, access_status").eq("id", profile.id).maybeSingle(),
+    db.from("app_admins").select("profile_id").eq("profile_id", profile.id).maybeSingle(),
+    db.from("custom_categories").select("name, archived_at").eq("user_id", profile.id),
+    db.from("app_secrets").select("value").eq("name", GEMINI_SECRET_NAME).maybeSingle(),
+  ]);
+  const p = (prof.data ?? {}) as { degree_type?: string | null; access_status?: string | null };
+  const degree = ["DO", "MD"].includes(String(p.degree_type ?? "")) ? String(p.degree_type) : "";
+  const categoryNames = ((cats.data ?? []) as { name: string | null; archived_at: string | null }[])
+    .filter((c) => !c.archived_at && c.name).map((c) => String(c.name));
+  const active = p.access_status === "active" || Boolean(admin.data);
+  const key = String((secret.data as { value?: string } | null)?.value ?? "").trim();
+  if (!active) return { degree, categoryNames, key: "", why: "account not active", deadline };
+  if (!key) return { degree, categoryNames, key: "", why: "shared key not configured", deadline };
+  return { degree, categoryNames, key, why: "", deadline };
+}
+
+/** ai-proxy's prompt_chars: the text parts of the request, never the file. */
+function promptChars(body: unknown): number {
+  let n = 0;
+  const walk = (v: unknown, depth: number) => {
+    if (depth > 6 || v == null) return;
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    if (typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      if (typeof o.text === "string") n += o.text.length;
+      for (const k of ["contents", "parts", "systemInstruction", "system_instruction"]) {
+        if (k in o) walk(o[k], depth + 1);
+      }
+    }
+  };
+  walk(body, 0);
+  return Math.min(n, 2_000_000_000);
+}
+
+/** One ai_usage row, as ai-proxy writes it. A logging failure never stops the filing. */
+async function logAiUsage(profileId: string, row: Record<string, unknown>) {
+  try {
+    const { error } = await db.from("ai_usage").insert({ user_id: profileId, ...row });
+    if (error) console.error(`ai_usage insert failed: ${error.message}`);
+  } catch { /* ignore */ }
+}
+
+// A scan result is loosely typed JSON from the model, checked by validateResponse.
+// deno-lint-ignore no-explicit-any
+type Scan = any;
+
+/**
+ * Read one attachment with the app's scanner prompt and validator, on the
+ * shared key. Returns the validated result, or null with the reason. Never
+ * throws, and never logs a fetch error's text: it carries the URL, and the
+ * URL carries the key.
+ */
+async function scanAttachment(profileId: string, f: Downloaded, ctx: ScanContext): Promise<{ scan: Scan | null; why: string }> {
+  if (!ctx.key) return { scan: null, why: ctx.why || "no key" };
+  const mime = f.content_type === "image/jpg" ? "image/jpeg" : f.content_type;
+  if (!scannableMime(mime)) return { scan: null, why: `not readable here (${mime})` };
+  const remaining = ctx.deadline - Date.now();
+  if (remaining < 5_000) return { scan: null, why: "time budget spent" };
+
+  const parts = [
+    { inlineData: { mimeType: mime, data: encodeBase64(f.bytes) } },
+    { text: mime === "application/pdf" ? scanPdfText(ctx.degree) : SCAN_IMAGE_TEXT },
+  ];
+  const body = scanRequestBody({ degreeType: ctx.degree, categories: ctx.categoryNames, parts });
+  const path = `models/${GEMINI_MODEL}:generateContent`;
+  const chars = promptChars(body);
+  const startedAt = new Date();
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), Math.min(SCAN_TIMEOUT_MS, remaining));
+  let status: number | null = null;
+  let ok = false;
+  let text = "";
+  let type = "application/json";
+  try {
+    const r = await fetch(`${GEMINI_BASE}${path}?key=${encodeURIComponent(ctx.key)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: abort.signal,
+    });
+    status = r.status;
+    ok = r.ok;
+    type = r.headers.get("content-type") || "application/json";
+    text = await r.text();
+  } catch {
+    await logAiUsage(profileId, { path, ok: false, status, prompt_chars: chars, provider: "gemini", model: GEMINI_MODEL });
+    return { scan: null, why: abort.signal.aborted ? "scan timed out" : "AI service unreachable" };
+  } finally {
+    clearTimeout(timer);
+  }
+  let parsedBody: unknown = null;
+  if (/json/i.test(type)) { try { parsedBody = JSON.parse(text); } catch { parsedBody = null; } }
+  await logAiUsage(profileId, {
+    path, ok, status, prompt_chars: chars, provider: "gemini",
+    ...meterUsage("gemini", GEMINI_MODEL, parsedBody, startedAt),
+  });
+  if (!ok) return { scan: null, why: `AI service answered ${status}` };
+  try {
+    const result = validateResponse(parseModelJson(parsedBody));
+    return result ? { scan: result, why: "" } : { scan: null, why: "no document type in the reply" };
+  } catch (err) {
+    return { scan: null, why: err instanceof Error ? err.message.slice(0, 120) : "unreadable reply" };
+  }
+}
+
+/** What happened to one kept attachment, for the reply and the ledger. */
+interface FilingResult {
+  docId: string;
+  outcome: "created" | "updated" | "linked" | "unfiled" | "removed" | "already";
+  lines: string[];
+}
+
+/** Scan every item that needs it, a few at a time, in the order given. */
+async function scanAll(profileId: string, items: StoredItem[], ctx: ScanContext): Promise<{ scan: Scan | null; why: string }[]> {
+  const out: { scan: Scan | null; why: string }[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      const it = items[i];
+      out[i] = it.existing?.linked_to ? { scan: null, why: "already filed" } : await scanAttachment(profileId, it.file, ctx);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SCAN_CONCURRENCY, items.length) }, worker));
+  return out;
+}
+
+/**
+ * File each stored attachment where the app would: read it, pick the section,
+ * match an existing record or create one, link the document. One at a time,
+ * so two copies of the same credential in one email match instead of
+ * duplicating. A failure on one leaves THAT document unfiled in the inbox and
+ * the rest carry on; nothing is ever dropped except a file that reads as a
+ * patient record, which the app deletes on upload too.
+ */
+async function fileDocuments(profile: MatchedProfile, items: StoredItem[], ctx: ScanContext): Promise<FilingResult[]> {
+  const scans = await scanAll(profile.id, items, ctx);
+  const results: FilingResult[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const name = plainText(it.file.filename, 120) || "document";
+    if (it.existing?.linked_to) {
+      results.push({ docId: it.docId, outcome: "already", lines: [`Already filed: ${plainText(it.existing.name, 120) || name}`] });
+      continue;
+    }
+    const { scan, why } = scans[i] ?? { scan: null, why: "not scanned" };
+    const mimeType = it.existing?.mime_type || it.file.content_type;
+    if (!scan) {
+      if (why) console.log(`inbound: ${it.docId} left unfiled: ${why}`);
+      results.push({ docId: it.docId, outcome: "unfiled", lines: [unfiledLine(name, "unknown", null)] });
+      continue;
+    }
+    try {
+      const target = filingTarget(scan);
+      let rows: unknown[] = [];
+      let categories: unknown[] = [];
+      if (target.kind === "section") {
+        const { data, error } = await db.from(SECTION_TABLE[target.section as keyof typeof SECTION_TABLE]).select("*").eq("user_id", profile.id);
+        if (error) throw new Error(`${target.section}: ${error.message}`);
+        rows = data ?? [];
+      } else if (target.kind === "custom") {
+        const [recs, cats] = await Promise.all([
+          db.from("custom_records").select("*").eq("user_id", profile.id),
+          db.from("custom_categories").select("*").eq("user_id", profile.id),
+        ]);
+        if (recs.error) throw new Error(`custom_records: ${recs.error.message}`);
+        if (cats.error) throw new Error(`custom_categories: ${cats.error.message}`);
+        rows = recs.data ?? [];
+        categories = cats.data ?? [];
+      }
+      const now = new Date().toISOString();
+      const plan = planFiling({
+        scan, docId: it.docId, fileName: it.file.filename, mimeType, userId: profile.id,
+        rows, categories, now, newId: () => crypto.randomUUID(),
+      });
+
+      if (plan.outcome === "removed" && it.existing) {
+        // Deleting is for a file this email just stored, as the app deletes an
+        // upload it has just screened. A document that was already in
+        // Documents is the physician's to judge, so it stays, unfiled.
+        results.push({ docId: it.docId, outcome: "unfiled", lines: [`Not filed: ${name} reads like a patient record. It was already in your Documents; open it in the app and delete it if it is one.`] });
+        continue;
+      }
+      if (plan.outcome === "removed") {
+        await assertIntakeWrite(profile);
+        const path = it.existing?.storage_path || `${profile.auth_user_id}/${it.docId}`;
+        const { error: rmDocErr } = await db.from("documents").delete().eq("id", it.docId).eq("user_id", profile.id);
+        if (rmDocErr) throw new Error(`documents delete: ${rmDocErr.message}`);
+        await db.storage.from(STORAGE_BUCKET).remove([path]).catch(() => {});
+        results.push({ docId: it.docId, outcome: "removed", lines: plan.lines });
+        continue;
+      }
+
+      // A contract is Practice scope, and so is the document once it is
+      // linked to one; everything else here is Credential.
+      const scope = sectionScope(plan.section) as "credential" | "practice";
+      for (const w of plan.writes) {
+        await assertIntakeWrite(profile, scope);
+        const { error } = w.op === "insert"
+          ? await db.from(w.table).insert(w.row)
+          : await db.from(w.table).update(w.row).eq("id", w.id).eq("user_id", profile.id);
+        if (error) throw new Error(`${w.table} ${w.op}: ${error.message}`);
+      }
+      if (plan.document) {
+        await assertIntakeWrite(profile, plan.document.linked_to ? scope : "credential");
+        // Only an unlinked row is touched, so a webhook retry that races a
+        // finished attempt, or a physician who filed it in the app meanwhile,
+        // never has a link moved underneath them.
+        const { error } = await db.from("documents")
+          .update({ ...plan.document, updated_at: now }).eq("id", it.docId).eq("user_id", profile.id).is("linked_to", null);
+        if (error) throw new Error(`documents link: ${error.message}`);
+      }
+      results.push({ docId: it.docId, outcome: plan.outcome as FilingResult["outcome"], lines: plan.lines });
+    } catch (err) {
+      console.error(`inbound: filing ${it.docId} failed: ${err instanceof Error ? err.message : String(err)}`);
+      results.push({ docId: it.docId, outcome: "unfiled", lines: [unfiledLine(name, "error", null)] });
+    }
+  }
+  return results;
+}
+
+/** "filed 1, added to 0, unfiled 0, removed 0" for the ledger detail. */
+function filingDetail(results: FilingResult[]): string {
+  const n = (o: FilingResult["outcome"][]) => results.filter((r) => o.includes(r.outcome)).length;
+  return `filed ${n(["created"])}, added to ${n(["updated", "linked"])}, already ${n(["already"])}, unfiled ${n(["unfiled"])}, removed ${n(["removed"])}`;
 }
 
 // ─── Route: cme@ ──────────────────────────────────────────────────────────────
@@ -851,33 +1253,37 @@ https://credentialdomd.com`);
     return json({ ok: true, route: "cme", result: "rejected_auth" });
   }
 
-  const { files, skipped, total } = await downloadAttachments(emailId, acceptCertificateLike);
-  const { stored, duplicates, failed } = await storeAsDocuments(profile, files, INBOX_DOC_TYPE);
+  // Every attachment is kept, then read and filed where the app would file
+  // it: a CME certificate becomes a CME entry, and anything else that rides
+  // along (a licence, a BLS card) goes to its own section instead of waiting
+  // in the inbox. What cannot be filed stays in the inbox and the reply says so.
+  const listed = await listAttachments(emailId);
+  const { files, skipped, total } = await downloadAttachments(emailId, acceptKeepable, listed);
+  const { stored, duplicates, failed, items } = await storeAsDocuments(profile, files, INBOX_DOC_TYPE);
+  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile)) : [];
 
   const notes: string[] = [];
-  if (duplicates > 0) notes.push(`${duplicates} file${duplicates === 1 ? " was" : "s were"} already in your Documents and skipped.`);
+  const notKept = notKeptNote(listed);
+  if (notKept) notes.push(notKept);
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed > 0) notes.push(`${failed} file${failed === 1 ? "" : "s"} could not be saved; forward that one again.`);
 
   let text: string;
-  if (stored > 0) {
-    text = `Got it: ${stored} certificate${stored === 1 ? "" : "s"} added to your Documents. Open the app, tap the certificate, and use File with AI (or link it to a CME entry) to count it.
-
-If what you sent was a full transcript rather than one certificate (a CME Passport or CE Broker export, say), use Import transcript on the CME page instead: it reads every activity as its own row for you to approve.
-
-If the app is already open, refresh it to see the new file.`;
-  } else if (total === 0) {
+  if (total === 0) {
     text = `No PDF or image attachment was found in that email, so nothing was added. Forward the certificate itself as an attachment (PDF or photo) to ${CME_LOCAL}@${INBOX_DOMAIN}.`;
+    if (notes.length) text += `\n\n${notes.join("\n")}`;
+    text += `\n\nOpen the app: ${APP_URL} (Documents)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
   } else {
-    text = `Nothing new was added to your Documents.`;
+    text = filingReplyText({
+      results, notes, appUrl: APP_URL,
+      tip: "If what you sent was a full transcript rather than one certificate (a CME Passport or CE Broker export, say), use Import transcript on the CME page instead: it reads every activity as its own row for you to approve.\n\nIf the app is already open, refresh it to see the new file.",
+    });
   }
-  if (notes.length) text += `\n\n${notes.join("\n")}`;
-  text += `\n\nOpen the app: ${APP_URL} (Documents)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
 
   const r = await sendEmail({ from: FROM_CME, to: [from], subject: replySubject, headers: replyHeaders, text });
-  const detail = `stored ${stored}, duplicates ${duplicates}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
-  await finish(ledgerId, failed > 0 && stored === 0 && total > 0 ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });
-  return json({ ok: true, route: "cme", stored, duplicates, skipped, failed, confirmed: r.ok });
+  const detail = `stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  await finish(ledgerId, failed > 0 && stored === 0 && duplicates === 0 && total > 0 ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });
+  return json({ ok: true, route: "cme", stored, duplicates, skipped, failed, filed: results.map((x) => x.outcome), confirmed: r.ok });
 }
 
 // ─── Route: contacts@ / refs@ ────────────────────────────────────────────────
@@ -1164,7 +1570,7 @@ type RecordRows = any[];
  * query itself failing is the one error worth throwing, since there is then
  * nothing to propose.
  */
-async function loadCatalogue(profileId: string) {
+async function loadCatalogue(profileId: string, exclude: Set<string> = new Set()) {
   const docsQ = db.from("documents").select("id, name, mime_type, type, linked_to, uploaded_at").eq("user_id", profileId);
   const recordQs = RECORD_TABLES.map(async (t): Promise<[string, RecordRows]> => {
     const { data, error } = await db.from(t.table).select(t.columns).eq("user_id", profileId);
@@ -1175,7 +1581,8 @@ async function loadCatalogue(profileId: string) {
   if (docsRes.error) throw new Error(`catalogue: documents: ${docsRes.error.message}`);
   const records: Record<string, RecordRows> = {};
   for (const [section, rows] of recordPairs) records[section] = rows;
-  const docs = ((docsRes.data ?? []) as { type?: string | null }[]).filter((d) => !INBOX_DOC_TYPES.has(String(d.type ?? "")));
+  const docs = ((docsRes.data ?? []) as { id?: string; type?: string | null }[])
+    .filter((d) => !INBOX_DOC_TYPES.has(String(d.type ?? "")) && !exclude.has(String(d.id ?? "")));
   return catalogueFromRows(docs as RecordRows, records);
 }
 
@@ -1323,9 +1730,43 @@ https://credentialdomd.com`);
   const requestSubject = parsed.subject ?? (stripFwdPrefix(subject) || null);
   const receivedAt = email.created_at || new Date().toISOString();
 
-  // The requester's checklist PDF, when one rides along (rare).
-  const { files, skipped } = await downloadAttachments(emailId, acceptCertificateLike);
-  const { stored, failed } = await storeAsDocuments(profile, files, REQUEST_DOC_TYPE);
+  // What is this email FOR? Until 2026-09-25 every docs@ forward was a
+  // request, so an approval letter forwarded to keep became a request whose
+  // only ask was the letter's signature line, the physician was asked what
+  // "Whitney, DO" meant, and the letter sat unfiled. A document to keep is
+  // now filed and nothing else happens: no request row, no acknowledgement
+  // (which would have thanked Sanford for a request Sanford never made). See
+  // _shared/intakeIntent.mjs for the rules.
+  const listed = await listAttachments(emailId);
+  const keepable = listed.filter(acceptKeepable);
+  const intent = classifyIntent({
+    subject: requestSubject ?? "",
+    body: parsed.body_text,
+    attachmentNames: keepable.map((a) => safeFilename(a.filename, "")),
+    attachmentCount: keepable.length,
+  });
+  console.log(`inbound ${emailId}: intent ${intent.intent} (${intent.reasons.join("; ")})`);
+  const { files, skipped } = await downloadAttachments(emailId, acceptKeepable, listed);
+
+  if (intent.intent === "delivery") {
+    return await deliverDocs(ledgerId, profile, from, files, skipped, notKeptNote(listed), replySubject, replyHeaders);
+  }
+
+  // "both": the finished documents are filed like a delivery; a form the
+  // requester wants filled in (named like an application, a checklist, an
+  // attestation) stays with the request, as every attachment did before.
+  let filing: FilingResult[] = [];
+  let requestFiles = files;
+  let deliveredFailed = 0;
+  if (intent.intent === "both") {
+    const keep = files.filter((f) => attachmentRole(f.filename) !== "form");
+    requestFiles = files.filter((f) => attachmentRole(f.filename) === "form");
+    const delivered = await storeAsDocuments(profile, keep, EMAIL_DOC_TYPE);
+    deliveredFailed = delivered.failed;
+    filing = delivered.items.length ? await fileDocuments(profile, delivered.items, await scanContext(profile)) : [];
+  }
+  // The requester's checklist, when one rides along (rare).
+  const { stored, failed } = await storeAsDocuments(profile, requestFiles, REQUEST_DOC_TYPE);
 
   await assertIntakeWrite(profile);
   const { data: reqRow, error: rErr } = await db.from("document_requests").insert({
@@ -1367,7 +1808,9 @@ https://credentialdomd.com`);
   // stays with proposal null and the app falls back to the hand-built reply.
   let proposal: Proposal | null = null;
   try {
-    const catalogue = await loadCatalogue(profile.id);
+    // A document that arrived in this same email is the requester's, not an
+    // answer to them: it is never proposed back.
+    const catalogue = await loadCatalogue(profile.id, new Set(filing.map((f) => f.docId)));
     proposal = buildProposal(
       { subject: requestSubject ?? "", body: requestBody, fromName: requesterName ?? "", fromAddr },
       catalogue,
@@ -1388,7 +1831,11 @@ https://credentialdomd.com`);
   const notes: string[] = [];
   if (stored > 0) notes.push(`${stored} attachment${stored === 1 ? "" : "s"} from the request ${stored === 1 ? "was" : "were"} saved to your Documents.`);
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
-  if (failed > 0) notes.push(`${failed} attachment${failed === 1 ? "" : "s"} could not be saved.`);
+  if (failed + deliveredFailed > 0) notes.push(`${failed + deliveredFailed} attachment${failed + deliveredFailed === 1 ? "" : "s"} could not be saved.`);
+  const notKept = notKeptNote(listed);
+  if (notKept) notes.push(notKept);
+  const filedLines = filing.flatMap((f) => f.lines);
+  if (filedLines.length) notes.push(`From the same email:\n${filedLines.join("\n")}`);
 
   let text = physicianSummaryText({ requesterName, requesterAddr: fromAddr, requesterFound: parsed.found, proposal, appUrl: APP_URL });
   if (notes.length) text += `\n\n${notes.join("\n")}`;
@@ -1464,13 +1911,36 @@ https://credentialdomd.com`);
   const proposalDetail = proposal ? `proposal ${proposal.docIds.length} doc(s), ${proposal.missing.length} missing` : "proposal none";
   // The ack outcome sits right after the id: finish() cuts detail at 500
   // characters and ledgerAcksSince counts on the words being there.
-  const detail = `request ${requestId}, ${ackDetail}, from ${fromAddr}${parsed.found ? "" : " (requester not found)"}, ${proposalDetail}, attachments ${stored}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  const detail = `request ${requestId}, ${ackDetail}, intent ${intent.intent}, from ${fromAddr}${parsed.found ? "" : " (requester not found)"}, ${proposalDetail}, attachments ${stored}${filing.length ? `, ${filingDetail(filing)}` : ""}, skipped ${skipped}, failed ${failed + deliveredFailed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
   await finish(ledgerId, "done", detail, { attachment_count: stored, profile_id: profile.id });
   return json({
-    ok: true, route: "docs", request_id: requestId, requester_found: parsed.found,
+    ok: true, route: "docs", intent: intent.intent, request_id: requestId, requester_found: parsed.found,
     proposed: proposal ? proposal.docIds.length : null, ack: ackDetail,
-    stored, skipped, failed, confirmed: r.ok,
+    stored, skipped, failed, filed: filing.map((f) => f.outcome), confirmed: r.ok,
   });
+}
+
+/**
+ * docs@ "delivery": a document forwarded to keep. Each attachment is stored,
+ * read and filed; the physician hears where each one went. No request row,
+ * no acknowledgement, nothing to anyone but the physician.
+ */
+async function deliverDocs(
+  ledgerId: string, profile: MatchedProfile, from: string, files: Downloaded[], skipped: number, notKept: string,
+  replySubject: string, replyHeaders: Record<string, string>,
+) {
+  const { stored, duplicates, failed, items } = await storeAsDocuments(profile, files, EMAIL_DOC_TYPE);
+  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile)) : [];
+  const notes: string[] = [];
+  if (notKept) notes.push(notKept);
+  if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
+  if (failed > 0) notes.push(`${failed} file${failed === 1 ? "" : "s"} could not be saved; forward the email again.`);
+  const text = filingReplyText({ results, notes, appUrl: APP_URL });
+  const r = await sendEmail({ from: FROM_DOCS, to: [from], subject: replySubject, headers: replyHeaders, text });
+  // Worded so "ack sent" can never appear here: ledgerAcksSince counts on it.
+  const detail = `delivery, stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  await finish(ledgerId, failed > 0 && stored === 0 && duplicates === 0 ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });
+  return json({ ok: true, route: "docs", intent: "delivery", stored, duplicates, skipped, failed, filed: results.map((x) => x.outcome), confirmed: r.ok });
 }
 
 // ─── Route: everything else -> relay to the owner ─────────────────────────────

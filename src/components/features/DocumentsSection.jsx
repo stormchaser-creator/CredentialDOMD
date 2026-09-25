@@ -15,7 +15,8 @@ import { screenDocument, phiWarningText } from "../../utils/phiGuard";
 import ScanReviewCard from "./ScanReviewCard";
 import CvImportReview from "./CvImportReview";
 import Modal from "../shared/Modal";
-import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
+import { CME_INBOX_ADDRESS, DOCS_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
+import { isReadableDoc } from "../../utils/docPrefill";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
 
@@ -469,7 +470,7 @@ function DocumentsSection() {
     if (doc) editItem("documents", { ...doc, ...(val ? leaveInbox(doc) : {}), linkedTo: val });
   };
 
-  // Emailed certificates first, everything else after.
+  // Emailed files that were not filed on arrival first, everything else after.
   const inboxDocs = data.documents.filter(isInboxDoc);
   const storedDocs = data.documents.filter(d => !isInboxDoc(d));
 
@@ -521,7 +522,7 @@ function DocumentsSection() {
         )}
         {!doc.linkedTo && (
           <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
-            {doc.data && (mime.startsWith("image/") || mime === "application/pdf") && (
+            {doc.data && isReadableDoc(doc) && (
               <button onClick={() => rescanDoc(doc)} disabled={scanning} style={{
                 flexShrink: 0, padding: "7px 12px", borderRadius: 8, border: "none",
                 backgroundColor: T.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
@@ -686,7 +687,7 @@ function DocumentsSection() {
             From your inbox, not filed yet ({inboxDocs.length})
           </div>
           <div style={{ fontSize: 13, color: T.textDim, marginBottom: 10, lineHeight: 1.45 }}>
-            Certificates you forwarded to {CME_INBOX_ADDRESS}. Use File with AI, or link one to a CME entry, so it counts.
+            Files you emailed to {DOCS_INBOX_ADDRESS} or {CME_INBOX_ADDRESS} that could not be filed on their own. Use File with AI, or link one to a record.
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {inboxDocs.map(doc => renderDoc(doc))}
@@ -695,7 +696,7 @@ function DocumentsSection() {
       )}
 
       {data.documents.length === 0 && scanQueue.length === 0 ? (
-        <EmptyState icon={"\ud83d\udcc1"} title="No documents" subtitle={`Upload, scan, or photograph your credentials and expense receipts. AI will read and file them automatically. CME certificates can also be forwarded to ${CME_INBOX_ADDRESS}.`} />
+        <EmptyState icon={"\ud83d\udcc1"} title="No documents" subtitle={`Upload, scan, or photograph your credentials and expense receipts. AI will read and file them automatically. You can also forward any credential document to ${DOCS_INBOX_ADDRESS}, and CME certificates to ${CME_INBOX_ADDRESS}.`} />
       ) : storedDocs.length > 0 && (
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
