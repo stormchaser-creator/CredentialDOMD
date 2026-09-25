@@ -19,7 +19,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
-import { remindable } from "../_shared/reminderRows.mjs";
+import { remindable, reminderLabel } from "../_shared/reminderRows.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -105,8 +105,7 @@ serve(async (req) => {
         // Historical, superseded, pending-confirmation and date-unknown
         // records never trigger a reminder (ticket 2c819309).
         if (!remindable(r)) continue;
-        const bits = [r.name, r.type && r.type !== r.name ? r.type : null, r.state].filter(Boolean);
-        items.push({ id: r.id, table: t.table, label: t.label, name: bits.join(" · ") || t.label, exp: r.expiration_date, days: dayDiff(r.expiration_date), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
+        items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
       }
     }
     if (!items.length) { results.push({ profile: p.id, sent: false, reason: "nothing due" }); continue; }

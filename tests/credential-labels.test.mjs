@@ -188,3 +188,16 @@ test('a privilege type the list lacks is shown as read, not blanked', () => {
   assert.match(html, /<option value="CO" selected="">CO<\/option>/);
   assert.doesNotMatch(html, /disabled=""/);
 });
+
+test('the reminder email names each DEA by type and state, never by the physician name', async () => {
+  const { reminderLabel, isPersonName: serverIsPersonName } = await import('../supabase/functions/_shared/reminderRows.mjs');
+  assert.deepEqual(DEA.map(d => reminderLabel(d, 'Licenses', PHYSICIAN)), [
+    'DEA Registration \u{B7} CO', 'DEA Registration \u{B7} CA', 'DEA ND \u{B7} DEA Registration \u{B7} ND',
+  ]);
+  assert.equal(reminderLabel({}, 'Licenses', PHYSICIAN), 'Licenses');
+  for (const name of ['RIVERA, JORDAN', 'Jordan Rivera', 'Jordan Alex Rivera DO', 'DEA ND', 'Skull Base Fellowship', '']) {
+    assert.equal(serverIsPersonName(name, PHYSICIAN), isPersonName(name, PHYSICIAN), `the edge copy agrees with the app on "${name}"`);
+  }
+  const fn = read('supabase/functions/send-reminders/index.ts');
+  assert.match(fn, /name: reminderLabel\(r, t\.label, p\.name\)/);
+});
