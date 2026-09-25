@@ -17,8 +17,10 @@
  *   education      education
  *   travel         travelDocs
  *   agreement      locumContracts     numbers coerced the way the app's save does
- *   other          customRecords      category found or created exactly as
- *                                     DocumentsSection's "other" branch does
+ *   other          customRecords      category found as DocumentsSection's
+ *                                     "other" branch does; created only when
+ *                                     its name is a plain heading (see
+ *                                     plainCategoryName), else unfiled
  *   receipt        (unfiled)          the app asks the physician to choose
  *                                     Expenses (and an agency) or Deductions,
  *                                     and that is not a guess to make for them
@@ -29,11 +31,16 @@
  * splitScanned, which withholds patient identifiers, SSNs, full birth dates and
  * account numbers. A record that is already on file (same licence number,
  * same facility, same policy, ...) is added to, never duplicated: empty fields
- * are filled, the expiration moves only forward (a renewal), and nothing else
- * is overwritten.
+ * are filled and nothing is overwritten. Two credentials whose numbers differ
+ * are never the same record, however much else they share (a second DEA, a
+ * renewed passport, a second board certification). An expiration already on
+ * the record is never moved by email: the reply names the date the file shows
+ * and the physician changes it in the app, because a misread date or a
+ * forged renewal that silently extends a licence switches off the reminder
+ * that stops it lapsing.
  */
 import { SECTION_FIELDS } from "./app/utils/sectionFields.js";
-import { findCategory, buildCategory, packRecord, normalizeRecord, toOtherExtracted, sanitizeText, identifierReason } from "./app/utils/customCategories.js";
+import { findCategory, buildCategory, packRecord, normalizeRecord, toOtherExtracted, sanitizeText, identifierReason, categoryKey } from "./app/utils/customCategories.js";
 import { splitScanned } from "./app/utils/scanSplit.js";
 import { OTHER_DOC_TYPE, CV_DOC_TYPE } from "./app/utils/scannerCore.js";
 import { RECEIPT_DOC_TYPE, normalizeReceipt } from "./app/utils/receiptScan.js";
@@ -158,7 +165,13 @@ const normNumber = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, ""
 const FACILITY_NOISE = new Set(["the", "inc", "llc", "llp", "pc", "pllc", "pa", "corp", "corporation", "co", "company", "ltd", "of", "and"]);
 const normFacility = (v) => normKey(v).split(" ").filter((t) => t && !FACILITY_NOISE.has(t)).join(" ");
 const same = (a, b, f = normKey) => { const x = f(a); return !!x && x === f(b); };
-const GENERIC_TYPES = new Set(["", "other", "certification", "certificate"]);
+// Both sides carry an identifying number and the numbers differ: two
+// credentials, whatever else they share.
+const numbersConflict = (a, b) => { const x = normNumber(a), y = normNumber(b); return !!x && !!y && x !== y; };
+// Types that name a kind of credential rather than one credential. Two board
+// certifications share "Board Certification (ABMS)" and are two records; the
+// name tells them apart.
+const GENERIC_TYPES = new Set(["", "other", "certification", "certificate", "board certification", "board certification abms", "board certification aoa"]);
 
 /** "2026-09-24" -> "09/24/2026". */
 export function usDate(iso) {
@@ -244,7 +257,13 @@ export function builtInFields(section, extracted) {
   return { placed, extras, withheld };
 }
 
-/** The record already on file that this scan is another copy (or a renewal) of, or null. */
+/**
+ * The record already on file that this scan is another copy of, or null.
+ * The first rule of each section is the identifying number; every fallback
+ * after it is refused when both sides carry a number and the numbers differ,
+ * so a second DEA, a renewed passport or a new malpractice policy becomes a
+ * record of its own instead of rewriting the old one.
+ */
 export function findExisting(section, fields, rows) {
   const f = fields || {};
   const list = (Array.isArray(rows) ? rows : []).filter((r) => r && typeof r === "object").map(toCamelRow);
@@ -252,22 +271,29 @@ export function findExisting(section, fields, rows) {
   switch (section) {
     case "licenses":
       return hit((r) => same(f.licenseNumber, r.licenseNumber, normNumber))
-        || hit((r) => same(f.type, r.type) && normKey(f.state) === normKey(r.state)
-          && (!GENERIC_TYPES.has(normKey(f.type)) || same(f.name, r.name)));
+        || hit((r) => !numbersConflict(f.licenseNumber, r.licenseNumber)
+          && same(f.type, r.type) && normKey(f.state) === normKey(r.state)
+          // A state tells two licences of one type apart. With no state on
+          // either side (a board certification, a BLS card), or a type that
+          // names a kind of credential, only the same name does.
+          && ((normKey(f.state) !== "" && !GENERIC_TYPES.has(normKey(f.type))) || same(f.name, r.name)));
     case "privileges":
       return hit((r) => same(f.facility, r.facility, normFacility));
     case "insurance":
       return hit((r) => same(f.policyNumber, r.policyNumber, normNumber))
-        || hit((r) => same(f.provider, r.provider, normFacility) && same(f.type, r.type));
+        || hit((r) => !numbersConflict(f.policyNumber, r.policyNumber)
+          && same(f.provider, r.provider, normFacility) && same(f.type, r.type));
     case "education":
       return hit((r) => same(f.type, r.type) && same(f.institution, r.institution, normFacility));
     case "cme":
-      return hit((r) => same(f.title, r.title) && same(f.date, r.date));
+      return hit((r) => !numbersConflict(f.certificateNumber, r.certificateNumber) && same(f.title, r.title) && same(f.date, r.date));
     case "healthRecords":
       return hit((r) => same(f.type, r.type) && same(f.dateAdministered, r.dateAdministered));
     case "travelDocs":
+      // A renewed passport always carries a new number: it is a new record,
+      // not the old one with a later date and a cancelled number.
       return hit((r) => same(f.number, r.number, normNumber))
-        || hit((r) => same(f.type, r.type) && same(f.provider, r.provider));
+        || hit((r) => !numbersConflict(f.number, r.number) && same(f.type, r.type) && same(f.provider, r.provider));
     case "locumContracts":
       return hit((r) => same(f.facility, r.facility, normFacility) && same(f.startDate, r.startDate));
     default:
@@ -276,14 +302,25 @@ export function findExisting(section, fields, rows) {
 }
 
 /**
- * Fill only what is empty on the record, and move the expiration forward
- * when the scan's is later. Returns the camelCase changes (possibly none) and
- * a few words on what happened.
+ * The sentence for a file whose expiration is later than the record's. The
+ * record's date is never moved by email (see the header): the physician is
+ * told what the file shows and changes it in the app.
+ */
+export function laterDateNote(fileDate, recordDate) {
+  return `This file shows an expiration of ${usDate(fileDate)}; your record shows ${usDate(recordDate)}. The date on your record was not changed: open the app to update it if the file is the newer one.`;
+}
+
+/**
+ * Fill only what is empty on the record. An expiration fills an empty one;
+ * an expiration already there is never moved, and a later one in the file
+ * comes back as `note` for the reply. Returns the camelCase changes
+ * (possibly none), a few words on what happened, and the note ("" if none).
  */
 export function fillEmpty(existing, placed, extras) {
   const ex = existing || {};
   const changes = {};
   const said = [];
+  let note = "";
   let filled = 0;
   for (const [k, v] of Object.entries(placed || {})) {
     if (k === "expirationDate") continue;
@@ -293,11 +330,9 @@ export function fillEmpty(existing, placed, extras) {
   }
   const next = placed?.expirationDate;
   if (validDate(next)) {
+    const was = String(ex.expirationDate ?? "").slice(0, 10);
     if (isBlank(ex.expirationDate)) { changes.expirationDate = next; filled++; }
-    else if (validDate(String(ex.expirationDate).slice(0, 10)) && next > String(ex.expirationDate).slice(0, 10)) {
-      changes.expirationDate = next;
-      said.push(`expiration moved to ${usDate(next)}`);
-    }
+    else if (validDate(was) && next > was) note = laterDateNote(next, was);
   }
   const current = ex.customFields && typeof ex.customFields === "object" && !Array.isArray(ex.customFields) ? ex.customFields : {};
   const added = Object.fromEntries(Object.entries(extras || {}).filter(([k]) => !Object.hasOwn(current, k)));
@@ -306,7 +341,7 @@ export function fillEmpty(existing, placed, extras) {
     filled += Object.keys(added).length;
   }
   if (filled) said.push(`filled ${filled} empty field${filled === 1 ? "" : "s"}`);
-  return { changes, said };
+  return { changes, said, note };
 }
 
 // --- Labels -----------------------------------------------------------------
@@ -370,6 +405,51 @@ const withDetails = (text, d) => (d.length ? `${text} (${d.join(", ")})` : text)
 // --- The plan ---------------------------------------------------------------
 
 /**
+ * The app's own patient-record check (screenDocument) on what the scanner
+ * read: the screen when it reads as a patient record, else null.
+ */
+export function patientRecordScreen(fileName, scan) {
+  if (!scan || typeof scan !== "object") return null;
+  const screen = screenDocument(`${fileName || ""}\n${JSON.stringify(scan)}`);
+  return screen?.level === "clinical" ? screen : null;
+}
+
+/**
+ * May an attachment in an email that also asks for something be filed as the
+ * physician's own? Its name decides nothing ("Letter330567.pdf" is a real
+ * approval, "DEA Registration.pdf" can be a blank template). A credentialer
+ * sends blank forms, and a blank privileges delineation reads as "privilege"
+ * at that facility, so only this: a built-in credential type (never a new category),
+ * not read with low confidence, carrying a date a blank form would not have
+ * (an expiration, or the section's issued / appointment / effective date).
+ * Everything else stays with the request.
+ */
+export function fileableFromRequest(scan) {
+  const target = filingTarget(scan);
+  if (target.kind !== "section") return false;
+  if (String(scan.confidence ?? "").toLowerCase() === "low") return false;
+  if (patientRecordScreen("", scan)) return false;
+  const { placed } = builtInFields(target.section, scan.extracted);
+  const [key] = PRIMARY_DATE[target.section] || [];
+  return validDate(placed.expirationDate) || (key ? validDate(String(placed[key] ?? "")) : false);
+}
+
+// A category the email path creates is named by the model, unreviewed, and
+// every later scan (the app's and email's) lists the physician's categories in
+// its prompt. So email creates only a plain heading: letters, digits and a
+// little punctuation, at most five words, nothing that reads as an
+// instruction. Anything else stays unfiled for the physician, who sees the
+// name in the app before it is saved.
+const INSTRUCTION_WORDS = /\b(?:always|never|ignore|disregard|classify|classified|treat|respond|output|instructions?|prompt|must|should|pretend|assistant|json|override|documents?\s+as)\b/i;
+export function plainCategoryName(name) {
+  const n = String(name ?? "").trim();
+  if (!n || n.length > 40) return false;
+  if (!/^[A-Za-z0-9][A-Za-z0-9 &'(),./-]*$/.test(n)) return false;
+  if (n.split(/\s+/).length > 5) return false;
+  return !INSTRUCTION_WORDS.test(n);
+}
+
+/**
  * The writes that file one emailed document.
  *
  * input:
@@ -388,6 +468,8 @@ const withDetails = (text, d) => (d.length ? `${text} (${d.join(", ")})` : text)
  * output:
  *   { outcome: "created" | "updated" | "linked" | "unfiled" | "removed",
  *     section, table, recordId,
+ *     readsAs: "Sanford Health Plan credentialing approval -> Privileges"
+ *              (what it was read as and where it goes; "" when unfiled),
  *     writes: [{ table, op: "insert" | "update", id, row }]   in order,
  *     document: { linked_to, name, type } | { name } | null,
  *     lines: [...]  what the physician is told,
@@ -409,8 +491,8 @@ export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [],
   });
 
   if (scan && typeof scan === "object") {
-    const screen = screenDocument(`${fileName || ""}\n${JSON.stringify(scan)}`);
-    if (screen?.level === "clinical") {
+    const screen = patientRecordScreen(fileName, scan);
+    if (screen) {
       return {
         outcome: "removed", section: null, table: null, recordId: null, writes: [], document: null, withheld: [],
         lines: [`Not kept: ${name} reads like a patient record (it contains ${screen.reasons.join(" and ")}). CredentialDOMD holds your credentials, not patient charts, so the file was deleted. Forward the credential itself instead.`],
@@ -440,7 +522,7 @@ export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [],
 
   const existing = findExisting(section, placed, rows);
   if (existing) {
-    const { changes, said } = fillEmpty(existing, placed, extras);
+    const { changes, said, note } = fillEmpty(existing, placed, extras);
     const writes = Object.keys(changes).length
       ? [{ table, op: "update", id: existing.id, row: { ...toSnakeRow(changes), updated_at: now } }]
       : [];
@@ -448,8 +530,9 @@ export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [],
     const what = said.length ? said.join(", ") : "the file is now attached to it";
     return {
       outcome: writes.length ? "updated" : "linked", section, table, recordId: existing.id, writes,
+      readsAs: `${joinParts(nameParts(section, merged), " ")} -> ${label}`,
       document: linkTo(existing.id),
-      lines: [`Added to an existing record: ${joinParts(nameParts(section, merged), " ")} -> ${label} (${what})`, ...withheldLine],
+      lines: [`Added to an existing record: ${joinParts(nameParts(section, merged), " ")} -> ${label} (${what})`, ...(note ? [note] : []), ...withheldLine],
       withheld,
     };
   }
@@ -467,7 +550,7 @@ export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [],
   };
   for (const [k, v] of Object.entries(REQUIRED_DEFAULTS[section] || {})) if (isBlank(record[k])) record[k] = v;
   return {
-    outcome: "created", section, table, recordId: id,
+    outcome: "created", section, table, recordId: id, readsAs: `${display} -> ${label}`,
     writes: [{ table, op: "insert", id, row: toSnakeRow(record) }],
     document: linkTo(id),
     lines: [withDetails(`Filed: ${display} -> ${label}`, details(section, placed)), ...withheldLine],
@@ -496,11 +579,15 @@ function planCustom({ scan, docId, fileName, mimeType, userId, rows, categories,
       lines.push(`Brought back your hidden category: ${plain(category.name, 60)}`);
     }
   } else {
+    // The suggested name is never echoed back when it is refused: it is
+    // model text, and the refusal is for text that should not be repeated.
+    const refused = () => ({ outcome: "unfiled", section: null, table: null, recordId: null, writes: [], document: null, withheld: [], reason: "category", lines: [unfiledLine(name, "category", scan)] });
+    if (!plainCategoryName(wanted)) return refused();
     let built;
     try {
       built = buildCategory({ name: wanted, icon: suggested.icon || "", fields: suggested.fields || [] }, { id: newId(), origin: "uploader", now });
     } catch {
-      return { outcome: "unfiled", section: null, table: null, recordId: null, writes: [], document: null, withheld: [], reason: "unknown", lines: [unfiledLine(name, "unknown", scan)] };
+      return refused();
     }
     category = built;
     writes.push({
@@ -516,8 +603,15 @@ function planCustom({ scan, docId, fileName, mimeType, userId, rows, categories,
   };
   const recs = (Array.isArray(rows) ? rows : []).filter((r) => r && typeof r === "object").map(toCamelRow).map(normalizeRecord).filter(Boolean);
   const { record: incoming, withheld } = packRecord(category, input, {});
+  // The same number is the same record. The same name is only when the
+  // numbers do not disagree and the name is not just the category's own
+  // (packRecord names a record after its category when the scan gave no
+  // name, so two hospitals' badges would both be "Hospital ID Badges").
+  const catKey = categoryKey(category.name);
   const existing = recs.find((r) => r.categoryId === category.id
-    && ((incoming.name && same(incoming.name, r.name)) || (incoming.number && same(incoming.number, r.number, normNumber))));
+    && ((incoming.number && same(incoming.number, r.number, normNumber))
+      || (incoming.name && same(incoming.name, r.name) && categoryKey(incoming.name) !== catKey
+        && !numbersConflict(incoming.number, r.number))));
   const catName = plain(category.name, 60);
   const withheldLine = withheldNote(withheld);
   const parts = [plain(incoming.name, 80) || catName, ""];
@@ -530,10 +624,11 @@ function planCustom({ scan, docId, fileName, mimeType, userId, rows, categories,
     for (const k of ["name", "issuer", "number", "issuedDate", "notes"]) {
       if (!isBlank(incoming[k]) && isBlank(existing[k])) { changes[k] = incoming[k]; filled++; }
     }
+    let note = "";
     if (validDate(incoming.expirationDate)) {
       const was = String(existing.expirationDate || "").slice(0, 10);
-      if (!validDate(was)) { changes.expirationDate = incoming.expirationDate; filled++; }
-      else if (incoming.expirationDate > was) { changes.expirationDate = incoming.expirationDate; said.push(`expiration moved to ${usDate(incoming.expirationDate)}`); }
+      if (isBlank(existing.expirationDate)) { changes.expirationDate = incoming.expirationDate; filled++; }
+      else if (validDate(was) && incoming.expirationDate > was) note = laterDateNote(incoming.expirationDate, was);
     }
     const addNew = (cur, inc) => Object.fromEntries(Object.entries(inc || {}).filter(([k, v]) => !isBlank(v) && !Object.hasOwn(cur || {}, k)));
     const fv = addNew(existing.fieldValues, incoming.fieldValues);
@@ -545,8 +640,9 @@ function planCustom({ scan, docId, fileName, mimeType, userId, rows, categories,
     writes.push({ table, op: "update", id: existing.id, row: { ...toSnakeRow(changes), updated_at: now } });
     return {
       outcome: "updated", section: "customRecords", table, recordId: existing.id, writes,
+      readsAs: `${plain(existing.name, 80) || catName} -> ${catName}`,
       document: linkTo(existing.id), withheld,
-      lines: [...lines, `Added to an existing record: ${plain(existing.name, 80) || catName} -> ${catName} (${said.length ? said.join(", ") : "the file is now attached to it"})`, ...withheldLine],
+      lines: [...lines, `Added to an existing record: ${plain(existing.name, 80) || catName} -> ${catName} (${said.length ? said.join(", ") : "the file is now attached to it"})`, ...(note ? [note] : []), ...withheldLine],
     };
   }
 
@@ -555,6 +651,7 @@ function planCustom({ scan, docId, fileName, mimeType, userId, rows, categories,
   writes.push({ table, op: "insert", id, row: toSnakeRow({ ...record, userId, favorite: false, createdAt: now, updatedAt: now }) });
   return {
     outcome: "created", section: "customRecords", table, recordId: id, writes,
+    readsAs: `${plain(record.name, 80) || catName} -> ${catName}`,
     document: linkTo(id), withheld,
     lines: [...lines, withDetails(`Filed: ${plain(record.name, 80) || catName} -> ${catName}`, details("customRecords", record)), ...withheldLine],
   };
@@ -566,8 +663,12 @@ function withheldNote(withheld) {
   return [`Left out on purpose: ${reasons.join(", ")}. CredentialDOMD does not keep patient identifiers, Social Security numbers, full birth dates or account numbers.`];
 }
 
-/** The one line for a file that stays in the inbox. */
-export function unfiledLine(name, reason, scan) {
+/**
+ * The one line for a file that stays in the inbox. readsAs (for an
+ * unverified forward) is what the scan made of it, so the physician still
+ * learns where it would go.
+ */
+export function unfiledLine(name, reason, scan, readsAs = "") {
   const tail = "(open the app > Documents to file it)";
   if (reason === "receipt") {
     const r = normalizeReceipt(scan?.extracted);
@@ -575,6 +676,8 @@ export function unfiledLine(name, reason, scan) {
     return `Saved, not filed yet: ${name}, a receipt${what ? ` ${what}` : ""} ${tail}. A receipt goes to Expenses or to Deductions, and that is your choice.`;
   }
   if (reason === "cv") return `Saved, not filed yet: ${name} looks like your CV ${tail}. File with AI reads it into your record.`;
+  if (reason === "category") return `Saved, not filed yet: ${name} fits none of your sections, and a new category is not created from email without you seeing its name ${tail}.`;
+  if (reason === "unverified") return `Saved, not filed yet: ${name}${readsAs ? `, which reads as ${readsAs}` : ""}. This message could not be verified as coming from you, so nothing in your records was added or changed ${tail}.`;
   return `Saved, not filed yet: ${name} ${tail}`;
 }
 

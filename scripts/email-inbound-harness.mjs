@@ -96,7 +96,12 @@ export function createDb() {
       from: () => ({
         upload: async (path, bytes) => { files.set(path, new Uint8Array(bytes)); return { data: { path }, error: null }; },
         download: async (path) => (files.has(path) ? { data: new Blob([files.get(path)]), error: null } : { data: null, error: { message: "missing" } }),
-        remove: async (paths) => { for (const p of paths) files.delete(p); return { data: null, error: null }; },
+        remove: async (paths) => {
+          const fail = globalThis.__inboundHarness.failRemove?.(paths);
+          if (fail) return { data: null, error: { message: fail } };
+          for (const p of paths) files.delete(p);
+          return { data: null, error: null };
+        },
       }),
     },
   };
@@ -111,6 +116,11 @@ export const harness = {
   gemini: [],               // request bodies sent to Gemini
   geminiReply: () => null,  // (body) => scan object, or { status, text }
   failInsert: null,
+  failRemove: null,         // (paths) => an error message to fail a Storage removal with
+  // The raw message's top-most Authentication-Results. The default is a
+  // DMARC pass for the physician's domain; a forward that merely fails to
+  // fail is "mx.resend.com; spf=pass smtp.mailfrom=attacker.example; dkim=none; dmarc=none".
+  rawAuth: "mx.resend.com; dmarc=pass header.from=elryx.com",
   access: { credential: true, practice: true },   // what the membership snapshot answers
 };
 globalThis.__inboundHarness = harness;
@@ -132,7 +142,7 @@ globalThis.fetch = async (input, init = {}) => {
     return a ? new Response(a.bytes) : new Response("gone", { status: 404 });
   }
   if (url.startsWith("https://raw.test/")) {
-    return new Response("Authentication-Results: mx.resend.com; dmarc=pass header.from=elryx.com\r\n\r\nbody");
+    return new Response(`Authentication-Results: ${harness.rawAuth}\r\n\r\nbody`);
   }
   if (url === `${RESEND}/emails`) {
     harness.sent.push(JSON.parse(init.body));
@@ -170,6 +180,8 @@ export function resetWorld() {
   harness.gemini.length = 0;
   harness.geminiReply = () => null;
   harness.failInsert = null;
+  harness.failRemove = null;
+  harness.rawAuth = "mx.resend.com; dmarc=pass header.from=elryx.com";
   harness.access = { credential: true, practice: true };
 }
 

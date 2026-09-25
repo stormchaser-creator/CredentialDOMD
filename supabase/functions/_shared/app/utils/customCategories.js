@@ -237,14 +237,29 @@ export function identifierReason(label, value) {
 }
 
 // ── Building a category ───────────────────────────────────────────────────
+// A category name and a field label are headings, but they are text a scan,
+// Vera or a person typed, and a name goes back into every later scan prompt.
+// So each is checked as a label AND as a value: "MRN 00481234" or
+// "123-45-6789" is an identifier wherever it appears, not a heading. For a
+// NAME, the document-number rule alone is let through when there is no
+// digit in it: "Driver's License" is a fair name for a kind of document,
+// and the number under it is what the record-level gate withholds.
+function headingReason(text, { name = false } = {}) {
+  const why = identifierReason(text, text);
+  if (name && why === "a driver's licence or passport number" && !/\d/.test(text)) return null;
+  return why;
+}
+
 export function buildCategory(input = {}, { id, now, origin } = {}) {
   const name = sanitizeText(input.name, LIMITS.name);
   if (!name) throw new Error("A category needs a name.");
+  const nameWhy = headingReason(name, { name: true });
+  if (nameWhy) throw new Error(`A category name cannot be ${nameWhy}. Name the kind of document instead.`);
   const taken = new Set();
   const fields = [];
   for (const raw of Array.isArray(input.fields) ? input.fields : []) {
     const label = sanitizeText(typeof raw === "string" ? raw : raw?.label, LIMITS.label);
-    if (!label || identifierReason(label, "")) continue;   // never define a field whose purpose is an identifier
+    if (!label || headingReason(label)) continue;   // never define a field whose purpose, or whose text, is an identifier
     const key = fieldKey(label, taken);
     if (!key) continue;
     taken.add(key);

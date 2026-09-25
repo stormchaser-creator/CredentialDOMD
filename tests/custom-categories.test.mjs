@@ -51,6 +51,22 @@ test("building a category: name required, keys unique, identifier fields never d
   assert.equal(many.fields.length, LIMITS.fields);
 });
 
+// Review of 2026-09-25: the name was never gated and a label was checked
+// only as a label, so "123-45-6789" survived as a field and a category named
+// "MRN 00481234" was created, then listed in every later scan prompt.
+test("a category name or field label that IS an identifier is refused, as label and as value", () => {
+  for (const name of ["123-45-6789", "MRN 00481234", "Patient MRN", "SSN", "DOB 3/14/61"]) {
+    assert.throws(() => buildCategory({ name }, { id: "X" }), /category name cannot be/, name);
+  }
+  const c = buildCategory({ name: "Dosimetry", fields: ["123-45-6789", "MRN 00481234", "Badge number", "Passport number"] }, { id: "D" });
+  assert.deepEqual(c.fields.map(f => f.label), ["Badge number"]);
+  // A kind of document is a fair name; only a number under it is an identifier.
+  for (const name of ["Driver's License", "Passport", "Patient Safety Committee", "Hospital ID Badges"]) {
+    assert.equal(buildCategory({ name }, { id: "Y" }).name, name);
+  }
+  assert.throws(() => buildCategory({ name: "Passport 500000001" }, { id: "Z" }), /category name cannot be/);
+});
+
 test("a packed record carries ONLY real columns, so the cloud never rejects it whole", () => {
   const { record } = packRecord(badges(), {
     name: "Penrose badge", issuer: "Penrose Hospital", number: "PX-1182",

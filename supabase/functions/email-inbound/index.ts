@@ -27,9 +27,11 @@
  *                   type = "email-inbox", read and filed as below, and the
  *                   physician is told where each went. No document_requests
  *                   row, no acknowledgement to anyone.
- *       "both"      a document AND an ask. The finished documents are filed
- *                   as a delivery; attachments named like a form stay with
- *                   the request; then the request flow below runs.
+ *       "both"      a document AND an ask. A file named like a form stays
+ *                   with the request; any other file is read and filed only
+ *                   when it is a built-in credential with a date
+ *                   (fileableFromRequest), and otherwise stays with the
+ *                   request as before; then the request flow below runs.
  *       "request"   everything below, unchanged. An email with no attachment
  *                   is always a request.
  *     A credentialer asked the physician for documents; the physician forwards
@@ -91,7 +93,14 @@
  *     forwarded to FORWARD_TO with reply_to set to the original sender, so a
  *     plain reply from Eric's inbox goes back to the physician.
  *
- * Filing (cme@ and docs@ deliveries). Each kept attachment that Gemini can
+ * Filing (cme@ and docs@ deliveries). Word, Excel, CSV, text and RTF files
+ * are read on the server first (_shared/officeText.mjs) and screened with the
+ * app's screenDocument before anything is stored, as the app screens them
+ * before upload; one that reads as a patient record, or cannot be read and so
+ * cannot be screened, is not stored and the reply names it. Writing to the
+ * physician's records needs the forward to be POSITIVELY authenticated (the
+ * acknowledgement's rule, mayFileFrom); a forward that only fails to fail has
+ * its files stored and scanned but left unfiled. Each kept attachment that Gemini can
  * read (PDF, JPEG, PNG, WebP, HEIC) is scanned with the app's own prompt and
  * validator (src/utils/scannerCore.js, copied to _shared/app/), with the
  * physician's degree and category names as the app sends them, on
@@ -100,12 +109,15 @@
  * does. _shared/intakeFiling.mjs turns the result into writes: the scan type
  * picks the section, only real columns become columns and the rest goes to
  * custom_fields past the identifier gate, an existing record of the same
- * credential is added to (empty fields filled, expiration moved only
- * forward) rather than duplicated, an "other" document goes into the
- * physician's own category (found or created with origin "uploader"), and
+ * credential is added to (empty fields filled; an expiration already there is
+ * never moved, the reply names the later date instead) rather than
+ * duplicated, a credential whose number differs is a new record, an "other"
+ * document goes into the physician's own category (found, or created with
+ * origin "uploader" when its name is a plain heading), and
  * the document is linked as "<section>:<record id>" under a readable name. A
  * receipt, a CV or anything unreadable stays in the inbox and the reply says
- * so; a file that reads as a patient record is deleted, as the app does on
+ * so; a file that reads as a patient record is deleted (Storage first, then
+ * the row, so a failed removal is never reported as done), as the app does on
  * upload. A failure on one attachment leaves that one unfiled and the rest
  * carry on. A file already in Documents (same name and size, or same bytes)
  * is not stored twice: filed, it is reported as already filed; unfiled, it
@@ -159,7 +171,11 @@ import { ackAllowed, ackText, authEvidence, physicianSummaryText, replySubject a
 // scripts/sync-shared-app-modules.mjs so the two can never read a file
 // differently.
 import { classifyIntent, attachmentRole } from "../_shared/intakeIntent.mjs";
-import { planFiling, filingTarget, scannableMime, unfiledLine, filingReplyText, sectionScope, plain as plainText, EMAIL_INBOX_DOC_TYPE, SECTION_TABLE } from "../_shared/intakeFiling.mjs";
+import { planFiling, filingTarget, scannableMime, unfiledLine, filingReplyText, sectionScope, plain as plainText, EMAIL_INBOX_DOC_TYPE, SECTION_TABLE, fileableFromRequest, patientRecordScreen } from "../_shared/intakeFiling.mjs";
+// Word, Excel, CSV, text and RTF attachments are read here and screened for
+// patient records BEFORE they are stored, as the app screens them before upload.
+import { officeText } from "../_shared/officeText.mjs";
+import { screenDocument } from "../_shared/app/utils/phiGuard.js";
 import { scanRequestBody, validateResponse, parseModelJson, SCAN_IMAGE_TEXT, scanPdfText } from "../_shared/app/utils/scannerCore.js";
 import { GEMINI_MODEL } from "../_shared/app/utils/geminiModel.js";
 import { meterUsage } from "../_shared/aiPricing.ts";
@@ -829,8 +845,10 @@ function acceptCertificateLike(a: ReceivedAttachment): boolean {
 }
 
 // The Word, Excel, CSV, text and RTF files the app's own upload accepts
-// (src/utils/officeText.js UPLOAD_ACCEPT). They are kept and left for File
-// with AI in the app, which can read them; the server cannot.
+// (src/utils/officeText.js UPLOAD_ACCEPT). Each is read and screened for
+// patient records before it is stored (screenOfficeFiles), then kept and
+// left for File with AI in the app. One that cannot be read cannot be
+// screened, so it is not stored.
 const OFFICE_EXT = /\.(docx?|xlsx?|csv|txt|rtf)$/i;
 const OFFICE_TYPES = new Set([
   "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -867,6 +885,51 @@ function notKeptNote(listed: ReceivedAttachment[]): string {
   if (!names.length) return "";
   const list = names.slice(0, 5).join(", ") + (names.length > 5 ? `, and ${names.length - 5} more` : "");
   return `Not kept: ${list}. Only PDFs, photos and Word, Excel or text files are saved; forward the document itself as one of those.`;
+}
+
+/**
+ * Screen the office files among `files` BEFORE anything is stored, the way the
+ * app screens an office file before upload: read its text on the server
+ * (_shared/officeText.mjs) and run the app's screenDocument. A file that
+ * reads as a patient record is not stored. A file that cannot be read (an
+ * old .doc or .xls, a damaged archive) cannot be screened, so it is not
+ * stored either. Both are named in `notes`, so nothing is dropped silently.
+ * PDFs and images pass through: they are screened once scanned (planFiling),
+ * as the app does, and deleted if they read as a patient record.
+ */
+async function screenOfficeFiles(files: Downloaded[]): Promise<{ keep: Downloaded[]; notes: string[] }> {
+  const keep: Downloaded[] = [];
+  const notes: string[] = [];
+  for (const f of files) {
+    const { kind, text } = await officeText(f.bytes, f.filename, f.content_type);
+    if (!kind) { keep.push(f); continue; }
+    const name = plainText(f.filename, 120) || "document";
+    if (text == null) {
+      notes.push(`Not kept: ${name} could not be read here, so it could not be checked for patient information. Save it as a PDF, .docx or .xlsx and forward it again.`);
+      continue;
+    }
+    const screen = screenDocument(`${f.filename}\n${text}`);
+    if (screen?.level === "clinical") {
+      notes.push(`Not kept: ${name} reads like a patient record (it contains ${screen.reasons.join(" and ")}). CredentialDOMD holds your credentials, not patient charts, so it was not saved.`);
+      continue;
+    }
+    keep.push(f);
+  }
+  return { keep, notes };
+}
+
+/**
+ * Remove one object from the documents bucket and say whether it went.
+ * supabase-js storage answers { error } rather than throwing, so a bare
+ * .catch() never saw a failure; "" means removed, else the reason.
+ */
+async function removeStored(path: string): Promise<string> {
+  try {
+    const { error } = await db.storage.from(STORAGE_BUCKET).remove([path]);
+    return error ? String(error.message || "storage remove failed") : "";
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
 }
 
 /** A documents row this user already has, as the dedupe reads it. */
@@ -959,7 +1022,10 @@ async function storeAsDocuments(profile: MatchedProfile, files: Downloaded[], do
     });
     if (dErr) {
       console.error(`documents insert failed for ${docId}: ${dErr.message}`);
-      await db.storage.from(STORAGE_BUCKET).remove([path]).catch(() => {});
+      // No row points at the object, so nothing in the app can ever delete
+      // it: a failed removal is logged with its path for a sweep.
+      const rmErr = await removeStored(path);
+      if (rmErr) console.error(`inbound: orphan storage object ${STORAGE_BUCKET}/${path} (no documents row): ${rmErr}`);
       failed++;
       continue;
     }
@@ -1101,22 +1167,52 @@ async function scanAttachment(profileId: string, f: Downloaded, ctx: ScanContext
 interface FilingResult {
   docId: string;
   outcome: "created" | "updated" | "linked" | "unfiled" | "removed" | "already";
+  unverified?: boolean;   // would have been filed, had the forward been authenticated
   lines: string[];
 }
 
-/** Scan every item that needs it, a few at a time, in the order given. */
-async function scanAll(profileId: string, items: StoredItem[], ctx: ScanContext): Promise<{ scan: Scan | null; why: string }[]> {
-  const out: { scan: Scan | null; why: string }[] = new Array(items.length);
+/**
+ * Said once when a forward's files were read but not filed because the
+ * forward was not positively authenticated. Mail from a domain that
+ * publishes no DMARC and signs with no aligned DKIM key can never pass, so
+ * the physician is told what fixes it rather than only that it happened.
+ */
+function unverifiedNote(results: FilingResult[], from: string): string {
+  if (!results.some((r) => r.unverified)) return "";
+  const domain = plainText(domainPart(from), 80) || "your address";
+  return `Mail from ${domain} arrives without a DMARC pass or a DKIM signature for ${domain}, so a forward cannot be told apart from a forgery and nothing is filed automatically. Turning on DKIM signing and publishing SPF and DMARC for ${domain} (in Google Workspace: Admin > Apps > Gmail > Authenticate email) lets forwards be filed as they arrive.`;
+}
+
+type ScanOutcome = { scan: Scan | null; why: string };
+
+/** Scan every file that needs it, a few at a time, in the order given. `done` is a result already in hand. */
+async function scanFiles(profileId: string, jobs: { file: Downloaded; skip?: string; done?: ScanOutcome }[], ctx: ScanContext): Promise<ScanOutcome[]> {
+  const out: ScanOutcome[] = new Array(jobs.length);
   let next = 0;
   const worker = async () => {
-    while (next < items.length) {
+    while (next < jobs.length) {
       const i = next++;
-      const it = items[i];
-      out[i] = it.existing?.linked_to ? { scan: null, why: "already filed" } : await scanAttachment(profileId, it.file, ctx);
+      const j = jobs[i];
+      out[i] = j.skip ? { scan: null, why: j.skip } : j.done ?? await scanAttachment(profileId, j.file, ctx);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(SCAN_CONCURRENCY, items.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(SCAN_CONCURRENCY, jobs.length) }, worker));
   return out;
+}
+
+/**
+ * May a forward write to the physician's credential records? Filing writes
+ * records, creates categories and fills fields, so it needs the forward to
+ * be POSITIVELY authenticated: dmarc=pass, or spf=pass with a dkim=pass
+ * aligned to the From domain, in the raw message's top-most
+ * Authentication-Results (the rule the requester acknowledgement uses).
+ * senderAuthFailure, which only refuses an explicit failure, still decides
+ * whether the files are kept at all; a forward that merely fails to fail
+ * (no DMARC record on the domain, an unaligned spf=pass from an attacker's
+ * own envelope domain) has its files stored and scanned, and left unfiled.
+ */
+function mayFileFrom(auth: AuthEvidence, from: string): boolean {
+  return auth.positive !== null && senderPositivelyAuthenticated(auth.positive, from, INBOUND_AUTHSERV_IDS);
 }
 
 /**
@@ -1126,9 +1222,20 @@ async function scanAll(profileId: string, items: StoredItem[], ctx: ScanContext)
  * duplicating. A failure on one leaves THAT document unfiled in the inbox and
  * the rest carry on; nothing is ever dropped except a file that reads as a
  * patient record, which the app deletes on upload too.
+ *
+ * mayFile false (the forward was not positively authenticated): every file
+ * is still scanned, and one that reads as a patient record is still removed,
+ * but nothing is written to a record, a category or a document's link.
+ * prescanned: results already in hand, by file (a "both" email reads an
+ * attachment before deciding whether it is the physician's to file).
  */
-async function fileDocuments(profile: MatchedProfile, items: StoredItem[], ctx: ScanContext): Promise<FilingResult[]> {
-  const scans = await scanAll(profile.id, items, ctx);
+async function fileDocuments(
+  profile: MatchedProfile, items: StoredItem[], ctx: ScanContext,
+  { mayFile, prescanned }: { mayFile: boolean; prescanned?: Map<Downloaded, ScanOutcome> },
+): Promise<FilingResult[]> {
+  const scans = await scanFiles(profile.id, items.map((it) => ({
+    file: it.file, skip: it.existing?.linked_to ? "already filed" : "", done: prescanned?.get(it.file),
+  })), ctx);
   const results: FilingResult[] = [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
@@ -1176,12 +1283,33 @@ async function fileDocuments(profile: MatchedProfile, items: StoredItem[], ctx: 
         continue;
       }
       if (plan.outcome === "removed") {
+        // The file first, then the row. The other order left the object in
+        // Storage with no row pointing at it whenever the removal failed
+        // (supabase-js answers { error }, it does not throw), where nothing
+        // could ever sweep it, and told the physician it was deleted.
         await assertIntakeWrite(profile);
         const path = it.existing?.storage_path || `${profile.auth_user_id}/${it.docId}`;
+        const rmErr = await removeStored(path);
+        if (rmErr) {
+          console.error(`inbound: patient-record file NOT removed, sweep ${STORAGE_BUCKET}/${path} (documents ${it.docId}): ${rmErr}`);
+          results.push({ docId: it.docId, outcome: "unfiled", lines: [`Not filed: ${name} reads like a patient record, and it could not be deleted automatically. Open the app > Documents and delete it.`] });
+          continue;
+        }
         const { error: rmDocErr } = await db.from("documents").delete().eq("id", it.docId).eq("user_id", profile.id);
-        if (rmDocErr) throw new Error(`documents delete: ${rmDocErr.message}`);
-        await db.storage.from(STORAGE_BUCKET).remove([path]).catch(() => {});
+        if (rmDocErr) {
+          console.error(`inbound: documents ${it.docId} kept after its file was removed: ${rmDocErr.message}`);
+          results.push({ docId: it.docId, outcome: "removed", lines: [...plan.lines, `Its entry in Documents could not be removed; delete ${name} there.`] });
+          continue;
+        }
         results.push({ docId: it.docId, outcome: "removed", lines: plan.lines });
+        continue;
+      }
+
+      if (!mayFile) {
+        // Nothing is written on an unverified forward, not even a rename;
+        // the reply still says what the file was read as.
+        const lines = plan.outcome === "unfiled" ? plan.lines : [unfiledLine(name, "unverified", null, String((plan as { readsAs?: string }).readsAs ?? "").slice(0, 200))];
+        results.push({ docId: it.docId, outcome: "unfiled", unverified: plan.outcome !== "unfiled", lines });
         continue;
       }
 
@@ -1252,21 +1380,28 @@ https://credentialdomd.com`);
     await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
     return json({ ok: true, route: "cme", result: "rejected_auth" });
   }
+  // Keeping a file needs only the absence of a failure (above); writing it
+  // into the physician's records needs a positive pass (mayFileFrom).
+  const mayFile = mayFileFrom(await authResultsFrom(email), from);
 
   // Every attachment is kept, then read and filed where the app would file
   // it: a CME certificate becomes a CME entry, and anything else that rides
   // along (a licence, a BLS card) goes to its own section instead of waiting
   // in the inbox. What cannot be filed stays in the inbox and the reply says so.
   const listed = await listAttachments(emailId);
-  const { files, skipped, total } = await downloadAttachments(emailId, acceptKeepable, listed);
-  const { stored, duplicates, failed, items } = await storeAsDocuments(profile, files, INBOX_DOC_TYPE);
-  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile)) : [];
+  const downloaded = await downloadAttachments(emailId, acceptKeepable, listed);
+  const { skipped, total } = downloaded;
+  const screened = await screenOfficeFiles(downloaded.files);
+  const { stored, duplicates, failed, items } = await storeAsDocuments(profile, screened.keep, INBOX_DOC_TYPE);
+  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile), { mayFile }) : [];
 
-  const notes: string[] = [];
+  const notes: string[] = [...screened.notes];
   const notKept = notKeptNote(listed);
   if (notKept) notes.push(notKept);
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed > 0) notes.push(`${failed} file${failed === 1 ? "" : "s"} could not be saved; forward that one again.`);
+  const unverified = unverifiedNote(results, from);
+  if (unverified) notes.push(unverified);
 
   let text: string;
   if (total === 0) {
@@ -1281,9 +1416,9 @@ https://credentialdomd.com`);
   }
 
   const r = await sendEmail({ from: FROM_CME, to: [from], subject: replySubject, headers: replyHeaders, text });
-  const detail = `stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  const detail = `stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}${mayFile ? "" : " (not verified, nothing filed)"}, refused ${screened.notes.length}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
   await finish(ledgerId, failed > 0 && stored === 0 && duplicates === 0 && total > 0 ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });
-  return json({ ok: true, route: "cme", stored, duplicates, skipped, failed, filed: results.map((x) => x.outcome), confirmed: r.ok });
+  return json({ ok: true, route: "cme", stored, duplicates, skipped, failed, refused: screened.notes.length, verified: mayFile, filed: results.map((x) => x.outcome), confirmed: r.ok });
 }
 
 // ─── Route: contacts@ / refs@ ────────────────────────────────────────────────
@@ -1711,6 +1846,9 @@ https://credentialdomd.com`);
     await finish(ledgerId, "failed", `sender authentication failed: ${authFail.slice(0, 200)}`);
     return json({ ok: true, route: "docs", result: "rejected_auth" });
   }
+  // The refusal above keeps a forged forward's files out entirely; writing a
+  // kept file into the physician's records needs a positive pass as well.
+  const mayFile = mayFileFrom(auth, from);
 
   // The original request lives inside the forwarded text.
   const rawText = (email.text && email.text.trim()) ? email.text : (email.html ? stripHtml(email.html) : "");
@@ -1744,26 +1882,54 @@ https://credentialdomd.com`);
     body: parsed.body_text,
     attachmentNames: keepable.map((a) => safeFilename(a.filename, "")),
     attachmentCount: keepable.length,
+    forwarded: parsed.found,
   });
   console.log(`inbound ${emailId}: intent ${intent.intent} (${intent.reasons.join("; ")})`);
-  const { files, skipped } = await downloadAttachments(emailId, acceptKeepable, listed);
+  const downloaded = await downloadAttachments(emailId, acceptKeepable, listed);
+  const { skipped } = downloaded;
+  const screened = await screenOfficeFiles(downloaded.files);
+  const files = screened.keep;
+  const refusedNotes = [...screened.notes];
 
   if (intent.intent === "delivery") {
-    return await deliverDocs(ledgerId, profile, from, files, skipped, notKeptNote(listed), replySubject, replyHeaders);
+    return await deliverDocs(ledgerId, profile, from, files, skipped, [...refusedNotes, notKeptNote(listed)].filter(Boolean), replySubject, replyHeaders, mayFile);
   }
 
-  // "both": the finished documents are filed like a delivery; a form the
-  // requester wants filled in (named like an application, a checklist, an
-  // attestation) stays with the request, as every attachment did before.
+  // "both": only what is plainly the physician's own is filed like a
+  // delivery; everything else stays with the request as
+  // request-attachment-inbox, as every attachment did before, and out of the
+  // packet catalogue. A file named like a form ("COI Request Form.pdf",
+  // "StMarys_Initial_Application.pdf") stays without being read. Any other
+  // file ("Approval Letter.pdf", "Letter330567.pdf", "Whitney_Privileges.pdf")
+  // is read first and filed only when it is a built-in credential with a
+  // date a blank form would not carry (fileableFromRequest): a name is not
+  // enough, since a blank "DEA Registration.pdf" is named like the real one,
+  // and a blank privileges delineation reads as a privilege at that facility.
   let filing: FilingResult[] = [];
   let requestFiles = files;
   let deliveredFailed = 0;
   if (intent.intent === "both") {
-    const keep = files.filter((f) => attachmentRole(f.filename) !== "form");
+    const candidates = files.filter((f) => attachmentRole(f.filename) !== "form");
     requestFiles = files.filter((f) => attachmentRole(f.filename) === "form");
-    const delivered = await storeAsDocuments(profile, keep, EMAIL_DOC_TYPE);
+    const ctx = await scanContext(profile);
+    const prescanned = new Map<Downloaded, ScanOutcome>();
+    const toFile: Downloaded[] = [];
+    // Read only when the result could be used: an unverified forward files nothing.
+    const scans = mayFile && candidates.length ? await scanFiles(profile.id, candidates.map((file) => ({ file })), ctx) : [];
+    candidates.forEach((f, i) => {
+      const scan = scans[i]?.scan ?? null;
+      if (scan && patientRecordScreen(f.filename, scan)) {
+        refusedNotes.push(`Not kept: ${plainText(f.filename, 120) || "an attachment"} reads like a patient record. CredentialDOMD holds your credentials, not patient charts, so it was not saved.`);
+      } else if (scan && fileableFromRequest(scan)) {
+        toFile.push(f);
+        prescanned.set(f, scans[i]);
+      } else {
+        requestFiles.push(f);
+      }
+    });
+    const delivered = await storeAsDocuments(profile, toFile, EMAIL_DOC_TYPE);
     deliveredFailed = delivered.failed;
-    filing = delivered.items.length ? await fileDocuments(profile, delivered.items, await scanContext(profile)) : [];
+    filing = delivered.items.length ? await fileDocuments(profile, delivered.items, ctx, { mayFile, prescanned }) : [];
   }
   // The requester's checklist, when one rides along (rare).
   const { stored, failed } = await storeAsDocuments(profile, requestFiles, REQUEST_DOC_TYPE);
@@ -1832,10 +1998,13 @@ https://credentialdomd.com`);
   if (stored > 0) notes.push(`${stored} attachment${stored === 1 ? "" : "s"} from the request ${stored === 1 ? "was" : "were"} saved to your Documents.`);
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed + deliveredFailed > 0) notes.push(`${failed + deliveredFailed} attachment${failed + deliveredFailed === 1 ? "" : "s"} could not be saved.`);
+  notes.push(...refusedNotes);
   const notKept = notKeptNote(listed);
   if (notKept) notes.push(notKept);
   const filedLines = filing.flatMap((f) => f.lines);
   if (filedLines.length) notes.push(`From the same email:\n${filedLines.join("\n")}`);
+  const unverified = unverifiedNote(filing, from);
+  if (unverified) notes.push(unverified);
 
   let text = physicianSummaryText({ requesterName, requesterAddr: fromAddr, requesterFound: parsed.found, proposal, appUrl: APP_URL });
   if (notes.length) text += `\n\n${notes.join("\n")}`;
@@ -1860,7 +2029,7 @@ https://credentialdomd.com`);
   // cap above bounds how many can go out in an hour.
   let ackDetail: string;
   try {
-    const authOk = auth.positive !== null && senderPositivelyAuthenticated(auth.positive, from, INBOUND_AUTHSERV_IDS);
+    const authOk = mayFile;   // the same positive pass filing needs (mayFileFrom)
     const allowed = ackAllowed({
       requesterAddr: fromAddr, requesterName, forwarderAddr: from, physicianEmail: phys.email, ownAddresses: own,
       requesterFound: parsed.found, ackRequests: phys.ackRequests, senderAuthenticated: authOk,
@@ -1926,21 +2095,22 @@ https://credentialdomd.com`);
  * no acknowledgement, nothing to anyone but the physician.
  */
 async function deliverDocs(
-  ledgerId: string, profile: MatchedProfile, from: string, files: Downloaded[], skipped: number, notKept: string,
-  replySubject: string, replyHeaders: Record<string, string>,
+  ledgerId: string, profile: MatchedProfile, from: string, files: Downloaded[], skipped: number, notKept: string[],
+  replySubject: string, replyHeaders: Record<string, string>, mayFile: boolean,
 ) {
   const { stored, duplicates, failed, items } = await storeAsDocuments(profile, files, EMAIL_DOC_TYPE);
-  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile)) : [];
-  const notes: string[] = [];
-  if (notKept) notes.push(notKept);
+  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile), { mayFile }) : [];
+  const notes: string[] = [...notKept];
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed > 0) notes.push(`${failed} file${failed === 1 ? "" : "s"} could not be saved; forward the email again.`);
+  const unverified = unverifiedNote(results, from);
+  if (unverified) notes.push(unverified);
   const text = filingReplyText({ results, notes, appUrl: APP_URL });
   const r = await sendEmail({ from: FROM_DOCS, to: [from], subject: replySubject, headers: replyHeaders, text });
   // Worded so "ack sent" can never appear here: ledgerAcksSince counts on it.
-  const detail = `delivery, stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  const detail = `delivery, stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}${mayFile ? "" : " (not verified, nothing filed)"}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
   await finish(ledgerId, failed > 0 && stored === 0 && duplicates === 0 ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });
-  return json({ ok: true, route: "docs", intent: "delivery", stored, duplicates, skipped, failed, filed: results.map((x) => x.outcome), confirmed: r.ok });
+  return json({ ok: true, route: "docs", intent: "delivery", stored, duplicates, skipped, failed, verified: mayFile, filed: results.map((x) => x.outcome), confirmed: r.ok });
 }
 
 // ─── Route: everything else -> relay to the owner ─────────────────────────────

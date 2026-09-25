@@ -106,7 +106,9 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
     if (!label) return;
     const raw = (data.customCategories || []).find(c => c.id === category.id);
     const taken = new Set((raw.fields || []).map(f => f?.key));
-    const built = buildCategory({ name: raw.name, fields: [{ label, type: fieldType }] });
+    // Only the field gate is wanted here. The category's own name is not
+    // re-checked, so a name saved before that check existed never blocks a field.
+    const built = buildCategory({ name: "Fields", fields: [{ label, type: fieldType }] });
     if (!built.fields.length) { setMsg("That field would hold an identifier this app does not keep."); return; }
     const key = fieldKey(label, taken);
     if (editItem("customCategories", { ...raw, fields: [...(raw.fields || []), { key, label, type: built.fields[0].type }] }) === false) { setMsg("Could not add the field."); return; }

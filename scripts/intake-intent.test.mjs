@@ -119,3 +119,79 @@ test("the count wins over the names when both are given", () => {
   assert.equal(classifyIntent({ subject: "", body: "Attached is your letter.", attachmentNames: [], attachmentCount: 1 }).intent, "delivery");
   assert.equal(classifyIntent({ subject: "", body: "Attached is your letter.", attachmentNames: ["a.pdf"], attachmentCount: 0 }).intent, "request");
 });
+
+// Review of 2026-09-25: delivery is the one outcome that drops the request
+// (no row, no proposal, no summary) and files the requester's paperwork as
+// the physician's own, so it must never be the answer to an ordinary ask.
+// Every one of these came back "delivery" before the fix.
+test("an ordinary credentialing request with a file attached is never a delivery", () => {
+  const cases = [
+    ["", "Please fill out the attached application and return it to me by Friday.", ["Whitney_Sanford.pdf"], "request"],
+    ["", "Attached is the reappointment paperwork for St. Mary's. Kindly complete and return it at your earliest convenience.", ["Whitney_Reappt_2026.pdf"], null],
+    ["", "Attached is your reappointment packet. Let me know if you have any questions.", ["Reappointment Packet.pdf"], null],
+    ["", "Can we get a copy of your current DEA?", ["image001.png"], "request"],
+    ["Missing items for your file", "Kindly send your current BLS card and a copy of your DEA certificate", ["x.pdf"], "request"],
+    ["", "Your reappointment is approved pending receipt of your updated malpractice certificate. Kindly send it", ["x.pdf"], "request"],
+    ["", "can I get a copy of your current ACLS?", ["x.pdf"], "request"],
+    ["", "send me your updated COI and your TB results", ["x.pdf"], "request"],
+  ];
+  for (const [subject, body, names, want] of cases) {
+    for (const forwarded of [true, false]) {
+      const r = classifyIntent({ subject, body, attachmentNames: names, forwarded });
+      assert.notEqual(r.intent, "delivery", `${body}: ${r.reasons.join(" | ")}`);
+      if (want) assert.equal(r.intent, want, `${body}: ${r.reasons.join(" | ")}`);
+    }
+  }
+});
+
+test("'for your file' in a subject is where the credentialer keeps what they ask for, not a delivery", () => {
+  const r = classifyIntent({ subject: "Missing items for your file", body: "Hi Dr. Whitney, see the list below.\n- BLS card\n- DEA", attachmentNames: ["logo.png"] });
+  assert.equal(r.intent, "request");
+  assert.ok(!r.reasons.join(" ").includes("for your records"), r.reasons.join(" | "));
+  // In the body, "for your records" still means a document to keep.
+  assert.equal(classifyIntent({ subject: "", body: "Attached is your badge photo for your records.", attachmentNames: ["badge.jpg"] }).intent, "delivery");
+});
+
+test("a packet of forms is never a delivery, whatever the covering note says", () => {
+  const r = classifyIntent({ subject: "Welcome", body: "Attached is your reappointment packet.", attachmentNames: ["Reappointment Packet.pdf", "COI Request Form.pdf"] });
+  assert.equal(r.intent, "both");
+  assert.ok(r.requestScore > 0);
+});
+
+test("with neither an ask nor a delivery, a third party's prose is a request and the physician's own note is a delivery", () => {
+  const body = "Hi Dr. Whitney, here is the paperwork from our office for the Penrose assignment next month.";
+  assert.equal(classifyIntent({ subject: "Penrose", body, attachmentNames: ["Penrose.pdf"], forwarded: true }).intent, "request");
+  assert.equal(classifyIntent({ subject: "Penrose", body, attachmentNames: ["Penrose.pdf"], forwarded: false }).intent, "delivery");
+  // Weak delivery words only, from a third party: file what is finished and keep the request.
+  assert.equal(classifyIntent({ subject: "", body: "Here is your renewed license from the board office, thanks.", attachmentNames: ["x.pdf"], forwarded: true }).intent, "both");
+  assert.equal(classifyIntent({ subject: "", body: "Here is your renewed license from the board office, thanks.", attachmentNames: ["x.pdf"], forwarded: false }).intent, "delivery");
+});
+
+test("an unparsed forward whose request sits below the forwarding marker is kept as a request", () => {
+  const body = `\n---------- Forwarded message ---------\nSomething odd: header lines missing\n\nPlease send your DEA and CV by Friday.`;
+  const r = classifyIntent({ subject: "Fwd:", body, attachmentNames: ["logo.png"] });
+  assert.equal(r.intent, "both");
+  assert.match(r.reasons.join(" "), /below the forwarding marker/);
+});
+
+test("an offer of help is not an ask, and a 'Questions?' footer is not a question", () => {
+  const letters = [
+    "Attached is your approval letter. If you have questions, please email us at cred@example.org.",
+    "Please see the attached letter. Please contact us with any questions.",
+    "Your privileges have been approved. Please email us with any questions or concerns.\n\nQuestions? Call 800-555-0100",
+  ];
+  for (const body of letters) {
+    const r = classifyIntent({ subject: "", body, attachmentNames: ["letter.pdf"], forwarded: true });
+    assert.equal(r.intent, "delivery", `${body}: ${r.reasons.join(" | ")}`);
+    assert.equal(r.requestScore, 0, body);
+  }
+});
+
+test("attachment names: a form word wins over a document word", () => {
+  for (const n of ["COI Request Form.pdf", "License Verification Form.pdf", "DEA Registration Form.pdf", "Credentialing Application - Welcome Packet.pdf", "StMarys_Initial_Application.pdf", "Blank certificate.pdf"]) {
+    assert.equal(attachmentRole(n), "form", n);
+  }
+  assert.equal(attachmentRole("Initial Application Approval Letter.pdf"), "document");
+  assert.equal(attachmentRole("Whitney items.pdf"), "unknown");
+  assert.equal(attachmentRole("Whitney_Privileges.pdf"), "unknown");
+});

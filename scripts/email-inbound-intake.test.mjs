@@ -12,6 +12,7 @@ import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { loadFunction, resetWorld, deliver, harness } from "./email-inbound-harness.mjs";
+import { makeDocx, makeXlsx } from "./fixtures/intake/zip.mjs";
 
 const PROFILE = "a676337e-16be-44be-a4c3-9b28b16a3966";
 const CLERK = "user_abc123";
@@ -32,6 +33,8 @@ const SANFORD_SCAN = {
   },
 };
 const pdf = (s) => new TextEncoder().encode(`%PDF-1.4 ${s}`);
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const letter = () => ({ filename: "Letter330567.pdf", contentType: "application/pdf", bytes: pdf("sanford approval 330567") });
 
 let n = 0;
@@ -138,7 +141,7 @@ test("the letter left unfiled by the old flow is filed when it is forwarded agai
   assert.equal(doc.type, "application/pdf");
 });
 
-test("a renewal adds to the record on file: empty fields filled, expiration moved forward, nothing overwritten", async () => {
+test("a renewal adds to the record on file: empty fields filled, nothing overwritten, and the expiration is left for the physician", async () => {
   rows("privileges").push({ id: "p1", user_id: PROFILE, type: "Full Admitting Privileges", name: "Sanford", facility: "Sanford Health Plan, Inc.", state: null, appointment_date: "2025-09-24", expiration_date: "2026-09-30", custom_fields: null, favorite: true });
   harness.geminiReply = () => SANFORD_SCAN;
   const r = await send();
@@ -148,9 +151,13 @@ test("a renewal adds to the record on file: empty fields filled, expiration move
   assert.equal(p.type, "Full Admitting Privileges", "a filled field is never overwritten");
   assert.equal(p.appointment_date, "2025-09-24");
   assert.equal(p.state, "ND", "an empty field is filled");
-  assert.equal(p.expiration_date, "2027-09-30", "a later expiration is a renewal");
+  // Never moved by email: a misread or forged date that extends a
+  // credential switches off the reminder that stops it lapsing.
+  assert.equal(p.expiration_date, "2026-09-30", "the record's expiration is not moved");
   assert.equal(p.favorite, true);
-  assert.match(toPhysician()[0].text, /Added to an existing record: .* -> Privileges \(expiration moved to 09\/30\/2027, filled \d+ empty fields?\)/);
+  const text = toPhysician()[0].text;
+  assert.match(text, /Added to an existing record: .* -> Privileges \(filled \d+ empty fields?\)/);
+  assert.match(text, /This file shows an expiration of 09\/30\/2027; your record shows 09\/30\/2026\. The date on your record was not changed/);
   assert.equal(rows("documents")[0].linked_to, "privileges:p1");
 });
 
@@ -355,8 +362,9 @@ test("a contract is Practice scope: a Credential-only membership keeps it unfile
   assert.equal(rows("documents")[0].linked_to, `locumContracts:${rows("locum_contracts")[0].id}`);
 });
 
-test("a Word document is kept for File with AI instead of being refused", async () => {
-  const r = await send({ subject: "Fwd: CV", text: "Attached is my updated CV.", attachments: [{ filename: "Whitney CV.docx", contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes: pdf("docx") }] });
+test("a Word document is screened, then kept for File with AI instead of being refused", async () => {
+  const cv = makeDocx(["Eric Whitney, DO", "Curriculum Vitae", "Neurological Surgery"]);
+  const r = await send({ subject: "Fwd: CV", text: "Attached is my updated CV.", attachments: [{ filename: "Whitney CV.docx", contentType: DOCX, bytes: cv }] });
   assert.equal(r.body.intent, "delivery");
   assert.equal(rows("documents").length, 1);
   assert.equal(rows("documents")[0].type, "email-inbox");
@@ -379,4 +387,140 @@ test("no reply ever carries an em dash, even when the scan does", async () => {
   await send();
   for (const m of harness.sent) assert.ok(!m.text.includes(EM_DASH), m.text);
   assert.ok(!rows("documents")[0].name.includes(EM_DASH));
+});
+
+// ---- Review of 2026-09-25 -------------------------------------------------
+
+const forwardFrom = (who, subject, body) => `---------- Forwarded message ---------
+From: ${who}
+Date: Thu, Sep 25, 2026
+Subject: ${subject}
+To: Eric Whitney <${ME}>
+
+${body}`;
+
+test("a request with a form attached is still a request: the row, the summary, and the form stays with it", async () => {
+  harness.geminiReply = () => SANFORD_SCAN;
+  const r = await send({
+    subject: "Fwd: Application",
+    text: forwardFrom("Kim Lee <kim.lee@stmarys.example>", "Application", "Dr. Whitney,\n\nPlease fill out the attached application and return it to me by Friday.\n\nThanks,\nKim"),
+    attachments: [{ filename: "Whitney_Sanford.pdf", contentType: "application/pdf", bytes: pdf("blank application") }],
+  });
+  assert.equal(r.body.intent, "request");
+  assert.equal(rows("document_requests").length, 1, "the request is made");
+  assert.equal(rows("privileges").length, 0, "the requester's form is not filed as the physician's record");
+  assert.equal(harness.gemini.length, 0);
+  assert.equal(rows("documents")[0].type, "request-attachment-inbox");
+  assert.equal(rows("documents")[0].linked_to, null);
+});
+
+test("both: blank forms and generically named files stay with the request; only a finished credential is filed", async () => {
+  // The blank privileges delineation reads as a privilege at St. Mary's, with no dates.
+  harness.geminiReply = () => ({ documentType: "privilege", confidence: "medium", extracted: { facility: "St. Mary's Hospital", type: "Neurosurgery core privileges" } });
+  const r = await send({
+    subject: "Fwd: Welcome",
+    text: forwardFrom("Medical Staff <medstaff@stmarys.example>", "Welcome", "Welcome to St. Mary's! Attached is your initial appointment packet. Please complete and return both documents by 10/15."),
+    attachments: [
+      { filename: "StMarys_Initial_Application.pdf", contentType: "application/pdf", bytes: pdf("application") },
+      { filename: "Whitney_Privileges.pdf", contentType: "application/pdf", bytes: pdf("delineation") },
+      { filename: "COI Request Form.pdf", contentType: "application/pdf", bytes: pdf("coi form") },
+      // Named like the finished document, but blank: the scan has no dates.
+      { filename: "DEA Registration.pdf", contentType: "application/pdf", bytes: pdf("blank dea") },
+    ],
+  });
+  assert.equal(r.body.intent, "both");
+  assert.equal(rows("document_requests").length, 1);
+  assert.equal(rows("privileges").length, 0, "no phantom privilege at St. Mary's");
+  assert.equal(rows("insurance").length, 0);
+  for (const d of rows("documents")) {
+    assert.equal(d.type, "request-attachment-inbox", `${d.name} stays with the request`);
+    assert.equal(d.linked_to, null, d.name);
+  }
+  assert.equal(harness.gemini.length, 2, "files named like forms are not even read");
+});
+
+test("an unverified forward keeps and reads its files but writes nothing to the records", async () => {
+  // SPF passes for the attacker's own envelope domain, nothing is aligned,
+  // and the physician's domain publishes no DMARC: not a failure, not a pass.
+  harness.rawAuth = "mx.resend.com; spf=pass smtp.mailfrom=bounce.attacker.example; dkim=none; dmarc=none header.from=elryx.com";
+  rows("licenses").push({ id: "dea", user_id: PROFILE, type: "DEA Registration", name: "DEA Registration", license_number: "FW1234567", state: "ND", expiration_date: "2025-10-31" });
+  harness.geminiReply = () => ({ documentType: "license", confidence: "high", extracted: { type: "DEA Registration", licenseNumber: "FW1234567", state: "ND", issuedDate: "2026-01-01", expirationDate: "2030-10-31" } });
+  const r = await send({ subject: "Fwd: DEA", text: "Attached is your renewed DEA registration.", attachments: [{ filename: "DEA certificate.pdf", contentType: "application/pdf", bytes: pdf("fake dea") }] });
+  assert.equal(r.body.intent, "delivery");
+  assert.equal(r.body.verified, false);
+  assert.deepEqual(r.body.filed, ["unfiled"]);
+  assert.equal(harness.gemini.length, 1, "still read, so a patient record would still be caught");
+  assert.deepEqual(rows("licenses"), [{ id: "dea", user_id: PROFILE, type: "DEA Registration", name: "DEA Registration", license_number: "FW1234567", state: "ND", expiration_date: "2025-10-31" }], "the record is untouched");
+  const [doc] = rows("documents");
+  assert.equal(doc.linked_to, null);
+  assert.equal(doc.type, "email-inbox");
+  const text = toPhysician()[0].text;
+  assert.match(text, /Saved, not filed yet: DEA certificate\.pdf, which reads as DEA Registration -> Licenses\. This message could not be verified as coming from you, so nothing in your records was added or changed/);
+  assert.match(text, /Mail from elryx\.com arrives without a DMARC pass or a DKIM signature for elryx\.com/);
+
+  // cme@ holds the same line.
+  resetWorld(); seed();
+  harness.rawAuth = "mx.resend.com; spf=pass smtp.mailfrom=bounce.attacker.example; dkim=none; dmarc=none";
+  harness.geminiReply = () => ({ documentType: "cme", confidence: "high", extracted: { title: "Spine Summit 2026", hours: 7.5, date: "2026-08-14" } });
+  const c = await send({ to: "cme@credentialdomd.com", subject: "Fwd: certificate", text: "Here you go", attachments: [{ filename: "cert.pdf", contentType: "application/pdf", bytes: pdf("cme") }] });
+  assert.equal(c.body.verified, false);
+  assert.equal(rows("cme").length, 0);
+  assert.equal(rows("documents")[0].linked_to, null);
+
+  // A patient record is still caught and removed on an unverified forward.
+  resetWorld(); seed();
+  harness.rawAuth = "mx.resend.com; spf=none; dkim=none; dmarc=none";
+  harness.geminiReply = () => ({ documentType: "unknown", confidence: "low", extracted: { note: "Operative note. Patient name: J. Doe. MRN 00481234." } });
+  const op = await send({ subject: "Fwd: op note", text: "see attached", attachments: [{ filename: "op-note.pdf", contentType: "application/pdf", bytes: pdf("op note") }] });
+  assert.deepEqual(op.body.filed, ["removed"]);
+  assert.equal(rows("documents").length, 0);
+  assert.equal(db().files.size, 0);
+  assert.ok(!/could not be verified/.test(toPhysician()[0].text), "nothing was withheld for want of verification");
+});
+
+test("a second DEA with another number is its own record; the old one keeps its number and date", async () => {
+  rows("licenses").push({ id: "dea", user_id: PROFILE, type: "DEA Registration", name: "DEA Registration", license_number: "FW1234567", state: "ND", expiration_date: "2025-10-31" });
+  harness.geminiReply = () => ({ documentType: "license", confidence: "high", extracted: { type: "DEA Registration", name: "DEA Registration", licenseNumber: "FW7654321", state: "ND", expirationDate: "2029-10-31" } });
+  const r = await send({ subject: "Fwd: DEA", text: "Attached is your DEA registration.", attachments: [{ filename: "dea.pdf", contentType: "application/pdf", bytes: pdf("dea 2") }] });
+  assert.deepEqual(r.body.filed, ["created"]);
+  assert.equal(rows("licenses").length, 2);
+  const old = rows("licenses").find((l) => l.id === "dea");
+  assert.equal(old.license_number, "FW1234567");
+  assert.equal(old.expiration_date, "2025-10-31");
+});
+
+test("a patient record whose file cannot be removed keeps its row and says so, instead of claiming it was deleted", async () => {
+  harness.geminiReply = () => ({ documentType: "unknown", confidence: "low", extracted: { note: "Operative note. Patient name: J. Doe. MRN 00481234. Date of birth 03/14/1961." } });
+  harness.failRemove = () => "storage is down";
+  const r = await send({ subject: "Fwd: op note", text: "see attached", attachments: [{ filename: "op-note.pdf", contentType: "application/pdf", bytes: pdf("op note") }] });
+  assert.deepEqual(r.body.filed, ["unfiled"]);
+  assert.equal(rows("documents").length, 1, "the row stays, so the file can still be found and deleted");
+  assert.equal(db().files.size, 1);
+  const text = toPhysician()[0].text;
+  assert.match(text, /could not be deleted automatically\. Open the app > Documents and delete it/);
+  assert.ok(!/was deleted/.test(text), text);
+});
+
+test("an office file that reads as a patient record is never stored, on docs@ and on cme@", async () => {
+  const csv = new TextEncoder().encode("Case log export\nPatient Name,MRN,Procedure\nJ Doe,MRN 00481234,Operative note: craniotomy\n");
+  const r = await send({ subject: "Fwd: case log", text: "Attached is my case log for your records.", attachments: [{ filename: "case_log_2026.csv", contentType: "text/csv", bytes: csv }] });
+  assert.equal(r.body.stored, 0);
+  assert.equal(rows("documents").length, 0, "no documents row");
+  assert.equal(db().files.size, 0, "no Storage upload");
+  assert.equal(harness.gemini.length, 0);
+  assert.match(toPhysician()[0].text, /Not kept: case_log_2026\.csv reads like a patient record \(it contains a medical record number/);
+
+  const xlsx = makeXlsx(["Patient Name", "MRN", "Discharge summary"]);
+  await send({ to: "cme@credentialdomd.com", subject: "Fwd: log", text: "log", attachments: [{ filename: "log.xlsx", contentType: XLSX, bytes: xlsx }] });
+  assert.equal(rows("documents").length, 0);
+  assert.equal(db().files.size, 0);
+  assert.match(toPhysician().at(-1).text, /Not kept: log\.xlsx reads like a patient record/);
+});
+
+test("an office file that cannot be read cannot be screened, so it is not stored, and the reply says what to send instead", async () => {
+  harness.geminiReply = () => SANFORD_SCAN;
+  const r = await send({ attachments: [letter(), { filename: "old.doc", contentType: "application/msword", bytes: new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 1, 2, 3]) }] });
+  assert.deepEqual(r.body.filed, ["created"]);
+  assert.equal(rows("documents").length, 1, "only the letter is stored");
+  assert.match(toPhysician()[0].text, /Not kept: old\.doc could not be read here, so it could not be checked for patient information\. Save it as a PDF, \.docx or \.xlsx and forward it again\./);
 });
