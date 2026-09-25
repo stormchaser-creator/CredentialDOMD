@@ -175,18 +175,64 @@ export function agencyOptions(contracts, { extra = [], today = todayLocal() } = 
   return list;
 }
 
+// Days either side of a booking that still belong to it: the flight out the
+// day before, the flight home or the rental return the day after.
+export const TRAVEL_DAYS = 2;
+
+// Days since the epoch for a YYYY-MM-DD date, NaN for anything else.
+const dayNumber = (d) => {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(d || ""));
+  return m ? Math.round(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000) : NaN;
+};
+
+// A contract's real bookings: its coverage blocks or, when it has none, a
+// short term (a locums assignment). A multi-year agreement's term is not a
+// booking; being inside it is weak evidence.
+function bookings(c) {
+  if (c?.coveragePeriods?.length) return c.coveragePeriods.filter(p => p?.start);
+  const from = c?.startDate || c?.termStart, to = c?.endDate || c?.termEnd;
+  if (!from || !to) return [];
+  return dayNumber(to) - dayNumber(from) <= 62 ? [{ start: from, end: to }] : [];
+}
+
+// Whole days from `date` to the nearest booking (0 inside one, Infinity with
+// none). A date or block that is not YYYY-MM-DD is never near anything.
+function bookingDistance(c, date) {
+  const d = dayNumber(date);
+  if (!Number.isFinite(d)) return Infinity;
+  let best = Infinity;
+  for (const p of bookings(c)) {
+    const s = dayNumber(p.start), e = p.end ? dayNumber(p.end) : Infinity;
+    if (!Number.isFinite(s) || Number.isNaN(e)) continue;
+    best = Math.min(best, d < s ? s - d : d > e ? d - e : 0);
+  }
+  return best;
+}
+
 /**
- * The agency to assume for an expense dated `date`: the one on the contract
- * in force that day (a coverage block first, then the shortest term), spelled
- * the way the chips spell it. "" when no contract with an agency covers it.
+ * The agency to assume for an expense dated `date`, spelled the way the
+ * chips spell it. "" when no contract with an agency is near it.
+ *
+ * Ranking, most specific first:
+ *   0  a booking contains the date (a coverage block, or a short term)
+ *   1  a booking starts or ends within TRAVEL_DAYS of it (a travel day)
+ *   2  the date falls in the contract's overall term (a gap between blocks,
+ *      or a multi-year agreement)
+ * Within a rank the nearest booking wins, then the shorter term, then the
+ * later start. A gap in one contract's term never beats the travel day of
+ * another (ticket 8360f6e6: Weatherby's gap was offered for an MPLT trip).
  */
 export function agencyForDate(contracts, date, { today = todayLocal() } = {}) {
   if (!date) return "";
-  const inForce = (contracts || [])
-    .filter(c => !isArchived(c) && agencyKey(c.agency) && termCovers(c, date))
-    .sort((a, b) => specificity(a, date) - specificity(b, date)
-      || termBounds(b).start.localeCompare(termBounds(a).start));
-  const hit = inForce[0];
+  const ranked = [];
+  for (const c of contracts || []) {
+    if (isArchived(c) || !agencyKey(c.agency)) continue;
+    const dist = bookingDistance(c, date);
+    const rank = dist === 0 ? 0 : dist <= TRAVEL_DAYS ? 1 : termCovers(c, date) ? 2 : -1;
+    if (rank >= 0) ranked.push({ c, rank, dist, spec: specificity(c, date), start: termBounds(c).start });
+  }
+  ranked.sort((a, b) => a.rank - b.rank || a.dist - b.dist || a.spec - b.spec || b.start.localeCompare(a.start));
+  const hit = ranked[0]?.c;
   if (!hit) return "";
   return agencyOptions(contracts, { today }).find(n => sameAgency(n, hit.agency)) || String(hit.agency).trim();
 }

@@ -75,6 +75,45 @@ test('the agency defaults from the contract in force on the expense date', () =>
   assert.equal(agencyForDate([{ ...GOODSAM, customFields: { archivedAt: '2026-09-22T00:00:00Z' } }], '2026-08-26', { today: TODAY }), '');
 });
 
+test('travel days either side of a booking name that booking, not a gap in a longer contract', () => {
+  // The Penrose block (Oct 30 to Nov 2) sits in a gap of Weatherby's term
+  // (blocks Sep 25-28, Nov 5-12, Dec 29-Jan 4). The flight out the day
+  // before and the flight home or rental return the day after are MPLT's.
+  const at = (d) => agencyForDate(CONTRACTS, d, { today: TODAY });
+  assert.equal(at('2026-10-29'), 'MPLT Healthcare, LLC.', 'the day before the Penrose block');
+  assert.equal(at('2026-11-03'), 'MPLT Healthcare, LLC.', 'the day after: 1 day from Penrose, 2 from Weatherby');
+  assert.equal(at('2026-11-04'), 'Weatherby Locums, Inc.', '2 days from Penrose, 1 from Weatherby');
+  assert.equal(at('2026-10-28'), 'MPLT Healthcare, LLC.', '2 days before the Penrose block');
+  assert.equal(at('2026-10-27'), 'Weatherby Locums, Inc.', '3 days out: back to the contract whose term covers it');
+  // The day before a Weatherby block, outside any term: Weatherby, where
+  // it used to be blank. Good Sam's last block ended Sep 20, 4 days before.
+  assert.equal(at('2026-09-24'), 'Weatherby Locums, Inc.');
+  // Two days after Good Sam's last block, three before Weatherby's first.
+  assert.equal(at('2026-09-22'), 'MPLT Healthcare, LLC.');
+  // Past the travel window of everything: still blank.
+  assert.equal(at('2027-01-07'), '');
+  assert.equal(at('2027-01-06'), 'Weatherby Locums, Inc.', '2 days after the last Weatherby block');
+  // A booking still beats a travel day: Oct 30 is inside Penrose.
+  assert.equal(at('2026-10-30'), 'MPLT Healthcare, LLC.');
+  assert.equal(at('2026-11-05'), 'Weatherby Locums, Inc.');
+  // A date that is not YYYY-MM-DD is never inside or near a booking.
+  assert.equal(at('10/29/2026'), '');
+  assert.equal(at('not a date'), '');
+  // An archived contract's booking is not a travel day either.
+  const archivedPenrose = CONTRACTS.map(c => (c.id === PENROSE_NOV.id ? { ...c, customFields: { archivedAt: '2026-10-01T00:00:00Z' } } : c));
+  assert.equal(agencyForDate(archivedPenrose, '2026-10-29', { today: TODAY }), 'Weatherby Locums, Inc.');
+});
+
+test('a multi-year agreement with an agency does not outrank a nearby booking', () => {
+  const longTerm = { id: 'c-long', facility: 'Synthetic long agreement', agency: 'Long Term Staffing', startDate: '2026-01-01', endDate: '2028-12-31', coveragePeriods: [], createdAt: '2026-09-01 00:00:00+00' };
+  const list = [longTerm, ...CONTRACTS];
+  const at = (d) => agencyForDate(list, d, { today: TODAY });
+  assert.equal(at('2026-10-31'), 'MPLT Healthcare, LLC.', 'inside a block');
+  assert.equal(at('2026-10-29'), 'MPLT Healthcare, LLC.', 'a travel day');
+  assert.equal(at('2026-10-15'), 'Weatherby Locums, Inc.', 'a gap in a shorter contract');
+  assert.equal(at('2027-06-01'), 'Long Term Staffing', 'nothing else near');
+});
+
 // ── Ended and archived contracts ─────────────────────────────────
 
 test('a contract has ended once its last day is more than 30 days past', () => {
