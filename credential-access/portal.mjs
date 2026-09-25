@@ -1,7 +1,7 @@
 // Activation requires a separately reviewed deployment. This browser flag never
 // replaces the independent server gate or recipient authorization.
 export const PORTAL_CONFIG = Object.freeze({
-  enabled: false,
+  enabled: true,
   endpoint: "https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/credential-portal",
 });
 
