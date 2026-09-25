@@ -56,8 +56,8 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
                 raise RuntimeError(result.stderr)
             return result
 
-        def role(statement, who='authenticated', subject='user_Admin1', ok=True, suffix='commit;'):
-            claims = json.dumps({'role': who, 'sub': subject}, separators=(',', ':'))
+        def role(statement, who='authenticated', subject='user_Admin1', ok=True, suffix='commit;', email=None):
+            claims = json.dumps({'role': who, 'sub': subject, **({'email': email} if email else {})}, separators=(',', ':'))
             return sql("begin;set local statement_timeout='30s';set local timezone='America/Los_Angeles';set local role " + who
                        + ';set local request.jwt.claims=' + quoted(claims) + ';' + statement + ';' + suffix, ok)
 
@@ -86,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         create table profiles(id uuid primary key,auth_user_id text unique,email text,name text,
           access_status text not null default 'pending' check(access_status in ('pending','active','revoked')),
           created_at timestamptz not null default now(),updated_at timestamptz not null default now(),deleted_at timestamptz,
-          is_founding_member boolean not null default false);
+          is_founding_member boolean not null default false,admin_inbox_seen_at timestamptz,admin_errors_seen_at timestamptz);
         create table app_admins(profile_id uuid primary key references profiles(id));
         create table account_tombstones(profile_id uuid primary key);
         create function public.current_profile_id() returns uuid language sql stable security definer set search_path=public as $$
@@ -99,14 +99,27 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         create policy profiles_admin_access_update on profiles for update to authenticated using(is_admin(current_profile_id())) with check(is_admin(current_profile_id()));
         create table beta_access(id uuid primary key,email text not null,name text,status text not null default 'invited'
           check(status in ('invited','active','revoked')),profile_id uuid references profiles(id),activated_at timestamptz,
-          created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+          created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
+          invited_at timestamptz not null default now(),invited_by uuid,invite_sent_at timestamptz,lead_id uuid,note text);
         alter table beta_access enable row level security;
         create policy beta_access_admin_all on beta_access for all to authenticated using(is_admin(current_profile_id())) with check(is_admin(current_profile_id()));
         create table support_tickets(id uuid primary key default gen_random_uuid(),user_id uuid,status text,priority text,
           archived_at timestamptz,agent_approved_at timestamptz,created_at timestamptz not null default now());
         create table client_errors(id uuid primary key default gen_random_uuid(),created_at timestamptz not null default now());
-        create table page_views(day date,path text,hits integer);
-        create table page_visits(created_at timestamptz,path text);
+        create table page_views(day date,path text,hits integer,referrer_domain text not null default 'direct');
+        create table page_visits(created_at timestamptz,path text,referrer text default '');
+        -- Production shapes the attention counts and reply idempotency read.
+        create table admin_messages(id uuid primary key default gen_random_uuid(),sender_id uuid not null,recipient_id uuid,
+          subject text,body text not null default 'Synthetic message',created_at timestamptz not null default now());
+        create table admin_message_replies(id uuid primary key default gen_random_uuid(),message_id uuid not null,user_id uuid not null,
+          author_id uuid not null,body text not null default 'Synthetic reply',is_admin_reply boolean not null default false,
+          created_at timestamptz not null default now());
+        create table field_proposals(id uuid primary key default gen_random_uuid(),section text not null default 'licenses',
+          label text not null default 'Synthetic field',status text not null default 'pending',created_at timestamptz not null default now());
+        create table early_access_leads(id uuid primary key default gen_random_uuid(),email text not null,name text,
+          waitlist boolean not null default true,created_at timestamptz not null default now());
+        create table support_messages(id uuid primary key default gen_random_uuid(),ticket_id uuid not null,author_id uuid,
+          body text not null,is_admin_reply boolean,created_at timestamptz default now());
         -- Deliberately permissive legacy ACLs: the migration must close them.
         grant select,insert,update,delete on profiles,beta_access to authenticated,service_role;
         grant select on app_admins to authenticated;
@@ -158,6 +171,11 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         """)
         migration = (ROOT / 'supabase/migrations/20260924020000_admin_operations.sql').read_text()
         sql(migration); sql(migration)
+        # The 2026-09-25 follow-up applies on top, twice, and every check
+        # below runs against the final definitions.
+        for name in ['20260925110000_admin_access_regrant_guard.sql']:
+            followup = (ROOT / 'supabase/migrations' / name).read_text()
+            sql(followup); sql(followup)
         check('migration is rerunnable and creates no audit actions', sql('select count(*) from admin_operations_audit').stdout.strip() == '0')
 
         # Authorization: privilege denials, real current-profile NULL, and real membership.
@@ -263,6 +281,40 @@ with tempfile.TemporaryDirectory(prefix='admin-ops-', dir='/tmp') as temp:
         # The pre-existing definer self-claim still owns its write capability.
         check('self-claim RPC execute preserved', value("has_function_privilege('authenticated','public.claim_beta_access()','EXECUTE')") is True)
         check('access grant escape flag is restored after operation', role('select '+profile_call(3,'revoked')+";select coalesce(current_setting('credentialdomd.access_grant',true),'')='1'").stdout.strip().endswith('f'))
+        # "Back to pending" never leaves a claimable invitation (2026-09-25).
+        # Reproduces the finding: pause, back to pending, then the member's own
+        # claim_beta_access() used to return 'active' with no audit row.
+        for n, status in [(14, 'active'), (15, 'active'), (16, 'active'), (17, 'pending')]:
+            sql(f"insert into profiles(id,auth_user_id,email,access_status) values('{pid(n)}','user_Member{n}','member{n}@example.invalid','{status}')")
+        sql(f"""insert into beta_access(id,email,status,profile_id,activated_at) values
+          ('{pid(1014)}','member14@example.invalid','active','{pid(14)}',now()),('{pid(1015)}','member15@example.invalid','active','{pid(15)}',now()),
+          ('{pid(1016)}','member16@example.invalid','active','{pid(16)}',now()),('{pid(1017)}','member17@example.invalid','invited',null,null)""")
+        def claim(n):
+            return value('claim_beta_access()', subject=f'user_Member{n}', email=f'member{n}@example.invalid')
+        value(profile_call(14, 'revoked'))
+        check('pause revokes the linked invitation', invite_state(1014)['status'] == 'revoked')
+        back = value(profile_call(14, 'pending'))
+        check('back to pending keeps the linked invitation revoked', profile_state(14)['status'] == 'pending' and invite_state(1014)['status'] == 'revoked')
+        before_claim = (profile_state(14), invite_state(1014)); audits = value('(select count(*) from admin_operations_audit)')
+        check('revoke then pending then self-claim stays pending', claim(14) == 'pending' and (profile_state(14), invite_state(1014)) == before_claim)
+        after = value(f"(select after_state from admin_operations_audit where id='{back['audit_id']}')")
+        check('audit after_state matches the final state', after['profile']['access_status'] == profile_state(14)['status'] == 'pending'
+              and [i['status'] for i in after['invites']] == [invite_state(1014)['status']] and value('(select count(*) from admin_operations_audit)') == audits)
+        value(profile_call(15, 'pending'))
+        check('active then pending revokes the linked invitation', invite_state(1015)['status'] == 'revoked')
+        check('active then pending then self-claim stays pending', claim(15) == 'pending' and profile_state(15)['status'] == 'pending' and invite_state(1015)['status'] == 'revoked')
+        # An invitation some older path left 'active' after it was used: the
+        # self-claim refuses a consumed invitation for the same profile.
+        sql(f"update profiles set access_status='pending' where id='{pid(16)}'")
+        consumed = (profile_state(16), invite_state(1016))
+        check('consumed invitation left active cannot re-grant a pending profile', consumed[1]['status'] == 'active' and claim(16) == 'pending'
+              and (profile_state(16), invite_state(1016)) == consumed)
+        check('a fresh invitation still activates on first claim', claim(17) == 'active' and profile_state(17)['status'] == 'active'
+              and invite_state(1017)['status'] == 'active' and invite_state(1017)['profile'] == pid(17))
+        approved = value(profile_call(14, 'active'))
+        check('only an audited Approve restores access and its invitation', approved['profile']['access_status'] == 'active' and invite_state(1014)['status'] == 'active'
+              and value(f"(select action from admin_operations_audit where id='{approved['audit_id']}')") == 'profile_access')
+
         print(json.dumps({'passed':len(checks),'checks':checks},indent=2))
     finally:
         if started:

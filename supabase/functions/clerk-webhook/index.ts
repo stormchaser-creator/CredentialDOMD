@@ -26,6 +26,10 @@
  *   active, stamp activated_at (first time only), link profile_id, and set
  *   profiles.access_status = 'active' unless an admin has revoked that
  *   profile. revoked → the profile stays as it is. No row → stays pending.
+ *   An invitation that already activated this same profile is spent: if an
+ *   administrator has since moved the profile to pending or paused, nothing
+ *   here writes, and only an audited Approve restores access
+ *   (./betaActivation.ts).
  *
  * user.deleted:
  *   The profile row is kept (FK integrity, historical records) and name /
@@ -83,6 +87,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { applyVerifiedMailbox } from "./verifiedMailbox.ts";
 import { PRODUCTION_CLERK_ISSUER, readProductionIdentity, initializeProductionProfile } from "../_shared/clerkContinuity.ts";
 import { canDeferReservedContinuity } from "./reservedContinuity.ts";
+import { decideBetaActivation } from "./betaActivation.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("CLERK_WEBHOOK_SECRET");
 if (!WEBHOOK_SECRET) {
@@ -298,36 +303,23 @@ async function activateBetaAccess(
     return { error: null };
   }
 
-  const status = (match.status ?? "").trim().toLowerCase();
-
-  if (status === "revoked") {
-    console.log(`beta: invite ${match.id} for ${match.email} is revoked; profile ${profile.id} left ${profile.access_status ?? "pending"}`);
+  // Revoked, unknown, or already used by this profile before an administrator
+  // moved it off active: no write. See betaActivation.ts.
+  const decision = decideBetaActivation(match, profile, now);
+  if (decision.action === "none") {
+    (decision.warn ? console.warn : console.log)(decision.log);
     return { error: null };
   }
 
-  if (status !== "invited" && status !== "active") {
-    console.warn(`beta: invite ${match.id} for ${match.email} has unknown status "${match.status}"; no change`);
-    return { error: null };
-  }
-
-  const betaPatch: Record<string, unknown> = {};
-  if (status !== "active") betaPatch.status = "active";
-  if (!match.activated_at) betaPatch.activated_at = now;
-  if (match.profile_id !== profile.id) betaPatch.profile_id = profile.id;
-
+  const { betaPatch } = decision;
   if (Object.keys(betaPatch).length > 0) {
     const { error: bErr } = await supabase.from("beta_access").update(betaPatch).eq("id", match.id);
     if (bErr) return { error: `update beta_access: ${bErr.message}` };
     console.log(`beta: invite ${match.id} for ${match.email} → active (profile ${profile.id})`);
   }
 
-  const current = (profile.access_status ?? "pending").trim().toLowerCase();
-  if (current === "revoked") {
-    console.warn(`beta: profile ${profile.id} is revoked; invite ${match.id} is active but access_status left revoked`);
-    return { error: null };
-  }
-  if (current === "active") {
-    console.log(`beta: profile ${profile.id} already active`);
+  if (!decision.activateProfile) {
+    (decision.warn ? console.warn : console.log)(decision.log);
     return { error: null };
   }
 
