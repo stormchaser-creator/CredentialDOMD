@@ -27,7 +27,7 @@ const bundle = await build({
       access: 'export const useLimitedLaunchAccess = () => globalThis.__entitlementRenderAccount.limitedLaunch;',
       clerk: 'export const useUser = () => ({isSignedIn:true,user:{id:"user_Synthetic"}});',
       database: 'export const supabase=null; export const COLLECTION_KEYS=["workLog","licenses","cme","caseLogs"]; export const downloadDocumentFile=()=>{throw Error("No download");};',
-      admin: 'export const isAdminUser=()=>false;',
+      admin: 'export const isAdminUser=()=>false; export const useAdminPreviewRefresh=()=>{};',
       downloads: 'export const downloadBlob=()=>{throw Error("No download");}; export const invoicePdfFile=downloadBlob; export const invoiceTextPdfFile=downloadBlob;',
     })[path] }));
     builder.onLoad({ filter: /.*/, namespace: 'editor' }, ({ path }) => ({ loader: 'jsx', contents:

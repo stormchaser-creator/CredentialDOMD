@@ -21,7 +21,7 @@ export const ADMIN_SOURCES = {
 export const ADMIN_TAB_SOURCES = {
   reports: [], tickets: ['tickets', 'feedback'], messages: ['messages', 'users'],
   users: ['users', 'invites'], errors: ['errors', 'users'], signups: ['signups', 'visits'],
-  waitlist: ['waitlist', 'attempts', 'users', 'invites'], fields: ['fields'], ai: ['users'], audit: [],
+  waitlist: ['waitlist', 'attempts', 'users', 'invites'], fields: ['fields'], ai: ['users'], audit: [], preview: [],
 };
 
 /** The sources a tab reads; the Tickets tab adds the archive only while it is open. */

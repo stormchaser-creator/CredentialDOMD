@@ -8,6 +8,7 @@ import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
 import AdminControlHistory from "./AdminControlHistory";
+import { AdminPreviewPicker } from "./AdminPreview";
 import { Modal, ScreenshotAttach } from "../shared";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
@@ -346,6 +347,7 @@ function AdminDashboardContent() {
     { id: "fields", label: attention?.fields_pending > 0 ? `Fields (${attention.fields_pending} pending)` : "Fields" },
     { id: "ai", label: "AI" },
     { id: "audit", label: "Control history" },
+    { id: "preview", label: "Preview as" },
   ];
 
   return (
@@ -376,6 +378,7 @@ function AdminDashboardContent() {
 
       {tab === "reports" && <AdminOperationsReport T={T} onNavigate={navigateReport} />}
       {tab === "audit" && <AdminControlHistory T={T} />}
+      {tab === "preview" && <AdminPreviewPicker T={T} />}
       {loading && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
       {error && (
         <div role="alert" style={{

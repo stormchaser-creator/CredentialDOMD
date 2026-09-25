@@ -355,13 +355,25 @@ export function describeAiStatus(settings) {
   return "Shared AI: checking...";
 }
 
+// The status the Settings AI lines describe. While an administrator previews
+// a member's view (utils/adminPreview.js, wired in lib/admin.js) they read as
+// they would for that member, without "no cap on admin accounts". Display
+// only: routing and the server's limits still follow the real status.
+let displayStatus = status => status;
+export function setAiStatusDisplay(filter) {
+  displayStatus = typeof filter === "function" ? filter : status => status;
+}
+function displayedAiStatus() {
+  try { return displayStatus(sharedAiStatus) || sharedAiStatus; } catch { return sharedAiStatus; }
+}
+
 /**
  * The Opus counterpart: "Shared Opus: on, 3 of 50 calls used today". Null
  * when the Gemini line already says why AI is off for this account.
  */
 export function describeOpusStatus(settings) {
   if (settings?.anthropicApiKey) return "Your own Anthropic key is in use on this device. The shared Opus daily limit does not apply.";
-  const s = sharedAiStatus;
+  const s = displayedAiStatus();
   if (s.anthropicShared) {
     if (s.unlimited) return `Shared Opus: on, ${s.anthropicUsed} call${s.anthropicUsed === 1 ? "" : "s"} today (no cap on admin accounts)`;
     if (s.overHard) return `Shared Opus: the monthly AI budget (${usd(s.budgetHardUsd)}) is used up. Vera answers on Gemini until the first of next month.`;
@@ -380,7 +392,7 @@ export function describeOpusStatus(settings) {
  * the hard line.
  */
 export function describeAiBudget(settings) {
-  const s = sharedAiStatus;
+  const s = displayedAiStatus();
   if (!s.budgetHardUsd) return null;
   if (!s.shared && !s.anthropicShared) return null;
   if (settings?.apiKey && settings?.anthropicApiKey) return null;

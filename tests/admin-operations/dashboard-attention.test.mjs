@@ -11,7 +11,7 @@ import * as adminTicketDraft from '../../src/utils/adminTicketDraft.js';
 
 const source = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
 const tick = () => new Promise(done => setImmediate(done));
-const anchor = '    { id: "audit", label: "Control history" },\n  ];\n';
+const anchor = '    { id: "preview", label: "Preview as" },\n  ];\n';
 assert.ok(source.includes(anchor), 'TABS anchor moved');
 
 function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, fields_pending: 1 }, full = false } = {}) {

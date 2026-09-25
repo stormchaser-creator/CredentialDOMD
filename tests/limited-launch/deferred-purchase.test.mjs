@@ -49,7 +49,7 @@ const built = await build({ stdin: { contents: 'export {default as Membership} f
       ? 'export const useApp = () => globalThis.__betaUI.context;'
       : path === 'hook' ? 'export const useLimitedLaunchAccess = () => globalThis.__betaUI.context.limitedLaunch;'
         : path === 'clerk' ? 'export const useUser = () => ({user:globalThis.__betaUI.context.user,isSignedIn:true});'
-          : path === 'admin' ? 'export const isAdminUser = () => false;'
+          : path === 'admin' ? 'export const isAdminUser = () => false; export const useAdminPreviewRefresh = () => {};'
       : path === 'client' ? 'export const createLimitedLaunchClient = ({accountId}) => {globalThis.__betaUI.clients.push(accountId); return globalThis.__betaUI.client;};'
         : path === 'access' ? 'export const LIMITED_LAUNCH_ACCESS_ENABLED = true; export const canReviewBillingOffer = (...args) => globalThis.__betaUI.canReview(...args); export const accessAuthority = {state: id => id === globalThis.__betaUI.context.user.id ? globalThis.__betaUI.context.limitedLaunch.access : null};'
           : 'export const supabase = null; export const generateCredentialZip = () => {throw Error("No export during test");}; export const downloadBlob = generateCredentialZip;' }));

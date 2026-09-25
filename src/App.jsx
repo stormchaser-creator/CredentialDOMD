@@ -59,6 +59,7 @@ import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { useIsAdmin } from "./lib/admin";
+import AdminPreviewBanner from "./components/pages/AdminPreview";
 import { isNonExpiring, mailtoHref, copyToClipboard } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { buildSetup, setupOwns, dateless } from "./utils/setupTasks";
@@ -137,6 +138,7 @@ export default function App() {
         <AppProvider onNavigate={handleNavigate} offlineSession={offlineSession}>
           <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
           <OfflineBanner />
+          <AdminPreviewBanner />
         </AppProvider>
       ) : (
         <>
@@ -146,6 +148,8 @@ export default function App() {
           <SignedIn>
             <AppProvider onNavigate={handleNavigate}>
               <AppInner tab={tab} setTab={setTab} subPage={subPage} setSubPage={setSubPage} navRecord={navRecord} />
+              {/* Outside AppInner so it also shows on the pending and paused screens. */}
+              <AdminPreviewBanner />
             </AppProvider>
           </SignedIn>
         </>
@@ -295,6 +299,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // late. It gates a card, not a permission: every admin view and every admin
   // function asks the server again.
   const isAdmin = useIsAdmin();
+  // Admin > Preview as: while on, the app renders as the chosen membership
+  // sees it, so the Admin card and page are hidden until Exit preview.
+  const adminPreview = limitedLaunch.access?.adminPreview || null;
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
@@ -2481,7 +2488,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (subPage === "terms") return <LegalSection page="terms" />;
     if (subPage === "data-rights") return <LegalSection page="data-rights" />;
     if (subPage === "cancellation") return <CancellationPage />;
-    if (subPage === "admin") return offlineMode
+    if (subPage === "admin" && !adminPreview) return offlineMode
       ? <OfflineUnavailable T={T} feature="Admin" detail="The admin dashboard reads and writes live server data." onBack={() => setSubPage(null)} />
       : <AdminDashboard />;
 
@@ -2504,8 +2511,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             </div>
           </button>
 
-          {/* Admin (app_admins membership, resolved server-side) */}
-          {isAdmin && (
+          {/* Admin (app_admins membership, resolved server-side). Hidden while
+              previewing a member's view: members do not have it. */}
+          {isAdmin && !adminPreview && (
             <button onClick={() => setSubPage("admin")} className="cmd-card-hover" style={{
               display: "flex", alignItems: "center", gap: 12,
               backgroundColor: T.card, border: `2px solid ${T.accent}`,

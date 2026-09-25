@@ -32,7 +32,10 @@
  * this decides is which card is drawn, not what may be read.
  */
 
-import { sharedAiStatus, useSharedAiStatus } from "../utils/aiClient";
+import { useSyncExternalStore } from "react";
+import { sharedAiStatus, useSharedAiStatus, setAiStatusDisplay } from "../utils/aiClient";
+import { accessAuthority } from "../utils/limitedLaunchAccess.js";
+import { adminPreviewActive, adminPreviewSource, adminPreviewStore } from "../utils/adminPreview.js";
 
 /**
  * Takes no argument on purpose. Every caller used to hand it a user object
@@ -54,6 +57,25 @@ export function isAdminUser() {
  */
 export function useIsAdmin() {
   return !!useSharedAiStatus()?.unlimited;
+}
+
+/**
+ * Admin "Preview as" (utils/adminPreview.js, ticket d45e857c). The access
+ * authority shows the chosen membership instead of the admin's own, only
+ * while isAdminUser() holds and only by taking capabilities away; the AI
+ * status lines drop the admin-only "no cap" wording for the same span.
+ */
+accessAuthority.setPreviewSource(adminPreviewSource({ store: adminPreviewStore, isAdmin: isAdminUser }));
+setAiStatusDisplay(status => (status.unlimited && adminPreviewActive(globalThis.window?.Clerk?.user?.id) ? { ...status, unlimited: false } : status));
+
+/**
+ * Re-render when a preview starts or ends, and when the admin answer lands
+ * (a preview stored in this tab applies only once the server says admin).
+ * Called where the access snapshot is computed (useSubscription).
+ */
+export function useAdminPreviewRefresh() {
+  useSyncExternalStore(adminPreviewStore.subscribe, adminPreviewStore.version, adminPreviewStore.version);
+  useSharedAiStatus();
 }
 
 /** Convenience for invoking edge functions with the user's JWT. */
