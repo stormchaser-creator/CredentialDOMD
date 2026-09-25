@@ -69,6 +69,22 @@ function secret(service, label = false) {
 function sqlText(s) {
   return `convert_from(decode('${Buffer.from(s, 'utf8').toString('hex')}', 'hex'), 'UTF8')`;
 }
+// Customer-facing hygiene applied on the host, where the model cannot skip it
+// (ticket 821d2f76). The model sometimes echoes the label it was told the host
+// adds; strip any leading copies so a customer never sees the header twice
+// (seen on two replies 2026-09-21). Em dashes read as machine-written to this
+// product's customers: a dash at the start of a line is dropped, one right
+// before punctuation or at a line's end is dropped, and one between words
+// becomes a comma. Only the em dash is touched: an en dash is a range
+// ("Aug 1 \u{2013} Aug 15", "9\u{2013}5") and turning it into a comma would
+// make a range read as a list. Nothing else in the reply is rewritten.
+export function customerReplyText(reply) {
+  return String(reply)
+    .replace(/^(?:\s*CredentialDOMD Support · Automated\s*)+/u, '')
+    .replace(/^[ \t]*\u{2014}[ \t]*/gmu, '')
+    .replace(/[ \t]*\u{2014}[ \t]*(?=[,.;:!?)]|$)/gmu, '')
+    .replace(/[ \t]*\u{2014}[ \t]*/gu, ', ');
+}
 export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   if (!/^[a-f0-9-]{36}$/.test(ticket.id)) throw Error('Invalid ticket id');
   if (!/^[a-f0-9-]{36}$/.test(ticket.owner_id || '')) throw Error('Invalid ticket owner');
@@ -82,9 +98,8 @@ export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   // Legacy rows require a profile author. Keep storage compatibility until the
   // reviewed support-job actor is installed; the body identifies automation and
   // must never present this profile ID as a human author. No actor is fabricated.
-  // The model sometimes echoes the label it was told the host adds; strip any leading copies
-  // so a customer never sees the header twice (seen on two replies 2026-09-21).
-  const body = String(reply).replace(/^(?:\s*CredentialDOMD Support · Automated\s*)+/u, '');
+  const body = customerReplyText(reply);
+  if (!body.trim() || body.length > 4000) throw Error('Invalid reply');
   const labeledReply = `CredentialDOMD Support · Automated\n\n${body}`;
   const awaiting = includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;
   const messageId = randomUUID();

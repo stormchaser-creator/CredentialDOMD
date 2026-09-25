@@ -8,7 +8,7 @@ import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../.
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import { invoiceSubject } from "../../../utils/invoicePdf";
-import { TEXT_RULE, money } from "../../../utils/invoiceCover";
+import { TEXT_RULE, money, invoiceCoverNotice } from "../../../utils/invoiceCover";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import {
   dutyDayPay, dutyLabel, summarizeDuties, hospitalsFor, callPeriodsOf,
@@ -30,6 +30,8 @@ function DutyLog({ contract }) {
   const [invoicePick, setInvoicePick] = useState(null); // { days, selected: Set }
   const [invoicePreview, setInvoicePreview] = useState(null);
   const [sent, setSent] = useState(false);
+  // After a send: where the full cover letter is (the WorkLog notice, here too).
+  const [notice, setNotice] = useState(null);
 
   const todayKey = (() => {
     const d = new Date();
@@ -187,6 +189,11 @@ function DutyLog({ contract }) {
     };
     const how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
     if (how === null) return; // share sheet cancelled
+    const msg = invoiceCoverNotice(how);
+    if (msg) {
+      setNotice(msg);
+      setTimeout(() => setNotice(n => (n === msg ? null : n)), 9000);
+    }
     markDutyBilled(`${how.startsWith("share") ? "share" : "download"}-${format}`);
   };
 
@@ -245,6 +252,14 @@ function DutyLog({ contract }) {
           This contract pays per day worked and per accepted 24-hour call period. Log the day; the rate comes from the agreement.
         </div>
       </div>
+
+      {notice && (
+        <div role="status" style={{
+          padding: "12px 14px", borderRadius: 12, marginBottom: 10,
+          backgroundColor: T.accent + "18", border: `1px solid ${T.accent}55`,
+          fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.45,
+        }}>{notice}</div>
+      )}
 
       <button onClick={openNew} style={{
         width: "100%", padding: "13px", borderRadius: 12, border: "none", marginBottom: 8,

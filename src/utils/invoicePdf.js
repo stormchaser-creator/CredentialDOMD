@@ -3,12 +3,12 @@ import autoTable from "jspdf-autotable";
 import { formatDate, mailtoHref } from "./helpers.js";
 import {
   money, invoicePayment, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail,
-  normalizeInvoiceText, MAILTO_BODY_MAX,
+  normalizeInvoiceText, invoiceTextOnlyShare, MAILTO_BODY_MAX,
 } from "./invoiceCover.js";
 
 // The wording lives in invoiceCover.js (pure, unit-tested); re-exported so
 // every send site keeps importing from here.
-export { invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail, invoicePayment, normalizeInvoiceText };
+export { invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail, invoicePayment, normalizeInvoiceText, invoiceTextOnlyShare };
 
 /**
  * Professional PDF invoice — clean table, brand header, ready for a
@@ -269,20 +269,17 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
     || window.matchMedia?.("(display-mode: standalone)")?.matches;
   if (standalone && navigator.share && fallbackText) {
     try {
-      // No PDF rides along here, so the itemized invoice — multi-line by
-      // nature, not prose — goes on the clipboard where its line breaks
-      // survive, same as the cover letter above. Only the flowing blurb
-      // goes into share `text`; the line-item table jammed into that field
-      // would hit the same iOS Mail newline-stripping this file works
-      // around everywhere else and read as one run-on paragraph.
-      try {
-        await navigator.clipboard.writeText(`${cover}\n\n${normalizeInvoiceText(fallbackText)}`);
-        coverCopied = true;
-      } catch { /* clipboard unavailable */ }
-      await navigator.share({
-        title: subject || `Invoice ${inv.number}`,
-        text: `${invoiceCoverBlurb(inv, { attached: false })} The full itemized invoice is on your clipboard for pasting.`,
-      });
+      // No PDF rides along here, so the message text IS the invoice: the
+      // cover letter and the itemized invoice, multi-line. The newline strip
+      // documented above was seen on shares that carry a file; whether a
+      // text-only share keeps its breaks is one of the things the Help & FAQ
+      // probe (src/utils/shareProbe.js) checks. It used to send a
+      // one-paragraph blurb that promised an invoice "below" with nothing
+      // below, plus a paste instruction meant for the sender but read by the
+      // recipient (ticket 821d2f76).
+      const body = invoiceTextOnlyShare(inv, fallbackText);
+      try { await navigator.clipboard.writeText(body); coverCopied = true; } catch { /* clipboard unavailable */ }
+      await navigator.share({ title: subject || `Invoice ${inv.number}`, text: body });
       return coverCopied ? "share-text+cover" : "share-text";
     } catch (err) {
       if (err?.name === "AbortError") return null;
@@ -294,5 +291,7 @@ export async function shareInvoicePdf(inv, subject, fallbackText) {
   a.download = file.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  return "download";
+  // Tagged like shareOrDownload's Word/Excel download, so every send site
+  // tells the physician the cover letter is on the clipboard.
+  return coverCopied ? "download+cover" : "download";
 }

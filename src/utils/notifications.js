@@ -1,6 +1,7 @@
 import { complianceFor } from "./compliance";
 import { getItemLabel, formatDate, MS_PER_DAY, mailtoHref } from "./helpers";
 import { scrubSsn } from "./outgoingText.js";
+import { smsBody, alertTextBody, alertCutNotice } from "./shareText";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -106,7 +107,7 @@ export function buildNotificationMessage(data, alerts) {
   if (alerts.expired.length > 0) {
     lines.push("", `\u26a0 EXPIRED (${alerts.expired.length}):`);
     alerts.expired.forEach(item => {
-      lines.push(`  \u2717 ${getItemLabel(item)} \u2014 expired ${fmtDate(item.expirationDate)}`);
+      lines.push(`  \u{2717} ${getItemLabel(item)}: expired ${fmtDate(item.expirationDate)}`);
       if (item.state) lines.push(`    State: ${item.state}`);
     });
   }
@@ -116,7 +117,7 @@ export function buildNotificationMessage(data, alerts) {
     alerts.soon.forEach(item => {
       const daysLeft = Math.ceil((new Date(item.expirationDate) - now) / MS_PER_DAY);
       const urgency = daysLeft <= 14 ? "URGENT" : daysLeft <= 30 ? "Soon" : "";
-      lines.push(`  \u23f3 ${getItemLabel(item)} \u2014 ${fmtDate(item.expirationDate)} (${daysLeft} day${daysLeft !== 1 ? "s" : ""}) ${urgency}`);
+      lines.push(`  \u{23f3} ${getItemLabel(item)}: ${fmtDate(item.expirationDate)} (${daysLeft} day${daysLeft !== 1 ? "s" : ""})${urgency ? ` ${urgency}` : ""}`);
       if (item.state) lines.push(`    State: ${item.state}`);
     });
   }
@@ -174,21 +175,46 @@ export function composeEmail(email, subject, body) {
   window.open(mailtoHref(email, subject, body), "_blank");
 }
 
-export function composeText(phone, raw) {
+/**
+ * Open Messages with the body. A long body is cut at a word boundary
+ * (shareText.smsBody), and the cut is never silent: the result says so, and
+ * with copyFullOnCut the full text goes to the clipboard first, inside the
+ * same tap, so the sender can paste the rest. Returns
+ * { truncated, copied: Promise<boolean> } for the caller's notice.
+ */
+export function composeText(phone, raw, { copyFullOnCut = false } = {}) {
   // Anything SSN-shaped is taken out before it reaches the Messages app.
   const body = scrubSsn(String(raw ?? ""));
-  const cleaned = phone.replace(/[^0-9+]/g, "");
+  const cleaned = String(phone || "").replace(/[^0-9+]/g, "");
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  // A hard character cut can land mid-word or mid-line on a long body; back
-  // up to the last line break or space so the truncated text still reads as
-  // whole words/lines instead of splitting one in half.
-  let truncated = body.substring(0, 1400);
-  if (truncated.length < body.length) {
-    const lastBreak = Math.max(truncated.lastIndexOf("\n"), truncated.lastIndexOf(" "));
-    if (lastBreak > 0) truncated = truncated.slice(0, lastBreak);
+  const { text, truncated } = smsBody(body);
+  let copied = Promise.resolve(false);
+  if (truncated && copyFullOnCut && navigator.clipboard?.writeText) {
+    copied = navigator.clipboard.writeText(String(body)).then(() => true, () => false);
   }
   window.open(
-    `sms:${cleaned}${isIOS ? "&body=" : "?body="}${encodeURIComponent(truncated)}`,
+    `sms:${cleaned}${isIOS ? "&body=" : "?body="}${encodeURIComponent(text)}`,
     "_blank"
   );
+  return { truncated, copied };
+}
+
+/**
+ * The alert screens' Text button (Notification Center, the home banner, the
+ * Settings test). The digest goes to the physician's own phone. One too long
+ * for a message is cut before an item and says the rest is in the app
+ * (shareText.alertTextBody), the full digest goes to the clipboard first,
+ * inside the same tap, and `onCut` receives the notice for the screen once
+ * the copy settles. It used to be cut mid-list with nothing said anywhere.
+ * Returns { truncated, copied: Promise<boolean> }.
+ */
+export function textAlert(phone, body, onCut) {
+  const { text, truncated } = alertTextBody(body);
+  let copied = Promise.resolve(false);
+  if (truncated && navigator.clipboard?.writeText) {
+    copied = navigator.clipboard.writeText(scrubSsn(String(body))).then(() => true, () => false);
+  }
+  composeText(phone, text);
+  if (truncated && onCut) copied.then((ok) => onCut(alertCutNotice(ok)));
+  return { truncated, copied };
 }

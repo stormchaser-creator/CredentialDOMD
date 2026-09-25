@@ -45,7 +45,7 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
       if (contact) headerLine(contact, 13);
       if (section.specialties?.length) {
         doc.setFont("helvetica", "bold").setFontSize(10.5).setTextColor(13, 110, 253);
-        headerLine(`${section.fullDegree ? section.fullDegree + " — " : ""}${section.specialties.map(id => id.split(":").pop()).join(", ")}`, 13.5);
+        headerLine(`${section.fullDegree ? section.fullDegree + ", " : ""}${section.specialties.map(id => id.split(":").pop()).join(", ")}`, 13.5);
       }
       y += 6;
       doc.setDrawColor(20, 24, 33).setLineWidth(1.4);
@@ -111,11 +111,11 @@ export function buildCvPdf(sections, { name = "Physician", degree = "" } = {}) {
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(160, 165, 172);
-    doc.text(`${name}${degree ? `, ${degree}` : ""} — Curriculum Vitae · page ${p} of ${pages}`, M, pageH - 24);
+    doc.text(`${name}${degree ? `, ${degree}` : ""} | Curriculum Vitae | page ${p} of ${pages}`, M, pageH - 24);
   }
 
   const blob = doc.output("blob");
-  const fname = `CV — ${name}${degree ? `, ${degree}` : ""}.pdf`;
+  const fname = `CV ${name}${degree ? `, ${degree}` : ""}.pdf`;
   return new File([blob], fname, { type: "application/pdf" });
 }
 

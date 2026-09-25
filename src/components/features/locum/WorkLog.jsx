@@ -12,7 +12,7 @@ import EmptyState from "../../shared/EmptyState";
 import { PlusIcon, TrashIcon, SendIcon, EditIcon } from "../../shared/Icons";
 import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
 import { invoiceSubject } from "../../../utils/invoicePdf";
-import { TEXT_RULE } from "../../../utils/invoiceCover";
+import { TEXT_RULE, invoiceCoverNotice } from "../../../utils/invoiceCover";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import { parseWorkDictation } from "../../../utils/workDictation";
@@ -911,9 +911,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     // PDF / Word / Excel, physician's choice — share sheet, download fallback
     const how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
     if (how === null) return; // user cancelled the share sheet
-    if (how.includes("+cover")) {
-      showNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard: paste it over the intro if you want the long form.");
-    }
+    const coverMsg = invoiceCoverNotice(how);
+    if (coverMsg) showNotice(coverMsg);
     markBilledAndLog(`${how.startsWith("share") ? "share" : "download"}-${format}`);
   }, [invoicePreview, markBilledAndLog, pdfArgsFor, showNotice]);
 

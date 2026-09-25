@@ -6,7 +6,7 @@
 // Run: node scripts/invoice-cover.test.mjs   (pure node, no test runner)
 import {
   money, invoicePayment, invoicePeriod, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail,
-  normalizeInvoiceText, TEXT_RULE, MAILTO_BODY_MAX,
+  normalizeInvoiceText, invoiceTextOnlyShare, invoiceCoverNotice, TEXT_RULE, MAILTO_BODY_MAX,
 } from "../src/utils/invoiceCover.js";
 import { mailtoHref } from "../src/utils/helpers.js";
 import { dutyDayPay } from "../src/utils/dutyPay.js";
@@ -160,6 +160,55 @@ for (const inv of [partial, unpaid, settled, { number: "X" }]) {
   for (const l of pay.lines) ok("no em dash in day-rate line labels", !l.label.includes(EM_DASH), l.label);
   eq("day-rate day total", pay.total, 2560.09);
 }
+
+// -- Expense invoices say what they are (ticket e8cc2a02) --
+{
+  const expense = {
+    number: "EXP-0003", kind: "expenses", physician: "Eric Whitney, DO", npi: "1234567890", email: "eric@example.com",
+    facility: "ANMG Locums", periodStart: "2026-08-03", periodEnd: "2026-08-09", total: 412.37,
+  };
+  const eBlurb = invoiceCoverBlurb({ ...expense, receipts: 3 });
+  const eLetter = invoiceCoverEmail({ ...expense, receipts: 3 });
+  console.log("\n-- expense blurb --\n" + eBlurb + "\n\n-- expense letter --\n" + eLetter + "\n");
+  for (const t of [eBlurb, eLetter]) {
+    ok("expense cover never says physician services", !/physician services/.test(t), t);
+    ok("expense cover never claims days of coverage", !/day of coverage|work performed/.test(t), t);
+    ok("expense cover names reimbursable travel expenses", t.includes("reimbursable travel expenses incurred Aug 3, 2026 through Aug 9, 2026"), t);
+    ok("expense cover counts the receipts that ride along", t.includes("3 receipts are attached."), t);
+    ok("expense cover has no em dash", !t.includes(EM_DASH));
+  }
+  ok("expense blurb still leads with the subject", eBlurb.startsWith("Invoice EXP-0003 from Eric Whitney, DO for ANMG Locums. \n\n"));
+  eq("expense letter keeps five paragraphs", eLetter.split("\n\n").length, 5);
+  ok("one receipt reads in the singular", invoiceCoverBlurb({ ...expense, receipts: 1 }).includes("The receipt is attached."));
+  for (const receipts of [0, undefined, -2, "x"]) {
+    ok(`no receipt claim when none ride along (${receipts})`, !/receipt/i.test(invoiceCoverEmail({ ...expense, receipts })) && !/receipt/i.test(invoiceCoverBlurb({ ...expense, receipts })));
+  }
+  ok("a work invoice never mentions receipts, even if a count leaks in", !/receipt/i.test(invoiceCoverBlurb({ ...partial, receipts: 2 })));
+  ok("work invoice wording is unchanged", blurb.includes("It itemizes each day of coverage and the work performed under the terms of our agreement. Please reach out"));
+  ok("expense 'below' letter never claims an attachment", !/attached/i.test(invoiceCoverEmail(expense, { attached: false })));
+}
+
+// -- No file rides along: the message is the letter plus the itemized invoice (ticket 821d2f76) --
+{
+  const text = ["INVOICE INV-0012", String.fromCodePoint(0x2500).repeat(40), "TOTAL DUE: $3,025.00"].join("\n");
+  const body = invoiceTextOnlyShare(partial, text);
+  ok("text-only share opens with the letter", body.startsWith("Hello,\n\nBelow is invoice INV-0012"));
+  ok("text-only share carries the itemized invoice below the letter", body.endsWith(normalizeInvoiceText(text)));
+  ok("text-only share never mentions the clipboard", !/clipboard/i.test(body));
+  ok("text-only share never claims an attachment", !/attached/i.test(body));
+  ok("text-only share normalizes the legacy wide rule", !BOX.test(body));
+}
+
+// -- The sender, never the recipient, hears about the clipboard --
+for (const inv of [partial, unpaid, settled, { number: "X" }]) {
+  for (const t of [invoiceCoverBlurb(inv), invoiceCoverEmail(inv), invoiceCoverBlurb(inv, { attached: false })]) {
+    ok("no recipient-facing cover mentions the clipboard", !/clipboard/i.test(t), t);
+  }
+}
+ok("a share with the letter copied tells the sender", /clipboard/.test(invoiceCoverNotice("share+cover") || ""));
+ok("a Word/Excel download with the letter copied says so", /downloaded/.test(invoiceCoverNotice("download+cover") || ""));
+eq("nothing to say when the letter was not copied", invoiceCoverNotice("share"), null);
+eq("nothing to say after a text-only share (it carried the letter)", invoiceCoverNotice("share-text+cover"), null);
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

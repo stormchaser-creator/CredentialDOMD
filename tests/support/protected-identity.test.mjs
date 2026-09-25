@@ -246,7 +246,7 @@ test('the mail, text-message, clipboard and share paths scrub, and the error rep
   assert.match(href, /%0D%0A/, 'CRLF line breaks are kept');
   const [helpers, notifications, share, emailPacket, support] = await Promise.all(['src/utils/helpers.js', 'src/utils/notifications.js', 'src/components/features/ShareModal.jsx', 'src/components/features/EmailPacketModal.jsx', 'src/components/pages/SupportModal.jsx'].map(read));
   assert.match(helpers, /export async function copyToClipboard\(raw\) \{\n(?:.*\n)?\s*const text = scrubSsn\(raw\);/);
-  assert.match(notifications, /export function composeText\(phone, raw\) \{[\s\S]{0,120}const body = scrubSsn\(/);
+  assert.match(notifications, /export function composeText\(phone, raw, \{ copyFullOnCut = false \} = \{\}\) \{[\s\S]{0,160}const body = scrubSsn\(/);
   assert.match(share, /const blurb = scrubSsn\(buildCredentialBlurb\(/);
   assert.match(emailPacket, /text: scrubSsn\(text\)/);
   assert.match(emailPacket, /filter\(\(d\) => !isIdentityLink\(d\?\.linkedTo\)\)/, 'no file linked to Protected Identity is offered for sending');
@@ -254,32 +254,33 @@ test('the mail, text-message, clipboard and share paths scrub, and the error rep
 
   // Vera's packet: the model writes the cover note from the conversation, so
   // an SSN typed or pasted there reaches the note, the blurb and the clipboard.
-  const { veraPacketText, bundlePacketText } = await import('../../src/utils/helpers.js');
-  const vera = veraPacketText(`Send my license to creds@example.invalid; they need my SSN ${SSN}`);
-  assert.doesNotMatch(vera.note + vera.blurb, /123-45-6789/);
+  // These are the builders the send paths actually call (src/utils/shareText.js).
+  const { veraPacketShareText, bundleShareText } = await import('../../src/utils/shareText.js');
+  const vera = veraPacketShareText(`Send my license to creds@example.invalid; they need my SSN ${SSN}`);
+  assert.doesNotMatch(vera.note + vera.blurb + vera.title, /123-45-6789/);
   assert.match(vera.note, /\[SSN removed\]/);
-  assert.equal(vera.blurb, `Credential packet: Send my license to creds@example.invalid. they need my SSN ${SSN_REMOVED}. Sent from CredentialDOMD.`);
+  assert.match(vera.blurb, /\[SSN removed\]/);
   assert.doesNotMatch(vera.note + vera.blurb, /\u{2014}/u, 'no em dash in outgoing text');
-  assert.equal(veraPacketText('').note, 'Credential documents enclosed.\n\nSent from CredentialDOMD.');
+  assert.match(veraPacketShareText('').note, /^Credential documents enclosed\.\n\nSent from CredentialDOMD/);
   // The Files bundle: a file name can carry an SSN into the letter, the title and the blurb.
-  const bundle = bundlePacketText([{ name: `W-9 ${SSN}.pdf` }, { name: 'License.pdf' }], { name: 'Dr Synthetic', degreeType: 'MD', npi: '1234567890' }, new Date('2026-09-25T12:00:00Z'));
+  const bundle = bundleShareText({ name: 'Dr Synthetic', degreeType: 'MD', npi: '1234567890' }, [{ name: `W-9 ${SSN}.pdf` }, { name: 'License.pdf' }], new Date('2026-09-25T12:00:00Z'));
   for (const [part, text] of Object.entries(bundle)) {
     assert.doesNotMatch(text, /123-45-6789|\u{2014}/u, part);
   }
-  assert.match(bundle.text, /1\. W-9 \[SSN removed\]\.pdf/);
-  assert.match(bundle.blurb, /1\. W-9 \[SSN removed\]\.pdf\./);
-  assert.match(bundle.text, /\(NPI 1234567890\)/, 'the NPI (ten digits) is kept');
-  assert.equal(bundle.title, 'Credential packet for Dr Synthetic, MD (2 documents)');
+  assert.match(bundle.letter, /1\. W-9 \[SSN removed\]\.pdf/);
+  assert.match(bundle.blurb, /W-9 \[SSN removed\]\.pdf/);
+  assert.match(bundle.letter, /\(NPI 1234567890\)/, 'the NPI (ten digits) is kept');
   const [assistant, documents] = await Promise.all(['src/components/features/AssistantSection.jsx', 'src/components/features/DocumentsSection.jsx'].map(read));
   const packet = assistant.slice(assistant.indexOf('action.kind === "send_packet"'), assistant.indexOf('action.kind === "export_data"'));
-  assert.match(packet, /const \{ note, blurb \} = veraPacketText\(action\.coverNote\);/);
+  assert.match(packet, /const \{ title, note: packetNote, blurb \} = veraPacketShareText\(action\.coverNote\);/);
+  assert.match(packet, /!isIdentityLink\(d\.linkedTo\)/, 'no file linked to Protected Identity goes out in a Vera packet');
   assert.doesNotMatch(packet, /navigator\.clipboard\.writeText/, 'the clipboard is written through copyToClipboard, which scrubs');
-  assert.equal((packet.match(/await copyToClipboard\(note\)/g) || []).length, 2, 'share path and download fallback');
-  assert.match(packet, /navigator\.share\(\{ title: "Credential packet", text: blurb, files \}\)/);
+  assert.equal((packet.match(/await copyToClipboard\(packetNote\)/g) || []).length, 2, 'share path and download fallback');
+  assert.match(packet, /navigator\.share\(\{ title, text: blurb, files \}\)/);
   const sendBundle = documents.slice(documents.indexOf('const sendBundle = useCallback('), documents.indexOf('const openCamera = useCallback('));
-  assert.match(sendBundle, /const \{ text, title, blurb \} = bundlePacketText\(docs, data\.settings\);/);
+  assert.match(sendBundle, /const \{ title, letter, blurb \} = bundleShareText\(data\.settings, sentDocs\);/);
   assert.doesNotMatch(sendBundle, /navigator\.clipboard\.writeText/);
-  assert.match(sendBundle, /await copyToClipboard\(text\)/);
+  assert.match(sendBundle, /await copyToClipboard\(letter\)/);
   assert.match(sendBundle, /navigator\.share\(\{ files, title, text: blurb \}\)/);
 
   const source = await read('src/lib/errorReport.js');

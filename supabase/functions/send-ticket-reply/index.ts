@@ -12,6 +12,7 @@
 // its signed links expire, while the thread in the app signs a fresh one each
 // time it opens.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
+import { ticketReplyEmail } from "../_shared/ticketReplyEmail.ts";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const SECRET = Deno.env.get("WELCOME_HOOK_SECRET")!;
@@ -20,15 +21,8 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const APP_URL = "https://credentialdomd.com/app/";
-
-const replyText = (reply: string, attachment: boolean) => [
-  reply,
-  attachment ? "A file is attached to this reply. Open the ticket in the app to see it." : "",
-  `Reply here: ${APP_URL}#support (More > Support > Your tickets)`,
-  "Eric",
-  "--\nEric Whitney, DO\nCredentialDOMD: credential tracking for physicians, by a physician\nhttps://credentialdomd.com",
-].filter(Boolean).join("\n\n");
+// Body and signature live in _shared/ticketReplyEmail.ts: an automated reply is
+// from and signed "CredentialDOMD Support", a reply the owner typed is his.
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -65,15 +59,16 @@ Deno.serve(async (req) => {
   }
 
   const subject = `Re: ${String(ticket.subject || "your ticket").slice(0, 150)} (CredentialDOMD)`;
+  const mail = ticketReplyEmail(reply, !!record.attachment_path);
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: "Eric Whitney, DO <whit@credentialdomd.com>",
+      from: mail.from,
       to: [email],
       reply_to: "stormchaser@elryx.com",
       subject,
-      text: replyText(reply, !!record.attachment_path),
+      text: mail.text,
     }),
   });
   const body = await r.text();

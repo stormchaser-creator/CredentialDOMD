@@ -18,7 +18,7 @@ import {
   ABMS_SUBSPECIALTIES, AOA_SUBSPECIALTIES, UCNS_CERTS, ABPS_CERTS,
 } from "../../constants/boardRequirements";
 import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
-import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, composeText } from "../../utils/notifications";
+import { generateAlerts, buildNotificationMessage, fireBrowserNotification, composeEmail, textAlert } from "../../utils/notifications";
 import { useSharedAiStatus, fetchSharedAiStatus, describeAiStatus, describeOpusStatus, describeAiBudget, useAnthropicAvailable } from "../../utils/aiClient";
 import { CODER_MODELS } from "../../utils/cptCoder";
 import FoundingMemberBadge from "../shared/FoundingMemberBadge";
@@ -49,6 +49,8 @@ function SettingsSection({ onUpgrade }) {
   // Nothing it finds is written until the physician ticks the row and saves.
   const [publicOpen, setPublicOpen] = useState(false);
   const [publicSavedMsg, setPublicSavedMsg] = useState(null);
+  // Said when the test alert text had to be shortened (textAlert).
+  const [testNotice, setTestNotice] = useState("");
 
   // Shared AI (server-held Gemini key, metered per user). Re-checked when
   // Settings opens so the "N of 200 calls used today" line is current.
@@ -694,6 +696,7 @@ function SettingsSection({ onUpgrade }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Send Test Notification</div>
             <button onClick={() => {
+              setTestNotice("");
               const alerts = generateAlerts(data);
               if (!alerts) { alert("No active alerts to send."); return; }
               const msg = buildNotificationMessage(data, alerts);
@@ -702,12 +705,15 @@ function SettingsSection({ onUpgrade }) {
                 fireBrowserNotification("CredentialDOMD Test", msg.shortText, "test-" + Date.now());
               }
               if (s.notifyEmail !== false && s.email) composeEmail(s.email, msg.subject, msg.body);
-              else if (s.notifyText !== false && s.phone) composeText(s.phone, msg.body);
+              else if (s.notifyText !== false && s.phone) textAlert(s.phone, msg.body, setTestNotice);
               else if (typeof Notification === "undefined" || Notification.permission !== "granted") {
                 alert("Enable browser notifications, or add email/phone above.");
               }
             }} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Test</button>
           </div>
+          {testNotice && (
+            <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6, lineHeight: 1.45 }}>{testNotice}</div>
+          )}
         </div>
       </div>
 

@@ -5,12 +5,13 @@ import Modal from "../../shared/Modal";
 import DeskTable from "../../shared/DeskTable";
 import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon, ExternalLinkIcon, DollarIcon, UndoIcon } from "../../shared/Icons";
-import { sortInvoiceLines, invoiceSubject, shareInvoiceText, invoicePdfFile, invoiceCoverBlurb, invoiceCoverEmail } from "../../../utils/invoicePdf";
-import { resolveDocuments, missingReceiptMessage, billedReceiptDocs } from "../../../utils/receiptFiles";
+import { sortInvoiceLines, invoiceSubject, shareInvoiceText, invoicePdfFile } from "../../../utils/invoicePdf";
+import { copyInvoiceCover, shareInvoiceFiles } from "../../../utils/expenseInvoiceSend";
+import { resolveDocuments, missingReceiptMessage, billedReceiptDocs, attachedExpenseIds } from "../../../utils/receiptFiles";
 import { downloadDocumentBlob } from "../../../lib/supabase";
 import { exportInvoice } from "../../../utils/invoiceExport";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
-import { money } from "../../../utils/invoiceCover";
+import { money, invoiceCoverNotice, INVOICE_COVER_ON_CLIPBOARD, expenseReceiptLines } from "../../../utils/invoiceCover";
 import { callPeriodsOf } from "../../../utils/dutyPay";
 
 const daysSince = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
@@ -256,7 +257,7 @@ function Invoices({ onOpenContract }) {
     const docs = receiptDocsFor(inv);
     if (!docs.length) return;
     const { files, missing } = await resolveDocuments(docs, { download: downloadDocumentBlob });
-    setResendReceipts({ files, missing, forId: inv.id });
+    setResendReceipts({ files, missing, attachedIds: attachedExpenseIds(docs, missing), forId: inv.id });
   };
   const resend = async (inv, format = "pdf") => {
     const c = contracts.find(x => x.id === inv.contractId);
@@ -272,6 +273,8 @@ function Invoices({ onOpenContract }) {
       // A resend can follow a payment — the document and cover must say so
       paid: paidOf(inv), balance: balanceOf(inv),
       issuedDate: inv.sentAt?.slice(0, 10),
+      // An expense invoice's cover says travel expenses, not physician services
+      kind: inv.kind,
     };
     const subject = invoiceSubject(args);
     // Rebuild the document from the stored line items when we have them
@@ -281,34 +284,47 @@ function Invoices({ onOpenContract }) {
       // user gesture is still live.
       const ready = resendReceipts.forId === inv.id ? resendReceipts : { files: [], missing: [] };
       if (format === "pdf" && ready.files.length) {
-        const bundle = [invoicePdfFile(args), ...ready.files];
-        try { await navigator.clipboard.writeText(invoiceCoverEmail(args)); } catch { /* clipboard unavailable */ }
-        if (navigator.canShare?.({ files: bundle })) {
-          try {
-            await navigator.share({ title: subject, text: invoiceCoverBlurb(args), files: bundle });
-            setNotice(ready.missing.length
-              ? `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"}. ${missingReceiptMessage(ready.missing)}`
-              : `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"} attached.`);
-            setTimeout(() => setNotice(null), 9000);
-            return;
-          } catch (err) {
-            if (err?.name === "AbortError") return;
-            // Anything else falls through to the unchanged single-document
-            // path below, so a resend can never deliver less than it did
-            // before receipts were added.
-          }
+        // The PDF marks "attached" only the expenses whose receipts are in
+        // this bundle; lines saved before lines carried expenseId only when
+        // every receipt is. The clipboard letter is count-free: it is written
+        // before the share and could not be taken back if the share fails
+        // (src/utils/expenseInvoiceSend.js). The share text counts the files.
+        const withReceipts = {
+          ...args,
+          lines: expenseReceiptLines(args.lines, ready.attachedIds, { allAttached: !ready.missing.length }),
+        };
+        const bundle = [invoicePdfFile(withReceipts), ...ready.files];
+        const coverCopied = await copyInvoiceCover(args, navigator.clipboard);
+        const shared = await shareInvoiceFiles(withReceipts, bundle, ready.files.length, navigator);
+        if (shared === "abort") return;
+        if (shared) {
+          const pasteNote = coverCopied ? ` ${INVOICE_COVER_ON_CLIPBOARD}` : "";
+          setNotice(ready.missing.length
+            ? `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"}. ${missingReceiptMessage(ready.missing)}${pasteNote}`
+            : `Resent with ${ready.files.length} receipt${ready.files.length === 1 ? "" : "s"} attached.${pasteNote}`);
+          setTimeout(() => setNotice(null), 12000);
+          return;
         }
+        // Anything else falls through to the single-document path below, so
+        // a resend can never deliver less than it did before receipts were
+        // added.
       }
-      const how = await exportInvoice(args, format, subject, inv.text);
+      // No receipt rides with the single document (or with Word/Excel), so
+      // no line of it may say one is attached.
+      const single = args.kind === "expenses" ? { ...args, lines: expenseReceiptLines(args.lines) } : args;
+      const how = await exportInvoice(single, format, subject, inv.text);
+      if (how === null) return; // share sheet cancelled
+      const coverMsg = invoiceCoverNotice(how);
       if (ready.missing.length || (ready.files.length && format === "pdf")) {
-        setNotice(ready.missing.length
+        setNotice((ready.missing.length
           ? `Invoice resent on its own. ${missingReceiptMessage(ready.missing)}`
-          : "Invoice resent on its own: the receipts were too large to send in the same message.");
-        setTimeout(() => setNotice(null), 9000);
+          : "Invoice resent on its own: the receipts were too large to send in the same message.")
+          + (coverMsg ? ` ${coverMsg}` : ""));
+        setTimeout(() => setNotice(null), 12000);
         return;
       }
-      if (how && how.includes("+cover")) {
-        setNotice("Sent with a short intro that reads correctly in Mail. The full cover letter is on your clipboard: paste it over the intro if you want the long form.");
+      if (coverMsg) {
+        setNotice(coverMsg);
         setTimeout(() => setNotice(null), 9000);
       }
       return;
