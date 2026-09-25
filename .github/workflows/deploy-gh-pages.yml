@@ -102,6 +102,17 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: node scripts/check-tables-exist.mjs
 
+      # Same ordering rule for columns: every key the client writes is a
+      # column, and one unknown column rejects the whole row. A migration that
+      # adds a column lists it in scripts/check-columns-exist.mjs, so a client
+      # that writes it cannot ship before production has it. Fails closed.
+      - name: Check every newly written column exists in production
+        working-directory: src
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: node scripts/check-columns-exist.mjs
+
       - name: Build the app and public site
         working-directory: src
         env:
