@@ -186,7 +186,6 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
     // Recheck after storage I/O so revocation, re-filing or row changes during the read fail closed.
     if (!await deps.store.record(sessionDigest, input.documentId, 'document_response_prepared', input.action, bytes.byteLength, await digest(bytes))) fail(401, 'document_unavailable');
     const mime = input.action === 'view' ? safeInlineMime(bytes, d.mime_type) : null;
-    // eslint-disable-next-line no-control-regex
     const filename = String(d.name || 'credential').replace(/[\r\n"\\/\u{0}-\u{1f}\u{7f}-\u{10ffff}]/gu, '_').slice(0, 160) || 'credential';
     return new Response(bytes, { status: 200, headers: { ...headers, 'Content-Type': mime || 'application/octet-stream', 'Content-Length': String(bytes.byteLength), 'Content-Disposition': `${mime ? 'inline' : 'attachment'}; filename="${filename}"` } });
   }

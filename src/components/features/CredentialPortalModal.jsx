@@ -1,3 +1,7 @@
+// Legacy single-use "selection" invitation UI. No longer mounted: owners now
+// use Administrator access (AdministratorAccess.jsx), which offers standing,
+// healthcare-only grants. Kept, with its tests, because the server still
+// honours selection invitations created before that screen existed.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import Modal from "../shared/Modal";

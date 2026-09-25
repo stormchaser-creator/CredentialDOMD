@@ -77,7 +77,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STRICT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SUBJECT = /^user_[A-Za-z0-9]+$/;
 // Controls and the Unicode line separators; the purpose is one line of text.
-// eslint-disable-next-line no-control-regex
 const CONTROL = /[\u{0}-\u{1f}\u{7f}\u{2028}\u{2029}]/gu;
 
 /**
