@@ -2,6 +2,7 @@ import { STATE_REQS } from '../constants/stateRequirements.js';
 import { RENEWAL_INFO } from '../constants/renewalInfo.js';
 import { ASSISTANT_SOURCES } from '../constants/assistantSources.js';
 import { STATE_NAMES } from '../constants/states.js';
+import { renewalRoute } from './renewalRoute.js';
 
 // These discrepancies are awaiting independent rule review. Exposing the issue
 // here changes no calculator facts and does not certify other entries as correct.
@@ -97,21 +98,20 @@ export function calculationEvidence(comp, degree, today) {
 }
 
 export function renewalEvidence(jurisdiction, degree) {
-  const r = Object.hasOwn(RENEWAL_INFO, jurisdiction) ? RENEWAL_INFO[jurisdiction] : null;
-  if (!r) return null;
-  const d = degreeOf(degree);
-  const separateDO = r.doBoardUrl && r.doBoardUrl !== r.boardUrl && r.doBoard && !/^null\b/i.test(r.doBoard);
-  const unknownDORoute = d === 'DO' && !!(STATE_REQS[jurisdiction]?.md || STATE_REQS[jurisdiction]?.do) && !separateDO;
+  // One DO/MD route selection, shared with the licence card's renewal box
+  // (src/utils/renewalRoute.js). Separate DO routes must not send the
+  // physician to a saved MD-only portal.
+  const route = renewalRoute(jurisdiction, degree);
+  if (!route) return null;
   return {
-    jurisdiction, degree: d, basis: 'stored_renewal_reference', currentVerification: 'not_performed',
-    degreeSelectionNeeded: !d && !!(STATE_REQS[jurisdiction]?.md || STATE_REQS[jurisdiction]?.do),
-    board: unknownDORoute ? null : d === 'DO' && separateDO ? r.doBoard : r.board,
-    // Separate DO routes must not send the physician to a saved MD-only portal.
-    boardUrl: unknownDORoute ? null : https(d === 'DO' && separateDO ? r.doBoardUrl : r.boardUrl),
-    portal: unknownDORoute ? null : https(d === 'DO' && separateDO ? r.doBoardUrl : r.portalUrl),
-    routeStatus: unknownDORoute ? 'degree_specific_route_not_established' : 'stored_route_not_live_checked',
-    alternativeDOBoard: !d && separateDO ? { name: r.doBoard, url: https(r.doBoardUrl) } : null,
-    guide: https(r.guideUrl),
+    jurisdiction, degree: route.degree, basis: 'stored_renewal_reference', currentVerification: 'not_performed',
+    degreeSelectionNeeded: route.degreeSelectionNeeded,
+    board: route.board,
+    boardUrl: route.boardUrl,
+    portal: route.portal,
+    routeStatus: route.unknownDORoute ? 'degree_specific_route_not_established' : 'stored_route_not_live_checked',
+    alternativeDOBoard: route.alternativeDOBoard,
+    guide: route.guide,
     recordedReview: ASSISTANT_SOURCES.renewalSources[jurisdiction]?.recordedReview || null,
     sourceUrls: (ASSISTANT_SOURCES.renewalSources[jurisdiction]?.sources || []).map(s => https(s.url)).filter(Boolean),
     fee: null, feeStatus: 'current_amount_not_verified',
