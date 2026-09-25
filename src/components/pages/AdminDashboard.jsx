@@ -16,6 +16,7 @@ import { waitlistView, leadState } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
+import { ADMIN_TICKET_CATEGORIES, adminTicketDraftProblem } from "../../utils/adminTicketDraft";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
 
@@ -130,7 +131,8 @@ function AdminDashboardContent() {
   const createTicket = async () => {
     const subject = newSubject.trim();
     const body = newBody.trim();
-    if (!subject || !body) { setTicketMsg("Subject and details are both needed."); return; }
+    const problem = adminTicketDraftProblem({ subject, body, category: newCategory });
+    if (problem) { setTicketMsg(problem); return; }
     setCreating(true); setTicketMsg("");
     try {
       const res = await supabase.functions.invoke("create-ticket", {
@@ -568,9 +570,9 @@ function AdminDashboardContent() {
             width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10,
             backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16,
           }} />
-        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          {[["feature_request", "Feature"], ["bug", "Bug"], ["question", "Question"], ["other", "Other"]].map(([v, l]) => (
-            <button key={v} onClick={() => setNewCategory(v)} style={{
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+          {ADMIN_TICKET_CATEGORIES.map(({ value: v, label: l }) => (
+            <button key={v} onClick={() => setNewCategory(v)} aria-pressed={newCategory === v} style={{
               flex: 1, padding: "9px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
               border: `1px solid ${newCategory === v ? T.accent : T.border}`,
               backgroundColor: newCategory === v ? T.accent : "transparent",
@@ -586,12 +588,18 @@ function AdminDashboardContent() {
             fontSize: 16, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box",
           }} />
         <ScreenshotAttach value={newAttachment} onChange={setNewAttachment} style={{ marginTop: 10 }} />
-        {ticketMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{ticketMsg}</div>}
-        <button onClick={createTicket} disabled={creating} style={{
-          width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",
-          backgroundColor: creating ? T.textDim : T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800,
-          cursor: creating ? "wait" : "pointer",
-        }}>{creating ? "Creating…" : "Create ticket"}</button>
+        {(() => {
+          // Create stays off until the server's own rules are met, and says why.
+          const problem = adminTicketDraftProblem({ subject: newSubject, body: newBody, category: newCategory });
+          return <>
+            {(ticketMsg || problem) && <div role="status" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: ticketMsg ? T.accent : T.textMuted }}>{ticketMsg || problem}</div>}
+            <button onClick={createTicket} disabled={creating || !!problem} style={{
+              width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",
+              backgroundColor: creating || problem ? T.textDim : T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800,
+              cursor: creating ? "wait" : problem ? "not-allowed" : "pointer",
+            }}>{creating ? "Creating…" : "Create ticket"}</button>
+          </>;
+        })()}
       </Modal>
 
     </div>
