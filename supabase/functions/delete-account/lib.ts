@@ -56,6 +56,8 @@ export const COLLECTION_TABLES: string[] = [
  * admin_messages are the operator's notes to the physician (recipient_id);
  * admin_message_replies is the thread under each, keyed by the physician it
  * belongs to whoever wrote the reply (user_id).
+ * credential_portal_invites are the physician's administrator access grants
+ * (owner_profile_id).
  */
 export interface UserTable { table: string; column: string }
 export const USER_TABLES: UserTable[] = [
@@ -75,6 +77,11 @@ export const USER_TABLES: UserTable[] = [
   { table: "deleted_items", column: "user_id" },
   { table: "forwarding_addresses", column: "user_id" },
   { table: "forwarding_address_sends", column: "user_id" },
+  // Administrator access grants. Deleting the grant row removes its sessions,
+  // mail outbox, document snapshots and audit (all ON DELETE CASCADE), so the
+  // administrators' addresses and the activity log go with the account.
+  // Migration 20260925040000 must be applied before this function is deployed.
+  { table: "credential_portal_invites", column: "owner_profile_id" },
 ];
 
 export const DOCUMENTS_BUCKET = "documents";

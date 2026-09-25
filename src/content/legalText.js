@@ -16,7 +16,7 @@ import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from './publicLaunch.mjs
 export const LEGAL_UPDATED = "September 19, 2026";
 // Technical data-handling statements reconciled with the app on September 18.
 // Operator identity confirmed against the merchant business settings and formation record on September 18.
-export const PRIVACY_UPDATED = "September 18, 2026";
+export const PRIVACY_UPDATED = "September 25, 2026";
 export const LEGAL_OPERATOR = "Eric Whitney, DO, A Professional Corporation";
 export const LEGAL_CONTACT = "support@credentialdomd.com";
 
@@ -103,6 +103,7 @@ const CURRENT_PRIVACY = {
           `**The service administrator**, Eric Whitney, DO, acts for ${LEGAL_OPERATOR} and has administrative access to the database and storage for support, debugging, and abuse prevention, and reads tickets, feedback, and the assistant log. Tickets and feedback may be triaged and acted on with AI tooling. Credential data is opened only when needed to run the service.`,
           "**The companies in section 6**, to the extent needed to provide their service.",
           "**Anyone you choose to share** a credential or packet with.",
+          "**An administrator you name**, such as a medical staff office, if you give them administrator access. That access is time-limited and view-only and covers only the credential records and files in the sections you select. They receive a new one-time code at their email address for each visit. You can narrow or revoke the access at any time. Passport and travel IDs, financial records and practice records are never included. Each visit and each file sent to them is logged for you to review, and deleting your data ends the access and removes its log.",
           "**Authorities**, if we are legally required to disclose."
         ]
       ],
@@ -260,7 +261,7 @@ export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   if (!mode.enabled) return { privacy: CURRENT_PRIVACY, terms: CURRENT_TERMS };
   const privacy = structuredClone(CURRENT_PRIVACY);
   const terms = structuredClone(CURRENT_TERMS);
-  privacy.updated = 'September 21, 2026';
+  privacy.updated = 'September 25, 2026';
   terms.updated = 'September 21, 2026';
   privacy.intro[1] = privacy.intro[1].replace('is in free beta.', 'is in early release.');
   const membership = terms.sections[0];

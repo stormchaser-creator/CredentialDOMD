@@ -48,7 +48,7 @@ eq("no duplicate collection table", new Set(COLLECTION_TABLES).size, COLLECTION_
 const userTables = USER_TABLES.map((t) => t.table);
 for (const t of ["assistant_log", "support_tickets", "support_messages", "feedback", "document_requests",
   "inbound_emails", "ai_usage", "client_errors", "backups", "deleted_items", "field_proposals", "user_events",
-  "admin_messages", "admin_message_replies"]) {
+  "admin_messages", "admin_message_replies", "credential_portal_invites"]) {
   ok(`USER_TABLES covers ${t}`, userTables.includes(t));
 }
 ok("no table is in both lists", !userTables.some((t) => COLLECTION_TABLES.includes(t)));
@@ -60,8 +60,10 @@ eq("admin_messages is matched by recipient_id (the physician the note went to)",
   USER_TABLES.find((t) => t.table === "admin_messages").column, "recipient_id");
 eq("admin_message_replies is matched by user_id (the thread owner, not the reply author)",
   USER_TABLES.find((t) => t.table === "admin_message_replies").column, "user_id");
+eq("administrator access grants are matched by owner_profile_id (their sessions, mail and audit cascade)",
+  USER_TABLES.find((t) => t.table === "credential_portal_invites").column, "owner_profile_id");
 ok("every other user table is matched by user_id",
-  USER_TABLES.filter((t) => !["support_messages", "inbound_emails", "client_errors", "admin_messages"].includes(t.table))
+  USER_TABLES.filter((t) => !["support_messages", "inbound_emails", "client_errors", "admin_messages", "credential_portal_invites"].includes(t.table))
     .every((t) => t.column === "user_id"));
 ok("profiles is never in a delete list (it is tombstoned, not deleted)",
   !userTables.includes("profiles") && !COLLECTION_TABLES.includes("profiles"));
