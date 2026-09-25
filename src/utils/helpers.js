@@ -3,6 +3,7 @@
 import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
 import { scrubSsn } from "./outgoingText.js";
+import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
 
 export const MS_PER_DAY = 86400000;
 
@@ -239,6 +240,10 @@ function getSectionFacts(item, section) {
     a("Expires", formatDate(item.expirationDate)); a("Overall Result", item.result);
   }
 
+  // A historical, superseded, provisional, pending or undated record says so
+  // wherever it is sent, so nobody reads it as the credential in force.
+  if (LIFECYCLE_SECTIONS.includes(section)) a("Status", lifecycleNote(item));
+
   return facts;
 }
 
@@ -317,15 +322,28 @@ export function buildCredentialBlurb(item, section, settings, hasDocs, note) {
     + " Sent via CredentialDOMD \u00b7 " + new Date().toLocaleDateString() + ".";
 }
 
+// The subject a credentialing office sees. It carries the record's canonical
+// label ("DEA Registration, CO"), never the Display Name: scans put the
+// physician's own name there, so three DEA shares went out headed with the
+// physician's name, the physician's name again, and "DEA ND".
 export function buildEmailSubject(item, section, settings) {
   if (section === "peerReferences") return `Professional reference: ${item.name || "Reference"}`;
-  const label = item.name || item.type || item.title || item.category || "Credential";
-  const physician = settings.name || "Physician";
+  const label = plainLabel(item, settings?.name, section) || "Credential";
+  const physician = settings?.name || "Physician";
   return `Credential Verification: ${label} - ${physician}`;
 }
 
-export function getItemLabel(item) {
-  return item.name || item.type || item.title || item.category || item.facility || "Credential";
+// A record's label for alerts and notification text: the same canonical label
+// the cards use, written with a comma so it reads cleanly in plain text.
+export function getItemLabel(item, physicianName, sectionKey) {
+  if (!item) return "Credential";
+  return plainLabel(item, physicianName, sectionKey || item._sec) || "Credential";
+}
+
+/** describeItem with its separators written as commas, for plain text and pickers. */
+export function plainLabel(item, physicianName, sectionKey) {
+  if (!item) return "";
+  return String(describeItem(item, physicianName, sectionKey) || "").replace(/\s*\u{2014}\s*/gu, ", ");
 }
 
 /**
@@ -340,11 +358,13 @@ export function getItemLabel(item) {
  * variant of the person's name (case, commas, middle names/initials, degree
  * suffixes) and label by type + state instead.
  */
-function isPersonName(name, physicianName) {
+const NAME_SUFFIXES = new Set(["do", "md", "jr", "sr", "ii", "iii", "iv", "phd", "np", "pa"]);
+const nameWords = (s) => String(s).toLowerCase().replace(/[.,()]/g, " ").split(/\s+/)
+  .filter(t => t && !NAME_SUFFIXES.has(t));
+
+export function isPersonName(name, physicianName) {
   if (!name || !physicianName) return false;
-  const strip = (s) => s.toLowerCase().replace(/[.,()]/g, " ").split(/\s+/)
-    .filter(t => t && !["do", "md", "jr", "sr", "ii", "iii", "iv", "phd", "np", "pa"].includes(t));
-  const a = strip(name), b = strip(physicianName);
+  const a = nameWords(name), b = nameWords(physicianName);
   if (!a.length || !b.length) return false;
   // Every word of the shorter name must appear in the longer one, allowing
   // middle initials to match full middle names ("e" ~ "edwin")
@@ -355,6 +375,67 @@ function isPersonName(name, physicianName) {
     || (t.length === 1 && u.startsWith(t))
     || (u.length === 1 && t.startsWith(u));
   return short.every(t => long.some(u => matches(t, u)));
+}
+
+// Sections whose Display Name is only ever noise when it is the physician's
+// own name: every card in them titles by type and state, facility, carrier or
+// school instead. Peer references are absent on purpose, the person IS the
+// record there.
+export const PERSON_NAME_SECTIONS = Object.freeze(["licenses", "privileges", "insurance", "education", "healthRecords", "travelDocs"]);
+
+/**
+ * The stricter test a write uses before it clears stored text. isPersonName
+ * is a display heuristic: it lets an initial on either side match, so a lone
+ * "ACLS" reads as "John A. Smith" and "Neurosurgery" as "N. Whitney". Hiding
+ * a title is cheap; erasing one on every save is not. Here the Display Name
+ * must be the physician's name and nothing else:
+ *   - two words or more (a lone "Mercy" or "Mayo" is a facility as often as
+ *     a name), unless the physician's own name is a single word;
+ *   - at least one word of two letters or more equal to one of the
+ *     physician's (the surname, usually);
+ *   - every word one of the physician's, or an initial of one of the
+ *     physician's full words ("E. Whitney"). A full word matches one of the
+ *     physician's initials ("Jordan Alex Rivera" for "Jordan A. Rivera") only
+ *     beside two exact full-word matches, so "Mercy Jones" is never read as
+ *     "Mary M. Jones".
+ */
+export function namesOnlyThePhysician(name, physicianName) {
+  if (!name || !physicianName) return false;
+  const a = nameWords(name), b = nameWords(physicianName);
+  if (!a.length || !b.length) return false;
+  if (a.length < 2 && b.length >= 2) return false;
+  const full = b.filter(u => u.length >= 2);
+  const exact = new Set(a.filter(t => t.length >= 2 && full.includes(t)));
+  if (exact.size === 0) return false;
+  const initials = b.filter(u => u.length === 1);
+  return a.every(t => b.includes(t)
+    || (t.length === 1 && full.some(u => u.startsWith(t)))
+    || (exact.size >= 2 && initials.some(u => t.startsWith(u))));
+}
+
+/**
+ * A board certification or a course certification is named by its Display
+ * Name ("Neurosurgery", "ACLS": the "What Is It In?" answer, the specialty
+ * the CV prints), so a write never clears it.
+ */
+const nameIsContent = (sectionKey, item) => sectionKey === "licenses"
+  && (item.type === CERTIFICATION_TYPE || /board certification/i.test(item.type || ""));
+
+/** True when a write clears this record's Display Name as the physician's own name. */
+export function clearsPersonName(sectionKey, item, physicianName) {
+  if (!item || typeof item !== "object" || !PERSON_NAME_SECTIONS.includes(sectionKey)) return false;
+  if (typeof item.name !== "string" || nameIsContent(sectionKey, item)) return false;
+  return namesOnlyThePhysician(item.name, physicianName);
+}
+
+/**
+ * The record with a Display Name that is just the physician's own name
+ * cleared, so the canonical label applies everywhere (share subjects,
+ * notifications, pickers) and not only on the card. Anything else is
+ * returned unchanged.
+ */
+export function withoutPersonName(sectionKey, item, physicianName) {
+  return clearsPersonName(sectionKey, item, physicianName) ? { ...item, name: null } : item;
 }
 
 // Every category titles CANONICALLY — the same fields in the same order for

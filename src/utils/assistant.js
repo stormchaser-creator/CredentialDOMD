@@ -31,7 +31,20 @@ const PROVIDER_DIGEST = CME_PROVIDERS.map(p =>
 // ── Known sections and their real fields (keeps the model honest) ──
 import { SECTION_FIELDS } from "./sectionFields.js";
 import { liveCategories, normalizeRecord, sanitizeText } from "./customCategories.js";
+import { lifecycleOf, isDateUnknown } from "./lifecycle.js";
 export { SECTION_FIELDS };
+
+// Lifecycle for a licence, privilege or policy in the snapshot, only when it
+// says something: absent means active with a known date (ticket 2c819309).
+// Without it Vera called a historical policy with its real dates "expired".
+export function lifecycleSnapshot(record) {
+  const out = {};
+  const status = lifecycleOf(record);
+  if (status !== "active") out.status = status;
+  if (isDateUnknown(record)) out.dateUnknown = true;
+  if (record?.supersededBy) out.replacedBy = record.supersededBy;
+  return out;
+}
 
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
 export function buildSnapshot(data, allTrackedStates = []) {
@@ -102,9 +115,9 @@ export function buildSnapshot(data, allTrackedStates = []) {
       states: allTrackedStates, specialties: data.settings.specialties,
       address: data.settings.address, website: data.settings.website, languages: data.settings.languages,
     },
-    licenses: short(data.licenses, l => ({ id: l.id, type: l.type, name: l.name, state: l.state, number: l.licenseNumber, expires: l.expirationDate })),
-    privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate })),
-    insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate })),
+    licenses: short(data.licenses, l => ({ id: l.id, type: l.type, name: l.name, state: l.state, number: l.licenseNumber, expires: l.expirationDate, ...lifecycleSnapshot(l) })),
+    privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate, ...lifecycleSnapshot(p) })),
+    insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate, ...lifecycleSnapshot(i) })),
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
     referenceEvidence: savedReferenceContext(allTrackedStates, data.settings.degreeType),
     renewalInfo: Object.fromEntries(allTrackedStates.map(st => [st, renewalEvidence(st, data.settings.degreeType)]).filter(([, value]) => value)),
@@ -158,6 +171,15 @@ state, hospital privileges, malpractice insurance, health records (vaccinations,
 drug screens), background screenings, documents (scanned via AI), locum contracts + work
 logging + invoices (stipend-allowance billing), RVU capture by voice, and the surgeon's
 COMPLETE career case log.
+
+CREDENTIAL STATUS: a license, privilege or insurance entry may carry status (provisional,
+pending_confirmation, superseded, historical; absent means active), dateUnknown:true (its
+expiration date is not known yet) and replacedBy (the id of the record that replaced it).
+Historical and superseded records are kept for disclosure history, with their original
+numbers and dates: never call them expired, overdue or due for renewal. pending_confirmation
+and dateUnknown are open questions to resolve, not lapses. To mark a record, propose
+update_record with lifecycleStatus (active|provisional|pending_confirmation|superseded|historical),
+dateUnknown, supersededBy (the replacing record's id) and statusSource (who reported it).
 
 YOU SEE A COMPACT SNAPSHOT, not the entire database. Most record lists are limited to
 40 entries and some fields are intentionally omitted. An absent field does not prove

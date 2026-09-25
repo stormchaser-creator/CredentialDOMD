@@ -1,69 +1,89 @@
 import { memo, useState } from "react";
 import { useApp } from "../../context/AppContext";
-import { RENEWAL_INFO } from "../../constants/renewalInfo";
-import { getStatusColor } from "../../utils/helpers";
+import { renewalView } from "../../utils/renewalRoute";
 
 /**
- * The door out of a warning. A license that is due (or will be) shows how to
- * actually renew it: the board's own portal, the fee and cycle when we have
- * verified them, and our state guide for the full steps. Facts come from the
- * researched dataset behind /states/<slug>; anything unverified is simply
- * not shown rather than guessed.
+ * The door out of a warning, kept to one line on every licence card:
+ * "How to renew", the short cycle, and the portal button only when the
+ * licence is urgent. Tapping the line opens the board's portal and the state
+ * guide, the full cycle, the due date and the stored fee, which is labelled
+ * with when it was last researched because it is not live data.
+ *
+ * The board and portal follow the physician's degree (src/utils/renewalRoute.js),
+ * the same selection Vera uses, so a DO is never sent to an MD-only page.
  */
-function RenewalInfo({ item }) {
-  const { theme: T } = useApp();
-  const [expanded, setExpanded] = useState(false);
-  const st = item?.state;
-  const info = st ? RENEWAL_INFO[st] : null;
-  if (!info || !/license|dea/i.test(item?.type || "")) return null;
+function RenewalInfo({ item, defaultExpanded = false, alertable = true }) {
+  const { theme: T, data } = useApp();
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const view = renewalView(item, data?.settings?.degreeType, { alertable });
+  if (!view) return null;
 
-  const isDea = /dea/i.test(item.type || "");
-  const color = getStatusColor(item.expirationDate);
-  const urgent = color === "red" || color === "orange" || color === "amber";
-  const portal = isDea ? "https://www.deadiversion.usdoj.gov/online_forms_apps.html" : info.portalUrl;
-  const label = isDea ? "DEA Diversion Control portal" : (info.board || "State board");
-  const summary = isDea ? "3-year cycle" : info.cycle;
-  const details = isDea ? ["$888 fee"] : [info.due && `Due: ${info.due}`, info.fee && `Fee: ${info.fee}`].filter(Boolean);
+  const stop = (e) => e.stopPropagation();
+  const linkStyle = (primary) => ({
+    padding: "8px 12px", borderRadius: 9, textDecoration: "none", fontSize: 12.5,
+    ...(primary
+      ? { backgroundColor: T.accent, color: "#fff", fontWeight: 800 }
+      : { border: `1px solid ${T.border}`, color: T.accent, fontWeight: 700 }),
+  });
+  const note = { fontSize: 12, color: T.textMuted, marginTop: 6, lineHeight: 1.45 };
 
   return (
-    <div style={{
-      marginTop: 8, padding: "10px 12px", borderRadius: 10,
-      backgroundColor: urgent ? (T.warningDim || "rgba(245,158,11,0.10)") : T.input,
-      border: `1px solid ${urgent ? (T.warning || "#f59e0b") : T.border}`,
-    }}>
-      <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
-        How to renew
-      </div>
-      {(summary || details.length > 0) && (
-        <div
-          onClick={(e) => { e.stopPropagation(); setExpanded(x => !x); }}
-          style={{ fontSize: 12.5, color: T.textMuted, marginBottom: 8, cursor: "pointer" }}
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={(e) => { stop(e); setExpanded(x => !x); }}
+          style={{
+            flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6,
+            padding: "4px 0", border: "none", background: "none", cursor: "pointer",
+            textAlign: "left", fontFamily: "inherit", fontSize: 12.5,
+            color: view.urgent ? (T.warning || "#f59e0b") : T.textMuted,
+          }}
         >
-          {summary}
-          {details.length > 0 && (
-            <span style={{ color: T.accent, fontWeight: 600, marginLeft: summary ? 6 : 0 }}>
-              {expanded ? "less" : "more info"}
-            </span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ fontWeight: 700 }}>How to renew</span>
+            {view.cycleShort ? ` \u{B7} ${view.cycleShort}` : ""}
+          </span>
+          <span aria-hidden="true" style={{
+            color: T.accent, fontWeight: 800, flexShrink: 0, display: "inline-block",
+            transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s",
+          }}>{"\u{203A}"}</span>
+        </button>
+        {view.showPortalOnLine && !expanded && (
+          <a href={view.portal} target="_blank" rel="noopener noreferrer" onClick={stop} style={{
+            ...linkStyle(true), padding: "5px 10px", flexShrink: 0, whiteSpace: "nowrap",
+          }}>Renew online</a>
+        )}
+      </div>
+      {expanded && (
+        <div style={{
+          marginTop: 4, padding: "10px 12px", borderRadius: 10,
+          backgroundColor: T.input, border: `1px solid ${T.border}`,
+        }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {view.portal && (
+              <a href={view.portal} target="_blank" rel="noopener noreferrer" onClick={stop} style={linkStyle(true)}>{view.portalLabel}</a>
+            )}
+            {view.alternativeBoard && (
+              <a href={view.alternativeBoard.url} target="_blank" rel="noopener noreferrer" onClick={stop} style={linkStyle(false)}>Osteopathic board</a>
+            )}
+            {view.guide && (
+              <a href={view.guide} target="_blank" rel="noopener noreferrer" onClick={stop} style={linkStyle(false)}>Steps, fees and pitfalls</a>
+            )}
+          </div>
+          {view.unknownDORoute && (
+            <div style={note}>The osteopathic renewal route for this state is not on file. The state guide has the steps.</div>
           )}
-          {expanded && details.length > 0 && (
-            <div style={{ marginTop: 4 }}>{details.join(" · ")}</div>
+          {view.board && view.portalLabel === "Renew online" && <div style={note}>Board: {view.board}</div>}
+          {view.alternativeBoard && (
+            <div style={note}>A DO licence here renews through {view.alternativeBoard.name}. Set MD or DO in Profile and this box shows only yours.</div>
           )}
+          {view.cycleFull && <div style={note}>Cycle: {view.cycleFull}</div>}
+          {view.due && <div style={note}>Due: {view.due}</div>}
+          {view.fee && <div style={note}>Fee, {view.feeCaption}: {view.fee}</div>}
         </div>
       )}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {portal && (
-          <a href={portal} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
-            padding: "8px 12px", borderRadius: 9, textDecoration: "none",
-            backgroundColor: T.accent, color: "#fff", fontSize: 12.5, fontWeight: 800,
-          }}>Renew at {label}</a>
-        )}
-        {!isDea && (
-          <a href={info.guideUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
-            padding: "8px 12px", borderRadius: 9, textDecoration: "none",
-            border: `1px solid ${T.border}`, color: T.accent, fontSize: 12.5, fontWeight: 700,
-          }}>Steps, fees and pitfalls</a>
-        )}
-      </div>
     </div>
   );
 }

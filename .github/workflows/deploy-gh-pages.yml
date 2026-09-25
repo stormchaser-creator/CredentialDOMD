@@ -94,8 +94,10 @@ jobs:
       # A TABLE_MAP key whose table is missing fails the account load for EVERY
       # user (assertCompleteAccountRecords), so the migration must be applied
       # and verified first. This makes that ordering mechanical instead of a
-      # procedure someone has to remember. It fails closed.
-      - name: Check every synced table exists in production
+      # procedure someone has to remember. It fails closed. The same script
+      # checks REQUIRED_COLUMNS: a key the client writes without a column
+      # makes PostgREST reject the whole row.
+      - name: Check every synced table and required column exists in production
         working-directory: src
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

@@ -6,7 +6,9 @@
  * notify_email on and an email address, it collects records whose
  * expiration_date falls between 30 days ago and reminder_lead_days ahead
  * (default 60), skips items the user has acknowledged (alert_acks.until in
- * the future), and sends ONE plain-text digest through Resend. It re-sends
+ * the future) and records that are historical, superseded, awaiting
+ * confirmation or whose date is not known yet (_shared/reminderRows.mjs),
+ * and sends ONE plain-text digest through Resend. It re-sends
  * no more often than notify_freq_days (default 7) unless the set of items
  * changed (fingerprint), and stamps profiles.last_notified plus a
  * notification_log row.
@@ -17,6 +19,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
+import { remindable, reminderLabel } from "../_shared/reminderRows.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -99,8 +102,10 @@ serve(async (req) => {
       if (error) { console.error("query failed", t.table, error.message); continue; }
       for (const r of (data || []) as any[]) {
         if (!r.expiration_date || acked.has(r.id)) continue;
-        const bits = [r.name, r.type && r.type !== r.name ? r.type : null, r.state].filter(Boolean);
-        items.push({ id: r.id, table: t.table, label: t.label, name: bits.join(" · ") || t.label, exp: r.expiration_date, days: dayDiff(r.expiration_date), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
+        // Historical, superseded, pending-confirmation and date-unknown
+        // records never trigger a reminder (ticket 2c819309).
+        if (!remindable(r)) continue;
+        items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date), state: r.state ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
       }
     }
     if (!items.length) { results.push({ profile: p.id, sent: false, reason: "nothing due" }); continue; }

@@ -8,6 +8,7 @@ import { CME_TOPICS } from "../../constants/cmeTopics";
 import { getStateEntry } from "../../constants/stateRequirements";
 import { STATES } from "../../constants/states";
 import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, normalizeReceipt, receiptSaveIssues } from "../../utils/receiptScan";
+import { canonicalForDocType, scanShapeIssues } from "../../utils/scanShape";
 
 const FIELD_DEFS = {
   license: [
@@ -95,6 +96,7 @@ const FIELD_ALIASES = {
 };
 const DIRECT_CARRY_KEYS = ["state", "expirationDate", "notes"];
 
+
 // Reclassifying must never throw away what the scan read. Values that map to
 // the new type's fields move there; everything else is kept as a detail on
 // the record (customFields, which every credential table has) instead of being
@@ -159,7 +161,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
     const rest = CME_TOPICS.filter(t => t !== "General / No Specific Topic" && !required.includes(t));
     return [...required, ...rest];
   }, [allTrackedStates, data.settings?.degreeType]);
-  const [edited, setEdited] = useState({ ...result.extracted });
+  const [edited, setEdited] = useState(() => canonicalForDocType(result.documentType, { ...result.extracted }, TYPE_OPTIONS[result.documentType]?.(data.settings?.degreeType, result.extracted)));
   const [docType, setDocType] = useState(result.documentType);
   const meta = SECTION_META[docType] || SECTION_META.unknown;
   const confColor = result.confidence === "high" ? T.success : result.confidence === "medium" ? T.warning : T.danger;
@@ -167,7 +169,9 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
   const typeOpts = TYPE_OPTIONS[docType]?.(data.settings.degreeType, edited) || null;
   const licenseExpiryRequired = docType === "license" && edited.type !== CERTIFICATION_TYPE;
   const expiryBlocked = (["privilege", "insurance"].includes(docType) || licenseExpiryRequired) && !edited.expirationDate;
-  const stateBlocked = docType === "license" && /license|dea/i.test(edited.type || "") && !edited.state;
+  const { typeIssue, stateIssue } = scanShapeIssues(docType, edited, typeOpts);
+  const typeBlocked = !!typeIssue;
+  const stateBlocked = !!stateIssue;
 
   // Receipts: where the money row goes. Billing an agency (Work > Expenses)
   // and deducting are exclusive, the same rule the statement importer
@@ -229,7 +233,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
       <div style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: 4, rowGap: 6, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
         <span style={{ fontSize: 12, color: T.textDim, marginRight: 6 }}>Not right?</span>
         {Object.keys(SECTION_META).filter(k => k !== "unknown").map(dt => (
-          <button key={dt} onClick={() => { setEdited(prev => remapEdited(docType, dt, prev)); setDocType(dt); }} style={{
+          <button key={dt} onClick={() => { setEdited(prev => { const next = remapEdited(docType, dt, prev); return canonicalForDocType(dt, next, TYPE_OPTIONS[dt]?.(data.settings.degreeType, next)); }); setDocType(dt); }} style={{
             padding: "4px 10px", borderRadius: 6, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
             backgroundColor: dt === docType ? meta.color : T.input,
             color: dt === docType ? "#fff" : T.textMuted,
@@ -304,6 +308,11 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                     style={{ ...iS, appearance: "auto", borderColor: edited[f.key] ? T.success + "60" : T.inputBorder }}
                   >
                     <option value="">Select type...</option>
+                    {/* A privilege or policy type the list lacks is kept as the
+                        document says it; a licence type never is (see scanShape.js). */}
+                    {docType !== "license" && edited[f.key] && !typeOpts.includes(edited[f.key]) && (
+                      <option value={edited[f.key]}>{edited[f.key]} (from document)</option>
+                    )}
                     {typeOpts.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : f.key === "state" && f.type === "select" ? (
@@ -439,9 +448,14 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
               This {SECTION_META[docType].label.toLowerCase()} expires. Enter the expiration date above before saving so the app can warn you in time.
             </div>
           )}
+          {typeBlocked && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
+              {typeIssue}
+            </div>
+          )}
           {stateBlocked && (
             <div style={{ fontSize: 13, fontWeight: 600, color: T.danger, marginBottom: 10 }}>
-              Select the issuing state above before saving. Without it this won&rsquo;t show up in your state compliance tracking.
+              {stateIssue}
             </div>
           )}
           {receiptBlocked && (
@@ -451,9 +465,9 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
           )}
           <div style={{ display: "flex", gap: 10 }}>
           <button
-            disabled={expiryBlocked || stateBlocked || receiptBlocked}
+            disabled={expiryBlocked || typeBlocked || stateBlocked || receiptBlocked}
             onClick={() => onSave(docType, isReceipt ? { ...edited, destination, agency } : edited, imageData, fileName)} style={{
-            opacity: (expiryBlocked || stateBlocked || receiptBlocked) ? 0.5 : 1,
+            opacity: (expiryBlocked || typeBlocked || stateBlocked || receiptBlocked) ? 0.5 : 1,
             flex: 1, padding: "12px", borderRadius: 12, border: "none", backgroundColor: meta.color, color: "#fff",
             fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}>

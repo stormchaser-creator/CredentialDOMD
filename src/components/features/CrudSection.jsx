@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, memo, useCallback } from "react";
-import { snapToOption } from "../../utils/snapOption";
+import { snapToOption, canonicalizeSelectValue } from "../../utils/snapOption";
 import { useApp } from "../../context/AppContext";
 import { CPT_DESCS } from "../../constants/cptDescs";
 import { CPT_BY_CODE } from "../../constants/cpt";
@@ -13,13 +13,13 @@ import { pushModal, popModal } from "../../utils/deskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon, StarIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate } from "../../utils/helpers";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, namesOnlyThePhysician, clearsPersonName, PERSON_NAME_SECTIONS } from "../../utils/helpers";
+import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField } from "../../utils/lifecycle";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { splitScanned } from "../../utils/docPrefill";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { isOfficeFile, extractOfficeText, UPLOAD_ACCEPT } from "../../utils/officeText";
 import { isContactPickerSupported, pickContact, parseVCard, parseContactText, CONTACT_EMAIL } from "../../utils/contactImport";
-import { STATE_NAMES } from "../../constants/states";
 import CPTCodePicker from "./CPTCodePicker";
 import { isEncrypted, hasLockCode, saveLockCode, encryptSecret, decryptSecret, setSecretUser } from "../../utils/secretBox";
 import { checkStorageQuota } from "../../utils/storageQuota";
@@ -53,24 +53,6 @@ function billedCodes(item) {
 
 const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
 
-// AI-scanned text for a select field (e.g. a DEA card's "Florida" instead of
-// "FL") won't exact-match its dropdown options, which breaks state-keyed
-// lookups elsewhere (RenewalInfo, MultiStateMatrix). Snap it to the matching
-// option when one exists; otherwise leave the raw text so the "(from
-// document)" fallback below can still show and preserve it for review.
-function canonicalizeSelectValue(fieldDef, raw) {
-  if (!fieldDef || fieldDef.type !== "select" || typeof raw !== "string") return raw;
-  const options = fieldDef.groups ? fieldDef.groups.flatMap(g => g.options) : (fieldDef.options || []);
-  const trimmed = raw.trim();
-  const ciMatch = options.find(o => o.toLowerCase() === trimmed.toLowerCase());
-  if (ciMatch) return ciMatch;
-  if (fieldDef.key === "state") {
-    const byName = Object.entries(STATE_NAMES).find(([, name]) => name.toLowerCase() === trimmed.toLowerCase());
-    if (byName && options.includes(byName[0])) return byName[0];
-  }
-  return raw;
-}
-
 // label/placeholder can vary by the record being edited (e.g. Certification
 // asks a different question than a license does) — same function-of-form
 // pattern already used for `required`.
@@ -85,6 +67,15 @@ function resolveFieldProp(f, key, form) {
 // validation, so a hidden field can never block a save.
 function isShown(f, form) {
   return typeof f.show === "function" ? !!f.show(form) : true;
+}
+
+// A "choice" field is a select whose stored value differs from what it
+// shows ({ value, label }), e.g. a status stored as "pending_confirmation"
+// or a "Replaced by" picker that stores a record id. Options may depend on
+// the record being edited.
+function choiceOptions(f, form) {
+  const opts = typeof f.options === "function" ? f.options(form) : f.options;
+  return Array.isArray(opts) ? opts.filter(o => o && o.value != null) : [];
 }
 
 function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort, favoritable = false }) {
@@ -300,6 +291,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             setForm(prev => {
               const merged = { ...prev };
               for (const [key, value] of Object.entries(placed)) {
+                // A scan often reads the physician's own name as the display
+                // name. It is never information, so it never fills the form.
+                // The strict test: a scanned "ACLS" or "Neurosurgery" is the
+                // credential, whatever the physician's initials are.
+                if (key === "name" && PERSON_NAME_SECTIONS.includes(sectionKey) && namesOnlyThePhysician(String(value ?? ""), data.settings.name)) continue;
                 if (value != null && value !== "" && !merged[key]) {
                   // Handle arrays (like topics) properly
                   const strValue = Array.isArray(value) ? value : String(value);
@@ -326,7 +322,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       }
     }
     if (refused.length) { setScanMsg(withRefusals(refused)); setScanIsError(true); }
-  }, [aiOn, data.settings.apiKey, data.settings.degreeType, fields, data.documents, attachedDocs]);
+  }, [aiOn, data.settings.apiKey, data.settings.degreeType, data.settings.name, sectionKey, fields, data.documents, attachedDocs]);
 
   /** Every route in puts the same fields on the form and says where it came from. */
   const applyContact = useCallback((contact, source) => {
@@ -474,25 +470,47 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     ? items
     : items.filter(i => categorize(i) === catFilter);
 
-  // Records that need a look (missing required fields, expired, or expiring
-  // soon) float to the top and stay grouped there — burying the one problem
-  // record at the bottom of an otherwise-fine list made it easy to miss.
-  const statusRank = (item) => {
+  // One status reading per record, shared by the phone cards, the desk table
+  // and the sort. Lifecycle (src/utils/lifecycle.js): a historical or
+  // superseded record is kept, labelled and sorted last, never flagged; a
+  // record whose date is not known yet or that awaits confirmation shows what
+  // is open, in grey, and never counts as needing attention.
+  const lifecycled = LIFECYCLE_SECTIONS.includes(sectionKey);
+  const rowStatus = (item) => {
     const nonExpiring = isNonExpiring(item, sectionKey);
-    const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
-    const missingRequired = fields.filter(f => {
+    const alertable = isAlertable(item);
+    const inactive = isInactive(item);
+    const color = !alertable ? "gray" : nonExpiring ? "green" : getStatusColor(item.expirationDate);
+    // A field required today (e.g. State on a license/DEA entry) can still be
+    // blank on an older record saved before that rule existed: flag it the
+    // same way an unreviewed NPI import gets flagged, instead of letting it
+    // silently render differently from its siblings forever.
+    const missingRequired = inactive ? [] : fields.filter(f => {
       const req = typeof f.required === "function" ? f.required(item) : f.required;
       return req && !item[f.key];
     });
-    const needsReview = (item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0;
-    if (needsReview) return 0;
-    if (color === "red") return 1;
-    if (color === "orange") return 2;
-    if (color === "amber") return 3;
+    const needsReview = !inactive && ((alertable && item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0);
+    return { nonExpiring, alertable, inactive, color, missingRequired, needsReview, note: lifecycled ? lifecycleNote(item) : null };
+  };
+
+  // Records that need a look (missing required fields, expired, or expiring
+  // soon) float to the top and stay grouped there; burying the one problem
+  // record at the bottom of an otherwise-fine list made it easy to miss.
+  // Historical and superseded records sink to the bottom under their own label.
+  const statusRank = (item) => {
+    const st = rowStatus(item);
+    if (st.inactive) return 5;
+    if (st.needsReview) return 0;
+    if (!st.alertable) return 4;
+    if (st.color === "red") return 1;
+    if (st.color === "orange") return 2;
+    if (st.color === "amber") return 3;
     return 4;
   };
   const shownItems = [...filteredItems].sort((a, b) => statusRank(a) - statusRank(b));
   const flaggedCount = shownItems.filter(i => statusRank(i) < 4).length;
+  const inactiveCount = shownItems.filter(i => statusRank(i) === 5).length;
+  const firstInactive = shownItems.length - inactiveCount;
 
   // Escape must close the lightbox, not the modal underneath it — capture
   // phase so this runs before Modal's own document-level Escape handler
@@ -564,8 +582,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     closeForm();
   }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft]);
 
+  // Typing a date unticks "date not yet known" (lifecycle.withFormField).
   const setField = useCallback((key, value) => {
-    setForm(p => ({ ...p, [key]: value }));
+    setForm(p => withFormField(p, key, value));
   }, []);
 
   return (
@@ -708,7 +727,19 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             label={resolveFieldProp(f, "label", form) + ((typeof f.required === "function" ? f.required(form) : f.required) ? " *" : "")}
             hint={f.type === "secret" ? undefined : resolveFieldProp(f, "hint", form)}
           >
-            {f.type === "select" ? (
+            {f.type === "choice" ? (
+              <select
+                value={form[f.key] ?? f.defaultValue ?? ""}
+                onChange={e => setField(f.key, e.target.value)}
+                style={{ ...iS, appearance: "auto" }}
+              >
+                {!f.defaultValue && <option value="">{resolveFieldProp(f, "placeholder", form) || "Select..."}</option>}
+                {form[f.key] && !choiceOptions(f, form).some(o => o.value === form[f.key]) && (
+                  <option value={form[f.key]}>A record no longer on file</option>
+                )}
+                {choiceOptions(f, form).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : f.type === "select" ? (
               <select
                 value={form[f.key] || ""}
                 onChange={e => setField(f.key, e.target.value)}
@@ -817,6 +848,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                 value={form[f.key] || ""}
                 onChange={e => setField(f.key, e.target.value)}
                 placeholder={resolveFieldProp(f, "placeholder", form)}
+                maxLength={f.maxLength}
                 style={iS}
               />
             )}
@@ -929,7 +961,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
         {viewItem && (
           <>
             {renderFollowUps(viewItem)}
-            {fields.filter(f => viewItem[f.key]).map(f => (
+            {fields.filter(f => viewItem[f.key]
+              && !(f.key === "name" && clearsPersonName(sectionKey, viewItem, data.settings.name))
+              && !(f.type === "choice" && f.defaultValue && viewItem[f.key] === f.defaultValue)).map(f => (
               <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
                 <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{resolveFieldProp(f, "label", viewItem)}</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "right", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
@@ -938,6 +972,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                     // Only a ticked box reaches here at all (the filter above
                     // drops falsy values), so it reads as the claim it is.
                     if (f.type === "checkbox") return resolveFieldProp(f, "checkboxLabel", viewItem) || "Yes";
+                    if (f.type === "choice") return choiceOptions(f, viewItem).find(o => o.value === v)?.label || "A record no longer on file";
                     if (f.type === "secret") {
                       const open = revealed[f.key];
                       return (
@@ -1129,17 +1164,13 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           defaultSort={deskDefaultSort}
           onRowClick={(item) => setViewItem(item)}
           status={(item) => {
-            const nonExpiring = isNonExpiring(item, sectionKey);
-            const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
-            const missingRequired = fields.filter(f => {
-              const req = typeof f.required === "function" ? f.required(item) : f.required;
-              return req && !item[f.key];
-            });
-            const needsReview = (item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0;
-            if (needsReview) return <StatusDot color="red" />;
-            if (item.expirationDate) return <StatusDot color={color} />;
+            const st = rowStatus(item);
+            if (st.needsReview) return <StatusDot color="red" />;
+            if (item.expirationDate || st.note) return <StatusDot color={st.color} />;
             return null;
           }}
+          groupBy={lifecycled && inactiveCount > 0 ? (item => (isInactive(item) ? "1" : "0")) : undefined}
+          groupHeader={(key, list) => (key === "1" ? `Historical and superseded (${list.length}) \u{B7} no renewal alerts` : null)}
           actions={(item) => (
             <div style={{ display: "inline-flex", gap: 3 }}>
               {starButton(item)}
@@ -1157,23 +1188,19 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             </div>
           )}
           {shownItems.map((item, idx) => {
-            const nonExpiring = isNonExpiring(item, sectionKey);
-            const color = nonExpiring ? "green" : getStatusColor(item.expirationDate);
-            // A field required today (e.g. State on a license/DEA entry) can still be
-            // blank on an older record saved before that rule existed — flag it the
-            // same way an unreviewed NPI import gets flagged, instead of letting it
-            // silently render differently from its siblings forever.
-            const missingRequired = fields.filter(f => {
-              const req = typeof f.required === "function" ? f.required(item) : f.required;
-              return req && !item[f.key];
-            });
-            const needsReview = (item.npiImported && !item.expirationDate && !nonExpiring) || missingRequired.length > 0;
-            const showAllDivider = idx === flaggedCount && flaggedCount > 0 && flaggedCount < shownItems.length;
+            const { nonExpiring, alertable, color, missingRequired, needsReview, note } = rowStatus(item);
+            const showAllDivider = idx === flaggedCount && flaggedCount > 0 && flaggedCount < firstInactive;
+            const showInactiveDivider = inactiveCount > 0 && idx === firstInactive;
             return (
               <div key={item.id}>
               {showAllDivider && (
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.6, margin: "8px 0 -2px" }}>
                   All records
+                </div>
+              )}
+              {showInactiveDivider && (
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.6, margin: "8px 0 -2px" }}>
+                  Historical and superseded ({inactiveCount}) {"\u{B7}"} no renewal alerts
                 </div>
               )}
               <div onClick={() => selectMode ? toggleSelected(item.id) : setViewItem(item)} style={{
@@ -1193,7 +1220,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                       {selectedIds.has(item.id) && <CheckIcon />}
                     </div>
                   )}
-                  {needsReview ? <StatusDot color="red" /> : item.expirationDate ? <StatusDot color={color} /> : null}
+                  {needsReview ? <StatusDot color="red" /> : (item.expirationDate || note) ? <StatusDot color={color} /> : null}
                   <div style={{ minWidth: 0 }}>
                     {/* The green TYPE always leads \u2014 it is the card's header.
                         The white line beneath carries only the specifics (the
@@ -1233,8 +1260,10 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
                                 parseFloat(item.cost) > 0 && `${fmtMoney(item.cost)}/yr`,
                                 parseFloat(item.renewalCost) > 0 && `${fmtMoney(item.renewalCost)} renewal`,
                                 item.graduationDate && !item.expirationDate && ("Graduated " + new Date(item.graduationDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" })),
-                                item.expirationDate && getStatusLabel(item.expirationDate),
+                                // A record that raises no alert keeps its date, without a countdown.
+                                item.expirationDate && (alertable ? getStatusLabel(item.expirationDate) : `Exp ${formatDate(item.expirationDate)}`),
                                 nonExpiring && "Does not expire",
+                                note,
                               ].filter(Boolean).join(" \u00b7 ");
                             })()}
                           </div>

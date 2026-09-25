@@ -15,6 +15,8 @@ import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
 import { preservePausedApplicationRecords, pausedApplicationLinks, isDeviceOnlySection } from "../utils/pausedApplicationRecords.js";
 import { reconcileDocumentLinks } from "../utils/documentLinks.js";
+import { prepareRecord } from "../utils/recordWrite.js";
+import { trackedStates } from "../utils/compliance.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { MS_PER_DAY } from "../utils/helpers";
 import {
@@ -653,15 +655,19 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // A device-only section (Protected Identity) is saved to this device's
   // cache and nowhere else: none of the four helpers below calls the cloud
   // for it. src/lib/supabase.js refuses those keys too, as a second wall.
-  const addItem = useCallback((key, item) => {
+  // Every add and edit is shaped once here (src/utils/recordWrite.js), so no
+  // path in (forms, the scanner, Vera, importers) can skip a storage rule.
+  const addItem = useCallback((key, raw) => {
+    const item = prepareRecord(key, raw, dataRef.current?.settings?.name);
     if (!updateSection(key, items => [...(items || []), item])) { window.alert(membershipWriteError().message); return false; }
     if (isDeviceOnlySection(key)) return true;
     // Sync to Supabase
     sbInsert(userIdRef.current, key, item).catch(() => {});
   }, [updateSection]);
 
-  const editItem = useCallback((key, item) => {
-    const previous = (dataRef.current[key] || []).find(record => record.id === item.id);
+  const editItem = useCallback((key, raw) => {
+    const previous = (dataRef.current[key] || []).find(record => record.id === raw?.id);
+    const item = prepareRecord(key, raw, dataRef.current?.settings?.name, previous || null);
     // Stamp the edit time so the self-heal pass can tell a newer local edit
     // (whose cloud write may have failed) from an older cloud row.
     const stamped = { ...item, updatedAt: new Date().toISOString() };
@@ -716,16 +722,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [guardedSetData]);
 
   // Tracked states: Settings picks plus every state where a medical license
-  // actually exists — adding a license auto-tracks its state's CME.
-  const allTrackedStates = useMemo(() => {
-    const states = new Set(
-      [data.settings.primaryState, ...(data.settings.additionalStates || [])].filter(Boolean)
-    );
-    for (const l of data.licenses || []) {
-      if (l.state && /medical license/i.test(l.type || "")) states.add(l.state);
-    }
-    return [...states];
-  }, [data.settings.primaryState, data.settings.additionalStates, data.licenses]);
+  // is held (src/utils/compliance.js trackedStates).
+  const allTrackedStates = useMemo(
+    () => trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses),
+    [data.settings.primaryState, data.settings.additionalStates, data.licenses],
+  );
 
   // record = { sec, id } opens that record's editor after the section renders
   const navigate = useCallback((tab, sub, record) => {

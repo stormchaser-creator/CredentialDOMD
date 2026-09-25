@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { isDea, isBoard } from "./setupTasks.js";
 import { redactForExport } from "../lib/supabase.js";
 import { isIdentityLink, withoutIdentityRecords } from "./pausedApplicationRecords.js";
+import { lifecycleSummary, isDateUnknown } from "./lifecycle.js";
 
 /**
  * Section key to the folder its documents belong in. This is the ONE list:
@@ -56,18 +57,41 @@ function sanitizeFilename(name) {
 /** Extensions the writer replaces with the one the mime type actually says. */
 const KNOWN_EXT = /\.(pdf|png|jpe?g|heic|heif|webp|gif|tiff?)$/i;
 
-function buildCredentialRows(data) {
+/**
+ * Status for a licence, privilege or policy row, and what it hangs on. Every
+ * record is exported, historical and superseded ones included, because an
+ * all-licenses-ever-held disclosure (NPDB, a hospital application) needs the
+ * whole history with each original number and period (ticket 2c819309).
+ */
+function lifecycleCells(rec, list, label) {
+  const detail = [];
+  if (rec.supersededBy) {
+    const next = (list || []).find((r) => r && r.id === rec.supersededBy);
+    detail.push(`Replaced by ${next ? label(next) : "a record no longer on file"}`);
+  }
+  if (isDateUnknown(rec)) detail.push("Expiration date not yet known");
+  if (rec.statusSource) detail.push(`Source: ${rec.statusSource}`);
+  return { Status: lifecycleSummary(rec), "Status Detail": detail.join(". ") };
+}
+
+const licenceLabel = (l) => [l.type || "License", l.state].filter(Boolean).join(", ");
+const privilegeLabel = (p) => p.hospital || p.facility || "Hospital Privilege";
+const policyLabel = (i) => i.carrier || i.company || i.provider || "Insurance Policy";
+
+export function buildCredentialRows(data) {
   const rows = [];
 
   for (const lic of data.licenses || []) {
     rows.push({
-      Credential: lic.state ? `${lic.state} Medical License` : "Medical License",
+      // The licence's own type: every licence used to read "Medical License",
+      // a DEA registration included.
+      Credential: licenceLabel(lic),
       Type: "License",
       "Issuing Authority": lic.issuingAuthority || lic.board || "",
       "License/Cert #": lic.licenseNumber || "",
       "Issue Date": lic.issuedDate || lic.issueDate || "",
       "Expiration Date": lic.expirationDate || "",
-      Status: lic.status || "",
+      ...lifecycleCells(lic, data.licenses, licenceLabel),
       State: lic.state || "",
       Notes: lic.notes || "",
     });
@@ -75,13 +99,13 @@ function buildCredentialRows(data) {
 
   for (const priv of data.privileges || []) {
     rows.push({
-      Credential: priv.hospital || priv.facility || "Hospital Privilege",
+      Credential: privilegeLabel(priv),
       Type: "Privilege",
       "Issuing Authority": priv.hospital || priv.facility || "",
       "License/Cert #": priv.privilegeNumber || "",
       "Issue Date": priv.appointmentDate || priv.issueDate || priv.startDate || "",
       "Expiration Date": priv.expirationDate || "",
-      Status: priv.status || "",
+      ...lifecycleCells(priv, data.privileges, privilegeLabel),
       State: priv.state || "",
       Notes: priv.notes || "",
     });
@@ -89,13 +113,13 @@ function buildCredentialRows(data) {
 
   for (const ins of data.insurance || []) {
     rows.push({
-      Credential: ins.carrier || ins.company || "Insurance Policy",
+      Credential: policyLabel(ins),
       Type: "Insurance",
-      "Issuing Authority": ins.carrier || ins.company || "",
+      "Issuing Authority": ins.carrier || ins.company || ins.provider || "",
       "License/Cert #": ins.policyNumber || "",
       "Issue Date": ins.issueDate || ins.effectiveDate || "",
       "Expiration Date": ins.expirationDate || "",
-      Status: ins.status || "",
+      ...lifecycleCells(ins, data.insurance, policyLabel),
       State: ins.state || "",
       Notes: ins.notes || "",
     });
@@ -241,7 +265,7 @@ function buildSpreadsheet(data) {
   // Set column widths
   ws["!cols"] = [
     { wch: 30 }, { wch: 15 }, { wch: 25 }, { wch: 20 },
-    { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 30 },
+    { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 36 }, { wch: 8 }, { wch: 30 },
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, "Credentials");

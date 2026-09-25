@@ -2,6 +2,7 @@ import { complianceFor } from "./compliance";
 import { getItemLabel, formatDate, MS_PER_DAY, mailtoHref } from "./helpers";
 import { scrubSsn } from "./outgoingText.js";
 import { smsBody, alertTextBody, alertCutNotice } from "./shareText";
+import { isAlertable } from "./lifecycle";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -27,8 +28,12 @@ export function generateAlerts(data) {
     ...(data.customRecords || []).filter(r => r && r.id).map(r => ({ ...r, _sec: "customRecords", _cat: r.categoryName || "Record" })),
   ];
 
-  const expired = allCreds.filter(i => i.expirationDate && new Date(i.expirationDate) < now && !activeAckFor(data, i.id));
-  const soon = allCreds.filter(i => {
+  // Historical, superseded, pending-confirmation and date-unknown records
+  // never alert (src/utils/lifecycle.js). A prior residency policy entered
+  // with its real dates used to raise a critical "expired" alert.
+  const alertable = allCreds.filter(isAlertable);
+  const expired = alertable.filter(i => i.expirationDate && new Date(i.expirationDate) < now && !activeAckFor(data, i.id));
+  const soon = alertable.filter(i => {
     if (!i.expirationDate) return false;
     if (activeAckFor(data, i.id)) return false;
     const d = Math.ceil((new Date(i.expirationDate) - now) / MS_PER_DAY);
@@ -107,7 +112,7 @@ export function buildNotificationMessage(data, alerts) {
   if (alerts.expired.length > 0) {
     lines.push("", `\u26a0 EXPIRED (${alerts.expired.length}):`);
     alerts.expired.forEach(item => {
-      lines.push(`  \u{2717} ${getItemLabel(item)}: expired ${fmtDate(item.expirationDate)}`);
+      lines.push(`  \u{2717} ${getItemLabel(item, data.settings.name, item._sec)}: expired ${fmtDate(item.expirationDate)}`);
       if (item.state) lines.push(`    State: ${item.state}`);
     });
   }
@@ -117,7 +122,7 @@ export function buildNotificationMessage(data, alerts) {
     alerts.soon.forEach(item => {
       const daysLeft = Math.ceil((new Date(item.expirationDate) - now) / MS_PER_DAY);
       const urgency = daysLeft <= 14 ? "URGENT" : daysLeft <= 30 ? "Soon" : "";
-      lines.push(`  \u{23f3} ${getItemLabel(item)}: ${fmtDate(item.expirationDate)} (${daysLeft} day${daysLeft !== 1 ? "s" : ""})${urgency ? ` ${urgency}` : ""}`);
+      lines.push(`  \u{23f3} ${getItemLabel(item, data.settings.name, item._sec)}: ${fmtDate(item.expirationDate)} (${daysLeft} day${daysLeft !== 1 ? "s" : ""})${urgency ? ` ${urgency}` : ""}`);
       if (item.state) lines.push(`    State: ${item.state}`);
     });
   }

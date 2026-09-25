@@ -6,8 +6,9 @@ import { useInputStyle } from "../shared/useInputStyle";
 import EmptyState from "../shared/EmptyState";
 import { UploadIcon, CameraIcon, TrashIcon } from "../shared/Icons";
 import { SECTION_META } from "../../constants/credentialTypes";
-import { generateId, downscalePhoto, copyToClipboard } from "../../utils/helpers";
+import { generateId, downscalePhoto, copyToClipboard, plainLabel } from "../../utils/helpers";
 import { bundleShareText } from "../../utils/shareText";
+import { canonicalState } from "../../utils/snapOption";
 import { analyzeDocument, analyzePDF, analyzeDocText, CV_DOC_TYPE, OTHER_DOC_TYPE } from "../../utils/documentScanner";
 import { liveCategories, findCategory, buildCategory, packRecord } from "../../utils/customCategories";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -186,10 +187,13 @@ function DocumentsSection() {
   // file picker the button opens, behind the same AI gate.
   useDeskAddShortcut(() => { if (requireApiKey()) fileRef.current?.click(); });
 
+  // Canonical labels, the same ones the cards use: a scanned Display Name is
+  // often the physician's own name, which made every licence read alike here.
+  const physicianName = data.settings?.name;
   const linkables = [
-    ...data.licenses.map(l => ({ value: `licenses:${l.id}`, label: `License: ${l.name || l.type}` })),
-    ...data.privileges.map(p => ({ value: `privileges:${p.id}`, label: `Privilege: ${p.name || p.type} - ${p.facility}` })),
-    ...data.insurance.map(i => ({ value: `insurance:${i.id}`, label: `Insurance: ${i.name || i.type}` })),
+    ...data.licenses.map(l => ({ value: `licenses:${l.id}`, label: `License: ${plainLabel(l, physicianName, "licenses")}` })),
+    ...data.privileges.map(p => ({ value: `privileges:${p.id}`, label: `Privilege: ${plainLabel(p, physicianName, "privileges")}` })),
+    ...data.insurance.map(i => ({ value: `insurance:${i.id}`, label: `Insurance: ${plainLabel(i, physicianName, "insurance")}` })),
     ...data.cme.map(c => ({ value: `cme:${c.id}`, label: `CME: ${c.title || c.category}` })),
     ...(data.healthRecords || []).map(h => ({ value: `healthRecords:${h.id}`, label: `Health: ${h.name || h.type || h.category}` })),
     ...(data.education || []).map(e => ({ value: `education:${e.id}`, label: `Education: ${e.name || e.type || e.institution}` })),
@@ -395,6 +399,11 @@ function DocumentsSection() {
     // columns; written as keys they would reject the whole record.
     const { facts: _facts, suggestedCategory: _suggested, ...kept } = fields || {};
     const entry = { ...kept, id };
+    // The review card already snapped the state; a caller that skipped it
+    // still never stores "North Dakota" where every lookup expects "ND".
+    if ((section === "licenses" || section === "privileges") && typeof entry.state === "string" && entry.state) {
+      entry.state = canonicalState(entry.state) || entry.state;
+    }
     if (section === "cme" && !entry.topics) entry.topics = [];
     if (section === "locumContracts") {
       // Contract terms drive billing math — coerce to numbers with defaults.

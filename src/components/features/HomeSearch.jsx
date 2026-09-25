@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { describeItem } from "../../utils/helpers";
+import { LIFECYCLE_SECTIONS, lifecycleNote } from "../../utils/lifecycle";
 
 /**
  * HomeSearch: one box at the top of Home that finds anything you have
@@ -101,7 +102,9 @@ export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
       if (!it || typeof it !== "object" || it.deleted) continue;
       const { label, hay } = hayFor(it, sec, data.settings?.name);
       if (toks.every(t => hay.includes(t))) {
-        const sub = [it.state, it.facility, it.provider, it.expirationDate && `exp ${it.expirationDate}`, it.date, it.total != null && `$${it.total}`]
+        // Historical and superseded records stay searchable, and say what they are.
+        const sub = [it.state, it.facility, it.provider, it.expirationDate && `exp ${it.expirationDate}`, it.date, it.total != null && `$${it.total}`,
+          LIFECYCLE_SECTIONS.includes(sec.key) && lifecycleNote(it)]
           .filter(Boolean).join(" · ");
         hits.push({ id: it.id, label: label || "(untitled)", sub,
           ...(sec.key === "customRecords" ? { dest: `custom:${it.categoryId || "unsorted"}`, sub: [it.categoryName, sub].filter(Boolean).join(" \u00b7 ") } : {}) });

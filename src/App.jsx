@@ -69,10 +69,12 @@ import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { SignedIn, SignedOut, useAuth, useUser } from "@clerk/clerk-react";
 import { evaluateOfflineFallback, probeNetwork, CLERK_LOAD_TIMEOUT_MS } from "./utils/offlineSession";
 import {
-  STATES, getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
+  STATES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
 import { computeBoardCompliance, aoaNationalEntry } from "./utils/boardCompliance";
+import { licenseFields, privilegeFields, insuranceFields } from "./utils/credentialForms";
+import { isAlertable, isInactive, isDateUnknown, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf } from "./utils/lifecycle";
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
 } from "./utils/helpers";
@@ -601,7 +603,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const now = new Date();
     const lead = data.settings.reminderLeadDays || 90;
     const inWindow = allCreds.filter(i => {
-      if (!i.expirationDate) return false;
+      // Historical, superseded, pending and date-unknown records never alert
+      // (src/utils/lifecycle.js). Snoozing them was the workaround.
+      if (!i.expirationDate || !isAlertable(i)) return false;
       if (new Date(i.expirationDate) < now) return true;
       const d = Math.ceil((new Date(i.expirationDate) - now) / MS_PER_DAY);
       return d >= 0 && d <= lead;
@@ -718,11 +722,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     // lifetime board certificate once the physician ticks "does not expire"
     // on it. isNonExpiring reads both, so the banner stops nagging about a
     // record that has been answered rather than only about a record type.
-    for (const l of data.licenses || []) if (!l.expirationDate && !isNonExpiring(l, "licenses")) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
-    for (const pv of data.privileges || []) if (!pv.expirationDate) out.push({ item: pv, sec: "privileges", label: describeItem(pv, data.settings.name, "privileges") });
+    // A record marked "date not yet known" or awaiting confirmation is an
+    // answered question, not a missing date: it goes to the resolve list
+    // below instead. Historical and superseded records are never chased.
+    for (const l of data.licenses || []) if (!l.expirationDate && !isNonExpiring(l, "licenses") && isAlertable(l)) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
+    for (const pv of data.privileges || []) if (!pv.expirationDate && isAlertable(pv)) out.push({ item: pv, sec: "privileges", label: describeItem(pv, data.settings.name, "privileges") });
     // Personal coverage (health/dental/vision/disability/life) has no
     // credentialing expiration to chase — only professional policies nag.
-    for (const ins of data.insurance || []) if (!ins.expirationDate && !/health insurance|dental|vision|life insurance|disability/i.test(ins.type || "")) out.push({ item: ins, sec: "insurance", label: describeItem(ins, data.settings.name, "insurance") });
+    for (const ins of data.insurance || []) if (!ins.expirationDate && isAlertable(ins) && !/health insurance|dental|vision|life insurance|disability/i.test(ins.type || "")) out.push({ item: ins, sec: "insurance", label: describeItem(ins, data.settings.name, "insurance") });
     for (const h of data.healthRecords || []) {
       if ((h.category === "TB Test" || h.category === "Fit Test") && !h.expirationDate) {
         out.push({ item: h, sec: "healthRecords", label: describeItem(h, data.settings.name, "healthRecords") });
@@ -730,6 +737,20 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     }
     return out;
   }, [data.licenses, data.privileges, data.insurance, data.healthRecords, data.settings.name]);
+
+  // Open questions the physician recorded instead of inventing a date: an
+  // appointment awaiting confirmation, an expiration not known yet. One task
+  // to resolve each, with who reported it. Never an alert, never in the ring.
+  const resolveMissing = useMemo(() => {
+    const out = [];
+    const groups = { licenses: data.licenses, privileges: data.privileges, insurance: data.insurance };
+    for (const [sec, list] of Object.entries(groups)) {
+      for (const item of list || []) {
+        if (needsResolution(item, sec)) out.push({ item, sec, label: describeItem(item, data.settings.name, sec) });
+      }
+    }
+    return out;
+  }, [data.licenses, data.privileges, data.insurance, data.settings.name]);
 
   // Setup owns these two conversations only while it is actually having
   // them: while the bordered card is on screen AND the task that would say
@@ -759,9 +780,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // medical license record does — CME/renewal tracking can't cover that state
   // until the license itself is in the app.
   const statesMissingLicense = useMemo(() => {
-    const licensed = new Set((data.licenses || []).filter(l => l.state && /medical license/i.test(l.type || "")).map(l => l.state));
+    // A historical or superseded record says nothing about a state today.
+    const current = (data.licenses || []).filter(l => !isInactive(l));
+    const licensed = new Set(current.filter(l => l.state && /medical license/i.test(l.type || "")).map(l => l.state));
     const out = new Set();
-    for (const l of data.licenses || []) {
+    for (const l of current) {
       if (l.state && !licensed.has(l.state)) out.add(l.state);
     }
     return [...out];
@@ -780,6 +803,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // Standing score for the ring: an item is good only while it expires beyond
   // the reminder window; inside the window, past it, missing a required date,
   // or a CME state behind all count against. Acknowledging never raises it.
+  // standingScore leaves historical, superseded, pending and date-unknown
+  // records out of the ring entirely (src/utils/lifecycle.js).
   const standing = useMemo(() => standingScore({
     items: allCreds, missingRequired: missingExpiration, stateComps,
     leadDays: data.settings.reminderLeadDays || 90,
@@ -802,6 +827,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const needsDate = new Set(missingExpiration.map(m => m.item.id));
     let active = 0, expiring = 0, expired = 0, undated = 0;
     for (const c of allCreds) {
+      // Historical, superseded, pending and date-unknown records are not
+      // counted: they cannot lapse and the ring leaves them out too.
+      if (!isAlertable(c)) continue;
       if (c.expirationDate) {
         const days = Math.ceil((new Date(c.expirationDate) - now) / MS_PER_DAY);
         if (days < 0) expired += 1;
@@ -1174,6 +1202,47 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               </span>
               <span style={{ color: T.warning, flexShrink: 0, fontWeight: 700 }}>Add date →</span>
             </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+    // Open questions the physician recorded instead of a made-up date. A task
+    // with its source, never an alert: it does not count in the ring and no
+    // reminder email goes out for it.
+    const resolveBanner = resolveMissing.length > 0 && (
+      <div style={{
+        backgroundColor: T.card, border: `1px solid ${T.border}`,
+        borderRadius: 12, padding: "12px 16px", marginBottom: 14,
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+          Resolve missing information ({resolveMissing.length})
+        </div>
+        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
+          Saved without a date you do not have yet. Add the date or confirm the status when it arrives. None of these raise alerts until then.
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {resolveMissing.slice(0, 5).map(({ item, sec, label }) => {
+            const secLabel = sec === "licenses" ? "License" : sec === "privileges" ? "Privilege" : "Insurance";
+            const open = lifecycleOf(item) === "pending_confirmation" ? LIFECYCLE_LABELS.pending_confirmation : (sec === "privileges" ? "Reappointment date not yet known" : "Expiration date not yet known");
+            return (
+              <button key={item.id} onClick={() => { setTab("credentials"); setSubPage(sec); setAutoEditTarget({ sec, id: item.id, focus: "expirationDate", mode: "edit" }); }} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                padding: "8px 10px", borderRadius: 8, border: "none",
+                backgroundColor: T.input, color: T.text, fontSize: 13, fontWeight: 600,
+                cursor: "pointer", textAlign: "left",
+              }}>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ color: T.textMuted, fontWeight: 700 }}>{secLabel}: </span>{label}
+                  </span>
+                  <span style={{ display: "block", fontSize: 11.5, color: T.textDim, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {open}{item.statusSource ? ` \u{B7} Source: ${item.statusSource}` : ""}
+                  </span>
+                </span>
+                <span style={{ color: T.accent, flexShrink: 0, fontWeight: 700 }}>Resolve {"\u{203A}"}</span>
+              </button>
             );
           })}
         </div>
@@ -1656,12 +1725,15 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           }}>View All</button>
         </div>
         <div style={{ backgroundColor: T.card, borderRadius: 12, overflow: "hidden", boxShadow: T.shadow1 }}>
-          {data.licenses.slice(0, 5).map((item, idx) => {
+          {[...data.licenses].sort((a, b) => Number(isInactive(a)) - Number(isInactive(b))).slice(0, 5).map((item, idx) => {
             // Course and device certifications have no expiration by nature;
             // grading them by date made them read as an unfinished "Draft".
+            // A historical, superseded, pending or undated licence is grey,
+            // keeps its date, and shows no countdown (src/utils/lifecycle.js).
             const nonExp = isNonExpiring(item, "licenses");
-            const sc = nonExp ? "green" : getStatusColor(item.expirationDate);
-            const d = item.expirationDate ? daysUntil(item.expirationDate) : null;
+            const alertable = isAlertable(item);
+            const sc = !alertable ? "gray" : nonExp ? "green" : getStatusColor(item.expirationDate);
+            const d = item.expirationDate && alertable ? daysUntil(item.expirationDate) : null;
             return (
               <div key={item.id} onClick={() => { setTab("credentials"); setSubPage("licenses"); setAutoEditTarget({ sec: "licenses", id: item.id, mode: "view" }); }} style={{
                 display: "flex", alignItems: "center", gap: 12,
@@ -1675,7 +1747,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
                     {describeItem(item, data.settings.name)}
                   </div>
                   <div style={{ fontSize: 13, color: T.textMuted, marginTop: 1 }}>
-                    {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : nonExp ? "Does not expire" : null].filter(Boolean).join(" \u00b7 ")}
+                    {[item.state, item.expirationDate ? `Exp ${formatDate(item.expirationDate)}` : nonExp ? "Does not expire" : null, lifecycleNote(item)].filter(Boolean).join(" \u00b7 ")}
                     {d !== null && Number.isFinite(d) && (
                       <span style={{ fontWeight: 700, color: d <= 90 ? sc : T.textMuted }}>
                         {" \u00b7 "}
@@ -1924,6 +1996,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           {hero}
           {profileGapBanner}
           {missingExpBanner}
+          {resolveBanner}
           {todoSection}
           {casesSection}
         </>
@@ -1980,6 +2053,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {hero}
         {profileGapBanner}
         {missingExpBanner}
+        {resolveBanner}
         {actionSection}
         {todoSection}
         {homeModals}
@@ -2237,18 +2311,21 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           { key: "issuedDate", label: "Issued", type: "date", width: "12%", render: i => i.issuedDate ? formatDate(i.issuedDate) : "\u2014" },
           // Expires carries the status in its color; expiration scanning is
           // the job, so it is also the default sort.
-          { key: "expirationDate", label: "Expires", type: "date", width: "13%", render: i => i.expirationDate ? formatDate(i.expirationDate) : (isNonExpiring(i, "licenses") ? "Does not expire" : "\u2014"), color: i => {
-            if (!i.expirationDate) return T.textDim;
+          { key: "expirationDate", label: "Expires", type: "date", width: "13%", render: i => i.expirationDate ? formatDate(i.expirationDate) : (isNonExpiring(i, "licenses") ? "Does not expire" : isDateUnknown(i) ? "Not yet known" : "\u2014"), color: i => {
+            // A historical, superseded, pending or undated record keeps its
+            // date in grey: it raises no alert (src/utils/lifecycle.js).
+            if (!i.expirationDate || !isAlertable(i)) return T.textDim;
             const c = getStatusColor(i.expirationDate);
             return c === "red" ? T.danger : (c === "orange" || c === "amber") ? T.warning : T.success;
           } },
+          { key: "lifecycleStatus", label: "Status", width: "12%", value: i => lifecycleNote(i) || "Active", render: i => lifecycleNote(i) || "Active", color: i => (lifecycleNote(i) ? T.textMuted : T.text) },
           { key: "renewalCost", label: "Cost", type: "number", width: "9%", align: "right", render: i => parseFloat(i.renewalCost) > 0 ? `$${parseFloat(i.renewalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "\u2014" },
         ]} filterTabs={[
           { key: "medical", label: "Medical Licenses", match: i => /medical license|physician|osteopathic|training license/i.test(i.type || "") },
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={[{ key: "type", label: "Type", type: "select", options: getLicenseTypes(data.settings.degreeType) }, { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" }, { key: "licenseNumber", label: "License #" }, { key: "state", label: "State", type: "select", options: STATES, required: (f) => /license|dea/i.test(f.type || "") }, { key: "issuedDate", label: "Issued", type: "date" }, { key: "noExpiration", label: "Expiration", type: "checkbox", checkboxLabel: "This certificate does not expire", show: (f) => /board certification/i.test(f.type || ""), hint: "A lifetime diplomate has no renewal date. Tick this and the app stops asking for one. Course and device certifications are already treated this way." }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE && !(f.noExpiration === true && /board certification/i.test(f.type || "")) }, { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." }, { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <RenewalInfo item={item} />} />
+        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub="Add your medical licenses, DEA, and certifications." fields={licenseFields({ degreeType: data.settings.degreeType, records: data.licenses, physicianName: data.settings.name })} renderExtra={item => <RenewalInfo item={item} />} />
       </>);
     }
     if (sub === "cme") return <CMESection onShare={openShare} />;
@@ -2257,11 +2334,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     if (sub?.startsWith("findCme:")) return <CMEResourcesSection initialTopicFilter={sub.split(":")[1]} />;
     if (sub === "privileges") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Hospital Privileges" /></div>;
-      return <CrudSection title="Privileges" sectionKey="privileges" favoritable {...crudTarget("privileges")} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={[{ key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES }, { key: "name", label: "Display Name" }, { key: "facility", label: "Facility" }, { key: "city", label: "City" }, { key: "state", label: "State", type: "select", options: STATES }, { key: "appointmentDate", label: "Appointed", type: "date" }, { key: "expirationDate", label: "Reappointment Due", type: "date", required: true }, { key: "portalUrl", label: "Credentialing / portal URL", type: "url", placeholder: "medstaff.hospital.org" }, { key: "loginUsername", label: "Portal username" }, { key: "loginSecret", label: "Portal password", type: "secret", hint: "Encrypted with your lock code before it syncs. Show it from the record's detail view." }, { key: "notes", label: "Notes", type: "textarea", placeholder: "Medical staff office contact, reappointment steps, badge, parking, dictation line..." }]} />;
+      return <CrudSection title="Privileges" sectionKey="privileges" favoritable {...crudTarget("privileges")} items={data.privileges} {...crud("privileges")} onShare={openShare} emptyIcon={"\ud83c\udfe5"} emptyTitle="No privileges" emptySub="Track hospital admitting and surgical privileges." fields={privilegeFields({ records: data.privileges, physicianName: data.settings.name })} />;
     }
     if (sub === "insurance") {
       if (!isPro) return <div style={{ position: "relative", minHeight: 320 }}><ProGate T={T} onUpgrade={() => { setSubPage(null); setShowPricing(true); }} featureName="Insurance Policies" /></div>;
-      return <CrudSection title="Insurance" sectionKey="insurance" favoritable {...crudTarget("insurance")} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={[{ key: "type", label: "Type", type: "select", options: INSURANCE_TYPES }, { key: "name", label: "Display Name" }, { key: "provider", label: "Carrier" }, { key: "policyNumber", label: "Policy #" }, { key: "coveragePerClaim", label: "Per Claim" }, { key: "coverageAggregate", label: "Aggregate" }, { key: "effectiveDate", label: "Effective", type: "date" }, { key: "expirationDate", label: "Expires", type: "date", required: (f) => !/health insurance|dental|vision|life insurance|disability/i.test(f.type || "") }, { key: "notes", label: "Notes", type: "textarea" }]} />;
+      return <CrudSection title="Insurance" sectionKey="insurance" favoritable {...crudTarget("insurance")} items={data.insurance} {...crud("insurance")} onShare={openShare} emptyIcon={"\ud83d\udee1\ufe0f"} emptyTitle="No policies" emptySub="Track malpractice and liability insurance." fields={insuranceFields({ records: data.insurance, physicianName: data.settings.name })} />;
     }
     if (sub === "screenings") return <ScreeningsSection onShare={openShare} />;
     if (sub === "publications") return <CrudSection title="Publications" sectionKey="publications" favoritable {...crudTarget("publications")} items={data.publications || []} {...crud("publications")} onShare={openShare} emptyIcon={"\ud83d\udcda"} emptyTitle="No publications" emptySub="Papers, chapters, and case reports — they appear on your CV in the order you set." fields={[{ key: "name", label: "Short Label", placeholder: "e.g. Cureus 2026 — Composite Homeostatic Wave" }, { key: "citation", label: "Full Citation (as it should read on the CV)", type: "textarea" }, { key: "year", label: "Year" }, { key: "sortOrder", label: "Order on CV", type: "number", placeholder: "1 = first; blank = after the ordered ones" }, { key: "doi", label: "DOI" }, { key: "pmid", label: "PMID" }, { key: "url", label: "Link" }, { key: "notes", label: "Notes", type: "textarea" }]} />;

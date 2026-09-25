@@ -1,5 +1,6 @@
 // Extensions spelled out so pure-node test scripts can import this module.
 import { formatDate } from "./helpers.js";
+import { isOnCv, lifecycleOf } from "./lifecycle.js";
 import { websiteLabel } from "./contactFormat.js";
 
 /**
@@ -166,7 +167,9 @@ export function buildCvContent(data, template = "clinical") {
     {
       const items = [];
       if (s.npi) items.push({ primary: `NPI: ${s.npi}`, secondary: "", date: "" });
-      const lic = data.licenses || [];
+      // A CV lists what is held now: active and provisional only. Historical
+      // and superseded licences stay in the full export for disclosures.
+      const lic = (data.licenses || []).filter(isOnCv);
       const isBoard = (l) => /board/i.test(l.type || "");
       const isMedical = (l) => /medical license/i.test(l.type || "");
       const isDEA = (l) => /dea/i.test(l.type || "");
@@ -182,7 +185,10 @@ export function buildCvContent(data, template = "clinical") {
       if (meds.length > 0) {
         items.push({ primary: "Medical Licenses", secondary: "", date: "", subhead: true });
         for (const m of meds) {
-          const provisional = /provisional|temporary/i.test(m.type || "") ? " (provisional temporary)" : "";
+          // The stored status says provisional; older records said it only in
+          // their type text.
+          const provisional = lifecycleOf(m) === "provisional" ? " (provisional)"
+            : /provisional|temporary/i.test(m.type || "") ? " (provisional temporary)" : "";
           const stateLabel = STATE_NAMES[m.state] || m.state || "";
           items.push({ primary: [stateLabel, m.licenseNumber].filter(Boolean).join(": ") + provisional, secondary: "", date: "" });
         }
@@ -198,19 +204,30 @@ export function buildCvContent(data, template = "clinical") {
     }
 
     // HOSPITAL PRIVILEGES — "Facility: (start to current) City, ST"
-    if (data.privileges.length > 0) {
+    // A past appointment belongs on a CV with its dates, so a historical one
+    // stays; a superseded record (replaced by its reappointment) and one still
+    // awaiting confirmation do not.
+    const cvPrivileges = (data.privileges || []).filter(p => {
+      const s = lifecycleOf(p);
+      return s !== "superseded" && s !== "pending_confirmation";
+    });
+    if (cvPrivileges.length > 0) {
       sections.push({
         type: "section",
         title: "Hospital Privileges",
-        items: [...data.privileges].sort((a, b) => {
+        items: [...cvPrivileges].sort((a, b) => {
           const da = a.appointmentDate ? new Date(a.appointmentDate) : new Date(0);
           const db = b.appointmentDate ? new Date(b.appointmentDate) : new Date(0);
           if (db - da !== 0) return db - da;
           return String(a.facility || a.name || "").localeCompare(String(b.facility || b.name || ""));
         }).map(p => {
           const from = longDate(p.appointmentDate);
-          const active = !p.expirationDate || new Date(p.expirationDate) >= new Date();
-          const span = from ? `(${from} to ${active ? "current" : formatDate(p.expirationDate)})` : "";
+          // A historical appointment is never "current", even when its end
+          // date was not recorded; it then shows its start alone.
+          const historical = lifecycleOf(p) === "historical";
+          const active = !historical && (!p.expirationDate || new Date(p.expirationDate) >= new Date());
+          const end = active ? "current" : p.expirationDate ? formatDate(p.expirationDate) : null;
+          const span = from ? (end ? `(${from} to ${end})` : `(${from})`) : "";
           const place = [p.city || p.customFields?.city, p.state].filter(Boolean).join(", ");
           const facility = p.facility || p.name || "";
           return {
@@ -290,11 +307,12 @@ export function buildCvContent(data, template = "clinical") {
     // Clinical template extras — credentialing packets want these; the paper CV
     // format stays untouched for the other templates
     if (template === "clinical") {
-      if (data.insurance.length > 0) {
+      const cvPolicies = (data.insurance || []).filter(isOnCv);
+      if (cvPolicies.length > 0) {
         sections.push({
           type: "section",
           title: "Professional Liability Insurance",
-          items: data.insurance.map(i => ({
+          items: cvPolicies.map(i => ({
             primary: namesThePhysician(i.name) ? (i.type || "Professional Liability") : i.name,
             secondary: [i.provider, i.policyNumber ? `Policy #${i.policyNumber}` : ""].filter(Boolean).join(" | "),
             detail: [i.coveragePerClaim ? `${i.coveragePerClaim}/claim` : "", i.coverageAggregate ? `${i.coverageAggregate} aggregate` : ""].filter(Boolean).join(", "),
