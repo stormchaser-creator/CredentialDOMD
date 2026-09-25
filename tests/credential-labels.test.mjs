@@ -22,11 +22,11 @@ import { getLicenseTypes, PRIVILEGE_TYPES, INSURANCE_TYPES } from '../src/consta
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
-const PHYSICIAN = 'Eric E. Whitney, DO';
+const PHYSICIAN = 'Jordan A. Rivera, DO';
 const SETTINGS = { name: PHYSICIAN, degreeType: 'DO' };
 const DEA = [
-  { id: 'dea-co', type: 'DEA Registration', state: 'CO', name: 'WHITNEY, ERIC', licenseNumber: 'FX0000001' },
-  { id: 'dea-ca', type: 'DEA Registration', state: 'CA', name: 'Eric Edwin Whitney DO', licenseNumber: 'FX0000002' },
+  { id: 'dea-co', type: 'DEA Registration', state: 'CO', name: 'RIVERA, JORDAN', licenseNumber: 'FX0000001' },
+  { id: 'dea-ca', type: 'DEA Registration', state: 'CA', name: 'Jordan Alex Rivera DO', licenseNumber: 'FX0000002' },
   { id: 'dea-nd', type: 'DEA Registration', state: 'ND', name: 'DEA ND', licenseNumber: 'FX0000003' },
 ];
 
@@ -74,13 +74,13 @@ test('the review card refuses an unmatched licence state or type instead of savi
 });
 
 test("the physician's own name is recognised in every form a scan writes it", () => {
-  for (const name of ['WHITNEY, ERIC', 'Eric Whitney', 'Eric Edwin Whitney DO', 'whitney eric e']) {
+  for (const name of ['RIVERA, JORDAN', 'Jordan Rivera', 'Jordan Alex Rivera DO', 'rivera jordan a']) {
     assert.ok(isPersonName(name, PHYSICIAN), name);
   }
   for (const name of ['DEA ND', 'CA Medical License', 'Skull Base Fellowship', '']) {
     assert.ok(!isPersonName(name, PHYSICIAN), name);
   }
-  assert.ok(!isPersonName('Eric Whitney', ''), 'no profile name, nothing to compare');
+  assert.ok(!isPersonName('Jordan Rivera', ''), 'no profile name, nothing to compare');
 });
 
 test('a person-name Display Name is dropped at save, and the canonical title applies', () => {
@@ -89,9 +89,9 @@ test('a person-name Display Name is dropped at save, and the canonical title app
   assert.equal(saved.licenseNumber, 'FX0000001', 'nothing else changes');
   assert.equal(describeItem(saved, PHYSICIAN, 'licenses'), 'DEA Registration \u{2014} CO');
   assert.equal(prepareRecord('licenses', DEA[2], PHYSICIAN), DEA[2], 'a real display name is kept, untouched');
-  const ref = { id: 'r', name: 'Eric Whitney', degree: 'MD' };
+  const ref = { id: 'r', name: 'Jordan Rivera', degree: 'MD' };
   assert.equal(prepareRecord('peerReferences', ref, PHYSICIAN), ref, 'on a reference the person IS the record');
-  assert.equal(withoutPersonName('cme', { name: 'Eric Whitney' }, PHYSICIAN).name, 'Eric Whitney');
+  assert.equal(withoutPersonName('cme', { name: 'Jordan Rivera' }, PHYSICIAN).name, 'Jordan Rivera');
   assert.ok(PERSON_NAME_SECTIONS.includes('licenses') && !PERSON_NAME_SECTIONS.includes('peerReferences'));
 });
 
@@ -126,7 +126,7 @@ test('the notification message lists each DEA by type and state', async () => {
   const msg = mod.exports.buildNotificationMessage({ settings: SETTINGS }, alerts);
   assert.match(msg.body, /DEA Registration, CO/);
   assert.match(msg.body, /DEA Registration, CA/);
-  assert.doesNotMatch(msg.body, /WHITNEY, ERIC|Eric Edwin Whitney DO/);
+  assert.doesNotMatch(msg.body, /RIVERA, JORDAN|Jordan Alex Rivera DO/);
 });
 
 test('every add and edit passes through prepareRecord, and the pickers use canonical labels', () => {
@@ -139,7 +139,7 @@ test('every add and edit passes through prepareRecord, and the pickers use canon
   assert.doesNotMatch(read('src/components/features/CrudSection.jsx'), /function canonicalizeSelectValue/, 'one canonicaliser, shared');
 });
 
-// ── The real review card, rendered with a synthetic account ──────────────
+// -- The real review card, rendered with a synthetic account --------------
 const require = createRequire(import.meta.url);
 const bundled = await build({
   stdin: { contents: 'export {default as ScanReviewCard} from "./src/components/features/ScanReviewCard.jsx";', resolveDir: root, loader: 'jsx' },

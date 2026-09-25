@@ -24,6 +24,7 @@
 // compared on read, which is more machinery than the problem deserves.
 
 import { isNonExpiring } from "./helpers.js";
+import { isAlertable, isInactive } from "./lifecycle.js";
 import { STATE_NAMES } from "../constants/states.js";
 import { CV_FILENAME_RE } from "./cvImport.js";
 
@@ -49,7 +50,7 @@ export const isLifeSupport = (l) => /\b(bls|acls|atls|pals|nrp)\b/i.test(`${l?.t
  */
 export function datable(data) {
   return (data?.licenses || []).filter((l) =>
-    l && !isNonExpiring(l, "licenses") && (isMedicalLicense(l) || isDea(l) || isCsr(l))
+    l && !isInactive(l) && !isNonExpiring(l, "licenses") && (isMedicalLicense(l) || isDea(l) || isCsr(l))
   );
 }
 
@@ -63,11 +64,10 @@ export function datable(data) {
  * marked as non-expiring).
  */
 export function dateless(data) {
-  return (data?.licenses || []).filter((l) =>
-    l && !l.expirationDate &&
-    !isNonExpiring(l, "licenses") &&
-    (isMedicalLicense(l) || isDea(l) || isCsr(l))
-  );
+  // A licence marked "date not yet known" or awaiting confirmation has been
+  // answered (it is on the Home resolve list instead), and a historical or
+  // superseded one is never renewed: neither is a missing date.
+  return datable(data).filter((l) => !l.expirationDate && isAlertable(l));
 }
 
 /** Documents linked to a record, using the exact link CrudSection writes. */
@@ -82,7 +82,7 @@ const hasDoc = (data, section, id) => linkedDocs(data, section, id).length > 0;
  */
 
 /** The two records every credentialing office asks for a copy of. */
-const proofRecords = (ctx) => ctx.licenses.filter((l) => isMedicalLicense(l) || isDea(l));
+const proofRecords = (ctx) => ctx.licenses.filter((l) => !isInactive(l) && (isMedicalLicense(l) || isDea(l)));
 const proofMissing = (ctx) => proofRecords(ctx).filter((l) => !hasDoc(ctx.data, "licenses", l.id));
 
 const boardRecords = (ctx) => ctx.licenses.filter(isBoard);
@@ -93,10 +93,14 @@ const idRecords = (ctx) =>
   (ctx.data.travelDocs || []).filter((t) => t && /passport|driver|identification/i.test(t.type || "") && !!t.number);
 const hasHeadshot = (ctx) => (ctx.data.professionalPhotos || []).length > 0 || !!ctx.s.profilePhoto;
 
-const privilegeRecords = (ctx) => (ctx.data.privileges || []).filter(Boolean);
+// Current appointments only. A reappointment date marked "not yet known" or
+// an appointment awaiting confirmation counts as answered: it is on the Home
+// resolve list, and nagging for it here too was the noise complained about.
+const privilegeRecords = (ctx) => (ctx.data.privileges || []).filter((p) => p && !isInactive(p));
+const dateAnswered = (p) => !!p.expirationDate || !isAlertable(p);
 const isMalpracticeType = (type) => /malpractice|tail|professional liability/i.test(type || "");
 const malpracticeRecords = (ctx) =>
-  (ctx.data.insurance || []).filter((i) => i && isMalpracticeType(i.type) && !!i.expirationDate);
+  (ctx.data.insurance || []).filter((i) => i && !isInactive(i) && isMalpracticeType(i.type) && !!i.expirationDate);
 const reachableReferences = (ctx) =>
   (ctx.data.peerReferences || []).filter((r) => r && r.name && (r.email || r.phone));
 
@@ -319,8 +323,8 @@ export const TASK_DEFS = [
     declaredNa: "noDea",
     naDetail: "Not applicable. You told us you do not hold a DEA registration.",
     documentedDetail: "Dated. Proof attached.",
-    doneWhen: ({ licenses }) => licenses.some((l) => isDea(l) && !!l.expirationDate),
-    evidenceWhen: ({ data, licenses }) => licenses.some((l) => isDea(l) && !!l.expirationDate && hasDoc(data, "licenses", l.id)),
+    doneWhen: ({ licenses }) => licenses.some((l) => isDea(l) && !isInactive(l) && !!l.expirationDate),
+    evidenceWhen: ({ data, licenses }) => licenses.some((l) => isDea(l) && !isInactive(l) && !!l.expirationDate && hasDoc(data, "licenses", l.id)),
     cardLine: () => "No DEA registration on file. If you hold one, the app cannot warn you about it yet.",
     nextPhrase: () => "your DEA registration",
     doneClause: "your DEA registration",
@@ -563,12 +567,12 @@ export const TASK_DEFS = [
     label: "Hospital privileges",
     why: "Privileges lapse on their own clock, and the reappointment letter is what proves them.",
     verb: "Add my privileges",
-    doneWhen: (ctx) => privilegeRecords(ctx).length > 0 && privilegeRecords(ctx).every((p) => !!p.expirationDate),
+    doneWhen: (ctx) => privilegeRecords(ctx).length > 0 && privilegeRecords(ctx).every(dateAnswered),
     evidenceWhen: (ctx) => privilegeRecords(ctx).length > 0 && privilegeRecords(ctx).every((p) => hasDoc(ctx.data, "privileges", p.id)),
     nextPhrase: () => "your hospital privileges",
     costLine: (ctx) => {
       const total = privilegeRecords(ctx).length;
-      const undated = privilegeRecords(ctx).filter((p) => !p.expirationDate).length;
+      const undated = privilegeRecords(ctx).filter((p) => !dateAnswered(p)).length;
       if (!total || !undated) return null;
       return `${undated} of your ${total} privilege ${plural(total, "record", "records")} ${plural(undated, "has", "have")} no expiration date on file.`;
     },
@@ -577,7 +581,7 @@ export const TASK_DEFS = [
     pendingDetail: (ctx) => {
       const total = privilegeRecords(ctx).length;
       if (!total) return "Nothing on file yet.";
-      return `${privilegeRecords(ctx).filter((p) => !!p.expirationDate).length} of ${total} carry a date.`;
+      return `${privilegeRecords(ctx).filter(dateAnswered).length} of ${total} carry a date or a recorded reason there is none yet.`;
     },
   },
   {

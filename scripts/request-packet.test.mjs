@@ -561,10 +561,10 @@ if (isMain) {
   eq("snake_case rows build the same catalogue as the app's camelCase", catalogueFromRows(snakeDocs, snakeRecords), CATALOGUE);
   eq("one entry per document", CATALOGUE.length, DOCS.length);
   eq("entry shape", Object.keys(CATALOGUE[0]),
-    ["id", "section", "recType", "category", "state", "name", "provider", "result", "fileName", "mime", "expiration", "uploadedAt"]);
+    ["id", "section", "recType", "category", "state", "name", "provider", "result", "fileName", "mime", "expiration", "uploadedAt", "lifecycle"]);
   eq("a linked licence carries its record", CATALOGUE.find((e) => e.id === "doc-dea-nd"),
     { id: "doc-dea-nd", section: "licenses", recType: "DEA Registration", category: null, state: "ND", name: null, provider: null, result: null,
-      fileName: "DEA ND.pdf", mime: "application/pdf", expiration: "2026-01-31", uploadedAt: "2023-02-01T10:00:00Z" });
+      fileName: "DEA ND.pdf", mime: "application/pdf", expiration: "2026-01-31", uploadedAt: "2023-02-01T10:00:00Z", lifecycle: "active" });
   eq("an orphan link is unlinked, typed from the filename", [CATALOGUE.find((e) => e.id === "doc-orphan").section, CATALOGUE.find((e) => e.id === "doc-orphan").recType], ["", "DEA renewal"]);
   eq("an inbox attachment keeps its real MIME type", CATALOGUE.find((e) => e.id === "doc-checklist").mime, "application/pdf");
   eq("a state typed in full is stored as a code", catalogueFromRows([{ id: "d", name: "x.pdf", linked_to: "licenses:l" }], { licenses: [{ id: "l", type: "DEA Registration", state: "Colorado" }] })[0].state, "CO");

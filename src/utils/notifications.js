@@ -1,5 +1,6 @@
 import { complianceFor } from "./compliance";
 import { getItemLabel, formatDate, MS_PER_DAY, mailtoHref } from "./helpers";
+import { isAlertable } from "./lifecycle";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -25,8 +26,12 @@ export function generateAlerts(data) {
     ...(data.customRecords || []).filter(r => r && r.id).map(r => ({ ...r, _sec: "customRecords", _cat: r.categoryName || "Record" })),
   ];
 
-  const expired = allCreds.filter(i => i.expirationDate && new Date(i.expirationDate) < now && !activeAckFor(data, i.id));
-  const soon = allCreds.filter(i => {
+  // Historical, superseded, pending-confirmation and date-unknown records
+  // never alert (src/utils/lifecycle.js). A prior residency policy entered
+  // with its real dates used to raise a critical "expired" alert.
+  const alertable = allCreds.filter(isAlertable);
+  const expired = alertable.filter(i => i.expirationDate && new Date(i.expirationDate) < now && !activeAckFor(data, i.id));
+  const soon = alertable.filter(i => {
     if (!i.expirationDate) return false;
     if (activeAckFor(data, i.id)) return false;
     const d = Math.ceil((new Date(i.expirationDate) - now) / MS_PER_DAY);

@@ -4,6 +4,8 @@ import { useApp } from "../../context/AppContext";
 import { STORAGE_KEY } from "../../constants/defaults";
 import { bulkSync, saveSettings, COLLECTION_KEYS, redactForExport } from "../../lib/supabase";
 import BackupPanel from "./BackupPanel";
+import { plainLabel } from "../../utils/helpers";
+import { lifecycleSummary } from "../../utils/lifecycle";
 
 function DataExport() {
   const { data, setData, userIdRef, theme: T } = useApp();
@@ -228,14 +230,17 @@ function DataExport() {
       lines.push("");
     };
 
+    // Every licence, privilege and policy is listed, historical and
+    // superseded ones included, each with its status (ticket 2c819309).
+    const who = data.settings.name;
     addSection("Licenses & Certifications", data.licenses, l =>
-      `${l.name || l.type} | ${l.state || ""} | #${l.licenseNumber || "---"} | Exp: ${l.expirationDate || "---"}`);
+      `${plainLabel(l, who, "licenses")} | #${l.licenseNumber || "---"} | Exp: ${l.expirationDate || "---"} | Status: ${lifecycleSummary(l)}`);
     addSection("CME Credits", data.cme, c =>
       `${c.title || c.category} | ${c.hours || 0} hrs | ${c.date || "---"} | ${c.provider || ""}`);
     addSection("Hospital Privileges", data.privileges, p =>
-      `${p.name || p.type} | ${p.facility || ""} | ${p.state || ""} | Due: ${p.expirationDate || "---"}`);
+      `${plainLabel(p, who, "privileges")} | ${p.state || ""} | Due: ${p.expirationDate || "---"} | Status: ${lifecycleSummary(p)}`);
     addSection("Insurance", data.insurance, i =>
-      `${i.name || i.type} | ${i.provider || ""} | Policy: ${i.policyNumber || "---"} | Exp: ${i.expirationDate || "---"}`);
+      `${plainLabel(i, who, "insurance")} | Policy: ${i.policyNumber || "---"} | Exp: ${i.expirationDate || "---"} | Status: ${lifecycleSummary(i)}`);
     addSection("Education", data.education, e =>
       `${e.type || "Degree"} | ${e.institution || ""} | ${e.graduationDate || ""}`);
     addSection("Case Logs", data.caseLogs, c =>

@@ -2,6 +2,7 @@
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
+import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
 
 export const MS_PER_DAY = 86400000;
 
@@ -175,6 +176,10 @@ function getSectionFacts(item, section) {
     a("Ordered", formatDate(item.orderDate)); a("Reported", formatDate(item.reportDate));
     a("Expires", formatDate(item.expirationDate)); a("Overall Result", item.result);
   }
+
+  // A historical, superseded, provisional, pending or undated record says so
+  // wherever it is sent, so nobody reads it as the credential in force.
+  if (LIFECYCLE_SECTIONS.includes(section)) a("Status", lifecycleNote(item));
 
   return facts;
 }

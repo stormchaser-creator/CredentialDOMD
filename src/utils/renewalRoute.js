@@ -12,6 +12,7 @@ import { RENEWAL_INFO } from "../constants/renewalInfo.js";
 import { STATE_REQS } from "../constants/stateRequirements.js";
 import { ASSISTANT_SOURCES } from "../constants/assistantSources.js";
 import { getStatusColor } from "./helpers.js";
+import { isAlertable, isInactive } from "./lifecycle.js";
 
 export const DEA_PORTAL = "https://www.deadiversion.usdoj.gov/online_forms_apps.html";
 // When the DEA fee text was last checked (added with the renewal links on
@@ -97,7 +98,9 @@ export function researchedLabel(recorded) {
 
 /**
  * Everything the renewal box shows for one licence, or null when it shows
- * nothing (not a licence or DEA, or no researched state data).
+ * nothing (not a licence or DEA, no researched state data, or a historical or
+ * superseded record, which is never renewed). A record whose date is not
+ * known yet or that awaits confirmation keeps the box but is never urgent.
  *
  * The collapsed box is one line: "How to renew", the short cycle, and the
  * portal button only when the licence is urgent (inside the 90-day window or
@@ -105,13 +108,13 @@ export function researchedLabel(recorded) {
  * in the expansion, labelled with when it was last researched.
  */
 export function renewalView(item, degree, { alertable = true } = {}) {
-  if (!item || !/license|dea/i.test(item.type || "")) return null;
+  if (!item || !/license|dea/i.test(item.type || "") || isInactive(item)) return null;
   const st = item.state;
   const info = st && Object.hasOwn(RENEWAL_INFO, st) ? RENEWAL_INFO[st] : null;
   if (!info) return null;
   const isDea = /dea/i.test(item.type || "");
   const color = getStatusColor(item.expirationDate);
-  const urgent = alertable && (color === "red" || color === "orange" || color === "amber");
+  const urgent = alertable && isAlertable(item) && (color === "red" || color === "orange" || color === "amber");
   const route = isDea ? null : renewalRoute(st, degree);
   const researched = researchedLabel(isDea ? DEA_RESEARCHED : ASSISTANT_SOURCES.renewalSources?.[st]?.recordedReview);
   const authority = isDea ? "the DEA" : "the board";

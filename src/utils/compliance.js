@@ -1,5 +1,6 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
 import { topicApplicability } from "./conditionalCme.js";
+import { isAlertable, isInactive } from "./lifecycle.js";
 
 /**
  * CME compliance engine — cycle-windowed.
@@ -432,10 +433,13 @@ export function windowNotes(comp) {
 /**
  * Find the license anchoring a state's renewal window: the state medical
  * license with the soonest future expiration (or the most recent one).
+ * Only a licence that can alert anchors it: a superseded temporary licence,
+ * a historical one, or one whose date is not known yet must never set the
+ * CME cycle (src/utils/lifecycle.js).
  */
 export function findStateLicense(licenses, state) {
   const candidates = (licenses || []).filter(l =>
-    l.state === state && /medical license/i.test(l.type || "") && l.expirationDate
+    l && l.state === state && /medical license/i.test(l.type || "") && l.expirationDate && isAlertable(l)
   );
   if (candidates.length === 0) return null;
   const future = candidates.filter(l => new Date(l.expirationDate) >= new Date());
@@ -445,7 +449,8 @@ export function findStateLicense(licenses, state) {
 
 /** DEA registration detection (drives the MATE Act line). */
 export function hasDEARegistration(licenses) {
-  return (licenses || []).some(l => /dea/i.test(l.type || "") || /dea/i.test(l.name || ""));
+  // A historical or superseded registration is not one held today.
+  return (licenses || []).some(l => l && !isInactive(l) && (/dea/i.test(l.type || "") || /dea/i.test(l.name || "")));
 }
 
 /**
@@ -482,7 +487,11 @@ export function standingScore({ items = [], missingRequired = [], stateComps = [
   const missingIds = new Set(missingRequired.map(m => m.item?.id ?? m.id));
   const needsAction = [];
   let good = 0, total = 0;
-  for (const it of items) {
+  // Historical, superseded, pending-confirmation and date-unknown records are
+  // left out of the ring entirely: they cannot lapse, so they are neither
+  // good standing nor a problem (src/utils/lifecycle.js).
+  const tracked = items.filter(isAlertable);
+  for (const it of tracked) {
     if (it.expirationDate) {
       total += 1;
       const days = Math.ceil((new Date(it.expirationDate) - now) / DAY_MS);
@@ -502,6 +511,6 @@ export function standingScore({ items = [], missingRequired = [], stateComps = [
     else needsAction.push({ item: { id: `cme:${x.st}`, _sec: "cme", _cat: "CME", state: x.st, needsConfirmation: x.comp?.assessmentStatus === "needs-confirmation" }, days: x.comp?.daysLeft ?? null });
   }
   needsAction.sort((a, b) => (a.days ?? 9e9) - (b.days ?? 9e9));
-  const percent = total === 0 ? (items.length === 0 ? 0 : 100) : Math.round((good / total) * 100);
+  const percent = total === 0 ? (tracked.length === 0 ? 0 : 100) : Math.round((good / total) * 100);
   return { percent, good, total, needsAction };
 }

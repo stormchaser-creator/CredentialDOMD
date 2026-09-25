@@ -96,7 +96,7 @@ test('the stored fee is labelled with when it was researched, and the DEA line p
   assert.match(dea.feeCaption, /confirm with the DEA$/);
 });
 
-// ── The real component, rendered with a synthetic account ────────────────
+// -- The real component, rendered with a synthetic account ----------------
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('..', import.meta.url));
 const bundled = await build({

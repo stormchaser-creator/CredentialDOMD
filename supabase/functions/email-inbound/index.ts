@@ -1123,14 +1123,19 @@ function parseForwarded(text: string): ParsedForward {
  * Negative"). Table names are snake_case; the section keys are the app's
  * camelCase ones, because documents.linked_to is written by the app as
  * "<section>:<record id>" and the matcher joins on that.
+ *
+ * lifecycle_status (migration 20260925040000) lets the matcher send the
+ * record in force rather than a superseded or historical one. Apply that
+ * migration before deploying this function: until then these three queries
+ * fail and their documents are offered unlinked, by filename.
  */
 const RECORD_TABLES: { table: string; section: string; columns: string }[] = [
-  { table: "licenses", section: "licenses", columns: "id, type, name, license_number, state, issued_date, expiration_date" },
+  { table: "licenses", section: "licenses", columns: "id, type, name, license_number, state, issued_date, expiration_date, lifecycle_status" },
   { table: "health_records", section: "healthRecords", columns: "id, category, type, name, date_administered, expiration_date, result, doses" },
   { table: "education", section: "education", columns: "id, type, name, institution, graduation_date" },
-  { table: "insurance", section: "insurance", columns: "id, type, name, provider, policy_number, effective_date, expiration_date" },
+  { table: "insurance", section: "insurance", columns: "id, type, name, provider, policy_number, effective_date, expiration_date, lifecycle_status" },
   { table: "screenings", section: "screenings", columns: "id, type, name, agency, report_date, result, expiration_date" },
-  { table: "privileges", section: "privileges", columns: "id, type, name, facility, state, appointment_date, expiration_date" },
+  { table: "privileges", section: "privileges", columns: "id, type, name, facility, state, appointment_date, expiration_date, lifecycle_status" },
   { table: "travel_docs", section: "travelDocs", columns: "id, type, name, provider, number, expiration_date" },
   { table: "professional_photos", section: "professionalPhotos", columns: "id, name, date_taken" },
   { table: "cme", section: "cme", columns: "id, title, category, hours, date, provider" },

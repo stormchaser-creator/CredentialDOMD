@@ -54,6 +54,7 @@ export interface CatalogueEntry {
   mime: string | null;
   expiration: string | null;
   uploadedAt: string | null;
+  lifecycle: string | null;
 }
 
 /** A documents row, snake_case from the table or camelCase from the app. */
@@ -801,7 +802,9 @@ export function classifyAsk(ask: unknown): Classified {
     .replace(/\s+/g, " ")
     .trim();
   const state = stateIn(cleaned) || stateIn(raw);
-  const all = /\b(?:all|every|each)\b/.test(t);
+  // An ask for prior or past records wants the whole history, so it is
+  // answered like "all": historical and superseded documents included.
+  const all = /\b(?:all|every|each)\b/.test(t) || HISTORY_ASK_RE.test(t);
   const focusRule = FOCUS_RULES.find((f) => f.ask.test(t));
   const focus = focusRule ? focusRule.key : null;
   for (const r of KIND_RULES) {
@@ -864,6 +867,7 @@ export function catalogueFromRows(
       mime: mime || null,
       expiration: rec ? isoDay(pick(rec, "expirationDate", "expiration_date")) : null,
       uploadedAt: pick(d, "uploaded_at", "uploadedAt", "created_at", "createdAt"),
+      lifecycle: rec ? lifecycleOfRow(rec) : null,
     });
   }
   return out;
@@ -928,6 +932,20 @@ export function describeEntry(entry: CatalogueEntry | null | undefined): string 
   return noEmDash(s);
 }
 
+// --- Credential lifecycle (ticket 2c819309) ------------------------------------
+
+// A record's lifecycle_status as the app writes it (src/utils/lifecycle.js).
+// Missing or unrecognised reads as active, so a bad value can never hide a
+// document that should be sent.
+const LIFECYCLES = new Set(["active", "provisional", "pending_confirmation", "superseded", "historical"]);
+const RETIRED = new Set(["superseded", "historical"]);
+const HISTORY_ASK_RE = /\b(?:prior|previous|past|former|historical|ever|inactive|superseded)\b/;
+function lifecycleOfRow(rec: unknown): string {
+  const v = low(pick(rec, "lifecycle_status", "lifecycleStatus"));
+  return LIFECYCLES.has(v) ? v : "active";
+}
+const retired = (e: CatalogueEntry): number => (e.lifecycle && RETIRED.has(e.lifecycle) ? 1 : 0);
+
 // ─── Matching an ask against the catalogue ───────────────────────────────────
 
 const CV_FILE_RE = /(?:^|[^a-z])cv(?:[^a-z]|$)|resume|résumé|curriculum/;
@@ -983,10 +1001,12 @@ function candidates(kind: string, entries: CatalogueEntry[]): CatalogueEntry[] {
   }
 }
 
-/** Unexpired before expired, then the later expiration, then the newer upload. */
+/** The record in force before a historical or superseded one, then unexpired before expired, then the later expiration, then the newer upload. */
 function rank(list: CatalogueEntry[], today: string): CatalogueEntry[] {
   const expired = (e: CatalogueEntry): number => (e.expiration && e.expiration < today ? 1 : 0);
   return [...list].sort((a, b) => {
+    const ra = retired(a), rb = retired(b);
+    if (ra !== rb) return ra - rb;
     const ea = expired(a), eb = expired(b);
     if (ea !== eb) return ea - eb;
     const xa = a.expiration || "", xb = b.expiration || "";
@@ -1020,6 +1040,9 @@ export function matchAsk(
   if (c.state && STATE_KINDS.has(kind)) list = list.filter((e) => e.state === c.state);
   list = rank(list, today).filter((e) => !NEVER_SECTIONS.has(e.section) && (e.section !== "cme" || kind === "cme"));
   if (c.all || SERIES_KINDS.has(kind)) return list;
+  // A single pick is the record in force. A superseded temporary licence or a
+  // prior policy is sent only when the ask names the history ("all", "prior").
+  list = list.filter((e) => !retired(e));
   const focus = c.focus ? FOCUS_RULES.find((f) => f.key === c.focus) : null;
   if (focus) {
     const named = list.filter((e) => focus.text.test(textOf(e)));

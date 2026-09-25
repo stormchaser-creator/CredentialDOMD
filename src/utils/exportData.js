@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { caseWRVU } from "./caseLogReport";
+import { lifecycleSummary } from "./lifecycle";
 
 /**
  * Vera's export engine: turns a section of the user's own data into a real
@@ -38,7 +39,10 @@ const EXPORTS = {
     row: l => ({
       Type: l.type || "", Name: l.name || "", State: l.state || "",
       "License #": l.licenseNumber || "", Issued: l.issuedDate || "",
-      Expires: l.expirationDate || "", Notes: l.notes || "",
+      Expires: l.expirationDate || "",
+      // Historical and superseded licences are exported too, with what they are.
+      Status: lifecycleSummary(l), "Status source": l.statusSource || "",
+      Notes: l.notes || "",
     }),
   },
   invoices: {

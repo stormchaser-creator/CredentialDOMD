@@ -17,6 +17,7 @@ import { useApp } from "../../../context/AppContext";
 import { complianceFor } from "../../../utils/compliance";
 import { STATE_REQS } from "../../../constants/stateRequirements";
 import { STATES } from "../../../constants/states";
+import { isAlertable, isInactive } from "../../../utils/lifecycle";
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -45,7 +46,9 @@ export default function MultiStateMatrix() {
   const degreeType = data.settings?.degreeType || "";
 
   const stateRows = useMemo(() => {
-    const licenses = data.licenses || [];
+    // One row per state held today: a historical or superseded licence is
+    // kept in Licenses but says nothing about the current renewal.
+    const licenses = (data.licenses || []).filter((l) => l && !isInactive(l));
     const stateSet = new Set();
     licenses.forEach((l) => l.state && stateSet.add(l.state));
     if (data.settings?.primaryState) stateSet.add(data.settings.primaryState);
@@ -71,10 +74,10 @@ export default function MultiStateMatrix() {
 
       // Privileges in this state
       const privCount = (data.privileges || []).filter(
-        (p) => p.state === state
+        (p) => p && p.state === state && !isInactive(p)
       ).length;
       const privEarliest = (data.privileges || [])
-        .filter((p) => p.state === state && p.expirationDate)
+        .filter((p) => p && p.state === state && p.expirationDate && isAlertable(p))
         .map((p) => p.expirationDate)
         .sort()[0];
 
@@ -138,8 +141,9 @@ export default function MultiStateMatrix() {
       {/* State cards (each state is one row) */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {stateRows.map((row) => {
-          const licDays = daysUntil(row.medLicense?.expirationDate);
-          const deaDays = daysUntil(row.deaLicense?.expirationDate);
+          // A date not known yet (or awaiting confirmation) is not a countdown.
+          const licDays = row.medLicense && isAlertable(row.medLicense) ? daysUntil(row.medLicense.expirationDate) : null;
+          const deaDays = row.deaLicense && isAlertable(row.deaLicense) ? daysUntil(row.deaLicense.expirationDate) : null;
           const privDays = daysUntil(row.privEarliest);
           const cmeReq = row.req?.total || 0;
           const cmePct = cmeReq > 0

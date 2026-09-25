@@ -49,6 +49,10 @@ import { useApp } from "../../context/AppContext";
  *                  A row after the group's items. `label` spans the leading
  *                  columns up to the first one named in `cells`; each cell
  *                  lands under its column in bold. null renders no row.
+ *   groupHeader(key, groupItems)
+ *                  -> content | null. A full-width label row BEFORE the
+ *                  group's items (historical records under their own
+ *                  heading). null renders no row.
  *
  * Layout notes: tableLayout "fixed" + width 100% means the table can never
  * spill horizontally (long text ellipsizes), which keeps overflow-x
@@ -61,7 +65,7 @@ import { useApp } from "../../context/AppContext";
  */
 export default function DeskTable({
   columns, items, defaultSort, status, actions, onRowClick, actionsWidth = 122,
-  groupBy, groupDir = "asc", groupKeys, subtotal,
+  groupBy, groupDir = "asc", groupKeys, subtotal, groupHeader,
 }) {
   const { theme: T } = useApp();
   const [sort, setSort] = useState(defaultSort || null);
@@ -168,6 +172,21 @@ export default function DeskTable({
     );
   };
 
+  const renderGroupHeader = (group) => {
+    if (!groupHeader || group.key == null || !group.items.length) return null;
+    const content = groupHeader(group.key, group.items);
+    if (content == null) return null;
+    const span = columns.length + (status ? 1 : 0) + (actions ? 1 : 0);
+    return (
+      <tr key={`header:${group.key}`} className="cmd-desk-group">
+        <td colSpan={span} style={{
+          padding: "9px 12px", borderTop: `1px solid ${T.border}`, backgroundColor: T.input,
+          fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.6,
+        }}>{content}</td>
+      </tr>
+    );
+  };
+
   let rowIdx = 0;
   return (
     <div style={{
@@ -204,6 +223,7 @@ export default function DeskTable({
         <tbody>
           {groups.map((group) => (
             <Fragment key={group.key ?? "all"}>
+              {renderGroupHeader(group)}
               {group.items.map((item) => {
                 const idx = rowIdx++;
                 return (
