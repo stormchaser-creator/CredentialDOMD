@@ -11,6 +11,7 @@ const {
   parseAttachments, ticketScreenshotPathAt, replyScreenshotPathAt, attachmentPathsOf,
   MAX_ATTACHMENTS, ATTACHMENT_COUNT_ERROR, ATTACHMENT_TOTAL_ERROR, MAX_TOTAL_ATTACHMENT_BYTES,
   isTicketAttachmentPath, stripServerOnlyPayloadKeys, SERVER_ONLY_PAYLOAD_KEYS, ATTACHMENT_EXTS,
+  storeTicketAttachments,
 } = await import("../supabase/functions/_shared/ticketAttachment.ts");
 
 let pass = 0, fail = 0;
@@ -280,6 +281,80 @@ eq("a payload of only those two keys comes back empty",
   stripServerOnlyPayloadKeys({ attachment_path: "x", attachment_paths: ["y"] }), {});
 ok("what create-ticket then writes is signable",
   isTicketAttachmentPath(ticketScreenshotPathAt(T, "png", 0), T) === true);
+
+// ── create-ticket says which files did not make it ────────────────────────
+// It used to log a failed upload, never check the row update, and answer
+// ok:true, so a physician who attached two files and saw "Ticket received"
+// could not know one was gone. A stubbed storage that refuses one of two.
+{
+  const stubDb = ({ failUpload = () => false, failUpdate = false } = {}) => {
+    const calls = { uploads: [], removed: [], updates: [] };
+    const db = {
+      storage: { from: (bucket) => ({
+        upload: async (path, bytes, options) => {
+          calls.uploads.push({ bucket, path, size: bytes.length, contentType: options.contentType });
+          return failUpload(path) ? { error: { message: "synthetic storage outage" } } : { error: null };
+        },
+        remove: async (paths) => { calls.removed.push(...paths); return { error: null }; },
+      }) },
+      from: (table) => ({ update: (row) => ({ eq: async (column, value) => {
+        calls.updates.push({ table, row, column, value });
+        return failUpdate ? { error: { message: "synthetic row failure" } } : { error: null };
+      } }) }),
+    };
+    return { db, calls };
+  };
+  const two = parseAttachments({ attachments: [
+    { data: dataUrl("image/png", png) },
+    { data: dataUrl("application/pdf", Uint8Array.from([0x25, 0x50, 0x44, 0x46])) },
+  ] });
+  const logged = [];
+  const log = (m) => logged.push(m);
+
+  {
+    const { db, calls } = stubDb({ failUpload: (path) => path.endsWith(".pdf") });
+    const result = await storeTicketAttachments(db, T, two, { page: "/app" }, log);
+    eq("one of two failing is reported as one failed", result.failed, 1);
+    eq("and the other is stored", result.stored, [`tickets/${T}/screenshot.png`]);
+    eq("both uploads were tried", calls.uploads.map((u) => u.path), [`tickets/${T}/screenshot.png`, `tickets/${T}/screenshot-2.pdf`]);
+    eq("the row records only the file that exists", calls.updates[0].row.context_payload,
+      { page: "/app", attachment_path: `tickets/${T}/screenshot.png`, attachment_paths: [`tickets/${T}/screenshot.png`] });
+    eq("on this ticket", [calls.updates[0].table, calls.updates[0].column, calls.updates[0].value], ["support_tickets", "id", T]);
+    ok("the failure is logged without the file's contents", logged.length === 1 && /attachment 2 upload failed/.test(logged[0]));
+    eq("nothing is removed", calls.removed, []);
+  }
+  {
+    const { db, calls } = stubDb();
+    const result = await storeTicketAttachments(db, T, two, {}, log);
+    eq("both stored when both land", [result.stored.length, result.failed], [2, 0]);
+    eq("the first stays in the singular key", calls.updates[0].row.context_payload.attachment_path, `tickets/${T}/screenshot.png`);
+  }
+  {
+    const { db, calls } = stubDb({ failUpload: () => true });
+    const result = await storeTicketAttachments(db, T, two, {}, log);
+    eq("every upload failing reports every file", [result.stored.length, result.failed], [0, 2]);
+    eq("and the row is not touched", calls.updates.length, 0);
+  }
+  {
+    // The update error used to be ignored: the files were in the bucket, the
+    // row did not point at them, and nobody could ever open them.
+    const { db, calls } = stubDb({ failUpdate: true });
+    const result = await storeTicketAttachments(db, T, two, {}, log);
+    eq("a row that cannot record the files counts them all as failed", [result.stored.length, result.failed], [0, 2]);
+    eq("and the unreachable objects are removed", calls.removed, [`tickets/${T}/screenshot.png`, `tickets/${T}/screenshot-2.pdf`]);
+  }
+  {
+    const { db } = stubDb();
+    db.storage.from = () => ({ upload: async () => { throw new Error("network"); }, remove: async () => ({ error: null }) });
+    const result = await storeTicketAttachments(db, T, two, {}, log);
+    eq("an upload that throws counts as failed rather than failing the ticket", result.failed, 2);
+  }
+  {
+    const createTicket = (await import("node:fs")).readFileSync(new URL("../supabase/functions/create-ticket/index.ts", import.meta.url), "utf8");
+    ok("create-ticket stores through the counted path", /storeTicketAttachments\(user\.db, data\.id, attachments, contextPayload\)/.test(createTicket));
+    ok("and returns both counts", /attachments_stored: files\.stored\.length/.test(createTicket) && /attachments_failed: files\.failed/.test(createTicket));
+  }
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

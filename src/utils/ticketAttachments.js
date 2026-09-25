@@ -34,7 +34,7 @@ export const TICKET_ATTACH_ACCEPT = [
   ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".csv", "text/csv",
   ".txt", "text/plain",
-  ".rtf", "application/rtf",
+  ".rtf", "application/rtf", "text/rtf",
   ".heic", ".heif",
 ].join(",");
 
@@ -49,6 +49,54 @@ export const TICKET_MIME_BY_EXT = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   csv: "text/csv", txt: "text/plain", rtf: "application/rtf",
 };
+
+/**
+ * Every MIME type the server stores (MIME_EXT in
+ * supabase/functions/_shared/ticketAttachment.ts). text/rtf is the one with
+ * no extension of its own: macOS reports an .rtf as text/rtf, the server has
+ * always stored it, and the client used to refuse it because this list was
+ * read off the extension table alone.
+ */
+export const TICKET_MIMES = new Set([...Object.values(TICKET_MIME_BY_EXT), "text/rtf"]);
+
+/** Never renamed into something storable: a browser executes these. */
+const EXECUTABLE_MIME = /svg|html|xml|javascript|ecmascript/;
+
+const extOf = (name) => (String(name || "").match(/\.([a-z0-9]{1,5})$/i) || [])[1]?.toLowerCase() || "";
+
+/**
+ * The MIME type to store a picked file under, or "" when it may not be
+ * attached. The browser's word is taken when the server stores that type;
+ * otherwise the extension decides (an empty type, application/octet-stream,
+ * application/csv, text/x-csv), except for a type a browser would run.
+ *
+ * A .csv is always text/csv, whatever the browser called it: Windows reports
+ * one as application/vnd.ms-excel when Excel is installed, and that stored a
+ * CSV as .xls.
+ */
+export function resolveTicketMime(file) {
+  const given = String(file?.type || "").toLowerCase().split(";")[0].trim();
+  const ext = extOf(file?.name);
+  if (ext === "csv" && !EXECUTABLE_MIME.test(given)) return "text/csv";
+  if (TICKET_MIMES.has(given)) return given;
+  if (EXECUTABLE_MIME.test(given)) return "";
+  return TICKET_MIME_BY_EXT[ext] || "";
+}
+
+/**
+ * The same data URL declaring `mime`. FileReader writes whatever type the
+ * browser guessed (or application/octet-stream when it guessed nothing), and
+ * the server stores a file under the type its data URL declares, so the
+ * resolved type has to be the one on the wire.
+ */
+export function withDataUrlMime(dataUrl, mime) {
+  const s = String(dataUrl || "");
+  if (!mime || !s.startsWith("data:")) return s;
+  const comma = s.indexOf(",");
+  if (comma < 0) return s;
+  const base64 = /;base64$/i.test(s.slice(0, comma));
+  return `data:${mime}${base64 ? ";base64" : ""}${s.slice(comma)}`;
+}
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
 
@@ -140,6 +188,17 @@ export function attachmentsPayload(images) {
   // The singular is still sent so a function that has not been redeployed
   // yet still receives the first image rather than none.
   return { attachment: { data: list[0].data }, attachments: list.map((im) => ({ data: im.data })) };
+}
+
+/**
+ * What to tell the sender when create-ticket saved the ticket but not every
+ * file. Empty when nothing was lost, and also when the function is an older
+ * one that does not report it (no count means nothing to claim).
+ */
+export function ticketAttachmentShortfall(data) {
+  const n = Number(data?.attachments_failed);
+  if (!Number.isInteger(n) || n <= 0) return "";
+  return `Your ticket was sent, but ${n} ${n === 1 ? "file" : "files"} did not attach. Add ${n === 1 ? "it" : "them"} as a reply.`;
 }
 
 /** Every signed link for one message, from either shape the API returns. */

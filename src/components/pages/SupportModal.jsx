@@ -4,7 +4,7 @@ import { pushModal, popModal, isTopModal } from "../../utils/deskKeys";
 import { edgeErrorMessage } from "../../utils/edgeError";
 import { supabase } from "../../lib/supabase";
 import { ScreenshotAttach } from "../shared";
-import { attachmentsPayload, linksFor } from "../../utils/ticketAttachments";
+import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { createSupportTextDrafts, supportReceiptConfirmed, supportSubmissionError } from "../../utils/supportTextDrafts";
 import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam } from "../../utils/supportOperationsClient";
@@ -64,8 +64,10 @@ function timeAgo(iso) {
  *                   to owner-or-admin), reply box -> reply-ticket edge function
  *                   (owner-or-admin, verified in the function).
  * Admin replies also go out by email (trg_notify_ticket_reply -> send-ticket-reply).
- * Either side can attach one screenshot to a ticket or to a reply; the thread
- * renders them through signed links from ticket-attachment-url.
+ * Either side can attach up to five files (screenshots, photos, PDFs, Office
+ * documents, CSV or text) to a ticket or to a reply; the thread renders them
+ * through signed links from ticket-attachment-url. create-ticket says how many
+ * files it could not store, and the sender is told to add those as a reply.
  */
 export default function SupportModal(props) {
   const { user } = useApp();
@@ -102,6 +104,10 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
   const [priority, setPriority] = useState("normal");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // Set when the ticket was saved but create-ticket could not store every
+  // file. Shown in place of the plain confirmation, and the sheet stays open
+  // so it can be read.
+  const [doneNote, setDoneNote] = useState("");
   const [error, setError] = useState("");
   const [attachment, setAttachment] = useState([]); // [{ data: dataURL, name }]
 
@@ -393,7 +399,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     listRequest.current++; threadRequest.current++; actionRequest.current++;
     clearTimeout(closeTimer.current);
     setSubject(""); setBody(""); setCategory("other"); setPriority("normal");
-    setDone(false); setError("");
+    setDone(false); setDoneNote(""); setError("");
     setCreateDraftSaved(null); setReplyDraftSaved(null);
     setOpenTicket(null); setThread([]); setReply(""); setReplyMsg("");
     setAttachment([]); setReplyAttachment([]); setAttachmentUrls([]); setReplyUrls({});
@@ -441,6 +447,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     const requestId = ++actionRequest.current;
     const current = () => requestId === actionRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
     try {
+      let shortfall = "";
       if (SUPPORT_OPERATIONS_ENABLED) await operations.create({ subject: subj, body: body.trim(), category, priority });
       else {
         const res = await supabase.functions.invoke("create-ticket", {
@@ -456,10 +463,15 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         if (res.error) throw res.error;
         if (!supportReceiptConfirmed(res.data)) throw new Error("The server did not confirm this ticket.");
         if (savedRevision) drafts.clear("create", savedRevision);
+        shortfall = ticketAttachmentShortfall(res.data);
       }
       if (!current()) return;
+      // The sheet may stay open to show what did not attach, so the sent
+      // ticket must not stay in the form to be sent a second time.
+      setSubject(""); setBody(""); setCategory("other"); setPriority("normal"); setAttachment([]); setCreateDraftSaved(null);
+      setDoneNote(shortfall);
       setDone(true);
-      closeTimer.current = setTimeout(() => { if (current()) { onClose(); reset(); } }, 2600);
+      if (!shortfall) closeTimer.current = setTimeout(() => { if (current()) { onClose(); reset(); } }, 2600);
     } catch (e) {
       const message = SUPPORT_OPERATIONS_ENABLED ? e.message || "Could not confirm receipt. Try again." : await supportSubmissionError(e);
       if (current()) setError(message);
@@ -488,8 +500,8 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
   const draftNotice = (saved, discard, busy) => <div style={{ marginTop: 8, fontSize: 12, color: T.textMuted }}>
     <p role="status" style={{ margin: "0 0 4px" }}>{saved === false
       ? "This tab could not save your draft. Copy your text before closing or signing in again."
-      : saved ? "Text draft saved for this account in this tab for up to 24 hours. Closing this support window keeps it; explicit sign-out removes it. Reattach screenshots after reopening."
-        : "Text drafts stay in this tab for up to 24 hours. Screenshots are not saved in drafts."}</p>
+      : saved ? "Text draft saved for this account in this tab for up to 24 hours. Closing this support window keeps it; explicit sign-out removes it. Reattach files after reopening."
+        : "Text drafts stay in this tab for up to 24 hours. Attached files are not saved in drafts."}</p>
     {saved !== null && <button onClick={discard} disabled={busy} style={{ padding: "6px 0", border: "none", background: "none", color: T.accent, cursor: "pointer" }}>Discard text draft</button>}
   </div>;
 
@@ -536,7 +548,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
         />
 
         {!SUPPORT_OPERATIONS_ENABLED && <>
-          <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Screenshot (optional)</label>
+          <label style={{ fontSize: 12, fontWeight: 700, color: T.textMuted }}>Screenshot or file (optional)</label>
           <ScreenshotAttach value={attachment} onChange={setAttachment} />
         </>}
         {SUPPORT_OPERATIONS_ENABLED && <p style={{ margin: 0, fontSize: 12, color: T.textMuted }}>Please describe the issue in text. Attachments are not available here yet.</p>}
@@ -646,7 +658,7 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     );
   };
 
-  // A reply can be text, a screenshot, or both.
+  // A reply can be text, files, or both.
   const canSend = !replying && !threadLoading && (reply.trim().length > 0 || (!SUPPORT_OPERATIONS_ENABLED && replyAttachment.length > 0));
 
   const renderThread = () => (
@@ -749,7 +761,23 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
           <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: T.border }} />
         </div>
 
-        {done ? (
+        {done && doneNote ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <div role="status" style={{ fontSize: 15, fontWeight: 700, color: T.text, lineHeight: 1.5 }}>
+              {doneNote}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={() => { setDone(false); setDoneNote(""); setTab("tickets"); leaveThread(); }} style={{
+                flex: 1, padding: "12px", borderRadius: 10, border: "none",
+                backgroundColor: T.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Open Your tickets</button>
+              <button onClick={close} style={{
+                padding: "12px 18px", borderRadius: 10, border: `1px solid ${T.border}`,
+                backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 600, cursor: "pointer",
+              }}>Done</button>
+            </div>
+          </div>
+        ) : done ? (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>{"✓"}</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>

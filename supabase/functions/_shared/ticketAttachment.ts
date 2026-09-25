@@ -151,6 +151,92 @@ export const replyScreenshotPathAt = (ticketId: string, messageId: string, ext: 
     : `tickets/${ticketId}/replies/${messageId}-${index + 1}.${ext}`;
 
 /**
+ * The slice of a Supabase client storeTicketAttachments uses. Declared here
+ * so this file keeps no Supabase import and the node test can hand it a stub.
+ */
+export interface TicketAttachmentStore {
+  storage: {
+    from(bucket: string): {
+      upload(path: string, bytes: Uint8Array, options: { contentType: string; upsert: boolean }): PromiseLike<{ error: { message: string } | null }>;
+      remove(paths: string[]): PromiseLike<{ error: { message: string } | null }>;
+    };
+  };
+  from(table: string): {
+    update(row: Record<string, unknown>): {
+      eq(column: string, value: string): PromiseLike<{ error: { message: string } | null }>;
+    };
+  };
+}
+
+export interface StoredTicketAttachments {
+  /** Keys now recorded on the ticket, in the order they were attached. */
+  stored: string[];
+  /** Files the sender attached that the ticket does not carry. */
+  failed: number;
+}
+
+/**
+ * Upload a NEW ticket's files and record them on its row, and say how many
+ * did not make it.
+ *
+ * The ticket text is saved before this runs, so a file that fails does not
+ * lose the ticket or the other files. It used to fail silently: the upload
+ * error was logged, the row update was never checked, and create-ticket
+ * answered ok:true, so a physician who attached two files and saw "Ticket
+ * received" had no way to know one was gone. The caller now reports `failed`
+ * and the client says how many to add as a reply.
+ *
+ * When the row update itself fails, the uploaded objects are unreachable (no
+ * reader signs a key the row does not carry), so they are removed rather
+ * than left as orphans, and every file counts as failed.
+ */
+export async function storeTicketAttachments(
+  db: TicketAttachmentStore,
+  ticketId: string,
+  attachments: DecodedAttachment[],
+  contextPayload: Record<string, unknown>,
+  log: (message: string) => void = (message) => console.error(message),
+): Promise<StoredTicketAttachments> {
+  const stored: string[] = [];
+  let failed = 0;
+  for (let i = 0; i < attachments.length; i++) {
+    const a = attachments[i];
+    const path = ticketScreenshotPathAt(ticketId, a.ext, i);
+    let upErr: { message: string } | null = null;
+    try {
+      ({ error: upErr } = await db.storage.from(ATTACHMENT_BUCKET)
+        .upload(path, a.bytes, { contentType: a.mime, upsert: true }));
+    } catch (e) {
+      upErr = { message: (e as Error)?.message || "upload threw" };
+    }
+    if (upErr) {
+      failed++;
+      log(`create-ticket: attachment ${i + 1} upload failed for ${ticketId}: ${upErr.message}`);
+    } else {
+      stored.push(path);
+    }
+  }
+  if (!stored.length) return { stored, failed };
+
+  let rowErr: { message: string } | null = null;
+  try {
+    ({ error: rowErr } = await db.from("support_tickets")
+      // attachment_path stays as the first one so every reader written
+      // before several files were allowed still finds one where it expects.
+      .update({ context_payload: { ...contextPayload, attachment_path: stored[0], attachment_paths: stored } })
+      .eq("id", ticketId));
+  } catch (e) {
+    rowErr = { message: (e as Error)?.message || "update threw" };
+  }
+  if (rowErr) {
+    log(`create-ticket: could not record ${stored.length} attachment(s) on ${ticketId}: ${rowErr.message}`);
+    try { await db.storage.from(ATTACHMENT_BUCKET).remove(stored); } catch { /* best effort */ }
+    return { stored: [], failed: attachments.length };
+  }
+  return { stored, failed };
+}
+
+/**
  * Every path a ticket or message row carries, old shape or new, in order and
  * without duplicates. `attachment_path` was the only column for a while, so a
  * row can hold the singular, the array, or both.
