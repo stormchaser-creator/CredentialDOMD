@@ -23,7 +23,14 @@ import { selectableContracts } from "../../../utils/contractsForDate";
 import {
   localDate, callDayOf, deriveCallDay, entryOrder, fmtTime, findContainer, overlapSiblings,
   money, billedSpan, isStipendDay as isStipendDayPure, rateFor as rateForPure, computeBilling as computeBillingPure,
+  callDayStartHour, currentCallDay, splitRows, splitGroupOf, splitPieceNote, hourLabel,
 } from "../../../utils/billing";
+
+// The fields a save sets on a work entry. Editing a split entry rewrites only
+// these on each existing piece, so everything else a piece carries (its id,
+// invoice, star) stays its own.
+const ENTRY_EDIT_KEYS = ["contractId", "type", "date", "callDay", "startTime", "endTime", "durationMin", "billedMin", "description", "privateNote", "splitGroupId"];
+const pickEditKeys = (row) => Object.fromEntries(ENTRY_EDIT_KEYS.filter(k => k in row).map(k => [k, row[k]]));
 
 /**
  * WorkLog — one-tap time capture for locum work, billed in the contract's
@@ -79,8 +86,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const { data, addItem, editItem, deleteItem, theme: T, isDesktop } = useApp();
   const iS = useInputStyle();
 
-  const contracts = data.locumContracts || [];
-  const entries = data.workLog || [];
+  // Memoized so a missing section is one stable empty list, not a new one on
+  // every render that re-runs every hook depending on it.
+  const contracts = useMemo(() => data.locumContracts || [], [data.locumContracts]);
+  const entries = useMemo(() => data.workLog || [], [data.workLog]);
   // Contracts a TIME entry can bill against. A day-rate agreement has no
   // hourly price — its work is logged as days and call periods, not clock
   // time — so it never appears in a time-entry dropdown.
@@ -246,7 +255,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const t = { contractId: contract.id, type, startedAt: new Date().toISOString() };
     setTimer(t); saveTimer(t);
     rememberContract(contract.id);
-    if (!inScheduledCoverage(contract, callDayOf({ startTime: t.startedAt }))) {
+    if (!inScheduledCoverage(contract, deriveCallDay(t.startedAt, callDayStartHour(contract)))) {
       showNotice(`Heads up: today isn't inside a scheduled coverage block for ${contract.facility || "this contract"} — make sure you're logging against the right agreement (see the Schedule tab).`);
     }
   }, [contract, rememberContract, inScheduledCoverage, showNotice]);
@@ -265,41 +274,63 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   }, []);
 
   // Overlap check at save time — surprises about "why didn't this bill"
-  // should never wait for the invoice.
-  const noticeOverlap = useCallback((c, saved) => {
-    if (!c || !saved.startTime || !saved.endTime) return false;
+  // should never wait for the invoice. `excluded` are rows this save
+  // replaces; `batch` is every row this save writes (the pieces of a split).
+  const overlapMessage = useCallback((c, saved, excluded, batch) => {
+    if (!c || !saved.startTime || !saved.endTime) return null;
     const dateKey = callDayOf(saved);
-    const sibs = overlapSiblings(entries, c.id, dateKey).filter(x => x.id !== saved.id);
-    const container = findContainer(saved, [...sibs, saved]);
+    const sibs = overlapSiblings(entries, c.id, dateKey).filter(x => x.id !== saved.id && !excluded.includes(x.id));
+    const mates = batch.filter(x => x !== saved);
+    const container = findContainer(saved, [...sibs, ...mates, saved]);
     if (container) {
-      showNotice(`This ${saved.type} falls entirely inside your ${container.type} (${fmtTime(container.startTime)}–${fmtTime(container.endTime)}) — that time is already billed, so it won't charge separately.`);
-      return true;
+      return `This ${saved.type} falls entirely inside your ${container.type} (${fmtTime(container.startTime)}–${fmtTime(container.endTime)}): that time is already billed, so it won't charge separately.`;
     }
-    const swallowed = sibs.filter(x => findContainer(x, [saved, ...sibs]) === saved || (findContainer(x, [saved, ...sibs])?.id === saved.id));
+    const swallowed = sibs.filter(x => findContainer(x, [...batch, ...sibs])?.id === saved.id);
     if (swallowed.length > 0) {
-      showNotice(`${swallowed.length} logged ${swallowed.length === 1 ? "entry falls" : "entries fall"} inside this time span — ${swallowed.length === 1 ? "it" : "they"} won't bill separately anymore (the time is covered by this ${saved.type}).`);
-      return true;
+      return `${swallowed.length} logged ${swallowed.length === 1 ? "entry falls" : "entries fall"} inside this time span, so ${swallowed.length === 1 ? "it" : "they"} won't bill separately anymore (the time is covered by this ${saved.type}).`;
     }
-    return false;
-  }, [entries, showNotice]);
+    return null;
+  }, [entries]);
 
-  // After a save on a stipend day, tell the user where the countdown stands.
-  const noticeAllowance = useCallback((c, dateKey, newMin, excludeId) => {
-    if (!c || (c.callStipend || 0) <= 0 || !isStipendDay(c, dateKey, entries)) return;
+  // After a save on a stipend day, where the countdown stands.
+  const allowanceMessage = useCallback((c, dateKey, newMin, excluded) => {
+    if (!c || (c.callStipend || 0) <= 0 || !isStipendDay(c, dateKey, entries)) return null;
     const allowance = (c.stipendHours || 0) * 60;
     const sibsN = overlapSiblings(entries, c.id, dateKey);
     const others = entries
-      .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dateKey && e.id !== excludeId)
+      .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dateKey && !excluded.includes(e.id))
       .reduce((s, e) => s + (findContainer(e, sibsN) ? 0 : (e.billedMin || 0)), 0);
     const used = others + (newMin || 0);
     const left = allowance - used;
     const fmtH = (m) => `${Math.floor(Math.abs(m) / 60)}h ${String(Math.abs(m) % 60).padStart(2, "0")}m`;
-    if (left >= 0) {
-      showNotice(`Stipend day: ${fmtH(used)} of the ${c.stipendHours}h covered by the stipend logged — ${fmtH(left)} left before time bills at ${money(c.overageHourlyRate || 0)}/hr.`);
-    } else {
-      showNotice(`Stipend day: ${fmtH(used)} logged — ${fmtH(-left)} past the ${c.stipendHours}h stipend; that time bills at ${money(c.overageHourlyRate || 0)}/hr.`);
+    return left >= 0
+      ? `Stipend day: ${fmtH(used)} of the ${c.stipendHours}h covered by the stipend logged, ${fmtH(left)} left before time bills at ${money(c.overageHourlyRate || 0)}/hr.`
+      : `Stipend day: ${fmtH(used)} logged, ${fmtH(-left)} past the ${c.stipendHours}h stipend; that time bills at ${money(c.overageHourlyRate || 0)}/hr.`;
+  }, [entries, isStipendDay]);
+
+  // One notice per save. A split save says where each piece went first, then
+  // the overlap or stipend countdown for each piece, the same checks a whole
+  // entry gets.
+  const noticeSaved = useCallback((c, rows, excluded = []) => {
+    const msgs = [];
+    const hour = hourLabel(callDayStartHour(c));
+    if (rows.length > 1) {
+      const where = rows.map((r, i) => `${fmtTime(r.startTime)}–${fmtTime(r.endTime)} counts toward ${i === 0 ? "the " : ""}${formatDate(r.callDay)}${i === 0 ? " call day" : ""}`);
+      msgs.push(`This ${rows[0].type} crossed the ${hour} start of the call day, so it is split: ${where.slice(0, -1).join(", ")} and ${where.at(-1)}.`);
+    } else if (rows[0]?.startTime && rows[0]?.callDay && deriveCallDay(rows[0].startTime, callDayStartHour(c)) !== rows[0].callDay) {
+      // Rule R2 kept it whole under the later day: the part before the start
+      // hour was too short to earn a billing increment.
+      msgs.push(`This ${rows[0].type} crossed ${hour}, but the part before ${hour} did not earn a billing increment of its own, so all ${rows[0].billedMin} min count toward the ${formatDate(rows[0].callDay)} call day.`);
     }
-  }, [entries, isStipendDay, showNotice]);
+    for (const r of rows) {
+      if (r.type === "CallDay" || r.type === "Orientation") continue;
+      const overlap = overlapMessage(c, r, excluded, rows);
+      if (overlap) { msgs.push(overlap); continue; }
+      const allowance = allowanceMessage(c, callDayOf(r), r.billedMin, excluded);
+      if (allowance) msgs.push(allowance);
+    }
+    if (msgs.length) showNotice(msgs.join(" "));
+  }, [overlapMessage, allowanceMessage, showNotice]);
 
   const stopTimer = useCallback(() => {
     if (!timer) return;
@@ -316,13 +347,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     // The identifier note goes to this device, keyed to the entry — the
     // synced row carries an empty string.
     if (timer.privateNote?.trim()) setPrivate("workLog", newId, timer.privateNote);
-    addItem("workLog", {
+    // One row, or one per piece when the contract splits at the call-day
+    // start (splitRows returns this very row when it does not).
+    const rows = splitRows({
       id: newId,
       createdAt: new Date().toISOString(),
       contractId: timer.contractId,
       type: timer.type,
       date: localDate(f.s),
-      callDay: deriveCallDay(f.s),
+      callDay: deriveCallDay(f.s, callDayStartHour(c)),
       startTime: f.s,
       endTime: f.e,
       durationMin: f.raw,
@@ -330,17 +363,17 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       description: timer.note || "",
       privateNote: "",
       invoiceId: null,
-    });
+    }, c, generateId);
+    for (const r of rows) if (addItem("workLog", r) === false) break;
     if (c?.payModel === "daily") {
       // A timer that predates this contract going day-rate: the row is kept
       // for the record but prices at $0 — the money lives in Days & call.
       showNotice(`${c.facility || "This contract"} pays per day and call period, not clock time — the timed entry was saved for your records but bills $0. Log the day or call period on Days & call.`);
     } else if (timer.type !== "Orientation") {
-      const overlapped = noticeOverlap(c, { id: "timer", type: timer.type, startTime: f.s, endTime: f.e, createdAt: new Date().toISOString() });
-      if (!overlapped) noticeAllowance(c, callDayOf({ startTime: f.s }), f.billed, null);
+      noticeSaved(c, rows);
     }
     setTimer(null); saveTimer(null);
-  }, [timer, contracts, contract, addItem, finalizeEntry, noticeAllowance, noticeOverlap, showNotice]);
+  }, [timer, contracts, contract, addItem, finalizeEntry, noticeSaved, showNotice]);
 
   // Work is logged AFTER it happens. A start time in the future almost
   // always means the date is wrong (the old UTC-date bug filed 9 PM work
@@ -420,23 +453,55 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         if (!rawMin) return;
         const type = (manual.type || "").trim() || (manual.otherType ? "Other" : orig.type);
         if (!confirmIfFuture(s2, manual.date)) return;
-        if (orig.invoiceId) {
-          const inv = (data.invoices || []).find(i => i.id === orig.invoiceId);
-          if (!window.confirm(`This entry is already billed${inv ? ` on ${inv.number}` : ""}. Editing updates your records but NOT the invoice that was sent — to change the invoice too, delete it in the Invoices tab (entries become unbilled) and generate it again. Edit anyway?`)) return;
+        // A split entry is edited as the one entry it was logged as: every
+        // piece is checked for an invoice, and the pieces are written again.
+        const oldPieces = splitGroupOf(orig, entries);
+        const billedPieces = oldPieces.filter(x => x.invoiceId);
+        if (billedPieces.length) {
+          const nums = [...new Set(billedPieces.map(x => (data.invoices || []).find(i => i.id === x.invoiceId)?.number).filter(Boolean))];
+          const partly = oldPieces.length > 1 && billedPieces.length < oldPieces.length ? "Part of this entry is" : "This entry is";
+          if (!window.confirm(`${partly} already billed${nums.length ? ` on ${nums.join(" and ")}` : ""}. Editing updates your records but NOT the invoice that was sent. To change the invoice too, delete it in the Invoices tab (entries become unbilled) and generate it again. Edit anyway?`)) return;
         }
         const f = finalizeEntry(type, s2, e2, rawMin, target);
-        editItem("workLog", {
+        const edited = {
           ...orig, contractId: target.id, type, date: manual.date,
-          callDay: f.s ? deriveCallDay(f.s) : manual.date,
+          callDay: f.s ? deriveCallDay(f.s, callDayStartHour(target)) : manual.date,
           startTime: f.s, endTime: f.e,
           durationMin: f.raw, billedMin: f.billed,
           description: manual.description || "",
           privateNote: "", // identifiers live in the on-device vault, never the row
-        });
-        if (type !== "CallDay" && type !== "Orientation") {
-          const overlapped = noticeOverlap(target, { id: orig.id, type, startTime: f.s, endTime: f.e, createdAt: orig.createdAt });
-          if (!overlapped) noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, orig.id);
+        };
+        // Split again from scratch; a stale group id never survives the edit.
+        if (orig.splitGroupId) edited.splitGroupId = null;
+        const rows = splitRows(edited, target, generateId);
+        // Fewer pieces than before removes the last ones. A billed piece is
+        // never removed that way: its invoice lists it.
+        const dropped = oldPieces.slice(rows.length).filter(x => x.invoiceId);
+        if (dropped.length) {
+          const num = (data.invoices || []).find(i => i.id === dropped[0].invoiceId)?.number;
+          window.alert(`This change would remove the part of this entry that is on ${num || "a sent invoice"}. Delete that invoice in the Invoices tab first (its entries become unbilled), then edit.`);
+          return;
         }
+        if (oldPieces.length === 1 && rows.length === 1) {
+          editItem("workLog", rows[0]);
+        } else {
+          // Piece i lands on old piece i, keeping that piece's own id, invoice
+          // and star; extra new pieces are added (carrying the last old
+          // piece's invoice, since that invoice billed their minutes), and
+          // leftover old pieces are removed.
+          const tailInvoice = oldPieces[oldPieces.length - 1].invoiceId || null;
+          for (let i = 0; i < rows.length; i++) {
+            const old = oldPieces[i];
+            const ok = old
+              ? editItem("workLog", { ...old, ...pickEditKeys(rows[i]) })
+              : addItem("workLog", { ...rows[i], createdAt: new Date().toISOString(), invoiceId: tailInvoice });
+            if (ok === false) break;
+          }
+          for (const old of oldPieces.slice(rows.length)) {
+            if (deleteItem("workLog", old.id) === false) break;
+          }
+        }
+        if (type !== "CallDay" && type !== "Orientation") noticeSaved(target, rows, oldPieces.map(x => x.id));
       }
       setShowManual(false); setManual({});
       return;
@@ -451,13 +516,13 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     // The identifier note goes to this device, keyed to the entry — the
     // synced row carries an empty string.
     if (manual.privateNote?.trim()) setPrivate("workLog", newId, manual.privateNote);
-    addItem("workLog", {
+    const rows = splitRows({
       id: newId,
       createdAt: new Date().toISOString(),
       contractId: target.id,
       type,
       date: manual.date,
-      callDay: f.s ? deriveCallDay(f.s) : manual.date,
+      callDay: f.s ? deriveCallDay(f.s, callDayStartHour(target)) : manual.date,
       startTime: f.s,
       endTime: f.e,
       durationMin: f.raw,
@@ -465,15 +530,13 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       description: manual.description || "",
       privateNote: "",
       invoiceId: null,
-    });
-    if (type !== "CallDay" && type !== "Orientation") {
-      const overlapped = noticeOverlap(target, { id: "new", type, startTime: f.s, endTime: f.e, createdAt: new Date().toISOString() });
-      if (!overlapped) noticeAllowance(target, f.s ? callDayOf({ startTime: f.s }) : manual.date, f.billed, null);
-    }
+    }, target, generateId);
+    for (const r of rows) if (addItem("workLog", r) === false) break;
+    if (type !== "CallDay" && type !== "Orientation") noticeSaved(target, rows);
 
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, timeContracts, manual, entries, addItem, editItem, rememberContract, noticeAllowance, noticeOverlap, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
+  }, [contract, contracts, timeContracts, manual, entries, addItem, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
 
   // A finished to-do arrives with the times HE typed on the finish form —
   // use them as given rather than re-deriving anything from timestamps.
@@ -507,22 +570,26 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   }, [billDraft, onBillDraftDone, timeContracts, contract, rememberContract]);
 
   const openEditEntry = useCallback((e) => {
+    // A piece of a split entry opens as the whole entry it was logged as:
+    // first piece's start, last piece's end, the first piece's note.
+    const pieces = splitGroupOf(e, entries);
+    const first = pieces[0], last = pieces[pieces.length - 1];
     setManual({
-      editId: e.id,
-      contractId: e.contractId,
-      type: e.type,
-      otherType: e.type !== "CallDay" && !WORK_TYPES.includes(e.type),
-      date: e.date,
-      start: e.startTime ? localHHMM(e.startTime) : "",
-      end: e.endTime ? localHHMM(e.endTime) : "",
-      durationMin: e.startTime ? "" : String(e.durationMin || ""),
-      description: e.description || "",
-      privateNote: getPrivate("workLog", e.id) || e.privateNote || "",
-      exact: !!e.startTime,
+      editId: first.id,
+      contractId: first.contractId,
+      type: first.type,
+      otherType: first.type !== "CallDay" && !WORK_TYPES.includes(first.type),
+      date: first.date,
+      start: first.startTime ? localHHMM(first.startTime) : "",
+      end: last.endTime ? localHHMM(last.endTime) : "",
+      durationMin: first.startTime ? "" : String(pieces.reduce((t, x) => t + (x.durationMin || 0), 0) || ""),
+      description: first.description || "",
+      privateNote: getPrivate("workLog", first.id) || first.privateNote || "",
+      exact: !!first.startTime,
       pickDate: false,
     });
     setShowManual(true);
-  }, []);
+  }, [entries]);
 
   // The timer card's "Log past time" control. At desk width `n` opens it
   // too, except on a day-rate contract, where DutyLog's own "Log a day"
@@ -597,8 +664,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   }, [amountForEntry, containerFor, overMinFor, contract]);
 
   // Re-derived on every render so the 7am call-day rollover is picked up
-  // (the `now` tick keeps this fresh while a timer runs).
-  const todayKey = callDayOf({ startTime: new Date(now).toISOString() });
+  // (the `now` tick keeps this fresh while a timer runs). The contract's own
+  // start hour decides the rollover.
+  const todayKey = currentCallDay(contract, new Date(now));
 
   const unbilled = useMemo(() => contractEntries.filter(e => !e.invoiceId), [contractEntries]);
   const unbilledTotal = useMemo(
@@ -890,6 +958,25 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     setSent(true);
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
   }, [invoicePreview, entries, editItem, addItem, contract]);
+
+  // Deleting a piece of a split entry deletes the whole entry: the pieces are
+  // one piece of work. A billed piece stays, and so does the rest with it.
+  const deleteEntry = useCallback((e) => {
+    const pieces = splitGroupOf(e, entries);
+    if (pieces.length < 2) {
+      if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id);
+      return;
+    }
+    const billed = pieces.find(x => x.invoiceId);
+    if (billed) {
+      const num = (data.invoices || []).find(i => i.id === billed.invoiceId)?.number;
+      window.alert(`Part of this entry is on ${num || "a sent invoice"}. Delete that invoice in the Invoices tab first (its entries become unbilled), then delete the entry.`);
+      return;
+    }
+    if (!window.confirm(`This entry was split at the start of the call day into ${pieces.length} parts. Delete all ${pieces.length}?`)) return;
+    for (const x of pieces) if (deleteItem("workLog", x.id) === false) return;
+    removePrivate("workLog", pieces[0].id);
+  }, [entries, deleteItem, data.invoices]);
 
   const pdfArgsFor = useCallback((preview) => {
     const s = data.settings || {};
@@ -1415,6 +1502,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             e.startTime && ["Exact time (records only)", `${fmtTime(e.startTime)}${e.endTime ? " – " + fmtTime(e.endTime) : ""}`],
             e.type !== "CallDay" && ["Logged", `${e.durationMin} min`],
             e.type !== "CallDay" && ["Billed", `${e.billedMin} min`],
+            splitPieceNote(e, entries) && ["Split at the call-day start", splitPieceNote(e, entries)],
             (() => {
               const c2 = contracts.find(c => c.id === e.contractId) || contract;
               const a2 = amountForEntry(e, c2);
@@ -1518,6 +1606,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                   <>
                     <div style={deskMain}>{formatDate(e.date)}</div>
                     {day !== e.date && <div style={deskSub}>call day {formatDate(day)}</div>}
+                    {e.splitGroupId && <div style={deskSub} title={splitPieceNote(e, entries)}>{splitPieceNote(e, entries)}</div>}
                   </>
                 );
               } },
@@ -1571,7 +1660,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             <div style={{ display: "inline-flex", gap: 3 }}>
               <button title="Edit" aria-label="Edit entry" onClick={(ev) => { ev.stopPropagation(); openEditEntry(e); }} style={deskGhostBtn}><EditIcon /></button>
               {!e.invoiceId && (
-                <button title="Delete" aria-label="Delete entry" onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{ ...deskBtn, backgroundColor: T.dangerDim, color: T.danger }}><TrashIcon /></button>
+                <button title="Delete" aria-label="Delete entry" onClick={(ev) => { ev.stopPropagation(); deleteEntry(e); }} style={{ ...deskBtn, backgroundColor: T.dangerDim, color: T.danger }}><TrashIcon /></button>
               )}
             </div>
           )}
@@ -1617,7 +1706,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                         <div style={{ fontSize: 12, color: T.textDim }}>
                           {isCoverage
                             ? `marks this as a call day — the stipend covers the first ${contract?.stipendHours || 0}h of logged work`
-                            : `${e.startTime ? `${billedSpan(e, contract)} · ` : ""}${e.billedMin || e.durationMin || 0} min`}
+                            : `${e.startTime ? `${billedSpan(e, contract)} · ` : ""}${e.billedMin || e.durationMin || 0} min${splitPieceNote(e, entries) ? ` · ${splitPieceNote(e, entries)}` : ""}`}
                         </div>
                         {getPrivate("workLog", e.id) && (
                           <div style={{ fontSize: 12, color: T.textDim, fontStyle: "italic", marginTop: 2 }}>
@@ -1657,7 +1746,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                         color: T.textMuted, cursor: "pointer", display: "flex", flexShrink: 0,
                       }}><EditIcon /></button>
                       {!e.invoiceId && (
-                        <button onClick={(ev) => { ev.stopPropagation(); if (window.confirm("Delete this entry?")) deleteItem("workLog", e.id); }} style={{
+                        <button onClick={(ev) => { ev.stopPropagation(); deleteEntry(e); }} style={{
                           padding: "5px 7px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim,
                           color: T.danger, cursor: "pointer", display: "flex", flexShrink: 0,
                         }}><TrashIcon /></button>

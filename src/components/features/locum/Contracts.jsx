@@ -15,6 +15,7 @@ import { agreementDocCandidates, attachExistingDoc, withAgreementFields } from "
 import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils/taxConstants";
 import { STATE_NAMES } from "../../../constants/states";
 import { isArchived } from "../../../utils/contractsForDate";
+import { callDayStartHour, hourLabel } from "../../../utils/billing";
 
 // The analyzer JSON goes through one normalizer so dates, dollar figures, and
 // coverage blocks land in the exact shape the form and the Work Log expect.
@@ -104,6 +105,12 @@ function Contracts() {
       incrementMinutes: parseInt(form.incrementMinutes, 10) || 15,
       minCallMinutes: parseInt(form.minCallMinutes, 10) || 15,
     };
+    // Call-day settings (locum_contracts.split_at_day_start / day_start_hour).
+    // Written only once the contract carries them (loaded from the cloud, or
+    // set on this form), so a contract nobody touched saves exactly the keys
+    // it always did.
+    if ("splitAtDayStart" in form) entry.splitAtDayStart = form.splitAtDayStart === true;
+    if ("dayStartHour" in form) entry.dayStartHour = callDayStartHour(form);
     if (editItem) editCtx("locumContracts", entry);
     else addItem("locumContracts", entry);
 
@@ -197,7 +204,7 @@ function Contracts() {
         </Field>
         <Field label="Location" hint="City / state of the facility"><input value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={iS} placeholder="e.g. Colorado Springs, CO" /></Field>
         <Field label="Invoice recipient email" hint="Where invoices get sent"><input type="email" value={form.billTo || ""} onChange={e => setForm(f => ({ ...f, billTo: e.target.value }))} style={iS} placeholder="billing@hospital.org" /></Field>
-        <Field label="Coverage dates" hint="Every scheduled block. The END date is your LAST call day — the 24-hr call that ends the next morning. A contract reading 'through Aug 10, 7 AM' ends Aug 9; work after that final 7 AM bills hourly with no stipend.">
+        <Field label="Coverage dates" hint={`Every scheduled block. A block's end date is your last call day: the 24-hour call that ends the next morning. A contract reading 'through Aug 10, ${hourLabel(callDayStartHour(form))}' ends Aug 9. Work that starts after that final ${hourLabel(callDayStartHour(form))} bills hourly with no stipend. ${form.splitAtDayStart === true ? "An entry that runs past it is split: only the part after it bills hourly." : "An entry that starts before it and runs past it counts whole toward Aug 9, inside the stipend, unless you turn on splitting below."}`}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {(form.coveragePeriods || []).map((p, i) => (
               <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -212,6 +219,15 @@ function Contracts() {
               color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
             }}>+ Add a date block</button>
           </div>
+        </Field>
+        <Field label="Start of the call day" hint={`Each call day runs from this time to the same time the next morning. Off: an entry that crosses it counts whole toward the call day it started in. On: the minutes before it count toward the ending call day and the minutes after toward the new one, and the entry bills the same total minutes it would whole (a side too short to earn a billing increment stays with the other side). Only stipend contracts split. Changing either setting never moves entries already logged.`}>
+          <select value={String(callDayStartHour(form))} onChange={e => setForm(f => ({ ...f, dayStartHour: parseInt(e.target.value, 10) }))} style={{ ...iS, appearance: "auto" }}>
+            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+          </select>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, fontSize: 14, color: T.text, cursor: "pointer" }}>
+            <input type="checkbox" checked={form.splitAtDayStart === true} onChange={e => setForm(f => ({ ...f, splitAtDayStart: e.target.checked }))} style={{ marginTop: 3 }} />
+            <span>Split calls that cross the start of the call day</span>
+          </label>
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <Field label="Day rate ($/day worked)" hint="Flat amount per day worked — leave blank if paid hourly"><input type="number" inputMode="decimal" value={form.dayRate ?? ""} onChange={e => setForm(f => ({ ...f, dayRate: e.target.value }))} style={iS} placeholder="2016.10" /></Field>
