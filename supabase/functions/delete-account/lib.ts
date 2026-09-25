@@ -56,8 +56,10 @@ export const COLLECTION_TABLES: string[] = [
  * admin_messages are the operator's notes to the physician (recipient_id);
  * admin_message_replies is the thread under each, keyed by the physician it
  * belongs to whoever wrote the reply (user_id).
+ * credential_portal_invites are the physician's administrator access grants
+ * (owner_profile_id).
  */
-export interface UserTable { table: string; column: string }
+export interface UserTable { table: string; column: string; optional?: boolean }
 export const USER_TABLES: UserTable[] = [
   { table: "assistant_log", column: "user_id" },
   { table: "support_tickets", column: "user_id" },
@@ -75,7 +77,31 @@ export const USER_TABLES: UserTable[] = [
   { table: "deleted_items", column: "user_id" },
   { table: "forwarding_addresses", column: "user_id" },
   { table: "forwarding_address_sends", column: "user_id" },
+  // Administrator access grants. Deleting the grant row removes its sessions,
+  // mail outbox, document snapshots and audit (all ON DELETE CASCADE), so the
+  // administrators' addresses and the activity log go with the account.
+  //
+  // optional: the portal tables arrive with migrations 20260918091000 and
+  // 20260925040000, which are applied at activation, not with this function.
+  // Every count and delete here throws on error, so without this a deploy of
+  // delete-account for any other reason before activation would fail EVERY
+  // deletion (user-initiated and the daily cancelled-account run). Only a
+  // missing-relation error is tolerated (isMissingTableError); any other
+  // error still stops the deletion.
+  { table: "credential_portal_invites", column: "owner_profile_id", optional: true },
 ];
+
+/**
+ * True for the error PostgREST gives when a table does not exist:
+ * PGRST205 ("Could not find the table ... in the schema cache") on current
+ * PostgREST, 42P01 ("relation ... does not exist") from Postgres itself.
+ */
+export function isMissingTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  if (code === "PGRST205" || code === "42P01") return true;
+  return typeof message === "string" && /could not find the table|relation .* does not exist/i.test(message);
+}
 
 export const DOCUMENTS_BUCKET = "documents";
 export const BACKUPS_BUCKET = "backups";

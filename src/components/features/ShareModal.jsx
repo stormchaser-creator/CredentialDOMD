@@ -4,7 +4,6 @@ import { useInputStyle } from "../shared/useInputStyle";
 import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import EmailPacketModal from "./EmailPacketModal";
-import CredentialPortalLauncher from "./CredentialPortalModal.jsx";
 import { EmailIcon, TextMsgIcon, CopyIcon, CheckIcon, FileIcon } from "../shared/Icons";
 import { buildCredentialText, buildCredentialBlurb, buildEmailSubject, generateId, copyToClipboard, mailtoHref } from "../../utils/helpers";
 import { composeText } from "../../utils/notifications";
@@ -253,7 +252,9 @@ function ShareModal({ open, onClose, item, section, linkedDocs, onLogShare }) {
         </div>
       )}
 
-      <CredentialPortalLauncher initialDocIds={(linkedDocs || []).map(doc => doc.id)} initialTo={email} />
+      {/* Administrator access is its own screen (More > Administrator access): a
+          record's Share button never preselects files for an administrator,
+          so a passport or receipt cannot be offered from here. */}
 
       {hasDocs && (
         <EmailPacketModal

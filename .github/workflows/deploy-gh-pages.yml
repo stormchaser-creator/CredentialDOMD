@@ -134,6 +134,11 @@ jobs:
           VITE_PUBLIC_SELF_SERVICE_SIGNUP_ENABLED: "true"
           VITE_CLERK_CONTINUITY_ENABLED: "true"
           VITE_SUPPORT_OPERATIONS_ENABLED: "false"
+          # Administrator access. "true" turns on the owner screen AND the
+          # packaged recipient page (/credential-access/). Flip only after the
+          # 20260925040000 migration is applied, credential-portal is deployed
+          # with its secrets, and the Cloudflare response-header rule for
+          # /credential-access/* is live (docs/CREDENTIAL-PORTAL-IMPLEMENTATION.md).
           VITE_CREDENTIAL_PORTAL_ENABLED: "false"
         run: |
           node scripts/build-help.mjs --check

@@ -3,5 +3,6 @@ import { credentialPortalDependencies } from '../_shared/credentialPortalDepende
 
 // The Supabase JWT gateway cannot validate the Clerk or opaque recipient token.
 // Future deployment must disable gateway JWT verification; the handler verifies both itself.
-// Code-level policy and runtime flag both remain disabled until reviewed activation.
+// The code-level policy is on; runtime env gates (CREDENTIAL_PORTAL_ENABLED,
+// CREDENTIAL_PORTAL_PRIVACY_READY, the secret) keep it off until activation.
 Deno.serve(createCredentialPortalHandler(credentialPortalDependencies()));
