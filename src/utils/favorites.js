@@ -23,7 +23,8 @@ export const PRO_GATED = new Set([
 // Credentials sections that can be starred.
 //
 // Deliberately excluded:
-//   answerBank, identityVault  paused application sections, device only
+//   answerBank, identityVault  device-only sections with no cloud table; a
+//                              star is a cloud column write
 //   matrix, findCme            tools, not collections, they hold no records
 //   every Practice collection  the request was Credentials, and leaving them
 //                              out keeps scopeForCollection's fall through

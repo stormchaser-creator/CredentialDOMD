@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { isDea, isBoard } from "./setupTasks.js";
 import { redactForExport } from "../lib/supabase.js";
+import { isIdentityLink, withoutIdentityRecords } from "./pausedApplicationRecords.js";
 
 /**
  * Section key to the folder its documents belong in. This is the ONE list:
@@ -304,8 +305,17 @@ function docBase64(doc) {
 }
 
 /**
- * The packet proper: every document linked to a record that still exists, in
- * folder order.
+ * The sections a credentialing packet is made of: exactly the ones with a
+ * folder, which are also exactly the ones with rows in
+ * credentials_summary.xlsx. A document linked anywhere else is not part of
+ * the packet: an expense receipt (travelExpenses), an invoice, a tax payment,
+ * a deduction, an agreement, a custom category, and never Protected Identity.
+ */
+export const PACKET_SECTIONS = new Set(Object.keys(FOLDER_MAP));
+
+/**
+ * The packet proper: every document linked to a credentialing record that
+ * still exists, in folder order.
  *
  * "Linked" is the whole claim the ending makes, so a stray upload sitting in
  * Files unattached is not counted, and a link pointing at a deleted record is
@@ -328,6 +338,10 @@ export function packetDocuments(data, { withBytes = false } = {}) {
     if (withBytes && !docBase64(doc)) continue;
     const [section, id] = String(doc.linkedTo || "").split(":");
     if (!section || !id) continue;
+    // The Send-it email preselects this list and the ZIP writes it, and both
+    // go to a credentialing office. Until this check a receipt linked to an
+    // expense and a file linked to Protected Identity were both "packet".
+    if (!PACKET_SECTIONS.has(section)) continue;
     if (!(data?.[section] || []).some((r) => r && r.id === id)) continue;
     rows.push({ doc, folder: categorizeDocument(doc, data) });
   }
@@ -372,7 +386,22 @@ export function packetPendingLine({ documents = 0, onDevice = 0 } = {}) {
   return `${n} of them ${n === 1 ? "is" : "are"} still coming back from your account on this device. Download once ${n === 1 ? "it lands" : "they land"} and the file carries everything.`;
 }
 
-export async function generateCredentialZip(data) {
+/**
+ * Build the ZIP.
+ *
+ * scope "packet" (the default, Setup's "Download the packet"): the file a
+ * physician sends whole to a credentialing office. Only the packet documents
+ * (credentialing sections, linked to a record that exists) and the summary
+ * spreadsheet. No JSON backup: that carried every collection, finances,
+ * travel IDs and Protected Identity included, to whoever received the packet.
+ *
+ * scope "account" (the export before cancelling): every document on this
+ * device and the JSON backup, for the physician's own keeping. Protected
+ * Identity stays out of it too; the full JSON backup under Data & Backup is
+ * the one deliberate copy of those records.
+ */
+export async function generateCredentialZip(data, { scope = "packet" } = {}) {
+  const account = scope === "account";
   const zip = new JSZip();
   const root = zip.folder("CredentialDOMD_Export");
 
@@ -395,7 +424,10 @@ export async function generateCredentialZip(data) {
     return path;
   };
 
-  for (const doc of data.documents || []) {
+  const docs = account
+    ? (data.documents || []).filter((doc) => !isIdentityLink(doc?.linkedTo))
+    : packetDocuments(data, { withBytes: true });
+  for (const doc of docs) {
     const base64 = docBase64(doc);
     if (!base64) continue;
     const folder = categorizeDocument(doc, data);
@@ -416,20 +448,21 @@ export async function generateCredentialZip(data) {
   const xlsxData = buildSpreadsheet(data);
   root.file("credentials_summary.xlsx", xlsxData);
 
-  // Add JSON backup. This is a second copy of the same export that the
-  // Download JSON button produces, and it used to keep its own two-field
-  // strip, so the ZIP carried the portal-password lock code and the CallSync
-  // feed link that the other path dropped. Both go through the one redaction
-  // now (src/lib/supabase.js).
-  const jsonBackup = JSON.stringify({
-    ...data,
-    settings: redactForExport(data.settings),
-    _exportMeta: {
-      app: "CredentialDOMD",
-      exportedAt: new Date().toISOString(),
-    },
-  }, null, 2);
-  root.file("credentialdomd_backup.json", jsonBackup);
+  // The JSON backup rides only in the physician's own account export. It
+  // used to keep its own two-field strip, so the ZIP carried the
+  // portal-password lock code and the CallSync feed link that the other path
+  // dropped. Both go through the one redaction now (src/lib/supabase.js).
+  if (account) {
+    const jsonBackup = JSON.stringify({
+      ...withoutIdentityRecords(data),
+      settings: redactForExport(data.settings),
+      _exportMeta: {
+        app: "CredentialDOMD",
+        exportedAt: new Date().toISOString(),
+      },
+    }, null, 2);
+    root.file("credentialdomd_backup.json", jsonBackup);
+  }
 
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   return blob;

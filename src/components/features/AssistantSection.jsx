@@ -16,6 +16,7 @@ import EmailPacketModal from "./EmailPacketModal";
 import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../../utils/storageScope";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
+import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
@@ -445,7 +446,8 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       } else if (action.kind === "send_packet") {
         const docs = (action.docIds || [])
           .map(id2 => (data.documents || []).find(d => d.id === id2))
-          .filter(d => d && d.data);
+          // Never a file linked to Protected Identity, whatever Vera proposed.
+          .filter(d => d && d.data && !isIdentityLink(d.linkedTo));
         if (docs.length === 0) throw new Error("None of those documents are downloaded on this device yet — open Files to let them sync, then approve again.");
         const files = docs.map(dataUrlToFile);
         const normalizedCoverNote = normalizeMultilineNote(action.coverNote) || "Credential documents enclosed.";

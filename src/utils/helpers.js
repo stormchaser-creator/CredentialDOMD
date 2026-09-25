@@ -2,6 +2,7 @@
 // (Vite resolves either way; node's ESM loader needs the ".js").
 import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
+import { scrubSsn } from "./outgoingText.js";
 
 export const MS_PER_DAY = 86400000;
 
@@ -91,11 +92,13 @@ export function normalizeMultilineNote(text) {
 
 // RFC 6068: a mailto body needs CRLF line breaks — a bare "\n" reads as one
 // continuous line in several mail clients. Every mailto in the app goes
-// through here so no send path can miss the conversion again.
+// through here so no send path can miss the conversion again. It is also
+// where an SSN-shaped value is taken out of anything the app hands to a mail
+// app (src/utils/outgoingText.js).
 export function mailtoHref(email, subject, body) {
   return `mailto:${encodeURIComponent(email || "")}`
-    + `?subject=${encodeURIComponent(subject || "")}`
-    + `&body=${encodeURIComponent(String(body || "").replace(/\r?\n/g, "\r\n"))}`;
+    + `?subject=${encodeURIComponent(scrubSsn(subject || ""))}`
+    + `&body=${encodeURIComponent(scrubSsn(String(body || "")).replace(/\r?\n/g, "\r\n"))}`;
 }
 
 export function daysUntil(dateStr) {
@@ -369,7 +372,11 @@ export function describeItem(item, physicianName, sectionKey) {
   return where ? `${base} — ${where}` : base;
 }
 
-export async function copyToClipboard(text) {
+// Every share letter and message the app copies goes through here, so an
+// SSN-shaped value is removed on the way out. (Protected Identity's own Copy
+// is the one deliberate copy of an SSN and does not use this.)
+export async function copyToClipboard(raw) {
+  const text = scrubSsn(raw);
   try { await navigator.clipboard.writeText(text); return true; }
   catch {
     const ta = document.createElement("textarea");

@@ -28,11 +28,11 @@
 // Pure, so it runs under a plain node test and adds exactly one name to the
 // load path in AppContext.
 
-import { PAUSED_APPLICATION_SECTIONS } from "./pausedApplicationRecords.js";
+import { DEVICE_ONLY_SECTIONS } from "./pausedApplicationRecords.js";
 
 export function reconcileDocumentLinks(data, collectionKeys, pausedLinks = []) {
   const keys = Array.isArray(collectionKeys) ? collectionKeys : [];
-  const known = new Set([...keys.filter(k => k !== "documents"), ...Object.keys(PAUSED_APPLICATION_SECTIONS)]);
+  const known = new Set([...keys.filter(k => k !== "documents"), ...Object.keys(DEVICE_ONLY_SECTIONS)]);
 
   const live = new Set(pausedLinks);
   for (const key of keys) {

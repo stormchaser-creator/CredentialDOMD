@@ -19,6 +19,7 @@ import { CME_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
+import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -67,7 +68,8 @@ function DocumentsSection() {
   // Bundle-send: one share sheet carrying ALL selected files, with a cover
   // note listing the contents — instead of sharing documents one by one.
   const sendBundle = useCallback(async () => {
-    const docs = data.documents.filter(d => selectedIds.has(d.id));
+    // A file linked to Protected Identity never goes out in a bundle.
+    const docs = data.documents.filter(d => selectedIds.has(d.id) && !isIdentityLink(d.linkedTo));
     if (docs.length === 0) return;
     const missing = docs.filter(d => !d.data);
     if (missing.length > 0) {

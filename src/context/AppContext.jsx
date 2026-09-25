@@ -13,7 +13,7 @@ import { profileSupportReference } from "../utils/profileIssueDiagnostics.js";
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from "../utils/accountRecordsLoad.js";
 import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
-import { preservePausedApplicationRecords, pausedApplicationLinks } from "../utils/pausedApplicationRecords.js";
+import { preservePausedApplicationRecords, pausedApplicationLinks, isDeviceOnlySection } from "../utils/pausedApplicationRecords.js";
 import { reconcileDocumentLinks } from "../utils/documentLinks.js";
 import { generateAlerts, fireBrowserNotification, buildNotificationMessage } from "../utils/notifications";
 import { MS_PER_DAY } from "../utils/helpers";
@@ -650,8 +650,12 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return true;
   }, [guardedSetData, user?.id]);
 
+  // A device-only section (Protected Identity) is saved to this device's
+  // cache and nowhere else: none of the four helpers below calls the cloud
+  // for it. src/lib/supabase.js refuses those keys too, as a second wall.
   const addItem = useCallback((key, item) => {
     if (!updateSection(key, items => [...(items || []), item])) { window.alert(membershipWriteError().message); return false; }
+    if (isDeviceOnlySection(key)) return true;
     // Sync to Supabase
     sbInsert(userIdRef.current, key, item).catch(() => {});
   }, [updateSection]);
@@ -662,6 +666,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // (whose cloud write may have failed) from an older cloud row.
     const stamped = { ...item, updatedAt: new Date().toISOString() };
     if (!updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x))) { window.alert(membershipWriteError().message); return false; }
+    if (isDeviceOnlySection(key)) return true;
     // Sync to Supabase
     sbUpdate(userIdRef.current, key, stamped, previous, user?.id).catch(() => {});
   }, [updateSection, user?.id]);
@@ -674,6 +679,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // column-only for the same reason, so a rejected star cannot take the
   // record's other fields down with it.
   const toggleFavorite = useCallback((key, id) => {
+    if (isDeviceOnlySection(key)) return false;
     const current = (dataRef.current[key] || []).find(record => record.id === id);
     if (!current) return false;
     const favorite = !(current.favorite === true);
@@ -701,6 +707,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       sbDelete(profileId, "documents", doc.id, doc).catch(() => {});
       recordTombstone(profileId, "documents", doc.id, doc).catch(() => {});
     }
+    // Files linked to it are ordinary cloud documents and go above; the
+    // record itself never had a cloud row or needs a tombstone.
+    if (isDeviceOnlySection(key)) return true;
     sbDelete(profileId, key, id, target).catch(() => {});
     recordTombstone(profileId, key, id, target).catch(() => {});
     return true;

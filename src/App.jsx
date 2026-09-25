@@ -20,6 +20,7 @@ import { cat1BucketLabel } from "./constants/creditEquivalence";
 import { ShareModal } from "./components/features";
 import CredentialPortalLauncher from "./components/features/CredentialPortalModal.jsx";
 import ApplicationRecordsPaused from "./components/features/ApplicationRecordsPaused.jsx";
+import ProtectedIdentitySection from "./components/features/ProtectedIdentitySection.jsx";
 import { PAUSED_APPLICATION_SECTIONS } from "./utils/pausedApplicationRecords.js";
 import { CrudSection } from "./components/features";
 import { CaseLogSummary } from "./components/features";
@@ -2132,6 +2133,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   ];
 
   const renderCredSection = (sub) => {
+    // Device only (ticket d49088c7): its own screen, not a CrudSection, so no
+    // scan, attachment, star or Send path can reach these records.
+    if (sub === "identityVault") return <ProtectedIdentitySection />;
     if (Object.hasOwn(PAUSED_APPLICATION_SECTIONS, sub)) {
       return <ApplicationRecordsPaused section={sub} count={(data[sub] || []).length} theme={T} />;
     }

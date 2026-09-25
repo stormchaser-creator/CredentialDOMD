@@ -6,6 +6,8 @@ import Modal from "../shared/Modal";
 import Field from "../shared/Field";
 import { supabase } from "../../lib/supabase";
 import { docAttachedLabel, docBytes, fmtBytes } from "../../utils/docLabel";
+import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
+import { scrubSsn } from "../../utils/outgoingText.js";
 
 export const PACKET_FROM_ADDRESS = "docs@credentialdomd.com";
 // Fired on window after a successful send so the Requests inbox (and the
@@ -81,9 +83,11 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
   }, [open, request?.id]);
 
   // Pre-checked docs first, then linked docs, then the rest, newest first.
+  // A file linked to Protected Identity is never offered: those records are
+  // kept on the device and out of every share.
   const docs = useMemo(() => {
     const pre = new Set(initialDocIds || []);
-    const list = [...(data.documents || [])];
+    const list = (data.documents || []).filter((d) => !isIdentityLink(d?.linkedTo));
     const rank = (d) => (pre.has(d.id) ? 0 : d.linkedTo ? 1 : 2);
     return list.sort((a, b) => rank(a) - rank(b) || String(b.uploadedAt || "").localeCompare(String(a.uploadedAt || "")));
   }, [data.documents, initialDocIds]);
@@ -115,8 +119,8 @@ function EmailPacketModal({ open, onClose, request, initialDocIds, initialNote, 
           request_id: request?.id || undefined,
           to: to.trim(),
           cc_self: !!ccSelf,
-          subject: subject.trim(),
-          text,
+          subject: scrubSsn(subject.trim()),
+          text: scrubSsn(text),
           doc_ids: chosen.map((d) => d.id),
         },
       });

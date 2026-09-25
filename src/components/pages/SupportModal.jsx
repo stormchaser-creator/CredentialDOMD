@@ -5,6 +5,7 @@ import { edgeErrorMessage } from "../../utils/edgeError";
 import { supabase } from "../../lib/supabase";
 import { ScreenshotAttach } from "../shared";
 import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
+import { scrubSsn } from "../../utils/outgoingText.js";
 import TicketAttachments from "../shared/TicketAttachments";
 import { createSupportTextDrafts, supportReceiptConfirmed, supportSubmissionError } from "../../utils/supportTextDrafts";
 import { SUPPORT_OPERATIONS_ENABLED, createSupportOperationsClient, supportActorLabel, supportMessageFromTeam } from "../../utils/supportOperationsClient";
@@ -304,11 +305,11 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     const savedRevision = saveReplyDraft(reply);
     setReplying(true); setReplyMsg("");
     try {
-      if (SUPPORT_OPERATIONS_ENABLED) await operations.reply({ ticketId: openTicket.id, body: text });
+      if (SUPPORT_OPERATIONS_ENABLED) await operations.reply({ ticketId: openTicket.id, body: scrubSsn(text) });
       else {
         const res = await supabase.functions.invoke("reply-ticket", {
         body: {
-          ticket_id: openTicket.id, body: text,
+          ticket_id: openTicket.id, body: scrubSsn(text),
           ...attachmentsPayload(replyAttachment),
         },
         });
@@ -448,12 +449,14 @@ function SupportModalContent({ open, onClose, contextPage, initialTab = "new" })
     const current = () => requestId === actionRequest.current && (SUPPORT_OPERATIONS_ENABLED || (window.Clerk?.session === session && window.Clerk?.user?.id === user?.id));
     try {
       let shortfall = "";
-      if (SUPPORT_OPERATIONS_ENABLED) await operations.create({ subject: subj, body: body.trim(), category, priority });
+      // A ticket is stored in the cloud and read by people, so an SSN-shaped
+      // number typed into it is taken out on the way (outgoingText.js).
+      if (SUPPORT_OPERATIONS_ENABLED) await operations.create({ subject: scrubSsn(subj), body: scrubSsn(body.trim()), category, priority });
       else {
         const res = await supabase.functions.invoke("create-ticket", {
         body: {
-          subject: subj,
-          body: body.trim(),
+          subject: scrubSsn(subj),
+          body: scrubSsn(body.trim()),
           category: category === "feedback" ? "other" : category,
           priority,
           context_page: contextPage || window.location.pathname,

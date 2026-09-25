@@ -174,11 +174,13 @@ ok("the ZIP's embedded JSON export goes through it",
 ok("the ZIP path no longer contains its own inline redaction",
   !INLINE_STRIP.test(credentialExportSrc));
 
-// And the real failing case, end to end: build the packet a physician
-// downloads and read the embedded backup back out of the archive.
+// And the real failing case, end to end: build the account export a
+// physician downloads before cancelling and read the embedded backup back out
+// of the archive. The packet sent to a credentialing office carries no JSON
+// backup at all (ticket d49088c7), so it has nothing to redact.
 const { generateCredentialZip } = await import("../src/utils/credentialExport.js");
 const JSZip = (await import("jszip")).default;
-const packet = await generateCredentialZip({
+const zipInput = {
   settings: fullSettings,
   licenses: [{ id: "lic-1", state: "NC", licenseNumber: "2019-1234", type: "License" }],
   privileges: [{
@@ -186,10 +188,16 @@ const packet = await generateCredentialZip({
     portalUsername: "areyes", portalPassword: "enc1:AAAABBBBCCCC",
   }],
   documents: [],
-});
+};
+const packet = await generateCredentialZip(zipInput, { scope: "account" });
 const backupEntry = await JSZip.loadAsync(await packet.arrayBuffer());
 const backupPath = Object.keys(backupEntry.files).find((n) => n.endsWith("credentialdomd_backup.json"));
-ok("the ZIP carries the embedded JSON backup", !!backupPath, backupPath || "");
+ok("the account export carries the embedded JSON backup", !!backupPath, backupPath || "");
+{
+  const sent = await JSZip.loadAsync(await (await generateCredentialZip(zipInput)).arrayBuffer());
+  ok("the packet for a credentialing office carries no JSON backup",
+    !Object.keys(sent.files).some((n) => n.endsWith(".json")));
+}
 const backupText = await backupEntry.file(backupPath).async("string");
 const backup = JSON.parse(backupText);
 for (const f of EXPORT_REDACT_FIELDS) {
