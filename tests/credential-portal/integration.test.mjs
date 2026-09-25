@@ -17,22 +17,29 @@ test('private credential portal: actual migration, two recipients, atomic redemp
   const mails = []; let mailState = 'sent', mailIdOverride, fileReads = 0, duringRead = null;
   const box = createPortalCrypto('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'); // Public synthetic fixture, never a runtime secret.
   const store = {
-    profile: id => row(`select * from profiles where id=${q(id)}`),
+    profile: id => row(`select id,auth_user_id,access_status,deleted_at from profiles where id=${q(id)}`),
+    ownerProfile: id => row(`select name,degree_type,verified_email from profiles where id=${q(id)}`),
+    storageSubjects: async id => JSON.parse(await db.sql(`select to_json(public.clerk_storage_subjects(${q(id)}))`)),
+    limit: (...args) => db.rpc('limit', args),
     creationCapacity: (...args) => db.rpc('creation_capacity', args),
     ownerDocuments: (id, ids) => db.rows(`select * from documents where user_id=${q(id)} and id in (${ids.map(q).join(',')})`),
     ownerRequest: (id, req) => row(`select * from credential_portal_invites where owner_profile_id=${q(id)} and request_id=${q(req)}`),
-    ownerInvite: (id, subject, invite) => row(`select id,recipient_email as "recipientEmail",expires_at as "expiresAt",case when revoked_at is not null then 'revoked' when redeemed_at is not null then 'redeemed' else 'pending' end as status,(select state from credential_portal_outbox where invite_id=i.id and kind='invite') as "deliveryState" from credential_portal_invites i where id=${q(invite)} and owner_profile_id=${q(id)} and owner_subject=${q(subject)}`),
-    ownerInvites: (id, subject) => db.rows(`select id from credential_portal_invites where owner_profile_id=${q(id)} and owner_subject=${q(subject)}`),
+    ownerGrant: async (id, subject, invite) => (await db.rpc('owner_grants', [id, subject, invite]))[0] || null,
+    ownerGrants: (id, subject) => db.rpc('owner_grants', [id, subject, null]),
     inviteMailId: async id => (await row(`select id from credential_portal_outbox where invite_id=${q(id)} and kind='invite'`))?.id,
-    inviteByToken: (token, email) => row(`select id,otp_version from credential_portal_invites where token_digest=${q(token)} and recipient_email=${q(email)}`),
+    inviteByToken: (token, email) => row(`select id,otp_version,kind,owner_profile_id from credential_portal_invites where token_digest=${q(token)} and recipient_email=${q(email)}`),
     createInvite: p => db.rpc('create', [p.id, p.owner, p.subject, p.email, p.request, p.fingerprint, p.tokenDigest, p.documents, p.mailId, p.encrypted]),
     claimOtp: p => db.rpc('claim_otp', [p.tokenDigest, p.email, p.version, p.otpDigest, p.mailId, p.encrypted, p.recipientLimitKey]),
     claimMail: (...args) => db.rpc('claim_mail', args), finishMail: (...args) => db.rpc('finish_mail', args),
     redeem: (...args) => db.rpc('redeem', args), access: (...args) => db.rpc('access', args), record: (...args) => db.rpc('record', args), revoke: (...args) => db.rpc('revoke', args),
     manifest: id => db.rows(`select * from credential_portal_documents where invite_id=${q(id)}`),
   };
+  // Code requests answer first and do their work after the response (S2);
+  // tests wait for that background work explicitly.
+  const pending = [];
+  const settle = async () => { while (pending.length) await Promise.all(pending.splice(0)); };
   const deps = {
-    crypto: box, store,
+    crypto: box, store, waitUntil: work => pending.push(work),
     authenticateOwner: async req => req.headers.get('x-owner') === 'alice' ? { profileId: alice.id, subject: alice.subject } : req.headers.get('x-owner') === 'bob' ? { profileId: bob.id, subject: bob.subject } : null,
     readFile: async (path, limit) => { fileReads++; const bytes = files.get(path); if (duringRead) await duringRead(); if (!bytes || bytes.length > limit) throw Error('unavailable'); return bytes.slice(); },
     sendMail: async (payload, key) => { mails.push({ payload: structuredClone(payload), key }); await new Promise(r => setTimeout(r, 15)); return { state: mailState, providerId: mailIdOverride !== undefined ? mailIdOverride : mailState === 'sent' ? 'synthetic-provider-id' : undefined }; },
@@ -48,14 +55,19 @@ test('private credential portal: actual migration, two recipients, atomic redemp
   };
   const codeFor = async invite => {
     assert.equal((await call({ action: 'request-code', inviteToken: invite.token, email: invite.email })).status, 202);
+    await settle();
     return mails.findLast(m => m.payload.to === invite.email && m.payload.subject.includes('code')).payload.text.match(/code is (\d{6})/)[1];
   };
   const verify = (invite, code, email = invite.email) => call({ action: 'verify', inviteToken: invite.token, email, code });
   const enter = async (recipient, docs = [aDoc]) => { const invite = await create('alice', recipient, docs); const result = await verify(invite, await codeFor(invite)); assert.equal(result.status, 200); return { invite, session: result.body.sessionToken }; };
 
-  await t.test('default disabled policy and GET previews perform no authentication, DB or mail work', async () => {
-    const disabled = createCredentialPortalHandler({ authenticateOwner: () => { throw Error('must not run'); } });
+  await t.test('disabled policy, unconfigured runtime and GET previews perform no authentication, DB or mail work', async () => {
+    const mustNotRun = () => { throw Error('must not run'); };
+    const disabled = createCredentialPortalHandler({ authenticateOwner: mustNotRun }, { ...CREDENTIAL_PORTAL_POLICY, enabled: false });
     const response = await disabled(request({ action: 'create' }, 'alice')); assert.equal(response.status, 503); assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    // The shipped code switch is on; the runtime gate (env flags, secret) is what keeps it off.
+    const unconfigured = createCredentialPortalHandler({ authenticateOwner: mustNotRun, assertConfigured: () => { throw Error('Private portal is not configured'); } });
+    for (const action of ['status', 'create', 'request-code', 'summary']) assert.equal((await unconfigured(request({ action }, 'alice'))).status, 503);
     assert.equal((await handler(new Request('https://functions.example/credential-portal?token=preview'))).status, 405);
     assert.equal(mails.length, 0);
   });
@@ -63,7 +75,8 @@ test('private credential portal: actual migration, two recipients, atomic redemp
     const count = fileReads;
     assert.equal((await call({ action: 'create', recipientEmail: alice.email, documentIds: [bDoc], requestId: crypto.randomUUID() }, 'alice')).status, 409);
     assert.equal((await call({ action: 'create', recipientEmail: alice.email, documentIds: [aDoc], requestId: crypto.randomUUID(), ownerId: bob.id }, 'alice')).status, 400);
-    for (const path of [null, `${alice.subject}/../${bob.subject}/${bDoc}`, `${alice.subject}/${bDoc}`]) {
+    // storage_path is NOT NULL in production; an empty path is the unsynced case.
+    for (const path of ['', `${alice.subject}/../${bob.subject}/${bDoc}`, `${alice.subject}/${bDoc}`, `${bob.subject}/${aDoc}`]) {
       await db.sql(`update documents set storage_path=${q(path)} where id=${q(aDoc)}`, 'postgres');
       assert.equal((await call({ action: 'create', recipientEmail: alice.email, documentIds: [aDoc], requestId: crypto.randomUUID() }, 'alice')).status, 409);
     }
@@ -73,7 +86,7 @@ test('private credential portal: actual migration, two recipients, atomic redemp
   await t.test('two independent recipients require exact invited mailbox and never leak invite token to owner response', async () => {
     a = await create(); b = await create('bob', bob.email, [bDoc]);
     const before = mails.length;
-    assert.equal((await call({ action: 'request-code', inviteToken: a.token, email: bob.email })).status, 202); assert.equal(mails.length, before);
+    assert.equal((await call({ action: 'request-code', inviteToken: a.token, email: bob.email })).status, 202); await settle(); assert.equal(mails.length, before);
     const ac = await codeFor(a), bc = await codeFor(b);
     assert.equal((await verify(a, ac, bob.email)).status, 401);
     assert.equal((await verify(b, ac === bc ? (bc === '999999' ? '000000' : '999999') : ac)).status, 401);
@@ -122,11 +135,11 @@ test('private credential portal: actual migration, two recipients, atomic redemp
     const invite = await create('alice', 'attempts@example.com'); const code = await codeFor(invite); const wrong = code === '999999' ? '000000' : '999999';
     const attempts = await Promise.all(Array.from({ length: 12 }, () => verify(invite, wrong))); assert.ok(attempts.every(r => r.status === 401));
     assert.equal((await row(`select otp_attempts from credential_portal_invites where id=${q(invite.id)}`)).otp_attempts, 5);
-    const before = mails.length; await call({ action: 'request-code', inviteToken: invite.token, email: invite.email }); assert.equal(mails.length, before); assert.equal((await verify(invite, code)).status, 401);
+    const before = mails.length; await call({ action: 'request-code', inviteToken: invite.token, email: invite.email }); await settle(); assert.equal(mails.length, before); assert.equal((await verify(invite, code)).status, 401);
   });
   await t.test('OTP version change invalidates the prior code and respects atomic send spacing', async () => {
     const invite = await create('alice', 'resend@example.com'); const oldCode = await codeFor(invite); const before = mails.length;
-    await Promise.all(Array.from({ length: 8 }, () => call({ action: 'request-code', inviteToken: invite.token, email: invite.email }))); assert.equal(mails.length, before);
+    await Promise.all(Array.from({ length: 8 }, () => call({ action: 'request-code', inviteToken: invite.token, email: invite.email }))); await settle(); assert.equal(mails.length, before);
     await db.sql(`update credential_portal_invites set otp_last_sent_at=clock_timestamp()-interval '61 seconds' where id=${q(invite.id)}`);
     const newCode = await codeFor(invite); assert.equal(mails.length, before + 1);
     // Even if random six digits repeat, the MAC is independently bound to a fresh version.

@@ -1,5 +1,11 @@
 const encoder = new TextEncoder();
-export const CREDENTIAL_PORTAL_POLICY = Object.freeze({ enabled: false, maxDocuments: 10, maxFileBytes: 10485760, maxTotalBytes: 31457280, origin: 'https://credentialdomd.com' });
+// The code-level switch is on as of the administrator-access build. Activation
+// is runtime only and fails closed: the function answers 503 until
+// CREDENTIAL_PORTAL_ENABLED and CREDENTIAL_PORTAL_PRIVACY_READY are both "true"
+// and CREDENTIAL_PORTAL_SECRET, CLERK_ISSUER, RESEND_API_KEY and the service
+// role are set (credentialPortalDependencies.ts assertConfigured).
+// CREDENTIAL_PORTAL_OWNER_PROFILES then limits it to the listed owners.
+export const CREDENTIAL_PORTAL_POLICY = Object.freeze({ enabled: true, maxDocuments: 10, maxFileBytes: 10485760, maxTotalBytes: 31457280, origin: 'https://credentialdomd.com' });
 export function base64url(bytes) {
   let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
