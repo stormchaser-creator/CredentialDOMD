@@ -22,6 +22,8 @@
 //
 // Pure: plain node tests and the edge-function copies mirror it.
 
+import { CERTIFICATION_TYPE } from "../constants/credentialTypes.js";
+
 export const LIFECYCLE_SECTIONS = Object.freeze(["licenses", "privileges", "insurance"]);
 export const LIFECYCLE_STATUSES = Object.freeze(["active", "provisional", "pending_confirmation", "superseded", "historical"]);
 export const STATUS_SOURCE_MAX = 200;
@@ -63,10 +65,34 @@ export function isAlertable(item) {
   return (s === "active" || s === "provisional") && !isDateUnknown(item);
 }
 
-/** Pending confirmation or date unknown, and not retired: a task to resolve, not an alert. */
-export function needsResolution(item) {
+/** Personal coverage (health, dental, vision, disability, life) has no credentialing expiration to chase. */
+export const PERSONAL_COVERAGE_RE = /health insurance|dental|vision|life insurance|disability/i;
+const isBoardCertType = (type) => /board certification/i.test(type || "");
+
+/**
+ * Whether "date not yet known" is a question this record can have at all.
+ * A course certification, a lifetime diplomate who ticked "does not expire"
+ * and personal coverage never expire, so their forms hide the checkbox. A
+ * flag left over from before the type changed has no control to clear it,
+ * so it must not count: normalizeLifecycle drops it and needsResolution
+ * ignores it.
+ */
+export function dateUnknownApplies(sectionKey, item) {
+  const type = String(item?.type || "");
+  if (sectionKey === "licenses") return type !== CERTIFICATION_TYPE && !(item?.noExpiration === true && isBoardCertType(type));
+  if (sectionKey === "insurance") return !PERSONAL_COVERAGE_RE.test(type);
+  return true;
+}
+
+/**
+ * Pending confirmation or date unknown, and not retired: a task to resolve,
+ * not an alert. With its section, a leftover "not yet known" on a record that
+ * cannot have one (dateUnknownApplies) is not a question.
+ */
+export function needsResolution(item, sectionKey) {
   if (!item || isInactive(item)) return false;
-  return lifecycleOf(item) === "pending_confirmation" || isDateUnknown(item);
+  if (lifecycleOf(item) === "pending_confirmation") return true;
+  return isDateUnknown(item) && (!sectionKey || dateUnknownApplies(sectionKey, item));
 }
 
 /** On a CV: active and provisional only. */
@@ -107,21 +133,37 @@ export function lifecycleSummary(item) {
  * The record as it may be written. Only keys already present are touched, so
  * a record from any other path is left exactly as it came:
  *   - status: one of the five, anything else becomes active
- *   - dateUnknown / noExpiration: strict booleans; "does not expire" and "not
- *     known yet" are different answers, and "does not expire" wins if both
+ *   - dateUnknown / noExpiration: strict booleans. "Does not expire" means
+ *     something only on a board certification or a course certification; on
+ *     any other licence type it is a hidden leftover and is cleared, so it can
+ *     never override "not known yet"
+ *   - dateUnknown is cleared where the record cannot have that question
+ *     (dateUnknownApplies), and as soon as a date arrives: on an add, or on an
+ *     edit whose date differs from `previous`. A form, a scan, Vera or a date
+ *     fix typing the reappointment date must re-arm the alert, the ring and
+ *     the reminder email. An edit that keeps the same date keeps the flag:
+ *     that is a stale date the physician marked not yet known.
  *   - supersededBy: kept only on a superseded record, never pointing at itself
  *   - statusSource: one line, at most 200 characters, blank becomes null
  * Other sections are returned unchanged.
  */
-export function normalizeLifecycle(sectionKey, item) {
+export function normalizeLifecycle(sectionKey, item, previous = null) {
   if (!LIFECYCLE_SECTIONS.includes(sectionKey) || !item || typeof item !== "object") return item;
   const has = (k) => Object.prototype.hasOwnProperty.call(item, k);
   if (!["lifecycleStatus", "dateUnknown", "supersededBy", "statusSource", "noExpiration"].some(has)) return item;
   const out = { ...item };
   if (has("lifecycleStatus")) out.lifecycleStatus = lifecycleOf(out);
   if (has("dateUnknown")) out.dateUnknown = out.dateUnknown === true;
-  if (has("noExpiration")) out.noExpiration = out.noExpiration === true;
-  if (out.noExpiration === true && out.dateUnknown === true) out.dateUnknown = false;
+  if (has("noExpiration")) {
+    const type = String(out.type || "");
+    out.noExpiration = out.noExpiration === true
+      && (sectionKey !== "licenses" || type === CERTIFICATION_TYPE || isBoardCertType(type));
+  }
+  if (out.dateUnknown === true) {
+    const date = typeof out.expirationDate === "string" ? out.expirationDate.trim() : out.expirationDate;
+    const dateArrived = !!date && (!previous || previous.expirationDate !== out.expirationDate);
+    if (dateArrived || !dateUnknownApplies(sectionKey, out)) out.dateUnknown = false;
+  }
   if (has("supersededBy")) {
     const ref = typeof out.supersededBy === "string" ? out.supersededBy.trim() : "";
     out.supersededBy = lifecycleOf(out) === "superseded" && ref && ref !== out.id ? ref : null;
@@ -139,13 +181,14 @@ export function normalizeLifecycle(sectionKey, item) {
  * `labelOf(record)` names one. `dateNoun` is what the date is called
  * ("Expiration", "Reappointment").
  */
-export function lifecycleFields({ records = [], labelOf = (r) => r?.id || "", dateNoun = "Expiration" } = {}) {
+export function lifecycleFields({ sectionKey, records = [], labelOf = (r) => r?.id || "", dateNoun = "Expiration" } = {}) {
   const statusOptions = LIFECYCLE_STATUSES.map((value) => ({ value, label: LIFECYCLE_LABELS[value] }));
   return {
     dateUnknown: {
       key: "dateUnknown", label: `${dateNoun} date`, type: "checkbox",
       checkboxLabel: `${dateNoun} date not yet known`,
       hint: "Kept without a made-up date. It shows as a task to resolve, never as an alert.",
+      show: (f) => dateUnknownApplies(sectionKey, f),
     },
     status: [
       {
@@ -168,4 +211,15 @@ export function lifecycleFields({ records = [], labelOf = (r) => r?.id || "", da
       },
     ],
   };
+}
+
+/**
+ * The form after one field changes. Typing the date answers "not yet known",
+ * so the checkbox unticks where the physician can see it, rather than the
+ * flag silently outliving the date (normalizeLifecycle clears it on save too).
+ */
+export function withFormField(form, key, value) {
+  const next = { ...form, [key]: value };
+  if (key === "expirationDate" && value && next.dateUnknown === true) next.dateUnknown = false;
+  return next;
 }

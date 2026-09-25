@@ -740,7 +740,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const groups = { licenses: data.licenses, privileges: data.privileges, insurance: data.insurance };
     for (const [sec, list] of Object.entries(groups)) {
       for (const item of list || []) {
-        if (needsResolution(item)) out.push({ item, sec, label: describeItem(item, data.settings.name, sec) });
+        if (needsResolution(item, sec)) out.push({ item, sec, label: describeItem(item, data.settings.name, sec) });
       }
     }
     return out;

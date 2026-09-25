@@ -292,11 +292,13 @@ export function plainLabel(item, physicianName, sectionKey) {
  * variant of the person's name (case, commas, middle names/initials, degree
  * suffixes) and label by type + state instead.
  */
+const NAME_SUFFIXES = new Set(["do", "md", "jr", "sr", "ii", "iii", "iv", "phd", "np", "pa"]);
+const nameWords = (s) => String(s).toLowerCase().replace(/[.,()]/g, " ").split(/\s+/)
+  .filter(t => t && !NAME_SUFFIXES.has(t));
+
 export function isPersonName(name, physicianName) {
   if (!name || !physicianName) return false;
-  const strip = (s) => s.toLowerCase().replace(/[.,()]/g, " ").split(/\s+/)
-    .filter(t => t && !["do", "md", "jr", "sr", "ii", "iii", "iv", "phd", "np", "pa"].includes(t));
-  const a = strip(name), b = strip(physicianName);
+  const a = nameWords(name), b = nameWords(physicianName);
   if (!a.length || !b.length) return false;
   // Every word of the shorter name must appear in the longer one, allowing
   // middle initials to match full middle names ("e" ~ "edwin")
@@ -316,15 +318,58 @@ export function isPersonName(name, physicianName) {
 export const PERSON_NAME_SECTIONS = Object.freeze(["licenses", "privileges", "insurance", "education", "healthRecords", "travelDocs"]);
 
 /**
+ * The stricter test a write uses before it clears stored text. isPersonName
+ * is a display heuristic: it lets an initial on either side match, so a lone
+ * "ACLS" reads as "John A. Smith" and "Neurosurgery" as "N. Whitney". Hiding
+ * a title is cheap; erasing one on every save is not. Here the Display Name
+ * must be the physician's name and nothing else:
+ *   - two words or more (a lone "Mercy" or "Mayo" is a facility as often as
+ *     a name), unless the physician's own name is a single word;
+ *   - at least one word of two letters or more equal to one of the
+ *     physician's (the surname, usually);
+ *   - every word one of the physician's, or an initial of one of the
+ *     physician's full words ("E. Whitney"). A full word matches one of the
+ *     physician's initials ("Jordan Alex Rivera" for "Jordan A. Rivera") only
+ *     beside two exact full-word matches, so "Mercy Jones" is never read as
+ *     "Mary M. Jones".
+ */
+export function namesOnlyThePhysician(name, physicianName) {
+  if (!name || !physicianName) return false;
+  const a = nameWords(name), b = nameWords(physicianName);
+  if (!a.length || !b.length) return false;
+  if (a.length < 2 && b.length >= 2) return false;
+  const full = b.filter(u => u.length >= 2);
+  const exact = new Set(a.filter(t => t.length >= 2 && full.includes(t)));
+  if (exact.size === 0) return false;
+  const initials = b.filter(u => u.length === 1);
+  return a.every(t => b.includes(t)
+    || (t.length === 1 && full.some(u => u.startsWith(t)))
+    || (exact.size >= 2 && initials.some(u => t.startsWith(u))));
+}
+
+/**
+ * A board certification or a course certification is named by its Display
+ * Name ("Neurosurgery", "ACLS": the "What Is It In?" answer, the specialty
+ * the CV prints), so a write never clears it.
+ */
+const nameIsContent = (sectionKey, item) => sectionKey === "licenses"
+  && (item.type === CERTIFICATION_TYPE || /board certification/i.test(item.type || ""));
+
+/** True when a write clears this record's Display Name as the physician's own name. */
+export function clearsPersonName(sectionKey, item, physicianName) {
+  if (!item || typeof item !== "object" || !PERSON_NAME_SECTIONS.includes(sectionKey)) return false;
+  if (typeof item.name !== "string" || nameIsContent(sectionKey, item)) return false;
+  return namesOnlyThePhysician(item.name, physicianName);
+}
+
+/**
  * The record with a Display Name that is just the physician's own name
  * cleared, so the canonical label applies everywhere (share subjects,
  * notifications, pickers) and not only on the card. Anything else is
  * returned unchanged.
  */
 export function withoutPersonName(sectionKey, item, physicianName) {
-  if (!item || typeof item !== "object" || !PERSON_NAME_SECTIONS.includes(sectionKey)) return item;
-  if (typeof item.name !== "string" || !isPersonName(item.name, physicianName)) return item;
-  return { ...item, name: null };
+  return clearsPersonName(sectionKey, item, physicianName) ? { ...item, name: null } : item;
 }
 
 // Every category titles CANONICALLY — the same fields in the same order for

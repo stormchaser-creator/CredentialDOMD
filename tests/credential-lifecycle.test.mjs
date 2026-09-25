@@ -8,11 +8,11 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   lifecycleOf, isAlertable, isInactive, needsResolution, isOnCv, isDateUnknown, expirationWaived,
-  lifecycleNote, lifecycleSummary, normalizeLifecycle, LIFECYCLE_STATUSES, STATUS_SOURCE_MAX,
+  lifecycleNote, lifecycleSummary, normalizeLifecycle, LIFECYCLE_STATUSES, STATUS_SOURCE_MAX, withFormField,
 } from '../src/utils/lifecycle.js';
 import { prepareRecord } from '../src/utils/recordWrite.js';
 import { licenseFields, privilegeFields, insuranceFields } from '../src/utils/credentialForms.js';
-import { findStateLicense, standingScore, complianceFor, hasDEARegistration } from '../src/utils/compliance.js';
+import { findStateLicense, standingScore, complianceFor, hasDEARegistration, trackedStates } from '../src/utils/compliance.js';
 import { dateless, buildSetup } from '../src/utils/setupTasks.js';
 import { buildCredentialRows } from '../src/utils/credentialExport.js';
 import { buildCredentialText } from '../src/utils/helpers.js';
@@ -88,7 +88,7 @@ test('every write is normalised: five statuses, strict booleans, a clean source,
   assert.equal(normalizeLifecycle('licenses', { id: 'a', lifecycleStatus: 'superseded', supersededBy: 'a' }).supersededBy, null, 'never replaced by itself');
   assert.equal(normalizeLifecycle('insurance', { statusSource: 'z'.repeat(500) }).statusSource.length, STATUS_SOURCE_MAX);
   assert.equal(normalizeLifecycle('privileges', { statusSource: '   ' }).statusSource, null);
-  assert.deepEqual(normalizeLifecycle('licenses', { noExpiration: true, dateUnknown: true }), { noExpiration: true, dateUnknown: false }, '"does not expire" and "not known yet" are different answers');
+  assert.deepEqual(normalizeLifecycle('licenses', { type: 'Board Certification (AOA)', noExpiration: true, dateUnknown: true }), { type: 'Board Certification (AOA)', noExpiration: true, dateUnknown: false }, '"does not expire" and "not known yet" are different answers');
   const untouched = { id: 'c', expirationDate: '2027-01-01' };
   assert.equal(normalizeLifecycle('licenses', untouched), untouched, 'a record without lifecycle keys is returned as is');
   const cme = { lifecycleStatus: 'Bogus' };
@@ -305,4 +305,137 @@ test('retired records sink to the bottom under their own label, and open questio
   assert.match(html, /Exp Jan 31, 2023 \u{B7} Superseded/u, 'its date is kept, with no countdown');
   assert.match(html, /Date not yet known/);
   assert.doesNotMatch(html, /Needs review/, 'an answered unknown date is not flagged red');
+});
+
+// -- Review fixes: the flag, the tracked states, setup --------------------
+test('typing the date on a record marked "not yet known" re-arms its alert, the ring and the reminder email', async () => {
+  // The Resolve card opens the editor on the date; the physician types it.
+  const stored = { id: 'p', type: 'Surgical Privileges', facility: 'Mercy', dateUnknown: true, statusSource: 'Med staff office' };
+  const saved = prepareRecord('privileges', { ...stored, expirationDate: day(10) }, 'Synthetic Physician', stored);
+  assert.equal(saved.dateUnknown, false, 'the date answers the question');
+  assert.equal(isAlertable(saved), true);
+  assert.equal(needsResolution(saved, 'privileges'), false, 'off the resolve list');
+  const { generateAlerts } = await bundle('src/utils/notifications.js');
+  assert.deepEqual(generateAlerts(data({ privileges: [saved] })).soon.map(i => i.id), ['p']);
+  assert.equal(standingScore({ items: [saved], leadDays: 90 }).total, 1, 'back in the ring');
+  assert.equal(remindable({ expiration_date: saved.expirationDate, date_unknown: saved.dateUnknown }), true, 'and in the reminder email');
+  // A scan or Vera replacing a stale date clears it the same way.
+  const stale = { id: 's', type: 'State Medical License (DO)', state: 'ND', expirationDate: '2024-01-31', dateUnknown: true };
+  assert.equal(prepareRecord('licenses', { ...stale, expirationDate: day(400) }, 'X', stale).dateUnknown, false);
+  // A stale date the physician marks unknown, date unchanged, keeps the flag.
+  const dated = { id: 'q', type: 'Surgical Privileges', expirationDate: '2024-01-01' };
+  assert.equal(prepareRecord('privileges', { ...dated, dateUnknown: true }, 'X', dated).dateUnknown, true);
+  // An add carrying both reads the date: an alert on, never silenced.
+  assert.equal(prepareRecord('licenses', { id: 'n', type: 'State Medical License', dateUnknown: true, expirationDate: day(30) }, 'X').dateUnknown, false);
+  assert.equal(prepareRecord('privileges', { id: 'u', dateUnknown: true, expirationDate: '' }, 'X').dateUnknown, true, 'a blank date is no answer');
+  // The form unticks the box as the date is typed, so the change is visible.
+  assert.equal(withFormField({ dateUnknown: true }, 'expirationDate', day(10)).dateUnknown, false);
+  assert.equal(withFormField({ dateUnknown: true }, 'expirationDate', '').dateUnknown, true);
+  assert.equal(withFormField({ dateUnknown: true }, 'notes', 'x').dateUnknown, true);
+  assert.deepEqual(withFormField({ name: 'a' }, 'expirationDate', '2027-01-01'), { name: 'a', expirationDate: '2027-01-01' }, 'no key a form lacks is added');
+  // Wiring: editItem hands the stored record over; the form's setter uses the rule.
+  const ctx = readFileSync(new URL('../src/context/AppContext.jsx', import.meta.url), 'utf8');
+  const edit = ctx.slice(ctx.indexOf('const editItem = useCallback('), ctx.indexOf('const toggleFavorite = useCallback('));
+  assert.match(edit, /prepareRecord\(key, raw, dataRef\.current\?\.settings\?\.name, previous \|\| null\)/);
+  const crud = readFileSync(new URL('../src/components/features/CrudSection.jsx', import.meta.url), 'utf8');
+  assert.match(crud, /setForm\(p => withFormField\(p, key, value\)\)/);
+});
+
+test('a leftover "not yet known" on a record that cannot have one never pins it on the resolve list', () => {
+  assert.equal(needsResolution({ type: 'Certification', dateUnknown: true }, 'licenses'), false);
+  assert.equal(needsResolution({ type: 'Board Certification (ABMS)', noExpiration: true, dateUnknown: true }, 'licenses'), false);
+  assert.equal(needsResolution({ type: 'Health Insurance (personal)', dateUnknown: true }, 'insurance'), false);
+  assert.equal(needsResolution({ type: 'State Medical License', dateUnknown: true }, 'licenses'), true);
+  assert.equal(needsResolution({ type: 'Surgical Privileges', dateUnknown: true }, 'privileges'), true);
+  // Saving the form clears it, so the Resolve button always has a way out.
+  assert.equal(normalizeLifecycle('licenses', { type: 'Certification', dateUnknown: true }).dateUnknown, false);
+  assert.equal(normalizeLifecycle('insurance', { type: 'Dental Insurance', dateUnknown: true }).dateUnknown, false);
+  assert.equal(normalizeLifecycle('insurance', { type: 'Tail Coverage', dateUnknown: true }).dateUnknown, true);
+  assert.match(readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8'), /needsResolution\(item, sec\)/, 'the Home list passes the section');
+});
+
+test('a hidden "does not expire" left from an earlier type never overrides "not yet known"', () => {
+  // Board certification, "does not expire" ticked, then retyped as a state licence and marked not yet known.
+  const out = normalizeLifecycle('licenses', { id: 'l', type: 'State Medical License', noExpiration: true, dateUnknown: true });
+  assert.equal(out.dateUnknown, true, 'the physician\'s answer is kept');
+  assert.equal(out.noExpiration, false, 'the hidden leftover is not stored');
+  assert.equal(needsResolution(out, 'licenses'), true);
+  assert.equal(dateless(data({ licenses: [out] })).length, 0, 'answered: on the resolve list, not the missing-date list');
+  const board = normalizeLifecycle('licenses', { type: 'Board Certification (ABMS)', noExpiration: true, dateUnknown: true });
+  assert.deepEqual([board.noExpiration, board.dateUnknown], [true, false], 'on a board certification "does not expire" still wins');
+  assert.equal(normalizeLifecycle('licenses', { type: 'Certification', noExpiration: true }).noExpiration, true);
+});
+
+test('a historical or superseded licence adds no state to CME tracking, the ring or Vera', () => {
+  const tx = { id: 'tx', type: 'State Medical License', state: 'TX', licenseNumber: 'T1', expirationDate: '2021-08-31', lifecycleStatus: 'historical' };
+  const co = { id: 'co', type: 'State Medical License', state: 'CO', licenseNumber: 'C1', expirationDate: day(600) };
+  assert.deepEqual(trackedStates('CO', [], [tx, co]), ['CO']);
+  assert.deepEqual(trackedStates(null, undefined, [{ ...tx, lifecycleStatus: 'superseded' }]), []);
+  assert.deepEqual(trackedStates('TX', [], [tx]), ['TX'], 'a state picked in Settings stays tracked');
+  assert.deepEqual(trackedStates(null, ['ND'], [co, { ...tx, lifecycleStatus: 'pending_confirmation' }]).sort(), ['CO', 'ND', 'TX'], 'a licence awaiting confirmation is still held');
+  assert.deepEqual(trackedStates(null, [], [null, co]), ['CO']);
+  // The ring as Home builds it (App.jsx stateComps).
+  const d = data({ settings: { ...data().settings, primaryState: 'CO' }, licenses: [tx, co] });
+  const stateComps = trackedStates(d.settings.primaryState, d.settings.additionalStates, d.licenses)
+    .map(st => ({ st, comp: complianceFor(d, st), lic: findStateLicense(d.licenses, st) }));
+  const ring = standingScore({ items: d.licenses, stateComps, leadDays: 90 });
+  assert.equal(ring.needsAction.some(n => n.item.id === 'cme:TX'), false, 'no CME shortfall for a state no longer held');
+  const ctx = readFileSync(new URL('../src/context/AppContext.jsx', import.meta.url), 'utf8');
+  assert.match(ctx, /trackedStates\(data\.settings\.primaryState, data\.settings\.additionalStates, data\.licenses\)/, 'the app, the Home cards and Vera read this list');
+});
+
+test('a lone historical or superseded medical licence leaves "Your licenses" and "Expiration dates" open', () => {
+  const old = { id: 'tx', type: 'State Medical License', state: 'TX', expirationDate: '2021-08-31', lifecycleStatus: 'historical' };
+  const tasks = (licenses, settings = {}) => buildSetup(data({ licenses, settings: { ...data().settings, ...settings } }), { isPro: true }).byId;
+  for (const status of ['historical', 'superseded']) {
+    const t = tasks([{ ...old, lifecycleStatus: status }]);
+    assert.notEqual(t.licenses.status, 'done', `${status}: licenses`);
+    assert.notEqual(t.dates.status, 'done', `${status}: dates`);
+  }
+  const now = tasks([old, { id: 'co', type: 'State Medical License', state: 'CO', expirationDate: day(600) }]);
+  assert.deepEqual([now.licenses.status, now.dates.status], ['done', 'done'], 'with the licence held today both are done');
+  const acls = { id: 'a', type: 'ACLS Certification', expirationDate: '2020-01-01', lifecycleStatus: 'historical' };
+  assert.notEqual(tasks([acls]).lifeSupport.status, 'done', 'an expired historical ACLS is not a current card');
+  assert.equal(tasks([{ ...acls, lifecycleStatus: 'active', expirationDate: day(300) }]).lifeSupport.status, 'done');
+  const boardCert = { id: 'b', type: 'Board Certification (AOA)', lifecycleStatus: 'superseded' };
+  assert.notEqual(tasks([boardCert], { specialties: ['Neurosurgery'] }).boards.status, 'done');
+  assert.equal(tasks([{ ...boardCert, lifecycleStatus: 'active' }], { specialties: ['Neurosurgery'] }).boards.status, 'done');
+});
+
+test('the inbound-email catalogue still links licences, policies and privileges before the lifecycle migration', async () => {
+  const { selectWithOptional, isMissingColumnError } = await import('../supabase/functions/_shared/catalogueQuery.mjs');
+  const calls = [];
+  const beforeMigration = async (cols) => {
+    calls.push(cols);
+    return cols.includes('lifecycle_status')
+      ? { data: null, error: { code: '42703', message: 'column licenses.lifecycle_status does not exist' } }
+      : { data: [{ id: 'l', type: 'State Medical License', state: 'TX' }], error: null };
+  };
+  const r = await selectWithOptional(beforeMigration, 'id, type, state', 'lifecycle_status');
+  assert.deepEqual(calls, ['id, type, state, lifecycle_status', 'id, type, state']);
+  assert.equal(r.error, null);
+  assert.equal(r.withoutOptional, true);
+  const cat = serverPacket.catalogueFromRows([{ id: 'd', name: 'tx.pdf', linked_to: 'licenses:l' }], { licenses: r.data });
+  assert.equal(cat[0].lifecycle, 'active', 'a row without the column reads as active');
+  assert.deepEqual(serverPacket.matchAsk(serverPacket.classifyAsk('TX medical license'), cat).map(e => e.id), ['d'], 'and its document is still sent by its record');
+  // After the migration: one query, the column read.
+  const after = [];
+  const ok = await selectWithOptional(async (cols) => { after.push(cols); return { data: [], error: null }; }, 'id', 'lifecycle_status');
+  assert.deepEqual([after, ok.withoutOptional], [['id, lifecycle_status'], undefined]);
+  // Any other failure is reported as it came, never retried into a different one.
+  const other = [];
+  const down = await selectWithOptional(async (cols) => { other.push(cols); return { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } }; }, 'id', 'lifecycle_status');
+  assert.equal(other.length, 1);
+  assert.equal(down.error.code, '57014');
+  assert.equal(isMissingColumnError({ code: 'PGRST204', message: 'Could not find the column' }), true);
+  assert.equal(isMissingColumnError(null), false);
+  // The function asks for lifecycle_status only as the optional column.
+  const fn = readFileSync(new URL('../supabase/functions/email-inbound/index.ts', import.meta.url), 'utf8');
+  const tables = fn.slice(fn.indexOf('const RECORD_TABLES'), fn.indexOf('];', fn.indexOf('const RECORD_TABLES')));
+  for (const table of ['licenses', 'insurance', 'privileges']) {
+    const line = tables.split('\n').find(l => l.includes(`table: "${table}"`));
+    assert.match(line, /columns: "[^"]*", optional: "lifecycle_status"/, table);
+    assert.doesNotMatch(line.match(/columns: "([^"]*)"/)[1], /lifecycle_status/, `${table}: never a required column`);
+  }
+  assert.match(fn, /selectWithOptional\(/);
 });

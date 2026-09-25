@@ -112,6 +112,7 @@
 import { Webhook } from "https://esm.sh/svix@1.40.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.97.0";
 import { accessWriteDecision } from "../_shared/accessWrite.mjs";
+import { selectWithOptional } from "../_shared/catalogueQuery.mjs";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { parseVCards, isVCardAttachment, looksLikeVCardText, type VCardContact } from "../_shared/vcard.ts";
 import { buildProposal, catalogueFromRows } from "../_shared/requestPacket.ts";
@@ -1125,17 +1126,19 @@ function parseForwarded(text: string): ParsedForward {
  * "<section>:<record id>" and the matcher joins on that.
  *
  * lifecycle_status (migration 20260925040000) lets the matcher send the
- * record in force rather than a superseded or historical one. Apply that
- * migration before deploying this function: until then these three queries
- * fail and their documents are offered unlinked, by filename.
+ * record in force rather than a superseded or historical one. It is an
+ * OPTIONAL column: asked for, and dropped from the query when the database
+ * does not have it yet (a deploy before the migration, or a rollback), so
+ * those three tables still link their documents. A missing lifecycle reads
+ * as active (requestPacket.ts lifecycleOfRow).
  */
-const RECORD_TABLES: { table: string; section: string; columns: string }[] = [
-  { table: "licenses", section: "licenses", columns: "id, type, name, license_number, state, issued_date, expiration_date, lifecycle_status" },
+const RECORD_TABLES: { table: string; section: string; columns: string; optional?: string }[] = [
+  { table: "licenses", section: "licenses", columns: "id, type, name, license_number, state, issued_date, expiration_date", optional: "lifecycle_status" },
   { table: "health_records", section: "healthRecords", columns: "id, category, type, name, date_administered, expiration_date, result, doses" },
   { table: "education", section: "education", columns: "id, type, name, institution, graduation_date" },
-  { table: "insurance", section: "insurance", columns: "id, type, name, provider, policy_number, effective_date, expiration_date, lifecycle_status" },
+  { table: "insurance", section: "insurance", columns: "id, type, name, provider, policy_number, effective_date, expiration_date", optional: "lifecycle_status" },
   { table: "screenings", section: "screenings", columns: "id, type, name, agency, report_date, result, expiration_date" },
-  { table: "privileges", section: "privileges", columns: "id, type, name, facility, state, appointment_date, expiration_date, lifecycle_status" },
+  { table: "privileges", section: "privileges", columns: "id, type, name, facility, state, appointment_date, expiration_date", optional: "lifecycle_status" },
   { table: "travel_docs", section: "travelDocs", columns: "id, type, name, provider, number, expiration_date" },
   { table: "professional_photos", section: "professionalPhotos", columns: "id, name, date_taken" },
   { table: "cme", section: "cme", columns: "id, title, category, hours, date, provider" },
@@ -1172,7 +1175,12 @@ type RecordRows = any[];
 async function loadCatalogue(profileId: string) {
   const docsQ = db.from("documents").select("id, name, mime_type, type, linked_to, uploaded_at").eq("user_id", profileId);
   const recordQs = RECORD_TABLES.map(async (t): Promise<[string, RecordRows]> => {
-    const { data, error } = await db.from(t.table).select(t.columns).eq("user_id", profileId);
+    const { data, error, withoutOptional } = await selectWithOptional(
+      (columns: string) => db.from(t.table).select(columns).eq("user_id", profileId),
+      t.columns,
+      t.optional,
+    );
+    if (withoutOptional) console.error(`catalogue: ${t.table}: read without ${t.optional}; apply its migration`);
     if (error) { console.error(`catalogue: ${t.table}: ${error.message}`); return [t.section, []]; }
     return [t.section, (data ?? []) as RecordRows];
   });

@@ -11,17 +11,16 @@
 
 import { STATES } from "../constants/states.js";
 import { getLicenseTypes, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES } from "../constants/credentialTypes.js";
-import { lifecycleFields, expirationWaived } from "./lifecycle.js";
+import { lifecycleFields, expirationWaived, PERSONAL_COVERAGE_RE } from "./lifecycle.js";
 import { plainLabel } from "./helpers.js";
 
-/** Personal coverage (health, dental, vision, disability, life) has no credentialing expiration to chase. */
-export const PERSONAL_COVERAGE_RE = /health insurance|dental|vision|life insurance|disability/i;
+export { PERSONAL_COVERAGE_RE };
 
 const isBoardCert = (f) => /board certification/i.test(f.type || "");
 
 /** The licence form. `records` feed the "Replaced by" picker. */
 export function licenseFields({ degreeType, records = [], physicianName } = {}) {
-  const life = lifecycleFields({ records, labelOf: (r) => plainLabel(r, physicianName, "licenses"), dateNoun: "Expiration" });
+  const life = lifecycleFields({ sectionKey: "licenses", records, labelOf: (r) => plainLabel(r, physicianName, "licenses"), dateNoun: "Expiration" });
   return [
     { key: "type", label: "Type", type: "select", options: getLicenseTypes(degreeType) },
     { key: "name", label: (f) => f.type === CERTIFICATION_TYPE ? "What Is It In?" : "Display Name", placeholder: (f) => f.type === CERTIFICATION_TYPE ? "e.g. ACLS, Da Vinci Robotic System" : "e.g. CA Medical License" },
@@ -31,8 +30,9 @@ export function licenseFields({ degreeType, records = [], physicianName } = {}) 
     { key: "noExpiration", label: "Expiration", type: "checkbox", checkboxLabel: "This certificate does not expire", show: isBoardCert, hint: "A lifetime diplomate has no renewal date. Tick this and the app stops asking for one. Course and device certifications are already treated this way." },
     { key: "expirationDate", label: "Expires", type: "date", required: (f) => f.type !== CERTIFICATION_TYPE && !(f.noExpiration === true && isBoardCert(f)) && !expirationWaived(f) },
     // "Not known yet" is a different answer from "does not expire": a course
-    // certification never expires, and a lifetime diplomate has said so.
-    { ...life.dateUnknown, show: (f) => f.type !== CERTIFICATION_TYPE && !(f.noExpiration === true && isBoardCert(f)) },
+    // certification never expires, and a lifetime diplomate has said so
+    // (lifecycle.dateUnknownApplies, which the save path enforces too).
+    life.dateUnknown,
     { key: "cmeCycleStart", label: "CME Cycle Start", type: "date", show: (f) => /medical license/i.test(f.type || ""), hint: "Leave blank for a normal renewal, and CME counts from one full state cycle back. Set it when your clock started somewhere else: your first renewal after training, or a first license whose CME period runs from the issue date. It changes which dates count, never how many hours you owe." },
     { key: "renewalCost", label: "Renewal Cost ($)", type: "currency", placeholder: "e.g. 450" },
     ...life.status,
@@ -42,7 +42,7 @@ export function licenseFields({ degreeType, records = [], physicianName } = {}) 
 
 /** The hospital privileges form. */
 export function privilegeFields({ records = [], physicianName } = {}) {
-  const life = lifecycleFields({ records, labelOf: (r) => plainLabel(r, physicianName, "privileges"), dateNoun: "Reappointment" });
+  const life = lifecycleFields({ sectionKey: "privileges", records, labelOf: (r) => plainLabel(r, physicianName, "privileges"), dateNoun: "Reappointment" });
   return [
     { key: "type", label: "Type", type: "select", options: PRIVILEGE_TYPES },
     { key: "name", label: "Display Name" },
@@ -64,7 +64,7 @@ export function privilegeFields({ records = [], physicianName } = {}) {
 
 /** The insurance form. */
 export function insuranceFields({ records = [], physicianName } = {}) {
-  const life = lifecycleFields({ records, labelOf: (r) => plainLabel(r, physicianName, "insurance"), dateNoun: "Expiration" });
+  const life = lifecycleFields({ sectionKey: "insurance", records, labelOf: (r) => plainLabel(r, physicianName, "insurance"), dateNoun: "Expiration" });
   return [
     { key: "type", label: "Type", type: "select", options: INSURANCE_TYPES },
     { key: "name", label: "Display Name" },
@@ -74,7 +74,7 @@ export function insuranceFields({ records = [], physicianName } = {}) {
     { key: "coverageAggregate", label: "Aggregate" },
     { key: "effectiveDate", label: "Effective", type: "date" },
     { key: "expirationDate", label: "Expires", type: "date", required: (f) => !PERSONAL_COVERAGE_RE.test(f.type || "") && !expirationWaived(f) },
-    { ...life.dateUnknown, show: (f) => !PERSONAL_COVERAGE_RE.test(f.type || "") },
+    life.dateUnknown,
     ...life.status,
     { key: "notes", label: "Notes", type: "textarea" },
   ];

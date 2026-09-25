@@ -447,6 +447,22 @@ export function findStateLicense(licenses, state) {
   return pool.sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate))[0];
 }
 
+/**
+ * The states whose CME the app tracks: the physician's picks in Settings plus
+ * every state where a medical licence is held. A historical or superseded
+ * licence is not held: it would add a state with no licence in force, whose
+ * CME window then reads as due in the ring, on a Home card and in Vera's
+ * snapshot. A state the physician picked in Settings stays tracked.
+ */
+export function trackedStates(primaryState, additionalStates, licenses) {
+  const states = new Set([primaryState, ...(Array.isArray(additionalStates) ? additionalStates : [])].filter(Boolean));
+  for (const l of licenses || []) {
+    if (!l || isInactive(l)) continue;
+    if (l.state && /medical license/i.test(l.type || "")) states.add(l.state);
+  }
+  return [...states];
+}
+
 /** DEA registration detection (drives the MATE Act line). */
 export function hasDEARegistration(licenses) {
   // A historical or superseded registration is not one held today.

@@ -10,6 +10,7 @@ import { canonicalState, canonicalizeSelectValue, canonicalScanFields } from '..
 import { canonicalForDocType, scanShapeIssues } from '../src/utils/scanShape.js';
 import {
   isPersonName, withoutPersonName, describeItem, plainLabel, buildEmailSubject, getItemLabel, PERSON_NAME_SECTIONS,
+  namesOnlyThePhysician, clearsPersonName,
 } from '../src/utils/helpers.js';
 import { prepareRecord } from '../src/utils/recordWrite.js';
 import { STATES } from '../src/constants/states.js';
@@ -95,6 +96,51 @@ test('a person-name Display Name is dropped at save, and the canonical title app
   assert.ok(PERSON_NAME_SECTIONS.includes('licenses') && !PERSON_NAME_SECTIONS.includes('peerReferences'));
 });
 
+test('a save clears only a Display Name that IS the physician, never a credential that shares an initial', () => {
+  // Each of these is the credential itself: "What Is It In?", a board
+  // specialty the CV prints, a carrier, a facility.
+  const keep = [
+    ['licenses', { type: 'Certification', name: 'ACLS' }, 'John A. Smith'],
+    ['licenses', { type: 'Board Certification (ABMS)', name: 'Neurosurgery' }, 'N. Whitney'],
+    ['licenses', { type: 'ECFMG Certificate', name: 'ECFMG' }, 'Eric E. Whitney, DO'],
+    ['licenses', { type: 'Other', name: 'Epic' }, 'Eric E. Whitney, DO'],
+    ['insurance', { type: 'Medical Malpractice (Occurrence)', name: 'MedPro' }, 'Mark M. Smith'],
+    ['privileges', { type: 'Surgical Privileges', name: 'Mercy' }, 'Mary M. Jones'],
+    ['privileges', { type: 'Surgical Privileges', name: 'Mercy Jones' }, 'Mary M. Jones'],
+    ['privileges', { type: 'Surgical Privileges', name: 'Mayo' }, 'John Mayo'],
+    ['education', { type: 'Fellowship', name: 'Skull Base Fellowship' }, 'Samuel B. Foster'],
+    // On a certification the name is the content, whatever it says.
+    ['licenses', { type: 'Board Certification (AOA)', name: 'Eric Whitney' }, 'Eric Whitney'],
+    ['licenses', { type: 'Certification', name: 'WHITNEY, ERIC' }, 'Eric E. Whitney, DO'],
+  ];
+  for (const [sec, rec, who] of keep) {
+    const item = { id: 'x', ...rec };
+    assert.equal(prepareRecord(sec, item, who).name, rec.name, `${sec} "${rec.name}" for ${who}`);
+    assert.equal(clearsPersonName(sec, item, who), false, `${sec} "${rec.name}": the detail view shows it`);
+  }
+  // Each of these is the physician's own name, however the document wrote it.
+  const clear = [
+    ['licenses', { type: 'DEA Registration', name: 'WHITNEY, ERIC' }, 'Eric E. Whitney, DO'],
+    ['licenses', { type: 'State Medical License', name: 'E. Whitney' }, 'Eric Whitney'],
+    ['licenses', { type: 'DEA Registration', name: 'Eric E. Whitney, DO' }, 'Eric E. Whitney, DO'],
+    ['licenses', { type: 'DEA Registration', name: 'Jordan Alex Rivera DO' }, PHYSICIAN],
+    ['privileges', { type: 'Surgical Privileges', name: 'jones, mary m' }, 'Mary M. Jones'],
+    ['travelDocs', { type: 'Passport', name: 'Mark Smith' }, 'Mark M. Smith'],
+  ];
+  for (const [sec, rec, who] of clear) {
+    assert.equal(prepareRecord(sec, { id: 'x', ...rec }, who).name, null, `${sec} "${rec.name}" for ${who}`);
+  }
+  assert.equal(namesOnlyThePhysician('Whitney', 'Eric Whitney'), false, 'a lone surname could be a facility');
+  assert.equal(namesOnlyThePhysician('Cher', 'Cher'), true, 'unless the physician has a one-word name');
+  assert.equal(namesOnlyThePhysician('E. W.', 'Eric Whitney'), false, 'initials alone name nobody');
+  assert.equal(namesOnlyThePhysician('Eric Whitney', ''), false);
+  // The scan merge and the detail view use the same strict test, not the display heuristic.
+  const crud = read('src/components/features/CrudSection.jsx');
+  assert.doesNotMatch(crud, /isPersonName\(/, 'the loose display test never decides what a form or a detail view drops');
+  assert.match(crud, /key === "name" && PERSON_NAME_SECTIONS\.includes\(sectionKey\) && namesOnlyThePhysician\(/);
+  assert.match(crud, /f\.key === "name" && clearsPersonName\(sectionKey, viewItem, data\.settings\.name\)/);
+});
+
 test('share subjects for the three DEA registrations all read by type and state', () => {
   const subjects = DEA.map(d => buildEmailSubject(d, 'licenses', SETTINGS));
   assert.deepEqual(subjects, [
@@ -127,6 +173,11 @@ test('the notification message lists each DEA by type and state', async () => {
   assert.match(msg.body, /DEA Registration, CO/);
   assert.match(msg.body, /DEA Registration, CA/);
   assert.doesNotMatch(msg.body, /RIVERA, JORDAN|Jordan Alex Rivera DO/);
+  // The alert email and text the physician forwards: no em dash anywhere.
+  assert.doesNotMatch(msg.body, /\u{2014}/u);
+  assert.doesNotMatch(msg.subject || '', /\u{2014}/u);
+  assert.match(msg.body, /DEA Registration, CO: expired /);
+  assert.match(msg.body, /DEA Registration, CA: [^\n]+ \(20 days\) Soon\n/);
 });
 
 test('every add and edit passes through prepareRecord, and the pickers use canonical labels', () => {

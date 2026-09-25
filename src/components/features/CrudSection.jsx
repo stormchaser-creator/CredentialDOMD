@@ -13,8 +13,8 @@ import { pushModal, popModal } from "../../utils/deskKeys";
 import EmptyState from "../shared/EmptyState";
 import StatusDot from "../shared/StatusDot";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, UploadIcon, CameraIcon, CheckIcon, StarIcon } from "../shared/Icons";
-import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, isPersonName, PERSON_NAME_SECTIONS } from "../../utils/helpers";
-import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote } from "../../utils/lifecycle";
+import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring, shortFacility, formatDate, namesOnlyThePhysician, clearsPersonName, PERSON_NAME_SECTIONS } from "../../utils/helpers";
+import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField } from "../../utils/lifecycle";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { splitScanned } from "../../utils/docPrefill";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -286,7 +286,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
               for (const [key, value] of Object.entries(placed)) {
                 // A scan often reads the physician's own name as the display
                 // name. It is never information, so it never fills the form.
-                if (key === "name" && PERSON_NAME_SECTIONS.includes(sectionKey) && isPersonName(String(value ?? ""), data.settings.name)) continue;
+                // The strict test: a scanned "ACLS" or "Neurosurgery" is the
+                // credential, whatever the physician's initials are.
+                if (key === "name" && PERSON_NAME_SECTIONS.includes(sectionKey) && namesOnlyThePhysician(String(value ?? ""), data.settings.name)) continue;
                 if (value != null && value !== "" && !merged[key]) {
                   // Handle arrays (like topics) properly
                   const strValue = Array.isArray(value) ? value : String(value);
@@ -572,8 +574,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     closeForm();
   }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft]);
 
+  // Typing a date unticks "date not yet known" (lifecycle.withFormField).
   const setField = useCallback((key, value) => {
-    setForm(p => ({ ...p, [key]: value }));
+    setForm(p => withFormField(p, key, value));
   }, []);
 
   return (
@@ -951,7 +954,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
           <>
             {renderFollowUps(viewItem)}
             {fields.filter(f => viewItem[f.key]
-              && !(f.key === "name" && PERSON_NAME_SECTIONS.includes(sectionKey) && isPersonName(String(viewItem.name), data.settings.name))
+              && !(f.key === "name" && clearsPersonName(sectionKey, viewItem, data.settings.name))
               && !(f.type === "choice" && f.defaultValue && viewItem[f.key] === f.defaultValue)).map(f => (
               <div key={f.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
                 <span style={{ fontSize: 13, color: T.textMuted, flexShrink: 0 }}>{resolveFieldProp(f, "label", viewItem)}</span>

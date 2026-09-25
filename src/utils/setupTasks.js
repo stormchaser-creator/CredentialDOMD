@@ -81,12 +81,20 @@ const hasDoc = (data, section, id) => linkedDocs(data, section, id).length > 0;
  * count, its sentence and its capture queue all read the same list.
  */
 
+/**
+ * Licences held today. A historical or superseded one is kept for the record
+ * but never renewed, so it can never mark a task done: a physician who moved
+ * states and entered only the old licence has nothing being watched.
+ */
+const currentLicenses = (ctx) => ctx.licenses.filter((l) => !isInactive(l));
+const holdsMedicalLicense = (ctx) => currentLicenses(ctx).some(isMedicalLicense);
+
 /** The two records every credentialing office asks for a copy of. */
 const proofRecords = (ctx) => ctx.licenses.filter((l) => !isInactive(l) && (isMedicalLicense(l) || isDea(l)));
 const proofMissing = (ctx) => proofRecords(ctx).filter((l) => !hasDoc(ctx.data, "licenses", l.id));
 
-const boardRecords = (ctx) => ctx.licenses.filter(isBoard);
-const lifeSupportRecords = (ctx) => ctx.licenses.filter((l) => isLifeSupport(l) && !!l.expirationDate);
+const boardRecords = (ctx) => currentLicenses(ctx).filter(isBoard);
+const lifeSupportRecords = (ctx) => currentLicenses(ctx).filter((l) => isLifeSupport(l) && !!l.expirationDate);
 
 /** A government photo ID with its number on file. Loyalty cards are not IDs. */
 const idRecords = (ctx) =>
@@ -252,13 +260,15 @@ export const TASK_DEFS = [
     label: "Your licenses",
     why: "The federal registry already has your license numbers. One lookup pulls every state it lists.",
     verb: "Import my licenses",
-    doneWhen: ({ licenses }) => licenses.some(isMedicalLicense),
+    doneWhen: holdsMedicalLicense,
     evidenceWhen: null,
     cardLine: () => "No licenses on file yet. The federal registry probably already has yours.",
     nextPhrase: () => "the registry lookup that fills in your licenses",
     doneClause: "your licenses",
-    regressionLine: () => "no medical license is on file",
-    pendingDetail: () => "No medical license on file yet.",
+    regressionLine: () => "no current medical license is on file",
+    pendingDetail: (ctx) => (ctx.licenses.some(isMedicalLicense)
+      ? "Only historical or superseded medical licenses are on file. Add the one you hold now."
+      : "No medical license on file yet."),
   },
   {
     id: "dates",
@@ -269,9 +279,9 @@ export const TASK_DEFS = [
     why: "Every reminder in the app counts down from these dates. A record without one is invisible to the warning system.",
     verb: "Add the missing dates",
     // The first clause stops an empty account reading as done.
-    doneWhen: (ctx) => ctx.licenses.some(isMedicalLicense) && dateless(ctx.data).length === 0,
+    doneWhen: (ctx) => holdsMedicalLicense(ctx) && dateless(ctx.data).length === 0,
     evidenceWhen: null,
-    blockedBy: (ctx) => (ctx.licenses.some(isMedicalLicense) ? null : "licenses"),
+    blockedBy: (ctx) => (holdsMedicalLicense(ctx) ? null : "licenses"),
     // secs is per record, so the whole job is worth naming honestly.
     estimateSecs: (ctx) => 10 * Math.max(1, dateless(ctx.data).length),
     cardLine: (ctx) => {
@@ -297,7 +307,7 @@ export const TASK_DEFS = [
     doneClause: "your expiration dates",
     pendingDetail: (ctx) => {
       const n = dateless(ctx.data).length;
-      if (!ctx.licenses.some(isMedicalLicense)) return "Add a license first, then the dates land here.";
+      if (!holdsMedicalLicense(ctx)) return "Add a license first, then the dates land here.";
       return `${n} ${plural(n, "record", "records")} with no expiration date.`;
     },
     regressionLine: (ctx) => {
@@ -328,12 +338,12 @@ export const TASK_DEFS = [
     cardLine: () => "No DEA registration on file. If you hold one, the app cannot warn you about it yet.",
     nextPhrase: () => "your DEA registration",
     doneClause: "your DEA registration",
-    pendingDetail: ({ licenses }) =>
-      licenses.some(isDea) ? "On file, but with no expiration date." : "Nothing on file yet.",
+    pendingDetail: (ctx) =>
+      currentLicenses(ctx).some(isDea) ? "On file, but with no expiration date." : "Nothing on file yet.",
     // A deleted registration and an undated one are different facts, and the
     // constant asserted the second when it was the first.
-    regressionLine: ({ licenses }) =>
-      licenses.some(isDea)
+    regressionLine: (ctx) =>
+      currentLicenses(ctx).some(isDea)
         ? "your DEA registration has no expiration date"
         : "your DEA registration is no longer on file",
   },
