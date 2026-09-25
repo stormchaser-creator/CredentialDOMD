@@ -3,11 +3,12 @@ import { edgeErrorMessage } from "../../utils/edgeError";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
-import { ADMIN_SOURCES, ADMIN_TAB_SOURCES, readAdminSource, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
+import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
 import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
 import AdminControlHistory from "./AdminControlHistory";
+import { AdminPreviewPicker } from "./AdminPreview";
 import { Modal, ScreenshotAttach } from "../shared";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
@@ -16,6 +17,7 @@ import { waitlistView, leadState } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
+import { ADMIN_TICKET_CATEGORIES, adminTicketDraftProblem } from "../../utils/adminTicketDraft";
 import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
 
@@ -36,7 +38,8 @@ function AdminDashboardContent() {
   const [rowLimits, setRowLimits] = useState({});
   const [ticketPreset, setTicketPreset] = useState({});
   const [accountPreset, setAccountPreset] = useState("all");
-  const [tickets, setTickets] = useState([]);
+  const [tickets, setTickets] = useState([]);   // unarchived tickets, all of them
+  const [archivedRows, setArchivedRows] = useState([]); // archived tickets, loaded on demand
   const [feedback, setFeedback] = useState([]);
   const [signups, setSignups] = useState([]);
   const [visits, setVisits] = useState([]);
@@ -71,10 +74,22 @@ function AdminDashboardContent() {
   const [newAttachment, setNewAttachment] = useState([]); // [{ data: dataURL, name }]
   const threadGeneration = useRef(0);
   const activeTicketId = useRef(null);
+  // One request ID per composed reply, reused on every retry of that same
+  // reply, so a reply whose response was lost is not saved (and emailed to
+  // the physician) twice. A different body, status or file gets a new one.
+  const replyRequest = useRef(null);
+  // Tickets whose Resolve & archive saved its reply but failed to archive: a
+  // retry with an empty box only archives, while the ticket is still resolved.
+  const archivePending = useRef(new Set());
   useEffect(() => () => { threadGeneration.current += 1; activeTicketId.current = null; }, []);
   const currentThread = (ticketId) => {
     const generation = threadGeneration.current;
     return () => activeTicketId.current === ticketId && threadGeneration.current === generation;
+  };
+  const replyRequestId = (ticketId, body, status, files) => {
+    const fingerprint = JSON.stringify([ticketId, body, status || null, files.map(f => [f.name || "", f.data?.length || 0, f.data?.slice(-64) || ""])]);
+    if (replyRequest.current?.fingerprint !== fingerprint) replyRequest.current = { fingerprint, id: globalThis.crypto?.randomUUID?.() ?? null };
+    return replyRequest.current.id;
   };
   const closeTicketDetail = () => {
     threadGeneration.current += 1; activeTicketId.current = null;
@@ -117,7 +132,8 @@ function AdminDashboardContent() {
   const createTicket = async () => {
     const subject = newSubject.trim();
     const body = newBody.trim();
-    if (!subject || !body) { setTicketMsg("Subject and details are both needed."); return; }
+    const problem = adminTicketDraftProblem({ subject, body, category: newCategory });
+    if (problem) { setTicketMsg(problem); return; }
     setCreating(true); setTicketMsg("");
     try {
       const res = await supabase.functions.invoke("create-ticket", {
@@ -173,23 +189,47 @@ function AdminDashboardContent() {
   // One tap: mark resolved and archive, instead of two separate trips into the ticket.
   const resolveAndArchive = async () => {
     if (!openTicket) return;
-    const isCurrent = currentThread(openTicket.id);
+    const ticketId = openTicket.id;
+    const isCurrent = currentThread(ticketId);
     const body = reply.trim();
     setBusy(true); setTicketMsg("");
+    const archiveFailed = (message) => new Error(`Your reply was sent and the ticket marked resolved, but it could not be archived (${message}). Tap Resolve & archive again to archive it.`);
     try {
-      const res = await supabase.functions.invoke("reply-ticket", {
-        body: {
-          ticket_id: openTicket.id, body: body || "Status set to resolved.", status: "resolved",
-          ...attachmentsPayload(replyAttachment),
-        },
-      });
-      if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
-      const { error: e2 } = await supabase.from("support_tickets")
-        .update({ archived_at: new Date().toISOString() })
-        .eq("id", openTicket.id);
-      if (e2) throw new Error(e2.message);
+      // The reply already went out on an earlier tap and only the archive
+      // failed: archive, do not answer the physician a second time. Only
+      // while the ticket is still resolved, though. A physician reply reopens
+      // it and a reply sent here since can move it, so the row itself is
+      // checked; if it moved, it is resolved again below.
+      let archived = false;
+      if (archivePending.current.has(ticketId) && !body && !replyAttachment.length) {
+        const { data: stillResolved, error: e2 } = await supabase.from("support_tickets")
+          .update({ archived_at: new Date().toISOString() })
+          .eq("id", ticketId).eq("status", "resolved").select("id");
+        if (e2) throw archiveFailed(e2.message);
+        archived = (stillResolved || []).length > 0;
+        if (!archived) archivePending.current.delete(ticketId);
+      }
+      if (!archived) {
+        const replyBody = body || "Status set to resolved.";
+        const requestId = replyRequestId(ticketId, replyBody, "resolved", replyAttachment);
+        const res = await supabase.functions.invoke("reply-ticket", {
+          body: {
+            ticket_id: ticketId, body: replyBody, status: "resolved",
+            ...attachmentsPayload(replyAttachment),
+            ...(requestId ? { client_request_id: requestId } : {}),
+          },
+        });
+        if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
+        replyRequest.current = null;
+        archivePending.current.add(ticketId);
+        if (isCurrent()) { setReply(""); setReplyAttachment([]); }
+        const { error: e2 } = await supabase.from("support_tickets")
+          .update({ archived_at: new Date().toISOString() })
+          .eq("id", ticketId);
+        if (e2) throw archiveFailed(e2.message);
+      }
+      archivePending.current.delete(ticketId);
       if (!isCurrent()) { await refreshTickets(); return; }
-      setReply(""); setReplyAttachment([]);
       setTicketMsg("Resolved and archived.");
       await refreshTickets();
       setTimeout(() => { if (isCurrent()) closeTicketDetail(); }, 900);
@@ -207,15 +247,19 @@ function AdminDashboardContent() {
     setBusy(true); setTicketMsg("");
     try {
       // A screenshot alone is a valid reply; reply-ticket gives it a stock body.
+      const replyBody = body || (newStatus ? `Status set to ${newStatus}.` : "");
+      const requestId = replyRequestId(openTicket.id, replyBody, newStatus, replyAttachment);
       const res = await supabase.functions.invoke("reply-ticket", {
         body: {
           ticket_id: openTicket.id,
-          body: body || (newStatus ? `Status set to ${newStatus}.` : ""),
+          body: replyBody,
           ...(newStatus ? { status: newStatus } : {}),
           ...attachmentsPayload(replyAttachment),
+          ...(requestId ? { client_request_id: requestId } : {}),
         },
       });
       if (res.error) throw new Error(await edgeErrorMessage(res.error, "That request failed."));
+      replyRequest.current = null;
       if (!isCurrent()) { await refreshTickets(); return; }
       const { data, error: threadError } = await loadAdminSupportThread(supabase, openTicket.id);
       if (!isCurrent()) return;
@@ -243,8 +287,8 @@ function AdminDashboardContent() {
       return;
     }
     let cancelled = false;
-    const keys = ADMIN_TAB_SOURCES[tab] || [];
-    const setters = { tickets: setTickets, feedback: setFeedback, signups: setSignups, visits: setVisits,
+    const keys = adminTabSources(tab, { showArchived });
+    const setters = { tickets: setTickets, archivedTickets: setArchivedRows, feedback: setFeedback, signups: setSignups, visits: setVisits,
       waitlist: setWaitlist, attempts: setAttempts, fields: setFields, users: setUsers,
       invites: setInvites, errors: setErrors, messages: setMessages };
     setLoading(keys.length > 0); setError("");
@@ -260,7 +304,24 @@ function AdminDashboardContent() {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [isAdmin, reloadKey, tab, rowLimits]);
+  }, [isAdmin, reloadKey, tab, rowLimits, showArchived]);
+
+  // Counts for the tab labels: unread physician replies, new error reports,
+  // people waiting on the waitlist and field proposals to review. Read on
+  // mount and whenever a tab is opened, without loading any list, so a reply
+  // to a direct message shows up here before its thread is opened.
+  const [attention, setAttention] = useState(null);
+  const messagesSeenAt = data?.settings?.adminInboxSeenAt || null;
+  const errorsSeenAt = data?.settings?.adminErrorsSeenAt || null;
+  // The stamp from before Messages was opened, so the rows that brought a new
+  // reply can still be marked after opening the tab moves the stamp to now.
+  const [repliesSince, setRepliesSince] = useState(null);
+  useEffect(() => {
+    if (!isAdmin || !supabase) return;
+    let cancelled = false;
+    readAdminAttention(supabase, { messagesSeenAt, errorsSeenAt }).then(result => { if (!cancelled) setAttention(result); });
+    return () => { cancelled = true; };
+  }, [isAdmin, reloadKey, messagesSeenAt, errorsSeenAt]);
 
   if (!isAdmin) {
     return (
@@ -273,17 +334,44 @@ function AdminDashboardContent() {
     );
   }
 
-  const hasSectionData = (ADMIN_TAB_SOURCES[tab] || []).every(key => coverage[key]?.rows && !coverage[key]?.error);
-  const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); setTab(nextTab); };
+  const sectionKeys = adminTabSources(tab, { showArchived });
+  const hasSectionData = sectionKeys.every(key => coverage[key]?.rows && !coverage[key]?.error);
+  // Opening a panel reads again (every number here used to age for the whole
+  // app session), and opening Messages or Errors marks them seen.
+  const openTab = (id) => {
+    setTab(id);
+    setReloadKey((k) => k + 1);
+    if (id === "messages") { setRepliesSince(messagesSeenAt || ""); updateSettings({ adminInboxSeenAt: new Date().toISOString() }); }
+    if (id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
+  };
+  // Only an Overview card applies a filter, and only for that drill-down. A
+  // plain tab tap opens the tab unfiltered, so "Accounts" never silently hides
+  // pending accounts after an earlier "Active account profiles" card.
+  const selectTab = (id) => { setTicketPreset({}); setAccountPreset("all"); setShowArchived(false); openTab(id); };
+  const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(nextTab); };
   const activeTickets = tickets.filter(t => !t.archived_at);
-  const archivedTickets = tickets.filter(t => t.archived_at);
+  const archivedTickets = archivedRows.filter(t => t.archived_at);
+  const archivedCount = coverage.archivedTickets?.count;
+  // A failed count read is marked "(?)", never shown as a plain label that
+  // reads the same as zero (readAdminAttention). No function yet: plain.
+  const counts = attention && !attention.error ? attention : null;
+  const countFailed = (label, noun) => ({ label: `${label} (?)`, title: `${noun} unavailable, open to check` });
   const TABS = [
     { id: "reports", label: "Overview & reports" },
-    { id: "tickets", label: "Tickets" }, { id: "messages", label: "Messages" },
-    { id: "users", label: "Accounts" }, { id: "errors", label: "Errors" },
-    { id: "signups", label: "Traffic history" }, { id: "waitlist", label: "Waitlist" },
-    { id: "fields", label: "Fields" }, { id: "ai", label: "AI" },
+    { id: "tickets", label: "Tickets" },
+    attention?.error ? { id: "messages", ...countFailed("Messages", "Unread count") }
+      : { id: "messages", label: counts?.unread_replies > 0 ? `Messages (${counts.unread_replies})` : "Messages" },
+    { id: "users", label: "Accounts" },
+    attention?.error ? { id: "errors", ...countFailed("Errors", "New error count") }
+      : { id: "errors", label: counts?.new_errors_since_seen > 0 ? `Errors (${counts.new_errors_since_seen})` : "Errors" },
+    { id: "signups", label: "Traffic history" },
+    attention?.error ? { id: "waitlist", ...countFailed("Waitlist", "Waiting count") }
+      : { id: "waitlist", label: counts ? `Waitlist (${counts.waitlist_waiting})` : "Waitlist" },
+    attention?.error ? { id: "fields", ...countFailed("Fields", "Pending field count") }
+      : { id: "fields", label: counts?.fields_pending > 0 ? `Fields (${counts.fields_pending} pending)` : "Fields" },
+    { id: "ai", label: "AI" },
     { id: "audit", label: "Control history" },
+    { id: "preview", label: "Preview as" },
   ];
 
   return (
@@ -301,14 +389,8 @@ function AdminDashboardContent() {
           <button
             key={t.id}
             aria-current={tab === t.id ? "page" : undefined}
-            onClick={() => {
-              setTab(t.id);
-              // Opening a panel reads again. Every number here aged for the
-              // whole app session before this.
-              setReloadKey((k) => k + 1);
-              if (t.id === "messages") updateSettings({ adminInboxSeenAt: new Date().toISOString() });
-              if (t.id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
-            }}
+            title={t.title}
+            onClick={() => selectTab(t.id)}
             style={{
               flex: "0 0 auto", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 8, border: "none",
               backgroundColor: tab === t.id ? T.card : "transparent",
@@ -321,6 +403,7 @@ function AdminDashboardContent() {
 
       {tab === "reports" && <AdminOperationsReport T={T} onNavigate={navigateReport} />}
       {tab === "audit" && <AdminControlHistory T={T} />}
+      {tab === "preview" && <AdminPreviewPicker T={T} />}
       {loading && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
       {error && (
         <div role="alert" style={{
@@ -334,10 +417,10 @@ function AdminDashboardContent() {
         </div>
       )}
 
-      {!loading && !error && (ADMIN_TAB_SOURCES[tab] || []).length > 0 && (
+      {!loading && !error && sectionKeys.length > 0 && (
         <div aria-label="List coverage" style={{ padding: "10px 12px", marginBottom: 12, border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMuted, fontSize: 12 }}>
           <div>List counts describe loaded records. Overview & reports contains full-database totals.</div>
-          {(ADMIN_TAB_SOURCES[tab] || []).map(key => {
+          {sectionKeys.map(key => {
             const item = coverage[key]; if (!item || item.error) return null;
             return <div key={key} style={{ marginTop: 5 }}>
               {ADMIN_SOURCES[key].label}: {item.rows.length} loaded{item.count !== null ? ` of ${item.count}` : " (total unavailable)"}
@@ -359,9 +442,9 @@ function AdminDashboardContent() {
               padding: "11px 16px", borderRadius: 10, border: `1px solid ${T.border}`,
               backgroundColor: showArchived ? T.card : "transparent", color: showArchived ? T.text : T.textMuted,
               fontSize: 13, fontWeight: 700, cursor: "pointer",
-            }}>{showArchived ? "Back to active" : `Archived (${archivedTickets.length})`}</button>
+            }}>{showArchived ? "Back to active" : Number.isSafeInteger(archivedCount) ? `Archived (${archivedCount})` : "Archived"}</button>
           </div>
-          <TicketsList key={JSON.stringify(ticketPreset)} initialFilters={ticketPreset} rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
+          <TicketsList key={JSON.stringify(ticketPreset) + String(showArchived)} initialFilters={showArchived ? {} : ticketPreset} rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
           {feedback.length > 0 && (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>
@@ -373,7 +456,7 @@ function AdminDashboardContent() {
         </>
       )}
       {tab === "messages" && (!loading || hasSectionData) && !error && (
-        <MessagesPanel messages={messages} setMessages={setMessages} users={users} myProfileId={userIdRef.current} T={T} />
+        <MessagesPanel messages={messages} users={users} myProfileId={userIdRef.current} repliesSince={repliesSince} T={T} onRefresh={() => setReloadKey(k => k + 1)} />
       )}
       {tab === "signups"  && (!loading || hasSectionData) && !error && (
         <>
@@ -515,9 +598,9 @@ function AdminDashboardContent() {
             width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10,
             backgroundColor: T.input, border: `1px solid ${T.border}`, color: T.text, fontSize: 16,
           }} />
-        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          {[["feature_request", "Feature"], ["bug", "Bug"], ["question", "Question"], ["other", "Other"]].map(([v, l]) => (
-            <button key={v} onClick={() => setNewCategory(v)} style={{
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+          {ADMIN_TICKET_CATEGORIES.map(({ value: v, label: l }) => (
+            <button key={v} onClick={() => setNewCategory(v)} aria-pressed={newCategory === v} style={{
               flex: 1, padding: "9px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
               border: `1px solid ${newCategory === v ? T.accent : T.border}`,
               backgroundColor: newCategory === v ? T.accent : "transparent",
@@ -533,12 +616,18 @@ function AdminDashboardContent() {
             fontSize: 16, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box",
           }} />
         <ScreenshotAttach value={newAttachment} onChange={setNewAttachment} style={{ marginTop: 10 }} />
-        {ticketMsg && <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: T.accent }}>{ticketMsg}</div>}
-        <button onClick={createTicket} disabled={creating} style={{
-          width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",
-          backgroundColor: creating ? T.textDim : T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800,
-          cursor: creating ? "wait" : "pointer",
-        }}>{creating ? "Creating…" : "Create ticket"}</button>
+        {(() => {
+          // Create stays off until the server's own rules are met, and says why.
+          const problem = adminTicketDraftProblem({ subject: newSubject, body: newBody, category: newCategory });
+          return <>
+            {(ticketMsg || problem) && <div role="status" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: ticketMsg ? T.accent : T.textMuted }}>{ticketMsg || problem}</div>}
+            <button onClick={createTicket} disabled={creating || !!problem} style={{
+              width: "100%", marginTop: 12, padding: "13px", borderRadius: 10, border: "none",
+              backgroundColor: creating || problem ? T.textDim : T.accent, color: "#fff", fontSize: 14.5, fontWeight: 800,
+              cursor: creating ? "wait" : problem ? "not-allowed" : "pointer",
+            }}>{creating ? "Creating…" : "Create ticket"}</button>
+          </>;
+        })()}
       </Modal>
 
     </div>
@@ -560,6 +649,10 @@ function statusColor(s) {
   return "#94a3b8";
 }
 
+// 16px or larger: below that, iOS Safari zooms the page when a control gets
+// focus and leaves it zoomed (the same rule as shared/useInputStyle.js).
+const FORM_CONTROL = { fontSize: 16 };
+
 function TicketsList({ rows, T, onOpen, initialFilters = {} }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(initialFilters.status || "all");
@@ -569,10 +662,10 @@ function TicketsList({ rows, T, onOpen, initialFilters = {} }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: T.text }}>
-        <label>Search loaded tickets <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Subject, email or details" /></label>
-        <label>Status <select value={status} onChange={event => setStatus(event.target.value)}>{["all", "unresolved", "open", "in_progress", "waiting_user", "resolved", "closed"].map(value => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select></label>
-        <label>Priority <select value={priority} onChange={event => setPriority(event.target.value)}>{["all", "urgent", "high", "normal", "low"].map(value => <option key={value}>{value}</option>)}</select></label>
-        <label>Approval <select value={approval} onChange={event => setApproval(event.target.value)}><option value="all">All tickets</option><option value="needs_review">Needs owner approval</option></select></label>
+        <label>Search loaded tickets <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Subject, email or details" style={FORM_CONTROL} /></label>
+        <label>Status <select value={status} onChange={event => setStatus(event.target.value)} style={FORM_CONTROL}>{["all", "unresolved", "open", "in_progress", "waiting_user", "resolved", "closed"].map(value => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select></label>
+        <label>Priority <select value={priority} onChange={event => setPriority(event.target.value)} style={FORM_CONTROL}>{["all", "urgent", "high", "normal", "low"].map(value => <option key={value}>{value}</option>)}</select></label>
+        <label>Approval <select value={approval} onChange={event => setApproval(event.target.value)} style={FORM_CONTROL}><option value="all">All tickets</option><option value="needs_review">Needs owner approval</option></select></label>
       </div>
       <div style={{ color: T.textMuted, fontSize: 12 }}>{filtered.length} matching tickets in {rows.length} loaded records.</div>
       {!filtered.length && <Empty T={T} text="No loaded tickets match these filters." />}
@@ -671,7 +764,9 @@ function FeedbackList({ rows, T }) {
 }
 
 function SignupsList({ rows, T, onReload, reloadedAt }) {
-  if (!rows.length) return <Empty T={T} text="No account creation days were returned." />;
+  // admin_signups_daily only ever returns the last 90 days (created_at >
+  // now() - 90 days), so "Load more" cannot widen it; say so on the total.
+  if (!rows.length) return <Empty T={T} text="No new accounts in the last 90 days." />;
   const total = rows.reduce((s, r) => s + (r.signups || 0), 0);
   // The old number added these three together and called the sum "signups",
   // which is how a panel showing four physicians read 8.
@@ -685,9 +780,10 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Account creation in the loaded history</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days (rolling; server view limit)</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
             <div style={{ fontSize: 11, color: T.textMuted }}>account records with email on file, excluding administrators</div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>Includes deleted and closed accounts. "New signup profiles" in Overview &amp; reports leaves those out and uses the window you pick there, so the two numbers can differ.</div>
           </div>
           {onReload && (
             <button onClick={onReload} style={{
@@ -859,8 +955,8 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
         Legacy founding badges: {foundingCount} (separate from paid founding memberships)
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-        <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" /></label>
-        <label>App access <select value={accessFilter} onChange={event => setAccessFilter(event.target.value)}><option value="all">All access states</option><option value="active">Active</option><option value="pending">Pending</option><option value="revoked">Paused</option></select></label>
+        <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" style={FORM_CONTROL} /></label>
+        <label>App access <select value={accessFilter} onChange={event => setAccessFilter(event.target.value)} style={FORM_CONTROL}><option value="all">All access states</option><option value="active">Active</option><option value="pending">Pending</option><option value="revoked">Paused</option></select></label>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
         Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}
@@ -906,7 +1002,6 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               {!u.deleted_at && u.id !== myProfileId && u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
               {!u.deleted_at && u.id !== myProfileId && u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
-              {!u.deleted_at && u.id !== myProfileId && u.access_status === "revoked" && chip("Back to pending", T.textDim, () => setAccess(u, "pending"), false)}
               {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
                 && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
             </div>
@@ -948,15 +1043,22 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
   };
   const [inviting, setInviting] = useState(null);
   const [inviteMsg, setInviteMsg] = useState("");
+  // Remove a row only once the server confirms exactly one row deleted. A
+  // delete that RLS refuses returns success with zero rows, so the count is
+  // the check, not just the error.
   const removeLead = async (r) => {
     const from = r.waitlist === false ? "the guide-request list" : "the waitlist";
     if (!window.confirm(`Remove ${r.email} from ${from}?`)) return;
+    setInviteMsg("");
+    const { data, error } = await supabase.from("early_access_leads").delete().eq("id", r.id).select("id");
+    if (error || data?.length !== 1) { setInviteMsg(`Could not remove ${r.email}: ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setRows(rs => rs.filter(x => x.id !== r.id));
-    await supabase.from("early_access_leads").delete().eq("id", r.id);
   };
   const removeAttempt = async (a) => {
+    setInviteMsg("");
+    const { data, error } = await supabase.from("waitlist_attempts").delete().eq("id", a.id).select("id");
+    if (error || data?.length !== 1) { setInviteMsg(`Could not dismiss ${a.email}: ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setAttempts(as2 => as2.filter(x => x.id !== a.id));
-    await supabase.from("waitlist_attempts").delete().eq("id", a.id);
   };
   const [showJoined, setShowJoined] = useState(false);
   const [showGuideOnly, setShowGuideOnly] = useState(false);
@@ -1106,13 +1208,18 @@ function FieldProposals({ rows, setRows, T }) {
   // New fields/categories the assistant created on the fly — the schema
   // evolves under founder review. Approve = keep an eye on it as a candidate
   // for a first-class field; dismiss = noise.
+  const [msg, setMsg] = useState("");
+  // The new status shows only once the server confirms one row changed.
   const setStatus = async (row, status) => {
+    setMsg("");
+    const { data, error } = await supabase.from("field_proposals").update({ status }).eq("id", row.id).select("id");
+    if (error || data?.length !== 1) { setMsg(`Could not ${status === "approved" ? "approve" : "dismiss"} "${row.label}": ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
     setRows(rs => rs.map(r => r.id === row.id ? { ...r, status } : r));
-    await supabase.from("field_proposals").update({ status }).eq("id", row.id);
   };
   if (!rows.length) return <Empty T={T} text="No new fields proposed yet. When the assistant invents a field to avoid dropping data, it lands here for your review." />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {msg && <div role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: T.danger || "#ef4444" }}>{msg}</div>}
       {rows.map(r => (
         <div key={r.id} style={{
           backgroundColor: T.card, border: `1px solid ${T.border}`,
@@ -1375,7 +1482,7 @@ function AiPanel({ users, ownKey, T }) {
  * Broadcast replies fan out into one thread per physician (admin_message_
  * reply_threads) so nobody sees anyone else's reply.
  */
-function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
+function MessagesPanel({ messages, users, myProfileId, repliesSince, T, onRefresh }) {
   const [composeOpen, setComposeOpen] = useState(false);
   const [recipient, setRecipient] = useState(""); // "" = broadcast
   const [subject, setSubject] = useState("");
@@ -1390,13 +1497,17 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
   const [replyBody, setReplyBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [detailMsg, setDetailMsg] = useState("");
+  // A failed thread read is not an empty thread: it hides "No one has
+  // replied yet." and says the replies could not be loaded.
+  const [threadError, setThreadError] = useState("");
 
   const activeUsers = users.filter(u => u.access_status === "active");
 
-  const refreshMessages = async () => {
-    const { data } = await supabase.from("admin_messages_overview").select("*").limit(200);
-    setMessages(data || []);
-  };
+  // Re-read through the section loader, so a failed read shows the section's
+  // error and Retry instead of "No messages sent yet.", and the coverage line
+  // is recounted with the list.
+  const refreshMessages = () => { onRefresh?.(); };
+  const THREAD_READ_FAILED = "Could not load the replies. Close this message and open it again to retry.";
 
   const send = async () => {
     const text = body.trim();
@@ -1415,22 +1526,25 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
   };
 
   const openDetail = async (m) => {
-    setOpenMsg(m); setDetailMsg(""); setViewingUser(null); setBroadcastThreads([]); setDirectThread([]);
+    setOpenMsg(m); setDetailMsg(""); setThreadError(""); setViewingUser(null); setBroadcastThreads([]); setDirectThread([]);
     if (m.recipient_id) {
-      const { data } = await supabase.from("admin_message_replies").select("*")
+      const { data, error } = await supabase.from("admin_message_replies").select("*")
         .eq("message_id", m.id).order("created_at");
+      if (error) { setThreadError(THREAD_READ_FAILED); return; }
       setDirectThread(data || []);
     } else {
-      const { data } = await supabase.from("admin_message_reply_threads").select("*")
+      const { data, error } = await supabase.from("admin_message_reply_threads").select("*")
         .eq("message_id", m.id).order("last_reply_at", { ascending: false });
+      if (error) { setThreadError(THREAD_READ_FAILED); return; }
       setBroadcastThreads(data || []);
     }
   };
 
   const openBroadcastThread = async (row) => {
-    setViewingUser(row); setDetailMsg("");
-    const { data } = await supabase.from("admin_message_replies").select("*")
+    setViewingUser(row); setDetailMsg(""); setThreadError(""); setDirectThread([]);
+    const { data, error } = await supabase.from("admin_message_replies").select("*")
       .eq("message_id", openMsg.id).eq("user_id", row.user_id).order("created_at");
+    if (error) { setThreadError(THREAD_READ_FAILED); return; }
     setDirectThread(data || []);
   };
 
@@ -1446,9 +1560,10 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
     setBusy(false);
     if (error) { setDetailMsg(error.message); return; }
     setReplyBody("");
-    const { data } = await supabase.from("admin_message_replies").select("*")
+    const { data, error: readError } = await supabase.from("admin_message_replies").select("*")
       .eq("message_id", openMsg.id).eq("user_id", targetUserId).order("created_at");
-    setDirectThread(data || []);
+    if (readError) setDetailMsg("Reply sent. The conversation could not refresh; close this message and open it again to see it.");
+    else setDirectThread(data || []);
     refreshMessages();
   };
 
@@ -1475,7 +1590,13 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
               onKeyDown={(ev) => { if (ev.key === "Enter") openDetail(m); }}
               style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{m.subject || "(no subject)"}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>
+                  {m.subject || "(no subject)"}
+                  {/* repliesSince: "" means never opened before, so every physician reply is new. */}
+                  {repliesSince !== null && m.last_physician_reply_at && (!repliesSince || new Date(m.last_physician_reply_at) > new Date(repliesSince)) && (
+                    <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 10, color: "#fff", backgroundColor: "#7c3aed" }}>NEW REPLY</span>
+                  )}
+                </span>
                 <span style={{
                   fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 10, flexShrink: 0,
                   color: m.recipient_id ? T.accent : "#fff",
@@ -1529,7 +1650,9 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
                 <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
                   Replies ({broadcastThreads.length})
                 </div>
-                {broadcastThreads.length === 0 ? (
+                {threadError ? (
+                  <div role="alert" style={{ fontSize: 12.5, color: T.danger || "#ef4444" }}>{threadError}</div>
+                ) : broadcastThreads.length === 0 ? (
                   <div style={{ fontSize: 12.5, color: T.textDim }}>No one has replied yet.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1554,6 +1677,7 @@ function MessagesPanel({ messages, setMessages, users, myProfileId, T }) {
 
             {showingThread && (
               <>
+                {threadError && <div role="alert" style={{ marginTop: 12, fontSize: 12.5, color: T.danger || "#ef4444" }}>{threadError}</div>}
                 {directThread.length > 0 && (
                   <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
                     {directThread.map(r => (

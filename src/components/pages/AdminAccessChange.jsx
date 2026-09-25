@@ -28,7 +28,7 @@ export default function AdminAccessChange({ change, T, onClose, onSaved }) {
     dialog?.addEventListener('keydown', trap);
     return () => { mounted.current = false; dialog?.removeEventListener('keydown', trap); if (previous?.isConnected) previous.focus(); };
   }, []);
-  const title = change.action === 'remove' ? 'Remove invitation' : change.status === 'revoked' ? 'Pause app access' : change.status === 'pending' ? 'Return account to pending' : change.kind === 'invite' ? 'Restore invitation' : 'Approve app access';
+  const title = change.action === 'remove' ? 'Remove invitation' : change.status === 'revoked' ? 'Pause app access' : change.kind === 'invite' ? 'Restore invitation' : 'Approve app access';
   const save = async () => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError('');
@@ -51,7 +51,7 @@ export default function AdminAccessChange({ change, T, onClose, onSaved }) {
       <p>{change.action === 'remove' ? 'This removes an unclaimed invitation.' : `App access will change from ${change.row.access_status || change.row.status} to ${change.status}.`}</p>
       <p style={{ color: T.textMuted }}>This changes the app access gate. Membership entitlement is checked separately. It does not cancel billing, issue a refund, or grant lifetime membership.</p>
       <label htmlFor="admin-control-reason" style={{ display: 'block', fontWeight: 700 }}>Reason for this change</label>
-      <textarea ref={reasonRef} id="admin-control-reason" value={reason} onChange={event => setReason(event.target.value)} disabled={busy || submitted} minLength={10} maxLength={500} rows={4} style={{ width: '100%', boxSizing: 'border-box', marginTop: 6, padding: 10, borderRadius: 8, background: T.input, color: T.text, border: `1px solid ${T.border}` }} />
+      <textarea ref={reasonRef} id="admin-control-reason" value={reason} onChange={event => setReason(event.target.value)} disabled={busy || submitted} minLength={10} maxLength={500} rows={4} style={{ width: '100%', boxSizing: 'border-box', marginTop: 6, padding: 10, borderRadius: 8, background: T.input, color: T.text, border: `1px solid ${T.border}`, fontSize: 16, fontFamily: 'inherit' }} />
       <p style={{ color: T.textMuted, fontSize: 12 }}>Use 10–500 characters. The reason and before/after state are recorded in Control history. Do not include passwords or clinical details.</p>
       {submitted && error && <p>Retry sends the same reviewed change and reason. If this record has changed, close this dialog and refresh the section before reviewing a new change.</p>}
       {error && <p role="alert" style={{ color: T.danger || '#ef4444' }}>{error}</p>}

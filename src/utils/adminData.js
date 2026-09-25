@@ -1,6 +1,12 @@
+import { normalizeAdminAttention } from './adminOperationsReport.js';
+
 /** Scoped admin reads. Each list has an explicit coverage count, never a business KPI. */
 export const ADMIN_SOURCES = {
-  tickets: { table: 'admin_tickets_open', label: 'Tickets', order: 'updated_at', size: 200 },
+  // Unarchived tickets are read on their own, so the oldest ticket still
+  // waiting can never fall behind newer activity in a shared recency page.
+  // Archived tickets load only when the Archived view is opened.
+  tickets: { table: 'admin_tickets_open', label: 'Active tickets', order: 'updated_at', size: 500, filter: query => query.is('archived_at', null) },
+  archivedTickets: { table: 'admin_tickets_open', label: 'Archived tickets', order: 'updated_at', size: 200, filter: query => query.not('archived_at', 'is', null) },
   feedback: { table: 'admin_feedback_recent', label: 'Legacy feedback', order: 'created_at', size: 50 },
   signups: { table: 'admin_signups_daily', label: 'Account creation days', order: 'day', size: 100, daily: true },
   visits: { table: 'admin_visits_daily', label: 'Traffic days', order: 'day', size: 100, daily: true },
@@ -15,8 +21,13 @@ export const ADMIN_SOURCES = {
 export const ADMIN_TAB_SOURCES = {
   reports: [], tickets: ['tickets', 'feedback'], messages: ['messages', 'users'],
   users: ['users', 'invites'], errors: ['errors', 'users'], signups: ['signups', 'visits'],
-  waitlist: ['waitlist', 'attempts', 'users', 'invites'], fields: ['fields'], ai: ['users'], audit: [],
+  waitlist: ['waitlist', 'attempts', 'users', 'invites'], fields: ['fields'], ai: ['users'], audit: [], preview: [],
 };
+
+/** The sources a tab reads; the Tickets tab adds the archive only while it is open. */
+export function adminTabSources(tab, { showArchived = false } = {}) {
+  return [...(ADMIN_TAB_SOURCES[tab] || []), ...(tab === 'tickets' && showArchived ? ['archivedTickets'] : [])];
+}
 
 export async function readAdminSource(client, key, requested) {
   const spec = ADMIN_SOURCES[key];
@@ -28,8 +39,9 @@ export async function readAdminSource(client, key, requested) {
     // Small pages also work with Supabase's default per-request row ceiling.
     for (let offset = 0; offset < limit;) {
       const take = Math.min(500, limit - offset);
-      let query = client.from(spec.table).select(spec.columns || '*', { count: 'exact' })
-        .order(spec.order, { ascending: false });
+      let query = client.from(spec.table).select(spec.columns || '*', { count: 'exact' });
+      if (spec.filter) query = spec.filter(query);
+      query = query.order(spec.order, { ascending: false });
       if (!spec.daily) query = query.order('id', { ascending: false });
       const result = await query.range(offset, offset + take - 1);
       if (result.error) throw result.error;
@@ -60,4 +72,28 @@ export function filterAdminUsers(rows, { query = '', access = 'all', showEmpty =
   return rows.filter(row => (showEmpty || !!(row.email || row.name || row.npi || row.last_seen_at))
     && (!needle || [row.name, row.email, row.npi, row.primary_state].some(value => String(value || '').toLocaleLowerCase().includes(needle)))
     && (access === 'all' || row.access_status === access));
+}
+
+/**
+ * The tab-label counts (unread replies, new errors, waiting leads, pending
+ * fields) without loading any list. The seen stamps the client just wrote are
+ * passed along so a tab opened a moment ago does not read as unread while
+ * that settings write syncs; the server uses the later of the two.
+ *
+ * Three outcomes, kept apart so a failure never reads like zero:
+ * - the counts;
+ * - null when the server has no such function yet (PGRST202 / 42883, before
+ *   its database update), where the labels show no count, as they always did;
+ * - { error } when the read failed or came back malformed, where the labels
+ *   say the count is unavailable.
+ */
+const ADMIN_ATTENTION_NOT_DEPLOYED = ['PGRST202', '42883'];
+export async function readAdminAttention(client, { messagesSeenAt = null, errorsSeenAt = null } = {}) {
+  try {
+    const { data, error } = await client.rpc('admin_attention_counts', { p_messages_seen_at: messagesSeenAt, p_errors_seen_at: errorsSeenAt });
+    if (error) return ADMIN_ATTENTION_NOT_DEPLOYED.includes(error.code) ? null : { error: error.message || 'The unread counts could not be read.' };
+    return normalizeAdminAttention(data) || { error: 'The server sent unreadable counts.' };
+  } catch (failure) {
+    return { error: failure?.message || 'The unread counts could not be read.' };
+  }
 }

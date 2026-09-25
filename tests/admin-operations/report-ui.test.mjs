@@ -105,3 +105,20 @@ test('expiry timer makes stale state visible and unmounted responses cannot popu
   assert.equal(unmounted.button('Export aggregate CSV').props.disabled, true);
   assert.equal(unmounted.nodes().filter(node => node.type === 'article').length, 0);
 });
+
+test('attention counts appear as Overview cards that open their tabs', async () => {
+  const f = fixture(); f.render();
+  f.requests[0].resolve({ data: { ...reportFixture(), attention: { unread_replies: 3, new_errors_since_seen: 4, waitlist_waiting: 12, fields_pending: 2 } } }); await tick();
+  const cards = f.nodes().filter(node => node.type === 'article');
+  assert.equal(cards.length, 11);
+  const text = f.text(f.render());
+  for (const label of ['Unread message replies', 'New error reports', 'Waiting on the waitlist', 'Fields awaiting review']) assert.match(text, new RegExp(label));
+  for (const [label, tab] of [['Open messages', 'messages'], ['Open waitlist', 'waitlist'], ['Open field proposals', 'fields']]) {
+    f.button(label).props.onClick(); assert.equal(f.navigation.at(-1), tab);
+  }
+});
+
+test('the report window select is 16px so iPhone Safari does not zoom on focus', () => {
+  const f = fixture(); f.render();
+  assert.ok(f.nodes().find(node => node.type === 'select').props.style.fontSize >= 16);
+});

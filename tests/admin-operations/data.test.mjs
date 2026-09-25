@@ -29,8 +29,9 @@ test('failure of any page discards partial data, never reports an empty healthy 
 });
 test('rejected network reads and malformed responses settle visibly', async () => {
   for (const mode of ['throw', 'malformed']) {
-    const db = { from() { const q = { select() { return q; }, order() { return q; }, async range() { if (mode === 'throw') throw Error('offline'); return {}; } }; return q; } };
+    const db = { from() { const q = { select() { return q; }, is() { return q; }, order() { return q; }, async range() { if (mode === 'throw') throw Error('offline'); return {}; } }; return q; } };
     const result = await readAdminSource(db, 'tickets'); assert.ok(result.error); assert.equal(result.rows, null);
+    assert.match(result.error, mode === 'throw' ? /offline/ : /did not return a list/);
   }
 });
 test('reports do not eagerly download personal working lists', () => {
@@ -56,6 +57,19 @@ test('missing version and invalid audit reason are rejected before RPC', () => {
   assert.throws(()=>adminControlRequest(change,'x'.repeat(501),'key'),/reason/);
   assert.throws(()=>adminControlRequest({...change,row:{...change.row,updated_at:null}},'Synthetic reason','key'),/Refresh/);
 });
+test('an account change is Approve or Pause; pending is refused before the RPC', () => {
+  assert.equal(adminControlRequest({...change,status:'active',row:{...change.row,access_status:'revoked'}},'Synthetic reviewed approval','key').args.p_status,'active');
+  for (const status of ['pending', undefined, 'invited']) {
+    assert.throws(()=>adminControlRequest({...change,status,row:{...change.row,access_status:'revoked'}},'Synthetic reviewed return','key'),/Approve or Pause/);
+  }
+});
+test('the Accounts panel offers no "Back to pending"', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const dashboard = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
+  const change = await readFile(new URL('../../src/components/pages/AdminAccessChange.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(dashboard, /Back to pending|setAccess\(u, "pending"\)/);
+  assert.doesNotMatch(change, /Return account to pending/);
+});
 test('invite removal passes null target status and bound profile expectation', () => {
   const request=adminControlRequest({kind:'invite',row:{id:'invite',status:'invited',updated_at:change.row.updated_at,profile_id:null},action:'remove'},'Synthetic removal','key');
   assert.equal(request.args.p_status,null); assert.equal(request.args.p_expected_profile_id,null); assert.equal(request.name,'admin_change_invite');
@@ -76,4 +90,61 @@ test('invitation receipts must identify the requested target and resulting state
     await assert.rejects(submitAdminControl({rpc:async()=>({data:bad})},invite,'Synthetic restore','key'),/matching audited change/);
   }
   await assert.rejects(submitAdminControl({rpc:async()=>({data:{audit_id:receipt.audit_id,duplicate:false}})}, {...invite,action:'remove'},'Synthetic removal','key'),/matching audited change/);
+});
+test('attention counts pass the seen stamps along; a failed read is an error, only a missing function is no counts', async () => {
+  const { readAdminAttention } = await import('../../src/utils/adminData.js');
+  const calls = [];
+  const counts = { unread_replies: 1, new_errors_since_seen: 0, waitlist_waiting: 4, fields_pending: 2 };
+  const client = response => ({ async rpc(name, args) { calls.push({ name, args }); if (response instanceof Error) throw response; return response; } });
+  assert.deepEqual(await readAdminAttention(client({ data: counts }), { messagesSeenAt: '2026-09-25T10:00:00Z', errorsSeenAt: null }), counts);
+  assert.deepEqual(calls[0], { name: 'admin_attention_counts', args: { p_messages_seen_at: '2026-09-25T10:00:00Z', p_errors_seen_at: null } });
+  // Before the database update: no function, so no counts (plain labels).
+  for (const code of ['PGRST202', '42883']) assert.equal(await readAdminAttention(client({ error: { code, message: 'Could not find the function' } })), null);
+  // Everything else is a failure the labels must show, never a quiet zero.
+  for (const response of [{ error: { code: '42501', message: 'permission denied' } }, { error: { code: 'PGRST301', message: 'JWT expired' } },
+    { data: { unread_replies: 1 } }, { data: null }, new Error('offline')]) {
+    const result = await readAdminAttention(client(response));
+    assert.equal(typeof result?.error, 'string', JSON.stringify(response));
+    assert.ok(result.error.length > 0);
+  }
+});
+test('the oldest open ticket stays loaded however much newer archived activity there is', async () => {
+  const { adminTabSources } = await import('../../src/utils/adminData.js');
+  // 300 archived tickets updated after the one open ticket still waiting.
+  const table = [{ id: 'waiting', status: 'open', archived_at: null, updated_at: '2026-06-01T00:00:00Z' },
+    ...Array.from({ length: 300 }, (_, n) => ({ id: `archived-${n}`, status: 'resolved', archived_at: '2026-09-01T00:00:00Z', updated_at: `2026-09-${String(1 + (n % 28)).padStart(2, '0')}T00:00:00Z` }))];
+  const calls = [];
+  const db = { from(name) {
+    const steps = [];
+    const q = {
+      select(_columns, options) { steps.push(['select', options.count]); return q; },
+      is(column, value) { steps.push(['is', column, value]); return q; },
+      not(column, operator, value) { steps.push(['not', column, operator, value]); return q; },
+      order(column) { steps.push(['order', column]); return q; },
+      async range(start, end) {
+        calls.push({ name, steps: [...steps], start, end });
+        let rows = table;
+        for (const [kind, column, a, b] of steps) {
+          if (kind === 'is') rows = rows.filter(row => row[column] === a);
+          if (kind === 'not') { assert.equal(a, 'is'); rows = rows.filter(row => row[column] !== b); }
+        }
+        rows = [...rows].sort((x, y) => y.updated_at.localeCompare(x.updated_at) || y.id.localeCompare(x.id));
+        return { data: rows.slice(start, end + 1), count: rows.length };
+      },
+    };
+    return q;
+  } };
+  const active = await readAdminSource(db, 'tickets');
+  assert.deepEqual(active.rows.map(row => row.id), ['waiting']);
+  assert.equal(active.count, 1);
+  const filterAt = calls[0].steps.findIndex(step => step[0] === 'is'), orderAt = calls[0].steps.findIndex(step => step[0] === 'order');
+  assert.ok(filterAt > 0 && filterAt < orderAt, 'the archive filter is applied before ordering and paging');
+  assert.equal(calls[0].end, 499);
+  const archived = await readAdminSource(db, 'archivedTickets');
+  assert.equal(archived.rows.length, 200);
+  assert.equal(archived.count, 300);
+  assert.ok(archived.rows.every(row => row.archived_at));
+  assert.deepEqual(adminTabSources('tickets'), ['tickets', 'feedback']);
+  assert.deepEqual(adminTabSources('tickets', { showArchived: true }), ['tickets', 'feedback', 'archivedTickets']);
+  assert.deepEqual(adminTabSources('users', { showArchived: true }), ['users', 'invites']);
 });

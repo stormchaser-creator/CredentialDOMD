@@ -135,3 +135,8 @@ test('control history failures do not misreport an empty audit log and unmounted
   unmounted.requests[0].resolve({ data: auditRows('LATE') }); await tick();
   assert.equal(unmounted.lateWrites, 0);
 });
+
+test('the reason box is 16px so iPhone Safari does not zoom the page when it opens focused', () => {
+  const f = fixture();
+  assert.ok(f.nodes().find(node => node.type === 'textarea').props.style.fontSize >= 16);
+});

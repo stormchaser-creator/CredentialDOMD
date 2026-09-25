@@ -118,10 +118,17 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
 
 /** In-memory write guard shared by UI and persistence; the server still enforces access. */
 export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED, now = () => globalThis.performance?.now() ?? Date.now(), currentAccount } = {}) {
-  let accountId = null, snapshot = null, receivedAt = 0, refreshFailed = false, records = null;
+  let accountId = null, snapshot = null, receivedAt = 0, refreshFailed = false, records = null, previewSource = null;
   const current = () => typeof currentAccount === "function" ? currentAccount() : accountId;
   return {
     enabled,
+    /**
+     * An admin "Preview as" view (utils/adminPreview.js). The source may only
+     * take capabilities away: whatever it returns is intersected with the
+     * real state here, so no source can grant a write the server snapshot
+     * did not. A source that throws or returns nothing leaves the real state.
+     */
+    setPreviewSource(source) { previewSource = typeof source === "function" ? source : null; },
     reset(nextAccountId = null) { accountId = nextAccountId; snapshot = null; receivedAt = 0; refreshFailed = false; records = null; },
     registerRecords(expectedAccountId, value) {
       if (accountId === expectedAccountId && current() === expectedAccountId) records = value;
@@ -141,6 +148,18 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
       if (value && refreshFailed) {
         value.needsRefresh = true;
         for (const scope of scopes) value.capabilities[scope].write = false;
+      }
+      if (value && previewSource) {
+        const real = Object.fromEntries(scopes.map(scope => [scope, Object.fromEntries(operations.map(op => [op, value.capabilities[scope][op] === true]))]));
+        let preview = null;
+        try { preview = previewSource(expectedAccountId, value); } catch { preview = null; }
+        if (preview && preview !== value && typeof preview === "object" && scopes.every(scope => preview.capabilities?.[scope] && typeof preview.capabilities[scope] === "object")) {
+          for (const scope of scopes) for (const op of operations) {
+            preview.capabilities[scope][op] = preview.capabilities[scope][op] === true && real[scope][op];
+          }
+          if (value.needsRefresh) preview.needsRefresh = true;
+          return preview;
+        }
       }
       return value;
     },
