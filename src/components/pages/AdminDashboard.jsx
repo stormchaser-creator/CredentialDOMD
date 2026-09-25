@@ -323,6 +323,10 @@ function AdminDashboardContent() {
     if (id === "messages") { setRepliesSince(messagesSeenAt || ""); updateSettings({ adminInboxSeenAt: new Date().toISOString() }); }
     if (id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
   };
+  // Only an Overview card applies a filter, and only for that drill-down. A
+  // plain tab tap opens the tab unfiltered, so "Accounts" never silently hides
+  // pending accounts after an earlier "Active account profiles" card.
+  const selectTab = (id) => { setTicketPreset({}); setAccountPreset("all"); setShowArchived(false); openTab(id); };
   const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(nextTab); };
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = tickets.filter(t => t.archived_at);
@@ -354,7 +358,7 @@ function AdminDashboardContent() {
           <button
             key={t.id}
             aria-current={tab === t.id ? "page" : undefined}
-            onClick={() => openTab(t.id)}
+            onClick={() => selectTab(t.id)}
             style={{
               flex: "0 0 auto", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 8, border: "none",
               backgroundColor: tab === t.id ? T.card : "transparent",
@@ -407,7 +411,7 @@ function AdminDashboardContent() {
               fontSize: 13, fontWeight: 700, cursor: "pointer",
             }}>{showArchived ? "Back to active" : `Archived (${archivedTickets.length})`}</button>
           </div>
-          <TicketsList key={JSON.stringify(ticketPreset)} initialFilters={ticketPreset} rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
+          <TicketsList key={JSON.stringify(ticketPreset) + String(showArchived)} initialFilters={showArchived ? {} : ticketPreset} rows={showArchived ? archivedTickets : activeTickets} T={T} onOpen={openTicketDetail} />
           {feedback.length > 0 && (
             <>
               <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>

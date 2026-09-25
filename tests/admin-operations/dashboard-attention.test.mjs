@@ -1,4 +1,5 @@
-// The Admin tab labels regained their counts without loading any list.
+// The Admin tab labels regained their counts without loading any list, and
+// Overview cards stopped leaving their filters on for later tab clicks.
 // Executes the real AdminDashboardContent with synthetic I/O.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ const tick = () => new Promise(done => setImmediate(done));
 const anchor = '    { id: "audit", label: "Control history" },\n  ];\n';
 assert.ok(source.includes(anchor), 'TABS anchor moved');
 
-function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, fields_pending: 1 } } = {}) {
+function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, fields_pending: 1 }, full = false } = {}) {
   const hooks = [], effects = [], rpcs = [], settingsWrites = [];
   let cursor = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
@@ -30,13 +31,13 @@ function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitl
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },
     '../../context/AppContext': { useApp: () => app }, '../../lib/supabase': { supabase: db }, '../../lib/admin': { useIsAdmin: () => true },
     '../../utils/adminData': adminData };
-  const injected = source.replace(anchor, anchor + '  globalThis.current = { TABS, openTab, navigateReport, tab, ticketPreset, accountPreset, showArchived, setShowArchived, repliesSince }; return null;\n') + '\nexport {AdminDashboardContent};';
+  const injected = (full ? source : source.replace(anchor, anchor + '  globalThis.current = { TABS, selectTab, navigateReport, tab, ticketPreset, accountPreset, showArchived, setShowArchived, repliesSince }; return null;\n')) + '\nexport {AdminDashboardContent};';
   const module = { exports: {} };
   const ctx = vm.createContext({ module, exports: module.exports, require: name => imports[name] || {}, console, setTimeout: () => 0 });
   vm.runInContext(transformSync(injected, { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
   const render = async () => {
     for (let round = 0; round < 4; round++) { cursor = 0; module.exports.AdminDashboardContent(); if (!effects.length) break; effects.splice(0).forEach(run => run()); await tick(); }
-    cursor = 0; module.exports.AdminDashboardContent(); return ctx.current;
+    cursor = 0; const tree = module.exports.AdminDashboardContent(); return full ? tree : ctx.current;
   };
   return { render, rpcs, settingsWrites, app };
 }
@@ -63,12 +64,49 @@ test('opening Messages marks it seen, keeps the old stamp for NEW REPLY badges, 
   const f = fixture();
   f.app.data = { settings: { adminInboxSeenAt: '2026-09-20T00:00:00.000Z' } };
   let view = await f.render();
-  view.openTab('messages');
+  view.selectTab('messages');
   view = await f.render();
   assert.equal(view.tab, 'messages');
   assert.equal(view.repliesSince, '2026-09-20T00:00:00.000Z');
   assert.ok(f.settingsWrites.some(w => w.adminInboxSeenAt));
   assert.equal(f.rpcs.at(-1).args.p_messages_seen_at, f.app.data.settings.adminInboxSeenAt);
-  view.openTab('errors'); await f.render();
+  view.selectTab('errors'); await f.render();
   assert.ok(f.settingsWrites.some(w => w.adminErrorsSeenAt));
+});
+
+test('an Overview card filter lasts for that drill-down only; tab clicks reset it', async () => {
+  const f = fixture();
+  let view = await f.render();
+  view.navigateReport('users', { access: 'active' });
+  view = await f.render();
+  assert.equal(view.accountPreset, 'active');
+  view.selectTab('reports'); view = await f.render();
+  view.selectTab('users'); view = await f.render();
+  assert.equal(view.accountPreset, 'all');
+  view.navigateReport('tickets', { status: 'unresolved', priority: 'urgent' });
+  view = await f.render();
+  assert.deepEqual({ ...view.ticketPreset }, { status: 'unresolved', priority: 'urgent' });
+  view.setShowArchived(true); view = await f.render();
+  view.selectTab('tickets'); view = await f.render();
+  assert.deepEqual({ ...view.ticketPreset }, {});
+  assert.equal(view.showArchived, false);
+});
+
+test('the Archived toggle opens archived tickets without the card filter that hid resolved ones', async () => {
+  const f = fixture({ full: true });
+  const nodes = tree => { const out = []; const visit = n => { if (Array.isArray(n)) n.forEach(visit); else if (n && typeof n === 'object' && n.props) { out.push(n); visit(n.props.children); } }; visit(tree); return out; };
+  const button = (tree, pattern) => nodes(tree).find(n => n.type === 'button' && pattern.test([].concat(n.props.children).join('')));
+  let tree = await f.render();
+  assert.ok(button(tree, /^Overview & reports$/));
+  // Drill in from the Overview "Open tickets" card, then open the archive.
+  const nav = nodes(tree).find(n => n.props.onNavigate);
+  nav.props.onNavigate('tickets', { status: 'unresolved' });
+  tree = await f.render();
+  const list = t => nodes(t).find(n => n.props.initialFilters && n.props.onOpen);
+  assert.deepEqual({ ...list(tree).props.initialFilters }, { status: 'unresolved' });
+  const activeKey = list(tree).key;
+  button(tree, /^Archived/).props.onClick();
+  tree = await f.render();
+  assert.deepEqual({ ...list(tree).props.initialFilters }, {});
+  assert.notEqual(list(tree).key, activeKey, 'the list remounts so its filters reset');
 });
