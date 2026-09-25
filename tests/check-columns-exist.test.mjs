@@ -64,7 +64,8 @@ test("every required column is created by a migration in this repo", () => {
 test("the lifecycle columns are required exactly as src/utils/lifecycle.js lists them", async () => {
   const { LIFECYCLE_COLUMNS } = await import("../src/utils/lifecycle.js");
   for (const [table, cols] of Object.entries(LIFECYCLE_COLUMNS)) assert.deepEqual(REQUIRED_COLUMNS[table], cols, table);
-  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 16);
+  // 13 lifecycle + 3 call-day split + 2 invoice email stamp.
+  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 18);
 });
 
 test("the client keys these columns stand for are the ones it writes", () => {
@@ -72,6 +73,10 @@ test("the client keys these columns stand for are the ones it writes", () => {
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.splitAtDayStart =/);
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.dayStartHour =/);
   assert.match(read("utils/billing.js"), /splitGroupId/);
+  // The invoice email stamp: written by send-invoice-email, mirrored into the
+  // device cache by Invoices.jsx, and written back with the next invoice edit.
+  assert.deepEqual(REQUIRED_COLUMNS.invoices, ["last_emailed_at", "last_emailed_to"]);
+  assert.match(read("components/features/locum/Invoices.jsx"), /lastEmailedAt: at, lastEmailedTo: to/);
 });
 
 test("CI runs this check before it builds", () => {

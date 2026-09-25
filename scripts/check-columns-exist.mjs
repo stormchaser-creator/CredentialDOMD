@@ -26,6 +26,10 @@ export const REQUIRED_COLUMNS = {
   // 20260925120000_call_day_split.sql (ticket 73202ae8)
   locum_contracts: ["split_at_day_start", "day_start_hour"],
   work_log: ["split_group_id"],
+  // 20260925130000_invoice_email_sends.sql (tickets e8cc2a02, 821d2f76).
+  // send-invoice-email writes them; the app then caches them from select *
+  // and writes them back on the next edit of the invoice.
+  invoices: ["last_emailed_at", "last_emailed_to"],
 };
 
 /** Classify one PostgREST answer. Only a definite "no such column" is missing. */

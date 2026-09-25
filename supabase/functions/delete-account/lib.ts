@@ -57,7 +57,8 @@ export const COLLECTION_TABLES: string[] = [
  * admin_message_replies is the thread under each, keyed by the physician it
  * belongs to whoever wrote the reply (user_id).
  * credential_portal_invites are the physician's administrator access grants
- * (owner_profile_id).
+ * (owner_profile_id). invoice_email_sends is the sent-once ledger of invoices
+ * emailed from the server (user_id).
  */
 export interface UserTable { table: string; column: string; optional?: boolean }
 export const USER_TABLES: UserTable[] = [
@@ -89,6 +90,11 @@ export const USER_TABLES: UserTable[] = [
   // missing-relation error is tolerated (isMissingTableError); any other
   // error still stops the deletion.
   { table: "credential_portal_invites", column: "owner_profile_id", optional: true },
+  // Who each invoice was emailed to by send-invoice-email (billing-office
+  // addresses, subjects, outcomes). optional for the same reason as above: the
+  // ledger arrives with migration 20260925130000, and a delete-account deploy
+  // that lands before it must not fail every deletion on a missing table.
+  { table: "invoice_email_sends", column: "user_id", optional: true },
 ];
 
 /**
