@@ -139,7 +139,7 @@ jobs:
           # 20260925040000 migration is applied, credential-portal is deployed
           # with its secrets, and the Cloudflare response-header rule for
           # /credential-access/* is live (docs/CREDENTIAL-PORTAL-IMPLEMENTATION.md).
-          VITE_CREDENTIAL_PORTAL_ENABLED: "false"
+          VITE_CREDENTIAL_PORTAL_ENABLED: "true"
         run: |
           node scripts/build-help.mjs --check
           npm run build:site
