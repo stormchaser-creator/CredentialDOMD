@@ -1666,7 +1666,7 @@ function parseForwarded(text: string): ParsedForward {
  * camelCase ones, because documents.linked_to is written by the app as
  * "<section>:<record id>" and the matcher joins on that.
  *
- * lifecycle_status (migration 20260925040000) lets the matcher send the
+ * lifecycle_status (migration 20260925030000) lets the matcher send the
  * record in force rather than a superseded or historical one. It is an
  * OPTIONAL column: asked for, and dropped from the query when the database
  * does not have it yet (a deploy before the migration, or a rollback), so

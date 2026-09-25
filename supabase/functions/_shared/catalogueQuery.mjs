@@ -1,7 +1,7 @@
 // A catalogue read that survives a column the database does not have yet.
 //
 // email-inbound describes every record a document request can attach. Some
-// of those columns arrive with a migration (lifecycle_status, 20260925040000).
+// of those columns arrive with a migration (lifecycle_status, 20260925030000).
 // Function deploys are manual and nothing gates them on the migration, so a
 // function deployed first, or a rollback run while it is live, made the whole
 // licences, insurance and privileges query fail: their documents were then

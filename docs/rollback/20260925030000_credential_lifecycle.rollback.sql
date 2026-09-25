@@ -1,4 +1,4 @@
--- Rollback for 20260925040000_credential_lifecycle.sql.
+-- Rollback for 20260925030000_credential_lifecycle.sql.
 --
 -- ORDER MATTERS. Revert the CLIENT and the send-reminders / email-inbound
 -- functions first, then run this. While a deployed client still writes

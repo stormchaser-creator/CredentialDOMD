@@ -67,3 +67,175 @@ export function termLabel(contract) {
   const fmt = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "";
   return from ? `${fmt(from)} to ${to ? fmt(to) : "open"}` : "";
 }
+
+// ── Ended contracts ─────────────────────────────────────────────
+//
+// A contract whose last day passed more than ENDED_AFTER_DAYS ago drops out
+// of the pickers on its own (ticket 8360f6e6: the fellowship that ended in
+// June kept appearing). It is still listed under Work > Agreements, a
+// "Show ended contracts" choice brings it back into any picker, and a picker
+// always keeps the contract already selected and any contract in force on
+// the date being logged.
+export const ENDED_AFTER_DAYS = 30;
+export const SHOW_ENDED = "__show_ended__";
+
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Today on this device's calendar, YYYY-MM-DD. */
+export const todayLocal = () => ymd(new Date());
+
+const termBounds = (c) => {
+  const starts = [c?.startDate, c?.termStart, ...(c?.coveragePeriods || []).map(p => p?.start)].filter(Boolean).sort();
+  const ends = [c?.endDate, c?.termEnd, ...(c?.coveragePeriods || []).map(p => p?.end || p?.start)].filter(Boolean).sort();
+  return { start: starts[0] || "", end: ends[ends.length - 1] || "" };
+};
+
+/** The contract's last day in force (the latest of its end date, term end and coverage blocks), or "" when open-ended. */
+export function contractEndDate(contract) {
+  return termBounds(contract).end;
+}
+
+/** True when the contract ended more than ENDED_AFTER_DAYS before `today`. */
+export function isEnded(contract, today = todayLocal()) {
+  const end = contractEndDate(contract);
+  if (!end || !today) return false;
+  const [y, m, d] = today.split("-").map(Number);
+  return end < ymd(new Date(y, m - 1, d - ENDED_AFTER_DAYS));
+}
+
+/** Whether the date falls anywhere in the contract's overall term (first start to last end), coverage gaps included. */
+export function termCovers(contract, date) {
+  if (!contract || !date) return false;
+  const { start, end } = termBounds(contract);
+  return !!start && date >= start && (!end || date <= end);
+}
+
+/**
+ * Contracts to offer in a picker: not archived, and not ended unless
+ * `showEnded`, the contract is `currentId`, or its term covers `date`.
+ */
+export function pickableContracts(contracts, currentId, { showEnded = false, date = "", today = todayLocal() } = {}) {
+  return (contracts || []).filter(c => c.id === currentId
+    || (!isArchived(c) && (showEnded || !isEnded(c, today) || (date && termCovers(c, date)))));
+}
+
+/** How many ended contracts a picker is hiding (0 once "Show ended contracts" is on). */
+export function hiddenEndedCount(contracts, currentId, opts = {}) {
+  if (opts.showEnded) return 0;
+  const shown = new Set(pickableContracts(contracts, currentId, opts).map(c => c.id));
+  return (contracts || []).filter(c => !isArchived(c) && !shown.has(c.id)).length;
+}
+
+// ── Agencies ────────────────────────────────────────────────────
+//
+// One agency often appears under two spellings ("MPLT Healthcare" and "MPLT
+// Healthcare, LLC."). Stored names are never rewritten; lists and matching
+// compare on this key instead.
+const AGENCY_SUFFIXES = new Set(["llc", "inc", "incorporated", "ltd", "corp", "corporation", "co", "llp", "pllc", "pc", "lp"]);
+
+/** Case-, punctuation- and company-suffix-insensitive key for an agency name. */
+export function agencyKey(name) {
+  const words = String(name || "").toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[.,'\u{2019}]/gu, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim().split(" ").filter(Boolean);
+  while (words.length > 1 && AGENCY_SUFFIXES.has(words[words.length - 1])) words.pop();
+  return words.join(" ");
+}
+
+/** True when two agency names are the same agency. */
+export function sameAgency(a, b) {
+  const ka = agencyKey(a);
+  return !!ka && ka === agencyKey(b);
+}
+
+// Newest first: the contract created last carries the spelling to show.
+const recency = (c) => `${c?.createdAt || "9999"}|${c?.endDate || c?.termEnd || ""}`;
+
+/**
+ * The agencies to offer as chips: one per agency, from contracts that are
+ * neither archived nor ended, spelled as on the most recently created of
+ * them, most recent first. `extra` names (an unbilled expense's agency, say)
+ * are appended when no listed agency matches them.
+ */
+export function agencyOptions(contracts, { extra = [], today = todayLocal() } = {}) {
+  const byKey = new Map();
+  for (const c of pickableContracts(contracts, null, { today })) {
+    const name = String(c.agency || "").trim();
+    const key = agencyKey(name);
+    if (!key) continue;
+    const cur = byKey.get(key);
+    if (!cur || recency(c) > cur.rank) byKey.set(key, { name, rank: recency(c) });
+  }
+  const list = [...byKey.values()].sort((a, b) => b.rank.localeCompare(a.rank)).map(x => x.name);
+  for (const n of extra) {
+    const name = String(n || "").trim();
+    if (name && !list.some(x => sameAgency(x, name))) list.push(name);
+  }
+  return list;
+}
+
+// Days either side of a booking that still belong to it: the flight out the
+// day before, the flight home or the rental return the day after.
+export const TRAVEL_DAYS = 2;
+
+// Days since the epoch for a YYYY-MM-DD date, NaN for anything else.
+const dayNumber = (d) => {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(d || ""));
+  return m ? Math.round(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000) : NaN;
+};
+
+// A contract's real bookings: its coverage blocks or, when it has none, a
+// short term (a locums assignment). A multi-year agreement's term is not a
+// booking; being inside it is weak evidence.
+function bookings(c) {
+  if (c?.coveragePeriods?.length) return c.coveragePeriods.filter(p => p?.start);
+  const from = c?.startDate || c?.termStart, to = c?.endDate || c?.termEnd;
+  if (!from || !to) return [];
+  return dayNumber(to) - dayNumber(from) <= 62 ? [{ start: from, end: to }] : [];
+}
+
+// Whole days from `date` to the nearest booking (0 inside one, Infinity with
+// none). A date or block that is not YYYY-MM-DD is never near anything.
+function bookingDistance(c, date) {
+  const d = dayNumber(date);
+  if (!Number.isFinite(d)) return Infinity;
+  let best = Infinity;
+  for (const p of bookings(c)) {
+    const s = dayNumber(p.start), e = p.end ? dayNumber(p.end) : Infinity;
+    if (!Number.isFinite(s) || Number.isNaN(e)) continue;
+    best = Math.min(best, d < s ? s - d : d > e ? d - e : 0);
+  }
+  return best;
+}
+
+/**
+ * The agency to assume for an expense dated `date`, spelled the way the
+ * chips spell it. "" when no contract with an agency is near it.
+ *
+ * Ranking, most specific first:
+ *   0  a booking contains the date (a coverage block, or a short term)
+ *   1  a booking starts or ends within TRAVEL_DAYS of it (a travel day)
+ *   2  the date falls in the contract's overall term (a gap between blocks,
+ *      or a multi-year agreement)
+ * Within a rank the nearest booking wins, then the shorter term, then the
+ * later start. A gap in one contract's term never beats the travel day of
+ * another (ticket 8360f6e6: Weatherby's gap was offered for an MPLT trip).
+ */
+export function agencyForDate(contracts, date, { today = todayLocal() } = {}) {
+  if (!date) return "";
+  const ranked = [];
+  for (const c of contracts || []) {
+    if (isArchived(c) || !agencyKey(c.agency)) continue;
+    const dist = bookingDistance(c, date);
+    const rank = dist === 0 ? 0 : dist <= TRAVEL_DAYS ? 1 : termCovers(c, date) ? 2 : -1;
+    if (rank >= 0) ranked.push({ c, rank, dist, spec: specificity(c, date), start: termBounds(c).start });
+  }
+  ranked.sort((a, b) => a.rank - b.rank || a.dist - b.dist || a.spec - b.spec || b.start.localeCompare(a.start));
+  const hit = ranked[0]?.c;
+  if (!hit) return "";
+  return agencyOptions(contracts, { today }).find(n => sameAgency(n, hit.agency)) || String(hit.agency).trim();
+}
+
+/** The picker choice that reveals ended contracts. */
+export const showEndedLabel = (n) => `Show ended contracts (${n})`;

@@ -6,7 +6,7 @@
 
 export const SECTION_FIELDS = {
   // Lifecycle keys (ticket 2c819309) are real columns on these three tables
-  // (migration 20260925040000); normalizeLifecycle cleans them on every write.
+  // (migration 20260925030000); normalizeLifecycle cleans them on every write.
   licenses: ["type", "name", "licenseNumber", "state", "issuedDate", "expirationDate", "notes", "lifecycleStatus", "dateUnknown", "supersededBy", "statusSource"],
   privileges: ["type", "name", "facility", "city", "state", "appointmentDate", "expirationDate", "notes", "lifecycleStatus", "dateUnknown", "supersededBy", "statusSource"],
   insurance: ["type", "name", "provider", "policyNumber", "coveragePerClaim", "coverageAggregate", "effectiveDate", "expirationDate", "notes", "lifecycleStatus", "dateUnknown", "supersededBy", "statusSource"],

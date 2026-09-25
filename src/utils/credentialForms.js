@@ -5,7 +5,7 @@
 // key a form writes is a real column (tests/credential-schema-contract.test.mjs).
 // The sync layer writes every key on a record as a column, and one the table
 // lacks makes PostgREST reject the WHOLE row; the licence form's noExpiration
-// checkbox did exactly that until migration 20260925040000.
+// checkbox did exactly that until migration 20260925030000.
 //
 // Pure: plain node tests import it.
 

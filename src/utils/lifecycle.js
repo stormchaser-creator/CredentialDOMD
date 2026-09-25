@@ -3,7 +3,7 @@
 // yet, without false alerts.
 //
 // Licenses, insurance and privileges carry four columns
-// (supabase/migrations/20260925040000_credential_lifecycle.sql):
+// (supabase/migrations/20260925030000_credential_lifecycle.sql):
 //   lifecycleStatus  active | provisional | pending_confirmation | superseded | historical
 //   dateUnknown      the expiration / reappointment date is not known yet
 //   supersededBy     the id of the record that replaced this one

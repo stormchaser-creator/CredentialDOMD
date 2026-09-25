@@ -4,7 +4,7 @@ import { useInputStyle } from "../../shared/useInputStyle";
 import EmptyState from "../../shared/EmptyState";
 import { TrashIcon } from "../../shared/Icons";
 import { generateId, formatDate } from "../../../utils/helpers";
-import { contractsForDate, contractIdForDate, termLabel, coversDate, selectableContracts } from "../../../utils/contractsForDate";
+import { contractsForDate, contractIdForDate, termLabel, coversDate, pickableContracts, hiddenEndedCount, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
 import { codeFromText, parseDictatedDate } from "../../../utils/cptCoder";
 import { searchCPT } from "../../../utils/cptSearch";
 import { Modal, Field } from "../../shared";
@@ -63,6 +63,8 @@ function RVULog() {
   // What the surgeon explicitly picked, if anything. The contract actually
   // used is derived below, never stored, so it can't go stale against the date.
   const [pickedId, setPickedId] = useState("");
+  // Pickers leave out archived and long-ended contracts until asked.
+  const [showEnded, setShowEnded] = useState(false);
   // The agreement in force on the entry date wins. A pick only holds while its
   // own term still covers that date: a contract picked once used to stay
   // selected as the date changed, so August work silently landed on an October
@@ -71,7 +73,7 @@ function RVULog() {
     const cov = coveringContract(date);
     if (pickedId && contracts.some(c => c.id === pickedId && coversDate(c, date))) return pickedId;
     if (cov) return cov;
-    return pickedId || contracts[0]?.id || "";
+    return pickedId || pickableContracts(contracts, null)[0]?.id || "";
   }, [pickedId, contracts, date, coveringContract]);
   const setContractId = setPickedId;
   // True when the chosen agreement's term does not include the entry date.
@@ -447,13 +449,15 @@ function RVULog() {
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...iS, minWidth: 0, flex: 1 }} />
               {contracts.length > 1 && (
-                <select value={contractId} onChange={e => setContractId(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
+                <select value={contractId} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : setContractId(e.target.value))} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
                   {(() => {
-                    const { covering, rest } = contractsForDate(selectableContracts(contracts, contractId), date);
+                    const { covering, rest } = contractsForDate(pickableContracts(contracts, contractId, { showEnded, date }), date);
+                    const hidden = hiddenEndedCount(contracts, contractId, { showEnded, date });
                     const lbl = (c) => `${c.shortName || c.facility}${termLabel(c) ? ` · ${termLabel(c)}` : ""}`;
                     return (<>
                       {covering.map(c => <option key={c.id} value={c.id}>{lbl(c)}</option>)}
                       {rest.map(c => <option key={c.id} value={c.id}>{lbl(c)} (not scheduled then)</option>)}
+                      {hidden > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hidden)}</option>}
                     </>);
                   })()}
                 </select>
@@ -621,9 +625,10 @@ function RVULog() {
             <Field label="Date"><input type="date" value={encDraft.date || ""} onChange={ev => setEncDraft(d => ({ ...d, date: ev.target.value }))} style={iS} /></Field>
             {contracts.length > 0 && (
               <Field label="Facility / contract">
-                <select value={encDraft.contractId || ""} onChange={ev => setEncDraft(d => ({ ...d, contractId: ev.target.value || null }))} style={{ ...iS, appearance: "auto" }}>
+                <select value={encDraft.contractId || ""} onChange={ev => (ev.target.value === SHOW_ENDED ? setShowEnded(true) : setEncDraft(d => ({ ...d, contractId: ev.target.value || null })))} style={{ ...iS, appearance: "auto" }}>
                   <option value="">— none —</option>
-                  {selectableContracts(contracts, encDraft.contractId).map(c => <option key={c.id} value={c.id}>{c.shortName || c.facility}</option>)}
+                  {pickableContracts(contracts, encDraft.contractId, { showEnded, date: encDraft.date }).map(c => <option key={c.id} value={c.id}>{c.shortName || c.facility}</option>)}
+                  {hiddenEndedCount(contracts, encDraft.contractId, { showEnded, date: encDraft.date }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, encDraft.contractId, { showEnded, date: encDraft.date }))}</option>}
                 </select>
               </Field>
             )}

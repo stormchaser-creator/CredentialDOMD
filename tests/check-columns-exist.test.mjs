@@ -1,59 +1,82 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { classifyColumn, checkColumns, REQUIRED_COLUMNS } from "../scripts/check-tables-exist.mjs";
-import { LIFECYCLE_COLUMNS } from "../src/utils/lifecycle.js";
+import { readFileSync, readdirSync } from "node:fs";
+import { classify, checkColumns, REQUIRED_COLUMNS } from "../scripts/check-columns-exist.mjs";
 
-// The deploy preflight also refuses a client whose new keys have no column in
-// production: one unknown column rejects the WHOLE row on save. Offline here;
-// CI runs it against production before the build.
+// The deploy preflight that stops a client writing a column before its
+// migration. These run offline; the live check runs in CI against production.
+// The answers below are the ones production gave on 2026-09-25 for a missing
+// column (work_log.split_group_id, before its migration) and a present one.
 
-test("only a definite 42703 counts as a missing column", () => {
-  assert.equal(classifyColumn(400, { code: "42703", message: "column licenses.lifecycle_status does not exist" }), "missing");
-  assert.equal(classifyColumn(200, []), "present");
-  assert.equal(classifyColumn(401, { code: "42501" }), "present", "Postgres resolves columns before privileges");
-  for (const [s, b] of [[400, { code: "PGRST100" }], [404, { code: "PGRST205" }], [500, null], [502, { message: "bad gateway" }]]) {
-    assert.equal(classifyColumn(s, b), "unknown", `${s} ${JSON.stringify(b)}`);
-  }
-});
+const MISSING = [400, { code: "42703", details: null, hint: null, message: "column work_log.split_group_id does not exist" }];
+const PRESENT = [200, []];
 
-test("the lifecycle columns are required, exactly as the migration adds them", () => {
-  assert.deepEqual(REQUIRED_COLUMNS.licenses, LIFECYCLE_COLUMNS.licenses);
-  assert.deepEqual(REQUIRED_COLUMNS.insurance, LIFECYCLE_COLUMNS.insurance);
-  assert.deepEqual(REQUIRED_COLUMNS.privileges, LIFECYCLE_COLUMNS.privileges);
-  const sql = readFileSync(new URL("../supabase/migrations/20260925040000_credential_lifecycle.sql", import.meta.url), "utf8");
-  for (const [table, cols] of Object.entries(REQUIRED_COLUMNS)) {
-    const block = sql.slice(sql.indexOf(`alter table public.${table}\n`), sql.indexOf(";", sql.indexOf(`alter table public.${table}\n`)));
-    for (const col of cols) assert.match(block, new RegExp(`add column if not exists ${col} `), `${table}.${col} is added by the migration`);
+test("only a definite 42703 counts as missing", () => {
+  assert.equal(classify(...MISSING), "missing");
+  assert.equal(classify(...PRESENT), "present");
+  assert.equal(classify(401, { code: "42501" }), "present", "permission denied means the column resolved");
+  assert.equal(classify(403, { code: "42501" }), "present");
+  for (const [s, b] of [[500, null], [400, { code: "PGRST100" }], [404, { code: "PGRST205" }], [401, { code: "PGRST301" }], [502, { message: "bad gateway" }]]) {
+    assert.equal(classify(s, b), "unknown", `${s} ${JSON.stringify(b)}`);
   }
 });
 
 const fakeFetch = (answers) => async (url) => {
   const u = new URL(url);
-  const id = `${u.pathname.split("/").pop()}.${u.searchParams.get("select")}`;
-  const [status, body] = answers[id] || [200, []];
+  const name = `${u.pathname.split("/").pop()}.${u.searchParams.get("select")}`;
+  assert.equal(u.searchParams.get("limit"), "0", "never reads a row");
+  const [status, body] = answers[name] || PRESENT;
   return { status, json: async () => body };
 };
 
-test("each missing column is reported by name", async () => {
-  const r = await checkColumns({ url: "https://x.test", key: "k", fetchImpl: fakeFetch({
-    "licenses.no_expiration": [400, { code: "42703" }],
-    "privileges.date_unknown": [400, { code: "42703" }],
-  }) });
-  assert.deepEqual(r.missing, ["licenses.no_expiration", "privileges.date_unknown"]);
+test("a column production lacks is reported by table and name", async () => {
+  const r = await checkColumns({ url: "https://x.test", key: "k", fetchImpl: fakeFetch({ "work_log.split_group_id": MISSING }) });
+  assert.deepEqual(r.missing, ["work_log.split_group_id"]);
   assert.deepEqual(r.unsure, []);
-  assert.equal(r.columns.length, 13);
 });
 
-test("columns production has, including ones anon may not read, pass", async () => {
-  const r = await checkColumns({ url: "https://x.test", key: "k", fetchImpl: fakeFetch({ "insurance.status_source": [401, { code: "42501" }] }) });
+test("every required column present passes", async () => {
+  const r = await checkColumns({ url: "https://x.test", key: "k", fetchImpl: fakeFetch({}) });
   assert.deepEqual(r.missing, []);
   assert.deepEqual(r.unsure, []);
+  assert.ok(r.columns.includes("locum_contracts.split_at_day_start"));
 });
 
 test("an unreachable database fails closed instead of passing", async () => {
-  const r = await checkColumns({ url: "https://x.test", key: "k", required: { licenses: ["lifecycle_status"] },
-    fetchImpl: async () => { throw new Error("ECONNREFUSED"); } });
+  const r = await checkColumns({ url: "https://x.test", key: "k", required: { work_log: ["split_group_id"] }, fetchImpl: async () => { throw new Error("offline"); } });
   assert.deepEqual(r.missing, []);
-  assert.deepEqual(r.unsure, ["licenses.lifecycle_status (unreachable)"]);
+  assert.deepEqual(r.unsure, ["work_log.split_group_id (unreachable)"]);
+});
+
+test("every required column is created by a migration in this repo", () => {
+  const dir = new URL("../supabase/migrations/", import.meta.url);
+  const sql = readdirSync(dir).filter(f => f.endsWith(".sql")).map(f => readFileSync(new URL(f, dir), "utf8")).join("\n");
+  // One statement may add several columns across lines.
+  const statements = sql.split(";");
+  for (const [table, cols] of Object.entries(REQUIRED_COLUMNS)) {
+    for (const col of cols) {
+      const ok = statements.some(st => new RegExp(`alter table public\\.${table}\\b`).test(st) && new RegExp(`add column if not exists ${col}\\b`).test(st));
+      assert.ok(ok, `${table}.${col} is added by a migration`);
+    }
+  }
+});
+
+test("the lifecycle columns are required exactly as src/utils/lifecycle.js lists them", async () => {
+  const { LIFECYCLE_COLUMNS } = await import("../src/utils/lifecycle.js");
+  for (const [table, cols] of Object.entries(LIFECYCLE_COLUMNS)) assert.deepEqual(REQUIRED_COLUMNS[table], cols, table);
+  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 16);
+});
+
+test("the client keys these columns stand for are the ones it writes", () => {
+  const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), "utf8");
+  assert.match(read("components/features/locum/Contracts.jsx"), /entry\.splitAtDayStart =/);
+  assert.match(read("components/features/locum/Contracts.jsx"), /entry\.dayStartHour =/);
+  assert.match(read("utils/billing.js"), /splitGroupId/);
+});
+
+test("CI runs this check before it builds", () => {
+  const ci = readFileSync(new URL("../.github/workflows/deploy-gh-pages.yml", import.meta.url), "utf8");
+  const check = ci.indexOf("node scripts/check-columns-exist.mjs");
+  assert.ok(check > 0, "the workflow runs the column check");
+  assert.ok(check < ci.indexOf("name: Build the app"), "before the build step");
 });

@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { useApp } from "../../../context/AppContext";
 import Modal from "../../shared/Modal";
 import { formatDate } from "../../../utils/helpers";
+import { callDayStartHour, hourLabel, DEFAULT_CALL_DAY_START_HOUR } from "../../../utils/billing";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -108,6 +109,9 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
           contract.orientationHourlyRate ? `orientation $${contract.orientationHourlyRate}/hr` : null,
           contract.orientationFee ? `orientation $${contract.orientationFee}` : null,
           `${contract.incrementMinutes || 15}-min increments`,
+          // The call-day settings, only once they differ from the old fixed rule.
+          contract.callStipend && callDayStartHour(contract) !== DEFAULT_CALL_DAY_START_HOUR ? `call day starts ${hourLabel(callDayStartHour(contract))}` : null,
+          contract.callStipend && contract.splitAtDayStart === true ? "calls crossing the start of the call day are split" : null,
         ].filter(Boolean).join(" · ")}
       </div>
       {contract.notes && (

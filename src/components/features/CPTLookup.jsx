@@ -6,6 +6,7 @@ import { generateId } from "../../utils/helpers";
 import { searchCPT } from "../../utils/cptSearch";
 import { aiCPTLookup } from "../../utils/cptAILookup";
 import { aiAvailable, describeAiStatus } from "../../utils/aiClient";
+import { pickableContracts } from "../../utils/contractsForDate";
 
 // Local calendar date — a UTC slice would file late-evening work on tomorrow
 const localDay = (d) => {
@@ -74,7 +75,9 @@ function CPTLookup() {
   // Looking a code up and billing it are the same errand — log it straight
   // into the RVU ledger instead of making him retype it on the Locum tab.
   const logToBilling = useCallback((c) => {
-    const contracts = data.locumContracts || [];
+    // Only a single CURRENT agreement is assumed: an archived or long-ended
+    // one no longer counts toward "there is only one".
+    const contracts = pickableContracts(data.locumContracts, null);
     addItem("encounters", {
       id: generateId(),
       createdAt: new Date().toISOString(),

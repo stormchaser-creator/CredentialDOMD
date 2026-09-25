@@ -13,8 +13,8 @@ import { pgBin, pgSkip } from './credential-portal/postgresFixture.mjs';
 // client ships. Own port: node --test runs files in parallel.
 const PORT = '57419';
 const run = promisify(execFile);
-const MIGRATION = fs.readFileSync(new URL('../supabase/migrations/20260925040000_credential_lifecycle.sql', import.meta.url), 'utf8');
-const ROLLBACK = fs.readFileSync(new URL('../docs/rollback/20260925040000_credential_lifecycle.rollback.sql', import.meta.url), 'utf8');
+const MIGRATION = fs.readFileSync(new URL('../supabase/migrations/20260925030000_credential_lifecycle.sql', import.meta.url), 'utf8');
+const ROLLBACK = fs.readFileSync(new URL('../docs/rollback/20260925030000_credential_lifecycle.rollback.sql', import.meta.url), 'utf8');
 
 async function startPostgres() {
   const bin = pgBin();
