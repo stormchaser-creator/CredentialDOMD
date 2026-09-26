@@ -223,9 +223,15 @@ Step by step:
    `ERROR_IP_PEPPER`, `ANTHROPIC_DAILY_LIMIT`, `AI_DAILY_LIMIT`, and the
    optional `RESEND_API_BASE` and `BACKUP_PART_MAX_BYTES`. `SUPABASE_URL`,
    `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided by the
-   platform. `WELCOME_HOOK_SECRET` must equal the literal inside
-   `welcome_new_lead()` in `schema/ddl.sql`. Everything else comes from the
-   password manager or the vendor dashboard; the old project cannot show them.
+   platform. `WELCOME_HOOK_SECRET` must equal vault secret
+   `welcome_hook_secret` on the new project (every database caller reads it
+   from there since `20260925140000_hook_secret_vault.sql`). Generate a fresh
+   value rather than carrying the old one: set it on the functions, then
+   `select vault.create_secret('<value>', 'welcome_hook_secret')`, and
+   `scripts/sql/hook-secret-audit.sql` must return zero rows. After that,
+   `scripts/rotate-hook-secret.sh` (with `SUPABASE_PROJECT_REF`) rotates both
+   together. Everything else comes from the password manager or the vendor
+   dashboard; the old project cannot show them.
 
    ```bash
    npx supabase secrets set --project-ref NEWREF RESEND_API_KEY=... WELCOME_HOOK_SECRET=... CLERK_ISSUER=https://clerk.credentialdomd.com ...

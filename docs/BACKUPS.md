@@ -144,8 +144,10 @@ in that part's `README.html`. Nothing is ever dropped in silence.
 Two ways in:
 
 * **Cron hook.** Header `x-hook-secret` equal to the `WELCOME_HOOK_SECRET`
-  function secret. Body `{}` runs every opted-in active profile; body
-  `{ "profile_id": "<uuid>" }` runs one.
+  function secret. `dispatch_monthly_backups()` reads the same value from
+  vault secret `welcome_hook_secret` at call time; rotate both with
+  `scripts/rotate-hook-secret.sh`. Body `{}` runs every opted-in active
+  profile; body `{ "profile_id": "<uuid>" }` runs one.
 * **Clerk JWT** (`clerkProfile`). That caller gets a backup of their own account
   and nothing else. An admin may pass `profile_id` to build someone else's.
   On-demand builds are capped at 3 per user per 24 hours; the answer to "I need
@@ -239,7 +241,9 @@ npx supabase db push --project-ref hkpnnsjcwprrwobmpqyy
 # 3. Confirm the job landed.
 #    select jobname, schedule from cron.job where jobname = 'monthly-backup';
 
-# 4. Dry run against one account before the 1st, with the hook secret:
+# 4. Dry run against one account before the 1st, with the hook secret
+#    (select decrypted_secret from vault.decrypted_secrets
+#     where name = 'welcome_hook_secret'):
 #    curl -s -X POST https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/build-backup \
 #      -H "x-hook-secret: $WELCOME_HOOK_SECRET" -H "Content-Type: application/json" \
 #      -d '{"profile_id":"<a profile uuid>"}'
