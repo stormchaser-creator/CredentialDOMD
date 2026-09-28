@@ -11,10 +11,16 @@ const SUBJECT = /^user_[A-Za-z0-9]{1,120}$/;
 const HASH = /^[a-f0-9]{64}$/;
 const isUuid = value => typeof value === 'string' && UUID.test(value);
 const isSubject = value => typeof value === 'string' && SUBJECT.test(value);
-const BASES = Object.freeze([...new Set([
-  ...Object.entries(BASE_KEYS).filter(([name]) => name !== 'lastIdentity').map(([, base]) => base),
-  DEVICE_KEYS_BASE, WIPE_SEEN_KEY,
-])]);
+// The journal (schemaVersion 1) stores one entry per base, in this order, and
+// validateJournal refuses any other list. It is written once per device and
+// read on every load, so this list must never follow BASE_KEYS: adding
+// accessAnswer to BASE_KEYS (a5379beb) made every existing journal invalid
+// and stopped the account from loading. A new base needs a new schemaVersion
+// that still accepts version 1 journals.
+const BASES = Object.freeze([
+  BASE_KEYS.data, BASE_KEYS.vault, BASE_KEYS.chat, BASE_KEYS.archives, BASE_KEYS.timer,
+  BASE_KEYS.lastContract, BASE_KEYS.pendingOps, BASE_KEYS.callsync, DEVICE_KEYS_BASE, WIPE_SEEN_KEY,
+]);
 const issued = new WeakMap();
 const running = new Map();
 const encoder = new TextEncoder();
