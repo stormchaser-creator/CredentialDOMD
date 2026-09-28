@@ -46,7 +46,9 @@ export function useBillingReturn(limitedLaunch, accountId, { win = globalThis.wi
     kind: state.kind,
     phase: landed ? "confirmed" : state.phase,
     // A beta holder's opt-in is charged at the beta's end, not at Checkout.
-    deferred: access?.freeBeta?.state === "active",
+    // Unknown (null) until there is a fresh answer: a page loaded back from
+    // Stripe has none yet, and a device's remembered one can be out of date.
+    deferred: !access || access.needsRefresh === true ? null : access.freeBeta?.state === "active",
     retry: () => setState(current => current && { ...current, phase: "confirming", round: current.round + 1 }),
     dismiss: () => setState(current => current && { ...current, dismissed: true }),
   };

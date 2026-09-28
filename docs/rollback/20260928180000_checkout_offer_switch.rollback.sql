@@ -19,7 +19,9 @@ do $$ begin
  end if;
 end $$;
 
+drop function if exists public.supersede_limited_checkout(uuid,text,boolean,uuid,jsonb,text,uuid,text);
 drop function if exists public.supersede_limited_checkout(uuid,text,boolean,uuid,jsonb);
+drop function if exists public.retire_limited_checkout_attempt(uuid,text,boolean,uuid,jsonb);
 drop function if exists public.limited_checkout_supersede_candidate(uuid,text,boolean);
 
 revoke all on function public.claim_limited_billing_checkout(uuid,text,boolean,text,uuid,text) from public,anon,authenticated,service_role;

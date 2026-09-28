@@ -17,7 +17,7 @@ import { BILLING_RETURN_COPY, clearBillingReturn, membershipLanded, readBillingR
 import { createCheckoutFailureReporter } from '../../src/utils/checkoutFailure.js';
 
 const owner = 'user_synthetic_funnel';
-const THEME = { text: '#text', textMuted: '#muted', textDim: '#dim', border: '#border', card: '#card', bg: '#bg', accent: '#accent', neutralDim: '#neutral', warning: '#warning', success: '#success' };
+const THEME = { text: '#text', textMuted: '#muted', textDim: '#dim', border: '#border', card: '#card', bg: '#bg', accent: '#accent', neutralDim: '#neutral', warning: '#warning', success: '#success', danger: '#danger', dangerDim: '#dangerdim' };
 const snapshot = () => ({
   schemaVersion: 1, policyVersion: PUBLIC_BILLING_POLICY.version, evaluatedAt: '2030-10-01T12:00:00Z',
   enforcementEnabled: true, accessStatus: 'pending', purchasedOfferId: null, billingEnabled: true,
@@ -179,6 +179,8 @@ test('when no fresh answer comes, the buyer is told to try again and nothing is 
   assert.deepEqual(f.redirects, []);
   assert.match(f.html(), /Your membership could not be confirmed just now\. Check your connection and try again\. Nothing was charged\./);
   assert.equal(button(f, 'Continue to secure payment').props.disabled, false, 'not left busy');
+  // The operator can tell a buyer was stopped at Continue with no request sent.
+  assert.deepEqual(f.reports, [['Membership checkout stopped on the page (access_unconfirmed)', 'error', { event: 'membership_checkout_failed', action: 'checkout', phase: 'client', during: null, httpStatus: null, code: 'access_unconfirmed' }]]);
   // The server's eligibility check is never skipped: the offer that is no longer
   // eligible on the fresh answer is refused before any checkout request.
   const onScreen = button(f, 'Continue to secure payment').props.onClick;
@@ -187,6 +189,7 @@ test('when no fresh answer comes, the buyer is told to try again and nothing is 
   await onScreen();
   assert.equal(f.calls.some(c => c[0] === 'checkout'), false);
   assert.match(f.html(), /This offer is no longer available for this account\./);
+  assert.deepEqual(f.reports.map(r => [r[0], r[2].phase]), [['Membership checkout stopped on the page (access_unconfirmed)', 'client'], ['Membership checkout stopped on the page (offer_unavailable)', 'client']]);
 });
 
 test('a checkout failure is reported once per session per code, with nothing about who', async () => {
@@ -307,4 +310,161 @@ test('the app shows the notice on the membership gate and above the app, from on
   assert.match(app, /<BillingReturnNotice \/>\s*<LimitedLaunchMembership onActivated/);
   assert.match(context, /const billingReturn = useBillingReturn\(limitedLaunch, user\?\.id\);/);
   assert.match(context, /limitedLaunch: \{ \.\.\.limitedLaunch, [^}]*billingReturn \}/);
+});
+
+// Review fixes (2026-09-28): where a failed Continue says why on a phone, the
+// Refresh offer path on a stale answer, the page after paying, the neutral
+// return line, the hint's contrast and the reports for refusals made here.
+const offerPanel = f => find(f.render(), n => n.type === 'section' && n.props['aria-label'] !== 'Membership');
+const failures = [
+  ['billing_unavailable', 503, /Membership could not be updated\. Your saved records have not changed\./],
+  ['checkout_pending', 503, /Your checkout is still being checked\. Please try again shortly\./],
+  ['subscription_already_exists', 409, /You already have a subscription\. A second purchase cannot start here\./],
+  ['checkout_offer_already_selected', 409, /Your saved checkout has different terms\./],
+  ['billing_disabled', 503, /Payments are not open yet\./],
+];
+
+test('a failed Continue says why inside the offer, beside the button, and brings that line into view', async () => {
+  for (const [code, httpStatus, copy] of failures) {
+    const f = fixture();
+    f.client.checkout = async () => { f.calls.push(['checkout']); throw Object.assign(Error('x'), { code, httpStatus, phase: 'http' }); };
+    await reviewCore(f);
+    tick(f);
+    f.render(); active.flush();
+    await button(f, 'Continue to secure payment').props.onClick();
+    const panel = offerPanel(f);
+    assert.ok(panel, `${code}: the offer stays on screen`);
+    const alert = find(panel, n => n.props?.role === 'alert');
+    assert.ok(alert, `${code}: the reason is inside the offer`);
+    assert.match(textOf(alert), copy, code);
+    assert.equal(alert.props.style.fontSize, 16, '16px on a phone');
+    assert.equal(alert.props.style.color, THEME.text);
+    const html = f.html();
+    assert.equal(html.match(copy.source.startsWith('Membership') ? /Membership could not be updated/g : new RegExp(copy.source, 'g')).length, 1, `${code}: said once, not also at the top`);
+    const seen = [];
+    alert.props.ref.current = { scrollIntoView: options => seen.push(options) };
+    active.flush();
+    assert.deepEqual(seen, [{ behavior: 'smooth', block: 'nearest' }], `${code}: scrolled into view`);
+  }
+  // The page's own refusals keep the offer too: a review that expired before Continue.
+  const f = fixture();
+  f.client.quote = async ({ offerId }) => ({ ...quoteFor(offerId), expiresAt: '2000-01-01T00:00:00Z' });
+  await reviewCore(f);
+  tick(f);
+  await button(f, 'Continue to secure payment').props.onClick();
+  assert.match(textOf(find(offerPanel(f), n => n.props?.role === 'alert')), /This offer has expired\./);
+  assert.deepEqual(f.reports.map(r => [r[0], r[2].phase]), [['Membership checkout stopped on the page (quote_expired)', 'client']]);
+  // Without an offer on screen the line stays at the top, and is brought into view there.
+  const g = fixture();
+  g.client.quote = async () => { throw Object.assign(Error('x'), { code: 'signup_disabled', httpStatus: 403, phase: 'http' }); };
+  await reviewCore(g);
+  assert.ok(!offerPanel(g), "no offer on screen");
+  const top = find(g.render(), n => n.type === 'p' && n.props.role === 'status' && textOf(n).includes('New membership enrollment is not open yet'));
+  assert.ok(top?.props.ref, 'the top line can be scrolled to');
+});
+
+test('Refresh offer on a stale answer asks for a fresh one, then quotes; with none it says so instead of doing nothing', async () => {
+  const f = fixture();
+  await reviewCore(f);
+  tick(f);
+  f.context.limitedLaunch.access.needsRefresh = true;
+  await button(f, 'Refresh offer').props.onClick();
+  assert.deepEqual(f.calls, [['quote', 'core'], ['refresh']], 'a fresh answer was asked for; no quote without one');
+  assert.match(f.html(), /Your membership could not be confirmed just now\./);
+  assert.deepEqual(f.reports.map(r => [r[0], r[2].phase]), [['Membership quote stopped on the page (access_unconfirmed)', 'client']]);
+  // The reviews stay reachable on the last answer; a tap refreshes first and then quotes.
+  const review = button(f, 'Review Credential offer');
+  assert.equal(review.props.disabled, false);
+  f.context.limitedLaunch.refresh = async () => { f.calls.push(['refresh']); f.context.limitedLaunch.access.needsRefresh = false; };
+  await review.props.onClick();
+  assert.deepEqual(f.calls.slice(2), [['refresh'], ['quote', 'core']]);
+  assert.match(f.html(), /Continue to secure payment/);
+  assert.equal(button(f, 'Refresh offer').props.disabled, false, 'not left busy');
+  // A fresh answer that no longer allows the offer says so.
+  f.context.limitedLaunch.access.needsRefresh = true;
+  f.context.limitedLaunch.refresh = async () => { f.calls.push(['refresh']); Object.assign(f.context.limitedLaunch.access, { needsRefresh: false, checkoutEligible: false }); };
+  await button(f, 'Refresh offer').props.onClick();
+  assert.equal(f.calls.filter(c => c[0] === 'quote').length, 2);
+  assert.match(f.html(), /This offer is no longer available for this account\./);
+});
+
+test('an offer this account cannot review looks unavailable, not like a live button', () => {
+  const f = fixture();
+  f.context.limitedLaunch.access.checkoutEligible = false;
+  for (const label of ['Review Credential offer', 'Review Credential + Practice offer']) {
+    const b = button(f, label);
+    assert.equal(b.props.disabled, true);
+    assert.equal(b.props.style.background, THEME.neutralDim, label);
+    assert.equal(b.props.style.color, THEME.textDim, label);
+    assert.equal(b.props.style.cursor, 'not-allowed', label);
+    assert.equal(b.props.style.fontSize, 16);
+  }
+  f.context.limitedLaunch.access = { ...snapshot(), checkoutResumeAvailable: true, checkoutResumeOfferId: 'core_locum', billingEnabled: false };
+  const resume = button(f, 'Resume checkout');
+  assert.equal(resume.props.disabled, true);
+  assert.equal(resume.props.style.cursor, 'not-allowed');
+  const g = fixture();
+  assert.equal(button(g, 'Review Credential offer').props.style.background, THEME.card, 'an available one keeps its look');
+});
+
+test('back from a completed Checkout, the page offers nothing more to buy until the membership shows it', () => {
+  for (const phase of ['confirming', 'delayed']) {
+    const f = fixture();
+    f.context.limitedLaunch.billingReturn = { kind: 'complete', phase, deferred: null, retry() {}, dismiss() {} };
+    const html = f.html();
+    assert.match(html, /Your checkout is being confirmed\. There is nothing more to choose or pay here\./, phase);
+    assert.doesNotMatch(html, /Review Credential|Resume checkout|Choose whether to purchase|founding place/, phase);
+  }
+  const canceled = fixture();
+  canceled.context.limitedLaunch.billingReturn = { kind: 'canceled', phase: 'canceled', retry() {}, dismiss() {} };
+  assert.match(canceled.html(), /Review Credential offer/, 'canceled keeps the offers');
+  const landed = fixture();
+  landed.context.limitedLaunch.billingReturn = { kind: 'complete', phase: 'confirmed', retry() {}, dismiss() {} };
+  assert.doesNotMatch(landed.html(), /nothing more to choose or pay/);
+  // The delayed line's support address is a link, as elsewhere on the page.
+  const f = fixture();
+  f.context.limitedLaunch.billingReturn = { kind: 'complete', phase: 'delayed', retry() {}, dismiss() {} };
+  active.begin();
+  assert.match(renderToStaticMarkup(Notice({})), /contact <a href="mailto:support@credentialdomd\.com"[^>]*>support@credentialdomd\.com<\/a>\./);
+});
+
+test('back from Stripe with no fresh answer yet, the notice says nothing about a payment', async () => {
+  const r = returnFixture('?billing=complete', null);
+  assert.equal(r.render().deferred, null, 'unknown before the first answer');
+  r.launch.access = { ...snapshot(), needsRefresh: true };
+  assert.equal(r.render().deferred, null, 'unknown on a stale answer');
+  r.launch.access = { ...snapshot(), freeBeta: { state: 'active', startsAt: '2030-09-20T12:00:00Z', endsAt: '2030-10-20T12:00:00Z', autoCharges: false } };
+  assert.equal(r.render().deferred, true, 'a beta opt-in, once known');
+  r.launch.access = snapshot();
+  assert.equal(r.render().deferred, false, 'charged at Checkout, once known');
+  await settle();
+  const f = fixture();
+  const notice = deferred => { f.context.limitedLaunch.billingReturn = { kind: 'complete', phase: 'confirming', deferred, retry() {}, dismiss() {} }; active.begin(); return renderToStaticMarkup(Notice({})); };
+  assert.match(notice(null), />Checkout complete\. Confirming your membership\.\.\.</);
+  assert.doesNotMatch(notice(null), /Payment received|No payment was taken/);
+  assert.match(notice(false), /Payment received\./);
+  assert.match(notice(true), /No payment was taken today\./);
+});
+
+test('the tick hint is in the danger colour, which meets 4.5:1 on the offer panel in both themes', async () => {
+  const f = fixture();
+  await reviewCore(f);
+  find(f.render(), n => n.type === 'span' && 'data-consent-gate' in n.props).props.onClick();
+  const hint = find(f.render(), n => n.type === 'span' && n.props.role === 'status' && textOf(n) === 'Tick the box above to continue.');
+  assert.equal(hint.props.style.color, THEME.danger);
+  const { THEMES } = await import('../../src/constants/themes.js');
+  const luminance = hex => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  for (const [name, theme] of Object.entries(THEMES)) assert.ok(contrast(theme.danger, theme.bg) >= 4.5, `${name}: ${contrast(theme.danger, theme.bg).toFixed(2)}`);
+});
+
+test('a payment page made after the answer changed is not opened, and that is reported', async () => {
+  const f = fixture();
+  await reviewCore(f);
+  tick(f);
+  f.client.checkout = async () => { f.calls.push(['checkout']); f.context.limitedLaunch.access.checkoutEligible = false; return { url: 'https://checkout.stripe.com/c/pay/synthetic' }; };
+  await button(f, 'Continue to secure payment').props.onClick();
+  assert.deepEqual(f.redirects, []);
+  assert.deepEqual(f.reports.map(r => [r[0], r[2].phase, r[2].code]), [['Membership checkout stopped on the page (checkout_discarded)', 'client', 'checkout_discarded']]);
+  assert.ok(!JSON.stringify(f.reports).includes('checkout.stripe.com'));
 });

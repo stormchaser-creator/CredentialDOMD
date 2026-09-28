@@ -10,12 +10,16 @@
 -- The rule is unchanged: at most one live Checkout, and never a second charge.
 -- A refused claim now names the previous attempt when it can be retired. The
 -- service expires that attempt's Stripe sessions itself, reads them back as
--- expired with no subscription, and hands that proof to
--- supersede_limited_checkout, which retires the attempt (and returns an unpaid
--- founding reservation) under the same account-row lock and founding advisory
--- lock every claim, settlement and release takes. Only then can a new claim
--- create a new attempt. A paid, committed or subscription-bound attempt, or one
--- a live worker still holds, is never retired.
+-- expired with no subscription, and hands that proof, with the new claim, to
+-- supersede_limited_checkout. In ONE transaction, under the account-row lock
+-- and founding advisory lock every claim, settlement and release takes, held
+-- from before the retirement to commit, it retires the attempt (returning an
+-- unpaid founding reservation) and makes the new claim. No other buyer's claim
+-- runs in between, so a buyer retrying the same $99 offer at full capacity
+-- keeps a place (retiring and claiming apart freed it for a round trip). A
+-- refused new claim undoes the retirement too. A paid, committed or
+-- subscription-bound attempt, or one a live worker still holds, is never
+-- retired.
 --
 -- Idempotent. The reviewed claim bodies are kept byte for byte behind a
 -- private name, as the founding capacity migration did. No gate, price, offer,
@@ -71,11 +75,16 @@ begin
  return r;
 end $$;
 
+-- An earlier draft of this migration granted the retirement on its own.
+drop function if exists public.supersede_limited_checkout(uuid,text,boolean,uuid,jsonb);
+
 -- p_proof comes from the service's own fresh Stripe reads after it expired
 -- every session of this attempt: {attempt_id, customer_id, status:'expired',
 -- subscription_id:null, session_ids:[...]}. An open attempt's saved session
 -- must be among them. True when the attempt is retired (or already was).
-create or replace function public.supersede_limited_checkout(p_profile_id uuid,p_clerk_subject text,p_livemode boolean,p_attempt_id uuid,p_proof jsonb)
+-- Private: only supersede_limited_checkout below calls it, inside the same
+-- transaction as the new claim.
+create or replace function public.retire_limited_checkout_attempt(p_profile_id uuid,p_clerk_subject text,p_livemode boolean,p_attempt_id uuid,p_proof jsonb)
 returns boolean language plpgsql security definer set search_path=public,pg_temp as $$
 declare a public.billing_checkout_attempts%rowtype; q public.limited_billing_quotes%rowtype; s public.limited_founding_slots%rowtype; customer text;
 begin
@@ -113,8 +122,35 @@ begin
  return true;
 end $$;
 
+-- Retire the unpaid attempt and make the new claim together. Returns the new
+-- claim's answer: 'claimed' with its quote when both happened, the claim's
+-- refusal (with nothing retired) when the new claim was refused, and
+-- {state:'not_retired'} when the proof did not retire the attempt.
+create or replace function public.supersede_limited_checkout(p_profile_id uuid,p_clerk_subject text,p_livemode boolean,p_attempt_id uuid,p_proof jsonb,p_offer_id text,p_preview_id uuid,p_consent_hash text)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare r jsonb;
+begin
+ -- Taken here, outside the block below, so undoing a refused claim does not
+ -- let them go: another claim waits until this transaction commits.
+ perform 1 from public.billing_accounts where profile_id=p_profile_id and livemode=p_livemode for update;
+ perform pg_advisory_xact_lock(8222,case when p_livemode then 1 else 0 end);
+ begin
+  if not public.retire_limited_checkout_attempt(p_profile_id,p_clerk_subject,p_livemode,p_attempt_id,p_proof) then
+   return jsonb_build_object('state','not_retired');
+  end if;
+  r:=public.claim_limited_billing_checkout(p_profile_id,p_clerk_subject,p_livemode,p_offer_id,p_preview_id,p_consent_hash);
+  if r->>'state' is distinct from 'claimed' then raise exception using errcode='CDS01',message='new claim refused'; end if;
+ exception when sqlstate 'CDS01' then
+  -- The retirement and the refused claim are rolled back; the buyer keeps
+  -- the attempt (and any place) they had.
+  return r-'prior';
+ end;
+ return r;
+end $$;
+
 revoke all on function public.claim_limited_billing_checkout_before_switch(uuid,text,boolean,text,uuid,text) from public,anon,authenticated,service_role;
 revoke all on function public.limited_checkout_supersede_candidate(uuid,text,boolean) from public,anon,authenticated,service_role;
-revoke all on function public.claim_limited_billing_checkout(uuid,text,boolean,text,uuid,text),public.supersede_limited_checkout(uuid,text,boolean,uuid,jsonb) from public,anon,authenticated,service_role;
-grant execute on function public.claim_limited_billing_checkout(uuid,text,boolean,text,uuid,text),public.supersede_limited_checkout(uuid,text,boolean,uuid,jsonb) to service_role;
+revoke all on function public.retire_limited_checkout_attempt(uuid,text,boolean,uuid,jsonb) from public,anon,authenticated,service_role;
+revoke all on function public.claim_limited_billing_checkout(uuid,text,boolean,text,uuid,text),public.supersede_limited_checkout(uuid,text,boolean,uuid,jsonb,text,uuid,text) from public,anon,authenticated,service_role;
+grant execute on function public.claim_limited_billing_checkout(uuid,text,boolean,text,uuid,text),public.supersede_limited_checkout(uuid,text,boolean,uuid,jsonb,text,uuid,text) to service_role;
 commit;

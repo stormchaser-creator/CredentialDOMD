@@ -13,14 +13,23 @@
 export const BILLING_RETURN_DELAYS_MS = Object.freeze([1000, 2000, 3000, 5000, 8000, 13000, 21000]);
 
 export const BILLING_RETURN_COPY = Object.freeze({
+  // Only once a fresh membership answer shows the buyer was charged at Checkout.
   confirming: "Payment received. Confirming your membership...",
   // An opt-in during a free beta collects $0 at Checkout; saying "Payment
   // received" would be untrue.
   confirmingDeferred: "Checkout complete. No payment was taken today. Confirming your membership...",
+  // Before that answer (a fresh page load back from Stripe, or a stale one):
+  // true of both, and says nothing about money.
+  confirmingUnknown: "Checkout complete. Confirming your membership...",
   confirmed: "Your membership is confirmed.",
   delayed: "Confirming your membership is taking longer than usual. Check again in a minute, or contact support@credentialdomd.com.",
   canceled: "Checkout was canceled. Nothing was charged.",
+  // The membership page in place of its offers while the purchase is confirmed.
+  membershipPending: "Your checkout is being confirmed. There is nothing more to choose or pay here.",
 });
+
+/** The support address in the delayed line, to render as a mailto link. */
+export const BILLING_SUPPORT_EMAIL = "support@credentialdomd.com";
 
 /** "complete", "canceled" or null, from a location.search string. */
 export function readBillingReturn(search) {

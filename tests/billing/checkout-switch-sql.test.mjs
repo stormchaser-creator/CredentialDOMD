@@ -70,13 +70,22 @@ async function startPostgres() {
     if (result.code) throw new Error(result.stderr);
     return result.stdout ? JSON.parse(result.stdout) : null;
   };
+  // A session kept open between statements, to interleave another with it.
+  const session = () => {
+    const child = spawn(path.join(bin, 'psql'), ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', PORT, '-U', 'postgres', '-d', 'postgres'], { env });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    const closed = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => resolve({ code, stdout: stdout.trim(), stderr })); });
+    return { send: statement => child.stdin.write(`${statement}\n`), end: () => { child.stdin.end(); return closed; } };
+  };
   const close = async () => { await exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
-  return { sql, as, value, close };
+  return { sql, as, value, session, close };
 }
 
 test('an unpaid Checkout can be retired so the buyer switches offer or retries, never two live sessions', { skip: pgSkip(), timeout: 180000 }, async t => {
   const db = await startPostgres();
-  const { sql, as, value } = db;
+  const { sql, as, value, session } = db;
   try {
     await sql(`create role anon nologin;create role authenticated nologin;create role service_role nologin bypassrls;
       create schema auth;grant usage on schema auth to authenticated,service_role;
@@ -118,13 +127,15 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
       const privateCalls = [
         `select claim_limited_billing_checkout_before_switch('${pid(1)}','${subject(1)}',true,'core',gen_random_uuid(),'x')`,
         `select limited_checkout_supersede_candidate('${pid(1)}','${subject(1)}',true)`,
+        // Retiring apart from the new claim would free a $99 place for a round trip.
+        `select retire_limited_checkout_attempt('${pid(1)}','${subject(1)}',true,gen_random_uuid(),'{}')`,
       ];
       for (const who of ['anon', 'authenticated', 'service_role']) for (const call of privateCalls) assert.ok(await denied(who, call), `${who}: ${call}`);
       for (const who of ['anon', 'authenticated']) {
-        assert.ok(await denied(who, `select supersede_limited_checkout('${pid(1)}','${subject(1)}',true,gen_random_uuid(),'{}')`));
+        assert.ok(await denied(who, `select supersede_limited_checkout('${pid(1)}','${subject(1)}',true,gen_random_uuid(),'{}','core',gen_random_uuid(),'x')`));
         assert.ok(await denied(who, `select claim_limited_billing_checkout('${pid(1)}','${subject(1)}',true,'core',gen_random_uuid(),'x')`));
       }
-      assert.equal(await value(`supersede_limited_checkout('${pid(1)}','${subject(1)}',true,gen_random_uuid(),'{}')`), false);
+      assert.deepEqual(await value(`supersede_limited_checkout('${pid(1)}','${subject(1)}',true,gen_random_uuid(),'{}','core',gen_random_uuid(),'x')`), { state: 'not_retired' });
     });
 
     // One reviewed promise (a historical no-card beta holder), then public
@@ -149,7 +160,16 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
       assert.equal(r.code, 0, r.stderr);
     };
     const proof = (n, attemptId, sessions, patch = {}) => ({ attempt_id: attemptId, customer_id: `cus_Switch${n}`, status: 'expired', subscription_id: null, session_ids: sessions, ...patch });
-    const supersede = (n, attemptId, p) => value(`supersede_limited_checkout('${pid(n)}','${subject(n)}',true,'${attemptId}',${lit(p)})`);
+    // Retire the attempt and claim with preview v, in one transaction.
+    const supersede = (n, attemptId, p, v) => value(`supersede_limited_checkout('${pid(n)}','${subject(n)}',true,'${attemptId}',${lit(p)},'${v.offer_id}','${v.id}','${v.consent_hash}')`);
+    const supersedeCall = (n, attemptId, p, v) => `supersede_limited_checkout('${pid(n)}','${subject(n)}',true,'${attemptId}',${lit(p)},'${v.offer_id}','${v.id}','${v.consent_hash}')`;
+    // The private retirement on its own, as the owner.
+    const retire = async (n, attemptId, p) => (await sql(`select retire_limited_checkout_attempt('${pid(n)}','${subject(n)}',true,'${attemptId}',${lit(p)})`)) === 't';
+    const notRetired = { state: 'not_retired' };
+    const until = async (check, what) => {
+      for (let i = 0; i < 500; i++) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
+      throw new Error(`timed out waiting for ${what}`);
+    };
     const attempt = async n => JSON.parse(await sql(`select to_jsonb(a) from billing_checkout_attempts a where profile_id='${pid(n)}' and livemode`) || 'null');
     const slots = where => sql(`select count(*) from limited_founding_slots where livemode and ${where}`).then(Number);
 
@@ -174,32 +194,41 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
         proof(1, first.attempt_id, ['cs_Switch1First'], { customer_id: 'cus_Other' }), proof(1, first.attempt_id, ['cs_Switch1First'], { status: 'open' }),
         proof(1, first.attempt_id, ['cs_Switch1First'], { subscription_id: 'sub_Switch1' }), proof(1, crypto.randomUUID(), ['cs_Switch1First']),
         proof(1, first.attempt_id, ['not-a-session'])]) {
-        assert.equal(await supersede(1, first.attempt_id, bad), false, JSON.stringify(bad));
+        assert.deepEqual(await supersede(1, first.attempt_id, bad, bundle), notRetired, JSON.stringify(bad));
+        assert.equal(await retire(1, first.attempt_id, bad), false, JSON.stringify(bad));
       }
-      assert.equal(await supersede(2, first.attempt_id, proof(1, first.attempt_id, ['cs_Switch1First'])), false, 'another profile cannot retire it');
+      assert.deepEqual(await supersede(2, first.attempt_id, proof(1, first.attempt_id, ['cs_Switch1First']), bundle), notRetired, 'another profile cannot retire it');
       assert.equal((await attempt(1)).state, 'open');
       assert.equal(await slots('true'), occupied);
 
-      assert.equal(await supersede(1, first.attempt_id, proof(1, first.attempt_id, ['cs_Switch1First'])), true);
-      assert.equal((await attempt(1)).state, 'expired');
-      assert.equal(await slots('true'), occupied - 1, 'the unpaid public place is free again');
-      assert.equal(await supersede(1, first.attempt_id, proof(1, first.attempt_id, ['cs_Switch1First'])), true, 'retiring twice is not an error');
-      assert.equal(await sql(`select to_jsonb(q) from limited_billing_quotes q where attempt_id='${first.attempt_id}'`), quoteBefore, 'the accepted quote is never rewritten');
+      // A new claim that is refused undoes the retirement with it.
+      const lapsed = await preview(1, 'core_locum');
+      await sql(`update limited_billing_previews set expires_at=clock_timestamp()-interval '1 second' where id='${lapsed.id}'`);
+      assert.deepEqual(await supersede(1, first.attempt_id, proof(1, first.attempt_id, ['cs_Switch1First']), lapsed), { state: 'quote_expired' });
+      assert.equal((await attempt(1)).state, 'open', 'still the saved attempt');
+      assert.equal((await attempt(1)).attempt_id, first.attempt_id);
+      assert.equal(await slots('true'), occupied, 'and its place');
 
-      const second = await claim(1, bundle);
+      const second = await supersede(1, first.attempt_id, proof(1, first.attempt_id, ['cs_Switch1First']), bundle);
+      assert.equal(await slots('true'), occupied - 1, 'the unpaid public place is free again');
+      assert.equal(await sql(`select to_jsonb(q) from limited_billing_quotes q where attempt_id='${first.attempt_id}'`), quoteBefore, 'the accepted quote is never rewritten');
+      assert.deepEqual(await supersede(1, first.attempt_id, proof(1, first.attempt_id, ['cs_Switch1First']), bundle), notRetired, 'the retired attempt is gone; a repeat retires nothing');
+
       assert.equal(second.state, 'claimed');
+      assert.equal(second.prior, undefined);
       assert.notEqual(second.attempt_id, first.attempt_id);
+      assert.equal((await attempt(1)).attempt_id, second.attempt_id);
       assert.equal(second.quote.offer_id, 'core_locum');
       assert.equal(second.quote.annual_cents, 24500);
       assert.equal(second.quote.public_founding_slot, null);
 
       // And back again: the bundle session was opened and cancelled too.
       await pinSave(1, second, 'cs_Switch1Second');
-      const back = await claim(1, await preview(1, 'core'));
+      const core2 = await preview(1, 'core');
+      const back = await claim(1, core2);
       assert.equal(back.state, 'offer_conflict');
       assert.equal(back.prior.attempt_id, second.attempt_id);
-      assert.equal(await supersede(1, second.attempt_id, proof(1, second.attempt_id, ['cs_Switch1Second'])), true);
-      const third = await claim(1, await preview(1, 'core'));
+      const third = await supersede(1, second.attempt_id, proof(1, second.attempt_id, ['cs_Switch1Second']), core2);
       assert.equal(third.state, 'claimed');
       assert.equal(third.quote.annual_cents, 9900);
       assert.ok(third.quote.public_founding_slot, 'the $99 place is reserved again for the new attempt');
@@ -209,20 +238,22 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
       await enroll(2);
       const first = await claim(2, await preview(2, 'core_locum'));
       assert.equal(first.state, 'claimed');
-      const live = await claim(2, await preview(2, 'core'));
+      const core = await preview(2, 'core');
+      const live = await claim(2, core);
       assert.equal(live.state, 'offer_conflict');
       assert.equal(live.prior, undefined, 'a worker inside its lease may still be creating the session');
-      assert.equal(await supersede(2, first.attempt_id, proof(2, first.attempt_id, [])), false);
+      assert.deepEqual(await supersede(2, first.attempt_id, proof(2, first.attempt_id, []), core), notRetired);
+      assert.equal(await retire(2, first.attempt_id, proof(2, first.attempt_id, [])), false);
 
       // The Stripe call failed: the lease ran out and a day went by.
       await sql(`update billing_checkout_attempts set lease_until=clock_timestamp()-interval '1 second',created_at=now()-interval '23 hours 30 minutes' where profile_id='${pid(2)}'`);
-      const stuck = await claim(2, await preview(2, 'core_locum'));
+      const again = await preview(2, 'core_locum');
+      const stuck = await claim(2, again);
       assert.equal(stuck.state, 'reconciliation_required');
       assert.equal(stuck.prior.attempt_id, first.attempt_id);
       assert.equal(stuck.prior.state, 'creating');
       assert.equal(stuck.prior.session_id, null);
-      assert.equal(await supersede(2, first.attempt_id, proof(2, first.attempt_id, ['cs_Switch2Orphan'])), true);
-      const retried = await claim(2, await preview(2, 'core_locum'));
+      const retried = await supersede(2, first.attempt_id, proof(2, first.attempt_id, ['cs_Switch2Orphan']), again);
       assert.equal(retried.state, 'claimed');
       assert.notEqual(retried.attempt_id, first.attempt_id);
     });
@@ -243,8 +274,7 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
         assert.equal(after.lease_token, before.lease_token);
         assert.equal(after.lease_until, before.lease_until);
         assert.equal(refused.prior.attempt_id, first.attempt_id);
-        assert.equal(await supersede(3, first.attempt_id, proof(3, first.attempt_id, [])), true);
-        const fresh = await claim(3, changed);
+        const fresh = await supersede(3, first.attempt_id, proof(3, first.attempt_id, []), changed);
         assert.equal(fresh.state, 'claimed');
         assert.equal(fresh.quote.annual_cents, 14900);
         assert.equal(await slots(`profile_id='${pid(3)}'`), 0, 'the retired founding reservation was returned');
@@ -258,19 +288,20 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
       const first = await claim(4, await preview(4, 'core'));
       await pinSave(4, first, 'cs_Switch4');
       await sql(`update limited_founding_slots set state='committed',subscription_id='sub_Switch4' where attempt_id='${first.attempt_id}'`);
-      const committed = await claim(4, await preview(4, 'core_locum'));
+      const bundle = await preview(4, 'core_locum');
+      const committed = await claim(4, bundle);
       assert.equal(committed.state, 'offer_conflict');
       assert.equal(committed.prior, undefined);
-      assert.equal(await supersede(4, first.attempt_id, proof(4, first.attempt_id, ['cs_Switch4'])), false);
+      assert.deepEqual(await supersede(4, first.attempt_id, proof(4, first.attempt_id, ['cs_Switch4']), bundle), notRetired);
       await sql(`update limited_founding_slots set state='reserved',subscription_id=null where attempt_id='${first.attempt_id}'`);
 
       for (const status of ['incomplete', 'active', 'past_due']) {
         await sql(`insert into billing_subscriptions(profile_id,livemode,subscription_id,offer_id,status,membership_active,period_end,last_event_id,last_event_created)
           values('${pid(4)}',true,'sub_Switch4','core','${status}',false,now()+interval '1 day','evt_Switch4',1)`);
-        const blocked = await claim(4, await preview(4, 'core_locum'));
+        const blocked = await claim(4, bundle);
         assert.ok(['offer_conflict', 'reconciliation_required'].includes(blocked.state), blocked.state);
         assert.equal(blocked.prior, undefined, status);
-        assert.equal(await supersede(4, first.attempt_id, proof(4, first.attempt_id, ['cs_Switch4'])), false, status);
+        assert.deepEqual(await supersede(4, first.attempt_id, proof(4, first.attempt_id, ['cs_Switch4']), bundle), notRetired, status);
         await sql(`delete from billing_subscriptions where profile_id='${pid(4)}'`);
       }
       assert.equal((await attempt(4)).state, 'open');
@@ -281,18 +312,67 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
       const first = await claim(5, await preview(5, 'core'));
       await pinSave(5, first, 'cs_Switch5');
       const bundle = await preview(5, 'core_locum');
-      const retired = await Promise.all(Array.from({ length: 8 }, () => supersede(5, first.attempt_id, proof(5, first.attempt_id, ['cs_Switch5']))));
-      assert.deepEqual(retired, Array(8).fill(true));
-      const claims = await Promise.all(Array.from({ length: 8 }, () => claim(5, bundle)));
-      const won = claims.filter(c => c.state === 'claimed');
-      assert.equal(won.length, 1, JSON.stringify(claims.map(c => c.state)));
-      assert.ok(claims.every(c => ['claimed', 'busy'].includes(c.state)));
+      const raced = await Promise.all(Array.from({ length: 12 }, (_, i) => i % 3 ? supersede(5, first.attempt_id, proof(5, first.attempt_id, ['cs_Switch5']), bundle) : claim(5, bundle)));
+      const won = raced.filter(c => c.state === 'claimed');
+      assert.equal(won.length, 1, JSON.stringify(raced.map(c => c.state)));
+      assert.ok(raced.every(c => ['claimed', 'not_retired', 'offer_conflict', 'busy'].includes(c.state)), JSON.stringify(raced.map(c => c.state)));
       assert.equal(Number(await sql(`select count(*) from limited_billing_quotes where profile_id='${pid(5)}'`)), 2);
-      assert.equal(await supersede(5, first.attempt_id, proof(5, first.attempt_id, ['cs_Switch5'])), false, 'the old attempt is gone');
-      assert.equal(await supersede(5, won[0].attempt_id, proof(5, won[0].attempt_id, [])), false, 'the new one is inside its lease');
+      assert.deepEqual(await supersede(5, first.attempt_id, proof(5, first.attempt_id, ['cs_Switch5']), bundle), notRetired, 'the old attempt is gone');
+      assert.deepEqual(await supersede(5, won[0].attempt_id, proof(5, won[0].attempt_id, []), bundle), notRetired, 'the new one is inside its lease');
       const now = await attempt(5);
       assert.equal(now.attempt_id, won[0].attempt_id);
       assert.equal(now.state, 'creating');
+    });
+
+    await t.test('at full founding capacity a buyer retrying the same $99 offer keeps a place: no other claim runs between retiring and claiming', async () => {
+      // Buyer 8's first $99 attempt reserved a public place, then its Stripe
+      // call failed; 23 hours on, the claim asks for it to be retired. Buyer 9
+      // wants a $99 place at the same moment, and all 100 are occupied.
+      await enroll(8);
+      await enroll(9);
+      const first = await claim(8, await preview(8, 'core'));
+      assert.ok(first.quote.public_founding_slot);
+      const theirs = await preview(9, 'core');
+      await sql(`insert into limited_founding_slots(livemode,slot,state,promise_email) select true,n,'promised','filler-'||n||'@example.invalid'
+        from generate_series(1,100) n where not exists(select 1 from limited_founding_slots s where s.livemode and s.slot=n)`);
+      const stale = () => sql(`update billing_checkout_attempts set lease_until=clock_timestamp()-interval '1 second',created_at=now()-interval '23 hours 30 minutes' where profile_id='${pid(8)}'`);
+      try {
+        assert.equal(await slots('true'), 100);
+        assert.equal((await claim(9, theirs)).state, 'founding_capacity_pending', 'full');
+        await stale();
+        const retry = await preview(8, 'core');
+        const stuck = await claim(8, retry);
+        assert.equal(stuck.state, 'reconciliation_required');
+        assert.equal(stuck.prior.attempt_id, first.attempt_id);
+
+        // Buyer 8's retirement and new claim run and stay uncommitted; buyer 9's claim starts in between.
+        const held = session();
+        held.send(`set application_name='switch_held';begin;set local role service_role;select to_jsonb((${supersedeCall(8, first.attempt_id, proof(8, first.attempt_id, []), retry)}));`);
+        await until(async () => await sql("select state from pg_stat_activity where application_name='switch_held'") === 'idle in transaction', 'the held transaction');
+        const waiting = claim(9, theirs);
+        await until(async () => await sql("select count(*) from pg_stat_activity where wait_event_type='Lock' and wait_event='advisory'") === '1', "buyer 9's claim to wait");
+        held.send('commit;');
+        const done = await held.end();
+        assert.equal(done.code, 0, done.stderr);
+        const kept = JSON.parse(done.stdout);
+        assert.equal(kept.state, 'claimed');
+        assert.notEqual(kept.attempt_id, first.attempt_id);
+        assert.ok(kept.quote.public_founding_slot, 'the new attempt holds a $99 place');
+        assert.equal(kept.quote.annual_cents, 9900);
+        assert.equal((await waiting).state, 'founding_capacity_pending', "buyer 9 waited and found no place");
+        assert.equal(await slots('true'), 100);
+        assert.equal(await slots(`profile_id='${pid(9)}'`), 0);
+
+        // The two steps apart, as the handler first made them: buyer 9 takes the freed place.
+        await stale();
+        const retryAgain = await preview(8, 'core');
+        assert.equal((await claim(8, retryAgain)).prior.attempt_id, kept.attempt_id);
+        assert.equal(await retire(8, kept.attempt_id, proof(8, kept.attempt_id, [])), true);
+        assert.equal((await claim(9, theirs)).state, 'claimed');
+        assert.equal((await claim(8, retryAgain)).state, 'founding_capacity_pending', 'the place was lost in the gap');
+      } finally {
+        await sql(`delete from limited_founding_slots where promise_email like 'filler-%'`);
+      }
     });
 
     await t.test('a no-card beta holder can switch the deferred offer; the promised place goes back to them', async () => {
@@ -308,10 +388,9 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
       assert.ok(bundle.billing_start_at, 'the other offer is also deferred to the original beta end');
       const refused = await claim(6, bundle);
       assert.equal(refused.state, 'offer_conflict');
-      assert.equal(await supersede(6, first.attempt_id, proof(6, first.attempt_id, ['cs_Switch6'])), true);
+      const second = await supersede(6, first.attempt_id, proof(6, first.attempt_id, ['cs_Switch6']), bundle);
       assert.equal(await sql(`select state||':'||coalesce(attempt_id::text,'none') from limited_founding_slots where livemode and promise_email=${text(promise)}`), 'promised:none');
       assert.equal(await value(`limited_deferred_checkout_resume('${pid(6)}','${subject(6)}',true,null)`), null, 'nothing is left to resume');
-      const second = await claim(6, bundle);
       assert.equal(second.state, 'claimed');
       assert.equal(second.quote.billing_start_at, core.billing_start_at);
     });
@@ -321,7 +400,7 @@ test('an unpaid Checkout can be retired so the buyer switches offer or retries, 
       await sql(ROLLBACK);
       assert.equal(await definition(WRAPPER), originalWrapper);
       assert.equal(await acl(WRAPPER), originalAcl);
-      for (const gone of ['claim_limited_billing_checkout_before_switch', 'supersede_limited_checkout', 'limited_checkout_supersede_candidate']) {
+      for (const gone of ['claim_limited_billing_checkout_before_switch', 'supersede_limited_checkout', 'retire_limited_checkout_attempt', 'limited_checkout_supersede_candidate']) {
         assert.equal(await sql(`select count(*) from pg_proc where proname='${gone}'`), '0', gone);
       }
       await enroll(7);

@@ -54,7 +54,8 @@ function fixture({ priorState = 'open' } = {}) {
   const deps = { mode: 'test', now: () => now, assertConfigured: () => {}, authenticate: async () => ({ profileId: PROFILE, clerkSubject: 'user_a' }), stripe: () => stripe, log: entry => calls.push(['log', entry]),
     store: { profile: async () => profile, previewById: async () => preview, eligibility: async () => eligibility, account: async () => account,
       claimLimitedCheckout: async () => { calls.push(['claim']); return structuredClone(claims.shift() || { state: 'busy' }); },
-      supersedeCheckout: async (...args) => { calls.push(['supersede', ...args]); return true; },
+      // As supersede_limited_checkout: the retirement and the new claim in one call.
+      supersedeCheckout: async (...args) => { calls.push(['supersede', ...args]); return structuredClone(claims.shift() || { state: 'busy' }); },
       pinPrice: async (...args) => calls.push(['pin', ...args]), saveCheckout: async (...args) => calls.push(['save', ...args]),
       closeCheckout: async (...args) => calls.push(['close', ...args]),
     } };
@@ -68,11 +69,12 @@ test('switching offer after a cancelled Checkout expires the old session, retire
   const response = await createLimitedLaunchHandlers(f.deps, config).checkout(paidRequest());
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { url: 'https://checkout.stripe.com/c/cs_New' });
-  assert.deepEqual(names(f.calls), ['claim', 'retrieve', 'list', 'expire', 'supersede', 'claim', 'pin', 'create', 'save']);
+  assert.deepEqual(names(f.calls), ['claim', 'retrieve', 'list', 'expire', 'supersede', 'pin', 'create', 'save']);
   assert.deepEqual(f.calls.filter(c => c[0] === 'expire'), [['expire', 'cs_Prior']], 'only the previous attempt\'s session');
   assert.equal(f.sessions.get('cs_Unrelated').status, 'open');
-  const [, profileId, subject, live, attempt, proof] = f.calls.find(c => c[0] === 'supersede');
+  const [, profileId, subject, live, attempt, proof, ...claimArgs] = f.calls.find(c => c[0] === 'supersede');
   assert.deepEqual([profileId, subject, live, attempt], [PROFILE, 'user_a', false, PRIOR]);
+  assert.deepEqual(claimArgs, ['core_locum', '10000000-0000-4000-8000-000000000003', 'a'.repeat(64)], 'the new claim travels with the retirement');
   assert.deepEqual(proof, { attempt_id: PRIOR, customer_id: 'cus_A', status: 'expired', subscription_id: null, session_ids: ['cs_Prior'] });
   const [, list] = f.calls.find(c => c[0] === 'list');
   assert.equal(list.customer, 'cus_A');
@@ -95,6 +97,33 @@ test('a first attempt that never saved its session: an orphan Stripe session for
   assert.deepEqual(g.calls.find(c => c[0] === 'supersede')[5].session_ids, []);
 });
 
+test('retrying the same $99 offer after a stuck first attempt retires it and claims again in one call, so the place cannot be taken in between', async () => {
+  // A first attempt whose Stripe call failed, 23 hours on, at full founding
+  // capacity: its reserved place is one of the 100. Retiring and claiming in
+  // two calls freed the place for a round trip; another buyer's claim could
+  // take it and this buyer got founding_capacity_pending.
+  const f = fixture({ priorState: 'creating' });
+  const founding = { ...f.q, offer_id: 'core', price_phase: 'founding', annual_cents: 9900, public_founding_slot: 42 };
+  f.prior.offer_id = 'core';
+  f.claims.splice(0, 2, { state: 'reconciliation_required', prior: f.prior }, { state: 'claimed', attempt_id: NEW, token: 'lease', quote: founding });
+  f.deps.store.previewById = async () => ({ ...founding, id: '10000000-0000-4000-8000-000000000003', consent_version: 'terms1', consent_hash: 'a'.repeat(64), consent_text: 'Synthetic terms', expires_at: new Date(now + 1800000).toISOString() });
+  const offer = limitedOffer('core', 'founding', config.productIds);
+  const price = { id: 'price_Founding', product: { id: offer.productId, active: true, livemode: false, metadata: { app: config.app, offer_id: 'core', pricing_policy_version: config.policyVersion, catalog_version: config.version } }, active: true, livemode: false, currency: 'usd', unit_amount: offer.unitAmount, type: 'recurring', recurring: { interval: 'year', interval_count: 1, usage_type: 'licensed' }, lookup_key: offer.lookupKey, billing_scheme: 'per_unit' };
+  f.stripe.prices.list = async () => ({ data: [price], has_more: false });
+  const response = await createLimitedLaunchHandlers(f.deps, config).checkout(paidRequest());
+  assert.equal(response.status, 200);
+  assert.deepEqual(names(f.calls), ['claim', 'list', 'supersede', 'pin', 'create', 'save'], 'one claim before, none after the retirement');
+  assert.deepEqual(f.calls.find(c => c[0] === 'supersede').slice(6), ['core', '10000000-0000-4000-8000-000000000003', 'a'.repeat(64)]);
+
+  // The claim made with the retirement is refused: the database undid both, and the buyer hears why.
+  const g = fixture({ priorState: 'creating' });
+  g.claims.splice(0, 2, { state: 'reconciliation_required', prior: g.prior }, { state: 'founding_capacity_pending' });
+  const refused = await createLimitedLaunchHandlers(g.deps, config).checkout(paidRequest());
+  assert.equal(refused.status, 409);
+  assert.deepEqual(await refused.json(), { error: 'founding_capacity_pending' });
+  assert.deepEqual(names(g.calls), ['claim', 'list', 'supersede']);
+});
+
 test('a previous session that completed, cannot be expired, or is not this account\'s is never retired and opens nothing', async () => {
   const cases = [
     [f => { f.sessions.get('cs_Prior').status = 'complete'; }, 409, 'subscription_already_exists'],
@@ -105,7 +134,8 @@ test('a previous session that completed, cannot be expired, or is not this accou
     [f => { f.sessions.get('cs_Prior').customer = 'cus_Other'; }, 409, 'checkout_owner_mismatch'],
     [f => { f.stripe.checkout.sessions.list = async () => ({ data: [], has_more: true }); }, 503, 'checkout_pending'],
     [f => { f.stripe.subscriptions.list = async () => ({ data: [{ id: 'sub_A', status: 'incomplete' }], has_more: false }); }, 409, 'subscription_already_exists'],
-    [f => { f.deps.store.supersedeCheckout = async () => false; }, 503, 'checkout_pending'],
+    [f => { f.deps.store.supersedeCheckout = async () => ({ state: 'not_retired' }); }, 503, 'checkout_pending'],
+    [f => { f.deps.store.supersedeCheckout = async () => null; }, 503, 'checkout_pending'],
   ];
   for (const [alter, status, code] of cases) {
     const f = fixture(); alter(f);

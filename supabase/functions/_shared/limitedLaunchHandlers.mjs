@@ -125,9 +125,12 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
   // A previous attempt that never took payment is retired only on fresh
   // provider evidence: every Stripe session made for it is expired here and
   // read back as expired with no subscription, then the database retires the
-  // attempt under its account lock. A session this cannot prove unpaid stops
-  // the new checkout; nothing is retired on a guess.
-  async function supersede(stripe, customer, profile, live, prior, trace) {
+  // attempt and makes the new claim in one transaction under its account and
+  // founding locks, so no other buyer's claim can take a $99 place the retired
+  // attempt held before this buyer's new attempt reserves it. A session this
+  // cannot prove unpaid stops the new checkout; nothing is retired on a guess.
+  // Returns the new claim.
+  async function supersede(stripe, customer, profile, live, prior, data, trace) {
     if (!/^[0-9a-f-]{36}$/.test(prior?.attempt_id || '') || !['creating', 'open'].includes(prior.state) || (prior.state === 'open' && !/^cs_[A-Za-z0-9_]+$/.test(prior.session_id || ''))) refuse(503, 'checkout_pending');
     const since = Math.floor(Date.parse(prior.created_at) / 1000) - 300;
     if (!Number.isSafeInteger(since)) refuse(503, 'checkout_pending');
@@ -155,7 +158,9 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     }
     trace.phase = 'supersede';
     const proof = { attempt_id: prior.attempt_id, customer_id: customer.id, status: 'expired', subscription_id: null, session_ids: expired };
-    if (await deps.store.supersedeCheckout(profile.id, profile.auth_user_id, live, prior.attempt_id, proof) !== true) refuse(503, 'checkout_pending');
+    const claim = await deps.store.supersedeCheckout(profile.id, profile.auth_user_id, live, prior.attempt_id, proof, data.offerId, data.quoteId, data.consentHash);
+    if (typeof claim?.state !== 'string' || claim.state === 'not_retired') refuse(503, 'checkout_pending');
+    return claim;
   }
   const checkout = route(async (req, trace) => {
     trace.phase = 'config';
@@ -191,12 +196,11 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     trace.phase = 'claim';
     let claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
     // The other offer, or a retry after a first attempt that never reached a
-    // saved session: retire the unpaid attempt, then claim again.
+    // saved session: retire the unpaid attempt and claim again, together.
     if (['offer_conflict', 'reconciliation_required'].includes(claim.state) && claim.prior) {
       if (unfinished.length) refuse(409, 'subscription_already_exists');
-      await supersede(stripe, customer, profile, live, claim.prior, trace);
+      claim = await supersede(stripe, customer, profile, live, claim.prior, data, trace);
       trace.phase = 'claim';
-      claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
       // A concurrent request saved a session meanwhile; the next try resumes it.
       if (claim.state === 'existing') refuse(503, 'checkout_pending');
     }

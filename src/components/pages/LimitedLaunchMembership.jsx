@@ -7,6 +7,7 @@ import { membershipDate, membershipPrice, quoteMatchesBetaWindow, scheduledMembe
 import { MEMBERSHIP_COPY } from "../../content/membershipCopy.js";
 import { reportError } from "../../lib/errorReport.js";
 import { createCheckoutFailureReporter } from "../../utils/checkoutFailure.js";
+import { BILLING_RETURN_COPY } from "../../utils/billingReturn.js";
 
 const messages = {
   signup_disabled: "New membership enrollment is not open yet. Please check again later.",
@@ -33,6 +34,8 @@ const messageFor = error => messages[error?.code] || "Membership could not be up
 const TICK_HINT = "Tick the box above to continue.";
 // Once per session per action and failure code, to the client error table.
 const reportCheckoutFailure = createCheckoutFailureReporter(reportError);
+// A refusal the page made itself: no request was sent, or its answer was not used.
+const refusedHere = (action, code) => reportCheckoutFailure(action, { code, phase: "client" });
 
 /** Explicit invitation activation and separately consented paid opt-in. No automatic actions. */
 export default function LimitedLaunchMembership({ onActivated }) {
@@ -52,6 +55,7 @@ function MembershipForAccount({ accountId, onActivated }) {
   const [tickHintFor, setTickHintFor] = useState(null);
   const request = useRef(0);
   const offerHeading = useRef(null);
+  const messageLine = useRef(null);
   useEffect(() => () => { request.current++; }, []);
   // Each reviewed offer (Review, Resume or Refresh) can open below the fold on
   // a phone: bring it into view and move focus to its heading.
@@ -61,11 +65,22 @@ function MembershipForAccount({ accountId, onActivated }) {
     try { heading.scrollIntoView?.({ behavior: "smooth", block: "start" }); } catch { /* An older browser without options still has the focus below. */ }
     try { heading.focus?.({ preventScroll: true }); } catch { /* Not focusable: the scroll above still shows it. */ }
   }, [quote]);
+  // A result shows where the buyer is looking: beside Continue while the offer
+  // is on screen, otherwise at the top. On a phone either can sit outside the
+  // screen after the tap, so bring it into view.
+  useEffect(() => {
+    const line = messageLine.current;
+    if (!message || !line) return;
+    try { line.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); } catch { /* The line still renders where it is. */ }
+  }, [message]);
   const access = limitedLaunch.access;
   // A stale answer (a phone tab left in the background) keeps a reviewed offer
   // on screen; continuing waits for a fresh answer (freshAccess).
   const shown = access?.needsRefresh ? { ...access, needsRefresh: false } : access;
   const button = { border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 9, padding: "11px 14px", cursor: busy ? "wait" : "pointer", fontSize: isDesktop ? 14 : 16, minHeight: 44, fontFamily: "inherit" };
+  // An offer this account cannot review right now looks unavailable, as the unticked Continue does.
+  const unavailable = { ...button, background: T.neutralDim, color: T.textDim, cursor: "not-allowed" };
+  const offerButton = permitted => permitted ? button : unavailable;
   // Visibly unavailable until the box is ticked; a tap then says why instead of doing nothing.
   const continueStyle = consent
     ? { ...button, border: "none", background: T.accent, color: "#fff", fontWeight: 700 }
@@ -102,39 +117,47 @@ function MembershipForAccount({ accountId, onActivated }) {
     finally { if (current(turn)) setBusy(false); }
   };
   const review = async offerId => {
-    if (busy || !currentlyPermitted(offerId)) return;
+    if (busy) return;
     const turn = ++request.current;
     setBusy(true); setMessage(null); setConsent(false); setQuote(null);
     try {
+      // As Continue: a stale answer (Refresh offer after a phone tab slept) is
+      // checked again first, and a refusal says why instead of doing nothing.
+      const fresh = await freshAccess();
+      if (!mine(turn)) return;
+      if (!fresh) { refusedHere("quote", "access_unconfirmed"); setMessage(messages.access_unconfirmed); return; }
+      if (!canReviewBillingOffer(fresh, offerId)) { refusedHere("quote", "offer_unavailable"); setMessage(messages.offer_unavailable); return; }
       // Public enrollment already resolves eligibility. A saved token must not
       // invoke the separate manual-invitation route while its server gate is off.
-      const invitationEnabled = accessAuthority.state(accountId)?.invitationActivationEnabled === true;
+      const invitationEnabled = fresh.invitationActivationEnabled === true;
       const result = await client.quote({ offerId, ...(invitation && invitationEnabled ? { invitationToken: invitation } : {}) });
-      if (current(turn) && currentlyPermitted(offerId)) {
-        if (quoteMatchesBetaWindow(result, accessAuthority.state(accountId))) setQuote(result);
-        else setMessage(messages.quote_expired);
-      }
-    } catch (error) { if (current(turn)) { reportCheckoutFailure("quote", error); setMessage(messageFor(error)); } }
-    finally { if (current(turn)) setBusy(false); }
+      if (!mine(turn)) return;
+      if (!current(turn)) { refusedHere("quote", "access_unconfirmed"); setMessage(messages.access_unconfirmed); }
+      else if (!currentlyPermitted(offerId)) { refusedHere("quote", "offer_unavailable"); setMessage(messages.offer_unavailable); }
+      else if (quoteMatchesBetaWindow(result, accessAuthority.state(accountId))) setQuote(result);
+      else { refusedHere("quote", "quote_expired"); setMessage(messages.quote_expired); }
+    } catch (error) { if (mine(turn)) { reportCheckoutFailure("quote", error); setMessage(messageFor(error)); } }
+    finally { if (mine(turn)) setBusy(false); }
   };
   const purchase = async () => {
     if (busy || !quote) return;
     if (!consent) { setTickHintFor(quote.quoteId); return; }
     if (Date.parse(quote.expiresAt) <= Date.now()) {
-      setConsent(false); setMessage(messages.quote_expired); return;
+      refusedHere("checkout", "quote_expired"); setConsent(false); setMessage(messages.quote_expired); return;
     }
     const turn = ++request.current;
     setBusy(true); setMessage(null);
     try {
       const fresh = await freshAccess();
       if (!mine(turn)) return;
-      if (!fresh) { setMessage(messages.access_unconfirmed); return; }
-      if (!quoteMatchesBetaWindow(quote, fresh) || Date.parse(quote.expiresAt) <= Date.now()) { setConsent(false); setMessage(messages.quote_expired); return; }
-      if (!canReviewBillingOffer(fresh, quote.offerId)) { setConsent(false); setMessage(messages.offer_unavailable); return; }
+      if (!fresh) { refusedHere("checkout", "access_unconfirmed"); setMessage(messages.access_unconfirmed); return; }
+      if (!quoteMatchesBetaWindow(quote, fresh) || Date.parse(quote.expiresAt) <= Date.now()) { refusedHere("checkout", "quote_expired"); setConsent(false); setMessage(messages.quote_expired); return; }
+      if (!canReviewBillingOffer(fresh, quote.offerId)) { refusedHere("checkout", "offer_unavailable"); setConsent(false); setMessage(messages.offer_unavailable); return; }
       const result = await client.checkout({ quoteId: quote.quoteId, consentHash: quote.consentHash, consent: true });
       if (!mine(turn)) return;
       if (current(turn) && currentlyPermitted(quote.offerId) && quoteMatchesBetaWindow(quote, accessAuthority.state(accountId))) window.location.assign(result.url);
-      else setMessage(messages.access_unconfirmed);
+      // A payment page was made but the answer changed meanwhile: it is not opened.
+      else { refusedHere("checkout", "checkout_discarded"); setMessage(messages.access_unconfirmed); }
     } catch (error) {
       if (mine(turn)) {
         reportCheckoutFailure("checkout", error);
@@ -147,13 +170,20 @@ function MembershipForAccount({ accountId, onActivated }) {
   const lifetime = access?.lifetime.credential || access?.lifetime.practice;
   const beta = access?.freeBeta?.state === "active";
   const scheduled = access?.scheduledMembership;
-  const betaCanReview = canReviewBillingOffer(access, "core") || canReviewBillingOffer(access, "core_locum");
+  // Offers are judged on the last answer even when it is stale: a tap asks
+  // for a fresh one before quoting (review), as Continue does (purchase).
+  const reviewable = offerId => canReviewBillingOffer(shown, offerId);
+  const betaCanReview = reviewable("core") || reviewable("core_locum");
   const resumeOffer = access?.checkoutResumeAvailable === true ? access.checkoutResumeOfferId : null;
-  const permittedQuote = !!quote && canReviewBillingOffer(shown, quote.offerId) && quoteMatchesBetaWindow(quote, shown);
+  // Back from a completed Stripe Checkout, before the membership shows it:
+  // nothing more to choose or pay, so no purchase buttons.
+  const returning = limitedLaunch.billingReturn?.kind === "complete" && ["confirming", "delayed"].includes(limitedLaunch.billingReturn.phase);
+  const permittedQuote = !!quote && !returning && canReviewBillingOffer(shown, quote.offerId) && quoteMatchesBetaWindow(quote, shown);
+  const panelShown = permittedQuote && !lifetime && !scheduled;
   const deferredResumeAfterBeta = quote?.paymentTiming === "after_beta" && access?.freeBeta?.state === "expired";
   return <section style={{ color: T.text, lineHeight: 1.6 }} aria-label="Membership">
     <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Your membership</h2>
-    {message && <p role="status">{message}</p>}
+    {message && !panelShown && <p ref={messageLine} role="status">{message}</p>}
     {limitedLaunch.publicSignupEnabled && limitedLaunch.enrollmentError && <div role="status">
       <p>{messageFor({ code: limitedLaunch.enrollmentError })}</p>
       <button style={button} disabled={busy} onClick={limitedLaunch.refresh}>Check membership again</button>
@@ -170,6 +200,7 @@ function MembershipForAccount({ accountId, onActivated }) {
           {access.purchasedOfferId === "core" && !access.capabilities.practice.write && <p>{access.practiceTrial.state === "expired" ? "Your Practice trial has ended. " : ""}Saved Practice records remain available to read and export. <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about adding Practice</a>; we will review the options and charges with you before any billing change.</p>}
           <button style={button} onClick={manage}>Manage paid subscription</button>
         </div>
+          : returning ? <p role="status">{BILLING_RETURN_COPY.membershipPending}</p>
           : <>
             {beta && <p>Your free beta is active until {membershipDate(access.freeBeta.endsAt)}. No card is required to keep this beta, and it will not charge automatically. {betaCanReview ? "You may choose a paid membership now with no charge before your original beta ends; its paid year starts at that original end date. Review the exact date and terms below. Keep using this account; your saved records stay in place." : "Your original beta end date has not changed. A paid offer is not available right now."}</p>}
             {!beta && invitation && access?.invitationActivationEnabled === true && <div style={{ marginBottom: 18 }}>
@@ -182,17 +213,17 @@ function MembershipForAccount({ accountId, onActivated }) {
             {invitation && access?.invitationActivationEnabled !== true && !limitedLaunch.publicSignupEnabled && <p>Invitation activation is not open yet. Please check again later.</p>}
             {(!beta || betaCanReview) && (resumeOffer ? <>
               <p>You have an unfinished {resumeOffer === "core" ? "Credential" : "Credential + Practice"} checkout. Review its current terms and confirm them before returning to payment.</p>
-              <button style={button} disabled={busy || !canReviewBillingOffer(access, resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>
+              <button style={offerButton(reviewable(resumeOffer))} disabled={busy || !reviewable(resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>
             </> : <>
               <p>Choose whether to purchase a membership. {access?.billingEnabled && access?.checkoutEligible ? "Review the exact offer before choosing to pay." : "An eligible membership offer is not available for this account right now."}</p>
               {!beta && <p>{access?.pricePhase === "founding" ? `${MEMBERSHIP_COPY.credentialPrices} Creating an account or viewing an offer does not reserve a founding place.` : "Your available Credential offer is checked securely before you choose to pay."} {MEMBERSHIP_COPY.fullPackage}</p>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <button style={button} disabled={busy || !canReviewBillingOffer(access, "core")} onClick={() => review("core")}>Review Credential offer</button>
-                <button style={button} disabled={busy || !canReviewBillingOffer(access, "core_locum")} onClick={() => review("core_locum")}>Review Credential + Practice offer</button>
+                <button style={offerButton(reviewable("core"))} disabled={busy || !reviewable("core")} onClick={() => review("core")}>Review Credential offer</button>
+                <button style={offerButton(reviewable("core_locum"))} disabled={busy || !reviewable("core_locum")} onClick={() => review("core_locum")}>Review Credential + Practice offer</button>
               </div>
             </>)}
           </>}
-    {permittedQuote && !lifetime && !scheduled && <section style={{ marginTop: 20, padding: 16, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12 }}>
+    {panelShown && <section style={{ marginTop: 20, padding: 16, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12 }}>
       <h3 ref={offerHeading} tabIndex={-1} style={{ margin: "0 0 8px" }}>{quote.name}</h3>
       <p><strong>{membershipPrice(quote.annualCents)} per year</strong></p>
       <p>100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals. Request a refund through Get help in the app or <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>support@credentialdomd.com</a>.</p>
@@ -215,7 +246,10 @@ function MembershipForAccount({ accountId, onActivated }) {
           <button style={continueStyle} disabled={busy || !consent} onClick={purchase}>{busy ? "Opening payment…" : quote.paymentTiming === "after_beta" ? "Continue to secure checkout" : "Continue to secure payment"}</button>
         </span>
         <button style={button} disabled={busy} onClick={() => review(quote.offerId)}>Refresh offer</button>
-        {tickHintFor === quote.quoteId && !consent && <span role="status" style={{ color: T.warning, fontSize: isDesktop ? 14 : 16, fontWeight: 600 }}>{TICK_HINT}</span>}
+        {/* Danger red meets 4.5:1 on the panel in both themes; the warning amber did not in light. */}
+        {tickHintFor === quote.quoteId && !consent && <span role="status" style={{ color: T.danger, fontSize: isDesktop ? 14 : 16, fontWeight: 600 }}>{TICK_HINT}</span>}
+        {/* Why Continue did not open payment, next to it, not at the top of the page. */}
+        {message && <p ref={messageLine} role="alert" style={{ flexBasis: "100%", margin: 0, padding: "8px 12px", borderLeft: `3px solid ${T.danger}`, background: T.dangerDim, color: T.text, fontSize: isDesktop ? 14 : 16 }}>{message}</p>}
       </div>
     </section>}
   </section>;
