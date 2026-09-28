@@ -43,7 +43,9 @@
  *
  * Configuration (one-time, in the Clerk dashboard → Webhooks):
  *   1. Endpoint URL: https://<your-supabase-ref>.supabase.co/functions/v1/clerk-webhook
- *   2. Subscribe to: user.created, user.updated, user.deleted
+ *   2. Subscribe to: user.created, user.updated, user.deleted. Anything else
+ *      the endpoint is sent (email.created, session.created...) is answered
+ *      200 and ignored; see IGNORED_EVENTS.
  *   3. Copy the signing secret → set as CLERK_WEBHOOK_SECRET in
  *      Supabase → Project Settings → Edge Functions → Secrets.
  *   Deploy with --no-verify-jwt (Svix signs the request, not a Supabase JWT).
@@ -314,9 +316,65 @@ async function activateBetaAccess(
   return await applyBetaDecision(supabase, match, profile, decision, now);
 }
 
-serve(async (req) => {
+/**
+ * Fixed failure codes, one per way this handler can refuse or fail an event.
+ * Each is logged as `CLERK_WEBHOOK_FAILURE code=<CODE> ...` and is the whole
+ * response body, so a failed delivery in Clerk's dashboard and the line in
+ * the function log carry the same searchable word. The free-text detail
+ * (a database message, a provider state) goes to the log only.
+ *
+ * 5xx asks Svix to retry, and is kept for conditions a retry can fix. 4xx is a
+ * request that will never verify. Anything that throws is UNHANDLED_EXCEPTION:
+ * that is what CONSOLE_LOG's ReferenceError would have been logged as.
+ */
+export const FAILURE = {
+  SECRET_MISSING: "SECRET_MISSING",
+  MISSING_SVIX_HEADERS: "MISSING_SVIX_HEADERS",
+  BAD_SIGNATURE: "BAD_SIGNATURE",
+  CONTINUITY_DISABLED: "CONTINUITY_DISABLED",
+  CONTINUITY_UNAVAILABLE: "CONTINUITY_UNAVAILABLE",
+  PROFILE_SYNC_FAILED: "PROFILE_SYNC_FAILED",
+  MAILBOX_NOT_APPLIED: "MAILBOX_NOT_APPLIED",
+  BETA_ACTIVATION_FAILED: "BETA_ACTIVATION_FAILED",
+  DELETE_LOOKUP_FAILED: "DELETE_LOOKUP_FAILED",
+  MAILBOX_NOT_CLEARED: "MAILBOX_NOT_CLEARED",
+  UNHANDLED_EXCEPTION: "UNHANDLED_EXCEPTION",
+} as const;
+type FailureCode = typeof FAILURE[keyof typeof FAILURE];
+
+/**
+ * Events this endpoint receives and deliberately does nothing with. Clerk
+ * production sends email.created and session.created to this endpoint along
+ * with the user events. A non-2xx for an event we never meant to act on only
+ * makes Svix retry it for a day, and an endpoint whose deliveries all fail for
+ * five days is disabled, which would take user.created down with it. Anything
+ * not listed and not handled below is ignored the same way; the list is here
+ * so the log can say which.
+ */
+const IGNORED_EVENTS = new Set([
+  "email.created",
+  "session.created",
+  "session.ended",
+  "session.removed",
+  "session.revoked",
+  "sms.created",
+]);
+
+interface EventContext {
+  type: string;
+  svixId: string;
+  userId: string;
+}
+
+function fail(status: number, code: FailureCode, ctx: EventContext, detail = ""): Response {
+  const line = `CLERK_WEBHOOK_FAILURE code=${code} status=${status} event=${ctx.type || "unknown"} svix_id=${ctx.svixId || "none"} user=${ctx.userId || "none"}${detail ? `: ${detail}` : ""}`;
+  (status >= 500 ? console.error : console.warn)(line);
+  return new Response(code, { status });
+}
+
+async function handle(req: Request, ctx: EventContext): Promise<Response> {
   if (!WEBHOOK_SECRET) {
-    return new Response("Webhook secret not configured", { status: 500 });
+    return fail(500, FAILURE.SECRET_MISSING, ctx, "CLERK_WEBHOOK_SECRET is not set");
   }
 
   const body = await req.text();
@@ -325,9 +383,10 @@ serve(async (req) => {
     "svix-timestamp": req.headers.get("svix-timestamp") ?? "",
     "svix-signature": req.headers.get("svix-signature") ?? "",
   };
+  ctx.svixId = headers["svix-id"];
 
   if (!headers["svix-id"] || !headers["svix-signature"]) {
-    return new Response("Missing svix headers", { status: 400 });
+    return fail(400, FAILURE.MISSING_SVIX_HEADERS, ctx);
   }
 
   let event: ClerkEvent;
@@ -335,10 +394,10 @@ serve(async (req) => {
     const wh = new Webhook(WEBHOOK_SECRET);
     event = wh.verify(body, headers) as ClerkEvent;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("Clerk webhook signature verification failed:", msg);
-    return new Response(`Webhook Error: ${msg}`, { status: 400 });
+    return fail(400, FAILURE.BAD_SIGNATURE, ctx, err instanceof Error ? err.message : String(err));
   }
+  ctx.type = String(event?.type ?? "");
+  ctx.userId = typeof event?.data?.id === "string" ? event.data.id : "";
 
   const now = new Date().toISOString();
 
@@ -353,7 +412,7 @@ serve(async (req) => {
       // handler or the browser can create a competing profile. A fresh provider
       // read also prevents a delayed signed webhook from rebinding an old email.
       if (Deno.env.get("CLERK_ISSUER") === PRODUCTION_CLERK_ISSUER) {
-        if (Deno.env.get("CLERK_CONTINUITY_ENABLED") !== "true") return new Response("Profile continuity is unavailable", { status: 503 });
+        if (Deno.env.get("CLERK_CONTINUITY_ENABLED") !== "true") return fail(503, FAILURE.CONTINUITY_DISABLED, ctx);
         try {
           const identity = await readProductionIdentity(user.id, Deno.env.get("CLERK_SECRET_KEY") || "");
           await initializeProductionProfile(supabase, identity, PRODUCTION_CLERK_ISSUER, {
@@ -363,7 +422,8 @@ serve(async (req) => {
           // Operator-provisioned existing members can have a reserved login
           // before they prove their email. Acknowledge only that exact pending
           // migration, without creating a profile, granting access or routing mail.
-          if (error instanceof Error && error.message === "verified_primary_required") {
+          const reason = error instanceof Error ? error.message : String(error);
+          if (reason === "verified_primary_required") {
             try {
               if (await canDeferReservedContinuity(supabase, user.id, {
                 productionSecret: Deno.env.get("CLERK_SECRET_KEY") || "",
@@ -372,14 +432,13 @@ serve(async (req) => {
               })) return new Response("Awaiting email verification", { status: 200 });
             } catch { /* Provider/database failures remain retryable below. */ }
           }
-          return new Response("Profile continuity is unavailable", { status: 503 });
+          return fail(503, FAILURE.CONTINUITY_UNAVAILABLE, ctx, reason);
         }
       }
 
       const { profile, error } = await syncProfile(user, clerkEmail, clerkName, now);
       if (error || !profile) {
-        console.error(`${event.type} ${user.id}: ${error ?? "no profile"}`);
-        return new Response(`DB error: ${error ?? "no profile"}`, { status: 500 });
+        return fail(500, FAILURE.PROFILE_SYNC_FAILED, ctx, error ?? "no profile");
       }
 
       // Routing first, and it CAN fail the event: a revocation that was not
@@ -388,17 +447,15 @@ serve(async (req) => {
       // re-runs both steps costs nothing.
       const mailbox = await applyVerifiedMailbox(supabase, event.type, event.data, verifiedEmails(user)[0] ?? null, profile, now);
       if (!mailbox.ok) {
-        console.error(`${event.type} ${user.id}: verified mailbox not applied: ${mailbox.detail}`);
-        return new Response(`Verified mailbox not applied: ${mailbox.detail}`, { status: 500 });
+        return fail(500, FAILURE.MAILBOX_NOT_APPLIED, ctx, mailbox.detail);
       }
 
       // A 500 here makes Svix retry, which re-runs both steps idempotently.
       const beta = await activateBetaAccess(user, profile, now);
       if (beta.error) {
-        console.error(`${event.type} ${user.id}: ${beta.error}`);
-        return new Response(`DB error: ${beta.error}`, { status: 500 });
+        return fail(500, FAILURE.BETA_ACTIVATION_FAILED, ctx, beta.error);
       }
-      break;
+      return new Response("ok", { status: 200 });
     }
 
     case "user.deleted": {
@@ -406,8 +463,7 @@ serve(async (req) => {
       // Keep the row and its name/email (see header). Just record it.
       const { row, error } = await selectProfile(userId);
       if (error) {
-        console.error("user.deleted lookup failed:", error);
-        return new Response(`DB error: ${error}`, { status: 500 });
+        return fail(500, FAILURE.DELETE_LOOKUP_FAILED, ctx, error);
       }
       if (row) {
         // Not a courtesy: this column is what lets a forwarded document into
@@ -421,19 +477,31 @@ serve(async (req) => {
         // restore the route behind the deletion.
         const mailbox = await applyVerifiedMailbox(supabase, "user.deleted", event.data, null, row, now);
         if (!mailbox.ok) {
-          console.error(`user.deleted ${userId}: verified mailbox not cleared: ${mailbox.detail}`);
-          return new Response(`Verified mailbox not cleared: ${mailbox.detail}`, { status: 500 });
+          return fail(500, FAILURE.MAILBOX_NOT_CLEARED, ctx, mailbox.detail);
         }
         console.log(`user.deleted ${userId}: profile ${row.id} retained (email=${row.email ?? "none"}, access_status=${row.access_status ?? "pending"})`);
       } else {
         console.log(`user.deleted ${userId}: no profile row`);
       }
-      break;
+      return new Response("ok", { status: 200 });
     }
 
     default:
-      console.log(`Ignoring Clerk event: ${event.type}`);
+      // Deliberately acknowledged: see IGNORED_EVENTS.
+      console.log(`Ignoring Clerk event: ${event.type}${IGNORED_EVENTS.has(event.type) ? "" : " (not in the known ignore list)"}`);
+      return new Response("ignored", { status: 200 });
   }
+}
 
-  return new Response("ok", { status: 200 });
+serve(async (req) => {
+  const ctx: EventContext = { type: "", svixId: "", userId: "" };
+  try {
+    return await handle(req, ctx);
+  } catch (err) {
+    // Nothing above is meant to throw. If something does, it is a defect in
+    // this function, not in the event, and it is logged under one code so it
+    // is found the first time instead of after a week of silent 500s.
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    return fail(500, FAILURE.UNHANDLED_EXCEPTION, ctx, detail);
+  }
 });

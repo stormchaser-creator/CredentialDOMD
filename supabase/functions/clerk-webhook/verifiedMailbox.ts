@@ -241,6 +241,32 @@ export interface MailboxProfile extends MailboxState {
   id: string;
 }
 
+/**
+ * Where applyVerifiedMailbox writes its lines. Tests pass a quiet one; the
+ * webhook passes nothing and gets the console.
+ *
+ * Both of these were referenced and never defined from 2026-09-20 until
+ * 2026-09-28. Every test passed a log explicitly, so the default was never
+ * evaluated in node, and Supabase's bundler does not type-check. In
+ * production the webhook calls with six arguments, so every user.created and
+ * user.updated threw `ReferenceError: CONSOLE_LOG is not defined` after the
+ * profile write and before any mailbox or beta-invitation write, and answered
+ * 500. That is why profiles.verified_email was null on every account.
+ * tests/clerk-webhook/handler.test.mjs now drives the real handler the way
+ * production calls it.
+ */
+export interface MailboxLog {
+  info(line: string): void;
+  warn(line: string): void;
+  error(line: string): void;
+}
+
+export const CONSOLE_LOG: MailboxLog = {
+  info: (line) => console.log(line),
+  warn: (line) => console.warn(line),
+  error: (line) => console.error(line),
+};
+
 export interface MailboxResult {
   ok: boolean;
   /** True when the caller should answer the provider with a retryable error. */

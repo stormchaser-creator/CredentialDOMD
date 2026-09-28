@@ -429,13 +429,33 @@ eq("non-strings are null", normalizeAddress(42), null);
   eq("a mixed-case verified address is stored normalized", held("p1"), "mixed@example.invalid");
 }
 
+// ── the call the handler actually makes: six arguments, no logger ─────────
+// Every call above passes QUIET, so until 2026-09-28 none of them evaluated
+// the default logger, and it did not exist: in production every user.created
+// and user.updated threw "CONSOLE_LOG is not defined" and answered 500.
+{
+  const { db, held } = stubDb([profile("p1", null, null)]);
+  const quietConsole = { log: console.log, warn: console.warn, error: console.error };
+  console.log = console.warn = console.error = () => {};
+  let r, thrown = null;
+  try {
+    r = await applyVerifiedMailbox(db, "user.created", payload({ addresses: [addr(NEW)], updated_at: T2 }), NEW, profile("p1", null, null), NOW);
+  } catch (e) {
+    thrown = e;
+  } finally {
+    Object.assign(console, quietConsole);
+  }
+  eq("the six-argument call the webhook makes does not throw", thrown && String(thrown), null);
+  ok("and it applies the mailbox", r?.ok === true && held("p1") === NEW);
+}
+
 // ── the handler actually fails the event ──────────────────────────────────
 {
   const src = readFileSync(new URL("../supabase/functions/clerk-webhook/index.ts", import.meta.url), "utf8");
   ok("the handler imports the shared apply", /import \{ applyVerifiedMailbox \} from "\.\/verifiedMailbox\.ts";/.test(src));
   eq("both event paths go through it", (src.match(/await applyVerifiedMailbox\(supabase,/g) || []).length, 2);
   eq("and both answer 500 when it did not land",
-     (src.match(/if \(!mailbox\.ok\) \{[\s\S]{0,260}?status: 500/g) || []).length, 2);
+     (src.match(/if \(!mailbox\.ok\) \{\s*return fail\(500, FAILURE\.MAILBOX_NOT_(APPLIED|CLEARED),/g) || []).length, 2);
   ok("the handler keeps no second copy of the decision", !/email_addresses \?\? \[\]\)\.length/.test(src));
   ok("user.deleted no longer clears the column by hand",
      !/update\(\{ verified_email: null, verified_email_at: null, updated_at: now \}\)/.test(src));
