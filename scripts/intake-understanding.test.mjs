@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   buildUnderstandingRequest, readModelReply, verifyUnderstanding, rulesUnderstanding, normalizeForQuote, quoteOccurs,
-  finalIntent, informationalReplyText, correctionExamples, splitForward, scanForModel, plainModelText, asksElsewhereLine,
+  finalIntent, correctionExamples, splitForward, scanForModel, plainModelText, asksElsewhereLine,
   plainSummary, decodeEntities, nearlyContains, ackWarranted, asksToSign, DROP,
   UNDERSTANDING_SCHEMA, UNDERSTANDING_MODEL, INTENTS, ROLES, MAX_CORRECTIONS,
 } from "../supabase/functions/_shared/intakeUnderstanding.mjs";
@@ -23,7 +23,7 @@ import {
 
 const EM_DASH = String.fromCodePoint(0x2014);
 const reply = (value, stop = "end_turn") => ({ stop_reason: stop, content: [{ type: "text", text: JSON.stringify(value) }] });
-const good = { intent: "request", asks: [{ quote: "your BLS card", kind: "bls", who: "physician" }], attachments: [], summary: "a request for your BLS card", confidence: "high" };
+const good = { intent: "request", asks: [{ quote: "your BLS card", kind: "bls", who: "physician" }], attachments: [], summary: "a request for your BLS card", confidence: "high", records: [] };
 
 // ── The request ─────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ test("the schema: every enum is the app's own list, and every object is closed",
   assert.deepEqual(s.properties.intent.enum, [...INTENTS]);
   assert.deepEqual(s.properties.asks.items.properties.kind.enum, [...KINDS]);
   assert.deepEqual(s.properties.attachments.items.properties.role.enum, [...ROLES]);
-  for (const o of [s, s.properties.asks.items, s.properties.attachments.items]) {
+  for (const o of [s, s.properties.asks.items, s.properties.attachments.items, s.properties.records.items, s.properties.records.items.properties.fields.items]) {
     assert.equal(o.additionalProperties, false);
     assert.deepEqual([...o.required].sort(), Object.keys(o.properties).sort());
   }
@@ -99,7 +99,13 @@ test("readModelReply takes only a finished reply that matches the schema exactly
     { ...good, attachments: [{ index: "1", role: "informational", filing: "" }] },
     { ...good, attachments: [{ index: 1, role: "blank_form", filing: "" }] },
     { ...good, summary: 7 },
+    { ...good, records: {} },
+    { ...good, records: [{ section: "insurance", match_existing: "", fields: [{ field: "provider", value: "x" }] }] },
+    { ...good, records: [{ section: "insurance", fields: [] }] },
   ]) assert.equal(readModelReply(reply(bad)).ok, false, JSON.stringify(bad));
+  // A reading recorded before records existed states nothing to enter.
+  const { records: _none, ...older } = good;
+  assert.deepEqual(readModelReply(reply(older)), { ok: true, value: { ...older, records: [] } });
   // Thinking blocks come before the text and are ignored.
   assert.equal(readModelReply({ stop_reason: "end_turn", content: [{ type: "thinking", thinking: "" }, { type: "text", text: JSON.stringify(good) }] }).ok, true);
 });
@@ -175,16 +181,6 @@ test("rulesUnderstanding: a real ask the rules cannot name still keeps it a requ
 });
 
 // ── What the physician reads ─────────────────────────────────────────────────
-
-test("informationalReplyText: what it was about, that nothing was asked, and each attachment", () => {
-  const t = informationalReplyText({
-    senderName: "Jordan Sample", summary: "how the policy covers emergency care.", appUrl: "https://app.example/",
-    results: [{ lines: ["Attached to your X contract: a.pdf"] }], notes: ["A note."],
-  });
-  assert.equal(t, "Read Jordan Sample's note about how the policy covers emergency care. It did not read as a request, so no reply was drafted.\n\nThe attachment:\nAttached to your X contract: a.pdf\n\nA note.\n\nOpen the app: https://app.example/ (Documents)\n\nCredentialDOMD\nhttps://credentialdomd.com");
-  // Only a settled reading (a confident model, nothing dropped) says nothing was asked.
-  assert.equal(informationalReplyText({ summary: "", settled: true, appUrl: "u" }), "Read the forwarded note. Nothing was asked of you.\n\nCredentialDOMD\nhttps://credentialdomd.com");
-});
 
 test("asksElsewhereLine names at most three asks", () => {
   assert.equal(asksElsewhereLine([], "docs@x"), "");
@@ -280,16 +276,24 @@ test("roles narrow the scanner's answer and never invent a credential", () => {
 
 test("the synthetic corpus: recorded replies read right, and the rules alone never invent an ask or make a letter a request", async () => {
   const cases = loadCases(SYNTHETIC_DIR);
-  assert.deepEqual(cases.map((c) => c.id), ["delivery-approval", "informational-agreement", "mixed-approval-and-form", "request-no-attachment", "request-with-form"]);
+  assert.deepEqual(cases.map((c) => c.id), ["delivery-approval", "informational-agreement", "informational-malpractice-limits", "mixed-approval-and-form", "request-no-attachment", "request-with-form"]);
   const stub = await runEval(cases, readerFor("stub"));
-  assert.deepEqual([stub.totals.intent, stub.totals.request, stub.totals.invented, stub.totals.asksHit, stub.totals.asksWanted, stub.totals.byModel], [5, 5, 0, 6, 6, 5]);
-  assert.match(formatReport(stub, "stub"), /intent: 5\/5 \(100%\)\nrequest or not: 5\/5 \(100%\)/);
+  assert.deepEqual([stub.totals.intent, stub.totals.request, stub.totals.invented, stub.totals.asksHit, stub.totals.asksWanted, stub.totals.byModel], [6, 6, 0, 6, 6, 6]);
+  assert.match(formatReport(stub, "stub"), /intent: 6\/6 \(100%\)\nrequest or not: 6\/6 \(100%\)/);
+  // The owner's case: every expected fact read, through the host's check, and none from an email that states none.
+  assert.deepEqual([stub.totals.factsHit, stub.totals.factsWanted, stub.totals.factsInvented], [5, 5, 0]);
+  assert.match(formatReport(stub, "stub"), /facts to enter: 5\/5 expected fields read right \(100%\)/);
   const rules = await runEval(cases, readerFor("rules"));
-  assert.equal(rules.totals.request, 5, "request or not is right even without the model");
+  assert.equal(rules.totals.request, 6, "request or not is right even without the model");
   assert.equal(rules.totals.invented, 0, "no ask on an email that asked for nothing");
+  assert.equal(rules.totals.factsInvented, 0, "no fact from an email that states none to enter");
   const info = rules.rows.find((r) => r.id === "informational-agreement");
   assert.notEqual(info.reading.intent, "request");
   assert.deepEqual(info.reading.asks, []);
+  // The rules alone read the limits; the agreement's effective date waits for the model.
+  const limits = rules.rows.find((r) => r.id === "informational-malpractice-limits");
+  assert.equal(limits.reading.intent, "informational");
+  assert.deepEqual([limits.score.factsHit, limits.score.factsWanted], [4, 5]);
 });
 
 test("the harness sends the request production sends, and scores only labelled cases", async () => {
@@ -464,15 +468,12 @@ test("the rules: an unclear email lists the sentences that name a document", () 
   assert.deepEqual(r.mentions, ["Your malpractice certificate is kept on file by our office."]);
 });
 
-test("a summary or quote from a crafted email carries no bare domain or phone number into our mail", () => {
+test("a summary or quote from a crafted email carries no bare domain or phone number into our mail or the app", () => {
   const phish = "an urgent licence hold; reverify at credentialdomd-verify.com/login or call 1 800 555 0199";
   assert.equal(plainSummary(phish), "");
-  const t = informationalReplyText({ senderName: "CredentialDOMD Security", summary: phish, settled: true, appUrl: "u" });
-  assert.ok(!/credentialdomd-verify|555|0199|reverify/.test(t), t);
-  assert.match(t, /^Read CredentialDOMD Security's note\. Nothing was asked of you\./);
   assert.equal(plainSummary("your 2027 reappointment"), "your 2027 reappointment", "a year is not a phone number");
   assert.equal(plainSummary("x", 10), "x");
-  assert.equal(informationalReplyText({ senderName: "call 800 555 0199", summary: "", appUrl: "u" }).split("\n")[0], "Read the forwarded note. It did not read as a request, so no reply was drafted.");
+  assert.equal(plainSummary("call 800 555 0199"), "", "a sender name that is a phone number is not shown either");
   const line = asksElsewhereLine([{ quote: "Please verify at credentialdomd-verify.com or call 800 555 0199 by 2026" }], "docs@x");
   assert.ok(!/credentialdomd-verify|555/.test(line), line);
   assert.match(line, /by 2026/);

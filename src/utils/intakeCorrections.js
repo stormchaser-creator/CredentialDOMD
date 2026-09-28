@@ -13,6 +13,11 @@
 //   move_document      an emailed document taken out of the inbox into a record
 //   relink_document    an emailed document moved from one record to another
 //   keep_as_document   "Keep as plain document" chosen for an emailed document
+//   dismiss_record     a fact an informational email stated, dismissed
+//   edit_record        such a fact changed before it was added
+//   undo_record        such a fact taken back out after it was entered
+//                      (the three built by intakeProposals.js
+//                      recordAnswerCorrection; migration 20260928170000)
 //
 // What a row holds is what the physician chose, never who anyone is: kinds,
 // sections, statuses, and ask or line texts with addresses, links, numbers,
@@ -25,7 +30,8 @@
 // the builders under plain node.
 import { INBOX_DOC_TYPES } from "./inboxDocs.js";
 
-export const CORRECTION_ACTIONS = Object.freeze(["dismiss_request", "edit_cover_note", "move_document", "relink_document", "keep_as_document"]);
+export const CORRECTION_ACTIONS = Object.freeze(["dismiss_request", "edit_cover_note", "move_document", "relink_document", "keep_as_document",
+  "dismiss_record", "edit_record", "undo_record"]);
 
 const MAX_ITEMS = 12;
 

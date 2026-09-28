@@ -52,7 +52,7 @@ test("existing tables, including ones anon may not read, pass", async () => {
 });
 
 test("tables the client reads outside TABLE_MAP are checked too", async () => {
-  assert.deepEqual([...CLIENT_READ_TABLES], ["member_view_grants", "member_view_events"]);
+  assert.deepEqual([...CLIENT_READ_TABLES], ["member_view_grants", "member_view_events", "intake_proposals"]);
   const r = await checkTables({ url: "https://x.test", key: "k", source: SRC, extra: CLIENT_READ_TABLES,
     fetchImpl: fakeFetch({ member_view_events: [404, { code: "PGRST205" }], member_view_grants: [401, { code: "42501" }] }) });
   assert.deepEqual(r.missing, ["member_view_events"], "the view log must exist before Settings reads it");

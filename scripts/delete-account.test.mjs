@@ -49,7 +49,7 @@ const userTables = USER_TABLES.map((t) => t.table);
 for (const t of ["assistant_log", "support_tickets", "support_messages", "feedback", "document_requests",
   "inbound_emails", "ai_usage", "client_errors", "backups", "deleted_items", "field_proposals", "user_events",
   "admin_messages", "admin_message_replies", "credential_portal_invites", "invoice_email_sends", "member_view_events", "member_view_grants",
-  "intake_corrections"]) {
+  "intake_corrections", "intake_proposals"]) {
   ok(`USER_TABLES covers ${t}`, userTables.includes(t));
 }
 ok("no table is in both lists", !userTables.some((t) => COLLECTION_TABLES.includes(t)));
@@ -67,8 +67,8 @@ eq("administrator access grants are matched by owner_profile_id (their sessions,
 // support access tables with their own migrations, not with this function. A
 // deploy of delete-account before then must not fail every deletion on a
 // missing table.
-eq("only the administrator access, invoice email, support access and intake corrections tables may be absent",
-  USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "invoice_email_sends", "member_view_grants", "member_view_events", "intake_corrections"]);
+eq("only the administrator access, invoice email, support access and intake tables may be absent",
+  USER_TABLES.filter((t) => t.optional).map((t) => t.table), ["credential_portal_invites", "invoice_email_sends", "member_view_grants", "member_view_events", "intake_corrections", "intake_proposals"]);
 eq("the invoice email ledger is matched by user_id", USER_TABLES.find((t) => t.table === "invoice_email_sends").column, "user_id");
 eq("the support view log is matched by profile_id (the member it is about)", USER_TABLES.find((t) => t.table === "member_view_events").column, "profile_id");
 eq("support access grants are matched by profile_id (their visits cascade)", USER_TABLES.find((t) => t.table === "member_view_grants").column, "profile_id");

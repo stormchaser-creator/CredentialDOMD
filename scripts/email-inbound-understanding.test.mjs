@@ -98,14 +98,17 @@ beforeEach(() => { resetWorld(); harness.rawAuth = AUTH_PASS; seed(); });
 
 // ── The incident ─────────────────────────────────────────────────────────────
 
-test("an informational letter with an agreement attached: no request, the agreement attached to the agency's contract, a short note to the physician", async () => {
+test("an informational letter with an agreement attached: no request, the agreement attached to the agency's contract, nobody emailed, and the app shows it", async () => {
   seedContracts();
   const r = await sendCase(INFO);
   assert.equal(r.status, 200);
   assert.equal(r.body.intent, "informational");
   assert.equal(r.body.read, "model");
+  assert.equal(r.body.emailed, false);
   assert.equal(rows("document_requests").length, 0, "no request row");
-  assert.equal(toOthers().length, 0, "nothing to the agency or anyone else");
+  // The owner's rule (2026-09-28): an email that asks nothing is entered in
+  // the app and emails nobody, not the agency and not the physician.
+  assert.equal(harness.sent.length, 0, "no email to anyone");
 
   // The agreement goes to the contract in force, and is never made into a contract.
   assert.equal(rows("locum_contracts").length, 2, "no new assignment contract");
@@ -115,12 +118,18 @@ test("an informational letter with an agreement attached: no request, the agreem
   assert.equal(doc.type, "application/pdf", "it left the inbox");
   assert.deepEqual(r.body.filed, ["linked"]);
 
-  const [reply] = toPhysician();
-  assert.equal(toPhysician().length, 1);
-  assert.ok(reply.text.startsWith("Read Jordan Sample's note about how Quillfeather Staffing's malpractice policy covers your emergency shifts. Nothing was asked of you.\n\n"), reply.text);
-  assert.match(reply.text, /The attachment:\nAttached to your Quillfeather Staffing contract \(Fernwick Example Hospital, 09\/01\/2026 to 12\/31\/2026\): Quillfeather_Master_Services_Agreement_signed\.pdf, the master agreement with Quillfeather Staffing\. It covers your 1 other Quillfeather Staffing contract too\./);
-  assert.ok(!/could not tell|Approve|request/i.test(reply.text), reply.text);
-  assert.ok(!reply.text.includes(EM_DASH));
+  // What the app shows instead of an email.
+  const [note] = rows("intake_proposals");
+  assert.equal(rows("intake_proposals").length, 1);
+  assert.equal(note.user_id, PROFILE);
+  assert.equal(note.sender, "Jordan Sample");
+  assert.equal(note.summary, "how Quillfeather Staffing's malpractice policy covers your emergency shifts");
+  assert.equal(note.verified, true);
+  assert.equal(note.status, "new");
+  assert.equal(r.body.note_id, note.id);
+  assert.deepEqual(note.items.map((i) => i.kind), ["file"]);
+  assert.match(note.items[0].line, /^Attached to your Quillfeather Staffing contract \(Fernwick Example Hospital, 09\/01\/2026 to 12\/31\/2026\): Quillfeather_Master_Services_Agreement_signed\.pdf, the master agreement with Quillfeather Staffing\. It covers your 1 other Quillfeather Staffing contract too\.$/);
+  assert.ok(!JSON.stringify(note).includes(EM_DASH));
 
   // One model call, on Vera's model, metered and held the way ai-proxy does it.
   assert.equal(harness.anthropic.length, 1);
@@ -165,32 +174,40 @@ test("an informational letter with an agreement attached: no request, the agreem
 
   const [row] = rows("inbound_emails");
   assert.match(row.detail, /^informational, stored 1, duplicates 0, filed 0, added to 1/);
+  assert.match(row.detail, /nobody emailed/);
   assert.match(row.detail, /read by model \(high\)/);
   assert.ok(!/ack sent/i.test(row.detail));
 });
 
-test("the same letter from a domain that cannot be verified: nothing filed, and the reply says where the agreement belongs", async () => {
+test("the same letter from a domain that cannot be verified: nothing filed, nobody emailed, and the app offers the agreement's link on one tap", async () => {
   seedContracts();
   harness.rawAuth = AUTH_NONE;
   const r = await sendCase(INFO);
   assert.equal(r.body.intent, "informational");
   assert.equal(r.body.verified, false);
   assert.equal(rows("document_requests").length, 0);
+  assert.equal(harness.sent.length, 0);
   const [doc] = rows("documents");
   assert.equal(doc.linked_to, null);
   assert.equal(doc.type, "email-inbox");
-  const text = toPhysician()[0].text;
-  assert.match(text, /^Read Jordan Sample's note about .*\. Nothing was asked of you\./);
-  assert.match(text, /Saved, not filed yet: Quillfeather_Master_Services_Agreement_signed\.pdf, which reads as the master agreement with Quillfeather Staffing -> your Quillfeather Staffing contract \(Fernwick Example Hospital, 09\/01\/2026 to 12\/31\/2026\)\. This message could not be verified as coming from you/);
-  assert.match(text, /Mail from clinic\.example arrives without a DMARC pass/);
+  const [note] = rows("intake_proposals");
+  assert.equal(note.verified, false);
+  const [link] = note.items.filter((i) => i.kind === "link");
+  assert.deepEqual({ ...link, key: undefined }, {
+    key: undefined, kind: "link", docId: doc.id, linkedTo: "locumContracts:contract-now", name: "Quillfeather Staffing - master agreement.pdf",
+    type: "application/pdf", target: "your Quillfeather Staffing contract (Fernwick Example Hospital, 09/01/2026 to 12/31/2026)",
+    fileName: "Quillfeather_Master_Services_Agreement_signed.pdf", state: "proposed",
+  });
+  assert.ok(!note.items.some((i) => i.kind === "file" && /Quillfeather_Master/.test(i.line)), "the link offer says it; no second line about the same file");
 });
 
-test("an agreement with no contract for its agency on file is kept unfiled, never made into a contract", async () => {
+test("an agreement with no contract for its agency on file is kept unfiled, never made into a contract, and the app says why", async () => {
   const r = await sendCase(INFO);
   assert.deepEqual(r.body.filed, ["unfiled"]);
   assert.equal(rows("locum_contracts").length, 0);
   assert.equal(rows("documents")[0].linked_to, null);
-  assert.match(toPhysician()[0].text, /Saved, not filed yet: Quillfeather_Master_Services_Agreement_signed\.pdf reads as the master agreement with Quillfeather Staffing, and no contract with Quillfeather Staffing is on file \(open the app > Documents to file it\)\. It was not made into a new contract, since it names no facility or dates\./);
+  assert.equal(harness.sent.length, 0);
+  assert.match(rows("intake_proposals")[0].items[0].line, /^Saved, not filed yet: Quillfeather_Master_Services_Agreement_signed\.pdf reads as the master agreement with Quillfeather Staffing, and no contract with Quillfeather Staffing is on file \(file it from Documents\)\. It was not made into a new contract, since it names no facility or dates\.$/);
 });
 
 // ── Delivery, request, mixed ─────────────────────────────────────────────────
@@ -483,14 +500,15 @@ test("cme@ with no model reading behaves exactly as it did", async () => {
   assert.equal(harness.anthropic.length, 0);
 });
 
-test("nothing the physician is sent carries an em dash, even when the model's summary does", async () => {
+test("nothing the physician is shown carries an em dash or a planted link, even when the model's summary does", async () => {
   seedContracts();
   await sendCase(INFO, { anthropicReply: () => ({ ...INFO.modelReply, summary: `the agency policy ${EM_DASH} emergency care, see https://phish.example/x` }) });
-  const text = toPhysician()[0].text;
-  assert.ok(!text.includes(EM_DASH), text);
-  assert.ok(!text.includes("phish.example"), "a link in the model's summary is never repeated");
-  // A summary that carried a link is not repeated at all.
-  assert.match(text, /^Read Jordan Sample's note\. Nothing was asked of you\./);
+  assert.equal(harness.sent.length, 0);
+  const [note] = rows("intake_proposals");
+  assert.ok(!JSON.stringify(note).includes(EM_DASH));
+  assert.ok(!JSON.stringify(note).includes("phish.example"), "a link in the model's summary is never repeated");
+  // A summary that carried a link is not shown at all.
+  assert.equal(note.summary, "");
 });
 
 // ── Review of the reading, 2026-09-28 (evening) ─────────────────────────────
@@ -528,9 +546,13 @@ test("a statement the model takes for an ask is dropped: no acknowledgement, nev
     if (req) {
       assert.equal(req.proposal.unclear, true, label);
       assert.deepEqual(req.proposal.items, [], label);
+      const text = toPhysician()[0].text;
+      assert.ok(!/Packet ready|Approve and send|Nothing was asked/.test(text), `${label}: ${text}`);
+    } else {
+      // Read as informational once the statement was dropped: entered in the app, nobody emailed.
+      assert.equal(r.body.intent, "informational", label);
+      assert.equal(harness.sent.length, 0, label);
     }
-    const text = toPhysician()[0].text;
-    assert.ok(!/Packet ready|Approve and send|Nothing was asked/.test(text), `${label}: ${text}`);
     assert.ok(rows("documents").some((d) => d.linked_to === "locumContracts:contract-now"), `${label}: the agreement went to the agency's contract, not a request`);
   }
 });

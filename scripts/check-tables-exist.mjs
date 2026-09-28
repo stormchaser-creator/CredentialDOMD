@@ -54,7 +54,9 @@ async function probe(url, key, table, fetchImpl = fetch) {
 // production before the client ships.
 //   member_view_grants, member_view_events: Settings > Support access and
 //   Admin > Control history (20260925131000_member_support_view.sql).
-export const CLIENT_READ_TABLES = Object.freeze(["member_view_grants", "member_view_events"]);
+//   intake_proposals: what informational mail entered or proposed, in More >
+//   Requests and on Home (20260928170000_intake_proposals.sql).
+export const CLIENT_READ_TABLES = Object.freeze(["member_view_grants", "member_view_events", "intake_proposals"]);
 
 export async function checkTables({ url, key, source, fetchImpl, extra = [] }) {
   const tables = [...new Set([...tableMapTables(source), ...extra])];

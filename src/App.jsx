@@ -52,6 +52,8 @@ import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirement
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox } from "./components/features";
 import { useOpenRequests } from "./hooks/useNewRequestCount";
+import { useIntakeNotes } from "./hooks/useIntakeNotes";
+import { IntakeNotesBanner } from "./components/features/IntakeNotes";
 import { useRequestProposals } from "./hooks/useRequestProposals";
 import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
@@ -318,6 +320,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // and the inbox's card never disagree about what is ready.
   const { rows: openRequests, count: newRequestCount, refresh: refreshRequests } = useOpenRequests();
   const openRequestRows = useRequestProposals(openRequests);
+  // What informational mail entered or offers (no email goes out for one):
+  // the newest on Home, all of them in More > Requests, counted in its badge.
+  const { notes: intakeNotes } = useIntakeNotes();
+  const requestsBadge = newRequestCount + intakeNotes.length;
   // The request Home's Review link opens. The inbox reports back once it
   // has opened it, and the id is cleared so a later trip to More > Requests
   // starts on the list.
@@ -981,6 +987,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         and {bannerCount - 1} more waiting
       </button>
     );
+    const intakeBanner = <IntakeNotesBanner notes={intakeNotes} T={T} isDesktop={isDesktop} onReview={goRequests} />;
     const requestBanner = lastSent ? (
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.success}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, boxShadow: T.shadow1 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", minWidth: 0 }}>
@@ -2022,6 +2029,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       return (
         <div className="cmd-fade-in">
           {homeSearch}
+          {intakeBanner}
           {requestBanner}
           {checklist}
           {hasActionColumn ? (
@@ -2066,6 +2074,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     return (
       <div className="cmd-fade-in">
         {homeSearch}
+        {intakeBanner}
         {requestBanner}
         {checklist}
         {hero}
@@ -2662,7 +2671,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           {/* Requests: document requests forwarded to docs@ */}
           <button onClick={() => setSubPage("requests")} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `1px solid ${newRequestCount ? T.accent : T.border}`,
+            backgroundColor: T.card, border: `1px solid ${requestsBadge ? T.accent : T.border}`,
             borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
             boxShadow: T.shadow1,
           }}>
@@ -2670,8 +2679,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Requests</div>
             </div>
-            {newRequestCount > 0 && (
-              <span style={{ minWidth: 22, padding: "2px 8px", borderRadius: 11, backgroundColor: T.accent, color: "#fff", fontSize: 12, fontWeight: 800, textAlign: "center" }}>{newRequestCount}</span>
+            {requestsBadge > 0 && (
+              <span style={{ minWidth: 22, padding: "2px 8px", borderRadius: 11, backgroundColor: T.accent, color: "#fff", fontSize: 12, fontWeight: 800, textAlign: "center" }}>{requestsBadge}</span>
             )}
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>

@@ -24,7 +24,11 @@
  *     "attachments": [{ "name": "file.pdf", "scan": <the scanner's result, or null> }],
  *     "expected": { "intent": "request|delivery|informational|mixed",
  *                   "asks": [{ "kind": "<requestPacket KINDS>" }],
- *                   "roles": ["<a role per attachment>"] },
+ *                   "roles": ["<a role per attachment>"],
+ *                   "records": [{ "section": "insurance", "fields": { "coveragePerClaim": "1000000", ... } }] },
+ *     "onFile": { "<section>": [<the physician's records the model may name>] } (optional),
+ *     "agencies": ["<agency names on the physician's contracts, for the rules>"] (optional),
+ *     "physicianName": "<the physician's name, so a fact about another doctor is dropped>" (optional),
  *     "modelReply": <a recorded model reply, optional, replayed in stub mode>
  *   }
  * A case with no "expected", or with "labelled": false, is read and shown
@@ -43,15 +47,19 @@
  *
  * What it prints: the intent, whether the email is a request at all (the
  * number the 2026-09-28 incident got wrong), ask precision and recall by
- * kind, asks invented on emails that asked for nothing, and attachment roles.
+ * kind, asks invented on emails that asked for nothing, attachment roles,
+ * and the facts an informational email states (records[], after the host's
+ * own check, intakeFacts.mjs verifyRecords): how many expected fields were
+ * read with the expected value, and how many were read that no one expected.
  */
 import { readdirSync, readFileSync, realpathSync, existsSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
-  buildUnderstandingRequest, readModelReply, verifyUnderstanding, rulesUnderstanding, splitForward,
+  buildUnderstandingRequest, readModelReply, verifyUnderstanding, rulesUnderstanding, rulesWithFacts, splitForward,
 } from "../supabase/functions/_shared/intakeUnderstanding.mjs";
+import { corpusIndex, existingForModel, attachmentText } from "../supabase/functions/_shared/intakeFacts.mjs";
 import { classifyAsk } from "../supabase/functions/_shared/requestPacket.ts";
 
 const REPO = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -108,13 +116,34 @@ export function caseInput(c) {
   return { rawText, forwardedBody, subject: String(c.subject || ""), from: c.from || {}, attachments };
 }
 
-/** The rules' reading of a case (the fallback). */
+/**
+ * What a fact in this case may rest on, as email-inbound builds it: the
+ * subject, the note, the message, the history and each attachment's words;
+ * the records on file the model may name by ref; the physician's name.
+ */
+export function factsFor(c) {
+  const input = caseInput(c);
+  const parts = splitForward(input.rawText, input.forwardedBody);
+  return {
+    parts,
+    onFile: existingForModel(c.onFile || {}),
+    facts: {
+      corpus: corpusIndex([input.subject, parts.note, parts.message, parts.history, ...input.attachments.map((a) => attachmentText(a.scan))]),
+      refs: existingForModel(c.onFile || {}).refs,
+      physicianName: String(c.physicianName || ""),
+    },
+  };
+}
+
+/** The rules' reading of a case (the fallback), with the one fact the rules can read. */
 export function readByRules(c, why = "evaluation") {
   const input = caseInput(c);
-  return rulesUnderstanding({
+  const { parts, facts } = factsFor(c);
+  const agencies = [...(Array.isArray(c.agencies) ? c.agencies : []), ...((c.onFile?.locumContracts || []).map((x) => x.agency).filter(Boolean))];
+  return rulesWithFacts(rulesUnderstanding({
     subject: input.subject, body: input.forwardedBody, attachmentNames: input.attachments.map((a) => a.name),
     attachmentCount: input.attachments.length, forwarded: true, why,
-  });
+  }), { message: [parts.note, parts.message].filter(Boolean).join("\n\n"), subject: input.subject, agencies, facts });
 }
 
 /** A model reply (recorded or live) through the host's own check, as production acts on it. */
@@ -122,8 +151,8 @@ export function readFromReply(c, message) {
   const input = caseInput(c);
   const read = readModelReply(message);
   if (!read.ok) return readByRules(c, read.why);
-  const parts = splitForward(input.rawText, input.forwardedBody);
-  const reading = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.attachments.length });
+  const { parts, facts } = factsFor(c);
+  const reading = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.attachments.length, facts });
   return reading.needsRules ? readByRules(c, "the reading's asks were not the email's own words") : reading;
 }
 
@@ -132,7 +161,7 @@ export function requestFor(c, corrections = []) {
   const input = caseInput(c);
   return buildUnderstandingRequest({
     subject: input.subject, sender: input.from, ...splitForward(input.rawText, input.forwardedBody),
-    attachments: input.attachments, corrections,
+    attachments: input.attachments, corrections, records: factsFor(c).onFile.lines,
   });
 }
 
@@ -172,6 +201,19 @@ export function scoreCase(c, reading) {
   const roles = Array.isArray(exp.roles) && reading.method === "model"
     ? exp.roles.map((r, i) => (reading.attachments || []).find((a) => a.index === i)?.role === r)
     : [];
+  // Facts, field by field: an expected field read with the expected value is
+  // a hit; any field read on a case that expects no records is invented.
+  const wantRecords = Array.isArray(exp.records) ? exp.records : [];
+  const gotRecords = Array.isArray(reading.records) ? reading.records : [];
+  let factsWanted = 0, factsHit = 0;
+  for (const w of wantRecords) {
+    const fields = Object.entries(w.fields || {});
+    factsWanted += fields.length;
+    const best = Math.max(0, ...gotRecords.filter((g) => g.section === w.section)
+      .map((g) => fields.filter(([k, v]) => String(g.fields?.[k] ?? "") === String(v)).length));
+    factsHit += best;
+  }
+  const factsGot = gotRecords.reduce((n, g) => n + Object.keys(g.fields || {}).length, 0);
   return {
     intent: reading.intent === exp.intent,
     request: isRequest(reading.intent) === isRequest(exp.intent),
@@ -181,6 +223,10 @@ export function scoreCase(c, reading) {
     invented: want.length === 0 ? got.length : 0,
     rolesRight: roles.filter(Boolean).length,
     rolesTotal: roles.length,
+    factsWanted,
+    factsHit,
+    factsGot,
+    factsInvented: wantRecords.length === 0 ? factsGot : 0,
   };
 }
 
@@ -204,6 +250,10 @@ export async function runEval(cases, read) {
     invented: sum("invented"),
     rolesRight: sum("rolesRight"),
     rolesTotal: sum("rolesTotal"),
+    factsWanted: sum("factsWanted"),
+    factsHit: sum("factsHit"),
+    factsGot: sum("factsGot"),
+    factsInvented: sum("factsInvented"),
     byModel: rows.filter((r) => r.reading.method === "model").length,
   };
   return { rows, totals };
@@ -218,7 +268,8 @@ export function formatReport({ rows, totals }, mode) {
     const s = r.score;
     const how = r.reading.method === "model" ? `model ${r.reading.confidence}` : `rules${r.reading.why ? ` (${r.reading.why})` : ""}`;
     const asks = (r.reading.asks || []).map(kindOf).join(", ") || "none";
-    const verdict = !s ? "unlabelled" : [s.intent ? "intent ok" : "INTENT WRONG", s.asksHit === s.asksWanted && s.asksGot === s.asksWanted ? "asks ok" : `asks ${s.asksHit}/${s.asksWanted} (read ${s.asksGot})`, s.invented ? `${s.invented} INVENTED` : ""].filter(Boolean).join(", ");
+    const facts = !s || (!s.factsWanted && !s.factsGot) ? "" : s.factsInvented ? `${s.factsInvented} FACTS INVENTED` : `facts ${s.factsHit}/${s.factsWanted} (read ${s.factsGot})`;
+    const verdict = !s ? "unlabelled" : [s.intent ? "intent ok" : "INTENT WRONG", s.asksHit === s.asksWanted && s.asksGot === s.asksWanted ? "asks ok" : `asks ${s.asksHit}/${s.asksWanted} (read ${s.asksGot})`, s.invented ? `${s.invented} INVENTED` : "", facts].filter(Boolean).join(", ");
     out.push(`  ${r.id}: ${r.reading.intent} by ${how}; asks: ${asks}; ${verdict}`);
   }
   out.push(
@@ -227,6 +278,8 @@ export function formatReport({ rows, totals }, mode) {
     `asks: precision ${pct(totals.asksHit, totals.asksGot)}, recall ${pct(totals.asksHit, totals.asksWanted)} (${totals.asksHit} right of ${totals.asksGot} read, ${totals.asksWanted} expected)`,
     `asks invented on emails that asked for nothing: ${totals.invented}`,
     `attachment roles: ${totals.rolesTotal ? `${totals.rolesRight}/${totals.rolesTotal} (${pct(totals.rolesRight, totals.rolesTotal)})` : "n/a"}`,
+    `facts to enter: ${totals.factsWanted ? `${totals.factsHit}/${totals.factsWanted} expected fields read right (${pct(totals.factsHit, totals.factsWanted)}), ${totals.factsGot} read` : "n/a"}`,
+    `facts read from emails that state none to enter: ${totals.factsInvented}`,
   );
   return out.join("\n");
 }

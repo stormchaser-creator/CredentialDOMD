@@ -1,8 +1,10 @@
 /**
  * The understanding step's one model call (intakeUnderstanding.mjs), made by
- * email-inbound on the SHARED Anthropic key, metered the way ai-proxy meters
- * that key. Nothing here decides what an email means; it only admits the
- * call or declines it, makes it, and says why.
+ * email-inbound on the key it is handed (app_secrets.anthropic_intake_key,
+ * intake's own, when the operator has set it; else the shared
+ * anthropic_shared_key), metered the way ai-proxy meters the shared key.
+ * Nothing here decides what an email means; it only admits the call or
+ * declines it, makes it, and says why.
  *
  *   admit   admitUnderstanding, before anything is scanned or sent:
  *           who     an active account, or an admin whose forward is

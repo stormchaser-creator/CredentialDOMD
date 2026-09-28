@@ -113,6 +113,10 @@ export const USER_TABLES: UserTable[] = [
   // same reason as above: migration 20260928160000 is applied with the
   // email-inbound deploy, not with this function.
   { table: "intake_corrections", column: "user_id", optional: true },
+  // What intake entered or proposed from an informational email (senders,
+  // summaries, source quotes), 2026-09-28. optional for the same reason:
+  // migration 20260928170000 arrives with the email-inbound deploy.
+  { table: "intake_proposals", column: "user_id", optional: true },
 ];
 
 /**

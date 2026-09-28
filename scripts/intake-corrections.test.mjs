@@ -13,6 +13,8 @@ import {
 import { correctionExamples } from "../supabase/functions/_shared/intakeUnderstanding.mjs";
 
 const MIGRATION = (await import("node:fs")).readFileSync(new URL("../supabase/migrations/20260928160000_intake_corrections.sql", import.meta.url), "utf8");
+// The answers to informational mail's proposals widen the list (migration 20260928170000).
+const WIDENED = (await import("node:fs")).readFileSync(new URL("../supabase/migrations/20260928170000_intake_proposals.sql", import.meta.url), "utf8");
 
 const request = {
   id: "req-1", inbound_ledger_id: "led-1", from_name: "Casey Example", from_addr: "casey@osterly.example",
@@ -25,9 +27,10 @@ const request = {
   },
 };
 
-test("the actions are the migration's own list", () => {
-  const listed = MIGRATION.match(/check \(action in \(([^)]*)\)\)/)[1].match(/'([a-z_]+)'/g).map((x) => x.slice(1, -1));
-  assert.deepEqual([...CORRECTION_ACTIONS], listed);
+test("the actions are the migrations' own list: the first five, then the three answers to a proposal", () => {
+  const actions = (sql) => sql.match(/check \(action in \(([^)]*)\)\)/)[1].match(/'([a-z_]+)'/g).map((x) => x.slice(1, -1));
+  assert.deepEqual([...CORRECTION_ACTIONS].slice(0, 5), actions(MIGRATION));
+  assert.deepEqual([...CORRECTION_ACTIONS], actions(WIDENED));
 });
 
 test("an emailed document is one with an inbox type, or a MIME type only email-inbound writes", () => {

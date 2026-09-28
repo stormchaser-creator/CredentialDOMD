@@ -7,6 +7,9 @@ import { docMime } from "../../utils/inboxDocs";
 import { docBytes, fmtBytes } from "../../utils/docLabel";
 import { noteForSelection, noteWithNotOnFile } from "../../utils/requestPacket";
 import { dismissCorrection, coverNoteCorrection, recordCorrection } from "../../utils/intakeCorrections";
+import { planAccept, planDismiss, planUndo, withItem, recordAnswerCorrection } from "../../utils/intakeProposals";
+import { useIntakeNotes, saveNote } from "../../hooks/useIntakeNotes";
+import { IntakeNoteCard } from "./IntakeNotes";
 import EmailPacketModal, { PACKET_FROM_ADDRESS, REQUEST_REPLIED_EVENT } from "./EmailPacketModal";
 import { ProposalChecklist, ApproveSendButton, ReviewButton, UnclearNote, canSendOnOneTap, proposalSummary, requesterMissing, unwrapInvoke } from "./RequestPacket";
 import { REQUESTS_CHANGED_EVENT } from "../../hooks/useNewRequestCount";
@@ -95,7 +98,7 @@ const sameIds = (selected, ids) => {
  * the owner can clear it and a later visit starts on the list.
  */
 function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
-  const { data, loaded, user, theme: T, navigate, userIdRef } = useApp();
+  const { data, loaded, user, theme: T, navigate, userIdRef, isDesktop, addItem, editItem, deleteItem } = useApp();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -215,11 +218,51 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
   // differing from the screen.
   const viewRows = useRequestProposals(rows);
 
+  // Informational mail: what an email that asked for nothing entered or
+  // offers (no email goes out for one). Shown above the requests on New.
+  const { notes, replace: replaceNote } = useIntakeNotes();
+  const [noteBusy, setNoteBusy] = useState(null); // { id, key } of the item being answered
+  const [noteErr, setNoteErr] = useState(null);   // { id, text }
+  // Add, Dismiss or Undo one item. The records go through the app's own
+  // addItem / editItem / deleteItem (utils/intakeProposals.js plans them),
+  // then the note records the answer, and the answer is a correction the
+  // next reading learns from.
+  const answerNote = async (note, item, action, extra = {}) => {
+    const plan = action === "add" ? planAccept(item, { data, newId: () => crypto.randomUUID(), fields: extra.fields })
+      : action === "dismiss" ? planDismiss(item)
+        : planUndo(item, { data });
+    if (plan.error) { setNoteErr({ id: note.id, text: plan.error }); return; }
+    setNoteErr(null);
+    setNoteBusy({ id: note.id, key: item.key });
+    try {
+      for (const w of plan.writes) {
+        const done = w.op === "add" ? addItem(w.key, w.record) : w.op === "edit" ? editItem(w.key, w.record) : deleteItem(w.key, w.id);
+        // A refused write has already said why (AppContext alertWriteRefused).
+        if (done === false) return;
+      }
+      const next = withItem(note, plan.item);
+      replaceNote(next);
+      if (!(await saveNote(next))) setNoteErr({ id: note.id, text: "Saved to your records, but this card could not be updated. Refresh to see it." });
+      const correction = action === "dismiss" ? recordAnswerCorrection(note, item, "dismiss_record")
+        : action === "undo" ? recordAnswerCorrection(note, item, "undo_record")
+          : extra.changed?.length ? recordAnswerCorrection(note, item, "edit_record", { changed: extra.changed }) : null;
+      if (correction) recordCorrection(supabase, userIdRef?.current, correction);
+    } finally {
+      setNoteBusy(null);
+    }
+  };
+  const noteDone = async (note) => {
+    const next = { ...note, status: "done" };
+    replaceNote(next);
+    if (!(await saveNote(next))) setNoteErr({ id: note.id, text: "Could not clear this card. Try again." });
+  };
+
   const counts = useMemo(() => {
     const c = { new: 0, replied: 0, dismissed: 0 };
     for (const r of rows) c[r.status] = (c[r.status] || 0) + 1;
+    c.new += notes.length;
     return c;
-  }, [rows]);
+  }, [rows, notes.length]);
   const visible = viewRows.filter((r) => r.status === tab);
   const open = openId ? viewRows.find((r) => r.id === openId) : null;
 
@@ -644,8 +687,24 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
         </div>
       )}
 
+      {tab === "new" && notes.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          {notes.map((n) => (
+            <IntakeNoteCard key={n.id} note={n} T={T} isDesktop={isDesktop}
+              busyKey={noteBusy && noteBusy.id === n.id ? noteBusy.key : null}
+              error={noteErr && noteErr.id === n.id ? noteErr.text : ""}
+              onAdd={(item, edit) => answerNote(n, item, "add", edit || {})}
+              onDismiss={(item) => answerNote(n, item, "dismiss")}
+              onUndo={(item) => answerNote(n, item, "undo")}
+              onDone={noteDone} />
+          ))}
+        </div>
+      )}
+
       {loading && rows.length === 0 ? (
         <div style={{ fontSize: 13.5, color: T.textDim, padding: "24px 0", textAlign: "center" }}>Loading…</div>
+      ) : visible.length === 0 && tab === "new" && notes.length > 0 ? (
+        <div style={{ fontSize: 13.5, color: T.textDim, padding: "8px 0" }}>No document requests.</div>
       ) : visible.length === 0 ? (
         tab === "new" ? (
           <EmptyState icon={"📨"} title="No document requests"
