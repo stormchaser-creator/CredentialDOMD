@@ -7,8 +7,7 @@
 // the duplicate before analysis is how an Add Agreement form ended up blank.
 
 import { officeKind } from "./officeText.js";
-import { toClock } from "./coverageBlocks.js";
-import { withStatedTimes } from "./coverageText.js";
+import { normalizeCoveragePeriods, fileableCoveragePeriods } from "./coverageText.js";
 import { docMime, INBOX_DOC_TYPE, leaveInbox } from "./inboxDocs.js";
 // mergeExtracted, splitScanned and mergeScanned live in scanSplit.js, which the
 // email-inbound edge function shares; re-exported so every import keeps working.
@@ -96,11 +95,12 @@ export function isoDate(v) {
 /**
  * Analyzer JSON → the exact shape the Contracts form and Work Log expect.
  * A coverage block keeps startTime/endTime (24-hour "HH:MM", see
- * coverageBlocks.js) only when the agreement stated them; `text`, the
- * agreement's own words when they are at hand, fills in any the model left
- * out (coverageText.js).
+ * coverageBlocks.js) only when the agreement stated them, and a start time
+ * only with an end time; `text`, the agreement's own words when they are at
+ * hand, fills in any the model left out, and `zone` is stamped on a block
+ * with times (coverageText.js normalizeCoveragePeriods).
  */
-export function normalizeAgreementFields(extracted, { text = "" } = {}) {
+export function normalizeAgreementFields(extracted, { text = "", zone = "" } = {}) {
   if (!extracted || typeof extracted !== "object" || Array.isArray(extracted)) return {};
   const out = { ...extracted };
 
@@ -118,19 +118,7 @@ export function normalizeAgreementFields(extracted, { text = "" } = {}) {
 
   const start = isoDate(out.startDate);
   const end = isoDate(out.endDate);
-  let periods = Array.isArray(out.coveragePeriods)
-    ? out.coveragePeriods
-        .map((p) => ({ start: isoDate(p?.start), end: isoDate(p?.end), startTime: toClock(p?.startTime), endTime: toClock(p?.endTime) }))
-        .filter((p) => p.start || p.end)
-        // Times only on a block with its own start date, and an end time
-        // only with an end date: a time on half a block would be a guess.
-        .map((p) => ({
-          start: p.start || p.end, end: p.end,
-          ...(p.start && p.startTime ? { startTime: p.startTime } : {}),
-          ...(p.start && p.end && p.endTime ? { endTime: p.endTime } : {}),
-        }))
-    : [];
-  if (text) periods = withStatedTimes(periods, text);
+  let periods = normalizeCoveragePeriods(Array.isArray(out.coveragePeriods) ? out.coveragePeriods : [], { text, zone, day: isoDate });
   // A single assignment span with no blocks listed is one block.
   if (periods.length === 0 && (start || end)) periods = [{ start: start || end, end }];
   if (periods.length) out.coveragePeriods = periods; else delete out.coveragePeriods;
@@ -147,6 +135,31 @@ export function normalizeAgreementFields(extracted, { text = "" } = {}) {
     if (grid.length) out.callRateGrid = grid; else delete out.callRateGrid;
   }
   return out;
+}
+
+const CONTRACT_NUMBER_FIELDS = ["hourlyRate", "callHourlyRate", "callStipend", "stipendHours", "overageHourlyRate", "orientationFee", "orientationHourlyRate"];
+
+/**
+ * A contract read on the Files tab (DocumentsSection), shaped the way the
+ * Contracts form saves one: every rate a number, increments defaulting to
+ * 15, and its coverage blocks through normalizeCoveragePeriods (times as
+ * HH:MM, a start time only with an end time, any time the model left out
+ * filled from `text`, the file's own words, and `zone` on a block with
+ * times). A block its times make end before it starts would bill no call
+ * day, so it is not saved: { entry, problem } names the first one.
+ */
+export function contractFromScan(fields, { text = "", zone = "" } = {}) {
+  const entry = { ...(fields || {}) };
+  for (const k of CONTRACT_NUMBER_FIELDS) entry[k] = parseFloat(entry[k]) || 0;
+  entry.incrementMinutes = parseInt(entry.incrementMinutes, 10) || 15;
+  entry.minCallMinutes = parseInt(entry.minCallMinutes, 10) || 15;
+  if (Array.isArray(entry.coveragePeriods) || text) {
+    const periods = normalizeCoveragePeriods(Array.isArray(entry.coveragePeriods) ? entry.coveragePeriods : [], { text, zone, day: isoDate });
+    const { refused } = fileableCoveragePeriods(periods);
+    if (refused.length) return { entry, problem: `${refused[0].problem} Fix its dates here or remove the block, then save.` };
+    if (periods.length || Array.isArray(entry.coveragePeriods)) entry.coveragePeriods = periods;
+  }
+  return { entry, problem: "" };
 }
 
 /** Wrap an analyzer result so its `extracted` block is normalized in place (opts.text: the agreement's text, when read from one). */

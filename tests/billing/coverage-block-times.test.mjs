@@ -88,10 +88,13 @@ test("a block with times: its moments, call days, window and the dates it touche
   assert.equal(hasTimedPeriods(TIMED_CONTRACT), true);
 });
 
-test("start time only: the end date stays the last call day; end time only: the block starts at that time", () => {
-  const startOnly = timedBlock({ start: "2026-11-05", startTime: "06:00", end: "2026-11-11" });
-  assert.equal(new Date(startOnly.endMs).toISOString(), at("2026-11-12 06:00"));
-  assert.deepEqual(blockCallDays(startOnly), ["2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11"]);
+test("a start time alone is no time: the block keeps its untimed meaning; end time only: the block starts at that time", () => {
+  // Read as a block starting at 6:00 AM, a start time alone turned every
+  // call day over at 6:00 AM and kept the end date as a call day of its own
+  // (see coverage-block-review-fixes.test.mjs). It is ignored instead.
+  const startOnly = { start: "2026-11-05", startTime: "06:00", end: "2026-11-11" };
+  assert.equal(timedBlock(startOnly), null);
+  assert.equal(isTimedPeriod(startOnly), false);
   const endOnly = timedBlock({ start: "2026-09-25", end: "2026-09-28", endTime: "07:00" });
   assert.equal(new Date(endOnly.startMs).toISOString(), at("2026-09-25 07:00"));
   assert.deepEqual(blockCallDays(endOnly), ["2026-09-25", "2026-09-26", "2026-09-27"]);
@@ -141,7 +144,10 @@ test("a 6 AM to 6 AM block: 6:15 AM work files under that same day, though the c
   // Outside the block the contract's own 7:00 decides.
   assert.equal(deriveCallDay(at("2026-11-12 06:15"), SIX_TO_SIX), "2026-11-11");
   assert.equal(deriveCallDay(at("2026-11-12 07:15"), SIX_TO_SIX), "2026-11-12");
-  assert.equal(deriveCallDay(at("2026-11-05 05:30"), SIX_TO_SIX), "2026-11-04");
+  // Before the block begins on its start date, Nov 4 is no call day, so the
+  // block's first day takes it (coverageBlocks.js leadInCallDay).
+  assert.equal(deriveCallDay(at("2026-11-05 05:30"), SIX_TO_SIX), "2026-11-05");
+  assert.equal(deriveCallDay(at("2026-11-04 23:30"), SIX_TO_SIX), "2026-11-04");
   // The number form is the old rule, untouched.
   assert.equal(deriveCallDay(at("2026-11-06 06:15"), 7), "2026-11-05");
   assert.equal(callDayStartHour(SIX_TO_SIX, at("2026-11-06 06:15")), 6);

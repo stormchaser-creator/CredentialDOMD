@@ -28,7 +28,7 @@ import {
   callDayStartHour, currentCallDay, splitRows, splitGroupOf, splitPieceNote, hourLabel,
   startedCoverageDays, stipendMinutesOf, outsideChargeOf, coveragePartsOf, callDayCuts,
 } from "../../../utils/billing";
-import { hasTimedPeriods, isTimedPeriod, periodHasCallDay, clockLabel } from "../../../utils/coverageBlocks";
+import { hasTimedPeriods, isTimedPeriod, periodHasCallDay, clockLabel, contractZone } from "../../../utils/coverageBlocks";
 
 // What a saved entry's time before or after its timed coverage block bills,
 // said once at save (null when none of it is outside the block).
@@ -36,8 +36,8 @@ function outsideNote(c, r) {
   const parts = coveragePartsOf(c, r);
   if (!parts) return null;
   const said = [];
-  if (parts.before) said.push(`${parts.before} min before the call began at ${clockLabel(parts.block.startMs)}`);
-  if (parts.after) said.push(`${parts.after} min after the call ended at ${clockLabel(parts.block.endMs)}`);
+  if (parts.before) said.push(`${parts.before} min before the call began at ${clockLabel(parts.block.startMs, parts.block.tz)}`);
+  if (parts.after) said.push(`${parts.after} min after the call ended at ${clockLabel(parts.block.endMs, parts.block.tz)}`);
   return `This ${r.type} has ${said.join(" and ")}: that time bills at ${money(outsideChargeOf(c, r).rate)}/hr, outside the stipend.`;
 }
 
@@ -351,7 +351,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const cut = hasTimedPeriods(c) && rows[0]?.startTime
       ? (rows.length > 1 ? rows[1].startTime : callDayCuts(c, new Date(rows[0].startTime).getTime(), new Date(rows[0].endTime || rows[0].startTime).getTime())[0])
       : null;
-    const hour = cut ? clockLabel(cut) : hourLabel(callDayStartHour(c));
+    const hour = cut ? clockLabel(cut, contractZone(c)) : hourLabel(callDayStartHour(c));
     if (rows.length > 1) {
       const where = rows.map((r, i) => `${fmtTime(r.startTime)}–${fmtTime(r.endTime)} counts toward ${i === 0 ? "the " : ""}${formatDate(r.callDay)}${i === 0 ? " call day" : ""}`);
       msgs.push(`This ${rows[0].type} crossed the ${hour} start of the call day, so it is split: ${where.slice(0, -1).join(", ")} and ${where.at(-1)}.`);
@@ -513,10 +513,23 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         // call day under R2) would put its invoice id on a call day that
         // invoice never billed, and an invoiced row on a day reads as that
         // day's stipend already billed.
-        const rows = billedPieces.length && oldPieces.length === 1 ? [edited] : splitRows(edited, target, generateId);
-        if (billedPieces.length && rows.length !== oldPieces.length) {
-          const num = (data.invoices || []).find(i => i.id === billedPieces[0].invoiceId)?.number;
+        const fresh = billedPieces.length && oldPieces.length === 1 ? [edited] : splitRows(edited, target, generateId);
+        const num = billedPieces.length ? (data.invoices || []).find(i => i.id === billedPieces[0].invoiceId)?.number : null;
+        if (billedPieces.length && fresh.length !== oldPieces.length) {
           window.alert(`This change would split this entry differently from the way ${num || "a sent invoice"} billed it. Delete that invoice in the Invoices tab first (its entries become unbilled), then edit.`);
+          return;
+        }
+        // An invoiced piece keeps the call day its invoice billed it under
+        // while its times stand: the contract's hour or its coverage blocks'
+        // times may have changed since, and re-deriving would move it (and
+        // its invoice id) to a day that invoice never billed. Moving its
+        // times to another call day waits for the invoice to be deleted.
+        const sameTimes = (r, old) => r.startTime === old.startTime && (oldPieces.length === 1 || r.endTime === old.endTime);
+        const rows = billedPieces.length
+          ? fresh.map((r, i) => (oldPieces[i].invoiceId && sameTimes(r, oldPieces[i]) ? { ...r, callDay: callDayOf(oldPieces[i]) } : r))
+          : fresh;
+        if (rows.some((r, i) => oldPieces[i]?.invoiceId && r.callDay !== callDayOf(oldPieces[i]))) {
+          window.alert(`This change would move this entry to a different call day from the one ${num || "a sent invoice"} billed it under. Delete that invoice in the Invoices tab first (its entries become unbilled), then edit.`);
           return;
         }
         if (billedPieces.length) {

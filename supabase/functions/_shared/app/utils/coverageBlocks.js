@@ -10,28 +10,38 @@
  * locum_contracts.coverage_periods; no column of its own) holds one object
  * per block:
  *
- *   { start: "YYYY-MM-DD", end: "YYYY-MM-DD", startTime?: "HH:MM", endTime?: "HH:MM" }
+ *   { start: "YYYY-MM-DD", end: "YYYY-MM-DD", startTime?: "HH:MM", endTime?: "HH:MM", tz?: "America/Chicago" }
  *
- * Times are 24-hour wall-clock times on this device's calendar, the clock
- * every call day is decided on (billing.js deriveCallDay). They are
- * optional, and they decide what `end` means:
+ * Times are 24-hour wall-clock times where the work happens. `tz` (an IANA
+ * zone) says which wall clock: the same block then covers the same moments
+ * whichever device reads it, so an invoice built on a Pacific-time laptop
+ * bills what one built on site does. Every save path stamps it (the
+ * Contracts form, the Files tab); a block without one (filed by email, which
+ * has no local clock) is read on this device's clock, as it always was.
  *
- *  - No times (every block saved before Sep 2026): `end` is the LAST CALL
- *    DAY, the call that ends the next morning at the contract's call-day
- *    start hour. That meaning is unchanged, and nothing below applies.
- *  - endTime: `end` is the literal date coverage ends, at endTime. "Sep 25
- *    (4pm) to Sep 28 (7am)" is { start: "2026-09-25", startTime: "16:00",
+ * The END TIME decides what `end` means:
+ *
+ *  - No end time (every block saved before Sep 2026): `end` is the LAST
+ *    CALL DAY, the call that ends the next morning at the contract's
+ *    call-day start hour. That meaning is unchanged, and nothing below
+ *    applies. A start time with no end time is ignored for the same reason
+ *    (the Contracts form refuses one): read as a block starting at 4:00 PM
+ *    it turned every call day over at 4:00 PM and kept the end date as a
+ *    call day of its own.
+ *  - An end time: `end` is the literal date coverage ends, at endTime. "Sep
+ *    25 (4pm) to Sep 28 (7am)" is { start: "2026-09-25", startTime: "16:00",
  *    end: "2026-09-28", endTime: "07:00" }: three call days (Sep 25, 26 and
- *    27), not four.
- *  - startTime only: coverage starts at startTime; `end` is still the last
- *    call day, whose call ends the next day at startTime.
+ *    27), not four. Without a start time the block starts on its start date
+ *    at the end time.
  *
- * Inside a timed block the call day turns over at the block's endTime,
- * falling back to its startTime: a 6 AM to 6 AM block files 6:15 AM work
- * under that same day even when the contract's call day starts at 7. The
- * first call day starts at the block's start moment (4:00 PM) and the last
- * ends at its end moment (7:00 AM). Outside every timed block the contract's
- * own call-day start hour decides, as it always has.
+ * Inside a timed block the call day turns over at the block's end time: a 6
+ * AM to 6 AM block files 6:15 AM work under that same day even when the
+ * contract's call day starts at 7. The first call day starts at the block's
+ * start moment (4:00 PM) and the last ends at its end moment (7:00 AM).
+ * Outside every timed block the contract's own call-day start hour decides,
+ * as it always has, except on a block's start date before it begins
+ * (leadInCallDay): 5:30 AM before a 6:00 AM start files under the block's
+ * first day, so work running into the block is split at its start.
  *
  * A call day is keyed by the calendar date its call starts on. The first
  * call day of a block is always the block's start date: a block starting
@@ -47,9 +57,77 @@ const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate(
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const isDay = (v) => DAY_KEY.test(String(v ?? ""));
 const parts = (key) => key.split("-").map(Number);
-/** Epoch ms of a wall-clock minute of the day on a calendar date. */
-const momentOf = (key, minute) => { const [y, m, d] = parts(key); return new Date(y, m - 1, d, Math.floor(minute / 60), minute % 60).getTime(); };
 const addDays = (key, n) => { const [y, m, d] = parts(key); return ymd(new Date(y, m - 1, d + n, 12)); };
+
+// ── Time zones ───────────────────────────────────────────────────
+// A zone "" is this device's own clock (the Date getters). Any other zone is
+// read through Intl, which every browser and Deno carry.
+
+const ZONES = new Map();
+/** An IANA zone as the runtime names it ("US/Central" reads as "America/Chicago"), or "" when it is not one. */
+export function validZone(tz) {
+  if (typeof tz !== "string" || !tz.trim() || tz.length > 64) return "";
+  if (ZONES.has(tz)) return ZONES.get(tz);
+  let out = "";
+  try { out = new Intl.DateTimeFormat("en-US", { timeZone: tz.trim() }).resolvedOptions().timeZone || ""; } catch { out = ""; }
+  ZONES.set(tz, out);
+  return out;
+}
+
+/** This device's zone, or "" when the runtime does not say. */
+export function deviceZone() {
+  try { return validZone(Intl.DateTimeFormat().resolvedOptions().timeZone || ""); } catch { return ""; }
+}
+
+const FORMATS = new Map();
+const zoneFormat = (tz) => {
+  if (!FORMATS.has(tz)) {
+    FORMATS.set(tz, new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }));
+  }
+  return FORMATS.get(tz);
+};
+
+// The wall clock at a moment: { key: "YYYY-MM-DD", minute (after midnight), second }.
+const wallAt = (ms, tz) => {
+  if (!tz) { const d = new Date(ms); return { key: ymd(d), minute: d.getHours() * 60 + d.getMinutes(), second: d.getSeconds() }; }
+  const p = {};
+  for (const x of zoneFormat(tz).formatToParts(new Date(ms))) p[x.type] = x.value;
+  const h = Number(p.hour) % 24;
+  return { key: `${p.year}-${p.month}-${p.day}`, minute: h * 60 + Number(p.minute), second: Number(p.second) };
+};
+
+// How far the zone's wall clock runs ahead of UTC at a moment, in ms.
+const offsetAt = (ms, tz) => {
+  const t = Math.floor(ms / 1000) * 1000;
+  const w = wallAt(t, tz);
+  const [y, m, d] = parts(w.key);
+  return Date.UTC(y, m - 1, d, Math.floor(w.minute / 60), w.minute % 60, w.second) - t;
+};
+
+/**
+ * Epoch ms of a wall-clock minute of the day on a calendar date, in a zone
+ * ("" = this device). Resolved the way new Date(y, m, d, h, mi) resolves
+ * this device's clock: an hour the clock skips (the spring-forward 2:30 AM)
+ * moves forward, an hour it repeats (the fall-back 1:30 AM) is the first.
+ */
+const MOMENTS = new Map();
+function momentOf(key, minute, tz = "") {
+  const [y, m, d] = parts(key);
+  const h = Math.floor(minute / 60), mi = minute % 60;
+  if (!tz) return new Date(y, m - 1, d, h, mi).getTime();
+  // A zone's moments never change, so each is worked out once.
+  const memo = `${tz}|${key}|${minute}`;
+  if (MOMENTS.has(memo)) return MOMENTS.get(memo);
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+  const before = offsetAt(wall - 86400000, tz), after = offsetAt(wall + 86400000, tz);
+  const hits = [wall - before, wall - after].filter((t) => offsetAt(t, tz) === wall - t).sort((a, b) => a - b);
+  const out = hits.length ? hits[0] : wall - before;
+  if (MOMENTS.size > 20000) MOMENTS.clear();
+  MOMENTS.set(memo, out);
+  return out;
+}
 
 /**
  * A time as "HH:MM" (24-hour), or "" when it is not a time. Reads what an
@@ -84,28 +162,31 @@ export function clockMinutes(v) {
   return h * 60 + m;
 }
 
-/** "4:00 PM" for minutes after midnight, or for a moment (Date, ISO string or epoch ms). */
-export function clockLabel(v) {
+/** "4:00 PM" for minutes after midnight, or for a moment (Date, ISO string or epoch ms) on a zone's clock ("" = this device). */
+export function clockLabel(v, tz = "") {
   let min = v;
-  if (typeof v !== "number" || v > 1440) { const d = new Date(v); min = d.getHours() * 60 + d.getMinutes(); }
+  if (typeof v !== "number" || v > 1440) min = wallAt(new Date(v).getTime(), validZone(tz)).minute;
   const h = Math.floor(min / 60), m = min % 60;
   return `${h % 12 === 0 ? 12 : h % 12}:${pad(m)} ${h < 12 ? "AM" : "PM"}`;
 }
 
-/** "Sep 25" for a moment. */
-export const monthDay = (ms) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-// The call day a moment falls in when the day turns over at `turnover`
-// minutes after midnight (the wall-clock rule, see billing.js deriveCallDay).
-const turnoverDay = (ms, turnover) => {
-  const d = new Date(ms);
-  return d.getHours() * 60 + d.getMinutes() >= turnover ? ymd(d) : ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 12));
+/** "Sep 25" for a moment, on a zone's calendar ("" = this device). */
+export const monthDay = (ms, tz = "") => {
+  const zone = validZone(tz);
+  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", ...(zone ? { timeZone: zone } : {}) });
 };
 
-/** True when a block states a time (endTime counts only with an end date). */
+// The call day a moment falls in when the day turns over at `turnover`
+// minutes after midnight on a zone's clock (the wall-clock rule, see
+// billing.js deriveCallDay).
+const turnoverDay = (ms, turnover, tz) => {
+  const w = wallAt(ms, tz);
+  return w.minute >= turnover ? w.key : addDays(w.key, -1);
+};
+
+/** True when a block states when it ends: an end date with an end time. A start time alone is no time (see the header). */
 export function isTimedPeriod(p) {
-  if (!p || !isDay(p.start)) return false;
-  return clockMinutes(p.startTime) != null || (isDay(p.end) && clockMinutes(p.endTime) != null);
+  return !!p && isDay(p.start) && isDay(p.end) && clockMinutes(p.endTime) != null;
 }
 
 /** True when any of the contract's blocks states a time. Without one, nothing here changes anything. */
@@ -115,25 +196,41 @@ export function hasTimedPeriods(contract) {
 
 /**
  * A timed block as moments, or null for a block without times:
- * { period, startMs, endMs, turnover (minutes after midnight), firstDay,
+ * { period, tz, startMs, endMs, turnover (minutes after midnight), firstDay,
  * lastDay, valid }. valid is false when it ends at or before it starts; such
- * a block covers nothing (the contract form refuses to save one).
+ * a block covers nothing (the contract form refuses to save one). A block on
+ * a zone's clock reads the same on every device, so it is worked out once
+ * per saved block (one on this device's clock is cheap to read).
  */
+const ZONED_BLOCKS = new WeakMap();
 export function timedBlock(p) {
   if (!isTimedPeriod(p)) return null;
-  const startMin = clockMinutes(p.startTime);
-  const endMin = isDay(p.end) ? clockMinutes(p.endTime) : null;
-  const turnover = endMin ?? startMin;
-  const startMs = momentOf(p.start, startMin ?? turnover);
-  const endMs = endMin != null ? momentOf(p.end, endMin) : momentOf(addDays(isDay(p.end) ? p.end : p.start, 1), turnover);
+  const tz = validZone(p.tz);
+  if (!tz) return readBlock(p, "");
+  const sig = `${p.start}|${p.end}|${p.startTime}|${p.endTime}|${tz}`;
+  const hit = ZONED_BLOCKS.get(p);
+  if (hit?.sig === sig) return hit.block;
+  const block = readBlock(p, tz);
+  ZONED_BLOCKS.set(p, { sig, block });
+  return block;
+}
+function readBlock(p, tz) {
+  const turnover = clockMinutes(p.endTime);
+  const startMs = momentOf(p.start, clockMinutes(p.startTime) ?? turnover, tz);
+  const endMs = momentOf(p.end, turnover, tz);
   const firstDay = p.start;
-  const last = turnoverDay(endMs - 1, turnover);
-  return { period: p, startMs, endMs, turnover, firstDay, lastDay: last > firstDay ? last : firstDay, valid: endMs > startMs };
+  const last = turnoverDay(endMs - 1, turnover, tz);
+  return { period: p, tz, startMs, endMs, turnover, firstDay, lastDay: last > firstDay ? last : firstDay, valid: endMs > startMs };
 }
 
 /** The contract's valid timed blocks, earliest start first. */
 export function timedBlocks(contract) {
   return (contract?.coveragePeriods || []).map(timedBlock).filter((b) => b && b.valid).sort((a, b) => a.startMs - b.startMs);
+}
+
+/** The zone the contract's timed blocks are stated in ("" = this device's clock). */
+export function contractZone(contract) {
+  return timedBlocks(contract).find((b) => b.tz)?.tz || "";
 }
 
 /** The timed block a moment falls inside (start inclusive, end exclusive), or null. */
@@ -147,7 +244,7 @@ export function timedBlockAt(contract, at) {
 export function timedCallDay(contract, at) {
   const b = timedBlockAt(contract, at);
   if (!b) return null;
-  const k = turnoverDay(new Date(at).getTime(), b.turnover);
+  const k = turnoverDay(new Date(at).getTime(), b.turnover, b.tz);
   return k < b.firstDay ? b.firstDay : k > b.lastDay ? b.lastDay : k;
 }
 
@@ -168,15 +265,15 @@ export function blockForCallDay(contract, dayKey) {
 /** When one call day of a timed block runs: { startMs, endMs }. */
 export function callDayWindow(b, dayKey) {
   return {
-    startMs: dayKey <= b.firstDay ? b.startMs : momentOf(dayKey, b.turnover),
-    endMs: dayKey >= b.lastDay ? b.endMs : momentOf(addDays(dayKey, 1), b.turnover),
+    startMs: dayKey <= b.firstDay ? b.startMs : momentOf(dayKey, b.turnover, b.tz),
+    endMs: dayKey >= b.lastDay ? b.endMs : momentOf(addDays(dayKey, 1), b.turnover, b.tz),
   };
 }
 
 /** "call 4:00 PM Sep 25 to 7:00 AM Sep 26": the window a timed call day covers, for the invoice. */
 export function callDayWindowText(b, dayKey) {
   const w = callDayWindow(b, dayKey);
-  return `call ${clockLabel(w.startMs)} ${monthDay(w.startMs)} to ${clockLabel(w.endMs)} ${monthDay(w.endMs)}`;
+  return `call ${clockLabel(w.startMs, b.tz)} ${monthDay(w.startMs, b.tz)} to ${clockLabel(w.endMs, b.tz)} ${monthDay(w.endMs, b.tz)}`;
 }
 
 /** Whether a period (timed or not) has this call day. An untimed block keeps its old meaning: start through end. */
@@ -185,6 +282,46 @@ export function periodHasCallDay(p, dayKey) {
   const b = timedBlock(p);
   if (b) return b.valid && dayKey >= b.firstDay && dayKey <= b.lastDay;
   return dayKey >= p.start && dayKey <= (p.end || p.start);
+}
+
+/**
+ * The call day for a moment on a timed block's start date, before the block
+ * begins (5:30 AM on Nov 5 before a 6:00 AM start): the block's first call
+ * day. `fallbackDay` is the call day the contract's own start hour gives the
+ * moment; when that is itself a call day of some block (the block before
+ * this one), it stands and this returns null, as it does for any moment not
+ * on a later block's start date. Filed under the block's first day, work
+ * that runs into the block is shared out at its start (billing.js
+ * coveragePartsOf) instead of billing whole under a day that is no call day.
+ */
+export function leadInCallDay(contract, at, fallbackDay) {
+  const ms = new Date(at).getTime();
+  if (!Number.isFinite(ms) || !isDay(fallbackDay)) return null;
+  if ((contract?.coveragePeriods || []).some((p) => periodHasCallDay(p, fallbackDay))) return null;
+  const b = timedBlocks(contract).find((x) => ms < x.startMs && wallAt(ms, x.tz).key === x.firstDay);
+  return b ? b.firstDay : null;
+}
+
+/**
+ * Every moment strictly inside (s, en) where a timed block's call day may
+ * turn over: its start and end moments, its own turnover time on each day
+ * inside it, and the midnight its start date begins (see leadInCallDay).
+ * billing.js callDayCuts keeps the ones where the call day really changes.
+ */
+export function blockTurnoversWithin(contract, s, en) {
+  const out = [];
+  for (const b of timedBlocks(contract)) {
+    const lead = momentOf(b.firstDay, 0, b.tz);
+    for (const t of [lead, b.startMs, b.endMs]) if (t > s && t < en) out.push(t);
+    const from = Math.max(s, b.startMs), to = Math.min(en, b.endMs);
+    if (!(to > from)) continue;
+    for (let k = addDays(wallAt(from, b.tz).key, -1), i = 0; i < 400; k = addDays(k, 1), i++) {
+      const t = momentOf(k, b.turnover, b.tz);
+      if (t >= to) break;
+      if (t > from) out.push(t);
+    }
+  }
+  return out;
 }
 
 /**
@@ -198,14 +335,40 @@ export function timedSpan(p) {
   const b = timedBlock(p);
   if (!b) return null;
   if (!b.valid) return { start: p.start, end: p.start };
-  return { start: ymd(new Date(b.startMs)), end: ymd(new Date(b.endMs - 1)) };
+  return { start: wallAt(b.startMs, b.tz).key, end: wallAt(b.endMs - 1, b.tz).key };
 }
 
-/** "Sep 25, 4:00 PM to Sep 28, 7:00 AM" for a timed block, or null for one without times. */
+/** "Sep 25, 4:00 PM to Sep 28, 7:00 AM" for a timed block (on its own zone's clock), or null for one without times. */
 export function timedBlockLabel(p) {
   const b = timedBlock(p);
   if (!b) return null;
-  return `${monthDay(b.startMs)}, ${clockLabel(b.startMs)} to ${monthDay(b.endMs)}, ${clockLabel(b.endMs)}`;
+  return `${monthDay(b.startMs, b.tz)}, ${clockLabel(b.startMs, b.tz)} to ${monthDay(b.endMs, b.tz)}, ${clockLabel(b.endMs, b.tz)}`;
+}
+
+const shortDay = (key) => { const [y, m, d] = parts(key); return new Date(y, m - 1, d, 12).toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
+
+/**
+ * What a block bills as, said the way the Contracts form shows it under the
+ * block: "Sep 25, 4:00 PM to Sep 28, 7:00 AM · 3 call days: Sep 25 to Sep
+ * 27" with times; without, "3 call days: Sep 25 to Sep 27" (the end date is
+ * the last call day). "" for a block with no start date yet or one that
+ * covers nothing (periodProblem says why).
+ */
+export function blockSummary(p) {
+  if (!p || !isDay(p.start)) return "";
+  const b = timedBlock(p);
+  let days;
+  if (b) {
+    if (!b.valid) return "";
+    days = blockCallDays(b);
+  } else {
+    const end = isDay(p.end) ? p.end : p.start;
+    if (end < p.start) return "";
+    days = [];
+    for (let k = p.start, i = 0; k <= end && i < 1000; k = addDays(k, 1), i++) days.push(k);
+  }
+  const count = `${days.length} call ${days.length === 1 ? "day" : "days"}: ${shortDay(days[0])}${days.length > 1 ? ` to ${shortDay(days.at(-1))}` : ""}`;
+  return b ? `${timedBlockLabel(p)} \u{b7} ${count}` : count;
 }
 
 /**
@@ -217,17 +380,25 @@ export function coveragePeriodText(p, formatDate) {
   return timedBlockLabel(p) ?? `${formatDate(p.start)}${p.end && p.end !== p.start ? " \u{2013} " + formatDate(p.end) : ""}`;
 }
 
-/** A block as saved: times kept only when they read as times ("HH:MM"), so a block without times saves exactly what it always did. */
-export function savedPeriod(p) {
-  const { startTime, endTime, ...rest } = p || {};
+/**
+ * A block as saved: times kept only when they read as times ("HH:MM"), so a
+ * block without times saves exactly what it always did. A block with an end
+ * time carries the zone its times are on: `zone` when given (the Contracts
+ * form's), else the one it already had.
+ */
+export function savedPeriod(p, zone = "") {
+  const { startTime, endTime, tz, ...rest } = p || {};
   const st = toClock(startTime), et = toClock(endTime);
-  return { ...rest, ...(st ? { startTime: st } : {}), ...(et ? { endTime: et } : {}) };
+  const out = { ...rest, ...(st ? { startTime: st } : {}), ...(et ? { endTime: et } : {}) };
+  const z = isTimedPeriod(out) ? validZone(zone) || validZone(tz) : "";
+  return z ? { ...out, tz: z } : out;
 }
 
 /** Why a coverage block cannot be saved (n: its number in the list), or "". */
 export function periodProblem(p, n) {
   if ((toClock(p?.startTime) || toClock(p?.endTime)) && !isDay(p?.start)) return `Block ${n} has a time but no start date.`;
   if (toClock(p?.endTime) && !isDay(p?.end)) return `Block ${n} has an end time but no end date. Enter the date coverage ends.`;
+  if (toClock(p?.startTime) && !toClock(p?.endTime)) return `Block ${n} has a start time but no end time. Enter when coverage ends.`;
   const b = timedBlock(p);
   if (b && !b.valid) return `Block ${n} ends before it starts (${timedBlockLabel(p)}). Check its dates and times.`;
   return "";

@@ -227,7 +227,10 @@ function screenFieldValues(record) {
   }
 }
 
-const PERIOD_KEYS = ['start', 'end', 'startDate', 'endDate', 'from', 'to', 'label', 'hospital', 'role', 'kind'];
+// A coverage block's times and zone (src/utils/coverageBlocks.js) decide what
+// its end date means: without them "Sep 25 to Sep 28" reads as four call days
+// when the block is Sep 25 4:00 PM to Sep 28 7:00 AM, three.
+const PERIOD_KEYS = ['start', 'end', 'startTime', 'endTime', 'tz', 'startDate', 'endDate', 'from', 'to', 'label', 'hospital', 'role', 'kind'];
 function cleanField(field, value) {
   if (field.kind === 'periods') {
     if (!Array.isArray(value)) return undefined;

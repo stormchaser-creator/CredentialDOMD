@@ -44,6 +44,9 @@ export const ROOTS = Object.freeze([
   // ...and matches invoices billed to the same agency with the app's
   // spelling-insensitive agencyKey, for the address it pre-fills.
   "utils/contractsForDate.js",
+  // email-inbound files an agreement's coverage blocks the way the app saves
+  // them (intakeFiling.mjs).
+  "utils/coverageText.js",
 ]);
 
 export const banner = (rel) =>

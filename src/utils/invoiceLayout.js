@@ -165,6 +165,7 @@ function factOf(line) {
   return line?.kind ? factFromFields(base, line) : factFromText(base);
 }
 
+const windowOf = (l) => (clean(l.windowText) ? { windowText: clean(l.windowText) } : {});
 function factFromFields(base, l) {
   const time = clean(l.timeText), note = clean(l.note);
   switch (l.kind) {
@@ -194,11 +195,13 @@ function factFromFields(base, l) {
         overAmount: num(l.overAmount) || 0, noRate: overMin > 0 && !(num(l.rate) > 0),
       };
     }
+    // A call day of a timed block on a contract billed by the hour carries
+    // the block's window (billing.js), which the day header states.
     case "hourly":
     case "orientation":
-      return { ...base, type: "timed", item: base.label, time, note, minutes: num(l.minutes) || 0, rate: num(l.rate) || 0, coveredByFee: l.coveredByFee === true, dayStartHour: validHour(num(l.dayStartHour)) };
+      return { ...base, type: "timed", item: base.label, time, note, minutes: num(l.minutes) || 0, rate: num(l.rate) || 0, coveredByFee: l.coveredByFee === true, dayStartHour: validHour(num(l.dayStartHour)), ...windowOf(l) };
     case "container":
-      return { ...base, type: "container", item: base.label, time, note, during: clean(l.during), dayStartHour: validHour(num(l.dayStartHour)) };
+      return { ...base, type: "container", item: base.label, time, note, during: clean(l.during), dayStartHour: validHour(num(l.dayStartHour)), ...windowOf(l) };
     default:
       return { ...base, type: "plain", item: base.label };
   }

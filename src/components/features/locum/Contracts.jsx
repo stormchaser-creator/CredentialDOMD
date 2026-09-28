@@ -16,13 +16,21 @@ import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils
 import { STATE_NAMES } from "../../../constants/states";
 import { isArchived } from "../../../utils/contractsForDate";
 import { callDayStartHour, hourLabel } from "../../../utils/billing";
-import { toClock, savedPeriod, periodProblem, coveragePeriodText } from "../../../utils/coverageBlocks";
+import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod } from "../../../utils/coverageBlocks";
 
 // The analyzer JSON goes through one normalizer so dates, dollar figures, and
 // coverage blocks land in the exact shape the form and the Work Log expect.
 const agreementAnalyzer = async (dataUrl, apiKey) => withAgreementFields(await analyzeAgreement(dataUrl, apiKey));
 // A text upload's own words also fill in any block time the model left out.
 const agreementTextAnalyzer = async (text, apiKey) => withAgreementFields(await analyzeAgreementText(text, apiKey), { text });
+
+// The zones a block's times can be stated in. A block's times are the
+// agreement's wall clock where the work happens, which is not always where
+// this device is (coverageBlocks.js).
+const US_ZONES = [
+  ["America/New_York", "Eastern"], ["America/Chicago", "Central"], ["America/Denver", "Mountain"], ["America/Phoenix", "Arizona"],
+  ["America/Los_Angeles", "Pacific"], ["America/Anchorage", "Alaska"], ["Pacific/Honolulu", "Hawaii"],
+];
 
 // Work-state hint reads from the tax engine's own list so it never promises a
 // state the estimator cannot model.
@@ -43,6 +51,9 @@ function Contracts() {
   const [form, setForm] = useState({});
   const [attachedDocs, setAttachedDocs] = useState([]);
   const [formError, setFormError] = useState(null);
+  // The zone the form's block times are on: the contract's own, else this
+  // device's. Held apart from the form so it never becomes a contract column.
+  const [blockZone, setBlockZone] = useState("");
 
   const items = data.locumContracts || [];
   const [showArchived, setShowArchived] = useState(false);
@@ -60,6 +71,7 @@ function Contracts() {
     // No increment defaults here: the inputs show 15 and save falls back to 15,
     // and an increment the contract states must be able to fill in.
     setForm({ coveragePeriods: [] });
+    setBlockZone(deviceZone());
     setEditItem(null); setAttachedDocs([]); setShowForm(true);
   }, []);
   useDeskAddShortcut(openAdd);
@@ -71,6 +83,7 @@ function Contracts() {
         ? item.coveragePeriods
         : (item.startDate ? [{ start: item.startDate, end: item.endDate || "" }] : []),
     });
+    setBlockZone(contractZone(item) || deviceZone());
     setEditItem(item); setAttachedDocs([]); setShowForm(true);
   }, []);
   const closeForm = useCallback(() => { setShowForm(false); setEditItem(null); setForm({}); setAttachedDocs([]); }, []);
@@ -83,9 +96,21 @@ function Contracts() {
       return;
     }
     // startDate/endDate = the span of all coverage periods (oldest → newest)
-    const periods = (form.coveragePeriods || []).filter(p => p.start || p.end).map(savedPeriod);
+    const zone = validZone(blockZone) || deviceZone();
+    const periods = (form.coveragePeriods || []).filter(p => p.start || p.end).map(p => savedPeriod(p, zone));
     const problem = periods.map((p, i) => periodProblem(p, i + 1)).find(Boolean);
     if (problem) { setFormError(problem); return; }
+    // A block saved without times has its end date as the last call day;
+    // with an end time the end date is when coverage ends, one call day
+    // fewer. Gaining an end time with the end date left as it was is the
+    // easy way to lose a day, so it is said before anything is saved.
+    const loaded = editItem?.coveragePeriods || [];
+    for (const [i, p] of periods.entries()) {
+      const was = isTimedPeriod(p) && loaded.find(o => o && !isTimedPeriod(o) && o.start === p.start && o.end === p.end);
+      if (!was) continue;
+      const end = formatDate(p.end);
+      if (!window.confirm(`Block ${i + 1} was saved without times, so ${end} was its last call day (${blockSummary(was)}). With an end time, ${end} is the date coverage ends: ${blockSummary(p)}. If coverage runs through the morning after ${end}, change the end date to that morning. Save with ${end} as the date coverage ends?`)) return;
+    }
     setFormError(null);
     const itemId = editItem ? editItem.id : generateId();
     const starts = periods.map(p => p.start).filter(Boolean).sort();
@@ -134,7 +159,7 @@ function Contracts() {
       });
     }
     closeForm();
-  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs, data.documents]);
+  }, [form, editItem, editCtx, addItem, closeForm, attachedDocs, data.documents, blockZone]);
 
   // Files that could be this agreement, for "Use a document already uploaded".
   const existingDocs = useMemo(
@@ -234,12 +259,32 @@ function Contracts() {
                     <input type="date" aria-label={`Block ${i + 1} end date`} value={p.end || ""} onChange={set("end")} style={dateS} />
                     <input type="time" aria-label={`Block ${i + 1} end time (optional)`} value={toClock(p.endTime)} onChange={set("endTime")} style={timeS} />
                   </div>
+                  {/* What the block bills as, live: the call days its dates and times make. */}
+                  {(() => {
+                    const problem = (p.start || p.end) ? periodProblem(p, i + 1) : "";
+                    const summary = problem ? "" : blockSummary(p);
+                    if (!problem && !summary) return null;
+                    return <div aria-label={`Block ${i + 1} call days`} style={{ fontSize: 13, color: problem ? T.danger : T.textMuted, marginTop: 2 }}>{problem || summary}</div>;
+                  })()}
                 </div>
               );
             })}
             {(form.coveragePeriods || []).length > 0 && (
-              <div style={{ fontSize: 12, color: T.textDim }}>Times are optional: enter them when the agreement states them.</div>
+              <div style={{ fontSize: 12, color: T.textDim }}>Times are optional: enter them when the agreement states them. A start time needs an end time.</div>
             )}
+            {(form.coveragePeriods || []).some(p => toClock(p.startTime) || toClock(p.endTime)) && (() => {
+              // The wall clock the times are on: where the work happens.
+              const zone = validZone(blockZone) || deviceZone();
+              const options = US_ZONES.some(([z]) => z === zone) || !zone ? US_ZONES : [...US_ZONES, [zone, zone]];
+              return (
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: T.textMuted }}>
+                  <span style={{ flexShrink: 0 }}>Times are</span>
+                  <select aria-label="Time zone of the block times" value={zone} onChange={e => setBlockZone(e.target.value)} style={{ ...iS, appearance: "auto", minWidth: 0, flex: 1 }}>
+                    {options.map(([z, name]) => <option key={z} value={z}>{name === z ? z : `${name} time (${z})`}</option>)}
+                  </select>
+                </label>
+              );
+            })()}
             <button onClick={() => setForm(f => ({ ...f, coveragePeriods: [...(f.coveragePeriods || []), { start: "", end: "" }] }))} style={{
               padding: "10px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: "transparent",
               color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",

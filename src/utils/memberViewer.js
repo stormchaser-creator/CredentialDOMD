@@ -13,6 +13,7 @@ import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring
 import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote } from "./lifecycle.js";
 import { complianceFor, findStateLicense, trackedStates } from "./compliance.js";
 import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel } from "./cmePresentation.js";
+import { timedBlockLabel } from "./coverageBlocks.js";
 
 export const READ_ONLY_MESSAGE = "This is a read-only support view. Nothing can be changed here.";
 
@@ -125,7 +126,9 @@ function formatValue(field, value, snapshot) {
     case "list": return Array.isArray(value) ? value.map(String).join(", ") : String(value);
     case "lifecycle": return LIFECYCLE_LABELS[value] || String(value);
     case "contract": return contractLabel(snapshot, value);
-    case "periods": return Array.isArray(value) ? value.map(period => [period.start || period.startDate || period.from, period.end || period.endDate || period.to].filter(Boolean).join(" to ") || [period.hospital, period.role, period.kind].filter(Boolean).join(", ")).filter(Boolean).join("; ") : "";
+    // A coverage block with times reads as the app lists it ("Sep 25, 4:00 PM
+    // to Sep 28, 7:00 AM"); its end date is then when coverage ends.
+    case "periods": return Array.isArray(value) ? value.map(period => timedBlockLabel(period) || [period.start || period.startDate || period.from, period.end || period.endDate || period.to].filter(Boolean).join(" to ") || [period.hospital, period.role, period.kind].filter(Boolean).join(", ")).filter(Boolean).join("; ") : "";
     case "doses": return Array.isArray(value) ? value.map(dose => [dose.doseNumber ? `Dose ${dose.doseNumber}` : "", dose.date ? formatDate(String(dose.date).slice(0, 10)) : "", dose.manufacturer, dose.lotNumber ? `lot ${dose.lotNumber}` : "", dose.facility].filter(Boolean).join(", ")).filter(Boolean).join("; ") : "";
     case "components": return Array.isArray(value) ? value.map(part => [part.name, part.scope, part.status, part.date].filter(Boolean).join(", ")).filter(Boolean).join("; ") : "";
     case "fieldDefs": return Array.isArray(value) ? value.map(def => def?.label || def?.key).filter(Boolean).join(", ") : "";
