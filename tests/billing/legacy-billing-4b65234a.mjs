@@ -1,9 +1,11 @@
-import { formatDate } from "./helpers.js";
-import {
-  hasTimedPeriods, isTimedPeriod, timedBlock, timedBlockAt, timedCallDay, blockCallDays, blockForCallDay,
-  callDayWindow, callDayWindowText, clockLabel, coveredIntervals, spanAgainstBlock, periodHasCallDay,
-  leadInCallDay, blockTurnoversWithin,
-} from "./coverageBlocks.js";
+// FROZEN COPY of src/utils/billing.js at 4b65234a (2026-09-28), before
+// coverage blocks could carry times (src/utils/coverageBlocks.js).
+// tests/billing/coverage-block-times.test.mjs runs it beside the live engine
+// to prove a contract whose blocks carry no times bills exactly as before:
+// every line, amount, total and minute count byte-identical. Never edit it to
+// make a test pass: it is the reference.
+
+import { formatDate } from "../../src/utils/helpers.js";
 
 /**
  * Locum time-engine billing math — shared between WorkLog (invoice
@@ -27,46 +29,19 @@ export function localDate(d) {
 // before that setting existed and the default when it is blank.
 export const DEFAULT_CALL_DAY_START_HOUR = 7;
 
-/**
- * The wall-clock hour a contract's call day starts, 0 to 23 (default 7).
- * With `at` (a moment), the hour the call day turns over at that moment:
- * inside a coverage block with times it is the block's own (its end time,
- * else its start time, see coverageBlocks.js), outside every such block the
- * contract's. A block time off the hour (6:30) reads as its hour here; the
- * call day itself is decided to the minute (deriveCallDay with the contract).
- */
-export function callDayStartHour(contract, at) {
+/** The wall-clock hour a contract's call day starts, 0 to 23 (default 7). */
+export function callDayStartHour(contract) {
   const raw = contract?.dayStartHour;
-  let hour = DEFAULT_CALL_DAY_START_HOUR;
-  if (raw !== null && raw !== undefined && raw !== "") {
-    const h = Number(raw);
-    if (Number.isInteger(h) && h >= 0 && h <= 23) hour = h;
-  }
-  if (at === undefined || at === null || at === "") return hour;
-  const block = timedBlockAt(contract, at);
-  return block ? Math.floor(block.turnover / 60) : hour;
+  if (raw === null || raw === undefined || raw === "") return DEFAULT_CALL_DAY_START_HOUR;
+  const h = Number(raw);
+  return Number.isInteger(h) && h >= 0 && h <= 23 ? h : DEFAULT_CALL_DAY_START_HOUR;
 }
 
 // The call day is decided on the WALL CLOCK. Subtracting 7 hours of elapsed
 // time (the old rule) is wrong on the two daylight-saving Sundays: after the
 // November fall-back, 6:00 to 6:59 filed under the new day, and after the
 // March spring-forward, 7:00 to 7:59 filed under the day before.
-//
-// The second argument is an hour, or the CONTRACT: then the call day follows
-// its coverage blocks with times (a 6 AM to 6 AM block files 6:15 AM under
-// that same day), and the contract's start hour everywhere else, except on a
-// timed block's start date before it begins, which files under the block's
-// first day when the contract hour would put it on a day that is no call day
-// (coverageBlocks.js leadInCallDay). Every save path passes the contract; a
-// stored call_day is never re-derived.
 export function deriveCallDay(startTime, startHour = DEFAULT_CALL_DAY_START_HOUR) {
-  if (startHour === null || typeof startHour === "object") {
-    const contract = startHour || {};
-    const inBlock = timedCallDay(contract, startTime);
-    if (inBlock) return inBlock;
-    const byHour = deriveCallDay(startTime, callDayStartHour(contract));
-    return leadInCallDay(contract, startTime, byHour) ?? byHour;
-  }
   const d = new Date(startTime);
   if (d.getHours() >= startHour) return localDate(d);
   return localDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 12));
@@ -83,31 +58,7 @@ export function callDayOf(e) {
 
 /** Today's call day for a contract (the day that has not reached its start hour yet counts as yesterday). */
 export function currentCallDay(contract, now = new Date()) {
-  return deriveCallDay(now, contract || {});
-}
-
-/**
- * The coverage days that have begun by `now`: an untimed block's days
- * through today's call day (as always), a timed block's call days whose
- * window has started (the first one at the block's start moment, 4:00 PM,
- * not at 7:00 that morning). Being on call IS the service, so each of these
- * bills its stipend even with nothing logged.
- */
-export function startedCoverageDays(c, now = new Date()) {
-  const out = [];
-  const today = currentCallDay(c, now);
-  const nowMs = new Date(now).getTime();
-  for (const p of c?.coveragePeriods || []) {
-    if (!p.start) continue;
-    if (isTimedPeriod(p)) {
-      const b = timedBlock(p);
-      for (const k of blockCallDays(b)) if (callDayWindow(b, k).startMs <= nowMs) out.push(k);
-      continue;
-    }
-    const last = (p.end || p.start) < today ? (p.end || p.start) : today;
-    for (let d = new Date(p.start + "T12:00"); localDate(d) <= last; d.setDate(d.getDate() + 1)) out.push(localDate(d));
-  }
-  return out;
+  return deriveCallDay(now, callDayStartHour(contract));
 }
 
 /** One canonical order for allowance consumption — the list rows and the
@@ -232,10 +183,7 @@ export function billedSpan(e, c) {
 export function isStipendDay(c, dayKey, allList) {
   if (!c || (c.callStipend || 0) <= 0 || !dayKey) return false;
   if ((allList || []).some(e => e.contractId === c.id && e.type === "CallDay" && callDayOf(e) === dayKey)) return true;
-  // A block with times has the call days between its start and end moments
-  // (Sep 25 4:00 PM to Sep 28 7:00 AM: Sep 25, 26, 27); one without keeps
-  // start through end, end being the last call day.
-  return (c.coveragePeriods || []).some(p => p.start && (isTimedPeriod(p) ? periodHasCallDay(p, dayKey) : dayKey >= p.start && dayKey <= (p.end || p.start)));
+  return (c.coveragePeriods || []).some(p => p.start && dayKey >= p.start && dayKey <= (p.end || p.start));
 }
 
 const CALL_TYPES = new Set(["Call", "Transfer call"]);
@@ -244,71 +192,11 @@ export function rateFor(type, c) {
   return CALL_TYPES.has(type) ? (c.callHourlyRate || c.hourlyRate || 0) : (c.hourlyRate || 0);
 }
 
-/** The rate for work outside the stipend (a day that is not a call day, or time before or after a timed block): the type's own rate, else the after-stipend rate. */
-export function outsideRateFor(type, c) {
-  return rateFor(type, c) || ((c?.callStipend || 0) > 0 ? (c.overageHourlyRate || 0) : 0);
-}
-
-/**
- * How one entry's billed minutes divide when it is filed under a call day of
- * a coverage block with times (coverageBlocks.js): { block, before, inside,
- * after } in minutes, or null when all of it is the call day's own work
- * (always null on a contract with no times, or for orientation).
- *
- * Only `inside` is stipend work: it draws down the day's allowance. Minutes
- * before the block's start moment or after its end moment bill as work
- * outside coverage (outsideRateFor). An entry that crosses the start or end
- * is shared out at that moment the way a split entry is (splitAtCallDay, R2):
- * the entry bills the same total it would whole, its whole increments go to
- * each side in proportion to its clock time there (largest remainder,
- * apportion), and any part that is not a whole increment rides on the first
- * side that earned one. For billing only: the stored row never changes.
- */
-export function coveragePartsOf(c, e) {
-  if (!c || !((c.callStipend || 0) > 0) || !e?.startTime || e.type === "CallDay" || e.type === "Orientation") return null;
-  if (!hasTimedPeriods(c)) return null;
-  const block = blockForCallDay(c, callDayOf(e));
-  if (!block) return null;
-  const s = new Date(e.startTime).getTime();
-  const en = e.endTime ? new Date(e.endTime).getTime() : s;
-  if (!Number.isFinite(s) || !Number.isFinite(en)) return null;
-  const span = spanAgainstBlock(s, en, block, coveredIntervals(c, callDayStartHour(c)));
-  if (!span.before && !span.after) return null;
-  const inc = (c.incrementMinutes || 15) > 0 ? (c.incrementMinutes || 15) : 15;
-  const billed = Math.max(0, Math.round(e.billedMin || 0));
-  const weights = [span.before, span.inside, span.after];
-  const units = Math.floor(billed / inc);
-  const mins = apportion(units, weights).map(u => u * inc);
-  const first = mins.findIndex(m => m > 0);
-  if (first >= 0) mins[first] += billed - units * inc;
-  else mins[weights.indexOf(Math.max(...weights))] = billed;
-  const [before, inside, after] = mins;
-  if (!before && !after) return null;
-  return { block, before, inside, after };
-}
-
-/** An entry's minutes that count toward its call day's stipend allowance (all of them unless a timed block leaves some outside). */
-export function stipendMinutesOf(c, e) {
-  const parts = coveragePartsOf(c, e);
-  return parts ? parts.inside : (e?.billedMin || 0);
-}
-
-/** What an entry's minutes outside its timed block bill: { minutes, amount, rate }; zeros when none are outside. */
-export function outsideChargeOf(c, e) {
-  const parts = coveragePartsOf(c, e);
-  if (!parts) return { minutes: 0, amount: 0, rate: 0 };
-  const rate = outsideRateFor(e.type, c);
-  const minutes = parts.before + parts.after;
-  return { minutes, amount: (parts.before / 60) * rate + (parts.after / 60) * rate, rate };
-}
-
 /** The fields computeBilling adds to a line for the invoice layout, beyond date, label, detail, amount, flag and _sort. */
 export const LAYOUT_LINE_FIELDS = Object.freeze([
   "kind", "minutes", "rate", "timeText", "note", "during", "coveredByFee",
   "includedMin", "overMin", "overAmount",
   "stipend", "allowanceMin", "priorMin", "loggedMin", "usedMin", "dayStartHour",
-  // Contracts with timed coverage blocks only (coverageBlocks.js).
-  "side", "item", "windowText",
 ]);
 
 /**
@@ -340,11 +228,16 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
 
   // Being on call IS the service: every EXPLICIT coverage-period day up to
   // the current call day (7am boundary) bills its stipend even with zero
-  // logged work — as do days carrying a CallDay marker. A block with times
-  // counts a call day once its call has begun (startedCoverageDays).
+  // logged work — as do days carrying a CallDay marker.
   if (stipendModel) {
-    for (const k of startedCoverageDays(c)) {
-      if (!byDate[k]) byDate[k] = [];
+    const today = currentCallDay(c);
+    for (const p of c.coveragePeriods || []) {
+      if (!p.start) continue;
+      const last = (p.end || p.start) < today ? (p.end || p.start) : today;
+      for (let d = new Date(p.start + "T12:00"); localDate(d) <= last; d.setDate(d.getDate() + 1)) {
+        const k = localDate(d);
+        if (!byDate[k]) byDate[k] = [];
+      }
     }
     for (const e of all) {
       if (e.type === "CallDay" && e.contractId === c.id) {
@@ -392,9 +285,6 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
 
   const emptyStipendDays = [];
   const dayOverMin = {};
-  const anyTimed = hasTimedPeriods(c);
-  const timed = stipendModel && anyTimed;
-  const nowMs = Date.now();
   for (const date of Object.keys(byDate).sort()) {
     const day = byDate[date].sort(entryOrder);
     const stipDay = stipendModel && isStipendDay(c, date, all);
@@ -403,68 +293,21 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
     // nothing. A call answered mid-procedure never bills twice.
     const sibs = overlapSiblings(all, c.id, date);
     const containerOf = (e) => findContainer(e, sibs);
-    // A call day of a coverage block with times: only the minutes inside the
-    // block are stipend work (coveragePartsOf); the rest bill on their own
-    // lines, "Before call began at 4:00 PM" / "After call ended at 7:00 AM".
-    // Without times there is no block, and every minute counts as always.
-    const blk = timed && stipDay ? blockForCallDay(c, date) : null;
-    const partsOf = (e) => (blk && !containerOf(e) ? coveragePartsOf(c, e) : null);
-    const effMin = (e) => {
-      if (containerOf(e)) return 0;
-      const parts = partsOf(e);
-      return parts ? parts.inside : (e.billedMin || 0);
-    };
-    const windowText = blk ? callDayWindowText(blk, date) : null;
-    // Work before a timed block began or after it ended: a money line of its
-    // own, at the rate time outside coverage bills (outsideRateFor), dated to
-    // the day so it sums into the day's total.
-    const pushOutside = (e, side, minutes, fromMs) => {
-      const outRate = outsideRateFor(e.type, c);
-      const amt = (minutes / 60) * outRate;
-      total += amt; totalMin += minutes;
-      const span = `${fmtTime(fromMs)}–${fmtTime(fromMs + minutes * 60000)}`;
-      lines.push({
-        date,
-        label: side === "before" ? `Before call began at ${clockLabel(blk.startMs, blk.tz)}` : `After call ended at ${clockLabel(blk.endMs, blk.tz)}`,
-        detail: `${span} · ${lineLabel(e)} · ${minutes} min @ ${money(outRate)}/hr${pieceNote(e)}`,
-        amount: amt,
-        _sort: `${date}~1~${e.startTime || "z"}`,
-        kind: "outside", side, item: lineLabel(e), minutes, rate: outRate, timeText: span, note: splitPieceNote(e, all),
-        dayStartHour: callWindow, windowText,
-      });
-    };
-    // The billed start of an entry (its start snapped down to the increment).
-    const billedFrom = (e) => { const inc = (c.incrementMinutes || 15) * 60000; return Math.floor(new Date(e.startTime).getTime() / inc) * inc; };
-    // A call day of a timed block whose call has not begun (an invoice built
-    // at 11:00 AM on the day a 4:00 PM block starts): its stipend is not owed
-    // yet, the same rule startedCoverageDays applies to a day with nothing
-    // logged, so the day bills only its work before the call, on its own
-    // lines. Work logged inside the block means the call is under way.
-    const underway = (e) => { if (containerOf(e)) return false; const p = partsOf(e); return !p || p.inside > 0; };
-    const notYet = !!blk && callDayWindow(blk, date).startMs > nowMs && !day.some(underway);
-    // A call day of a timed block on a contract billed by the hour: its lines
-    // carry the block's turnover and window, so the invoice's day header
-    // states the call day the work was filed under (6:00 AM to 6:00 AM), not
-    // the contract's hour.
-    const hourBlk = anyTimed && !stipDay ? blockForCallDay(c, date) : null;
-    const dayHour = hourBlk
-      ? { dayStartHour: Math.floor(hourBlk.turnover / 60), windowText: callDayWindowText(hourBlk, date) }
-      : { dayStartHour: callWindow, ...(notYet ? { windowText } : {}) };
+    const effMin = (e) => (containerOf(e) ? 0 : (e.billedMin || 0));
 
-    if (!stipDay || notYet) {
+    if (!stipDay) {
       for (const e of day) {
         const container = containerOf(e);
         if (container) {
           lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)}, no separate charge${pieceNote(e)}`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}`,
-            kind: "container", minutes: e.billedMin || 0, during: during(container), ...itemFields(e), ...dayHour });
+            kind: "container", minutes: e.billedMin || 0, during: during(container), ...itemFields(e), dayStartHour: callWindow });
           continue;
         }
-        if (notYet) { pushOutside(e, "before", e.billedMin || 0, billedFrom(e)); continue; }
         const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
         const amt = ((e.billedMin || 0) / 60) * rate;
         totalMin += e.billedMin || 0; total += amt;
         lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}${e.billedMin} min @ ${money(rate)}/hr${pieceNote(e)}`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}`,
-          kind: "hourly", minutes: e.billedMin || 0, rate, ...itemFields(e), ...dayHour });
+          kind: "hourly", minutes: e.billedMin || 0, rate, ...itemFields(e), dayStartHour: callWindow });
       }
       continue;
     }
@@ -489,14 +332,10 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
     // work-log marker was deleted. A zero overage stamp is valid, but a
     // stamp alone can also belong to orientation or additional-work invoices.
     // Legacy invoices still use their invoiced work-log rows as the fallback.
-    const beforeOnly = (e) => { const p = coveragePartsOf(c, e); return !!p && !p.inside && !p.after; };
     const stipendBilled = stamped.some(inv => Array.isArray(inv.lines) && inv.lines.some(line =>
       line && line.date === date && line.label === "On-call coverage (daily total)"
       && Number.isFinite(line.amount) && line.amount > 0))
-      || all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date
-        // Work billed before a timed block's call began went out without
-        // the stipend (notYet above), so it proves nothing about it.
-        && !(blk && beforeOnly(e)));
+      || all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "Orientation" && callDayOf(e) === date);
     const legacyInvoiced = all.some(e => e.invoiceId && e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === date
       && !stamped.some(inv => (inv.entryIds || []).includes(e.id)));
     const billedOver = stamped.reduce((s2, inv) => s2 + (inv.dayOverMin[date] || 0), 0)
@@ -514,15 +353,6 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
       let rem = Math.max(0, allowance - priorMin);
       for (const e of day) {
         const container = containerOf(e);
-        const parts = container ? null : partsOf(e);
-        // A timed day's pieces of one entry print back to back from its
-        // billed start: before, inside, after.
-        const from = parts ? billedFrom(e) : 0;
-        if (parts?.before) pushOutside(e, "before", parts.before, from);
-        if (parts && !parts.inside) {
-          if (parts.after) pushOutside(e, "after", parts.after, from + parts.before * 60000);
-          continue;
-        }
         if (container) {
           lines.push({
             date: null,
@@ -536,7 +366,7 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
           });
           continue;
         }
-        const billed = parts ? parts.inside : (e.billedMin || 0);
+        const billed = e.billedMin || 0;
         const cov = Math.min(rem, billed);
         rem -= cov;
         const over = billed - cov;
@@ -544,27 +374,22 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
         let flag = "included";
         if (over > 0) flag = rate > 0 ? `+${money(overAmtItem)}` : "no rate set";
         const split = cov > 0 && over > 0 ? ` (${cov}m included, ${over}m beyond)` : "";
-        const insideFrom = from + (parts?.before || 0) * 60000;
-        const span = parts ? `${fmtTime(insideFrom)}–${fmtTime(insideFrom + billed * 60000)}` : "";
         lines.push({
           date: null,
           label: `· ${lineLabel(e)}`,
-          detail: `${parts ? `${span} · ` : invoiceSpan(e)}${billed} min${split}${pieceNote(e)}`,
+          detail: `${invoiceSpan(e)}${billed} min${split}${pieceNote(e)}`,
           amount: null,
           flag,
           _sort: `${date}~1~${e.startTime || "z"}`,
           kind: "work", minutes: billed, includedMin: cov, overMin: over, overAmount: overAmtItem, rate,
           ...itemFields(e),
-          ...(parts ? { timeText: span } : {}),
         });
-        if (parts?.after) pushOutside(e, "after", parts.after, insideFrom + billed * 60000);
       }
     };
     // What the day's money line was written from (see "Layout fields").
     const dayFields = (kind) => ({
       kind, stipend: c.callStipend, allowanceMin: allowance, priorMin, loggedMin: logged,
       usedMin: Math.min(logged, allowance), overMin, overAmount: overAmt, rate, dayStartHour: callWindow,
-      ...(windowText ? { windowText } : {}),
     });
 
     if (!stipendBilled) {
@@ -696,26 +521,6 @@ function dayStartsWithin(s, en, hour) {
   return out;
 }
 
-/**
- * Every moment strictly inside (s, en) where the call day changes, as epoch
- * ms: the contract's start hour, or on a contract with timed coverage blocks
- * wherever deriveCallDay(t, contract) turns over (a block's start and end
- * moments, and its own turnover time inside it).
- */
-export function callDayCuts(contract, s, en) {
-  const hour = callDayStartHour(contract);
-  if (!hasTimedPeriods(contract)) return dayStartsWithin(s, en, hour);
-  // Each block's moments are on its own zone's clock (coverageBlocks.js).
-  const candidates = new Set([...dayStartsWithin(s, en, hour), ...blockTurnoversWithin(contract, s, en)]);
-  const out = [];
-  let prev = deriveCallDay(s, contract);
-  for (const t of [...candidates].sort((a, b) => a - b)) {
-    const k = deriveCallDay(t, contract);
-    if (k !== prev) { out.push(t); prev = k; }
-  }
-  return out;
-}
-
 // Largest-remainder apportionment of `total` whole units by integer weights.
 // Exact integer arithmetic, so a tie is a real tie and goes to the earlier
 // piece.
@@ -738,12 +543,9 @@ export function apportion(total, weights) {
  *
  * Where to cut: at every wall-clock start hour (default 7:00) strictly inside
  * [start, end). An entry that starts exactly at 7:00 belongs to that day; one
- * that ends exactly at 7:00 is not cut. On a contract with timed coverage
- * blocks, wherever the call day changes instead (callDayCuts): a 6 AM to 6 AM
- * block cuts at 6:00, and a block ending at 7:00 AM cuts there. Never split:
- * CallDay markers, Orientation, zero-length entries, entries without both
- * times, contracts without a stipend, and contracts that have not turned
- * splitting on.
+ * that ends exactly at 7:00 is not cut. Never split: CallDay markers,
+ * Orientation, zero-length entries, entries without both times, contracts
+ * without a stipend, and contracts that have not turned splitting on.
  *
  * Billed minutes, rule R2: the entry bills the same total B it would bill
  * whole (the contract's rounding, applied once). B's whole increments are
@@ -759,10 +561,8 @@ export function splitAtCallDay(entry, contract) {
   if (!entry.startTime || !entry.endTime || entry.type === "CallDay" || entry.type === "Orientation") return [entry];
   const s = new Date(entry.startTime).getTime(), en = new Date(entry.endTime).getTime();
   if (!(en > s)) return [entry];
-  // Where the call day changes: the contract's start hour, or a timed
-  // block's start, end and own turnover (callDayCuts). The call day of each
-  // piece is decided the same way, by deriveCallDay with the contract.
-  const cuts = callDayCuts(contract, s, en);
+  const hour = callDayStartHour(contract);
+  const cuts = dayStartsWithin(s, en, hour);
   if (!cuts.length) return [entry];
 
   const bounds = [s, ...cuts, en];
@@ -789,7 +589,7 @@ export function splitAtCallDay(entry, contract) {
   if (groups.length === 0) return [entry];
   if (groups.length === 1) {
     // Whole, under the call day of the piece that holds the increments.
-    const callDay = deriveCallDay(groups[0].anchor, contract);
+    const callDay = deriveCallDay(groups[0].anchor, hour);
     return [callDay === entry.callDay ? entry : { ...entry, callDay }];
   }
 
@@ -799,7 +599,7 @@ export function splitAtCallDay(entry, contract) {
     startTime: new Date(g.from).toISOString(),
     endTime: new Date(g.to).toISOString(),
     date: i === 0 ? entry.date : localDate(g.from),
-    callDay: deriveCallDay(g.anchor, contract),
+    callDay: deriveCallDay(g.anchor, hour),
     durationMin: raw[i],
     billedMin: g.units * inc + (i === 0 ? extra : 0),
   }));

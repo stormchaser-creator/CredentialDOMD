@@ -18,12 +18,13 @@ import ScanReviewCard from "./ScanReviewCard";
 import CvImportReview from "./CvImportReview";
 import Modal from "../shared/Modal";
 import { CME_INBOX_ADDRESS, DOCS_INBOX_ADDRESS, isInboxDoc, docMime, leaveInbox } from "../../utils/inboxDocs";
-import { isReadableDoc } from "../../utils/docPrefill";
+import { isReadableDoc, contractFromScan } from "../../utils/docPrefill";
 import { RECEIPT_DOC_TYPE, normalizeReceipt, receiptToExpense, receiptToDeduction } from "../../utils/receiptScan";
 import { checkStorageQuota } from "../../utils/storageQuota";
 import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { isArchived } from "../../utils/contractsForDate";
+import { deviceZone } from "../../utils/coverageBlocks";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -289,8 +290,11 @@ function DocumentsSection() {
       if (scannable && aiOn) {
         setScanning(true);
         try {
+          // An Office file's own words ride along with its scan: an agreement's
+          // coverage times the model left out are filled from them at save.
+          const text = isOfficeFile(file) ? await extractOfficeText({ name: file.name, type: file.type, file }) : "";
           const result = isOfficeFile(file)
-            ? await analyzeDocText(await extractOfficeText({ name: file.name, type: file.type, file }), deg, apiKey, scanHints)
+            ? await analyzeDocText(text, deg, apiKey, scanHints)
             : file.type === "application/pdf"
               ? await analyzePDF(dataUrl, deg, apiKey, scanHints)
               : await analyzeDocument(dataUrl, deg, apiKey, scanHints);
@@ -312,7 +316,7 @@ function DocumentsSection() {
             setScanning(false);
             continue;
           }
-          setScanQueue(q => [...q, { result, imageData: dataUrl, fileName: file.name, docId }]);
+          setScanQueue(q => [...q, { result, imageData: dataUrl, fileName: file.name, docId, text }]);
         } catch (err) {
           setScanError(err.message || "Analysis failed. Document has been saved to your files.");
         }
@@ -342,7 +346,7 @@ function DocumentsSection() {
     handleFiles([file]);
   }, [closeCamera, handleFiles]);
 
-  const handleSave = (docType, fields, _imageData, _fileName, docId) => {
+  const handleSave = (docType, fields, _imageData, _fileName, docId, scanText = "") => {
     const id = generateId();
     if (docType === RECEIPT_DOC_TYPE) {
       // Same rows the Expenses form and the statement importer write; the
@@ -410,12 +414,13 @@ function DocumentsSection() {
     }
     if (section === "cme" && !entry.topics) entry.topics = [];
     if (section === "locumContracts") {
-      // Contract terms drive billing math — coerce to numbers with defaults.
-      for (const k of ["hourlyRate", "callHourlyRate", "callStipend", "stipendHours", "overageHourlyRate", "orientationFee", "orientationHourlyRate"]) {
-        entry[k] = parseFloat(entry[k]) || 0;
-      }
-      entry.incrementMinutes = parseInt(entry.incrementMinutes, 10) || 15;
-      entry.minCallMinutes = parseInt(entry.minCallMinutes, 10) || 15;
+      // Contract terms drive billing math: numbers with defaults, and the
+      // coverage blocks the way the Contracts form saves them, with any time
+      // the model left out filled from an Office file's own words and this
+      // device's zone on a block with times (docPrefill.js contractFromScan).
+      const shaped = contractFromScan(entry, { text: scanText, zone: deviceZone() });
+      if (shaped.problem) { setScanError(shaped.problem); return; }
+      Object.assign(entry, shaped.entry);
     }
 
     // Add the credential entry
@@ -442,8 +447,9 @@ function DocumentsSection() {
     try {
       const mime = docMime(doc);
       const isPdf = mime === "application/pdf" || doc.data.startsWith("data:application/pdf");
+      const text = isOfficeFile(doc) ? await extractOfficeText({ name: doc.name, type: mime, dataUrl: doc.data }) : "";
       const result = isOfficeFile(doc)
-        ? await analyzeDocText(await extractOfficeText({ name: doc.name, type: mime, dataUrl: doc.data }), deg, apiKey, scanHints)
+        ? await analyzeDocText(text, deg, apiKey, scanHints)
         : isPdf
           ? await analyzePDF(doc.data, deg, apiKey, scanHints)
           : await analyzeDocument(doc.data, deg, apiKey, scanHints);
@@ -452,7 +458,7 @@ function DocumentsSection() {
       if (result.documentType === CV_DOC_TYPE) {
         setCvOffer({ docId: doc.id, dataUrl: doc.data, fileName: doc.name, mime: docMime(doc) });
       } else {
-        setScanQueue(q => q.some(i => i.docId === doc.id) ? q : [...q, { result, imageData: doc.data, fileName: doc.name, docId: doc.id }]);
+        setScanQueue(q => q.some(i => i.docId === doc.id) ? q : [...q, { result, imageData: doc.data, fileName: doc.name, docId: doc.id, text }]);
       }
     } catch (err) {
       setScanError(err.message || "Could not read this document.");
@@ -694,7 +700,7 @@ function DocumentsSection() {
               result={item.result}
               imageData={item.imageData}
               fileName={item.fileName}
-              onSave={(docType, fields, img, fn) => handleSave(docType, fields, img, fn, item.docId)}
+              onSave={(docType, fields, img, fn) => handleSave(docType, fields, img, fn, item.docId, item.text)}
               onDiscard={() => handleDiscard(item.docId)}
             />
           ))}

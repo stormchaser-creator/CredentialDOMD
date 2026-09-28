@@ -13,13 +13,20 @@
  * the override on the entry so it never nags about that day again.
  */
 
-/** Coverage blocks for a contract, falling back to a plain start/end pair. */
+import { timedSpan } from "./coverageBlocks.js";
+
+/**
+ * Coverage blocks for a contract, falling back to a plain start/end pair. A
+ * block with times (coverageBlocks.js) counts every calendar date it touches:
+ * Sep 25 4:00 PM to Sep 28 7:00 AM covers Sep 25 through the sign-out morning
+ * of Sep 28, where the physician still is. One without keeps start to end.
+ */
 function blocksOf(contract) {
   if (!contract) return [];
   const ps = contract.coveragePeriods?.length
     ? contract.coveragePeriods
     : (contract.startDate ? [{ start: contract.startDate, end: contract.endDate || contract.startDate }] : []);
-  return ps.filter(p => p && p.start);
+  return ps.filter(p => p && p.start).map(p => timedSpan(p) || p);
 }
 
 export function coversDate(contract, dateStr) {

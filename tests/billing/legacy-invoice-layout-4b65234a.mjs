@@ -1,7 +1,13 @@
-import { formatDate } from "./helpers.js";
-import { plainDashes } from "./outgoingText.js";
-import { money, invoicePayment, TEXT_RULE } from "./invoiceCover.js";
-import { DEFAULT_CALL_DAY_START_HOUR, hourLabel, apportion } from "./billing.js";
+// FROZEN COPY of src/utils/invoiceLayout.js at 4b65234a (2026-09-28), before
+// coverage blocks could carry times. tests/billing/coverage-block-times.test.mjs
+// lays out invoices from contracts WITHOUT times with it and with the live
+// layout, and requires the same days, rows and totals. It reads the frozen
+// engine's helpers too. Never edit it to make a test pass: it is the reference.
+
+import { formatDate } from "../../src/utils/helpers.js";
+import { plainDashes } from "../../src/utils/outgoingText.js";
+import { money, invoicePayment, TEXT_RULE } from "../../src/utils/invoiceCover.js";
+import { DEFAULT_CALL_DAY_START_HOUR, hourLabel, apportion } from "./legacy-billing-4b65234a.mjs";
 
 /**
  * The invoice as its reader sees it: one block per day, each opening with
@@ -21,14 +27,6 @@ import { DEFAULT_CALL_DAY_START_HOUR, hourLabel, apportion } from "./billing.js"
  *   Callback beyond 4 h                                       1.00 h @ $300.00/hr    $300.00
  *     Call: ...            10:45 PM–11:00 PM                  0.25 h                 $75.00
  *   Total for Fri, Sep 25, 2026                                                      $5,250.00
- *
- * On a contract whose coverage blocks carry times (coverageBlocks.js) a call
- * day states its real window instead ("call 4:00 PM Sep 25 to 7:00 AM Sep
- * 26"), and work before the call began or after it ended prints as its own
- * charge inside the day, with each piece of work and its dollars under it:
- *
- *   Before call began at 4:00 PM                              0.50 h @ $300.00/hr    $150.00
- *     Rounding: ...        3:30 PM–4:00 PM                    0.50 h                 $150.00
  *
  * Presentation only. No amount is computed here: every dollar printed is a
  * line's own amount (or, for a work item, the dollars the engine already
@@ -165,7 +163,6 @@ function factOf(line) {
   return line?.kind ? factFromFields(base, line) : factFromText(base);
 }
 
-const windowOf = (l) => (clean(l.windowText) ? { windowText: clean(l.windowText) } : {});
 function factFromFields(base, l) {
   const time = clean(l.timeText), note = clean(l.note);
   switch (l.kind) {
@@ -176,17 +173,9 @@ function factFromFields(base, l) {
         ...base, type: l.kind === "stipendDay" ? "stipend" : "additional",
         stipend: num(l.stipend), allowanceMin: num(l.allowanceMin), loggedMin: num(l.loggedMin), usedMin: num(l.usedMin),
         overMin, overAmount: num(l.overAmount) || 0, rate, noRate: overMin > 0 && !(rate > 0),
-        dayStartHour: validHour(num(l.dayStartHour)), windowText: clean(l.windowText) || null,
+        dayStartHour: validHour(num(l.dayStartHour)),
       };
     }
-    case "outside":
-      // Work before a timed block began or after it ended: its own charge,
-      // grouped under its label ("Before call began at 4:00 PM").
-      return {
-        ...base, type: "outside", side: l.side === "after" ? "after" : "before", edge: base.label, item: clean(l.item) || base.label,
-        time, note, minutes: num(l.minutes) || 0, rate: num(l.rate) || 0,
-        dayStartHour: validHour(num(l.dayStartHour)), windowText: clean(l.windowText) || null,
-      };
     case "work": {
       const overMin = num(l.overMin) || 0;
       return {
@@ -195,13 +184,11 @@ function factFromFields(base, l) {
         overAmount: num(l.overAmount) || 0, noRate: overMin > 0 && !(num(l.rate) > 0),
       };
     }
-    // A call day of a timed block on a contract billed by the hour carries
-    // the block's window (billing.js), which the day header states.
     case "hourly":
     case "orientation":
-      return { ...base, type: "timed", item: base.label, time, note, minutes: num(l.minutes) || 0, rate: num(l.rate) || 0, coveredByFee: l.coveredByFee === true, dayStartHour: validHour(num(l.dayStartHour)), ...windowOf(l) };
+      return { ...base, type: "timed", item: base.label, time, note, minutes: num(l.minutes) || 0, rate: num(l.rate) || 0, coveredByFee: l.coveredByFee === true, dayStartHour: validHour(num(l.dayStartHour)) };
     case "container":
-      return { ...base, type: "container", item: base.label, time, note, during: clean(l.during), dayStartHour: validHour(num(l.dayStartHour)), ...windowOf(l) };
+      return { ...base, type: "container", item: base.label, time, note, during: clean(l.during), dayStartHour: validHour(num(l.dayStartHour)) };
     default:
       return { ...base, type: "plain", item: base.label };
   }
@@ -349,12 +336,9 @@ function stipendSection(day, work, ctx) {
   }
   const rows = [];
   const allowanceText = isNum(allowance) && allowance > 0;
-  // A call day of a block with times is not always 24 hours (4:00 PM to
-  // 7:00 AM); its header states the window instead.
-  const stipendItem = day.windowText ? "Call stipend" : "24-hour call stipend";
   if (day.type === "stipend") {
     rows.push(row({
-      item: stipendItem,
+      item: "24-hour call stipend",
       time: allowanceText ? `covers the first ${hrs(allowance)} of work` : "on-call coverage",
       hours: !(day.loggedMin > 0) ? "no work logged"
         : allowanceText ? `${hrs(Math.min(day.usedMin ?? day.loggedMin, allowance))} used of ${hrs(allowance)}`
@@ -363,7 +347,7 @@ function stipendSection(day, work, ctx) {
     }));
   } else {
     rows.push(row({
-      item: stipendItem,
+      item: "24-hour call stipend",
       time: "billed on an earlier invoice",
       hours: allowanceText && isNum(day.usedMin) ? `${hrs(day.usedMin)} used of ${hrs(allowance)}` : `${hrs(day.loggedMin)} more logged`,
     }));
@@ -383,31 +367,6 @@ function stipendSection(day, work, ctx) {
     rows.push(workRow(w, stipend, ctx, shares.get(w) ?? null));
   }
   if (callback && !placed) rows.push(callback);
-  return rows;
-}
-
-/**
- * Work before a timed block began or after it ended, one group per label:
- * the label with its hours and dollars (a money row of the day), then each
- * piece of work with its own time and dollars under it. The group's amount
- * is its lines' amounts added in cents, so the day total still adds up.
- */
-function outsideRows(facts, { hrs }) {
-  const groups = new Map();
-  for (const f of facts) {
-    if (!groups.has(f.edge)) groups.set(f.edge, []);
-    groups.get(f.edge).push(f);
-  }
-  const rows = [];
-  for (const [edge, list] of groups) {
-    const minutes = list.reduce((s, f) => s + f.minutes, 0);
-    const amount = fromCents(list.reduce((s, f) => s + cents(f.amount ?? 0), 0));
-    const oneRate = list.every((f) => f.rate === list[0].rate);
-    rows.push(row({ item: edge, hours: oneRate ? `${hrs(minutes)} @ ${money(list[0].rate)}/hr` : hrs(minutes), amount, amountText: money(amount), sums: true, tone: amount === 0 ? "quiet" : "normal" }));
-    for (const f of list) {
-      rows.push(row({ level: 1, item: f.item, time: f.time, note: f.note, hours: oneRate ? hrs(f.minutes) : `${hrs(f.minutes)} @ ${money(f.rate)}/hr`, amount: f.amount, amountText: money(f.amount ?? 0) }));
-    }
-  }
   return rows;
 }
 
@@ -484,14 +443,9 @@ export function invoiceDays(inv = {}) {
     if (dayFacts.length > 1) throw Error(`two daily totals on ${date}`);
     const [day] = dayFacts;
     const work = facts.filter((f) => f.type === "work" || f.type === "workText");
-    const outside = facts.filter((f) => f.type === "outside");
-    const rows = facts.filter((f) => !dayFacts.includes(f) && !work.includes(f) && !outside.includes(f)).map((f) => plainRow(f, ctx));
-    // Time before the call began reads before the stipend, time after it
-    // ended after the stipend and its callback.
-    rows.push(...outsideRows(outside.filter((f) => f.side === "before"), ctx));
+    const rows = facts.filter((f) => !dayFacts.includes(f) && !work.includes(f)).map((f) => plainRow(f, ctx));
     if (day) rows.push(...stipendSection(day, work, ctx));
     else rows.push(...work.map((w) => workRow(w, ctx.stipend, ctx)));
-    rows.push(...outsideRows(outside.filter((f) => f.side === "after"), ctx));
     const totalCents = facts.reduce((s, f) => s + (f.amount == null ? 0 : cents(f.amount)), 0);
     const rowCents = rows.reduce((s, r) => s + (r.sums ? cents(r.amount) : 0), 0);
     if (rowCents !== totalCents) throw Error(`rows of ${date} add to ${rowCents}, lines to ${totalCents}`);
@@ -504,12 +458,9 @@ export function invoiceDays(inv = {}) {
     const hour = day?.dayStartHour ?? facts.find((f) => isNum(f.dayStartHour))?.dayStartHour ?? fallbackHour;
     const smallHours = facts.some((f) => TIMED_TYPES.has(f.type) && startsBefore(f.time, hour));
     const callDay = !!day || facts.some((f) => f.callDay) || smallHours;
-    // A call day of a block with times states its real window, as the
-    // engine wrote it: "call 4:00 PM Sep 25 to 7:00 AM Sep 26".
-    const timedWindow = day?.windowText || facts.find((f) => f.windowText)?.windowText || "";
     days.push({
       date, title,
-      window: timedWindow || (callDay ? callWindowText(date, hour) : ""),
+      window: callDay ? callWindowText(date, hour) : "",
       rows: rows.map(cleanRow),
       total: fromCents(totalCents),
       totalLabel: `Total for ${title}`,

@@ -10,6 +10,7 @@ import { STATES } from "../../constants/states";
 import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, normalizeReceipt, receiptSaveIssues, toISODate } from "../../utils/receiptScan";
 import { canonicalForDocType, scanShapeIssues } from "../../utils/scanShape";
 import { agencyOptions, agencyForDate, sameAgency } from "../../utils/contractsForDate";
+import { timedBlock, timedBlockLabel, periodProblem } from "../../utils/coverageBlocks";
 
 const FIELD_DEFS = {
   license: [
@@ -382,11 +383,17 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard }) {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {(edited.coveragePeriods || []).map((p, i) => (
-                    <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input type="date" value={p.start || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
-                      <span style={{ color: T.textDim, flexShrink: 0 }}>–</span>
-                      <input type="date" value={p.end || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
-                      <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>&times;</button>
+                    <div key={i}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input type="date" value={p.start || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                        <span style={{ color: T.textDim, flexShrink: 0 }}>–</span>
+                        <input type="date" value={p.end || ""} onChange={e => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
+                        <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: prev.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>&times;</button>
+                      </div>
+                      {/* Times the agreement states ride along with the block; they are edited on the Contracts form. A block they make end before it starts is refused at save, so it says so here. */}
+                      {timedBlock(p)?.valid === false
+                        ? <div style={{ fontSize: 12, color: T.danger, marginTop: 3 }}>{periodProblem(p, i + 1)}</div>
+                        : timedBlockLabel(p) && <div style={{ fontSize: 12, color: T.textDim, marginTop: 3 }}>{timedBlockLabel(p)}</div>}
                     </div>
                   ))}
                   <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: [...(prev.coveragePeriods || []), { start: "", end: "" }] }))} style={{

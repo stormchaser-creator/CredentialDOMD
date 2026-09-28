@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import Modal from "../../shared/Modal";
 import { formatDate } from "../../../utils/helpers";
 import { callDayStartHour, hourLabel, DEFAULT_CALL_DAY_START_HOUR } from "../../../utils/billing";
+import { coveragePeriodText } from "../../../utils/coverageBlocks";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -74,7 +75,7 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc }) {
   const hrs = s.minutes / 60;
   const outstanding = s.billed - s.collected;
   const periods = contract.coveragePeriods?.length
-    ? contract.coveragePeriods.map(p => `${formatDate(p.start)}${p.end && p.end !== p.start ? " – " + formatDate(p.end) : ""}`).join(", ")
+    ? contract.coveragePeriods.map(p => coveragePeriodText(p, formatDate)).join(", ")
     : (contract.startDate ? `${formatDate(contract.startDate)}${contract.endDate ? " – " + formatDate(contract.endDate) : ""}` : "");
 
   return (

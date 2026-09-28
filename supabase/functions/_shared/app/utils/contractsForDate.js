@@ -14,10 +14,18 @@
  *   1  a short term containing it (under ~2 months: a locums assignment)
  *   2  a long term containing it (a multi-year agreement, weak evidence)
  *   3  dates on file are incomplete
+ *
+ * A coverage block with times (coverageBlocks.js) is read as the calendar
+ * dates it touches (timedSpan): Sep 25 4:00 PM to Sep 28 7:00 AM is in force
+ * Sep 25 through Sep 28. A block without times is read as it always was.
  */
+import { timedSpan } from "./coverageBlocks.js";
+
+const asDates = (p) => timedSpan(p) || p;
+const blocksOf = (c) => (c?.coveragePeriods || []).map(asDates);
 const periodsOf = (c) =>
   (c?.coveragePeriods?.length
-    ? c.coveragePeriods
+    ? blocksOf(c)
     : [{ start: c?.startDate || c?.termStart, end: c?.endDate || c?.termEnd }]);
 
 export function coversDate(contract, date) {
@@ -27,7 +35,7 @@ export function coversDate(contract, date) {
 
 export function specificity(contract, date) {
   if (!contract || !date) return 3;
-  const blocks = contract.coveragePeriods?.length ? contract.coveragePeriods : null;
+  const blocks = contract.coveragePeriods?.length ? blocksOf(contract) : null;
   if (blocks && blocks.some(p => p?.start && date >= p.start && (!p.end || date <= p.end))) return 0;
   const from = contract.startDate || contract.termStart;
   const to = contract.endDate || contract.termEnd;
@@ -87,8 +95,8 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
 export const todayLocal = () => ymd(new Date());
 
 const termBounds = (c) => {
-  const starts = [c?.startDate, c?.termStart, ...(c?.coveragePeriods || []).map(p => p?.start)].filter(Boolean).sort();
-  const ends = [c?.endDate, c?.termEnd, ...(c?.coveragePeriods || []).map(p => p?.end || p?.start)].filter(Boolean).sort();
+  const starts = [c?.startDate, c?.termStart, ...blocksOf(c).map(p => p?.start)].filter(Boolean).sort();
+  const ends = [c?.endDate, c?.termEnd, ...blocksOf(c).map(p => p?.end || p?.start)].filter(Boolean).sort();
   return { start: starts[0] || "", end: ends[ends.length - 1] || "" };
 };
 
@@ -192,7 +200,7 @@ const dayNumber = (d) => {
 // short term (a locums assignment). A multi-year agreement's term is not a
 // booking; being inside it is weak evidence.
 function bookings(c) {
-  if (c?.coveragePeriods?.length) return c.coveragePeriods.filter(p => p?.start);
+  if (c?.coveragePeriods?.length) return blocksOf(c).filter(p => p?.start);
   const from = c?.startDate || c?.termStart, to = c?.endDate || c?.termEnd;
   if (!from || !to) return [];
   return dayNumber(to) - dayNumber(from) <= 62 ? [{ start: from, end: to }] : [];
