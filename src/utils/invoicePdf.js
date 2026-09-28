@@ -5,10 +5,14 @@ import {
   money, invoicePayment, invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail,
   normalizeInvoiceText, invoiceTextOnlyShare, MAILTO_BODY_MAX,
 } from "./invoiceCover.js";
+import { invoiceLayout, sortInvoiceLines } from "./invoiceLayout.js";
 
 // The wording lives in invoiceCover.js (pure, unit-tested); re-exported so
 // every send site keeps importing from here.
 export { invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail, invoicePayment, normalizeInvoiceText, invoiceTextOnlyShare };
+// The line order moved to invoiceLayout.js with the day layout; kept here
+// for the screens that import it from this module.
+export { sortInvoiceLines };
 
 /**
  * Professional PDF invoice — clean table, brand header, ready for a
@@ -17,36 +21,172 @@ export { invoiceSubject, invoiceCoverBlurb, invoiceCoverEmail, invoicePayment, n
 
 const NAVY = [10, 37, 64];      // #0A2540
 const EMERALD = [16, 185, 129]; // #10b981
+const DAY_FILL = [229, 237, 242];
+const DAY_TEXT = [31, 56, 81];
+const STRIPE = [245, 245, 245];
+const TOTAL_FILL = [247, 250, 250];
+const INCLUDED = [16, 150, 105];
+const QUIET = [150, 150, 150];
+const SUB_TEXT = [110, 110, 110];
+
+// Page geometry for the line items (mm, A4 297 high). A page's table stops
+// TABLE_BOTTOM above the edge; a continuation page starts at PAGE_TOP.
+const PAGE_TOP = 16;
+const TABLE_BOTTOM = 14;
+// Slack between the planned page end and autoTable's own, so the planner
+// below (not autoTable) decides every break.
+const PLAN_SLACK = 0.5;
+const HEAD = [["Item", "Time", "Hours", "Amount"]];
+
+const dayHeaderText = (day) => (day.window ? `${day.title}   \u{b7}   ${day.window}` : day.title);
 
 /**
- * Chronological line order, even for invoices saved before lines carried
- * _sort keys: day by day → stipend → calls by clock time (pre-7am counts
- * as end of the call day) → other work → one-time orientation last.
+ * The line items as day blocks (invoiceLayout.js): a header row per day,
+ * its money rows with the work under them, and the day's total under a
+ * rule. Columns Item | Time | Hours | Amount.
+ *
+ * Page breaks are planned here from each row's measured height, not left to
+ * autoTable, so a day never loses its header or its total:
+ *  - a day that does not fit in the room left may split only when its
+ *    header and first two rows fit there and at least one of its rows
+ *    goes over with its total; otherwise it starts on the next page;
+ *  - its last row and its total always share a page, so a total never
+ *    opens a page alone;
+ *  - a page that carries on a day opens with the column head and
+ *    "<day> (continued)".
+ * A day is not moved whole just because it would fit on a fresh page: on
+ * the owner's Northfield invoice that left half of page 1 blank. Each page's
+ * rows are then drawn by one autoTable call.
  */
-const parseDetailTime = (detail = "") => {
-  const m = detail.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  if (!m) return null;
-  let h = parseInt(m[1], 10) % 12;
-  if (/pm/i.test(m[3])) h += 12;
-  let mins = h * 60 + parseInt(m[2], 10);
-  if (mins < 7 * 60) mins += 24 * 60; // before 7am = tail of the call day
-  return mins;
-};
-export function sortInvoiceLines(lines = []) {
-  const rank = (l) =>
-    !l.date ? 9
-      : l.label?.startsWith("Call coverage") ? 0
-        : l.label?.startsWith("Call") ? 1
-          : 2;
-  return [...lines].sort((a, b) => {
-    if (a._sort && b._sort) return a._sort.localeCompare(b._sort);
-    const d = (a.date || "9999").localeCompare(b.date || "9999");
-    if (d) return d;
-    const r = rank(a) - rank(b);
-    if (r) return r;
-    const ta = parseDetailTime(a.detail), tb = parseDetailTime(b.detail);
-    if (ta != null && tb != null) return ta - tb;
-    return 0;
+function dayTable(doc, days, startY, M) {
+  const H = doc.internal.pageSize.getHeight();
+  const blocks = days.map((day) => {
+    const rows = [{ cells: [{ content: dayHeaderText(day), colSpan: 4 }], kind: { kind: "day" } }];
+    day.rows.forEach((r, i) => {
+      const time = [r.time, r.note].filter(Boolean).join("\n");
+      rows.push({
+        cells: r.detail != null ? [r.item, { content: r.detail, colSpan: 2 }, r.amountText] : [r.item, time, r.hours, r.amountText],
+        kind: { kind: "row", row: r, stripe: i % 2 === 1 },
+      });
+    });
+    rows.push({ cells: [{ content: day.totalLabel, colSpan: 3 }, money(day.total)], kind: { kind: "total" } });
+    return { rows, cont: { cells: [{ content: `${day.title} (continued)`, colSpan: 4 }], kind: { kind: "day" } } };
+  });
+  const options = (rows, extra) => ({
+    margin: { left: M, right: M, top: PAGE_TOP, bottom: TABLE_BOTTOM },
+    head: HEAD,
+    body: rows.map((r) => r.cells),
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 2.4, textColor: [40, 40, 40], fillColor: [255, 255, 255] },
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 66 },
+      1: { cellWidth: 48 },
+      2: { cellWidth: 38 },
+      3: { cellWidth: "auto", halign: "right" },
+    },
+    // A row (a wrapped label, a two-line time) never splits across pages.
+    rowPageBreak: "avoid",
+    didParseCell: (h) => {
+      if (h.section !== "body") return;
+      const k = rows[h.row.index].kind;
+      const s = h.cell.styles;
+      if (k.kind === "day") {
+        s.fillColor = DAY_FILL; s.textColor = DAY_TEXT;
+        return;
+      }
+      if (k.kind === "total") {
+        s.fillColor = TOTAL_FILL; s.fontStyle = "bold"; s.textColor = [30, 30, 30];
+        s.lineColor = NAVY; s.lineWidth = { top: 0.35, right: 0, bottom: 0, left: 0 };
+        if (h.column.index === 0) s.halign = "right";
+        return;
+      }
+      const r = k.row;
+      if (k.stripe) s.fillColor = STRIPE;
+      if (r.level === 1) {
+        s.fontSize = 8;
+        s.textColor = SUB_TEXT;
+        if (h.column.index === 0) s.cellPadding = { top: 2.4, bottom: 2.4, right: 2.4, left: 6 };
+      }
+      if (h.column.index === 3) {
+        if (r.tone === "included") { s.textColor = INCLUDED; s.fontSize = 8; }
+        else if (r.tone === "quiet") { s.textColor = QUIET; s.fontSize = 8; }
+      }
+    },
+    ...extra,
+  });
+
+  // Measure every row (and each day's "continued" band) on a scratch page
+  // of the same width and fonts.
+  const all = blocks.flatMap((b) => [...b.rows, b.cont]);
+  const probe = new jsPDF({ unit: "mm", format: "a4" });
+  autoTable(probe, options(all, { startY: PAGE_TOP }));
+  const heights = probe.lastAutoTable.body.map((r) => r.height);
+  const headH = probe.lastAutoTable.head[0].height;
+  all.forEach((r, i) => { r.h = heights[i]; });
+
+  // Plan the pages.
+  const limit = H - TABLE_BOTTOM - PLAN_SLACK;
+  const pages = [[]];
+  let y = startY + headH;
+  const newPage = () => { pages.push([]); y = PAGE_TOP + headH; };
+  const put = (r) => { pages[pages.length - 1].push(r); y += r.h; };
+  const height = (rows) => rows.reduce((s, r) => s + r.h, 0);
+  for (const { rows, cont } of blocks) {
+    // rows: the day's header, its rows, its total.
+    const room = limit - y;
+    const splits = rows.length - 2 >= 3 && height(rows.slice(0, 3)) <= room;
+    if (pages[pages.length - 1].length && height(rows) > room && !splits) newPage();
+    rows.forEach((r, i) => {
+      // The last data row travels with the total.
+      const need = i > 0 && i === rows.length - 2 ? r.h + rows[i + 1].h : r.h;
+      const page = pages[pages.length - 1];
+      if (i > 0 && y + need > limit && !(page.length === 1 && page[0] === cont)) {
+        newPage();
+        put(cont);
+      }
+      put(r);
+    });
+  }
+
+  pages.forEach((rows, p) => {
+    if (p > 0) doc.addPage();
+    autoTable(doc, options(rows, { startY: p === 0 ? startY : PAGE_TOP, showHead: "firstPage" }));
+  });
+}
+
+/** The pre-day-block table: the fallback when day totals cannot be shown adding up. */
+function flatTable(doc, rows, startY, M) {
+  autoTable(doc, {
+    startY,
+    margin: { left: M, right: M },
+    head: [["Date", "Item", "Details", "Amount"]],
+    body: rows,
+    styles: { font: "helvetica", fontSize: 9, cellPadding: 2.6, textColor: [40, 40, 40] },
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
+    alternateRowStyles: { fillColor: [243, 247, 245] },
+    columnStyles: {
+      0: { cellWidth: 24 },
+      1: { cellWidth: 52, fontStyle: "bold" },
+      3: { cellWidth: 26, halign: "right", fontStyle: "bold" },
+    },
+    didParseCell: (h) => {
+      // Zero-dollar (stipend-covered) amounts render muted
+      if (h.section === "body" && h.column.index === 3 && h.cell.raw === "$0.00") {
+        h.cell.styles.textColor = [150, 150, 150];
+        h.cell.styles.fontStyle = "normal";
+      }
+      // Work items under a daily total render as quiet sub-rows; their
+      // amount cell shows "included" (green) or the beyond-stipend value
+      if (h.section === "body" && h.row.raw && typeof h.row.raw[1] === "string" && h.row.raw[1].startsWith("· ")) {
+        if (h.column.index === 1) h.cell.styles.fontStyle = "normal";
+        h.cell.styles.textColor = [110, 110, 110];
+        if (h.column.index === 3) {
+          h.cell.styles.fontSize = 7.5;
+          h.cell.styles.fontStyle = "normal";
+          if (h.cell.raw === "included") h.cell.styles.textColor = [16, 150, 105];
+        }
+      }
+    },
   });
 }
 
@@ -100,50 +240,28 @@ export function buildInvoicePdf(inv) {
   }
   y = Math.max(yL, yR) + 4;
 
-  // ── Line items table ──
-  autoTable(doc, {
-    startY: y,
-    margin: { left: M, right: M },
-    head: [["Date", "Item", "Details", "Amount"]],
-    body: sortInvoiceLines(inv.lines).map(l => [
-      l.date ? formatDate(l.date) : "",
-      l.label || "",
-      l.detail || "",
-      l.amount == null ? (l.flag || "") : money(l.amount),
-    ]),
-    styles: { font: "helvetica", fontSize: 9, cellPadding: 2.6, textColor: [40, 40, 40] },
-    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
-    alternateRowStyles: { fillColor: [243, 247, 245] },
-    columnStyles: {
-      0: { cellWidth: 24 },
-      1: { cellWidth: 52, fontStyle: "bold" },
-      3: { cellWidth: 26, halign: "right", fontStyle: "bold" },
-    },
-    didParseCell: (h) => {
-      // Zero-dollar (stipend-covered) amounts render muted
-      if (h.section === "body" && h.column.index === 3 && h.cell.raw === "$0.00") {
-        h.cell.styles.textColor = [150, 150, 150];
-        h.cell.styles.fontStyle = "normal";
-      }
-      // Work items under a daily total render as quiet sub-rows; their
-      // amount cell shows "included" (green) or the beyond-stipend value
-      if (h.section === "body" && h.row.raw && typeof h.row.raw[1] === "string" && h.row.raw[1].startsWith("· ")) {
-        if (h.column.index === 1) h.cell.styles.fontStyle = "normal";
-        h.cell.styles.textColor = [110, 110, 110];
-        if (h.column.index === 3) {
-          h.cell.styles.fontSize = 7.5;
-          h.cell.styles.fontStyle = "normal";
-          if (h.cell.raw === "included") h.cell.styles.textColor = [16, 150, 105];
-        }
-      }
-    },
-  });
+  // ── Line items: day blocks, or the flat table when they can't add up ──
+  const layout = invoiceLayout(inv);
+  if (layout.mode === "days") dayTable(doc, layout.days, y, M);
+  else flatTable(doc, layout.rows, y, M);
 
   // ── Totals ──
   let ty = doc.lastAutoTable.finalY + 6;
   // A resend after a payment shows what's left (or that nothing is), not
   // the original total as if nothing had happened.
   const pay = invoicePayment(inv);
+  // The payment line, the TOTAL DUE box, the terms and the remit line go
+  // together, above the footer: when they do not fit under the table, they
+  // start the next page.
+  const H = doc.internal.pageSize.getHeight();
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  const termLines = inv.terms ? doc.splitTextToSize(`Terms: ${inv.terms}`, W - 2 * M).length : 0;
+  const needed = (pay.hasPayment ? 6 : 0) + 20 + (termLines ? termLines * 3.8 + 4 : 0) + (inv.billTo ? 2 : 0);
+  if (ty + needed > H - 14) {
+    doc.addPage();
+    ty = 20;
+  }
   if (pay.hasPayment) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);

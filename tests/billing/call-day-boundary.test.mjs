@@ -24,6 +24,10 @@ test.after(() => {
 });
 
 const { deriveCallDay, callDayOf, callDayStartHour, splitAtCallDay, splitRows, computeBilling, findContainer, splitPieceNote } = live;
+const withoutLayoutFields = (priced) => ({
+  ...priced,
+  lines: priced.lines.map((l) => Object.fromEntries(Object.entries(l).filter(([k]) => !live.LAYOUT_LINE_FIELDS.includes(k)))),
+});
 
 // A local wall-clock instant: at('2026-11-01 06:30').
 const at = (s) => { const [d, t] = s.split(' '); const [y, m, dd] = d.split('-').map(Number); const [hh, mi, ss = 0] = t.split(':').map(Number); return new Date(y, m - 1, dd, hh, mi, ss).toISOString(); };
@@ -413,7 +417,9 @@ test('setting off: every representative entry saves the same row and prices exac
     const unbilled = invoiced.filter(e => !e.invoiceId);
     for (const filter of [null, days('2026-08-04', '2026-08-05', '2026-08-06'), days('2026-07-27', '2026-07-28', '2026-08-10', '2026-08-11')]) {
       for (const [l, all, inv] of [[list, list, []], [unbilled, invoiced, invoices]]) {
-        const a = computeBilling(c, l, true, all, inv, filter);
+        // The layout fields (live.LAYOUT_LINE_FIELDS) are the one addition
+        // since the frozen engine; with them removed nothing may differ.
+        const a = withoutLayoutFields(computeBilling(c, l, true, all, inv, filter));
         const b = legacy.computeBilling(c, l, true, all, inv, filter);
         assert.deepEqual(a, b, `${c.id} ${filter ? [...filter].join(',') : 'all days'}`);
         assert.equal(JSON.stringify(a), JSON.stringify(b), 'byte-identical, key order included');

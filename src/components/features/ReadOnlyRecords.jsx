@@ -4,6 +4,7 @@ import { COLLECTION_KEYS, downloadDocumentFile } from "../../lib/supabase";
 import { scopeForCollection } from "../../utils/limitedLaunchAccess.js";
 import { downloadBlob } from "../../utils/credentialExport";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../utils/invoicePdf";
+import { callDayStartHour } from "../../utils/billing";
 import { isIdentitySection, isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 
 const label = value => String(value).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, ch => ch.toUpperCase());
@@ -47,6 +48,10 @@ export default function ReadOnlyRecords({ scope }) {
         facility: contract.facility, agency: contract.agency, location: contract.location, billTo: contract.billTo,
         periodStart: record.periodStart, periodEnd: record.periodEnd, terms: record.terms, lines: record.lines,
         totalMin: record.totalMinutes, total, paid, balance: record.writeOffAt ? 0 : Math.max(0, total - paid), issuedDate: record.sentAt?.slice(0, 10),
+        // The call-day window its day blocks print: lines saved before the
+        // day layout do not carry it, so it comes from the agreement, as on
+        // every resend (invoiceDocumentArgs).
+        ...(contract.id ? { dayStartHour: callDayStartHour(contract) } : {}),
       };
       const file = record.lines?.length ? invoicePdfFile(args) : invoiceTextPdfFile(args, record.text || "");
       downloadBlob(file, file.name);

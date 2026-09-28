@@ -5,7 +5,9 @@ import Modal from "../../shared/Modal";
 import DeskTable from "../../shared/DeskTable";
 import { formatDate } from "../../../utils/helpers";
 import { SendIcon, TrashIcon, ExternalLinkIcon, DollarIcon, UndoIcon } from "../../shared/Icons";
-import { sortInvoiceLines, invoiceSubject, shareInvoiceText, invoicePdfFile } from "../../../utils/invoicePdf";
+import { invoiceSubject, shareInvoiceText, invoicePdfFile } from "../../../utils/invoicePdf";
+import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
+import { invoicePlainText } from "../../../utils/invoiceLayout";
 import { copyInvoiceCover, shareInvoiceFiles } from "../../../utils/expenseInvoiceSend";
 import { resolveDocuments, missingReceiptMessage, billedReceiptDocs, attachedExpenseIds } from "../../../utils/receiptFiles";
 import { downloadDocumentBlob } from "../../../lib/supabase";
@@ -287,7 +289,9 @@ function Invoices({ onOpenContract }) {
       // No receipt rides with the single document (or with Word/Excel), so
       // no line of it may say one is attached.
       const single = args.kind === "expenses" ? { ...args, lines: expenseReceiptLines(args.lines) } : args;
-      const how = await exportInvoice(single, format, subject, inv.text);
+      // The text-only fallback reads the same day blocks as the file does
+      // (the stored text was written in whatever layout was current then).
+      const how = await exportInvoice(single, format, subject, invoicePlainText(single));
       if (how === null) return; // share sheet cancelled
       const coverMsg = invoiceCoverNotice(how);
       if (ready.missing.length || (ready.files.length && format === "pdf")) {
@@ -573,41 +577,8 @@ function Invoices({ onOpenContract }) {
               </div>
             )}
             {viewInv.lines?.length ? (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    {["Date", "Item", "Amount"].map((h, i) => (
-                      <th key={h} style={{
-                        textAlign: i === 2 ? "right" : "left", padding: "6px 6px",
-                        borderBottom: `2px solid ${T.accent}`, color: T.textMuted,
-                        fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5,
-                      }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortInvoiceLines(viewInv.lines).map((l, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.textDim, whiteSpace: "nowrap", verticalAlign: "top" }}>
-                        {l.date ? formatDate(l.date) : ""}
-                      </td>
-                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, color: T.text, verticalAlign: "top" }}>
-                        <div style={{ fontWeight: l.amount == null ? 500 : 700, paddingLeft: l.amount == null ? 10 : 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{l.label}</div>
-                        {l.detail && <div style={{ fontSize: 11, color: T.textMuted, whiteSpace: "pre-line", paddingLeft: l.amount == null ? 10 : 0 }}>{l.detail}</div>}
-                      </td>
-                      <td style={{ padding: "6px 6px", borderBottom: `1px solid ${T.border}`, textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "top", color: l.amount ? T.text : l.flag === "included" ? (T.success || T.accent) : T.textDim, fontSize: l.amount == null ? 11 : undefined }}>
-                        {l.amount == null ? (l.flag || "") : money(l.amount)}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td colSpan={2} style={{ padding: "8px 6px", fontWeight: 800, color: T.text }}>TOTAL DUE</td>
-                    <td style={{ padding: "8px 6px", textAlign: "right", fontWeight: 800, fontSize: 14, color: T.accent }}>
-                      {money(viewInv.totalAmount)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              // Day blocks and day totals, from the same arguments a resend's PDF is built from
+              <InvoiceLinesTable inv={invoiceDocumentArgs(viewInv, contracts.find(x => x.id === viewInv.contractId), data.settings || {}, billNameOf(viewInv))} />
             ) : (
               <div style={{
                 backgroundColor: T.input, border: `1px solid ${T.border}`, borderRadius: 10,

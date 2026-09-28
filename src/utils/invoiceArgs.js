@@ -8,6 +8,8 @@
  * Pure: no React, no DOM. Nothing here writes to the invoice.
  */
 
+import { callDayStartHour } from "./billing.js";
+
 // Payments are a ledger, not a flag: agencies sometimes pay an invoice in
 // pieces. Legacy invoices marked paid before the ledger existed count as
 // paid in full.
@@ -45,5 +47,8 @@ export function invoiceDocumentArgs(inv, contract, settings = {}, billName = "")
     issuedDate: inv.sentAt?.slice(0, 10),
     // An expense invoice's cover says travel expenses, not physician services.
     kind: inv.kind,
+    // The call-day window a day block prints (invoiceLayout.js). Lines saved
+    // since the layout carry their own; older ones read the agreement's.
+    ...(contract ? { dayStartHour: callDayStartHour(contract) } : {}),
   };
 }

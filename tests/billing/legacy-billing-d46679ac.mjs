@@ -1,4 +1,11 @@
-import { formatDate } from "./helpers.js";
+// FROZEN COPY of src/utils/billing.js at d46679ac (2026-09-28), before invoice
+// lines carried the structured layout fields (kind, stipend, minutes, ...).
+// tests/billing/invoice-layout.test.mjs runs it beside the live engine to
+// prove the fields are additive: with them stripped, every line, amount and
+// total is byte-identical. Never edit it to make a test pass: it is the
+// reference.
+
+import { formatDate } from "../../src/utils/helpers.js";
 
 /**
  * Locum time-engine billing math — shared between WorkLog (invoice
@@ -185,13 +192,6 @@ export function rateFor(type, c) {
   return CALL_TYPES.has(type) ? (c.callHourlyRate || c.hourlyRate || 0) : (c.hourlyRate || 0);
 }
 
-/** The fields computeBilling adds to a line for the invoice layout, beyond date, label, detail, amount, flag and _sort. */
-export const LAYOUT_LINE_FIELDS = Object.freeze([
-  "kind", "minutes", "rate", "timeText", "note", "during", "coveredByFee",
-  "includedMin", "overMin", "overAmount",
-  "stipend", "allowanceMin", "priorMin", "loggedMin", "usedMin", "dayStartHour",
-]);
-
 /**
  * Billing engine — ALLOWANCE model (per the actual contracts):
  *  - Stipend (callStipend > 0): each call day pays the flat stipend, which
@@ -256,25 +256,13 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
   // Invoiced times are the billed quarter-hour block: start snaps DOWN to
   // the increment, end = start + billed minutes (8:08–8:11 → 8:00–8:15).
   // The true times stay on the entry for the physician's own records.
-  const billedBlock = (e) => {
+  const invoiceSpan = (e) => {
     if (!e.startTime) return "";
     const inc = (c.incrementMinutes || 15) * 60000;
     const s = new Date(Math.floor(new Date(e.startTime).getTime() / inc) * inc);
     const en = new Date(s.getTime() + (e.billedMin || 0) * 60000);
-    return `${fmtTime(s)}–${fmtTime(en)}`;
+    return `${fmtTime(s)}–${fmtTime(en)} · `;
   };
-  const invoiceSpan = (e) => { const b = billedBlock(e); return b ? `${b} · ` : ""; };
-
-  // Layout fields (src/utils/invoiceLayout.js). Every line below also
-  // carries the numbers its label and detail were written from, so the
-  // printed invoice can lay a day out (stipend, callback, each item's own
-  // dollars, a day total) without reading them back out of the text. They
-  // are ADDED after the fields a line always had and never change them:
-  // date, label, detail, amount, flag and _sort stay byte-identical
-  // (tests/billing/invoice-layout.test.mjs holds that against a frozen copy).
-  const callWindow = callDayStartHour(c);
-  const itemFields = (e) => ({ timeText: billedBlock(e), note: splitPieceNote(e, all) });
-  const during = (x) => `${x.type} ${fmtTime(x.startTime)}–${fmtTime(x.endTime)}`;
 
   const emptyStipendDays = [];
   const dayOverMin = {};
@@ -292,15 +280,13 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
       for (const e of day) {
         const container = containerOf(e);
         if (container) {
-          lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)}, no separate charge${pieceNote(e)}`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}`,
-            kind: "container", minutes: e.billedMin || 0, during: during(container), ...itemFields(e), dayStartHour: callWindow });
+          lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}during ${container.type} ${fmtTime(container.startTime)}–${fmtTime(container.endTime)}, no separate charge${pieceNote(e)}`, amount: 0, _sort: `${date}~1~${e.startTime || "z"}` });
           continue;
         }
         const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
         const amt = ((e.billedMin || 0) / 60) * rate;
         totalMin += e.billedMin || 0; total += amt;
-        lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}${e.billedMin} min @ ${money(rate)}/hr${pieceNote(e)}`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}`,
-          kind: "hourly", minutes: e.billedMin || 0, rate, ...itemFields(e), dayStartHour: callWindow });
+        lines.push({ date, label: lineLabel(e), detail: `${invoiceSpan(e)}${e.billedMin} min @ ${money(rate)}/hr${pieceNote(e)}`, amount: amt, _sort: `${date}~1~${e.startTime || "z"}` });
       }
       continue;
     }
@@ -354,8 +340,6 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
             amount: null,
             flag: "no charge",
             _sort: `${date}~1~${e.startTime || "z"}`,
-            kind: "work", minutes: e.billedMin || 0, includedMin: 0, overMin: 0, overAmount: 0,
-            during: during(container), ...itemFields(e),
           });
           continue;
         }
@@ -374,16 +358,9 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
           amount: null,
           flag,
           _sort: `${date}~1~${e.startTime || "z"}`,
-          kind: "work", minutes: billed, includedMin: cov, overMin: over, overAmount: overAmtItem, rate,
-          ...itemFields(e),
         });
       }
     };
-    // What the day's money line was written from (see "Layout fields").
-    const dayFields = (kind) => ({
-      kind, stipend: c.callStipend, allowanceMin: allowance, priorMin, loggedMin: logged,
-      usedMin: Math.min(logged, allowance), overMin, overAmount: overAmt, rate, dayStartHour: callWindow,
-    });
 
     if (!stipendBilled) {
       total += c.callStipend + overAmt;
@@ -407,7 +384,6 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
         detail,
         amount: c.callStipend + overAmt,
         _sort: `${date}~0`,
-        ...dayFields("stipendDay"),
       });
       pushWorkItems();
     } else if (day.length > 0) {
@@ -428,7 +404,6 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
         detail,
         amount: overAmt,
         _sort: `${date}~0`,
-        ...dayFields("additionalDay"),
       });
       pushWorkItems();
     }
@@ -447,26 +422,18 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
     // actual calendar date so the printed document stays truthful.
     const dateNote = e.date && e.date !== oDay ? `performed ${formatDate(e.date)} · ` : "";
     const tp = `${dateNote}${e.startTime ? `${billedSpan(e, c)} · ` : ""}`;
-    const orientFields = (rate) => ({
-      kind: "orientation", minutes: e.billedMin || 0, rate,
-      timeText: e.startTime ? billedSpan(e, c) : "", note: dateNote ? `performed ${formatDate(e.date)}` : "",
-      dayStartHour: callWindow,
-    });
     if ((c.orientationHourlyRate || 0) > 0) {
       const amt = ((e.billedMin || 0) / 60) * c.orientationHourlyRate;
       totalMin += e.billedMin || 0; total += amt;
-      lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}`,
-        ...orientFields(c.orientationHourlyRate) });
+      lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(c.orientationHourlyRate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
     } else if ((c.orientationFee || 0) > 0) {
       totalMin += e.billedMin || 0;
-      lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min (covered by orientation fee)`, amount: 0, _sort: `${oDay}~1~${e.startTime || "z"}`,
-        ...orientFields(0), coveredByFee: true });
+      lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min (covered by orientation fee)`, amount: 0, _sort: `${oDay}~1~${e.startTime || "z"}` });
     } else {
       const rate = rateFor("Orientation", c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
       const amt = ((e.billedMin || 0) / 60) * rate;
       totalMin += e.billedMin || 0; total += amt;
-      lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}`,
-        ...orientFields(rate) });
+      lines.push({ date: oDay, label: `Orientation${e.description ? ": " + e.description : ""}`, detail: `${tp}${e.billedMin} min @ ${money(rate)}/hr`, amount: amt, _sort: `${oDay}~1~${e.startTime || "z"}` });
     }
   }
 
@@ -480,7 +447,7 @@ export function computeBilling(c, list, includeOrientation, allList, invoicesLis
     orientationIncluded = true;
     // Earliest orientation day — deterministic, not creation order
     const feeDay = orientationList.map(x => callDayOf(x)).sort()[0];
-    lines.push({ date: feeDay, label: "Orientation (one-time)", detail: "", amount: c.orientationFee, _sort: `${feeDay}~2`, kind: "orientationFee" });
+    lines.push({ date: feeDay, label: "Orientation (one-time)", detail: "", amount: c.orientationFee, _sort: `${feeDay}~2` });
   }
 
   // Chronological invoice: day by day, stipend first, then the day's work
@@ -517,7 +484,7 @@ function dayStartsWithin(s, en, hour) {
 // Largest-remainder apportionment of `total` whole units by integer weights.
 // Exact integer arithmetic, so a tie is a real tie and goes to the earlier
 // piece.
-export function apportion(total, weights) {
+function apportion(total, weights) {
   const W = weights.reduce((a, w) => a + w, 0);
   if (!(W > 0) || !(total > 0)) return weights.map(() => 0);
   const base = weights.map(w => Math.floor((total * w) / W));
