@@ -9,7 +9,7 @@
 // step, no runner.
 // Run: node scripts/request-flow.test.mjs
 import {
-  ackAllowed, ackText, physicianSummaryText, approveRequestBody, firstName, longDate, replySubject, senderPositivelyAuthenticated,
+  ackAllowed, ackText, physicianSummaryText, approveRequestBody, firstName, longDate, replySubject, senderPositivelyAuthenticated, withoutGuessBlock,
   topAuthenticationResults, authservId, authEvidence, authVerdicts, senderAuthFailure,
   MAX_APPROVE_SUBJECT, MAX_APPROVE_TEXT, MAX_REPLY_SUBJECT,
 } from "../supabase/functions/_shared/requestFlow.ts";
@@ -301,18 +301,25 @@ const proposal2 = {
   ],
   docIds: ["d1", "d2", "d3"], missing: ["TB form", "Logs 12-months"], coverNote: "Hello Tara,",
 };
-const sum2 = physicianSummaryText({ requesterName: "Tara Domalewski", requesterAddr: "tara@mychg.com", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/" });
+const sum2 = physicianSummaryText({ requesterName: "Tara Domalewski", requesterAddr: "tara@mychg.com", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/", oneTap: true });
 eq("the summary, four asks", sum2,
   "Got it. Tara Domalewski asked for 4 items:\n"
   + "- MPLT COI: Professional Liability COI, ProAssurance Specialty Insurance\n"
   + "- MMR dose #2: MMR (Measles, Mumps, Rubella) vaccination, MMR (Measles, Mumps, Rubella) vaccination\n"
-  + "- TB form: not on file\n"
+  + "- TB form: not on file. The reply says nothing about it unless you add it.\n"
   + "- Logs 12-months: follows separately (the app exports it)\n"
   + "\n"
   + "Packet ready: 3 documents. Open the app and tap Approve and send.\n"
   + "https://credentialdomd.com/app/#requests (opens your requests)");
+// Since 2026-09-28 a proposal that may not go on one tap sends the physician
+// to Review, with what to check, and never names Approve and send.
+const review2 = physicianSummaryText({ requesterName: "Tara Domalewski", requesterAddr: "tara@mychg.com", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/",
+  review: 'Not on file: "TB form". The asks were read by keyword matching, so check the draft before it goes.' });
+ok("not one tap: Review, not Approve and send", review2.includes("\nDraft ready: 3 documents. Open the app and tap Review. Nothing goes to Tara Domalewski until you send it.\n") && !review2.includes("Approve and send"));
+ok("not one tap: what to check comes before the link", review2.includes('\nTo check: Not on file: "TB form". The asks were read by keyword matching, so check the draft before it goes.\nhttps://credentialdomd.com/app/#requests'));
+ok("oneTap absent reads as not one tap", !physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: proposal2, appUrl: "u" }).includes("Approve and send"));
 const proposal1 = { v: 1, method: "rules", items: [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["d9"], labels: ["Board Certification (AOA)"] }], docIds: ["d9"], missing: [], coverNote: "x" };
-const sum1 = physicianSummaryText({ requesterName: "Madeline Castorena", requesterAddr: "m@ruhealth.org", requesterFound: true, proposal: proposal1, appUrl: "https://credentialdomd.com/app/" });
+const sum1 = physicianSummaryText({ requesterName: "Madeline Castorena", requesterAddr: "m@ruhealth.org", requesterFound: true, proposal: proposal1, appUrl: "https://credentialdomd.com/app/", oneTap: true });
 ok("one ask is singular", sum1.startsWith("Got it. Madeline Castorena asked for 1 item:\n- board certificate: Board Certification (AOA)"));
 ok("one document is singular", sum1.includes("Packet ready: 1 document. Open the app and tap Approve and send."));
 ok("no name falls back to the address", physicianSummaryText({ requesterName: null, requesterAddr: "m@ruhealth.org", requesterFound: true, proposal: proposal1, appUrl: "u" }).startsWith("Got it. m@ruhealth.org asked for"));
@@ -355,11 +362,14 @@ ok("requester found, no proposal: still names the asker", physicianSummaryText({
 ok("requester found, no items: still names the asker and the missing list",
   physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal1, items: [], docIds: [] }, appUrl: "u" }).startsWith("Got it. Tara sent a document request, but no list of documents could be read from it."));
 const unclearSummary = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: [...proposal2.items, { ask: "attestation form", kind: "unknown", status: "missing", docIds: [], labels: [] }] }, appUrl: "u" });
-ok("an ask the rules could not name is 'not recognised', not 'not on file'", unclearSummary.includes("- attestation form: not recognised, nothing attached") && unclearSummary.includes("- TB form: not on file"));
+ok("an ask the rules could not name is a question for the physician, not 'not on file'",
+  unclearSummary.includes("- attestation form: not recognised. What did they mean? Nothing about it is in the reply.") && unclearSummary.includes("- TB form: not on file. The reply says nothing about it unless you add it."));
 ok("null proposal: the request is still announced and the fallback is the old path",
   physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: null, appUrl: "u" })
     .includes("The packet could not be prepared automatically; open the request to choose the documents."));
-const nothing = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(2), docIds: [] }, appUrl: "u" });
+const nothing = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(2), docIds: [] }, appUrl: "u", oneTap: true });
+const nothingReview = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(2), docIds: [] }, appUrl: "u" });
+ok("nothing found, not one tap: Review", nothingReview.includes("Nothing on file to attach yet. Open the app and tap Review. Nothing goes to Tara until you send it.") && !nothingReview.includes("Send reply"));
 ok("nothing found: does not say 'Packet ready: 0 documents'", !nothing.includes("Packet ready") && nothing.includes("Nothing on file to attach yet"));
 // The button on the list card and on Home reads "Send reply (nothing to
 // attach)"; "reply from the request" sent the physician into the card to
@@ -372,6 +382,17 @@ ok("the app link is always there, with the #requests fragment, and it is the las
 ok("the summary ends on the link when the requester was found", sum1.endsWith("#requests (opens your requests)") && sum2.endsWith("#requests (opens your requests)"));
 ok("the old two-route hint is gone", ![sum1, sum2, notFound, notFoundNoProposal, notFoundNoItems, nothing].some((s) => s.includes("(Home, or More > Requests)")));
 noEmDash("summary", sum2 + notFound + nothing);
+
+// ── withoutGuessBlock: a stored note never asks a third party what they meant ─
+{
+  const legacy = "Hello Jordan,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nI could not tell from your email what you meant by:\n- The policy covers emergency care documented in your file\nReply with details and I will send what is needed.\n\nRegards,\nRowan Testa, MD";
+  eq("the legacy block goes, and nothing else", withoutGuessBlock(legacy),
+    "Hello Jordan,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nRegards,\nRowan Testa, MD");
+  eq("a note that is only the block and a greeting keeps the greeting",
+    withoutGuessBlock("Hello Jordan,\n\nI could not tell from your email what you meant by:\n- x\n- y\nReply with details and I will send what is needed.\n\nRegards,\nR"), "Hello Jordan,\n\nRegards,\nR");
+  eq("a note without it is untouched", withoutGuessBlock("Hello,\n\n- DEA\n\nThanks"), "Hello,\n\n- DEA\n\nThanks");
+  eq("null is empty", withoutGuessBlock(null), "");
+}
 
 // ── approveRequestBody: the one-tap call's shape ─────────────────────────────
 const RID = "4de7181c-3a38-4fc1-a1e2-ff62d8005b8d";

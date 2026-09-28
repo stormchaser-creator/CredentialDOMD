@@ -16,6 +16,7 @@ import { realpathSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
   parseAsks, classifyAsk, describeEntry, matchAsk, catalogueFromRows, buildProposal, noteForSelection, KINDS, isReportKind,
+  hasAskForm, oneTapReady, reviewReason, noteWithNotOnFile,
 } from "../src/utils/requestPacket.js";
 
 export const NOW = "2026-09-11";
@@ -354,8 +355,8 @@ if (isMain) {
     eq("R1: it is a board certificate", classifyAsk(asks[0]), { kind: "board_cert", state: null, all: false, focus: null });
     eq("R1: matched to the AOA certificate", ids(asks[0]), ["doc-board"]);
     const p = buildProposal(REQUEST_1, CATALOGUE, PHYSICIAN, NOW);
-    eq("R1: proposal shape", Object.keys(p), ["v", "method", "items", "docIds", "missing", "coverNote"]);
-    eq("R1: version and method", [p.v, p.method], [1, "rules"]);
+    eq("R1: proposal shape", Object.keys(p), ["v", "method", "source", "confidence", "items", "docIds", "missing", "coverNote"]);
+    eq("R1: version, method, and who read the asks", [p.v, p.method, p.source, p.confidence], [2, "rules", "rules", "keyword"]);
     eq("R1: one found item with its label", p.items,
       [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["doc-board"], labels: ["Board Certification (AOA)"] }]);
     eq("R1: docIds and nothing missing", [p.docIds, p.missing], [["doc-board"], []]);
@@ -526,7 +527,10 @@ if (isMain) {
     const p = buildProposal({ subject: "Fluoro", fromName: "Kim", fromAddr: "k@x.example", body: "- Copy of fluoroscopy license\n- State license" }, CATALOGUE, PHYSICIAN, NOW);
     eq("fluoroscopy in a proposal: missing, with the medical licence attached only for the licence ask",
       p.items.map((i) => [i.kind, i.status, i.docIds]), [["fluoroscopy", "missing", []], ["state_license", "found", ["doc-lic-ca"]]]);
-    ok("fluoroscopy in a proposal: the note says it is not on file, not that it is attached and not that it will follow", p.coverNote.includes("Not on file:\n- fluoroscopy license") && !p.coverNote.includes("follow"));
+    // Not on file is the physician's to say (reviewReason, noteWithNotOnFile), never the draft's.
+    ok("fluoroscopy in a proposal: the note neither attaches it nor promises it nor names it", !p.coverNote.includes("fluoroscopy") && !p.coverNote.includes("follow"));
+    ok("fluoroscopy in a proposal: the physician is told it is not on file", reviewReason(p).includes('Not on file: "fluoroscopy license".'));
+    ok("fluoroscopy in a proposal: and can add it to the draft", noteWithNotOnFile(p.coverNote, p).includes("Not on file:\n- fluoroscopy license\n\nRegards,"));
   }
   // A word inside a broad kind picks the document that carries it. The COI
   // bucket ranks the current policy first, so "tail coverage" kept sending
@@ -631,7 +635,7 @@ if (isMain) {
   {
     const p = buildProposal({ subject: "Re: Items needed for credentialing", fromName: "Sam Reyes", fromAddr: "s@x.example", body: "CAQH ID" }, CATALOGUE, PHYSICIAN, NOW);
     eq("a one-line unknown body: the proposal item is the body line", p.items.map((i) => [i.ask, i.kind, i.status]), [["CAQH ID", "unknown", "missing"]]);
-    ok("and the note asks about it by name, not by the subject", p.coverNote.includes("what you meant by:\n- CAQH ID") && !p.coverNote.includes("credentialing"));
+    ok("and the PHYSICIAN is asked about it by name; the requester's note says nothing about it", reviewReason(p).includes('Not recognised: "CAQH ID".') && !p.coverNote.includes("CAQH") && !p.coverNote.includes("credentialing"));
   }
   eq("a signature title in a long body is not an ask",
     parseAsks("Hello,\n\nPer our call, nothing further is needed.\n\nTonya\nSr. Medical Staff Coordinator, Hospital Privileging\n954-555-0100\n"), []);
@@ -668,8 +672,12 @@ if (isMain) {
     // out on one tap, unread, and "they will follow separately" over a
     // Livescan receipt the physician never had brought the credentialer back
     // two weeks later asking where it was.
-    eq("nothing found: the reports follow, the DEA is not on file and not promised, and an office is 'there'", p.coverNote,
-      "Hello there,\n\nThese will follow separately:\n- NPI letter\n- Peer references\n- Case logs for the last 24 months\n\nI do not have these on file:\n- Colorado DEA\n\nRegards,\nEric Whitney, DO");
+    eq("nothing found: the reports follow, the DEA is neither promised nor named, and an office is 'there'", p.coverNote,
+      "Hello there,\n\nThese will follow separately:\n- NPI letter\n- Peer references\n- Case logs for the last 24 months\n\nRegards,\nEric Whitney, DO");
+    eq("nothing found: the DEA is the physician's question", reviewReason(p), 'Not on file: "Colorado DEA". The asks were read by keyword matching, so check the draft before it goes.');
+    eq("nothing found: said only when the physician adds it", noteWithNotOnFile(p.coverNote, p),
+      "Hello there,\n\nThese will follow separately:\n- NPI letter\n- Peer references\n- Case logs for the last 24 months\n\nNot on file:\n- Colorado DEA\n\nRegards,\nEric Whitney, DO");
+    eq("adding it twice adds it once", noteWithNotOnFile(noteWithNotOnFile(p.coverNote, p), p), noteWithNotOnFile(p.coverNote, p));
     eq("nothing found: docIds empty, missing is every ask", [p.docIds, p.missing.length], [[], 4]);
   }
   {
@@ -677,9 +685,10 @@ if (isMain) {
     eq("surname-first From is greeted by first name", p.coverNote.split("\n")[0], "Hello Marisol,");
     eq("'all of them' attaches every state licence", p.items[1].docIds, ["doc-lic-ca", "doc-lic-co", "doc-lic-nd"]);
     eq("the missing block lists only what is not attached", p.missing, ["attestation form"]);
-    ok("the note attaches first, then asks about what it could not name, and promises nothing for it",
-      p.coverNote.indexOf("Attached are the documents you asked for:") < p.coverNote.indexOf("I could not tell from your email what you meant by:\n- attestation form\nReply with details and I will send what is needed.")
+    ok("the note attaches, and says nothing to the requester about what it could not name",
+      p.coverNote.includes("Attached are the documents you asked for:") && !p.coverNote.includes("attestation") && !/could not tell/i.test(p.coverNote)
       && !p.coverNote.includes("follow separately"));
+    ok("the unnamed form is the physician's question", reviewReason(p).startsWith('Not recognised: "attestation form". What did they mean?'));
   }
   {
     const p = buildProposal(REQUESTS.compounds, CATALOGUE, PHYSICIAN, NOW);
@@ -701,16 +710,18 @@ if (isMain) {
       ["attestation form", "unknown", "missing", []],
     ]);
     ok("compounds: the flu and COVID records the credentialer did not ask for are not in the packet", !p.docIds.includes("doc-flu") && !p.docIds.includes("doc-covid"));
-    ok("compounds: the Colorado asks are listed as not on file, and the California DEA is attached only for the California ask",
-      p.coverNote.includes("Not on file:\n- Colorado DEA\n- DEA for the state of Colorado\n- CSR for the state of Colorado")
-      && !p.coverNote.includes("follow") && p.docIds.filter((id) => id === "doc-dea-ca").length === 1);
-    ok("compounds: the unnamed form is asked about, not promised",
-      p.coverNote.includes("I could not tell from your email what you meant by:\n- attestation form") && !p.missing.includes("Colorado licenses"));
+    ok("compounds: the Colorado asks are the physician's question, and the California DEA is attached only for the California ask",
+      reviewReason(p).includes('Not on file: "Colorado DEA", "DEA for the state of Colorado", "CSR for the state of Colorado".')
+      && !p.coverNote.includes("Colorado DEA") && !p.coverNote.includes("follow") && p.docIds.filter((id) => id === "doc-dea-ca").length === 1);
+    ok("compounds: the unnamed form is asked of the physician, not of the requester",
+      reviewReason(p).includes('Not recognised: "attestation form".') && !p.coverNote.includes("attestation") && !p.missing.includes("Colorado licenses"));
   }
   {
     const p = buildProposal({ subject: "Forms", fromName: "Sam", fromAddr: "s@x.example", body: "- Signed attestation form (attached)\n- W-9" }, CATALOGUE, PHYSICIAN, NOW);
-    eq("nothing but unnamed asks: the note asks, and neither the attached nor the follow-separately block appears", p.coverNote,
-      "Hello Sam,\n\nI could not tell from your email what you meant by:\n- attestation form\n- W-9\nReply with details and I will send what is needed.\n\nRegards,\nEric Whitney, DO");
+    eq("nothing but unnamed asks: the note is a plain thank-you, and the questions go to the physician", p.coverNote,
+      "Hello Sam,\n\nThank you for your email.\n\nRegards,\nEric Whitney, DO");
+    ok("and the physician is asked what both meant", reviewReason(p).startsWith('Not recognised: "attestation form", "W-9". What did they mean?'));
+    eq("an unnamed ask is never added as 'Not on file'", noteWithNotOnFile(p.coverNote, p), p.coverNote);
     eq("but they still count as missing for the app", p.missing, ["attestation form", "W-9"]);
   }
   eq("Dr. is dropped from the greeting", buildProposal(REQUESTS.sentenceOnly, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello Tonya,");
@@ -801,8 +812,8 @@ if (isMain) {
   {
     const p = buildProposal(REQUESTS.compounds, CATALOGUE, PHYSICIAN, NOW);
     const note = noteForSelection(p, p.docIds.filter((id) => id !== "doc-bls" && id !== "doc-acls"), PHYSICIAN, REQUESTS.compounds.fromName);
-    ok("the unknown ask still reads as buildProposal wrote it, after the held and missing blocks",
-      note.includes("Not enclosed this time:\n- BLS\n- ACLS\n\nNot on file:\n- Colorado DEA\n- DEA for the state of Colorado\n- CSR for the state of Colorado\n\nI could not tell from your email what you meant by:\n- attestation form\nReply with details and I will send what is needed.\n\nRegards,\nEric Whitney, DO"));
+    ok("the held cards read as held, and nothing unmatched or unnamed follows them",
+      note.includes("Not enclosed this time:\n- BLS\n- ACLS\n\nRegards,\nEric Whitney, DO") && !note.includes("Colorado DEA") && !note.includes("attestation"));
     ok("and the held cards are not in the attached list", !note.includes("- BLS Certification") && !note.includes("- ACLS Certification"));
   }
   {
@@ -811,7 +822,7 @@ if (isMain) {
     eq("no proposal at all is the empty note", noteForSelection(null, null, PHYSICIAN, "Sam"), "Hello Sam,\n\nI did not find a list of documents in your request. Reply with what you need and I will send it.\n\nRegards,\nEric Whitney, DO");
     eq("a stored proposal with thin items does not crash",
       noteForSelection({ items: [{ ask: "DEA", status: "found", docIds: ["a"] }, { ask: "x", status: "weird" }, null] }, ["a"], PHYSICIAN, "Sam"),
-      "Hello Sam,\n\nAttached are the documents you asked for:\n- Document\n\nI could not tell from your email what you meant by:\n- x\nReply with details and I will send what is needed.\n\nRegards,\nEric Whitney, DO");
+      "Hello Sam,\n\nAttached are the documents you asked for:\n- Document\n\nRegards,\nEric Whitney, DO");
     ok("no em dash in a trimmed note from em-dashed input", !noteForSelection(buildProposal(REQUESTS.emDashes, CATALOGUE, PHYSICIAN, NOW), [], PHYSICIAN, "Marisol \u2014 RUHS").includes("\u2014"));
   }
 
@@ -820,7 +831,10 @@ if (isMain) {
     const asks = parseAsks(REQUESTS.sanfordApproval.body, REQUESTS.sanfordApproval.subject);
     ok("Sanford: no ask names the physician", !asks.some((a) => /whitney/i.test(a)), JSON.stringify(asks));
     ok("Sanford: no ask is a header or a contact line", !asks.some((a) => /^to\b|@|\d{3}\)?[ .-]\d{3}/i.test(a)), JSON.stringify(asks));
-    eq("Sanford: with no ask in the body, the subject stands in", asks, ["Sanford Health Plan Initial Application Approval Letter for Eric"]);
+    // Before 2026-09-28 the subject stood in when the body asked nothing,
+    // and an approval letter's subject became an ask. A letter that asks
+    // nothing is not a request because its subject names a document.
+    eq("Sanford: nothing in the body asks, and the subject does not either", asks, []);
     const p = buildProposal(REQUESTS.sanfordApproval, CATALOGUE, PHYSICIAN, NOW);
     ok("Sanford: the cover note never asks what 'Whitney, DO' means", !/whitney, do/i.test(p.coverNote.split("\n").slice(0, -1).join("\n")), p.coverNote);
     const none = [
@@ -835,6 +849,90 @@ if (isMain) {
       parseAsks("- DEA\n- Eric E. Whitney, DO\n- Board certificate", ""), ["DEA", "Board certificate"]);
     eq("a state written as a degree is still an ask when the kind is known",
       parseAsks("a. State license, MD\nb. DEA", ""), ["State license, MD", "DEA"]);
+  }
+
+  // ── A statement is never an ask (2026-09-28) ────────────────────────────
+  // An agency consultant's letter explaining its malpractice policy, with no
+  // request in it, was read as asking for the physician's malpractice
+  // certificate and for a sentence of its own. Synthetic and paraphrased.
+  {
+    const letter = [
+      "Dr. Testa,",
+      "",
+      "I wanted to explain how coverage works for the emergency shifts you pick up through Quillfeather Staffing.",
+      "Proof of malpractice coverage is required for every provider on our panel, and our group policy provides that coverage for emergency care.",
+      "The policy covers emergency department encounters documented under your name, including tail coverage for those shifts.",
+      "Your signed master services agreement is attached for reference.",
+      "",
+      "Best regards,",
+      "Jordan Sample",
+      "Provider Relations",
+    ].join("\n");
+    eq("an informational letter: no sentence is an ask", parseAsks(letter, "Malpractice coverage for emergency care"), []);
+    const p = buildProposal({ subject: "Malpractice coverage for emergency care", fromName: "Jordan Sample", fromAddr: "j@quillfeather.example", body: letter }, CATALOGUE, PHYSICIAN, NOW);
+    eq("an informational letter: nothing proposed, nothing attached", [p.items.length, p.docIds], [0, []]);
+    ok("an informational letter: never one tap", !oneTapReady(p));
+    for (const sentence of [
+      "Proof of malpractice coverage is required for every provider on our panel.",
+      "The policy covers emergency care documented in your file.",
+      "Required documentation is kept by the credentialing office.",
+      "Nothing is missing from your file.",
+      "Physicians need not obtain separate coverage.",
+    ]) {
+      ok(`"${sentence}" has no asking form`, !hasAskForm(sentence) || /nothing is missing/i.test(sentence));
+      eq(`"${sentence}" alone is not an ask`, parseAsks(sentence, ""), []);
+    }
+    for (const sentence of [
+      "Please send your current DEA.", "Can you provide a copy of your BLS card?", "We still need your COI.",
+      "Send the signed attestation by Friday.", "Return the completed application.", "Your TB test is outstanding.",
+      "Could you upload the malpractice certificate", "We are requesting your board certificate.",
+    ]) ok(`"${sentence}" is in an asking form`, hasAskForm(sentence));
+    eq("the same sentences written as asks are asks",
+      parseAsks("Please send proof of malpractice coverage for emergency care.", ""), ["proof of malpractice coverage for emergency care"].map((a) => parseAsks(`Please send ${a}.`, "")[0]));
+    eq("a list of statements under nothing that asks is not a checklist",
+      parseAsks("- The policy covers emergency care\n- Tail coverage is included", ""), []);
+    eq("the same list under an asking line is a checklist",
+      parseAsks("Please send:\n- DEA\n- COI", ""), ["DEA", "COI"]);
+    eq("a bare checklist forwarded alone is still a checklist", parseAsks("- DEA\n- CSR", ""), ["DEA", "CSR"]);
+    eq("a subject names what a long letter is about, not what it asks for",
+      parseAsks("Thank you for joining our panel. We look forward to working with you on the emergency schedule this fall and winter.", "DEA registration"), []);
+    eq("an asking subject over a long letter still stands in",
+      parseAsks("Thank you for joining our panel. We look forward to working with you on the emergency schedule this fall and winter.", "Missing items: DEA registration"), ["DEA registration"]);
+  }
+
+  // ── A model's reading: quote-checked asks, and when one tap may send ─────
+  {
+    const req = { subject: "Documents for your file", fromName: "Sam Reyes", fromAddr: "s@x.example", body: "unused when a reading is given" };
+    const reading = { confidence: "high", asks: [
+      { quote: "Please send a copy of your current board certificate.", kind: "board_cert" },
+      { quote: "your BLS card", kind: "bls" },
+    ] };
+    const p = buildProposal(req, CATALOGUE, PHYSICIAN, NOW, reading);
+    eq("a reading: source, confidence and the asks as the email wrote them", [p.source, p.confidence, p.items.map((i) => [i.ask, i.kind, i.status, i.quote, i.confidence])], ["model", "high", [
+      ["board certificate", "board_cert", "found", "Please send a copy of your current board certificate.", "high"],
+      ["BLS card", "bls", "found", "your BLS card", "high"],
+    ]]);
+    ok("a high-confidence reading with every ask answered is one tap", oneTapReady(p));
+    eq("and has nothing to review", reviewReason(p), "");
+    const medium = buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { ...reading, confidence: "medium" });
+    ok("a medium-confidence reading is not one tap", !oneTapReady(medium));
+    ok("and says why", reviewReason(medium).includes("not certain"));
+    const withMissing = buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [...reading.asks, { quote: "Colorado DEA", kind: "dea" }] });
+    ok("an ask nothing on file answers is not one tap", !oneTapReady(withMissing));
+    eq("and is the physician's question, not a line in the note", [reviewReason(withMissing), withMissing.coverNote.includes("Colorado")], ['Not on file: "Colorado DEA".', false]);
+    const withUnknown = buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [...reading.asks, { quote: "the facility attestation", kind: "not-a-kind" }] });
+    eq("a kind the rules do not know reads as the rules read it", withUnknown.items[2].kind, "unknown");
+    ok("an unrecognised ask is not one tap", !oneTapReady(withUnknown));
+    const keyword = buildProposal({ ...req, body: "- board certificate\n- BLS" }, CATALOGUE, PHYSICIAN, NOW);
+    eq("the same asks read by keywords match the same documents", keyword.docIds, p.docIds);
+    ok("but a keyword proposal is never one tap", !oneTapReady(keyword) && !oneTapReady({ ...keyword, confidence: "high" }));
+    ok("and a proposal that only claims to be a model's, with no item confidence, is not one tap",
+      !oneTapReady({ ...keyword, source: "model", confidence: "high" }));
+    const lapsed = oneTapReady({ source: "model", confidence: "high", items: [{ ask: "DEA", kind: "dea", status: "found", docIds: ["d"], labels: ["DEA Registration, ND, expired 2026-01-31"], confidence: "high" }] });
+    ok("an ask answered only by an expired document is not one tap", !lapsed);
+    ok("a reading with no asks is not one tap", !oneTapReady(buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [] })));
+    eq("duplicate and empty quotes collapse", buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [{ quote: "BLS", kind: "bls" }, { quote: "bls", kind: "bls" }, { quote: "  ", kind: "bls" }, null] }).items.length, 1);
+    ok("no reading field ever carries an em dash", !JSON.stringify(buildProposal(req, CATALOGUE, PHYSICIAN, NOW, { confidence: "high", asks: [{ quote: "BLS \u2014 current", kind: "bls" }] })).includes("\u2014"));
   }
 
   // ── House rules: no em dash in anything the module can produce ───────────

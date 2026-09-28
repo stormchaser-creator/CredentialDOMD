@@ -25,6 +25,8 @@ import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { isArchived } from "../../utils/contractsForDate";
 import { deviceZone } from "../../utils/coverageBlocks";
+import { supabase } from "../../lib/supabase";
+import { relinkCorrection, keepCorrection, recordCorrection } from "../../utils/intakeCorrections";
 
 // Section a linked document belongs to -> the scan category that styles its
 // "Linked" badge. Receipts link to the money row they became.
@@ -36,7 +38,12 @@ const LINKED_META_KEY = {
 };
 
 function DocumentsSection() {
-  const { data, setData, addItem, editItem, deleteItem: deleteItemCtx, updateSettings, theme: T, navigate } = useApp();
+  const { data, setData, addItem, editItem, deleteItem: deleteItemCtx, updateSettings, theme: T, navigate, userIdRef } = useApp();
+  // A document that came by email and is filed, moved or kept plain here is
+  // the physician correcting what email intake did with it; the next reading
+  // of their mail learns from it (utils/intakeCorrections.js). Fire and
+  // forget: nothing here waits on it or fails because of it.
+  const noteIntakeCorrection = (row) => { if (row) recordCorrection(supabase, userIdRef?.current, row); };
   const iS = useInputStyle();
   // The physician's own category names, so the scanner files a second badge
   // where the first went instead of inventing a near-duplicate.
@@ -358,7 +365,10 @@ function DocumentsSection() {
       const entry = toExpense ? receiptToExpense(receipt, { id, agency }) : receiptToDeduction(receipt, { id });
       if (addItem(section, entry) === false) { setScanError("Could not save that receipt. Nothing was changed."); return; }
       const doc = data.documents.find(d => d.id === docId);
-      if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });
+      if (doc) {
+        noteIntakeCorrection(relinkCorrection(doc, `${section}:${id}`, { scanType: docType }));
+        editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });
+      }
       const money = `$${entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       setFiled(toExpense
         ? { text: `Saved ${entry.category}${entry.vendor ? `, ${entry.vendor}` : ""}, ${money} to Work > Expenses, billable to ${entry.agency}. The receipt is attached and goes out with the expense invoice.`, label: "Open Expenses", tab: "locum", sub: "expenses" }
@@ -386,7 +396,10 @@ function DocumentsSection() {
       const { record, withheld } = packRecord(category, { ...(fields?.record || {}), documentIds: docId ? [docId] : [] }, { id });
       if (addItem("customRecords", record) === false) { setScanError("Could not save this record. The file is still in Documents."); return; }
       const doc = data.documents.find(d => d.id === docId);
-      if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `customRecords:${id}` });
+      if (doc) {
+        noteIntakeCorrection(relinkCorrection(doc, `customRecords:${id}`, { scanType: docType }));
+        editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `customRecords:${id}` });
+      }
       setFiled({
         text: `Filed in ${category.name}.${withheld.length ? " Patient identifiers, SSNs and full birth dates were left out." : ""}`,
         label: `Open ${category.name}`, tab: "credentials", sub: `custom:${category.id}`,
@@ -427,12 +440,25 @@ function DocumentsSection() {
     addItem(section, entry);
     // Link the document to it (an emailed certificate leaves the inbox here)
     const doc = data.documents.find(d => d.id === docId);
-    if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });
+    if (doc) {
+      noteIntakeCorrection(relinkCorrection(doc, `${section}:${id}`, { scanType: docType }));
+      editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });
+    }
 
     setScanQueue(q => q.filter(item => item.docId !== docId));
   };
 
-  const handleDiscard = (docId) => setScanQueue(q => q.filter(item => item.docId !== docId));
+  // "Keep as plain document" (and Discard, which leaves the file unfiled the
+  // same way). For a document that came by email, that is a correction.
+  const handleDiscard = (docId) => {
+    const item = scanQueue.find(i => i.docId === docId);
+    const doc = data.documents.find(d => d.id === docId);
+    noteIntakeCorrection(keepCorrection(doc, {
+      scanType: item?.result?.documentType || "",
+      suggested: item?.result?.extracted?.suggestedCategory?.name || SECTION_META[item?.result?.documentType]?.section || "",
+    }));
+    setScanQueue(q => q.filter(i => i.docId !== docId));
+  };
 
   // Re-run AI filing on an ALREADY-STORED document — recovery path for
   // uploads whose review step was lost (stale build, refresh, killed PWA).
@@ -493,7 +519,9 @@ function DocumentsSection() {
   const deleteDoc = (id) => { if (window.confirm("Delete this document? This cannot be undone.")) deleteItemCtx("documents", id); };
   const linkDoc = (id, val) => {
     const doc = data.documents.find(d => d.id === id);
-    if (doc) editItem("documents", { ...doc, ...(val ? leaveInbox(doc) : {}), linkedTo: val });
+    if (!doc) return;
+    noteIntakeCorrection(relinkCorrection(doc, val));
+    editItem("documents", { ...doc, ...(val ? leaveInbox(doc) : {}), linkedTo: val });
   };
 
   // Emailed files that were not filed on arrival first, everything else after.

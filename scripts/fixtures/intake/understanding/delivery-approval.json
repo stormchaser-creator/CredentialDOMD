@@ -1,0 +1,47 @@
+{
+  "id": "delivery-approval",
+  "about": "A credentialing office sends an approval letter to keep. Synthetic.",
+  "subject": "Your initial appointment",
+  "from": {
+    "name": "Medical Staff Office",
+    "address": "medstaff@fernwick-hospital.example"
+  },
+  "body": "Dear Dr. Testa,\n\nCongratulations. Your initial appointment to the medical staff has been approved by the board.\n\nPlease see the attached approval letter for your records. If you have any questions, please contact our office.\n\nSincerely,\nMedical Staff Office\nFernwick Example Hospital",
+  "attachments": [
+    {
+      "name": "Approval_Letter.pdf",
+      "scan": {
+        "documentType": "privilege",
+        "confidence": "high",
+        "extracted": {
+          "type": "Courtesy Privileges",
+          "name": "Initial appointment approval",
+          "facility": "Fernwick Example Hospital",
+          "state": "ND",
+          "appointmentDate": "2026-09-15",
+          "expirationDate": "2028-09-14"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "intent": "delivery",
+    "asks": [],
+    "roles": [
+      "credential_for_physician"
+    ]
+  },
+  "modelReply": {
+    "intent": "delivery",
+    "asks": [],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "credential_for_physician",
+        "filing": "Privileges"
+      }
+    ],
+    "summary": "your approved initial appointment at Fernwick Example Hospital",
+    "confidence": "high"
+  }
+}

@@ -108,6 +108,33 @@ const bodies = [
 ];
 for (const b of bodies) eq(`parseAsks agrees on ${String(JSON.stringify(b)).slice(0, 50)}`, server.parseAsks(b, "Re: Fwd: docs"), client.parseAsks(b, "Re: Fwd: docs"));
 
+// ── A model's reading, and the one-tap rule (2026-09-28) ────────────────────
+{
+  const readings = [
+    { confidence: "high", asks: [{ quote: "Please send a copy of your current board certificate.", kind: "board_cert" }, { quote: "your BLS card", kind: "bls" }] },
+    { confidence: "medium", asks: [{ quote: "Colorado DEA", kind: "dea" }, { quote: "the facility attestation", kind: "nope" }] },
+    { confidence: "high", asks: [] },
+    { confidence: "weird", asks: [null, { quote: "  " }, { ask: "MMR titer", kind: "titers" }] },
+    null,
+  ];
+  for (const [i, reading] of readings.entries()) {
+    const a = client.buildProposal(REQUEST_1, clientCat, PHYSICIAN, NOW, reading);
+    const b = server.buildProposal(REQUEST_1, serverCat, PHYSICIAN, NOW, reading);
+    eq(`reading ${i}: JSON-identical proposal`, b, a);
+    eq(`reading ${i}: same one-tap answer`, server.oneTapReady(b), client.oneTapReady(a));
+    eq(`reading ${i}: same review reason`, server.reviewReason(b), client.reviewReason(a));
+    eq(`reading ${i}: same note with not-on-file lines`, server.noteWithNotOnFile(b.coverNote, b), client.noteWithNotOnFile(a.coverNote, a));
+  }
+  for (const r of Object.values(requests)) {
+    const a = client.buildProposal(r, clientCat, PHYSICIAN, NOW);
+    eq("review reasons agree on every rules proposal", server.reviewReason(server.buildProposal(r, serverCat, PHYSICIAN, NOW)), client.reviewReason(a));
+    ok("and no rules proposal is ever one tap", !client.oneTapReady(a) && !server.oneTapReady(a));
+  }
+  for (const sentence of ["Please send your DEA.", "The policy covers emergency care.", "Nothing is missing.", "Return the form", "Proof of coverage is required.", "", null]) {
+    eq(`hasAskForm agrees on ${JSON.stringify(sentence)}`, server.hasAskForm(sentence), client.hasAskForm(sentence));
+  }
+}
+
 // ── The clock and the edges ─────────────────────────────────────────────────
 for (const when of ["2025-06-01", "2026-02-15", "2027-12-31", new Date("2026-09-11T12:00:00Z")]) {
   eq(`expiry ordering agrees at ${JSON.stringify(when)}`,

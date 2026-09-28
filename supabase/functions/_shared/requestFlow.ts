@@ -45,6 +45,8 @@ export interface ProposalItem {
 export interface Proposal {
   v: number;
   method: string;
+  source?: string;
+  confidence?: string;
   items: ProposalItem[];
   docIds: string[];
   missing: string[];
@@ -462,6 +464,14 @@ export interface SummaryInput {
   requesterFound: boolean;
   proposal: Proposal | null | undefined;
   appUrl: string;
+  /**
+   * May the reply go on one tap (requestPacket.ts oneTapReady)? Absent reads
+   * as no: since 2026-09-28 a proposal read by keywords is never one tap,
+   * and the physician is sent to Review instead of to Approve and send.
+   */
+  oneTap?: boolean;
+  /** What to check before it goes (requestPacket.ts reviewReason). */
+  review?: string;
 }
 
 // The next step names the control that is on the screen: the request's
@@ -526,8 +536,11 @@ export function physicianSummaryText(input: SummaryInput): string {
       const ask = String(it.ask ?? "").trim() || "(unnamed)";
       if (it.status === "found") lines.push(`- ${ask}: ${(it.labels ?? []).filter(Boolean).join(", ") || plural((it.docIds ?? []).length, "document", "documents")}`);
       else if (it.status === "report") lines.push(`- ${ask}: follows separately (the app exports it)`);
-      else if (it.kind === "unknown") lines.push(`- ${ask}: not recognised, nothing attached`);
-      else lines.push(`- ${ask}: not on file`);
+      // Neither of these is in the reply to the requester (requestPacket.ts
+      // coverNoteFor): each is a question for the physician, asked here and
+      // on the request in the app.
+      else if (it.kind === "unknown") lines.push(`- ${ask}: not recognised. What did they mean? Nothing about it is in the reply.`);
+      else lines.push(`- ${ask}: not on file. The reply says nothing about it unless you add it.`);
     }
     const n = Array.isArray(p.docIds) ? p.docIds.length : 0;
     lines.push("");
@@ -539,6 +552,11 @@ export function physicianSummaryText(input: SummaryInput): string {
       lines.push(n > 0
         ? `Packet ready: ${plural(n, "document", "documents")}. Open the request, enter their address under Requester's email and send.`
         : "Nothing on file to attach yet. Open the request, enter their address under Requester's email and tap Send reply.");
+    } else if (!input.oneTap) {
+      // Not one tap: the draft waits for the physician. The Approve and send
+      // this line used to name was tapped on 2026-09-28 over a draft that
+      // answered an informational letter as if it were a request.
+      lines.push(`${n > 0 ? `Draft ready: ${plural(n, "document", "documents")}.` : "Nothing on file to attach yet."} Open the app and tap Review. Nothing goes to ${who} until you send it.`);
     } else if (n > 0) {
       lines.push(`Packet ready: ${plural(n, "document", "documents")}. Open the app and tap Approve and send.`);
     } else {
@@ -550,9 +568,28 @@ export function physicianSummaryText(input: SummaryInput): string {
     }
   }
 
+  const review = String(input.review ?? "").replace(/\s+/g, " ").trim();
+  if (review && p && Array.isArray(p.items) && p.items.length) lines.push(`To check: ${review}`);
   lines.push(`${input.appUrl}#requests (opens your requests)`);
   if (!input.requesterFound && !saidNotFound) lines.push("", NOT_FOUND_NOTE);
   return lines.join("\n");
+}
+
+// The block the packet matcher wrote into cover notes until 2026-09-28, when
+// a sentence of an agency's own informational letter was mailed back to the
+// agency under it. The matcher no longer writes it, but proposals stored
+// before then still carry it, and an installed app can still show one.
+const GUESS_BLOCK_RE = /\n*I could not tell from your email what you meant by:\n(?:- [^\n]*\n)*Reply with details and I will send what is needed\.?/g;
+
+/**
+ * The note without that block, so no reply ever tells a third party that
+ * their own words could not be understood. Anything else in the note is the
+ * physician's and is left exactly as it was.
+ */
+export function withoutGuessBlock(text: string | null | undefined): string {
+  const t = String(text ?? "");
+  if (!t.includes("I could not tell from your email what you meant by:")) return t;
+  return t.replace(GUESS_BLOCK_RE, "").replace(/^\n+/, "");
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

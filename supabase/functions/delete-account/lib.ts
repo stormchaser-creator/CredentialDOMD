@@ -108,6 +108,11 @@ export const USER_TABLES: UserTable[] = [
   // applied before the client that uses it, not with this function.
   { table: "member_view_grants", column: "profile_id", optional: true },
   { table: "member_view_events", column: "profile_id", optional: true },
+  // The physician's corrections to what email intake did, fed back into the
+  // intake understanding prompt (2026-09-28). optional for the
+  // same reason as above: migration 20260928160000 is applied with the
+  // email-inbound deploy, not with this function.
+  { table: "intake_corrections", column: "user_id", optional: true },
 ];
 
 /**

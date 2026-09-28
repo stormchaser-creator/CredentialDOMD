@@ -238,6 +238,35 @@ export function filingTarget(scan) {
   return { kind: "unfiled", reason: "unknown" };
 }
 
+/**
+ * Where a scan goes once the email has been read (intakeUnderstanding.mjs):
+ * the role the reading gave the attachment can only NARROW the scanner's
+ * answer, never invent a credential.
+ *
+ *   form_to_complete        unfiled: a blank form is not the physician's record
+ *   request_checklist       unfiled: the sender's list of what they want
+ *   agreement_or_contract   Contracts, where a master agreement with no
+ *                           facility or dates is attached to the agency's
+ *                           existing contract or left unfiled, never made
+ *                           into a new assignment (planFiling)
+ *   informational           filed only when the scanner read a built-in
+ *                           credential; never a new category of its own
+ *   credential_for_physician, or no role   the scanner decides, as before
+ */
+export function roleTarget(scan, role) {
+  const base = filingTarget(scan);
+  if (!role) return base;
+  if (role === "form_to_complete") return { kind: "unfiled", reason: "form" };
+  if (role === "request_checklist") return { kind: "unfiled", reason: "checklist" };
+  if (role === "agreement_or_contract") {
+    if (base.kind === "section") return base;
+    if (base.kind === "unfiled" && base.reason === "error") return base;
+    return { kind: "section", section: "locumContracts" };
+  }
+  if (role === "informational" && base.kind !== "section") return base.kind === "unfiled" && base.reason === "error" ? base : { kind: "unfiled", reason: "informational" };
+  return base;
+}
+
 // --- Built-in sections ------------------------------------------------------
 
 /**
@@ -539,7 +568,7 @@ export function plainCategoryName(name) {
  * @param {{ scan: any, docId: string, fileName: string, mimeType?: string, userId: string,
  *           rows?: unknown[], categories?: unknown[], now: string, newId: () => string }} input
  */
-export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [], categories = [], now, newId }) {
+export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [], categories = [], now, newId, role = null }) {
   const name = plain(fileName, 120) || "document";
   const unfiled = (reason, extra = {}) => ({
     outcome: "unfiled", section: null, table: null, recordId: null, writes: [], document: extra.document || null,
@@ -556,7 +585,7 @@ export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [],
     }
   }
 
-  const target = filingTarget(scan);
+  const target = roleTarget(scan, role);
   if (target.kind === "unfiled") {
     if (target.reason === "receipt") {
       const r = normalizeReceipt(scan.extracted);
@@ -569,7 +598,13 @@ export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [],
 
   const section = target.section;
   const table = SECTION_TABLE[section];
-  const { placed, extras, withheld } = builtInFields(section, scan.extracted);
+  // An agreement the scanner read as something else ("other") carries its
+  // fields in the other shape; the agency is its issuer.
+  const extracted = section === "locumContracts" && scan.documentType !== "agreement" ? agreementFieldsFromOther(scan.extracted) : scan.extracted;
+  const { placed, extras, withheld } = builtInFields(section, extracted);
+  if (section === "locumContracts" && masterAgreement(placed)) {
+    return planMasterAgreement({ placed, fileName, mimeType, rows, now, name });
+  }
   const parts = nameParts(section, placed);
   const display = joinParts(parts, " ");
   const label = SECTION_LABEL[section];
@@ -611,6 +646,79 @@ export function planFiling({ scan, docId, fileName, mimeType, userId, rows = [],
     document: linkTo(id),
     lines: [withDetails(`Filed: ${display} -> ${label}`, details(section, placed)), ...withheldLine],
     withheld,
+  };
+}
+
+// --- Master agreements ------------------------------------------------------
+
+/** The fields of an agreement the scanner filed as "other": its issuer is the agency. */
+function agreementFieldsFromOther(extracted) {
+  const ex = extracted && typeof extracted === "object" && !Array.isArray(extracted) ? extracted : {};
+  const out = {};
+  const agency = ex.agency || ex.issuer || ex.provider || ex.name;
+  if (agency) out.agency = agency;
+  for (const k of ["facility", "startDate", "endDate", "coveragePeriods"]) if (ex[k] !== undefined) out[k] = ex[k];
+  return out;
+}
+
+/**
+ * An agreement that governs every assignment rather than one: no facility of
+ * its own (or only the agency's name where the facility goes), and no dates
+ * or coverage blocks. The 2026-09-28 email carried the physician's signed
+ * master professional services agreement with his agency; filed as a
+ * contract it would have been an assignment with no facility, no dates and a
+ * zero rate, which the invoice screens would offer as a real one.
+ */
+export function masterAgreement(placed) {
+  const f = placed || {};
+  const dated = !isBlank(f.startDate) || !isBlank(f.endDate) || (Array.isArray(f.coveragePeriods) && f.coveragePeriods.length > 0);
+  if (dated) return false;
+  return isBlank(f.facility) || same(f.facility, f.agency, normFacility);
+}
+
+const contractWords = (c) => {
+  const where = plain(c.facility, 80);
+  const dates = [c.startDate, c.endDate].map((d) => String(d || "").slice(0, 10)).filter(validDate).map(usDate);
+  const when = dates.length === 2 ? `${dates[0]} to ${dates[1]}` : dates.length ? `from ${dates[0]}` : "";
+  return [where, when].filter(Boolean).join(", ");
+};
+
+/**
+ * A master agreement goes to the agency's existing contract: linked to the
+ * one in force today, or else the one that starts latest, and the reply says
+ * how many others it also covers. With no agency on it, or no contract with
+ * that agency on file, it is kept unfiled and the reply says why. Never a
+ * new contract, never a write to a contract row.
+ */
+function planMasterAgreement({ placed, fileName, mimeType, rows, now, name }) {
+  const agency = plain(placed.agency, 80);
+  const today = String(now || "").slice(0, 10);
+  const list = (Array.isArray(rows) ? rows : []).filter((r) => r && typeof r === "object").map(toCamelRow);
+  const matches = agency ? list.filter((r) => !isBlank(r.agency)
+    && (same(agency, r.agency, normFacility) || containsName(agency, r.agency) || containsName(r.agency, agency))) : [];
+  if (!matches.length) {
+    const what = agency ? `the master agreement with ${agency}` : "a master agreement";
+    const none = agency ? `no contract with ${agency} is on file` : "it names no agency to match it to";
+    return {
+      outcome: "unfiled", section: null, table: null, recordId: null, writes: [], document: null, withheld: [], reason: "agreement",
+      readsAs: `${what} -> ${agency ? `your ${agency} contract, once one is on file` : "Contracts"}`,
+      lines: [`Saved, not filed yet: ${name} reads as ${what}, and ${none} (open the app > Documents to file it). It was not made into a new contract, since it names no facility or dates.`],
+    };
+  }
+  const inForce = (c) => {
+    const start = String(c.startDate || "").slice(0, 10), end = String(c.endDate || "").slice(0, 10);
+    return validDate(start) && start <= today && (!validDate(end) || end >= today);
+  };
+  const byStart = [...matches].sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")));
+  const pick = byStart.find(inForce) || byStart[0];
+  const others = matches.length - 1;
+  const words = contractWords(pick);
+  const label = `your ${plain(pick.agency, 80) || agency} contract${words ? ` (${words})` : ""}`;
+  return {
+    outcome: "linked", section: "locumContracts", table: SECTION_TABLE.locumContracts, recordId: pick.id, writes: [], withheld: [],
+    readsAs: `the master agreement with ${agency} -> ${label}`,
+    document: { linked_to: `locumContracts:${pick.id}`, name: docLabel([agency, "master agreement"], fileName), type: mimeType || "application/octet-stream" },
+    lines: [`Attached to ${label}: ${name}, the master agreement with ${agency}.${others ? ` It covers your ${others} other ${agency} contract${others === 1 ? "" : "s"} too.` : ""}`],
   };
 }
 
@@ -733,6 +841,9 @@ export function unfiledLine(name, reason, scan, readsAs = "") {
   }
   if (reason === "cv") return `Saved, not filed yet: ${name} looks like your CV ${tail}. File with AI reads it into your record.`;
   if (reason === "category") return `Saved, not filed yet: ${name} fits none of your sections, and a new category is not created from email without you seeing its name ${tail}.`;
+  if (reason === "form") return `Saved, not filed yet: ${name} is a form to fill in, not one of your credentials ${tail}.`;
+  if (reason === "checklist") return `Saved, not filed yet: ${name} is the sender's list of what they want ${tail}.`;
+  if (reason === "informational") return `Saved, not filed yet: ${name} is for reading, not one of your credentials ${tail}.`;
   if (reason === "unverified") return `Saved, not filed yet: ${name}${readsAs ? `, which reads as ${readsAs}` : ""}. This message could not be verified as coming from you, so nothing in your records was added or changed ${tail}.`;
   return `Saved, not filed yet: ${name} ${tail}`;
 }

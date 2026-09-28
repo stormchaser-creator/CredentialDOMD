@@ -55,7 +55,7 @@ import { useOpenRequests } from "./hooks/useNewRequestCount";
 import { useRequestProposals } from "./hooks/useRequestProposals";
 import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
-import { RequestPacketSummary, ApproveSendButton, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
+import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
@@ -946,9 +946,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const homeSearch = <HomeSearch onOpen={openFromSearch} onAskVera={askVera} />;
     // A forwarded request is the last thing the physician types. When the
     // newest open request carries a proposal (built on arrival, or rebuilt
-    // on the client by useRequestProposals), the banner is the packet itself
-    // with one button: Approve and send. Review is a link, not a gate, and
-    // it lands on the request, not the list. The old "N requests waiting"
+    // on the client by useRequestProposals), the banner is the packet itself.
+    // A packet a model read with every ask matched has one button, Approve
+    // and send, with Review as a link beside it. Anything else leads with
+    // Review and says what is unclear: on 2026-09-28 a keyword proposal built
+    // from an informational letter sat here as Approve and send, was tapped,
+    // and answered the agency as if it had asked for documents. The old "N requests waiting"
     // shape is left only for the beat before the file has loaded, since a
     // proposal cannot be built against an empty document list.
     const bannerRows = bannerSentIds.length ? openRequestRows.filter((r) => !bannerSentIds.includes(r.id)) : openRequestRows;
@@ -1000,10 +1003,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               banner's only way into the request is Review; the default
               "Open the request" sent a physician on a phone to More >
               Requests instead of the link that lands on it. */}
-          <ApproveSendButton key={newestRequest.id} request={newestRequest} T={T}
-            accountEmail={data.settings?.email || user?.email} ownAddresses={ownSenders} send={sendPacket} onSent={onPacketSent}
-            notFoundReason={HOME_NOT_FOUND_REASON} noMatchReason={HOME_NO_MATCH_REASON} />
-          <button onClick={reviewRequest} style={linkStyle}>Review</button>
+          {canSendOnOneTap(newestRequest) ? (
+            <>
+              <ApproveSendButton key={newestRequest.id} request={newestRequest} T={T}
+                accountEmail={data.settings?.email || user?.email} ownAddresses={ownSenders} send={sendPacket} onSent={onPacketSent}
+                notFoundReason={HOME_NOT_FOUND_REASON} noMatchReason={HOME_NO_MATCH_REASON} />
+              <button onClick={reviewRequest} style={linkStyle}>Review</button>
+            </>
+          ) : (
+            <ReviewButton key={newestRequest.id} request={newestRequest} T={T} onReview={reviewRequest} />
+          )}
         </div>
         {moreWaiting}
       </div>

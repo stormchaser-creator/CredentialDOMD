@@ -133,7 +133,7 @@ import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import { isOwnStorageObjectForSubjects } from "../_shared/storagePath.ts";
 import { storageSubjects } from "../_shared/clerkContinuity.ts";
-import { approveRequestBody, longDate, replySubject } from "../_shared/requestFlow.ts";
+import { approveRequestBody, longDate, replySubject, withoutGuessBlock } from "../_shared/requestFlow.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_API = (Deno.env.get("RESEND_API_BASE") ?? "https://api.resend.com").replace(/\/$/, "");
@@ -732,6 +732,10 @@ serve(async (req) => {
       headers["References"] = mid;
     }
 
+    // A note stored before 2026-09-28 can still carry "I could not tell from
+    // your email what you meant by:" over the sender's own words; that block
+    // never goes to a third party (requestFlow.ts withoutGuessBlock).
+    text = withoutGuessBlock(text);
     const footer = `Sent from CredentialDOMD on behalf of ${displayName}. Reply to this email to reach ${displayName} directly.`;
     const fullText = `${text ? `${text}\n\n` : ""}${footer}`;
 

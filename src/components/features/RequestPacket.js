@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { oneTapReady, reviewReason } from "../../utils/requestPacket.js";
 
 // The one-tap packet. A credentialer's email lands as a document_requests row
 // with a `proposal` (built on the server at arrival, or on the client when the
@@ -9,8 +10,16 @@ import React, { useState } from "react";
 // drift apart is how the old flow grew to seven taps.
 //
 // Written with React.createElement rather than JSX and importing nothing from
-// the app, so scripts/request-packet-ui.test.mjs can render every state with
-// react-dom/server in plain node against a fake theme.
+// the app but the pure matcher, so scripts/request-packet-ui.test.mjs can
+// render every state with react-dom/server in plain node against a fake theme.
+//
+// One tap is for a proposal that can go unread (requestPacket.js
+// oneTapReady): a model read the email, every ask it read is the email's own
+// words, and each is matched with high confidence. Anything else leads with
+// Review, and the line under it says what is unclear. On 2026-09-28 a
+// keyword proposal built from an agency's informational letter was offered
+// on one tap, the owner tapped it, and the agency was told "Attached are the
+// documents you asked for" about documents it had never asked for.
 
 const h = React.createElement;
 
@@ -120,6 +129,20 @@ export const NOTHING_MATCHED_REASON = "No documents could be matched from this e
 // render the words Home actually shows.
 export const HOME_NOT_FOUND_REASON = "Requester's address not found. Tap Review and enter it.";
 export const HOME_NO_MATCH_REASON = "No documents could be matched from this email. Tap Review to pick them.";
+// The reason a proposal that may not go on one tap prints under a button that
+// was handed it without a review. Every screen that offers the button checks
+// oneTapReady first and leads with Review; this is the backstop.
+export const REVIEW_FIRST_REASON = "Tap Review and check the draft first.";
+
+/** May this request's packet go on one tap, unread? (requestPacket.js oneTapReady) */
+export const canSendOnOneTap = (request) => oneTapReady(request?.proposal);
+
+/**
+ * The line that says what to check before a packet goes, or "" when it may
+ * go on one tap. Unrecognised and unanswered asks are named here, because
+ * none of them is in the cover note (requestPacket.js reviewReason).
+ */
+export const reviewLine = (request) => (request?.proposal ? reviewReason(request.proposal) : "");
 
 /**
  * Why the Approve button will not send, or null when it will. Each reason is
@@ -282,11 +305,15 @@ export function ProposalChecklist({ proposal, T, selected, onToggle }) {
  * no Open, and "Open the request" there sent a physician on a phone to
  * More > Requests past the link that lands on it.
  */
-export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docIds, text: noteText, send, onSent, label, notFoundReason, noMatchReason }) {
+export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docIds, text: noteText, send, onSent, label, notFoundReason, noMatchReason, reviewed }) {
   const [phase, setPhase] = useState("idle"); // idle | sending | sent
   const [error, setError] = useState(null);
   const [sentTo, setSentTo] = useState("");
-  const computed = approveBlockedReason(request, accountEmail, ownAddresses, docIds);
+  // `reviewed` is the detail view, where the physician is looking at the
+  // draft: the button sends what the screen shows and says so ("Send"). Away
+  // from it, only a one-tap proposal may send at all.
+  const computed = approveBlockedReason(request, accountEmail, ownAddresses, docIds)
+    || (!reviewed && !oneTapReady(request?.proposal) ? REVIEW_FIRST_REASON : null);
   const reason = computed === REQUESTER_NOT_FOUND_REASON && notFoundReason ? notFoundReason
     : computed === NOTHING_MATCHED_REASON && noMatchReason ? noMatchReason
     : computed;
@@ -297,7 +324,7 @@ export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docI
   const ready = !reason && phase === "idle" && typeof send === "function";
   const text = phase === "sending" ? "Sending..."
     : phase === "sent" ? `Sent to ${sentTo}`
-    : (label || (nothingToAttach ? "Send reply (nothing to attach)" : `Approve and send ${plural(n, "document")}`));
+    : (label || (nothingToAttach ? "Send reply (nothing to attach)" : reviewed ? `Send ${plural(n, "document")}` : `Approve and send ${plural(n, "document")}`));
 
   const onClick = async (e) => {
     // The list card that holds this button opens on click; the tap that
@@ -332,5 +359,58 @@ export function ApproveSendButton({ request, T, accountEmail, ownAddresses, docI
     ),
     reason ? h("div", { style: { ...WRAP, fontSize: 12.5, color: T.textMuted } }, reason) : null,
     error ? h("div", { style: { ...WRAP, fontSize: 13, fontWeight: 600, color: T.danger } }, error) : null,
+  );
+}
+
+/**
+ * The primary action for a packet that may not go on one tap: Review, which
+ * opens the request with its draft editable, and under it the line that says
+ * what is unclear.
+ */
+export function ReviewButton({ request, T, onReview, reason }) {
+  const why = reason === undefined ? reviewLine(request) : reason;
+  const btnStyle = {
+    padding: "11px 14px", borderRadius: 10, border: "none", fontSize: 14, fontWeight: 800, fontFamily: "inherit",
+    cursor: "pointer", maxWidth: "100%", minWidth: 0, whiteSpace: "normal", overflowWrap: "anywhere", textAlign: "center",
+    background: T.accent, color: "#fff",
+  };
+  const onClick = (e) => {
+    if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+    if (onReview) onReview(request);
+  };
+  return h("div", { style: { display: "flex", flexDirection: "column", gap: 6, minWidth: 0, maxWidth: "100%" } },
+    h("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minWidth: 0 } },
+      h("button", { type: "button", onClick, style: btnStyle }, "Review"),
+    ),
+    why ? h("div", { style: { ...WRAP, fontSize: 12.5, color: T.warning, lineHeight: 1.45 } }, why) : null,
+  );
+}
+
+/**
+ * On the request itself: each ask the draft says nothing about, as a
+ * question for the physician. An unrecognised ask asks what they meant; an
+ * ask nothing on file answers offers to say so in the draft
+ * (onSayNotOnFile, which adds the "Not on file" lines). Nothing is shown for
+ * a proposal that may go on one tap.
+ */
+export function UnclearNote({ request, T, onSayNotOnFile, canEdit = true }) {
+  const proposal = request?.proposal;
+  if (!proposal || oneTapReady(proposal)) return null;
+  const items = Array.isArray(proposal.items) ? proposal.items.filter((i) => i && typeof i === "object") : [];
+  const unclear = items.filter((i) => i.status !== "found" && i.status !== "report" && i.kind === "unknown");
+  const missing = items.filter((i) => i.status !== "found" && i.status !== "report" && i.kind !== "unknown");
+  const keyword = proposal.source !== "model";
+  const line = (text, key, extra = null) => h("div", { key, style: { ...WRAP, fontSize: 13, color: T.text, lineHeight: 1.45 } }, text, extra);
+  const link = (label, onClick) => h("button", {
+    type: "button", onClick,
+    style: { marginLeft: 6, padding: 0, border: "none", background: "none", color: T.accent, font: "inherit", fontWeight: 700, cursor: "pointer", textDecoration: "underline" },
+  }, label);
+  return h("div", { style: { marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.warning}`, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 } },
+    h("div", { style: { fontSize: 12, fontWeight: 700, color: T.warning, textTransform: "uppercase", letterSpacing: 0.4 } }, "Check before sending"),
+    ...unclear.map((i, n) => line(`"${String(i.ask || "")}": not recognised. What did they mean? The draft says nothing about it.`, `u${n}`)),
+    missing.length ? line(`Not on file: ${missing.map((i) => `"${String(i.ask || "")}"`).join(", ")}. The draft says nothing about ${missing.length === 1 ? "it" : "them"}.`, "m",
+      canEdit && onSayNotOnFile ? link("Say so in the draft", () => onSayNotOnFile()) : null) : null,
+    keyword ? line("These asks were read by keyword matching, so check that each one is really something they asked for.", "k")
+      : proposal.confidence !== "high" ? line("The reading of this email is not certain, so check the draft before it goes.", "c") : null,
   );
 }

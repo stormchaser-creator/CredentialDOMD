@@ -21,15 +21,21 @@
  * (which strips the type annotations and nothing else), the same way
  * scripts/vcard-shared.test.mjs loads vcard.ts.
  *
- * Rules, not AI. The earlier path spent an AI turn proposing docIds and the
- * physician still had to approve; a table of kinds costs nothing, answers in
- * a millisecond, and makes the same mistake every time, which is what makes
- * a mistake fixable. Pure by design: nothing here reads a clock unless the
+ * Rules, not AI, for the MATCHING. The earlier path spent an AI turn
+ * proposing docIds and the physician still had to approve; a table of kinds
+ * costs nothing, answers in a millisecond, and makes the same mistake every
+ * time, which is what makes a mistake fixable. Since 2026-09-28 the ASKS may
+ * come from a model's reading of the email instead of from parseAsks
+ * (buildProposal's `reading`: quote-checked by email-inbound), and only such
+ * a proposal, every ask matched with high confidence, may go on one tap
+ * (oneTapReady). A sentence with no asking form is never an ask here
+ * (hasAskForm), and an ask the proposal cannot answer is never in the cover
+ * note: it is a question for the physician (reviewReason). Pure by design: nothing here reads a clock unless the
  * caller leaves `now` out, so the tests pin a date and get the same answer
  * on every machine.
  */
 
-export const PROPOSAL_VERSION = 1;
+export const PROPOSAL_VERSION = 2;
 
 export type AskStatus = "found" | "missing" | "report";
 
@@ -81,15 +87,29 @@ export interface ProposalItem {
   status: AskStatus;
   docIds: string[];
   labels: string[];
+  /** The email's own words for this ask, when a model reading named it (quote-checked by the host). */
+  quote?: string;
+  /** How sure the reading is of this ask: "high" | "medium" | "low" from a model, absent from the rules. */
+  confidence?: string;
 }
 
 export interface Proposal {
   v: number;
-  method: "rules";
+  method: string;
+  /** Who read the asks: "model" (quote-checked) or "rules" (keywords). */
+  source: string;
+  /** The reading's own confidence; "keyword" for the rules. */
+  confidence: string;
   items: ProposalItem[];
   docIds: string[];
   missing: string[];
   coverNote: string;
+}
+
+/** Asks a model reading found, already quote-checked by the caller. */
+export interface Reading {
+  asks: { ask?: string | null; quote?: string | null; kind?: string | null }[];
+  confidence?: string | null;
 }
 
 export interface RequestLike {
@@ -295,7 +315,46 @@ const DISCLAIMER_RE = /confidential(?:ity)?\s+(?:notice|disclaimer|statement|war
 const BANNER_RE = /^\W*(?:caution|warning|external(?: email| sender| message)?|attention|notice|alert)\b.{0,40}\b(?:originated|outside|external|do not click|unless you recognize|phishing|untrusted|links or attachments)/i;
 
 const ASK_SENTENCE_RE = /\b(?:send|sending|copy|copies|need|needs|needed|require|required|requires|requirements?|provide|providing|attach|forward|documents?|documentation|missing|request|requesting|requested|submit|upload|obtain|receive|outstanding|pending)\b/i;
-const NOT_ASK_RE = /\blet (?:me|us) know\b|\bif you (?:have|need) any\b|\bquestions?\b|\bdo not hesitate\b|\bfeel free\b|\bthank(?:s| you) for\b|\b(?:i|we)(?:'ve|'ll| have| will)? (?:sent|attached|forwarded|received|send|attach|forward)\b|\battached (?:is|are|please find|you will find)\b|\bplease (?:find|see) (?:the )?attached\b|\bas requested\b|\bhere (?:is|are)\b|\bhas been (?:sent|received|submitted)\b|\bno (?:further|longer|additional)\b|\bdo(?:es)? not need\b|\bdon't need\b|\bnothing (?:else|further|more)\b|\bnot need(?:ed)?\b|\b(?:see|find) (?:below|the list)\b|\bbelow\b|\bas follows\b|\bthe following\b|\bhave a (?:great|good|nice)\b|\bcongrat|\bwelcome\b|\bsigned up\b|\bunsubscribe\b/i;
+const NOT_ASK_RE = /\blet (?:me|us) know\b|\bif you (?:have|need) any\b|\bquestions?\b|\bdo not hesitate\b|\bfeel free\b|\bthank(?:s| you) for\b|\b(?:i|we)(?:'ve|'ll| have| will)? (?:sent|attached|forwarded|received|send|attach|forward)\b|\battached (?:is|are|please find|you will find)\b|\bplease (?:find|see) (?:the )?attached\b|\bas requested\b|\bhere (?:is|are)\b|\bhas been (?:sent|received|submitted)\b|\bno (?:further|longer|additional)\b|\bnothing (?:is |was )?(?:missing|outstanding|needed|required|due)\b|\bdo(?:es)? not need\b|\bdon't need\b|\bnothing (?:else|further|more)\b|\bnot need(?:ed)?\b|\b(?:see|find) (?:below|the list)\b|\bbelow\b|\bas follows\b|\bthe following\b|\bhave a (?:great|good|nice)\b|\bcongrat|\bwelcome\b|\bsigned up\b|\bunsubscribe\b/i;
+
+// The form of an ask. A sentence names the documents a letter is about far
+// more often than it asks for them: "Proof of malpractice coverage is required
+// for every provider" and "The policy covers emergency care documented in
+// your file" are an agency explaining its policy, and on 2026-09-28 both
+// became asks, one matched to the physician's own malpractice certificate by
+// its keyword and the other sent back to the agency as "I could not tell from
+// your email what you meant by". A sentence is an ask only in an asking form:
+// a question, "please", "need", "can you", "send", "provide", "submit", a
+// sentence that opens on a verb telling the reader to do something, or a word
+// that says something is still missing. Nouns alone ("required",
+// "documentation", "certificate") never make one.
+// "Nothing is missing", "need not", "no further documents": the asking words, negated.
+const NEGATED_ASK_RE = /\bnothing\b[^.?!]{0,30}\b(?:missing|outstanding|needed|required|due)\b|\bnot\s+(?:missing|outstanding|needed|required)\b|\bno\s+(?:need|further|longer|additional)\b|\bneed\s+not\b/i;
+const ASK_FORM_RE = /\?|\b(?:please|pls|kindly)\b|\bneed(?:s|ed)?\b(?!\s+not\b)|\b(?:can|could|would|will)\s+(?:you|we\s+(?:get|have|obtain))\b|\b(?:send|sending|resend|re-send|provide|providing|submit|submitting|upload|uploading)\b|\b(?:missing|outstanding|awaiting)\b|\bwaiting\s+(?:on|for)\b|\b(?:we|i)\s+(?:are\s+|am\s+)?(?:still\s+|also\s+)?(?:request|requesting|require)\b/i;
+// The imperative: the sentence opens on the verb ("Return the signed form",
+// "Attach your COI"), after nothing but a greeting word or two.
+const IMPERATIVE_RE = /^\W*(?:(?:also|and|then|just|kindly|please|now)\s+)*(?:send|resend|provide|submit|upload|forward|return|fax|attach|complete|sign|fill|email|e-mail|mail|bring|include|get|obtain|update|renew)\b/i;
+// A line that is a statement rather than a label: it carries a finite verb.
+// "Board certificate.", "Copy of your DEA and CSR for the state of Colorado"
+// and "Hep B surface antibody and titer" are labels, and a label on its own
+// line is how a short request is written; "Your coverage is active." and
+// "The policy covers emergency care" are statements.
+// Words that make a subject line a request on their own ("Document request",
+// "Action required", "Incomplete application").
+const SUBJECT_ASK_RE = /\b(?:request(?:s|ed)?|required|action\s+required|incomplete|due)\b/i;
+const STATEMENT_VERB_RE = /\b(?:is|are|was|were|be|been|being|has|have|had|will|shall|would|should|does|do|did|covers?|covered|includes?|included|provides?|provided|applies|applied|remains?|means|explains?|confirms?|describes?|extends?|meets?|must|may|might|can|obtain(?:s|ed)?|required|requires)\b/i;
+
+/** True when a sentence is in an asking form (see ASK_FORM_RE). */
+export function hasAskForm(s: unknown): boolean {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  return !!t && !NEGATED_ASK_RE.test(t) && (ASK_FORM_RE.test(t) || IMPERATIVE_RE.test(t));
+}
+
+/** A statement with no asking form: never an ask, however many document words it names. */
+function factualStatement(s: unknown): boolean {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  return !!t && !hasAskForm(t) && STATEMENT_VERB_RE.test(t);
+}
 
 // Words that carry no ask on their own. "Hep B surface antibody and titer"
 // is one ask, not an ask plus every titer on file, and the check that stops
@@ -620,6 +679,12 @@ export function parseAsks(text: unknown, subject: unknown = ""): string[] {
   }
   lines = lines.slice(0, cut);
 
+  // Whether anything outside the list asks. A checklist under "Please send"
+  // or "Missing items" is a request, and so is a bare list forwarded alone;
+  // a list of statements under nothing that asks ("- The policy covers
+  // emergency care") is a letter explaining itself.
+  const subj = cleanSubject(subject);
+  const asking = hasAskForm(subj) || SUBJECT_ASK_RE.test(subj) || lines.some((l, i) => !itemAt[i] && hasAskForm(l));
   const items: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(LIST_ITEM_RE);
@@ -631,6 +696,7 @@ export function parseAsks(text: unknown, subject: unknown = ""): string[] {
       const next = lines.slice(i + 1).find((l) => l.trim());
       if (next && LIST_ITEM_RE.test(next)) continue;
     }
+    if (!asking && factualStatement(cleanAsk(txt))) continue;
     items.push(txt);
   }
 
@@ -638,8 +704,14 @@ export function parseAsks(text: unknown, subject: unknown = ""): string[] {
   if (!raw.length) raw = sentenceAsks(lines);
   if (!raw.length) raw = shortLineAsks(lines);
   if (!raw.length) {
+    // The subject stands in only when it is itself asking ("Missing items",
+    // "Documents needed", "Request: DEA") or the message says nothing at all.
+    // A letter whose sentences all turned out to be statements is not a
+    // request because its subject names a document: "Malpractice coverage for
+    // emergency care" is what the letter is about, not what it asks for.
     const s = cleanSubject(subject);
-    if (s && !/^\(?no subject\)?$/i.test(s)) raw = [s];
+    const said = lines.join(" ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean).length;
+    if (s && !/^\(?no subject\)?$/i.test(s) && (said < 12 || hasAskForm(s) || SUBJECT_ASK_RE.test(s))) raw = [s];
   }
 
   const out: string[] = [];
@@ -698,7 +770,7 @@ function isSignatureLine(line: unknown): boolean {
 function shortLineAsks(lines: string[]): string[] {
   const short = lines.map((l) => l.trim()).filter(Boolean);
   if (!short.length || short.length > 3) return [];
-  return short.filter((l) => l.length <= 100 && !NOISE_LINE_RE.test(l) && !isSignatureLine(l) && (classifyAsk(l).kind !== "unknown" || !NAME_LINE_RE.test(cleanAsk(l))));
+  return short.filter((l) => l.length <= 100 && !NOISE_LINE_RE.test(l) && !isSignatureLine(l) && !factualStatement(cleanAsk(l) || l) && (classifyAsk(l).kind !== "unknown" || !NAME_LINE_RE.test(cleanAsk(l))));
 }
 
 /** No list: the sentences that ask for something, greeting and pleasantries left out. */
@@ -716,12 +788,45 @@ function sentenceAsks(lines: string[]): string[] {
     for (const piece of p.split(/(?<=(?:[A-Za-z]{4,}|\d|\)))[.!?]\s+/)) {
       const s = piece.trim();
       if (!s || s.length > 300) continue;
-      if (!ASK_SENTENCE_RE.test(s) || NOT_ASK_RE.test(s)) continue;
+      if (!ASK_SENTENCE_RE.test(s) || NOT_ASK_RE.test(s) || !hasAskForm(s)) continue;
       out.push(s);
       if (out.length >= MAX_SENTENCE_ASKS) return out;
     }
   }
   return out;
+}
+
+/**
+ * Does the email ask its reader for anything at all? True when an ask was
+ * read (parseAsks), and also when any sentence of the message is in an
+ * asking form and is not a pleasantry, an offer of help or a pointer to an
+ * attachment, even one whose object the rules cannot name ("Please complete
+ * and return both documents by 10/15" names nothing a kind can match, and is
+ * still a request). The message ends at the quoted history, the sign-off or
+ * a disclaimer, as parseAsks reads it. The rules' fallback reads an email
+ * that asks nothing as informational, never as a request
+ * (intakeUnderstanding.mjs rulesUnderstanding).
+ */
+export function asksSomething(text: unknown, subject: unknown = ""): boolean {
+  if (parseAsks(text, subject).length) return true;
+  const all = String(text ?? "").replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").split("\n");
+  let end = all.length;
+  for (let i = 0; i < all.length; i++) {
+    const t = all[i].trim();
+    if (isHistoryMarker(all, i) || (t && (SIGNOFF_RE.test(t) || SIGNATURE_RE.test(t) || DISCLAIMER_RE.test(t)))) { end = i; break; }
+  }
+  const paras: string[] = [];
+  let cur: string[] = [];
+  for (const l of all.slice(0, end)) {
+    if (!l.trim()) { if (cur.length) paras.push(cur.join(" ")); cur = []; continue; }
+    if (NOISE_LINE_RE.test(l) || isSignatureLine(l) || BANNER_RE.test(l.trim())) continue;
+    cur.push(l.trim());
+  }
+  if (cur.length) paras.push(cur.join(" "));
+  return paras.some((p) => p.split(/(?<=[A-Za-z0-9)'"])[.!?]\s+/).some((piece) => {
+    const s = piece.trim();
+    return !!s && hasAskForm(s) && !NOT_ASK_RE.test(s);
+  }));
 }
 
 // ─── Naming the ask ──────────────────────────────────────────────────────────
@@ -1119,18 +1224,19 @@ function coverNoteFor(items: ProposalItem[], fromName: unknown, physician: Physi
     });
     if (!kept && it.docIds.length) held.push(it.ask);
   }
-  // Nothing this note promises is a promise the app cannot keep. A report
-  // (case logs, CV, NPI, references, work history: REPORT_KINDS) does follow
-  // separately, because the app exports it. An ask the rules named but
-  // nothing on file answers is stated as a fact and no more: this note goes
-  // out on one tap, unread, and "they will follow separately" over a
-  // Livescan receipt the physician never had brought the credentialer back
-  // two weeks later asking where it was. An ask the rules could not name is
-  // not promised either; the note asks instead.
+  // Nothing this note promises is a promise the app cannot keep, and nothing
+  // in it is a guess. A report (case logs, CV, NPI, references, work
+  // history: REPORT_KINDS) does follow separately, because the app exports it.
+  // An ask the reading could not name, or named and found nothing on file
+  // for, is a question for the PHYSICIAN and is not in this note at all: on
+  // 2026-09-28 a sentence from an agency's own informational letter was
+  // mailed back to the agency under "I could not tell from your email what
+  // you meant by:", and a statement read as an ask would have read the same
+  // way under "Not on file:". The app asks the physician about both
+  // (reviewReason) and adds "Not on file" lines to the draft only when they
+  // say so (noteWithNotOnFile).
   const report = items.filter((it) => it.status === "report" && it.kind !== "unknown").map((it) => it.ask);
-  const missing = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind !== "unknown").map((it) => it.ask);
-  const unclear = items.filter((it) => it.status !== "found" && it.kind === "unknown").map((it) => it.ask);
-  const lines = [`Hello ${firstName(fromName)},`, ""];
+  const lines: string[] = [`Hello ${firstName(fromName)},`, ""];
   if (!items.length) {
     lines.push("I did not find a list of documents in your request. Reply with what you need and I will send it.");
   } else {
@@ -1143,14 +1249,7 @@ function coverNoteFor(items: ProposalItem[], fromName: unknown, physician: Physi
       if (attached.length || held.length) lines.push("");
       lines.push("These will follow separately:", ...report.map((a) => `- ${a}`));
     }
-    if (missing.length) {
-      if (attached.length || held.length || report.length) lines.push("");
-      lines.push(attached.length ? "Not on file:" : "I do not have these on file:", ...missing.map((a) => `- ${a}`));
-    }
-    if (unclear.length) {
-      if (attached.length || held.length || report.length || missing.length) lines.push("");
-      lines.push("I could not tell from your email what you meant by:", ...unclear.map((a) => `- ${a}`), "Reply with details and I will send what is needed.");
-    }
+    if (!attached.length && !held.length && !report.length) lines.push("Thank you for your email.");
   }
   // No name, no sign-off. "Regards," over a blank line, or over a bare
   // "DO", read as a letter nobody signed, so both lines go together.
@@ -1227,30 +1326,144 @@ export function buildProposal(
   catalogue: CatalogueEntry[] | null | undefined,
   physician: Physician | null | undefined,
   now?: unknown,
+  reading?: Reading | null,
 ): Proposal {
   const req: RequestLike = request || {};
   const body = req.body !== undefined && req.body !== null ? req.body : (req.body_text !== undefined ? req.body_text : "");
   const fromName = req.fromName !== undefined ? req.fromName : req.from_name;
-  const asks = parseAsks(body, req.subject);
+  const model = readingAsks(reading);
+  const asks = model ? model.map((a) => a.ask) : parseAsks(body, req.subject);
+  const confidence = model ? readingConfidence(reading) : "keyword";
   const today = isoDay(now === undefined || now === null ? new Date() : now) || new Date().toISOString().slice(0, 10);
   const items: ProposalItem[] = [];
   const docIds: string[] = [];
   const missing: string[] = [];
-  for (const ask of asks) {
+  asks.forEach((ask, n) => {
     const c = classifyAsk(ask);
+    // A model reading names the kind itself; the rules still read the state,
+    // "all" and the focus word off the ask, which is the email's own text.
+    if (model && model[n].kind) c.kind = model[n].kind as string;
     const entries = matchAsk(c, catalogue, now);
     const status: AskStatus = entries.length ? "found" : (REPORT_KINDS.has(c.kind) ? "report" : "missing");
     const ids = entries.map((e) => String(e.id));
-    items.push({ ask, kind: c.kind, status, docIds: ids, labels: entries.map((e) => labelFor(e, today)) });
+    const item: ProposalItem = { ask, kind: c.kind, status, docIds: ids, labels: entries.map((e) => labelFor(e, today)) };
+    if (model) { item.quote = model[n].quote; item.confidence = confidence; }
+    items.push(item);
     for (const id of ids) if (!docIds.includes(id)) docIds.push(id);
     if (status !== "found") missing.push(ask);
-  }
+  });
   return {
     v: PROPOSAL_VERSION,
     method: "rules",
+    source: model ? "model" : "rules",
+    confidence,
     items,
     docIds,
     missing,
     coverNote: coverNoteFor(items, fromName, physician, null),
   };
+}
+
+// ─── A model's reading, and when one tap may send ────────────────────────────
+
+const CONFIDENCES = new Set(["high", "medium", "low"]);
+const KIND_SET = new Set(KINDS);
+
+/**
+ * The asks of a model reading, cleaned for display, or null when there is no
+ * reading. Each ask is the email's own sentence (the caller has already
+ * checked that it occurs in the email); the item shows it cleaned ("Please
+ * send a copy of your current DEA" reads "DEA"), and the quote is kept as
+ * written. A kind the rules do not know is "unknown".
+ */
+function readingAsks(reading: Reading | null | undefined): { ask: string; quote: string; kind: string | null }[] | null {
+  if (!reading || !Array.isArray(reading.asks)) return null;
+  const out: { ask: string; quote: string; kind: string | null }[] = [];
+  const seen = new Set<string>();
+  for (const a of reading.asks) {
+    if (!a || typeof a !== "object") continue;
+    const quote = noEmDash(String(a.quote ?? a.ask ?? "").replace(/\s+/g, " ").trim()).slice(0, 300);
+    if (!quote) continue;
+    const ask = noEmDash(cleanAsk(quote) || quote).trim().slice(0, MAX_ASK_CHARS);
+    const key = low(ask);
+    if (!ask || seen.has(key)) continue;
+    seen.add(key);
+    const kind = typeof a.kind === "string" && KIND_SET.has(a.kind) ? a.kind : null;
+    out.push({ ask, quote, kind });
+    if (out.length >= MAX_ASKS) break;
+  }
+  return out;
+}
+
+function readingConfidence(reading: Reading | null | undefined): string {
+  const c = low(reading && reading.confidence);
+  return CONFIDENCES.has(c) ? c : "low";
+}
+
+const EXPIRED_LABEL_RE = /, expired \d{4}-\d{2}-\d{2}$/;
+
+/**
+ * May this proposal go out on ONE tap, unread? Only when a model read the
+ * email, every ask it read is quote-checked (the caller's job), named, and
+ * matched with high confidence, and each is answered by a document that has
+ * not lapsed (or is a report the app exports). A proposal read by keywords
+ * is never one tap, whatever it matched: on 2026-09-28 a keyword read an
+ * agency's statement about its own malpractice policy as an ask for the
+ * physician's malpractice certificate, the app offered Approve and send, and
+ * the owner tapped it.
+ */
+export function oneTapReady(proposal: Partial<Proposal> | null | undefined): boolean {
+  const p: Partial<Proposal> = proposal || {};
+  if (p.source !== "model" || p.confidence !== "high") return false;
+  const items = Array.isArray(p.items) ? p.items : [];
+  if (!items.length) return false;
+  return items.every((it) => {
+    if (!it || typeof it !== "object" || it.kind === "unknown" || it.confidence !== "high") return false;
+    if (it.status === "report") return true;
+    if (it.status !== "found") return false;
+    const labels = Array.isArray(it.labels) ? it.labels : [];
+    return labels.some((l) => !EXPIRED_LABEL_RE.test(String(l ?? "")));
+  });
+}
+
+const quoted = (xs: string[]): string => xs.map((x) => `"${x}"`).join(", ");
+
+/**
+ * What the physician should look at before this goes, in one line, or ""
+ * when it may go on one tap. Every unrecognised or unanswered ask is named
+ * here, because none of them is in the cover note.
+ */
+export function reviewReason(proposal: Partial<Proposal> | null | undefined): string {
+  const p: Partial<Proposal> = proposal || {};
+  if (oneTapReady(p)) return "";
+  const items = (Array.isArray(p.items) ? p.items : []).filter((it) => it && typeof it === "object");
+  if (!items.length) return "No asks could be read from this email.";
+  const unclear = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind === "unknown").map((it) => String(it.ask ?? ""));
+  const missing = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind !== "unknown").map((it) => String(it.ask ?? ""));
+  const lapsed = items.filter((it) => it.status === "found" && Array.isArray(it.labels) && it.labels.length > 0
+    && it.labels.every((l) => EXPIRED_LABEL_RE.test(String(l ?? "")))).map((it) => String(it.ask ?? ""));
+  const parts: string[] = [];
+  if (unclear.length) parts.push(`Not recognised: ${quoted(unclear)}. What did they mean?`);
+  if (missing.length) parts.push(`Not on file: ${quoted(missing)}.`);
+  if (lapsed.length) parts.push(`Only an expired copy on file: ${quoted(lapsed)}.`);
+  if (p.source !== "model") parts.push("The asks were read by keyword matching, so check the draft before it goes.");
+  else if (p.confidence !== "high") parts.push("The reading of this email is not certain, so check the draft before it goes.");
+  else if (!parts.length) parts.push("Check the draft before it goes.");
+  return noEmDash(parts.join(" "));
+}
+
+/**
+ * The draft with a "Not on file:" list added above the sign-off, for the
+ * physician who chose to say so. Asks already listed are not added twice.
+ */
+export function noteWithNotOnFile(note: unknown, proposal: Partial<Proposal> | null | undefined): string {
+  const text = String(note ?? "");
+  const items = (Array.isArray(proposal?.items) ? proposal.items : []).filter((it) => it && typeof it === "object");
+  const missing = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind !== "unknown")
+    .map((it) => String(it.ask ?? "").trim()).filter((a) => a && !text.includes(`- ${a}`));
+  if (!missing.length) return text;
+  const block = ["Not on file:", ...missing.map((a) => `- ${a}`)].join("\n");
+  const at = text.search(/\n\nRegards,\n/);
+  const out = at >= 0 ? `${text.slice(0, at)}\n\n${block}${text.slice(at)}` : `${text.replace(/\s+$/, "")}${text.trim() ? "\n\n" : ""}${block}`;
+  return noEmDash(out);
 }

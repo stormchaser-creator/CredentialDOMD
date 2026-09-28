@@ -5,9 +5,10 @@ import EmptyState from "../shared/EmptyState";
 import { FileIcon } from "../shared/Icons";
 import { docMime } from "../../utils/inboxDocs";
 import { docBytes, fmtBytes } from "../../utils/docLabel";
-import { noteForSelection } from "../../utils/requestPacket";
+import { noteForSelection, noteWithNotOnFile } from "../../utils/requestPacket";
+import { dismissCorrection, coverNoteCorrection, recordCorrection } from "../../utils/intakeCorrections";
 import EmailPacketModal, { PACKET_FROM_ADDRESS, REQUEST_REPLIED_EVENT } from "./EmailPacketModal";
-import { ProposalChecklist, ApproveSendButton, proposalSummary, requesterMissing, unwrapInvoke } from "./RequestPacket";
+import { ProposalChecklist, ApproveSendButton, ReviewButton, UnclearNote, canSendOnOneTap, proposalSummary, requesterMissing, unwrapInvoke } from "./RequestPacket";
 import { REQUESTS_CHANGED_EVENT } from "../../hooks/useNewRequestCount";
 import { useRequestProposals } from "../../hooks/useRequestProposals";
 import { useForwardingAddresses } from "../../hooks/useForwardingAddresses";
@@ -94,7 +95,7 @@ const sameIds = (selected, ids) => {
  * the owner can clear it and a later visit starts on the list.
  */
 function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
-  const { data, loaded, user, theme: T, navigate } = useApp();
+  const { data, loaded, user, theme: T, navigate, userIdRef } = useApp();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -260,7 +261,13 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
         .eq("id", req.id);
       if (error) throw error;
       try { window.dispatchEvent(new CustomEvent(REQUESTS_CHANGED_EVENT, { detail: { id: req.id, status } })); } catch { /* no window */ }
-      if (status === "dismissed") setOpenId(null);
+      if (status === "dismissed") {
+        setOpenId(null);
+        // A dismissed request was something intake read as a request and
+        // the physician would not answer: the next reading learns from it
+        // (utils/intakeCorrections.js). Fire and forget.
+        recordCorrection(supabase, userIdRef?.current, dismissCorrection(req, { physicianName: data.settings?.name || "" }));
+      }
     } catch (e) {
       setRows(prev);
       setErr(e.message || "Could not update the request");
@@ -389,6 +396,15 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     // that does work, takes its place. The no-match wording in the packet
     // box above names it.
     const matchable = !!proposal && Array.isArray(proposal.items) && proposal.items.length > 0;
+    // The draft as the app wrote it for what is ticked. A note sent that
+    // differs from it was edited by the physician, and that edit is a
+    // correction the next reading learns from (utils/intakeCorrections.js).
+    const drafted = proposal ? noteForSelection(proposal, selectedIds, physician, open.from_name) : "";
+    const oneTap = canSendOnOneTap(open);
+    const onDetailSent = (result) => {
+      onPacketSent(viewReq)(result);
+      if (noteEdited) recordCorrection(supabase, userIdRef?.current, coverNoteCorrection(open, drafted, note, { physicianName: physician.name }));
+    };
     return (
       <div>
         <button onClick={() => setOpenId(null)} style={{ ...btn(false), padding: "7px 12px", fontSize: 12.5, marginBottom: 12 }}>‹ All requests</button>
@@ -427,7 +443,13 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
               )}
             </div>
             {proposal ? (
-              <ProposalChecklist proposal={proposal} T={T} selected={selected} onToggle={open.status === "new" ? toggleDoc : undefined} />
+              <>
+                <ProposalChecklist proposal={proposal} T={T} selected={selected} onToggle={open.status === "new" ? toggleDoc : undefined} />
+                {/* What the draft says nothing about, as questions for the
+                    physician; "Say so in the draft" adds the Not on file lines. */}
+                <UnclearNote request={open} T={T} canEdit={open.status === "new" && !sent}
+                  onSayNotOnFile={() => setNote(noteWithNotOnFile(note, proposal))} />
+              </>
             ) : (
               <div style={{ fontSize: 13, color: T.textDim, lineHeight: 1.5 }}>
                 {loaded ? "No documents could be matched from this email. Reply by email and pick them, or ask Vera." : "Reading your file..."}
@@ -468,11 +490,14 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", marginTop: 12, minWidth: 0 }}>
                 {matchable ? (
                   <>
+                    {/* This screen is the review: the draft is in view and
+                        editable, so the button sends it. It says Approve and
+                        send only for a packet that could have gone on one tap. */}
                     <ApproveSendButton key={open.id} request={viewReq} T={T} accountEmail={realEmail} ownAddresses={senders}
-                      docIds={selectedIds} text={note}
-                      label={edited && selectedIds.length > 0 ? `Approve and send ${selectedIds.length} selected` : undefined}
+                      docIds={selectedIds} text={note} reviewed
+                      label={edited && selectedIds.length > 0 ? `${oneTap ? "Approve and send" : "Send"} ${selectedIds.length} selected` : (oneTap && selectedIds.length > 0 ? `Approve and send ${selectedIds.length} document${selectedIds.length === 1 ? "" : "s"}` : undefined)}
                       notFoundReason={requesterGone ? "Type the requester's email above to send." : undefined}
-                      send={sendWithAddress} onSent={onPacketSent(viewReq)} />
+                      send={sendWithAddress} onSent={onDetailSent} />
                     <button onClick={() => replyByEmail(modalReq, selectedIds, note)} style={linkBtn}>Review in full</button>
                   </>
                 ) : (
@@ -571,13 +596,13 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
               </span>
             ))}
             {" "}to <b style={{ color: T.text }}>{REQUESTS_ADDRESS}</b> and that is the last thing you type. The app reads what was asked for,
-            matches it against your file and writes the reply; one tap here or on Home sends it. Or{" "}
+            matches it against your file and writes the reply. When every ask is clear, one tap here or on Home sends it; when anything is not, you review the draft first. Or{" "}
           </>
         ) : (
           <>
             {CONFIRM_FIRST_SENTENCE} Once one is confirmed, forward a credentialer's email from it to{" "}
             <b style={{ color: T.text }}>{REQUESTS_ADDRESS}</b> and the app reads what was asked for, matches it against your file
-            and writes the reply; one tap here or on Home sends it.{" "}
+            and writes the reply. When every ask is clear, one tap here or on Home sends it; when anything is not, you review the draft first.{" "}
           </>
         )}
         <button onClick={() => navigate("more", "settings")} style={{
@@ -625,8 +650,8 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
         tab === "new" ? (
           <EmptyState icon={"📨"} title="No document requests"
             subtitle={sendersText
-              ? `Forward a credentialer's request from ${sendersText} to ${REQUESTS_ADDRESS}. That is the last step: the app matches the ask against your file, writes the reply, and one tap sends it with the documents attached.`
-              : `${CONFIRM_FIRST_SENTENCE} Once one is confirmed, forward a credentialer's request from it to ${REQUESTS_ADDRESS} and the app matches the ask against your file, writes the reply, and one tap sends it with the documents attached.`} />
+              ? `Forward a credentialer's request from ${sendersText} to ${REQUESTS_ADDRESS}. That is the last step: the app matches the ask against your file and writes the reply, and when every ask is clear one tap sends it with the documents attached.`
+              : `${CONFIRM_FIRST_SENTENCE} Once one is confirmed, forward a credentialer's request from it to ${REQUESTS_ADDRESS} and the app matches the ask against your file and writes the reply, and when every ask is clear one tap sends it with the documents attached.`} />
         ) : (
           <div style={{ fontSize: 13.5, color: T.textDim, padding: "24px 0", textAlign: "center" }}>
             {tab === "replied" ? "Nothing replied to yet." : "Nothing dismissed."}
@@ -664,9 +689,12 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
                   <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}
                     style={{ marginTop: 10, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 12px", minWidth: 0, cursor: "default" }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: sum.ready ? T.success : T.warning, overflowWrap: "anywhere" }}>{sum.line}</div>
-                    {r.status === "new" && (
-                      <ApproveSendButton key={r.id} request={r} T={T} accountEmail={realEmail} ownAddresses={senders} send={sendPacket} onSent={onPacketSent(r)} />
-                    )}
+                    {/* One tap only for a packet a model read with every ask
+                        matched; anything else leads with Review, which opens
+                        the request with its draft, and says what is unclear. */}
+                    {r.status === "new" && (canSendOnOneTap(r)
+                      ? <ApproveSendButton key={r.id} request={r} T={T} accountEmail={realEmail} ownAddresses={senders} send={sendPacket} onSent={onPacketSent(r)} />
+                      : <ReviewButton key={r.id} request={r} T={T} onReview={() => setOpenId(r.id)} />)}
                   </div>
                 )}
               </div>

@@ -19,9 +19,9 @@ import { renderToString } from "react-dom/server";
 import {
   proposalSummary, requesterLine, requesterMissing, askLine, approveBlockedReason, approveBody, unwrapInvoke,
   RequestPacketSummary, ProposalChecklist, ApproveSendButton, REQUESTER_NOT_FOUND_REASON, NOTHING_MATCHED_REASON,
-  HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON,
+  HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON, REVIEW_FIRST_REASON, ReviewButton, UnclearNote, canSendOnOneTap, reviewLine,
 } from "../src/components/features/RequestPacket.js";
-import { staleRequests, buildClientProposals, withProposals, documentSetKey } from "../src/utils/requestProposals.js";
+import { staleRequests, buildClientProposals, withProposals, documentSetKey, modelReading } from "../src/utils/requestProposals.js";
 import { DOCS, RECORDS, PHYSICIAN, NOW, REQUEST_1 } from "./request-packet.test.mjs";
 
 let pass = 0, fail = 0;
@@ -46,8 +46,8 @@ const boardCert = {
   id: "11111111-1111-4111-8111-111111111111",
   from_name: "Madeline Castorena", from_addr: "mcastorena@ruhealth.org", subject: "BOARD CERTIFICATE",
   proposal: {
-    v: 1, method: "rules",
-    items: [{ ask: "a copy of your board certificate", kind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"] }],
+    v: 2, method: "rules", source: "model", confidence: "high",
+    items: [{ ask: "a copy of your board certificate", kind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"], confidence: "high" }],
     docIds: ["d1"], missing: [],
     coverNote: "Hello Madeline,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)\n\nRegards,\nEric Whitney, DO",
   },
@@ -56,12 +56,12 @@ const fourItems = {
   id: "22222222-2222-4222-8222-222222222222",
   from_name: "Casey Morgan", from_addr: "cmorgan@hospital.org", subject: "RE: Requested docs",
   proposal: {
-    v: 1, method: "rules",
+    v: 2, method: "rules", source: "model", confidence: "high",
     items: [
-      { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"] },
-      { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d3", "d4"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"] },
-      { ask: "TB form", kind: "tb", status: "found", docIds: ["d5"], labels: ["QuantiFERON-TB Gold, Negative"] },
-      { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [] },
+      { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"], confidence: "high" },
+      { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d3", "d4"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"], confidence: "high" },
+      { ask: "TB form", kind: "tb", status: "found", docIds: ["d5"], labels: ["QuantiFERON-TB Gold, Negative"], confidence: "high" },
+      { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [], confidence: "high" },
     ],
     docIds: ["d2", "d3", "d4", "d5"], missing: ["Logs 12-months"],
     coverNote: "Hello Casey,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nThese will follow separately:\n- Logs 12-months\n\nRegards,\nEric Whitney, DO",
@@ -81,10 +81,10 @@ const twoDocs = {
   id: "44444444-4444-4444-8444-444444444444",
   from_name: "Kyle Ortega", from_addr: "kortega@penrose.org", subject: "DEA and license",
   proposal: {
-    v: 1, method: "rules",
+    v: 2, method: "rules", source: "model", confidence: "high",
     items: [
-      { ask: "DEA", kind: "dea", status: "found", docIds: ["d6"], labels: ["DEA Registration, CO"] },
-      { ask: "Colorado license", kind: "state_license", status: "found", docIds: ["d7"], labels: ["State Medical License (DO), CO"] },
+      { ask: "DEA", kind: "dea", status: "found", docIds: ["d6"], labels: ["DEA Registration, CO"], confidence: "high" },
+      { ask: "Colorado license", kind: "state_license", status: "found", docIds: ["d7"], labels: ["State Medical License (DO), CO"], confidence: "high" },
     ],
     docIds: ["d6", "d7"], missing: [],
     coverNote: "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CO\n- State Medical License (DO), CO\n\nRegards,\nEric Whitney, DO",
@@ -187,8 +187,12 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   ok("no proposal: the old jargon is gone", !none.includes("Nothing proposed"));
   // Items but nothing on file is a reply, not a block: the note saying what
   // follows is what the credentialer is waiting for (C4, below).
-  const empty = render(ApproveSendButton, { request: nothingFound, T, accountEmail: ME, send });
-  ok("a proposal with items and no documents: enabled, and says nothing is attached", empty.includes("Send reply (nothing to attach)") && !empty.includes("disabled") && !empty.includes("could be matched"));
+  // Since 2026-09-28 it is never one tap, since nothing on file answers the
+  // ask; on the request's own screen, where the draft is in view, it sends.
+  const empty = render(ApproveSendButton, { request: nothingFound, T, accountEmail: ME, send, reviewed: true });
+  ok("a proposal with items and no documents: enabled in review, and says nothing is attached", empty.includes("Send reply (nothing to attach)") && !empty.includes("disabled") && !empty.includes("could be matched"));
+  const emptyAway = render(ApproveSendButton, { request: nothingFound, T, accountEmail: ME, send });
+  ok("and away from the request it waits for a review", emptyAway.includes("disabled") && emptyAway.includes(REVIEW_FIRST_REASON));
   eq("the reason function agrees with the render", [
     approveBlockedReason(boardCert, ""), approveBlockedReason(noProposal, ME), approveBlockedReason(boardCert, ME),
     approveBlockedReason(ME_FWD, ME), approveBlockedReason({ ...ME_FWD, forwarded_by: null }, ME, ["eric@hospital.org"]), approveBlockedReason(twoDocs, ME, [], []),
@@ -234,6 +238,50 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   ok("four documents is plural", render(ApproveSendButton, { request: fourItems, T, accountEmail: ME, send }).includes("Approve and send 4 documents"));
   ok("the label prop replaces the text", render(ApproveSendButton, { request: twoDocs, T, accountEmail: ME, send, label: "Approve and send" }).includes(">Approve and send<"));
   ok("no send function: not clickable", render(ApproveSendButton, { request: twoDocs, T, accountEmail: ME }).includes("disabled"));
+}
+
+// ── One tap is for a packet a model read with high confidence (2026-09-28) ─
+{
+  const send = async () => ({ ok: true });
+  const keyword = { ...boardCert, id: "77777777-7777-4777-8777-777777777777", proposal: { ...boardCert.proposal, source: "rules", confidence: "keyword", items: boardCert.proposal.items.map(({ confidence: _c, ...i }) => i) } };
+  ok("a model-read packet with every ask matched may go on one tap", canSendOnOneTap(boardCert) && canSendOnOneTap(fourItems) && canSendOnOneTap(twoDocs));
+  ok("a keyword packet may not, however well it matched", !canSendOnOneTap(keyword) && !canSendOnOneTap(nothingFound) && !canSendOnOneTap(noProposal));
+  const away = render(ApproveSendButton, { request: keyword, T, accountEmail: ME, send });
+  ok("away from the request, a keyword packet's button is disabled and says to review first", away.includes("disabled") && away.includes(REVIEW_FIRST_REASON));
+  const inReview = render(ApproveSendButton, { request: keyword, T, accountEmail: ME, send, reviewed: true });
+  ok("on the request, with the draft in view, it sends and says Send, not Approve and send", !inReview.includes("disabled") && inReview.includes("Send 1 document<") && !inReview.includes("Approve"));
+  ok("an address problem still blocks in review", render(ApproveSendButton, { request: { ...keyword, from_addr: "docs@credentialdomd.com" }, T, accountEmail: ME, send, reviewed: true }).includes("disabled"));
+  eq("reviewLine is empty for a one-tap packet", reviewLine(boardCert), "");
+  eq("and names what to check otherwise", reviewLine(keyword), "The asks were read by keyword matching, so check the draft before it goes.");
+  const review = render(ReviewButton, { request: keyword, T, onReview: () => {} });
+  ok("ReviewButton: Review, with what is unclear under it", review.includes(">Review<") && review.includes("keyword matching") && review.includes(T.warning));
+  const unclear = { ...keyword, proposal: { ...keyword.proposal, items: [...keyword.proposal.items,
+    { ask: "attestation form", kind: "unknown", status: "missing", docIds: [], labels: [] },
+    { ask: "Colorado DEA", kind: "dea", status: "missing", docIds: [], labels: [] }] } };
+  const note = render(UnclearNote, { request: unclear, T, onSayNotOnFile: () => {} });
+  ok("UnclearNote asks the physician what an unrecognised ask meant", note.includes("&quot;attestation form&quot;: not recognised. What did they mean? The draft says nothing about it."));
+  ok("UnclearNote names what is not on file and offers to say so", note.includes("Not on file: &quot;Colorado DEA&quot;. The draft says nothing about it.") && note.includes("Say so in the draft"));
+  ok("UnclearNote says the reading was by keyword", note.includes("read by keyword matching"));
+  eq("UnclearNote shows nothing for a one-tap packet", render(UnclearNote, { request: boardCert, T }), "");
+  ok("UnclearNote offers no edit on a request that is not open", !render(UnclearNote, { request: unclear, T, onSayNotOnFile: () => {}, canEdit: false }).includes("Say so in the draft"));
+  ok("no em dash in any of it", ![away, inReview, review, note].some((x) => x.includes("\u2014")));
+}
+
+// ── A client rebuild keeps a model's reading (2026-09-28) ────────────────
+{
+  const data = { documents: DOCS, ...RECORDS, settings: { name: "Eric Whitney", degreeType: "DO" } };
+  const modelRow = {
+    id: "r-model", status: "new", subject: "Docs", from_name: "Sam", from_addr: "s@x.example", proposal_at: "2020-01-01T00:00:00Z",
+    body_text: "Proof of malpractice coverage is required for every provider. Please send your board certificate.",
+    proposal: { v: 2, method: "rules", source: "model", confidence: "high", docIds: [], missing: [], coverNote: "",
+      items: [{ ask: "board certificate", quote: "your board certificate", kind: "board_cert", status: "missing", docIds: [], labels: [], confidence: "high" }] },
+  };
+  const built = buildClientProposals([modelRow], data, { now: NOW });
+  const p = built["r-model"];
+  eq("a stale model proposal is rebuilt from the model's asks, not the email's words", [p.method, p.source, p.confidence, p.items.map((i) => [i.ask, i.kind, i.status, i.quote])],
+    ["rules-client", "model", "high", [["board certificate", "board_cert", "found", "your board certificate"]]]);
+  ok("and, every ask now matched, it may go on one tap", canSendOnOneTap({ proposal: p }));
+  eq("modelReading is null for a rules proposal", modelReading(boardCert.proposal === null ? null : { ...boardCert.proposal, source: "rules" }), null);
 }
 
 // ── unwrapInvoke: the response the way EmailPacketModal reads it ─────────
@@ -307,9 +355,15 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   const newest = Math.max(...DOCS.map((d) => new Date(d.uploadedAt).getTime()));
   const after = new Date(newest + 60_000).toISOString();
   const before = new Date(newest - 60_000).toISOString();
-  const stored = { v: 1, method: "rules", items: [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["doc-board"], labels: ["Board Certification (AOA)"] }], docIds: ["doc-board"], missing: [], coverNote: "stored" };
+  const stored = { v: 2, method: "rules", source: "rules", confidence: "keyword", items: [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["doc-board"], labels: ["Board Certification (AOA)"] }], docIds: ["doc-board"], missing: [], coverNote: "stored" };
   const req = { status: "new", subject: REQUEST_1.subject, body_text: REQUEST_1.body, from_name: REQUEST_1.fromName, from_addr: REQUEST_1.fromAddr };
   const fresh = { ...req, id: "r-fresh", proposal: stored, proposal_at: after };
+  // A version-1 proposal was built by rules that could read a statement as an
+  // ask and wrote "I could not tell" into its note: rebuilt once the file is
+  // visible, and left alone on a device that cannot see it yet.
+  const legacy = { ...req, id: "r-legacy", proposal: { ...stored, v: 1 }, proposal_at: after };
+  eq("a version-1 proposal is stale once the file is visible", staleRequests([legacy], DOCS).map((r) => r.id), ["r-legacy"]);
+  eq("but not on a device that cannot see the file", staleRequests([legacy], []).map((r) => r.id), []);
   const older = { ...req, id: "r-older", proposal: stored, proposal_at: before };
   const gone = { ...req, id: "r-gone", proposal: { ...stored, docIds: ["doc-deleted"], items: [{ ...stored.items[0], docIds: ["doc-deleted"] }] }, proposal_at: after };
   const absent = { ...req, id: "r-absent", proposal: null, proposal_at: null };
@@ -337,7 +391,7 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   const built = buildClientProposals([fresh, older, absent, replied], data, { now: NOW });
   eq("only the stale open rows are rebuilt", Object.keys(built).sort(), ["r-absent", "r-older"]);
   eq("a rebuilt proposal is marked rules-client", built["r-older"].method, "rules-client");
-  eq("and carries the matcher's result", [built["r-older"].v, built["r-older"].docIds, built["r-absent"].items[0].kind], [1, ["doc-board"], "board_cert"]);
+  eq("and carries the matcher's result", [built["r-older"].v, built["r-older"].docIds, built["r-absent"].items[0].kind], [2, ["doc-board"], "board_cert"]);
   ok("the cover note greets the requester and signs as the physician", built["r-absent"].coverNote.startsWith("Hello Marisol,") && built["r-absent"].coverNote.endsWith("Eric Whitney, DO"));
   eq("nothing stale, nothing built", buildClientProposals([fresh], data, { now: NOW }), {});
   eq("no rows, nothing built", buildClientProposals([], data, { now: NOW }), {});

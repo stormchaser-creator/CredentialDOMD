@@ -21,19 +21,38 @@
  *
  *   docs@ | requests@ | packets@credentialdomd.com   Documents and requests.
  *     Same sender matching and authentication as cme@. The email is first
- *     read for what it is FOR (_shared/intakeIntent.mjs):
- *       "delivery"  a document forwarded to keep (an approval letter, a
- *                   renewed card). Every attachment is stored with
- *                   type = "email-inbox", read and filed as below, and the
- *                   physician is told where each went. No document_requests
- *                   row, no acknowledgement to anyone.
- *       "both"      a document AND an ask. A file named like a form stays
- *                   with the request; any other file is read and filed only
- *                   when it is a built-in credential with a date
- *                   (fileableFromRequest), and otherwise stays with the
- *                   request as before; then the request flow below runs.
- *       "request"   everything below, unchanged. An email with no attachment
- *                   is always a request.
+ *     READ for what it is FOR, before any rule decides anything: one model
+ *     call (Vera's model, on the shared Anthropic key, under ai-proxy's
+ *     daily cap, dollar hold and ai_usage metering; _shared/intakeModelCall.ts)
+ *     sees the forward, its subject and sender, each attachment's scanner
+ *     result and the account's last corrections, and answers in a strict
+ *     schema (_shared/intakeUnderstanding.mjs). The host checks the answer:
+ *     an ask must quote the email word for word and be asked of the
+ *     physician, or it is dropped, and with no ask left the email is not a
+ *     request. When the call cannot run or fails, the rules
+ *     (_shared/intakeIntent.mjs) answer instead, and even then a sentence
+ *     with no asking form is never an ask.
+ *       "delivery"       a document forwarded to keep (an approval letter, a
+ *                        renewed card). Every attachment is stored with
+ *                        type = "email-inbox", read and filed as below, and
+ *                        the physician is told where each went. No
+ *                        document_requests row, no acknowledgement to anyone.
+ *       "informational"  a note that asks for nothing (an agency explaining
+ *                        its policy). Filed as a delivery; the physician is
+ *                        told "Read <sender>'s note about <summary>. Nothing
+ *                        was asked of you." and where each attachment went.
+ *                        A master agreement is attached to the agency's
+ *                        existing contract, never made into a new one.
+ *       "mixed"          a document AND an ask. A form or checklist stays
+ *                        with the request; a credential is filed only when
+ *                        it is a built-in credential with a date
+ *                        (fileableFromRequest), an agreement goes to the
+ *                        agency's contract; then the request flow below runs.
+ *       "request"        everything below. The proposal is built from the
+ *                        quote-checked asks, and is offered on one tap only
+ *                        when every ask is matched with high confidence
+ *                        (requestPacket.ts oneTapReady); otherwise the
+ *                        physician is sent to Review.
  *     A credentialer asked the physician for documents; the physician forwards
  *     that email here from a mailbox the account has proved it can read, and
  *     that forward is the last thing they type.
@@ -74,8 +93,11 @@
  *           address the forward came from when that is a confirmed address
  *           other than the profile email, so the credentialer keeps
  *           writing to the mailbox they were already in.
- *     In the app, Home and More > Requests show the proposal and one button,
- *     Approve and send, which send-packet-email turns into the reply.
+ *     In the app, Home and More > Requests show the proposal and, when it
+ *     may go on one tap, one button, Approve and send, which
+ *     send-packet-email turns into the reply; otherwise Review, with what is
+ *     unclear. An ask the reading could not name, or found nothing on file
+ *     for, is a question for the physician and never text to the requester.
  *
  *   contacts@ | contact@ | refs@ | reference@ | references@   Peer references.
  *     An iPhone cannot hand a contact card to a web app: iOS has no Contact
@@ -160,7 +182,7 @@ import { accessWriteDecision } from "../_shared/accessWrite.mjs";
 import { selectWithOptional } from "../_shared/catalogueQuery.mjs";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { parseVCards, isVCardAttachment, looksLikeVCardText, type VCardContact } from "../_shared/vcard.ts";
-import { buildProposal, catalogueFromRows } from "../_shared/requestPacket.ts";
+import { buildProposal, catalogueFromRows, oneTapReady, reviewReason } from "../_shared/requestPacket.ts";
 // replySubject is imported under another name because each route handler
 // below already holds a local `replySubject` string (the physician's own
 // confirmation subject); the bare name would have resolved to that string
@@ -171,8 +193,17 @@ import { ackAllowed, ackText, authEvidence, physicianSummaryText, replySubject a
 // validator are the app's own, copied under _shared/app/ by
 // scripts/sync-shared-app-modules.mjs so the two can never read a file
 // differently.
-import { classifyIntent, attachmentRole } from "../_shared/intakeIntent.mjs";
-import { planFiling, filingTarget, scannableMime, unfiledLine, filingReplyText, sectionScope, plain as plainText, EMAIL_INBOX_DOC_TYPE, SECTION_TABLE, fileableFromRequest, patientRecordScreen } from "../_shared/intakeFiling.mjs";
+import { attachmentRole } from "../_shared/intakeIntent.mjs";
+import { planFiling, roleTarget, scannableMime, unfiledLine, filingReplyText, sectionScope, plain as plainText, EMAIL_INBOX_DOC_TYPE, SECTION_TABLE, fileableFromRequest, patientRecordScreen } from "../_shared/intakeFiling.mjs";
+// What the email MEANS, read before any rule decides anything: one model call
+// on the shared Anthropic key (intakeModelCall.ts, under ai-proxy's admission
+// and metering), checked by the host (every ask must quote the email), with
+// the rules as the fallback. See _shared/intakeUnderstanding.mjs.
+import {
+  buildUnderstandingRequest, readModelReply, verifyUnderstanding, rulesUnderstanding, splitForward, correctionExamples,
+  informationalReplyText, asksElsewhereLine, UNDERSTANDING_TIMEOUT_MS, MAX_CORRECTIONS,
+} from "../_shared/intakeUnderstanding.mjs";
+import { callUnderstanding } from "../_shared/intakeModelCall.ts";
 // Word, Excel, CSV, text and RTF attachments are read here and screened for
 // patient records BEFORE they are stored, as the app screens them before upload.
 import { officeText } from "../_shared/officeText.mjs";
@@ -254,6 +285,21 @@ const GEMINI_SECRET_NAME = "gemini_shared_key";
 const SCAN_TIMEOUT_MS = 45_000;
 const SCAN_BUDGET_MS = 100_000;
 const SCAN_CONCURRENCY = 3;
+// The understanding step's model call draws on the same allowances as Vera's
+// calls through ai-proxy, read from the same secrets with the same defaults:
+// ANTHROPIC_DAILY_LIMIT calls a day and AI_BUDGET_HARD_USD a month per
+// account (admins uncapped).
+const ANTHROPIC_SECRET_NAME = "anthropic_shared_key";
+const positiveEnv = (name: string, fallback: number, parse: (s: string) => number) => {
+  const n = parse(Deno.env.get(name) || "");
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const ANTHROPIC_DAILY_LIMIT = positiveEnv("ANTHROPIC_DAILY_LIMIT", 60, (s) => parseInt(s, 10));
+const BUDGET_HARD_USD = positiveEnv("AI_BUDGET_HARD_USD", 15, parseFloat);
+// The model call's timeout. INTAKE_UNDERSTANDING_TIMEOUT_MS may only shorten
+// it (the local harness uses a fraction of a second); it is never longer
+// than UNDERSTANDING_TIMEOUT_MS, because the webhook is still open.
+const UNDERSTAND_TIMEOUT_MS = Math.min(UNDERSTANDING_TIMEOUT_MS, positiveEnv("INTAKE_UNDERSTANDING_TIMEOUT_MS", UNDERSTANDING_TIMEOUT_MS, (s) => parseInt(s, 10)));
 // Same-size files compared byte for byte to find a duplicate that was renamed
 // when it was filed. More candidates than this is not a duplicate check any more.
 const MAX_CONTENT_COMPARES = 3;
@@ -1049,6 +1095,9 @@ interface ScanContext {
   key: string;              // the shared Gemini key, or "" when it may not be used
   why: string;              // why the key is "" (for the ledger), else ""
   deadline: number;         // epoch ms after which no new scan starts
+  active: boolean;          // profiles.access_status is active
+  admin: boolean;           // an app admin (uncapped, as in ai-proxy)
+  anthropicKey: string;     // the shared Anthropic key for the understanding step, "" when unset
 }
 
 /**
@@ -1058,21 +1107,26 @@ interface ScanContext {
  */
 async function scanContext(profile: MatchedProfile): Promise<ScanContext> {
   const deadline = Date.now() + SCAN_BUDGET_MS;
-  const [prof, admin, cats, secret] = await Promise.all([
+  const [prof, admin, cats, secret, claude] = await Promise.all([
     db.from("profiles").select("degree_type, access_status").eq("id", profile.id).maybeSingle(),
     db.from("app_admins").select("profile_id").eq("profile_id", profile.id).maybeSingle(),
     db.from("custom_categories").select("name, archived_at").eq("user_id", profile.id),
     db.from("app_secrets").select("value").eq("name", GEMINI_SECRET_NAME).maybeSingle(),
+    db.from("app_secrets").select("value").eq("name", ANTHROPIC_SECRET_NAME).maybeSingle(),
   ]);
   const p = (prof.data ?? {}) as { degree_type?: string | null; access_status?: string | null };
   const degree = ["DO", "MD"].includes(String(p.degree_type ?? "")) ? String(p.degree_type) : "";
   const categoryNames = ((cats.data ?? []) as { name: string | null; archived_at: string | null }[])
     .filter((c) => !c.archived_at && c.name).map((c) => String(c.name));
-  const active = p.access_status === "active" || Boolean(admin.data);
+  const isAdmin = Boolean(admin.data);
+  const isActive = p.access_status === "active";
+  const active = isActive || isAdmin;
   const key = String((secret.data as { value?: string } | null)?.value ?? "").trim();
-  if (!active) return { degree, categoryNames, key: "", why: "account not active", deadline };
-  if (!key) return { degree, categoryNames, key: "", why: "shared key not configured", deadline };
-  return { degree, categoryNames, key, why: "", deadline };
+  const anthropicKey = String((claude.data as { value?: string } | null)?.value ?? "").trim();
+  const base = { degree, categoryNames, deadline, active: isActive, admin: isAdmin, anthropicKey };
+  if (!active) return { ...base, key: "", why: "account not active" };
+  if (!key) return { ...base, key: "", why: "shared key not configured" };
+  return { ...base, key, why: "" };
 }
 
 /** ai-proxy's prompt_chars: the text parts of the request, never the file. */
@@ -1232,7 +1286,7 @@ function mayFileFrom(auth: AuthEvidence, from: string): boolean {
  */
 async function fileDocuments(
   profile: MatchedProfile, items: StoredItem[], ctx: ScanContext,
-  { mayFile, prescanned }: { mayFile: boolean; prescanned?: Map<Downloaded, ScanOutcome> },
+  { mayFile, prescanned, roles }: { mayFile: boolean; prescanned?: Map<Downloaded, ScanOutcome>; roles?: Map<Downloaded, string> },
 ): Promise<FilingResult[]> {
   const scans = await scanFiles(profile.id, items.map((it) => ({
     file: it.file, skip: it.existing?.linked_to ? "already filed" : "", done: prescanned?.get(it.file),
@@ -1247,13 +1301,18 @@ async function fileDocuments(
     }
     const { scan, why } = scans[i] ?? { scan: null, why: "not scanned" };
     const mimeType = it.existing?.mime_type || it.file.content_type;
+    // The role the reading gave this attachment, when a model read the email
+    // (intakeFiling.mjs roleTarget): it narrows the scanner's answer and never
+    // invents a credential.
+    const role = roles?.get(it.file) ?? null;
     if (!scan) {
       if (why) console.log(`inbound: ${it.docId} left unfiled: ${why}`);
-      results.push({ docId: it.docId, outcome: "unfiled", lines: [unfiledLine(name, "unknown", null)] });
+      const reason = role === "form_to_complete" ? "form" : role === "request_checklist" ? "checklist" : "unknown";
+      results.push({ docId: it.docId, outcome: "unfiled", lines: [unfiledLine(name, reason, null)] });
       continue;
     }
     try {
-      const target = filingTarget(scan);
+      const target = roleTarget(scan, role);
       let rows: unknown[] = [];
       let categories: unknown[] = [];
       if (target.kind === "section") {
@@ -1273,7 +1332,7 @@ async function fileDocuments(
       const now = new Date().toISOString();
       const plan = planFiling({
         scan, docId: it.docId, fileName: it.file.filename, mimeType, userId: profile.id,
-        rows, categories, now, newId: () => crypto.randomUUID(),
+        rows, categories, now, newId: () => crypto.randomUUID(), role,
       });
 
       if (plan.outcome === "removed" && it.existing) {
@@ -1393,10 +1452,34 @@ https://credentialdomd.com`);
   const downloaded = await downloadAttachments(emailId, acceptKeepable, listed);
   const { skipped, total } = downloaded;
   const screened = await screenOfficeFiles(downloaded.files);
+  // cme@ reads the email as docs@ does (intakeUnderstanding.mjs), for two
+  // things: the role of each attachment (a blank form or an agency agreement
+  // that rides along with a certificate is not filed as a credential) and
+  // whether the email also asks the physician for something, which cme@
+  // does not answer and the reply points to docs@ for. The rules have
+  // nothing to add here, so without a model reading cme@ is unchanged.
+  const ctx = await scanContext(profile);
+  const prescanned = await prescanAll(profile.id, screened.keep, ctx);
+  let reading: Reading | null = null;
+  if (canUnderstand(ctx)) {
+    const rawText = (email.text && email.text.trim()) ? email.text : (email.html ? stripHtml(email.html) : "");
+    const parsed = parseForwarded(rawText);
+    const read = await understandEmail(profile, ctx, {
+      subject: parsed.subject ?? stripFwdPrefix(subject), subjectRaw: subject, senderName: parsed.found ? parsed.from_name : null,
+      senderAddr: parsed.found ? parsed.from_addr : "", rawText, forwardedBody: parsed.found ? parsed.body_text : null,
+      rulesBody: parsed.body_text, attachmentNames: screened.keep.map((f) => f.filename), attachmentCount: screened.keep.length,
+      forwarded: parsed.found, files: screened.keep, prescanned,
+    });
+    console.log(`inbound ${emailId}: cme, ${readingDetail(read)}`);
+    if (read.method === "model") reading = read;
+  }
+  const roles = reading ? rolesByFile(screened.keep, reading) : new Map<Downloaded, string>();
   const { stored, duplicates, failed, items } = await storeAsDocuments(profile, screened.keep, INBOX_DOC_TYPE);
-  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile), { mayFile }) : [];
+  const results = items.length ? await fileDocuments(profile, items, ctx, { mayFile, prescanned, roles }) : [];
 
   const notes: string[] = [...screened.notes];
+  const elsewhere = reading ? asksElsewhereLine(reading.asks, DOCS_ADDR) : "";
+  if (elsewhere) notes.push(elsewhere);
   const notKept = notKeptNote(listed);
   if (notKept) notes.push(notKept);
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
@@ -1405,7 +1488,9 @@ https://credentialdomd.com`);
   if (unverified) notes.push(unverified);
 
   let text: string;
-  if (total === 0) {
+  if (total === 0 && reading?.intent === "informational") {
+    text = informationalReplyText({ senderName: "", summary: reading.summary, results: [], notes, appUrl: APP_URL });
+  } else if (total === 0) {
     text = `No PDF or image attachment was found in that email, so nothing was added. Forward the certificate itself as an attachment (PDF or photo) to ${CME_LOCAL}@${INBOX_DOMAIN}.`;
     if (notes.length) text += `\n\n${notes.join("\n")}`;
     text += `\n\nOpen the app: ${APP_URL} (Documents)\n\nCredentialDOMD\nhttps://credentialdomd.com`;
@@ -1812,6 +1897,106 @@ async function ackAlreadySent(profileId: string, requestId: string, messageId: s
   return false;
 }
 
+// ─── Reading an email before deciding anything ───────────────────────────────
+
+/** What the email is for, as the host acts on it (intakeUnderstanding.mjs). */
+interface Reading {
+  method: "model" | "rules";
+  why?: string;
+  intent: "request" | "delivery" | "informational" | "mixed";
+  asks: { quote: string; kind: string | null }[];
+  dropped: { quote: string; why: string }[];
+  attachments: { index: number; role: string; filing: string }[];
+  summary: string;
+  confidence: string;
+}
+
+/**
+ * This account's last corrections, as one-line examples for the prompt. The
+ * table arrives with migration 20260928160000; before it, or on any error,
+ * there are none, and the reading goes ahead without them.
+ */
+async function recentCorrections(profileId: string): Promise<string[]> {
+  try {
+    const { data, error } = await db.from("intake_corrections")
+      .select("action, before, after, created_at").eq("user_id", profileId)
+      .order("created_at", { ascending: false }).limit(MAX_CORRECTIONS);
+    if (error) return [];
+    const rows = ((data ?? []) as { created_at?: string }[])
+      .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))).slice(0, MAX_CORRECTIONS);
+    return correctionExamples(rows);
+  } catch {
+    return [];
+  }
+}
+
+/** May the understanding step's model call run for this account? */
+const canUnderstand = (ctx: ScanContext) => Boolean(ctx.anthropicKey) && (ctx.active || ctx.admin);
+
+/**
+ * Read the email: the model when it may run and answers usably, the rules
+ * otherwise. `files` are the kept attachments in the order the model sees
+ * them, `prescanned` their scanner results. Never throws.
+ */
+async function understandEmail(profile: MatchedProfile, ctx: ScanContext, input: {
+  subject: string; subjectRaw: string; senderName: string | null; senderAddr: string; rawText: string;
+  forwardedBody: string | null; rulesBody: string; attachmentNames: string[]; attachmentCount: number;
+  forwarded: boolean; files: Downloaded[]; prescanned: Map<Downloaded, ScanOutcome>;
+}): Promise<Reading> {
+  const rules = (why: string): Reading => rulesUnderstanding({
+    subject: input.subject, body: input.rulesBody, attachmentNames: input.attachmentNames,
+    attachmentCount: input.attachmentCount, forwarded: input.forwarded, why,
+  }) as Reading;
+  if (!ctx.anthropicKey) return rules("shared Anthropic key not configured");
+  if (!ctx.active && !ctx.admin) return rules("account not active");
+  try {
+    const corrections = await recentCorrections(profile.id);
+    const request = buildUnderstandingRequest({
+      subject: input.subject,
+      sender: { name: input.senderName ?? "", address: input.senderAddr },
+      ...splitForward(input.rawText, input.forwardedBody),
+      // A file that reads as a patient record is named as one and nothing
+      // it says goes to the model.
+      attachments: input.files.map((f) => {
+        const scan = input.prescanned.get(f)?.scan ?? null;
+        return { name: f.filename, scan: scan && patientRecordScreen(f.filename, scan) ? { patientRecord: true } : scan };
+      }),
+      corrections,
+    });
+    const call = await callUnderstanding({
+      db, profileId: profile.id, isAdmin: ctx.admin, active: ctx.active, key: ctx.anthropicKey, request,
+      dailyLimit: ANTHROPIC_DAILY_LIMIT, budgetHardUsd: BUDGET_HARD_USD, timeoutMs: UNDERSTAND_TIMEOUT_MS,
+    });
+    if (!call.ok) return rules(call.why);
+    const read = readModelReply(call.message);
+    if (!read.ok) return rules(read.why);
+    return verifyUnderstanding(read.value, { emailText: `${input.subjectRaw}\n${input.rawText}`, attachmentCount: input.files.length }) as Reading;
+  } catch (err) {
+    console.error(`understanding failed: ${err instanceof Error ? err.name : "unknown"}`);
+    return rules("understanding failed");
+  }
+}
+
+/** The role the reading gave each kept attachment, when a model read it. */
+function rolesByFile(files: Downloaded[], reading: Reading): Map<Downloaded, string> {
+  const roles = new Map<Downloaded, string>();
+  if (reading.method !== "model") return roles;
+  for (const a of reading.attachments) if (files[a.index]) roles.set(files[a.index], a.role);
+  return roles;
+}
+
+/** Scan every kept attachment once, up front, when the model will read the email. */
+async function prescanAll(profileId: string, files: Downloaded[], ctx: ScanContext): Promise<Map<Downloaded, ScanOutcome>> {
+  const out = new Map<Downloaded, ScanOutcome>();
+  if (!files.length || !canUnderstand(ctx)) return out;
+  const scans = await scanFiles(profileId, files.map((file) => ({ file })), ctx);
+  files.forEach((f, i) => { if (scans[i]) out.set(f, scans[i]); });
+  return out;
+}
+
+/** "model" or "rules (why)", for the ledger and the log. */
+const readingDetail = (r: Reading) => (r.method === "model" ? `read by model (${r.confidence}${r.dropped.length ? `, ${r.dropped.length} ask(s) dropped` : ""})` : `read by rules${r.why ? ` (${r.why})` : ""}`);
+
 async function handleDocsRequest(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
   const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "docs").neq("id", ledgerId));
   if (recent >= CME_PER_SENDER_PER_HOUR) {
@@ -1882,68 +2067,92 @@ https://credentialdomd.com`);
   const receivedAt = email.created_at || new Date().toISOString();
 
   // What is this email FOR? Until 2026-09-25 every docs@ forward was a
-  // request, so an approval letter forwarded to keep became a request whose
-  // only ask was the letter's signature line, the physician was asked what
-  // "Whitney, DO" meant, and the letter sat unfiled. A document to keep is
-  // now filed and nothing else happens: no request row, no acknowledgement
-  // (which would have thanked Sanford for a request Sanford never made). See
-  // _shared/intakeIntent.mjs for the rules.
+  // request, and until 2026-09-28 keyword rules decided which kind it was:
+  // an agency's informational letter became a request because it said
+  // "required", two of its statements became asks, and the app offered the
+  // reply to the agency on one tap. Now the email is READ first, by one model
+  // call that sees the whole forward and what the scanner made of each
+  // attachment, and the host checks the reading (every ask must quote the
+  // email); the rules answer only when that call cannot run or fails.
+  //   request / mixed         the request flow below
+  //   delivery / informational  every attachment filed as a delivery, no
+  //                           request row, nothing to anyone but the physician
   const listed = await listAttachments(emailId);
   const keepable = listed.filter(acceptKeepable);
-  const intent = classifyIntent({
-    subject: requestSubject ?? "",
-    body: parsed.body_text,
-    attachmentNames: keepable.map((a) => safeFilename(a.filename, "")),
-    attachmentCount: keepable.length,
-    forwarded: parsed.found,
-  });
-  console.log(`inbound ${emailId}: intent ${intent.intent} (${intent.reasons.join("; ")})`);
   const downloaded = await downloadAttachments(emailId, acceptKeepable, listed);
   const { skipped } = downloaded;
   const screened = await screenOfficeFiles(downloaded.files);
   const files = screened.keep;
   const refusedNotes = [...screened.notes];
+  const ctx = await scanContext(profile);
+  // Read once, used twice: the reading sees each result, and filing reuses it.
+  const prescanned = await prescanAll(profile.id, files, ctx);
+  const reading = await understandEmail(profile, ctx, {
+    subject: requestSubject ?? "", subjectRaw: subject, senderName: requesterName, senderAddr: parsed.found ? fromAddr : "",
+    rawText, forwardedBody: parsed.found ? parsed.body_text : null, rulesBody: parsed.body_text,
+    attachmentNames: keepable.map((a) => safeFilename(a.filename, "")), attachmentCount: keepable.length,
+    forwarded: parsed.found, files, prescanned,
+  });
+  const intent = reading.intent;
+  const roles = rolesByFile(files, reading);
+  console.log(`inbound ${emailId}: intent ${intent}, ${readingDetail(reading)}`);
 
-  if (intent.intent === "delivery") {
-    return await deliverDocs(ledgerId, profile, from, files, skipped, [...refusedNotes, notKeptNote(listed)].filter(Boolean), replySubject, replyHeaders, mayFile);
+  if (intent === "delivery" || intent === "informational") {
+    return await deliverDocs(ledgerId, profile, from, files, skipped, [...refusedNotes, notKeptNote(listed)].filter(Boolean), replySubject, replyHeaders, mayFile,
+      { ctx, prescanned, roles, reading, senderName: requesterName || (parsed.found ? fromAddr : "") });
   }
 
-  // "both": only what is plainly the physician's own is filed like a
+  // "mixed": only what is plainly the physician's own is filed like a
   // delivery; everything else stays with the request as
   // request-attachment-inbox, as every attachment did before, and out of the
-  // packet catalogue. A file named like a form ("COI Request Form.pdf",
-  // "StMarys_Initial_Application.pdf") stays without being read. Any other
-  // file ("Approval Letter.pdf", "Letter330567.pdf", "Whitney_Privileges.pdf")
-  // is read first and filed only when it is a built-in credential with a
-  // date a blank form would not carry (fileableFromRequest): a name is not
-  // enough, since a blank "DEA Registration.pdf" is named like the real one,
-  // and a blank privileges delineation reads as a privilege at that facility.
+  // packet catalogue. With a model reading, the attachment's role decides
+  // which is which (a credential or an agreement is filed, a form or a
+  // checklist stays); without one, a file named like a form ("COI Request
+  // Form.pdf") stays without being read. Any other file is read and filed
+  // only when it is a built-in credential with a date a blank form would not
+  // carry (fileableFromRequest), or an agreement, which filing attaches to
+  // the agency's contract and never makes a new one of: a name is not
+  // enough, since a blank "DEA Registration.pdf" is named like the real one.
   let filing: FilingResult[] = [];
   let requestFiles = files;
   let deliveredFailed = 0;
-  if (intent.intent === "both") {
-    const candidates = files.filter((f) => attachmentRole(f.filename) !== "form");
-    requestFiles = files.filter((f) => attachmentRole(f.filename) === "form");
-    const ctx = await scanContext(profile);
-    const prescanned = new Map<Downloaded, ScanOutcome>();
+  if (intent === "mixed") {
+    const candidate = (f: Downloaded) => {
+      const role = roles.get(f);
+      if (role) return role === "credential_for_physician" || role === "agreement_or_contract";
+      return attachmentRole(f.filename) !== "form";
+    };
+    const candidates = files.filter(candidate);
+    requestFiles = files.filter((f) => !candidate(f));
     const toFile: Downloaded[] = [];
-    // Read only when the result could be used: an unverified forward files nothing.
-    const scans = mayFile && candidates.length ? await scanFiles(profile.id, candidates.map((file) => ({ file })), ctx) : [];
-    candidates.forEach((f, i) => {
-      const scan = scans[i]?.scan ?? null;
+    // Read only when the result could be used: an unverified forward files
+    // nothing, so without a reading in hand it is not read at all.
+    const unread = mayFile ? candidates.filter((f) => !prescanned.has(f)) : [];
+    const late = unread.length ? await scanFiles(profile.id, unread.map((file) => ({ file })), ctx) : [];
+    unread.forEach((f, i) => { if (late[i]) prescanned.set(f, late[i]); });
+    for (const f of candidates) {
+      const scan = prescanned.get(f)?.scan ?? null;
       if (scan && patientRecordScreen(f.filename, scan)) {
         refusedNotes.push(`Not kept: ${plainText(f.filename, 120) || "an attachment"} reads like a patient record. CredentialDOMD holds your credentials, not patient charts, so it was not saved.`);
-      } else if (scan && fileableFromRequest(scan)) {
+      } else if (scan && (roles.get(f) === "agreement_or_contract" || fileableFromRequest(scan))) {
         toFile.push(f);
-        prescanned.set(f, scans[i]);
       } else {
         requestFiles.push(f);
       }
-    });
+    }
     const delivered = await storeAsDocuments(profile, toFile, EMAIL_DOC_TYPE);
     deliveredFailed = delivered.failed;
-    filing = delivered.items.length ? await fileDocuments(profile, delivered.items, ctx, { mayFile, prescanned }) : [];
+    filing = delivered.items.length ? await fileDocuments(profile, delivered.items, ctx, { mayFile, prescanned, roles }) : [];
   }
+  // A file that reads as a patient record is never kept, whatever the email
+  // called it: when the model read the email every attachment was read too,
+  // so a "form" that is really a chart is caught here rather than stored.
+  requestFiles = requestFiles.filter((f) => {
+    const scan = prescanned.get(f)?.scan ?? null;
+    if (!scan || !patientRecordScreen(f.filename, scan)) return true;
+    refusedNotes.push(`Not kept: ${plainText(f.filename, 120) || "an attachment"} reads like a patient record. CredentialDOMD holds your credentials, not patient charts, so it was not saved.`);
+    return false;
+  });
   // The requester's checklist, when one rides along (rare).
   const { stored, failed } = await storeAsDocuments(profile, requestFiles, REQUEST_DOC_TYPE);
 
@@ -1990,12 +2199,16 @@ https://credentialdomd.com`);
     // A document that arrived in this same email is the requester's, not an
     // answer to them: it is never proposed back.
     const catalogue = await loadCatalogue(profile.id, new Set(filing.map((f) => f.docId)));
+    // A model reading hands the matcher its quote-checked asks; without one
+    // the matcher reads the email itself, as it always has, and a proposal
+    // read by keywords is never offered on one tap (oneTapReady).
     proposal = buildProposal(
       { subject: requestSubject ?? "", body: requestBody, fromName: requesterName ?? "", fromAddr },
       catalogue,
       { name: phys.name, degree: phys.degree },
+      undefined,
+      reading.method === "model" ? { asks: reading.asks, confidence: reading.confidence } : null,
     );
-    // An AI pass over the rules' result (naming the asks the rules could not) would run here, before the proposal is stored.
     const now = new Date().toISOString();
     const { error: uErr } = await db.from("document_requests")
       .update({ proposal, proposal_at: now, updated_at: now }).eq("id", requestId);
@@ -2019,7 +2232,10 @@ https://credentialdomd.com`);
   const unverified = unverifiedNote(filing, from);
   if (unverified) notes.push(unverified);
 
-  let text = physicianSummaryText({ requesterName, requesterAddr: fromAddr, requesterFound: parsed.found, proposal, appUrl: APP_URL });
+  let text = physicianSummaryText({
+    requesterName, requesterAddr: fromAddr, requesterFound: parsed.found, proposal, appUrl: APP_URL,
+    oneTap: proposal ? oneTapReady(proposal) : false, review: proposal ? reviewReason(proposal) : "",
+  });
   if (notes.length) text += `\n\n${notes.join("\n")}`;
   text += `\n\nCredentialDOMD\nhttps://credentialdomd.com`;
 
@@ -2093,37 +2309,50 @@ https://credentialdomd.com`);
   const proposalDetail = proposal ? `proposal ${proposal.docIds.length} doc(s), ${proposal.missing.length} missing` : "proposal none";
   // The ack outcome sits right after the id: finish() cuts detail at 500
   // characters and ledgerAcksSince counts on the words being there.
-  const detail = `request ${requestId}, ${ackDetail}, intent ${intent.intent}, from ${fromAddr}${parsed.found ? "" : " (requester not found)"}, ${proposalDetail}, attachments ${stored}${filing.length ? `, ${filingDetail(filing)}` : ""}, skipped ${skipped}, failed ${failed + deliveredFailed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  const detail = `request ${requestId}, ${ackDetail}, intent ${intent}, ${readingDetail(reading)}, from ${fromAddr}${parsed.found ? "" : " (requester not found)"}, ${proposalDetail}, attachments ${stored}${filing.length ? `, ${filingDetail(filing)}` : ""}, skipped ${skipped}, failed ${failed + deliveredFailed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
   await finish(ledgerId, "done", detail, { attachment_count: stored, profile_id: profile.id });
   return json({
-    ok: true, route: "docs", intent: intent.intent, request_id: requestId, requester_found: parsed.found,
+    ok: true, route: "docs", intent, read: reading.method, one_tap: proposal ? oneTapReady(proposal) : false, request_id: requestId, requester_found: parsed.found,
     proposed: proposal ? proposal.docIds.length : null, ack: ackDetail,
     stored, skipped, failed, filed: filing.map((f) => f.outcome), confirmed: r.ok,
   });
 }
 
 /**
- * docs@ "delivery": a document forwarded to keep. Each attachment is stored,
- * read and filed; the physician hears where each one went. No request row,
- * no acknowledgement, nothing to anyone but the physician.
+ * docs@ "delivery" or "informational": a document forwarded to keep, or a
+ * note that asks for nothing. Each attachment is stored, read and filed (the
+ * reading's role for it narrows where, intakeFiling.mjs roleTarget); the
+ * physician hears where each one went. No request row, no acknowledgement,
+ * nothing to anyone but the physician.
+ *
+ * An informational email opens its reply with what it was about and says
+ * that nothing was asked: "Read <sender>'s note about <summary>. Nothing was
+ * asked of you." A delivery keeps the filing reply it always had.
  */
 async function deliverDocs(
   ledgerId: string, profile: MatchedProfile, from: string, files: Downloaded[], skipped: number, notKept: string[],
   replySubject: string, replyHeaders: Record<string, string>, mayFile: boolean,
+  opts: { ctx?: ScanContext; prescanned?: Map<Downloaded, ScanOutcome>; roles?: Map<Downloaded, string>; reading?: Reading; senderName?: string } = {},
 ) {
+  const kind = opts.reading?.intent === "informational" ? "informational" : "delivery";
   const { stored, duplicates, failed, items } = await storeAsDocuments(profile, files, EMAIL_DOC_TYPE);
-  const results = items.length ? await fileDocuments(profile, items, await scanContext(profile), { mayFile }) : [];
+  const results = items.length
+    ? await fileDocuments(profile, items, opts.ctx ?? await scanContext(profile), { mayFile, prescanned: opts.prescanned, roles: opts.roles })
+    : [];
   const notes: string[] = [...notKept];
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed > 0) notes.push(`${failed} file${failed === 1 ? "" : "s"} could not be saved; forward the email again.`);
   const unverified = unverifiedNote(results, from);
   if (unverified) notes.push(unverified);
-  const text = filingReplyText({ results, notes, appUrl: APP_URL });
+  const text = kind === "informational"
+    ? informationalReplyText({ senderName: opts.senderName ?? "", summary: opts.reading?.summary ?? "", results, notes, appUrl: APP_URL })
+    : filingReplyText({ results, notes, appUrl: APP_URL });
   const r = await sendEmail({ from: FROM_DOCS, to: [from], subject: replySubject, headers: replyHeaders, text });
   // Worded so "ack sent" can never appear here: ledgerAcksSince counts on it.
-  const detail = `delivery, stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}${mayFile ? "" : " (not verified, nothing filed)"}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}`;
+  const how = opts.reading ? `, ${readingDetail(opts.reading)}` : "";
+  const detail = `${kind}, stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}${mayFile ? "" : " (not verified, nothing filed)"}, skipped ${skipped}, failed ${failed}${r.ok ? "" : `, confirmation failed ${r.status}`}${how}`;
   await finish(ledgerId, failed > 0 && stored === 0 && duplicates === 0 ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });
-  return json({ ok: true, route: "docs", intent: "delivery", stored, duplicates, skipped, failed, verified: mayFile, filed: results.map((x) => x.outcome), confirmed: r.ok });
+  return json({ ok: true, route: "docs", intent: kind, read: opts.reading?.method ?? null, stored, duplicates, skipped, failed, verified: mayFile, filed: results.map((x) => x.outcome), confirmed: r.ok });
 }
 
 // ─── Route: everything else -> relay to the owner ─────────────────────────────
