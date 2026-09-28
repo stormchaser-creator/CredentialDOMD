@@ -32,6 +32,10 @@ export const BASE_KEYS = {
   // CallSync sync bookkeeping (last check, last result); the feed link
   // itself lives in the device-key slot with the AI keys.
   callsync: "credentialdomd-callsync",
+  // The server's last membership answer for this account, two booleans
+  // (src/utils/limitedLaunchAccess.js): which archive a cold start opens on
+  // before this session's first check answers.
+  accessAnswer: "credentialdomd-access-answer",
 };
 
 // The profiles.deleted_at stamp this device last purged its cache for

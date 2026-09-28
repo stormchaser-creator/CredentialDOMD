@@ -122,8 +122,8 @@ function Forecast() {
       id: form.id || generateId(),
       expected: parseFloat(form.expected) || 0,
     };
-    if (sched.some(s => s.id === entry.id)) editItem("scheduleDays", entry);
-    else addItem("scheduleDays", entry);
+    // Refused: the day stays open to save again.
+    if ((sched.some(s => s.id === entry.id) ? editItem("scheduleDays", entry) : addItem("scheduleDays", entry)) === false) return;
     const others = (schedByDate[editDay] || []).filter(s => s.id !== entry.id);
     if (others.length) setForm(null); else setEditDay(null);
   };
@@ -139,8 +139,8 @@ function Forecast() {
   const [loadMsg, setLoadMsg] = useState(null);
   const loadContractDates = () => {
     const have = new Set(sched.map(s => `${s.contractId}|${s.date}`));
-    let added = 0;
-    for (const c of selectableContracts(contracts)) {
+    let added = 0, refused = false;
+    load: for (const c of selectableContracts(contracts)) {
       const periods = c.coveragePeriods?.length
         ? c.coveragePeriods
         : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
@@ -163,19 +163,25 @@ function Forecast() {
         if (dates.length > 62 || dates.length < 1) continue;
         for (const date of dates) {
           if (!have.has(`${c.id}|${date}`)) {
-            addItem("scheduleDays", {
+            // Refused: stop, and report only what was loaded.
+            if (addItem("scheduleDays", {
               id: generateId(), date, contractId: c.id,
               kind: c.payModel === "daily" ? "day" : "call",
               expected: avgOf[c.id] || 0,
-            });
+            }) === false) { refused = true; break load; }
             added++;
           }
         }
       }
     }
-    setLoadMsg(added > 0
-      ? `Loaded ${added} coverage day${added === 1 ? "" : "s"} from your agreements — tap any day to adjust the amount.`
-      : "All coverage dates are already on the calendar. Multi-year blocks (ANMG) are skipped — tap individual days to add those.");
+    // A refused load (membership being re-checked) was explained by addItem;
+    // this never claims days that were not saved.
+    if (refused && added === 0) return;
+    setLoadMsg(refused
+      ? `Loaded ${added} coverage day${added === 1 ? "" : "s"}. The rest were not saved; load again once connected.`
+      : added > 0
+        ? `Loaded ${added} coverage day${added === 1 ? "" : "s"} from your agreements. Tap any day to adjust the amount.`
+        : "All coverage dates are already on the calendar. Multi-year blocks (ANMG) are skipped; tap individual days to add those.");
     setTimeout(() => setLoadMsg(null), 8000);
   };
 

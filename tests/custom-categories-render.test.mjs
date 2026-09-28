@@ -70,9 +70,15 @@ test('a category id that no longer exists explains where its records went', () =
 });
 
 test('a read-only account sees its records but no category tools', () => {
-  const html = render(Category, { categoryId: 'C1' }, { canWriteCredential: false });
+  const html = render(Category, { categoryId: 'C1' }, { canWriteCredential: false, credentialReadOnly: true });
   assert.match(html, /Penrose badge/);
   assert.doesNotMatch(html, /Hide category|Move to another category/);
+});
+
+test('a membership check in progress keeps the category tools; the write guard answers a tap (ticket fe321c16)', () => {
+  const html = render(Category, { categoryId: 'C1' }, { canWriteCredential: false, credentialReadOnly: false });
+  assert.match(html, /Penrose badge/);
+  assert.match(html, /Hide category/);
 });
 
 test('the new category form renders', () => {

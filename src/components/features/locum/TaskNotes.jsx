@@ -57,13 +57,14 @@ function TaskNotes({ onBill }) {
   const capture = () => {
     const t = text.trim();
     if (!t) return;
-    addItem("taskNotes", {
+    // Refused: the note stays in the box to save again.
+    if (addItem("taskNotes", {
       id: generateId(),
       text: t,
       contractId: defaultContract,
       capturedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
-    });
+    }) === false) return;
     setText("");
   };
 
@@ -94,7 +95,8 @@ function TaskNotes({ onBill }) {
   const submitFinish = () => {
     if (!finishing) return;
     if (!form.start || !form.end) return; // the button is disabled until both exist
-    editItem("taskNotes", { ...finishing, completedAt: new Date().toISOString() });
+    // Refused: the finish form stays open with its times, and nothing is billed.
+    if (editItem("taskNotes", { ...finishing, completedAt: new Date().toISOString() }) === false) return;
     onBill?.({
       date: form.date,
       type: form.type,
@@ -201,7 +203,7 @@ function TaskNotes({ onBill }) {
               style={{ ...iS, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} />
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
-                onClick={() => { const v = editText.trim(); if (v) editItem("taskNotes", { ...editTask, text: v }); setEditTask(null); }}
+                onClick={() => { const v = editText.trim(); if (v && editItem("taskNotes", { ...editTask, text: v }) === false) return; setEditTask(null); }}
                 disabled={!editText.trim()}
                 style={{
                   flex: 1, padding: "13px", borderRadius: 12, border: "none",

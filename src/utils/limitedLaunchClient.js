@@ -15,14 +15,19 @@ const SAFE_ERROR_CODES = new Set([
   "checkout_unavailable", "checkout_pending", "founding_capacity_pending", "quote_mismatch", "catalog_unavailable",
   "checkout_needs_reconciliation", "invalid_request", "request_too_large",
 ]);
+// Where a request stopped, for the failure report (ticket fe321c16). Never
+// a server message, token or address: only one of these words.
+const PHASES = new Set(["config", "session", "token", "network", "response", "http", "timeout"]);
 class LimitedLaunchClientError extends Error {
-  constructor(code, httpStatus) {
+  constructor(code, httpStatus, phase, during) {
     super("Membership information could not load. Your saved records have not changed.");
     this.code = SAFE_ERROR_CODES.has(code) ? code : "membership_information_unavailable";
     this.httpStatus = Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? httpStatus : null;
+    this.phase = PHASES.has(phase) ? phase : null;
+    if (this.phase === "timeout" && PHASES.has(during)) this.during = during;
   }
 }
-const unavailable = (code, httpStatus) => new LimitedLaunchClientError(code, httpStatus);
+const unavailable = (code, httpStatus, phase, during) => new LimitedLaunchClientError(code, httpStatus, phase, during);
 const object = value => value && typeof value === "object" && !Array.isArray(value);
 const uuid = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 const hash = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
@@ -124,26 +129,29 @@ export function createLimitedLaunchClient({
   fetchImpl = globalThis.fetch, timeoutMs = 9000,
 } = {}) {
   async function request(endpoint, body = {}, tokenOptions) {
-    if (!enabled || !accountId || !url || !anonKey) throw unavailable();
+    if (!enabled || !accountId || !url || !anonKey) throw unavailable(undefined, undefined, "config");
     const session = getSession();
     const sameSession = () => getSession() === session && session?.user?.id === accountId;
-    if (!sameSession()) throw unavailable();
+    if (!sameSession()) throw unavailable(undefined, undefined, "session");
     const controller = new AbortController();
-    let timer, reader, response;
+    let timer, reader, response, stage = "token";
     const cancelBody = () => {
       try { Promise.resolve(reader ? reader.cancel() : response?.body?.cancel()).catch(() => {}); }
       catch { /* Cleanup must not expose transport details or replace the request error. */ }
     };
     const deadline = new Promise((_, reject) => {
-      timer = setTimeout(() => { controller.abort(); cancelBody(); reject(unavailable()); }, timeoutMs);
+      timer = setTimeout(() => { controller.abort(); cancelBody(); reject(unavailable(undefined, undefined, "timeout", stage)); }, timeoutMs);
     });
     try {
       const token = await Promise.race([tokenOptions ? session.getToken(tokenOptions) : session.getToken(), deadline]);
-      if (!token || !sameSession() || controller.signal.aborted) throw unavailable();
+      if (!sameSession()) throw unavailable(undefined, undefined, "session");
+      if (!token || controller.signal.aborted) throw unavailable();
+      stage = "network";
       response = await Promise.race([fetchImpl(`${url}/functions/v1/${endpoint}`, {
         method: "POST", headers: { Authorization: `Bearer ${token}`, apikey: anonKey, "Content-Type": "application/json" },
         body: JSON.stringify(body), credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store", redirect: "error", signal: controller.signal,
       }), deadline]);
+      stage = "response";
       if (!sameSession() || controller.signal.aborted || !response.body
         || Number(response.headers.get("content-length")) > 65536) throw unavailable();
       reader = response.body.getReader();
@@ -160,14 +168,17 @@ export function createLimitedLaunchClient({
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
       const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
       if (!sameSession() || controller.signal.aborted) throw unavailable();
-      if (!response.ok) throw unavailable(value?.error, response.status);
+      if (!response.ok) throw unavailable(value?.error, response.status, "http");
       return value;
     } catch (error) {
+      // A response that was not OK is an HTTP failure even when its body was unreadable.
+      const phase = response && !response.ok ? "http" : stage;
       if (error instanceof LimitedLaunchClientError) {
         if (error.httpStatus === null && Number.isInteger(response?.status) && response.status >= 100 && response.status <= 599) error.httpStatus = response.status;
+        if (!error.phase) error.phase = phase;
         throw error;
       }
-      throw unavailable(undefined, response?.status);
+      throw unavailable(undefined, response?.status, phase);
     }
     finally { clearTimeout(timer); controller.abort(); cancelBody(); }
   }

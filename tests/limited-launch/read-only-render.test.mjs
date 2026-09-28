@@ -147,3 +147,101 @@ test('fresh pending account gets purchase guidance while saved records retain re
   assert.match(render(Notice), /Saved records are available/);
   assert.match(render(Notice), /viewing and exporting saved records/);
 });
+
+// Ticket fe321c16: the screenshot showed "Checking membership" with an
+// unstyled Check again button over the archive, whose Documents section
+// listed raw file names ("IMG_9740.jpeg", "process (2).pdf") in bare rows.
+const themed = value => Object.assign(value.theme, { accent: '#0a7', textDim: '#777', danger: '#c00' });
+
+test('a check still in progress shows no notice; only sustained failure gets the styled reconnecting note', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not load.', access: null, reconnecting: false,
+    remembered: { credential: true, practice: true } });
+  assert.equal(render(Notice), '');
+  value.limitedLaunch.access = { needsRefresh: true, lifetime: { credential: true, practice: true }, capabilities: { credential: capability(false), practice: capability(false) } };
+  assert.equal(render(Notice), '');
+  value.limitedLaunch.reconnecting = true;
+  const html = render(Notice);
+  assert.match(html, /Reconnecting to your account\./);
+  // Refused writes are dropped, not queued: the note never promises a later save.
+  assert.match(html, /Changes can&#x27;t be saved until the connection is back\./);
+  assert.doesNotMatch(html, /will save|once connected/);
+  const tryAgain = html.match(/<button type="button" style="([^"]*)">Try again<\/button>/);
+  assert.ok(tryAgain, 'a real button, not a bare default one');
+  assert.match(tryAgain[1], /background-color:#0a7/);
+  assert.match(tryAgain[1], /font-size:16px/);
+  assert.match(tryAgain[1], /border-radius:10px/);
+  assert.doesNotMatch(html, /Checking membership|Check again|read-only|membership can be verified/);
+  value.isDesktop = true;
+  assert.match(render(Notice), /font-size:14px/);
+});
+
+test('the archive lists each file under the record it belongs to, with a readable name, kind and date', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  value.data.travelExpenses = [{ id: 'exp', category: 'Meals', vendor: 'Synthetic Diner', date: '2026-09-02', amount: 42.5 }];
+  value.data.documents = [
+    { id: 'receipt', name: 'IMG_9740.jpeg', type: 'image/jpeg', uploadedAt: '2026-09-03T15:00:00Z', linkedTo: 'travelExpenses:exp', storagePath: 'synthetic' },
+    { id: 'scan', name: 'process (2).pdf', type: 'application/pdf', uploadedAt: '2026-09-04T15:00:00Z', linkedTo: 'invoices:invoice', storagePath: 'synthetic' },
+  ];
+  const html = render(Archive, { scope: 'practice' });
+  const card = html.slice(html.indexOf('Meals, Synthetic Diner'), html.indexOf('</details>', html.indexOf('Meals, Synthetic Diner')));
+  assert.match(card, /Sep 2, 2026 \u{B7} \$42\.50/u);
+  assert.match(card, /1 file</);
+  assert.match(card, />Receipt</);
+  assert.match(card, /Photo \u{B7} Added Sep 3, 2026 \u{B7} IMG_9740\.jpeg/u);
+  assert.match(card, /Download attachment/);
+  const invoice = html.slice(html.indexOf('Invoice SAVED-001'), html.indexOf('</details>', html.indexOf('Invoice SAVED-001')));
+  assert.match(invoice, />Invoice file</);
+  assert.match(invoice, /PDF \u{B7} Added Sep 4, 2026 \u{B7} process \(2\)\.pdf/u);
+  assert.match(invoice, /Download invoice PDF/);
+  // No file is the headline of its own row any more, and nothing reads as an em dash.
+  assert.doesNotMatch(html, /<summary[^>]*>[^<]*IMG_9740/);
+  assert.doesNotMatch(html, /\u{2014}/u);
+  // The app's buttons, 16px on a phone.
+  assert.match(html, /<button type="button" style="[^"]*border-radius:10px[^"]*font-size:16px[^"]*">Download saved records/);
+});
+
+test('files filed to nothing listed are grouped last, by readable name', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  value.data.documents = [{ id: 'loose', name: 'Board_certificate.pdf', type: 'application/pdf', uploadedAt: '2026-08-01T12:00:00Z', storagePath: 'synthetic' }];
+  const html = render(Archive, { scope: 'credential' });
+  assert.ok(html.indexOf('Other documents (1)') > html.indexOf('Saved license'));
+  assert.match(html, />Board certificate</);
+  assert.match(html, /PDF \u{B7} Added Aug 1, 2026 \u{B7} Board_certificate\.pdf/u);
+});
+
+// Review of ticket fe321c16's fix: the reconnecting copy ignored the last
+// answer's denial, and a cold start with nothing remembered showed editors.
+test('a sustained failure says nothing about reconnecting to a membership the last answer made read-only', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  const denied = { needsRefresh: true, entitled: { credential: false, practice: false }, lifetime: { credential: false, practice: false },
+    freeBeta: { state: 'expired' }, practiceTrial: { state: 'none' }, capabilities: { credential: capability(false), practice: capability(false) } };
+  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not load.', access: denied, reconnecting: true });
+  assert.equal(render(Notice), '', 'the archive already says read-only; no retry is promised');
+  // One scope still open (a paid Credential with Practice ended): that one is reconnecting.
+  denied.entitled.credential = true;
+  assert.match(render(Notice), /Reconnecting to your account\./);
+  // Before this session's first answer, the device's remembered denial counts the same.
+  Object.assign(value.limitedLaunch, { access: null, remembered: { credential: false, practice: false } });
+  assert.equal(render(Notice), '');
+});
+
+test('no answer yet and none remembered on this device: the neutral Checking membership line, not a verdict', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch, { status: 'loading', access: null, remembered: null, checking: true });
+  const html = render(Notice);
+  assert.match(html, /Checking membership\./);
+  assert.match(html, /Changes are paused until membership can be verified\./);
+  assert.match(html, /<button type="button" style="[^"]*font-size:16px[^"]*">Check again<\/button>/);
+  assert.doesNotMatch(html, /read-only|beta has ended|Reconnecting|\u{2014}/u);
+});
+
+test('an out-of-date build asks for a reload instead of saying it is reconnecting', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not be verified.', access: null,
+    remembered: { credential: true, practice: true }, reconnecting: false, outdated: true });
+  const html = render(Notice);
+  assert.match(html, /This version of the app is out of date\.<\/strong> Reload to continue\./);
+  assert.match(html, /<button type="button" style="[^"]*">Reload<\/button>/);
+  assert.doesNotMatch(html, /Try again|Reconnecting|Checking membership/);
+});

@@ -517,3 +517,38 @@ test('ordinary explicit-now quote pins full charge and cannot carry a hidden def
     await assert.rejects(setup({ fetchImpl: async () => Response.json({ ...quote, ...patch }) }).client.quote({ offerId: 'core' }), unavailable);
   }
 });
+
+// Ticket fe321c16: where a membership check stopped, for the failure report.
+test('each failed check says where it stopped, without any token, address or server text', async () => {
+  const { describeAccessRefreshFailure, createAccessRefreshReporter } = await import('../../src/utils/accessRefreshFailure.js');
+  const cases = [
+    ['token', s => { s.session.getToken = async () => { throw Error('Synthetic token rejection user_synthetic_a'); }; }],
+    ['network', s => { s.fetchImpl = async () => { throw TypeError('Load failed'); }; }],
+    ['http', s => { s.fetchImpl = async () => Response.json({ error: 'private@example.test' }, { status: 503 }); }],
+    ['timeout', s => { s.timeoutMs = 10; s.session.getToken = () => new Promise(() => {}); }],
+    ['session', s => { s.getSession = () => null; }],
+    ['invalid', s => { s.fetchImpl = async () => Response.json({ ...fixture(), accessStatus: 'unknown' }); }],
+  ];
+  const described = [];
+  for (const [phase, change] of cases) {
+    const session = { user: { id: 'user_synthetic_a' }, getToken: async () => 'synthetic-auth-token' };
+    const options = { session, fetchImpl: async () => Response.json(fixture()), timeoutMs: 1000, getSession: () => session };
+    change(options);
+    const client = createLimitedLaunchClient({ accountId: 'user_synthetic_a', enabled: true, url: 'https://membership.invalid',
+      anonKey: 'synthetic-public-key', getSession: options.getSession, fetchImpl: options.fetchImpl, timeoutMs: options.timeoutMs });
+    const error = await client.entitlements().then(() => null, e => e);
+    assert.ok(error, `${phase} rejects`);
+    const failure = describeAccessRefreshFailure(error);
+    assert.equal(failure.phase, phase);
+    if (phase === 'http') assert.equal(failure.httpStatus, 503);
+    if (phase === 'timeout') assert.equal(failure.during, 'token');
+    described.push(failure);
+  }
+  const sent = [];
+  const report = createAccessRefreshReporter((...args) => sent.push(args));
+  for (const failure of [...described, ...described]) report(Object.assign(new Error('x'), failure));
+  assert.equal(sent.length, described.length, 'once per session per code');
+  assert.doesNotMatch(JSON.stringify(sent), /user_synthetic|private@example|synthetic-auth-token|Synthetic token|Load failed/);
+  // A reporter that throws never stops the retry loop.
+  assert.equal(createAccessRefreshReporter(() => { throw Error('offline'); })(new Error('x')), true);
+});

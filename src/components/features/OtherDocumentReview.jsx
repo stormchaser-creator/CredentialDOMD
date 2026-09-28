@@ -15,7 +15,7 @@ const ROLE_FIELDS = [
 ];
 
 function OtherDocumentReview({ extracted, onFile, onDiscard }) {
-  const { theme: T, data, canWriteCredential } = useApp();
+  const { theme: T, data, credentialReadOnly } = useApp();
   const iS = useInputStyle();
   const start = useMemo(() => toOtherExtracted(extracted), [extracted]);
   const categories = useMemo(() => liveCategories(data), [data]);
@@ -110,9 +110,9 @@ function OtherDocumentReview({ extracted, onFile, onDiscard }) {
       )}
 
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-        <button type="button" disabled={!ready || canWriteCredential === false} onClick={file} style={{
+        <button type="button" disabled={!ready || credentialReadOnly === true} onClick={file} style={{
           flex: 1, padding: "12px", borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff",
-          fontSize: 15, fontWeight: 700, cursor: ready ? "pointer" : "default", opacity: ready && canWriteCredential !== false ? 1 : 0.5, fontFamily: "inherit",
+          fontSize: 15, fontWeight: 700, cursor: ready ? "pointer" : "default", opacity: ready && credentialReadOnly !== true ? 1 : 0.5, fontFamily: "inherit",
         }}>
           {typedMatch || mode === "existing" ? `File in ${(typedMatch || chosen)?.name || "category"}` : `Create "${newName.trim() || "category"}" and file it`}
         </button>
@@ -121,7 +121,7 @@ function OtherDocumentReview({ extracted, onFile, onDiscard }) {
           color: T.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
         }}>Keep as plain document</button>
       </div>
-      {canWriteCredential === false && (
+      {credentialReadOnly === true && (
         <div style={{ fontSize: 12.5, color: T.textDim, marginTop: 8 }}>Your records are read-only right now, so this can&rsquo;t be filed. The file stays in Documents.</div>
       )}
     </div>

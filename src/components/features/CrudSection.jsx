@@ -553,6 +553,23 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
     }
     setRequiredError(null);
     const itemId = editItem ? editItem.id : generateId();
+    // The record first; its attachments and closing the form only once it
+    // saved. A refused save (membership being re-checked) keeps the form open
+    // with everything typed and attached, to save again; addItem said why.
+    const commit = (values) => {
+      const saved = editItem ? onEdit({ ...editItem, ...values }) : onAdd({ ...values, id: itemId });
+      if (saved === false) return;
+      // Save attached documents and link them — addItem syncs each to cloud
+      for (const doc of attachedDocs) {
+        addItem("documents", {
+          id: generateId(),
+          name: doc.name, type: doc.type, size: doc.size, data: doc.data,
+          uploadedAt: new Date().toISOString(),
+          linkedTo: `${sectionKey}:${itemId}`,
+        });
+      }
+      closeForm();
+    };
     const secretFields = fields.filter(f => f.type === "secret" && form[f.key] && !isEncrypted(form[f.key]));
     if (secretFields.length) {
       if (!hasLockCode()) {
@@ -564,22 +581,11 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       (async () => {
         const enc = { ...form };
         for (const f of secretFields) enc[f.key] = await encryptSecret(form[f.key]);
-        if (editItem) onEdit({ ...editItem, ...enc });
-        else onAdd({ ...enc, id: itemId });
+        commit(enc);
       })();
-    } else if (editItem) onEdit({ ...editItem, ...form });
-    else onAdd({ ...form, id: itemId });
-
-    // Save attached documents and link them — addItem syncs each to cloud
-    for (const doc of attachedDocs) {
-      addItem("documents", {
-        id: generateId(),
-        name: doc.name, type: doc.type, size: doc.size, data: doc.data,
-        uploadedAt: new Date().toISOString(),
-        linkedTo: `${sectionKey}:${itemId}`,
-      });
+      return;
     }
-    closeForm();
+    commit(form);
   }, [editItem, form, onEdit, onAdd, closeForm, attachedDocs, sectionKey, addItem, fields, lockCodeDraft]);
 
   // Typing a date unticks "date not yet known" (lifecycle.withFormField).

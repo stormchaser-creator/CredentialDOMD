@@ -71,7 +71,9 @@ test('copies eligible slots only, retains every source, and journals digests bef
   assert.equal(result.state, 'complete');
   for (const base of bases) {
     assert.equal(f.values.get(f.source(base)), before.get(f.source(base)));
-    if (base === BASE_KEYS.lastIdentity) assert.equal(f.values.has(f.target(base)), false);
+    // lastIdentity is never copied; accessAnswer is the server's answer for one
+    // account, asked again for the new one (and not a version 1 journal base).
+    if (base === BASE_KEYS.lastIdentity || base === BASE_KEYS.accessAnswer) assert.equal(f.values.has(f.target(base)), false);
     else assert.equal(f.values.get(f.target(base)), before.get(f.source(base)));
   }
   assert.equal(f.writes[0].key, continuityJournalKey(f.binding));
@@ -81,6 +83,7 @@ test('copies eligible slots only, retains every source, and journals digests bef
   for (const write of f.writes.filter(write => write.key === continuityJournalKey(f.binding))) {
     assert.equal(write.value.includes('synthetic-private-value'), false);
     assert.equal(write.value.includes(BASE_KEYS.lastIdentity), false);
+    assert.equal(write.value.includes(BASE_KEYS.accessAnswer), false);
   }
 });
 
@@ -205,6 +208,26 @@ test('completed journal never resurrects destination data later cleared by the u
   assert.equal(result.alreadyComplete, true);
   assert.equal(f.values.has(f.target(BASE_KEYS.data)), false);
   assert.equal(f.writes.length, before);
+});
+
+// The bases a version 1 journal has held since 2026-09-20. A device keeps its
+// journal and validates it on every load, so the list is pinned as literals.
+const JOURNAL_V1_BASES = ['credentialdomd-data', 'credentialdomd-private-vault', 'credentialdomd-assistant-chat',
+  'credentialdomd-assistant-archives', 'credentialdomd-live-timer', 'credentialdomd-last-contract',
+  'credentialdomd-pending-ops', 'credentialdomd-callsync', 'credentialdomd-keys', 'credentialdomd-wipe-seen'];
+
+test('a journal written before a device key was added still loads (ID-RECOVER-INVALID_JOURNAL, 2026-09-28)', async () => {
+  const f = fixture();
+  f.values.set(continuityJournalKey(f.binding), JSON.stringify({ schemaVersion: 1,
+    continuityId: f.proof.continuity.id, profileId: f.proof.profileId, subject: current, sourceSubject: legacy,
+    state: 'complete', entries: JOURNAL_V1_BASES.map(base => ({ base, digest: null, state: 'absent' })) }));
+  const result = await f.recover();
+  assert.equal(result.alreadyComplete, true);
+});
+
+test('a new journal records exactly the version 1 bases, whatever BASE_KEYS gains', async () => {
+  const f = fixture(); await f.recover();
+  assert.deepEqual(JSON.parse(f.values.get(continuityJournalKey(f.binding))).entries.map(entry => entry.base), JOURNAL_V1_BASES);
 });
 
 test('tampered journal base names cannot redirect a later write', async () => {

@@ -73,8 +73,9 @@ function ScreeningsSection({ onShare }) {
   const handleSave = useCallback(() => {
     const itemId = editItem ? editItem.id : generateId();
     const entry = { ...form, id: itemId, components: (form.components || []).filter(c => c.name) };
-    if (editItem) editCtx("screenings", entry);
-    else addItem("screenings", entry);
+    // Refused (membership being re-checked): the form stays open with what
+    // was typed and attached, to save again; addItem has said why.
+    if ((editItem ? editCtx("screenings", entry) : addItem("screenings", entry)) === false) return;
     for (const doc of attachedDocs) {
       if (doc.existingId) {
         // Already in Files: link the stored copy, never insert a second one.

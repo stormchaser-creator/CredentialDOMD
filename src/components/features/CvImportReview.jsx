@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, memo } from "react";
 import { useApp } from "../../context/AppContext";
 import { generateId } from "../../utils/helpers";
+import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
 import { analyzeCvPdf, analyzeCvImage, analyzeCvText } from "../../utils/cvScan";
 import { cvFindings, defaultSelectedCvIds, selectableIdsIn } from "../../utils/cvImport";
@@ -143,11 +144,21 @@ function CvImportReview({ source = null, onSaved, onClose }) {
   const save = useCallback(() => {
     const plan = buildSavePlan(findings, selected, generateId);
     if (!plan.count) return;
-    if (Object.keys(plan.settings).length) updateSettings(plan.settings);
-    for (const { section, item } of plan.items) addItem(section, item);
-    setSaved(plan);
+    // Refused before anything was written (membership being re-checked, or
+    // read-only): the review stays, ticks and all, and says why once.
+    if (Object.keys(plan.settings).length && updateSettings(plan.settings) === false) { alertWriteRefused({ scope: "credential" }); return; }
+    let written = 0;
+    for (const { section, item } of plan.items) {
+      if (addItem(section, item) === false) break;
+      written += 1;
+    }
+    if (written === 0 && plan.items.length && !Object.keys(plan.settings).length) return;
+    // The saved screen lists only what was written.
+    const done = written === plan.items.length ? plan
+      : { ...plan, items: plan.items.slice(0, written), count: plan.settingsFindings.length + written };
+    setSaved(done);
     setPhase("saved");
-    onSaved?.(plan.count);
+    onSaved?.(done.count);
   }, [findings, selected, updateSettings, addItem, onSaved]);
 
   // ── styles, matching PublicRecordReview so the two screens read as one ────

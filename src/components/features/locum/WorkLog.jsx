@@ -15,6 +15,7 @@ import { invoiceSubject } from "../../../utils/invoicePdf";
 import { invoiceCoverNotice } from "../../../utils/invoiceCover";
 import { invoicePlainText } from "../../../utils/invoiceLayout";
 import { exportInvoice } from "../../../utils/invoiceExport";
+import { writeAllowedNow } from "../../../utils/limitedLaunchAccess.js";
 import InvoiceFormatChooser from "../../shared/InvoiceFormatChooser";
 import InvoiceLinesTable from "../../shared/InvoiceLinesTable";
 import { parseWorkDictation } from "../../../utils/workDictation";
@@ -372,6 +373,15 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (msgs.length) showNotice(msgs.join(" "));
   }, [overlapMessage, allowanceMessage, showNotice]);
 
+  // Add a new entry's rows. False when nothing was saved: the caller keeps
+  // what was typed (or the running timer) to try again. The pieces of one
+  // entry are written together, so a refusal lands on the first.
+  const addRows = useCallback((rows) => {
+    let saved = 0;
+    for (const r of rows) { if (addItem("workLog", r) === false) break; saved += 1; }
+    return saved > 0;
+  }, [addItem]);
+
   const stopTimer = useCallback(() => {
     if (!timer) return;
     const c = contracts.find(x => x.id === timer.contractId) || contract;
@@ -384,9 +394,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       `Only ${Math.round((end - start) / 1000)} seconds on the clock — logging bills ${f.billed} min. Log it? (Cancel keeps the timer running.)`
     )) return;
     const newId = generateId();
-    // The identifier note goes to this device, keyed to the entry — the
-    // synced row carries an empty string.
-    if (timer.privateNote?.trim()) setPrivate("workLog", newId, timer.privateNote);
     // One row, or one per piece when the contract splits at the call-day
     // start (splitRows returns this very row when it does not).
     const rows = splitRows({
@@ -404,7 +411,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       privateNote: "",
       invoiceId: null,
     }, c, generateId);
-    for (const r of rows) if (addItem("workLog", r) === false) break;
+    // A refused save (membership being re-checked) keeps the timer running,
+    // so the time is still there to log; addItem has said why.
+    if (!addRows(rows)) return;
+    // The identifier note goes to this device, keyed to the entry — the
+    // synced row carries an empty string.
+    if (timer.privateNote?.trim()) setPrivate("workLog", newId, timer.privateNote);
     if (c?.payModel === "daily") {
       // A timer that predates this contract going day-rate: the row is kept
       // for the record but prices at $0 — the money lives in Days & call.
@@ -413,7 +425,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       noticeSaved(c, rows);
     }
     setTimer(null); saveTimer(null);
-  }, [timer, contracts, contract, addItem, finalizeEntry, noticeSaved, showNotice]);
+  }, [timer, contracts, contract, addRows, finalizeEntry, noticeSaved, showNotice]);
 
   // Work is logged AFTER it happens. A start time in the future almost
   // always means the date is wrong (the old UTC-date bug filed 9 PM work
@@ -481,12 +493,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (manual.editId) {
       const orig = entries.find(x => x.id === manual.editId);
       if (!orig) return;
-      if (manual.privateNote?.trim()) setPrivate("workLog", manual.editId, manual.privateNote);
-      else removePrivate("workLog", manual.editId);
+      const keepPrivate = () => {
+        if (manual.privateNote?.trim()) setPrivate("workLog", manual.editId, manual.privateNote);
+        else removePrivate("workLog", manual.editId);
+      };
       if (orig.type === "CallDay") {
         if (!startIso) return;
         const end2 = endIso || new Date(new Date(startIso).getTime() + (target.stipendHours || 0) * 3600e3).toISOString();
-        editItem("workLog", { ...orig, date: manual.date, startTime: startIso, endTime: end2, description: manual.description || orig.description });
+        // Refused: the form stays open with the edit in it.
+        if (editItem("workLog", { ...orig, date: manual.date, startTime: startIso, endTime: end2, description: manual.description || orig.description }) === false) return;
+        keepPrivate();
         showNotice(`Coverage window updated: ${fmtTime(startIso)}–${fmtTime(end2)}.`);
       } else {
         const [s2, e2, rawMin] = normalizeTimes(startIso, endIso, parseInt(manual.durationMin, 10) || 0);
@@ -538,7 +554,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           if (!window.confirm(`${partly} already billed${nums.length ? ` on ${nums.join(" and ")}` : ""}. Editing updates your records but NOT the invoice that was sent. To change the invoice too, delete it in the Invoices tab (entries become unbilled) and generate it again. Edit anyway?`)) return;
         }
         if (oldPieces.length === 1 && rows.length === 1) {
-          editItem("workLog", rows[0]);
+          // Refused: the form stays open with the edit in it.
+          if (editItem("workLog", rows[0]) === false) return;
         } else {
           // Piece i lands on old piece i, keeping that piece's own id, invoice
           // and star; extra new pieces are added unbilled (only an unbilled
@@ -549,12 +566,14 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             const ok = old
               ? editItem("workLog", { ...old, ...pickEditKeys(rows[i]) })
               : addItem("workLog", { ...rows[i], createdAt: new Date().toISOString(), invoiceId: null });
-            if (ok === false) break;
+            // Nothing written yet: keep the form open to try again.
+            if (ok === false) { if (i === 0) return; break; }
           }
           for (const old of oldPieces.slice(rows.length)) {
             if (deleteItem("workLog", old.id) === false) break;
           }
         }
+        keepPrivate();
         if (type !== "CallDay" && type !== "Orientation") noticeSaved(target, rows, oldPieces.map(x => x.id));
       }
       setShowManual(false); setManual({});
@@ -567,9 +586,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (!confirmIfFuture(s3, manual.date)) return;
     const f = finalizeEntry(type, s3, e3, rawMin, target);
     const newId = generateId();
-    // The identifier note goes to this device, keyed to the entry — the
-    // synced row carries an empty string.
-    if (manual.privateNote?.trim()) setPrivate("workLog", newId, manual.privateNote);
     const rows = splitRows({
       id: newId,
       createdAt: new Date().toISOString(),
@@ -585,12 +601,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       privateNote: "",
       invoiceId: null,
     }, target, generateId);
-    for (const r of rows) if (addItem("workLog", r) === false) break;
+    // Refused: the form stays open with everything typed in it.
+    if (!addRows(rows)) return;
+    // The identifier note goes to this device, keyed to the entry — the
+    // synced row carries an empty string.
+    if (manual.privateNote?.trim()) setPrivate("workLog", newId, manual.privateNote);
     if (type !== "CallDay" && type !== "Orientation") noticeSaved(target, rows);
 
     rememberContract(target.id);
     setShowManual(false); setManual({});
-  }, [contract, contracts, billableContracts, timeContracts, manual, entries, addItem, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
+  }, [contract, contracts, billableContracts, timeContracts, manual, entries, addItem, addRows, editItem, deleteItem, rememberContract, noticeSaved, showNotice, normalizeTimes, inScheduledCoverage, confirmIfFuture, finalizeEntry, data.invoices]);
 
   // A finished to-do arrives with the times HE typed on the finish form —
   // use them as given rather than re-deriving anything from timestamps.
@@ -954,6 +974,33 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   const markBilledAndLog = useCallback((method) => {
     if (!invoicePreview) return;
     const invId = generateId();
+    // The invoice record goes first: if it is refused (the membership check
+    // went stale while the share sheet was open), nothing is marked billed,
+    // the preview stays, and the physician is told the invoice went out.
+    const recorded = addItem("invoices", {
+      id: invId,
+      number: invoicePreview.number,
+      contractId: contract.id,
+      // The period is the days that were PICKED for this invoice — the
+      // preview computed it; the wider unbilled pool is irrelevant here.
+      periodStart: invoicePreview.periodStart || null,
+      periodEnd: invoicePreview.periodEnd || null,
+      entryIds: invoicePreview.entryIds,
+      totalMinutes: invoicePreview.totalMin,
+      totalAmount: invoicePreview.total,
+      dayOverMin: invoicePreview.dayOverMin || {},
+      method,
+      sentAt: new Date().toISOString(),
+      paidAt: null,
+      text: invoicePreview.text,
+      lines: invoicePreview.lines,
+      terms: invoicePreview.terms,
+    });
+    if (recorded === false) {
+      // An alert: the notice banner sits under this open preview.
+      window.alert(`Invoice ${invoicePreview.number} went out but is not on the Invoices tab yet, and its entries are still unbilled. Tap Copy once connected to record it.`);
+      return;
+    }
     if (invoicePreview.orientationIncluded && contract) {
       editItem("locumContracts", { ...contract, orientationBilled: true });
     }
@@ -980,25 +1027,6 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         invoiceId: invId,
       });
     }
-    addItem("invoices", {
-      id: invId,
-      number: invoicePreview.number,
-      contractId: contract.id,
-      // The period is the days that were PICKED for this invoice — the
-      // preview computed it; the wider unbilled pool is irrelevant here.
-      periodStart: invoicePreview.periodStart || null,
-      periodEnd: invoicePreview.periodEnd || null,
-      entryIds: invoicePreview.entryIds,
-      totalMinutes: invoicePreview.totalMin,
-      totalAmount: invoicePreview.total,
-      dayOverMin: invoicePreview.dayOverMin || {},
-      method,
-      sentAt: new Date().toISOString(),
-      paidAt: null,
-      text: invoicePreview.text,
-      lines: invoicePreview.lines,
-      terms: invoicePreview.terms,
-    });
     setSent(true);
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
   }, [invoicePreview, entries, editItem, addItem, contract]);
@@ -1038,6 +1066,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
 
   const [fmtOpen, setFmtOpen] = useState(false);
   const sendInvoice = useCallback(async (format) => {
+    // An invoice that goes out has to be recorded, so it never goes out
+    // while the record would be refused.
+    if (!writeAllowedNow("practice")) return;
     const args = pdfArgsFor(invoicePreview);
     // PDF / Word / Excel, physician's choice — share sheet, download fallback
     const how = await exportInvoice(args, format, invoiceSubject(args), invoicePreview.text);
@@ -1493,7 +1524,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
                 background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
                 fontSize: 15, fontWeight: 800, cursor: "pointer",
               }}>{sent ? "Sent ✓" : "Send invoice…"}</button>
-              <button onClick={async () => { await copyToClipboard(invoicePreview.text); markBilledAndLog("clipboard"); }} style={{
+              <button onClick={async () => { if (!writeAllowedNow("practice")) return; await copyToClipboard(invoicePreview.text); markBilledAndLog("clipboard"); }} style={{
                 flex: 1, padding: "14px", borderRadius: 12, border: `1px solid ${T.border}`,
                 backgroundColor: "transparent", color: T.text, fontSize: 14, fontWeight: 700, cursor: "pointer",
               }}>Copy</button>
