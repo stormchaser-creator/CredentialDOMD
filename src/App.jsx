@@ -2970,8 +2970,11 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {tab === "home" && <AdminMessageCard />}
         <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}>
           {/* Routine membership details belong in the profile. A check that
-              keeps failing (not one slow resume) gets a small reconnecting note. */}
-          {limitedLaunch.reconnecting && <LaunchAccessNotice />}
+              keeps failing (not one slow resume) gets a small reconnecting
+              note; a first answer still pending on a device that remembers
+              none says "Checking membership"; a build that cannot read the
+              answer asks for a reload. */}
+          {(limitedLaunch.reconnecting || limitedLaunch.checking || limitedLaunch.outdated) && <LaunchAccessNotice />}
           {renderContent()}
           {previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style={{ height: previewClearance }} />}
         </div>

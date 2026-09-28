@@ -92,8 +92,9 @@ test('the app reads exactly these fields for its gates', async () => {
   assert.match(subscription, /canWriteCredential: !LIMITED_LAUNCH_ACCESS_ENABLED \|\| !!limitedLaunch\.access\?\.capabilities\.credential\.write/);
   assert.match(subscription, /canWritePractice: !LIMITED_LAUNCH_ACCESS_ENABLED \|\| !!limitedLaunch\.access\?\.capabilities\.practice\.write/);
   // The archives follow the (previewed) server answer, not the freshness of the snapshot.
-  assert.match(subscription, /credentialReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly\(limitedLaunch\.access, "credential"\)/);
-  assert.match(subscription, /practiceReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly\(limitedLaunch\.access, "practice"\)/);
+  // Before this session's first answer, the answer the device remembered.
+  assert.match(subscription, /credentialReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly\(limitedLaunch\.access, "credential", limitedLaunch\.remembered\)/);
+  assert.match(subscription, /practiceReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly\(limitedLaunch\.access, "practice", limitedLaunch\.remembered\)/);
   const practice = await readFile(new URL('../src/components/features/locum/LocumDashboard.jsx', import.meta.url), 'utf8');
   assert.match(practice, /if \(limitedLaunch\.enabled && practiceReadOnly\) return <ReadOnlyRecords scope="practice" \/>;/);
 });

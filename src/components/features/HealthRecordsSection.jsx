@@ -97,8 +97,9 @@ function HealthRecordsSection({ onShare, autoEditId, onAutoEditDone, autoViewId,
     setReqError(null);
     const itemId = editItem ? editItem.id : generateId();
     const entry = { ...form, id: itemId };
-    if (editItem) editItemCtx("healthRecords", entry);
-    else addItem("healthRecords", entry);
+    // Refused (membership being re-checked): the form stays open with what
+    // was typed and attached, to save again; addItem has said why.
+    if ((editItem ? editItemCtx("healthRecords", entry) : addItem("healthRecords", entry)) === false) return;
 
     // Same behavior as every other credential form: attached files are
     // saved to Documents and linked to this record.

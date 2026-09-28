@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
-import { accessAuthority, accessVerifying, allowsDataChange, allowsSettingsChange, alertWriteRefused } from "../utils/limitedLaunchAccess.js";
+import { accessAuthority, accessVerifying, allowsDataChange, allowsSettingsChange, alertWriteRefused, scopesForWrite } from "../utils/limitedLaunchAccess.js";
 import { DEFAULT_DATA } from "../constants/defaults";
 import { THEMES } from "../constants/themes";
 import { useSubscription } from "../hooks/useSubscription";
@@ -649,7 +649,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     if (!allowsSettingsChange(updates)) {
       // Refused only because membership is being re-checked: say so, unless
       // all it carried was a "seen" timestamp nobody typed.
-      if (accessVerifying() && Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"))) alertWriteRefused();
+      if (accessVerifying(accessAuthority, "credential") && Object.keys(updates || {}).some(key => !key.endsWith("SeenAt"))) alertWriteRefused({ scope: "credential" });
       return false;
     }
     if (!guardedSetData(d => ({ ...d, settings: { ...d.settings, ...updates } }))) return false;
@@ -664,7 +664,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // path in (forms, the scanner, Vera, importers) can skip a storage rule.
   const addItem = useCallback((key, raw) => {
     const item = prepareRecord(key, raw, dataRef.current?.settings?.name);
-    if (!updateSection(key, items => [...(items || []), item])) { alertWriteRefused(); return false; }
+    if (!updateSection(key, items => [...(items || []), item])) { alertWriteRefused({ scope: scopesForWrite(key, item) }); return false; }
     if (isDeviceOnlySection(key)) return true;
     // Sync to Supabase
     sbInsert(userIdRef.current, key, item).catch(() => {});
@@ -676,7 +676,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // Stamp the edit time so the self-heal pass can tell a newer local edit
     // (whose cloud write may have failed) from an older cloud row.
     const stamped = { ...item, updatedAt: new Date().toISOString() };
-    if (!updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x))) { alertWriteRefused(); return false; }
+    if (!updateSection(key, items => (items || []).map(x => x.id === stamped.id ? stamped : x))) { alertWriteRefused({ scope: scopesForWrite(key, stamped, previous) }); return false; }
     if (isDeviceOnlySection(key)) return true;
     // Sync to Supabase
     sbUpdate(userIdRef.current, key, stamped, previous, user?.id).catch(() => {});
@@ -696,7 +696,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const favorite = !(current.favorite === true);
     const next = { ...current, favorite };
     if (!updateSection(key, items => (items || []).map(x => x.id === id ? next : x))) {
-      alertWriteRefused(); return false;
+      alertWriteRefused({ scope: scopesForWrite(key, next, current) }); return false;
     }
     sbSetFavorite(userIdRef.current, key, next, favorite, user?.id).catch(() => {});
     return true;
@@ -708,7 +708,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     const linkedDocs = key === "documents" ? [] : (before.documents || []).filter(doc => doc.linkedTo === `${key}:${id}`);
     if (!accessAuthority.allowsMutation(key, target || { id }, target)
       || linkedDocs.some(doc => !accessAuthority.allowsMutation("documents", doc, doc))) {
-      alertWriteRefused(); return false;
+      alertWriteRefused({ scope: scopesForWrite(key, target || { id }, target) }); return false;
     }
     const next = { ...before, [key]: (before[key] || []).filter(item => item.id !== id) };
     if (linkedDocs.length) next.documents = (before.documents || []).filter(doc => !linkedDocs.includes(doc));

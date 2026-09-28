@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { accessAuthority, ACCESS_REFRESH_MS, LIMITED_LAUNCH_ACCESS_ENABLED, PUBLIC_SELF_SERVICE_SIGNUP_ENABLED } from "../utils/limitedLaunchAccess.js";
 import { clearLaunchInvitation } from "../utils/launchInvitation.js";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
-import { createAccessRefreshReporter } from "../utils/accessRefreshFailure.js";
+import { createAccessRefreshReporter, describeAccessRefreshFailure } from "../utils/accessRefreshFailure.js";
 import { reportError } from "../lib/errorReport.js";
 
 // A phone resumed from the background often fails its first check (Clerk's
@@ -12,6 +12,12 @@ export const ACCESS_RETRY_DELAYS_MS = Object.freeze([1000, 3000, 8000, 20000, 60
 // The reconnecting notice waits for this many failures over at least this long.
 export const RECONNECT_NOTICE_FAILURES = 3;
 export const RECONNECT_NOTICE_MS = 30000;
+// A visible session asks again this long before its answer would go stale,
+// so a save is never refused for a round trip every five minutes.
+export const ACCESS_REFRESH_LEAD_MS = 60000;
+// Failures no retry can fix: this build cannot read the server's answer
+// ("invalid") or was built without the service settings ("config").
+const PERMANENT_PHASES = new Set(["invalid", "config"]);
 
 const reportRefreshFailure = createAccessRefreshReporter(reportError);
 const clock = () => globalThis.performance?.now?.() ?? Date.now();
@@ -58,13 +64,16 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       setResult({ accountId, status: "ready", error: null, enrollmentError, reconnecting: false });
     } catch (error) {
       if (!current()) return;
-      accessAuthority.suspendWrites();
+      // Retrying cannot fix a build that cannot read the answer: no backoff,
+      // and the page asks for a reload instead of saying it is reconnecting.
+      const outdated = PERMANENT_PHASES.has(describeAccessRefreshFailure(error).phase);
+      accessAuthority.suspendWrites({ outdated });
       const run = failures.current, now = clock();
       if (run.count === 0) run.since = now;
       run.count += 1;
       run.shown = run.shown || (run.count >= RECONNECT_NOTICE_FAILURES && now - run.since >= RECONNECT_NOTICE_MS);
       reportRefreshFailure(error);
-      setResult({ accountId, status: "error", error: error.message, reconnecting: run.shown });
+      setResult({ accountId, status: "error", error: error.message, reconnecting: run.shown && !outdated, outdated });
     }
   }, [accountId, client]);
   // Automatic checks (mount, resume, the timer, a retry) share the one in flight.
@@ -99,7 +108,14 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       if ((event?.type === "visibilitychange" || event?.type === "pageshow") && !failures.current.shown) failures.current = freshFailures();
       void check();
     };
-    const tick = () => { if (!hidden()) void check(); };
+    // The five-minute tick is a backstop for the timer below; it does not ask
+    // again while the current answer has more than the lead time left.
+    const tick = () => {
+      if (hidden()) return;
+      const answer = accessAuthority.state(accountId);
+      if (answer && !answer.needsRefresh && answer.freshForMs > ACCESS_REFRESH_LEAD_MS) return;
+      void check();
+    };
     const invalidatePending = () => { generation.current++; flight.current = null; };
     const timer = setInterval(tick, ACCESS_REFRESH_MS);
     window.addEventListener("online", resume);
@@ -116,12 +132,19 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       window.removeEventListener("pageshow", resume);
       document.removeEventListener("visibilitychange", resume);
     };
+  }, [active, accountId, check]);
+  // A refused save asks for an answer now (alertWriteRefused), whatever the
+  // retry schedule had reached, so "try again in a moment" holds.
+  useEffect(() => {
+    if (!active) return;
+    return accessAuthority.setRecheck(() => { backoff.current = 0; void check(); });
   }, [active, check]);
   // A failed check is retried with backoff until one succeeds. Each failure
   // sets a new result, which schedules the next try; success, an account
   // change or unmount clears it. A hidden page waits for its resume instead.
+  // An out-of-date build is not retried on a schedule.
   useEffect(() => {
-    if (!active || result.accountId !== accountId || result.status !== "error") return;
+    if (!active || result.accountId !== accountId || result.status !== "error" || result.outdated) return;
     const delay = ACCESS_RETRY_DELAYS_MS[Math.min(backoff.current, ACCESS_RETRY_DELAYS_MS.length - 1)];
     const timer = setTimeout(() => {
       if (hidden()) return;
@@ -130,16 +153,20 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     }, delay);
     return () => clearTimeout(timer);
   }, [active, accountId, result, check]);
-  // Refresh the view at the end of a trial and when a cached write decision expires.
+  // Refresh the view at the end of a trial, and ask again a minute before the
+  // answer would go stale, so a fresh one replaces it first.
   useEffect(() => {
     if (!active) return;
     const access = accessAuthority.state(accountId);
     if (!access || access.needsRefresh) return;
-    const timer = setTimeout(() => { redraw(n => n + 1); void check(); }, access.nextCheckInMs);
+    const early = Math.max(1, (access.freshForMs ?? access.nextCheckInMs) - ACCESS_REFRESH_LEAD_MS);
+    const timer = setTimeout(() => { redraw(n => n + 1); void check(); }, Math.min(access.nextCheckInMs, early));
     return () => clearTimeout(timer);
   }, [active, accountId, result, check]);
   const access = LIMITED_LAUNCH_ACCESS_ENABLED ? accessAuthority.state(accountId) : null;
+  const remembered = LIMITED_LAUNCH_ACCESS_ENABLED && accountId ? accessAuthority.remembered(accountId) : null;
   const mine = result.accountId === accountId;
+  const outdated = mine && result.status === "error" && result.outdated === true;
   return {
     enabled: LIMITED_LAUNCH_ACCESS_ENABLED,
     access,
@@ -148,8 +175,16 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     // Membership is being checked again: no answer yet, an old one, or a
     // failed check. The normal screens stay; writes wait for a fresh answer.
     verifying: LIMITED_LAUNCH_ACCESS_ENABLED && !!accountId && (!access || access.needsRefresh === true),
+    // The last answer this device remembered for the account, which decides
+    // the archives until this session's first answer arrives.
+    remembered,
+    // No answer at all yet, this session or remembered: the archives show
+    // with a neutral "Checking membership" line until one arrives.
+    checking: LIMITED_LAUNCH_ACCESS_ENABLED && !!accountId && !access && !remembered && !outdated,
     // Only after sustained failure does the page say it is reconnecting.
     reconnecting: mine && result.status === "error" && result.reconnecting === true,
+    // This build cannot read the answer; only a reload helps.
+    outdated,
     profileReady,
     publicSignupEnabled: PUBLIC_SELF_SERVICE_SIGNUP_ENABLED,
     enrollmentError: mine ? result.enrollmentError : null,

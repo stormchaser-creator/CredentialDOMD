@@ -76,15 +76,16 @@ function TaxPrep() {
     const amt = parseFloat(payForm.amount);
     if (editPay) {
       if (!amt) return;
-      editItem("taxPayments", { ...editPay, date: payForm.date || editPay.date, amount: amt, note: (payForm.note || "").trim() });
+      // Refused: the payment form stays open to save again.
+      if (editItem("taxPayments", { ...editPay, date: payForm.date || editPay.date, amount: amt, note: (payForm.note || "").trim() }) === false) return;
       setEditPay(null); setPayForm({});
       return;
     }
     if (!amt || !payFor) return;
-    addItem("taxPayments", {
+    if (addItem("taxPayments", {
       id: generateId(), jurisdiction: payFor, date: payForm.date || today,
       amount: amt, taxYear: String(year), note: (payForm.note || "").trim(),
-    });
+    }) === false) return;
     setPayFor(null); setPayForm({});
   };
   const removePayment = (p) => { if (window.confirm("Remove this payment record?")) deleteItem("taxPayments", p.id); };

@@ -1,8 +1,10 @@
 import { useApp } from "../../context/AppContext";
-import { canReviewBillingOffer } from "../../utils/limitedLaunchAccess.js";
+import { canReviewBillingOffer, lastAnswer, OUTDATED_MESSAGE } from "../../utils/limitedLaunchAccess.js";
 import { scheduledMembershipCopy } from "../../utils/membershipTiming.js";
 import { actionButtonStyle } from "./actionButton.js";
 
+// OUTDATED_MESSAGE, with its first sentence in bold.
+const OUTDATED_PARTS = [OUTDATED_MESSAGE.slice(0, OUTDATED_MESSAGE.indexOf(".") + 1), OUTDATED_MESSAGE.slice(OUTDATED_MESSAGE.indexOf(".") + 2)];
 const until = value => new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export default function LaunchAccessNotice({ onReviewOffers }) {
@@ -12,16 +14,32 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
   const hasSavedRecords = Object.values(data || {}).some(value => Array.isArray(value) && value.length > 0);
   const button = primary => actionButtonStyle(T, { primary, isDesktop });
   const box = { padding: "12px 16px", marginBottom: 14, background: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 12 };
-  // A check that has not answered yet is not a membership decision. Only a
-  // run of failed checks says anything, and it says the records are safe.
+  const line = (strong, rest, action) => <aside role="status" style={{ ...box, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+    <p style={{ margin: 0, flex: "1 1 220px", color: T.textMuted, fontSize: 14, lineHeight: 1.5 }}>
+      <strong style={{ color: T.text }}>{strong}</strong> {rest}
+    </p>
+    {action}
+  </aside>;
+  // This build cannot read the server's answer. Retrying never helps; a
+  // reload for the current version does.
+  if (limitedLaunch.outdated) {
+    const [strong, rest] = OUTDATED_PARTS;
+    return line(strong, rest, <button type="button" style={button(true)} onClick={() => globalThis.location?.reload()}>Reload</button>);
+  }
+  // A check that has not answered yet is not a membership decision.
   if (!access || limitedLaunch.error || access.needsRefresh) {
-    if (!limitedLaunch.reconnecting) return null;
-    return <aside role="status" style={{ ...box, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-      <p style={{ margin: 0, flex: "1 1 220px", color: T.textMuted, fontSize: 14, lineHeight: 1.5 }}>
-        <strong style={{ color: T.text }}>Reconnecting to your account.</strong> Your records are safe; changes will save once connected.
-      </p>
-      <button type="button" style={button(true)} onClick={() => { void limitedLaunch.refresh(); }}>Try again</button>
-    </aside>;
+    // No answer at all yet, this session or on this device: the archives are
+    // showing, and this says why, without a verdict.
+    if (limitedLaunch.checking) {
+      return line("Checking membership.", "Saved records remain available. Changes are paused until membership can be verified.",
+        <button type="button" style={button(false)} onClick={() => { void limitedLaunch.refresh(); }}>Check again</button>);
+    }
+    // Only a run of failed checks says it is reconnecting, and never about a
+    // membership the last answer already made read-only: that stays so.
+    const open = ["credential", "practice"].some(scope => lastAnswer(access, scope, limitedLaunch.remembered) !== false);
+    if (!limitedLaunch.reconnecting || !open) return null;
+    return line("Reconnecting to your account.", "Changes can't be saved until the connection is back.",
+      <button type="button" style={button(true)} onClick={() => { void limitedLaunch.refresh(); }}>Try again</button>);
   }
   let title, copy;
   if (access.accessStatus === "pending" && !hasSavedRecords) {

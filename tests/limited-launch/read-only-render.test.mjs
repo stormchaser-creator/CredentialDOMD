@@ -155,14 +155,17 @@ const themed = value => Object.assign(value.theme, { accent: '#0a7', textDim: '#
 
 test('a check still in progress shows no notice; only sustained failure gets the styled reconnecting note', () => {
   const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
-  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not load.', access: null, reconnecting: false });
+  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not load.', access: null, reconnecting: false,
+    remembered: { credential: true, practice: true } });
   assert.equal(render(Notice), '');
   value.limitedLaunch.access = { needsRefresh: true, lifetime: { credential: true, practice: true }, capabilities: { credential: capability(false), practice: capability(false) } };
   assert.equal(render(Notice), '');
   value.limitedLaunch.reconnecting = true;
   const html = render(Notice);
   assert.match(html, /Reconnecting to your account\./);
-  assert.match(html, /Your records are safe; changes will save once connected\./);
+  // Refused writes are dropped, not queued: the note never promises a later save.
+  assert.match(html, /Changes can&#x27;t be saved until the connection is back\./);
+  assert.doesNotMatch(html, /will save|once connected/);
   const tryAgain = html.match(/<button type="button" style="([^"]*)">Try again<\/button>/);
   assert.ok(tryAgain, 'a real button, not a bare default one');
   assert.match(tryAgain[1], /background-color:#0a7/);
@@ -205,4 +208,40 @@ test('files filed to nothing listed are grouped last, by readable name', () => {
   assert.ok(html.indexOf('Other documents (1)') > html.indexOf('Saved license'));
   assert.match(html, />Board certificate</);
   assert.match(html, /PDF \u{B7} Added Aug 1, 2026 \u{B7} Board_certificate\.pdf/u);
+});
+
+// Review of ticket fe321c16's fix: the reconnecting copy ignored the last
+// answer's denial, and a cold start with nothing remembered showed editors.
+test('a sustained failure says nothing about reconnecting to a membership the last answer made read-only', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  const denied = { needsRefresh: true, entitled: { credential: false, practice: false }, lifetime: { credential: false, practice: false },
+    freeBeta: { state: 'expired' }, practiceTrial: { state: 'none' }, capabilities: { credential: capability(false), practice: capability(false) } };
+  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not load.', access: denied, reconnecting: true });
+  assert.equal(render(Notice), '', 'the archive already says read-only; no retry is promised');
+  // One scope still open (a paid Credential with Practice ended): that one is reconnecting.
+  denied.entitled.credential = true;
+  assert.match(render(Notice), /Reconnecting to your account\./);
+  // Before this session's first answer, the device's remembered denial counts the same.
+  Object.assign(value.limitedLaunch, { access: null, remembered: { credential: false, practice: false } });
+  assert.equal(render(Notice), '');
+});
+
+test('no answer yet and none remembered on this device: the neutral Checking membership line, not a verdict', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch, { status: 'loading', access: null, remembered: null, checking: true });
+  const html = render(Notice);
+  assert.match(html, /Checking membership\./);
+  assert.match(html, /Changes are paused until membership can be verified\./);
+  assert.match(html, /<button type="button" style="[^"]*font-size:16px[^"]*">Check again<\/button>/);
+  assert.doesNotMatch(html, /read-only|beta has ended|Reconnecting|\u{2014}/u);
+});
+
+test('an out-of-date build asks for a reload instead of saying it is reconnecting', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not be verified.', access: null,
+    remembered: { credential: true, practice: true }, reconnecting: false, outdated: true });
+  const html = render(Notice);
+  assert.match(html, /This version of the app is out of date\.<\/strong> Reload to continue\./);
+  assert.match(html, /<button type="button" style="[^"]*">Reload<\/button>/);
+  assert.doesNotMatch(html, /Try again|Reconnecting|Checking membership/);
 });

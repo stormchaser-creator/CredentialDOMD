@@ -61,8 +61,10 @@ const lifetime = (over = {}) => ({
 // unanswered check turned every write off and the screens read that as expiry.
 test('a failed membership lookup keeps the Practice screen with writes refused, and deletes nothing', () => {
   const data = savedRecords(), original = structuredClone(data);
+  // Cold start: no answer this session, but this device remembers the last one.
   globalThis.__entitlementRenderAccount = { data, theme: {}, navigate() {},
-    limitedLaunch: { enabled: true, status: 'error', access: null, error: 'Membership information could not load.' } };
+    limitedLaunch: { enabled: true, status: 'error', access: null, verifying: true, remembered: { credential: true, practice: true },
+      error: 'Membership information could not load.' } };
   const failed = renderToStaticMarkup(React.createElement(Screen));
   assert.equal(derived.plan, 'locum');
   assert.equal(derived.canWriteCredential, false);
@@ -73,6 +75,53 @@ test('a failed membership lookup keeps the Practice screen with writes refused, 
   assert.match(failed, /Synthetic saved work entry/);
   assert.doesNotMatch(failed, /Practice saved records/);
   assert.deepEqual(data, original);
+  delete globalThis.__entitlementRenderAccount;
+});
+
+// Review of ticket fe321c16's fix: a lapsed member (settings.accessStatus
+// still cached 'active') reloading on a network where the check fails saw
+// every editor, indefinitely; and an owner in good standing saw "Upgrade to
+// Pro" cards while the first check was pending.
+test('a cold start opens on the answer this device remembered: a lapsed member gets the archive from first paint', () => {
+  const data = savedRecords(), original = structuredClone(data);
+  globalThis.__entitlementRenderAccount = { data, theme: {}, navigate() {},
+    limitedLaunch: { enabled: true, status: 'error', access: null, verifying: true, remembered: { credential: false, practice: false },
+      error: 'Membership information could not load.' } };
+  const lapsed = renderToStaticMarkup(React.createElement(Screen));
+  assert.equal(derived.credentialReadOnly, true);
+  assert.equal(derived.practiceReadOnly, true);
+  assert.match(lapsed, /Practice saved records/);
+  assert.match(lapsed, /Synthetic saved work entry/);
+  assert.doesNotMatch(lapsed, /data-editor/);
+  // Nothing remembered at all (a new device): the archive waits for the answer.
+  globalThis.__entitlementRenderAccount.limitedLaunch.remembered = null;
+  const unknown = renderToStaticMarkup(React.createElement(Screen));
+  assert.equal(derived.credentialReadOnly, true);
+  assert.equal(derived.practiceReadOnly, true);
+  assert.match(unknown, /Practice saved records/);
+  assert.doesNotMatch(unknown, /data-editor/);
+  assert.deepEqual(data, original);
+  delete globalThis.__entitlementRenderAccount;
+});
+
+test('with no answer yet, a member in good standing is not shown as un-Pro (no Upgrade to Pro gates)', async () => {
+  const data = savedRecords();
+  globalThis.__entitlementRenderAccount = { data, theme: {}, navigate() {},
+    limitedLaunch: { enabled: true, status: 'error', access: null, verifying: true, remembered: { credential: true, practice: true },
+      error: 'Membership information could not load.' } };
+  renderToStaticMarkup(React.createElement(Screen));
+  assert.equal(derived.isPro, true, 'the Credentials sections render, not the ProGate card');
+  assert.equal(derived.canWriteCredential, false, 'writes still wait for the answer');
+  // An answer that withholds read still gates, as before.
+  globalThis.__entitlementRenderAccount.limitedLaunch = { enabled: true, status: 'ready', error: null, verifying: false,
+    access: lifetime({ accessStatus: 'revoked', capabilities: { credential: { read: false, write: false, export: false }, practice: { read: false, write: false, export: false } } }) };
+  renderToStaticMarkup(React.createElement(Screen));
+  assert.equal(derived.isPro, false);
+  // Those subpages gate on isPro and nothing else.
+  const app = await (await import('node:fs/promises')).readFile(new URL('../../src/App.jsx', import.meta.url), 'utf8');
+  for (const feature of ['Hospital Privileges', 'Insurance Policies', 'Case Logs', 'Peer References', 'Malpractice History']) {
+    assert.match(app, new RegExp(`if \\(!isPro\\) return <div style=\\{\\{ position: "relative", minHeight: 320 \\}\\}><ProGate T=\\{T\\} onUpgrade=\\{\\(\\) => \\{ setSubPage\\(null\\); setShowPricing\\(true\\); \\}\\} featureName="${feature}" />`));
+  }
   delete globalThis.__entitlementRenderAccount;
 });
 

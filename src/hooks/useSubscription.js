@@ -334,12 +334,17 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
     // The read-only archive and its copy follow the server's answer, never an
     // old snapshot or a failed check (ticket fe321c16): while membership is
     // re-checked the normal screens stay and the write guard refuses changes.
-    credentialReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly(limitedLaunch.access, "credential"),
-    practiceReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly(limitedLaunch.access, "practice"),
+    // Before this session's first answer, the one this device remembered for
+    // the account decides; with neither, the archive waits for the answer.
+    credentialReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly(limitedLaunch.access, "credential", limitedLaunch.remembered),
+    practiceReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly(limitedLaunch.access, "practice", limitedLaunch.remembered),
     ...(LIMITED_LAUNCH_ACCESS_ENABLED ? {
       // Saved Practice records remain reachable after the write entitlement ends.
       plan: "locum", tier: "locum", tierObject: getTier("locum"),
-      isPro: limitedLaunch.access?.capabilities.credential.read === true,
+      // No answer yet is not "not Pro": a member in good standing never sees
+      // an upgrade card while the first check is pending or failing. Reads
+      // show only this device's own records; writes wait for the answer.
+      isPro: limitedLaunch.access ? limitedLaunch.access.capabilities.credential.read === true : limitedLaunch.verifying === true,
       isPractice: false, isDevMode: false,
       isPaid: !!limitedLaunch.access?.purchasedOfferId,
       hasSubscription: !!(limitedLaunch.access?.purchasedOfferId || limitedLaunch.access?.scheduledMembership),

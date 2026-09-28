@@ -65,23 +65,29 @@ export async function loadScreens(exportsSource) {
 
 export const THEME = { text: '#111', textMuted: '#666', textDim: '#888', border: '#aaa', card: '#fff', bg: '#eee', accent: '#2a7', accentDim: '#dfe', danger: '#c00', dangerDim: '#fee', warning: '#a60', warningDim: '#ffe', success: '#0a0', input: '#fafafa', inputBorder: '#ccc', shadow1: 'none' };
 
-/** Mount a component with an account whose writes are recorded AND applied. */
-export function mount(Component, { data: seed = {}, confirm = () => true, storage = {}, props = {} } = {}) {
+/**
+ * Mount a component with an account whose writes are recorded AND applied.
+ * `refuse(op, key)` returning true makes that write come back false, as
+ * AppContext's do when the access authority refuses them (a membership
+ * check in progress); a refused write is recorded as ['refused', op, key].
+ */
+export function mount(Component, { data: seed = {}, confirm = () => true, storage = {}, props = {}, refuse = () => false } = {}) {
   const h = runtime();
   const calls = [];
   const data = { settings: {}, locumContracts: [], workLog: [], invoices: [], documents: [], travelExpenses: [], ...seed };
   const apply = (key, fn) => { data[key] = fn(data[key] || []); };
+  const refused = (op, key) => { if (!refuse(op, key)) return false; calls.push(['refused', op, key]); return true; };
   const app = {
     data, theme: THEME, isDesktop: false, setData: () => {},
-    addItem: (key, item) => { calls.push(['add', key, item]); apply(key, l => [...l, item]); return true; },
-    editItem: (key, item) => { calls.push(['edit', key, item]); apply(key, l => l.map(x => (x.id === item.id ? item : x))); return true; },
-    deleteItem: (key, id) => { calls.push(['delete', key, id]); apply(key, l => l.filter(x => x.id !== id)); return true; },
+    addItem: (key, item) => { if (refused('add', key)) return false; calls.push(['add', key, item]); apply(key, l => [...l, item]); return true; },
+    editItem: (key, item) => { if (refused('edit', key)) return false; calls.push(['edit', key, item]); apply(key, l => l.map(x => (x.id === item.id ? item : x))); return true; },
+    deleteItem: (key, id) => { if (refused('delete', key)) return false; calls.push(['delete', key, id]); apply(key, l => l.filter(x => x.id !== id)); return true; },
   };
   const dialogs = [];
   globalThis.window = { confirm: (m) => { dialogs.push(['confirm', m]); return confirm(m); }, alert: (m) => { dialogs.push(['alert', m]); } };
   globalThis.__screen = { app, storage: { ...storage }, vault: {} };
   const render = () => { current = h; h.begin(); const tree = Component(props); h.flush(); return tree; };
-  return { render, calls, dialogs, data, html: () => renderToStaticMarkup(render()) };
+  return { render, calls, dialogs, data, storage: globalThis.__screen.storage, html: () => renderToStaticMarkup(render()) };
 }
 
 // Every element in a tree, including ones passed as a Modal's footer.

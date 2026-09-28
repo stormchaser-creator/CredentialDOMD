@@ -19,7 +19,7 @@ function fixture({ publicSignup = true, enabled = true, profileReady = true } = 
     useState(value) { const at = index++; if (!(at in cells)) cells[at] = value; return [cells[at], next => { cells[at] = typeof next === 'function' ? next(cells[at]) : next; }]; },
     useMemo: fn => fn(), useCallback: fn => fn, useEffect: fn => effects.push(fn),
   };
-  const authority = { reset: id => calls.push(['reset', id]), state: () => null,
+  const authority = { reset: id => calls.push(['reset', id]), state: () => null, remembered: () => null, setRecheck: () => () => {},
     accept: (id, value) => { calls.push(['accept', id, value]); return true; },
     suspendWrites: () => calls.push(['suspend']) };
   const imports = {

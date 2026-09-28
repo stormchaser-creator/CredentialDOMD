@@ -280,10 +280,16 @@ function DocumentsSection() {
         setScanError(`"${file.name}" is already uploaded${dup.linkedTo ? " (and linked)" : " — find it below and use File with AI"}. Skipped duplicate.`);
         continue;
       }
-      addItem("documents", {
+      // A file that was not saved is never sent to be read: the reading costs
+      // money and its result would have nowhere to go. Refused (membership
+      // being re-checked; addItem has said why), the rest of the pick stops.
+      if (addItem("documents", {
         id: docId, name: file.name, type: file.type, size: file.size,
         data: dataUrl, uploadedAt: new Date().toISOString(), linkedTo: "",
-      });
+      }) === false) {
+        setScanError(`"${file.name}" was not saved, so it was not read. Nothing was changed.`);
+        return;
+      }
 
       const scannable = file.type.startsWith("image/") || file.type === "application/pdf" || isOfficeFile(file);
       if (scannable && aiOn) {
@@ -418,8 +424,8 @@ function DocumentsSection() {
       entry.minCallMinutes = parseInt(entry.minCallMinutes, 10) || 15;
     }
 
-    // Add the credential entry
-    addItem(section, entry);
+    // Add the credential entry. Refused, the review card stays to save again.
+    if (addItem(section, entry) === false) { setScanError("Could not save this record. The file is still in Documents."); return; }
     // Link the document to it (an emailed certificate leaves the inbox here)
     const doc = data.documents.find(d => d.id === docId);
     if (doc) editItem("documents", { ...doc, ...leaveInbox(doc), linkedTo: `${section}:${id}` });

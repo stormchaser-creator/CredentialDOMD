@@ -13,7 +13,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import * as refreshFailure from '../../src/utils/accessRefreshFailure.js';
-import { ACCESS_REFRESH_MS, RECONNECTING_MESSAGE, createAccessAuthority, membershipReadOnly, writeRefusalMessage } from '../../src/utils/limitedLaunchAccess.js';
+import { ACCESS_REFRESH_MS, OUTDATED_MESSAGE, RECONNECTING_MESSAGE, accessVerifying, alertWriteRefused, createAccessAuthority, membershipReadOnly, writeRefusalMessage } from '../../src/utils/limitedLaunchAccess.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 
 const source = await readFile(new URL('../../src/hooks/useLimitedLaunchAccess.js', import.meta.url), 'utf8');
@@ -33,20 +33,29 @@ const failure = (phase = 'network', extra = {}) => Object.assign(new Error('Memb
 
 const same = (a, b) => !!a && !!b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
 
-function fixture({ answers = [], initialAccount = ACCOUNT } = {}) {
+// A device's remembered answers, as the authority keeps them (two booleans per account).
+const deviceMemory = (seed = {}) => {
+  const saved = new Map(Object.entries(seed));
+  return { saved, read: id => saved.get(id) ?? null, write: (id, value) => { saved.set(id, { ...value }); } };
+};
+
+function fixture({ answers = [], initialAccount = ACCOUNT, memory = deviceMemory(), latency = 0 } = {}) {
   let now = 0, nextTimer = 1, account = initialAccount, visibility = 'visible';
   const timers = new Map(), listeners = new Map(), calls = [], reports = [];
   const schedule = (fn, ms, every) => { const id = nextTimer++; timers.set(id, { fn, at: now + Math.max(0, ms || 0), every }); return id; };
   const clear = id => { timers.delete(id); };
   const on = (type, fn) => { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); };
   const off = (type, fn) => listeners.get(type)?.delete(fn);
-  const authority = createAccessAuthority({ enabled: true, now: () => now, currentAccount: () => account });
+  const authority = createAccessAuthority({ enabled: true, now: () => now, currentAccount: () => account, memory });
   const queue = [...answers];
   const client = {
     entitlements: () => {
       calls.push({ at: now, account });
       const next = queue.length ? queue.shift() : snapshot();
       if (typeof next === 'function') return next();
+      // A round trip that takes `latency` ms (or latency(n) for the nth call) on the fake clock.
+      const ms = typeof latency === 'function' ? latency(calls.length - 1) : latency;
+      if (ms > 0) return new Promise((resolve, reject) => { schedule(() => (next instanceof Error ? reject(next) : resolve(next)), ms, 0); });
       if (next instanceof Error) return Promise.reject(next);
       return Promise.resolve(next);
     },
@@ -90,7 +99,7 @@ function fixture({ answers = [], initialAccount = ACCOUNT } = {}) {
     document: { addEventListener: on, removeEventListener: off, get visibilityState() { return visibility; } },
   });
   const f = {
-    authority, calls, reports, timers, listeners, queue, module: module.exports,
+    authority, calls, reports, timers, listeners, queue, memory, module: module.exports,
     get now() { return now; },
     render() {
       do {
@@ -167,7 +176,8 @@ test('a transient failure retries after 1 s, 3 s and 8 s and recovers without an
   await f.advance(0);
   assert.equal(f.value.status, 'error');
   assert.equal(f.value.verifying, true);
-  assert.equal(membershipReadOnly(f.value.access, 'practice'), false, 'no snapshot yet is not a denial');
+  assert.equal(membershipReadOnly(f.value.access, 'practice', f.value.remembered), true, 'nothing answered or remembered yet: the archive waits');
+  assert.equal(f.value.checking, true, 'with the neutral Checking membership line');
   await f.advance(999);
   assert.equal(f.calls.length, 1, 'the first retry waits one second');
   await f.advance(20_000);
@@ -275,9 +285,85 @@ test('failures reach the error reporter once per code, with no account, token or
 
 test('the app shows the membership note only for sustained failure, and swaps in an archive only on a server denial', async () => {
   const app = await readFile(new URL('../../src/App.jsx', import.meta.url), 'utf8');
-  assert.match(app, /\{limitedLaunch\.reconnecting && <LaunchAccessNotice \/>\}/);
+  assert.match(app, /\{\(limitedLaunch\.reconnecting \|\| limitedLaunch\.checking \|\| limitedLaunch\.outdated\) && <LaunchAccessNotice \/>\}/);
   assert.doesNotMatch(app, /limitedLaunch\.access\.needsRefresh\) && <LaunchAccessNotice/);
   assert.doesNotMatch(app, /!canWriteCredential && \["credentials", "documents"\]/);
   const practice = await readFile(new URL('../../src/components/features/locum/LocumDashboard.jsx', import.meta.url), 'utf8');
   assert.doesNotMatch(practice, /!canWritePractice\) return <ReadOnlyRecords/);
+});
+
+// Review of ticket fe321c16's fix.
+
+test('a visible session with working checks never lets its answer go stale, so no save is refused every five minutes', async () => {
+  // Round trips of 0.2 s and 5 s in turn, as on a phone network.
+  const f = fixture({ latency: n => (n % 2 ? 5000 : 200) });
+  await f.advance(0);
+  await f.advance(200);
+  assert.equal(f.value.status, 'ready');
+  for (let t = 0; t < 30 * 60; t += 1) {
+    await f.advance(1000);
+    const state = f.authority.state();
+    assert.equal(state.needsRefresh, false, `stale at ${f.now} ms`);
+    assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true, `a save refused at ${f.now} ms`);
+  }
+  // About one check per four minutes, not two per five.
+  assert.ok(f.calls.length >= 7 && f.calls.length <= 9, `${f.calls.length} checks in 30 minutes`);
+});
+
+test('a cold start opens on the answer this device remembered, and every answer updates it', async () => {
+  const memory = deviceMemory({ [ACCOUNT]: { credential: false, practice: false } });
+  const pending = deferred();
+  const f = fixture({ memory, answers: [() => pending.promise] });
+  // The first render, before any effect, already has it: the lapsed member's archive from first paint.
+  const first = f.value;
+  assert.deepEqual(first.remembered, { credential: false, practice: false });
+  assert.equal(membershipReadOnly(first.access, 'practice', first.remembered), true);
+  assert.equal(membershipReadOnly(first.access, 'credential', first.remembered), true);
+  assert.equal(first.checking, false, 'a remembered answer is not "checking"');
+  // Refusals say read-only for a remembered denial, never "reconnecting".
+  await f.advance(0);
+  assert.equal(accessVerifying(f.authority, 'practice'), false);
+  assert.notEqual(writeRefusalMessage(f.authority, 'practice'), RECONNECTING_MESSAGE);
+  // The member renewed: the answer lands and is remembered for the next launch.
+  pending.resolve(snapshot());
+  await f.settle();
+  assert.deepEqual(memory.saved.get(ACCOUNT), { credential: true, practice: true });
+  assert.equal(membershipReadOnly(f.value.access, 'practice', f.value.remembered), false);
+  // Never another account's answer.
+  assert.equal(f.authority.remembered(OTHER), null);
+});
+
+test('a refused save while reconnecting asks for an answer at once, even when the retries are a minute apart', async () => {
+  const f = fixture({ answers: Array(6).fill(null).map(() => failure()) });
+  await f.advance(0);
+  await f.advance(32_000);
+  assert.equal(f.calls.length, 5, 'the schedule has reached one a minute');
+  f.queue.length = 0;
+  const shown = [];
+  alertWriteRefused({ authority: f.authority, scope: 'practice', alert: m => shown.push(m), now: () => 1e12 });
+  await f.settle();
+  assert.equal(f.calls.length, 6, 'a check started at the refusal');
+  assert.deepEqual(shown, [RECONNECTING_MESSAGE]);
+  assert.equal(f.value.status, 'ready');
+  assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true, '"try again in a moment" is true');
+});
+
+test('an answer this build cannot read stops the retries and asks for a reload', async () => {
+  const unreadable = { ...snapshot(), policyVersion: 'synthetic-newer-policy' };
+  const f = fixture({ answers: [unreadable, unreadable, unreadable] });
+  await f.advance(0);
+  assert.equal(f.value.status, 'error');
+  assert.equal(f.value.outdated, true);
+  assert.equal(f.value.reconnecting, false);
+  assert.equal(f.value.checking, false);
+  await f.advance(4 * 60_000);
+  assert.equal(f.calls.length, 1, 'no 1, 3, 8, 20 and 60 s retries');
+  assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), false);
+  assert.equal(writeRefusalMessage(f.authority, 'practice'), OUTDATED_MESSAGE);
+  assert.deepEqual(f.reports.map(([message]) => message), ['Membership check failed (invalid)'], 'reported once');
+  // A readable answer (a server fix, or the reload) clears it.
+  f.queue.length = 0;
+  await f.resume(['visibilitychange']);
+  assert.equal(f.value.outdated, false);
+  assert.equal(f.value.status, 'ready');
 });
