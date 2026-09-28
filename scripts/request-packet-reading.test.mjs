@@ -33,7 +33,7 @@ for (const [name, m] of COPIES) {
   test(`${name}: a kind only the model names (an attestation as a photo ID) matches, but is never one tap`, () => {
     const p = m.buildProposal(REQ, catalogue, PHYSICIAN, NOW, read([{ quote: "Please sign and return the attached attestation", kind: "photo_id" }]));
     const [it] = p.items;
-    assert.deepEqual([it.kind, it.ruleKind, it.status], ["photo_id", "unknown", "found"]);
+    assert.deepEqual([it.kind, it.ruleKind, it.status, it.confidence], ["photo_id", "unknown", "found", "medium"]);
     assert.ok(it.labels.some((l) => /driver/i.test(l)), "the licence on file matches");
     assert.equal(m.oneTapReady(p), false, "a government ID is never sent on the model's word alone");
     assert.match(m.reviewReason(p), /Named by the reading alone: ".*" as photo ID\. Check that is what they meant\./);

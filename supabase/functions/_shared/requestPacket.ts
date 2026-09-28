@@ -1421,13 +1421,16 @@ export function buildProposal(
     // differ, the words win and the item is no longer certain: "Could you
     // send a copy of your current BLS card?" read as a malpractice COI would
     // otherwise have gone out on one tap with the wrong certificate. A kind
-    // only the model names is kept, and oneTapReady still sends it to Review.
+    // only the model names is kept, and is not certain either: oneTapReady
+    // sends it to Review, and so does an app built before ruleKind existed,
+    // which reads only the item's confidence.
     const ruleKind = c.kind;
     let itemConfidence = confidence;
     let modelKind: string | null = null;
     if (model && model[n].kind) {
       const named = model[n].kind as string;
-      if (ruleKind === "unknown" || ruleKind === named) c.kind = named;
+      if (ruleKind === named) c.kind = named;
+      else if (ruleKind === "unknown") { c.kind = named; if (named !== "unknown" && confidence === "high") itemConfidence = "medium"; }
       else { modelKind = named; itemConfidence = confidence === "high" ? "medium" : confidence; }
     }
     const entries = matchAsk(c, catalogue, now);
