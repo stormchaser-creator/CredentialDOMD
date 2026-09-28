@@ -32,6 +32,7 @@ import { CMEResourcesSection } from "./components/features";
 import { CVGenerator } from "./components/features";
 import ReadOnlyRecords from "./components/features/ReadOnlyRecords.jsx";
 import LaunchAccessNotice from "./components/shared/LaunchAccessNotice.jsx";
+import BillingReturnNotice from "./components/shared/BillingReturnNotice.jsx";
 import OfflineBanner from "./components/shared/OfflineBanner.jsx";
 import AccountRecordsLoadError from "./components/shared/AccountRecordsLoadError.jsx";
 import LimitedLaunchMembership from "./components/pages/LimitedLaunchMembership.jsx";
@@ -814,6 +815,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const previewClearance = adminPreview ? ADMIN_PREVIEW_BANNER_CLEARANCE : 0;
   if (limitedLaunch.enabled && access !== "active" && access !== "revoked" && access !== null) return <div style={{ minHeight: "100vh", padding: `24px 24px ${24 + previewClearance}px`, background: T.bg, display: "grid", placeItems: "center" }}>
     <div style={{ width: "100%", maxWidth: 620, padding: 24, background: T.card, borderRadius: 16 }}>
+      <BillingReturnNotice />
       <LimitedLaunchMembership onActivated={recheckAccess} />
       <button style={{ marginTop: 20 }} onClick={() => { void limitedLaunch.refresh(); void recheckAccess(); }}>Check access again</button>
       <button style={{ margin: "20px 0 0 12px" }} onClick={signOut}>Sign out</button>
@@ -2905,6 +2907,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               note; a first answer still pending on a device that remembers
               none says "Checking membership"; a build that cannot read the
               answer asks for a reload. */}
+          {/* Back from Stripe: the purchase is being confirmed, or nothing was charged. */}
+          <BillingReturnNotice onReviewOffers={() => { setTab("more"); setSubPage("settings"); }} />
           {(limitedLaunch.reconnecting || limitedLaunch.checking || limitedLaunch.outdated) && <LaunchAccessNotice />}
           {renderContent()}
           {previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style={{ height: previewClearance }} />}

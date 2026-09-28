@@ -17,8 +17,11 @@
 import { Component, createElement } from "react";
 import { redactLaunchInvitation } from "../utils/launchInvitation.js";
 
-const ENDPOINT = import.meta.env.VITE_SUPABASE_URL
-  ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/report-error`
+// Outside Vite (a component rendered by a test bundle) there is no env: no
+// endpoint, and nothing is sent. The same guard as utils/limitedLaunchClient.js.
+const ENV = import.meta.env || {};
+const ENDPOINT = ENV.VITE_SUPABASE_URL
+  ? `${ENV.VITE_SUPABASE_URL}/functions/v1/report-error`
   : null;
 
 const BUILD =
@@ -139,7 +142,7 @@ export function reportError(err, kind = "error", extra = undefined) {
       auth_user_id: currentUserId,
       extra: scrubExtra(extra),
     };
-    if (import.meta.env.DEV) {
+    if (ENV.DEV) {
       // Visible in dev, but do not spam the live table from localhost.
       console.warn("[errorReport] would send:", payload);
       return;
