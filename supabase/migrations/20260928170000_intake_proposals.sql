@@ -29,8 +29,8 @@
 -- Owner-only. The owner may read their rows and change status and items
 -- (column grants), nothing else; only the service role inserts, and there is
 -- no delete for the owner (the rows go with the account: on delete cascade,
--- and delete-account's USER_TABLES). items is capped at 4 KB, the same cap
--- intake_corrections has, so a row stays a note and not a store.
+-- and delete-account's USER_TABLES). items is capped at 4 KB of text, so a
+-- row stays a note and not a store.
 --
 -- It also lets intake_corrections record the physician's answers to these
 -- proposals (dismiss_record, edit_record, undo_record), which the next
@@ -63,15 +63,21 @@ begin
     alter table public.intake_proposals add constraint intake_proposals_status_check
       check (status in ('new', 'done', 'dismissed'));
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'intake_proposals_shape_check') then
-    alter table public.intake_proposals add constraint intake_proposals_shape_check
-      check (jsonb_typeof(items) = 'array'
-        and pg_column_size(items) <= 4096
-        and char_length(sender) <= 120
-        and char_length(summary) <= 300
-        and char_length(message_id) <= 1000);
-  end if;
 end $$;
+
+-- The 4 KB cap is on items as text, the same thing email-inbound measures
+-- before it inserts (intakeFacts.mjs itemsBytes). pg_column_size, the
+-- binary size, ran 4 to 18 per cent over the text and refused notes the
+-- function had already fitted, after their records were written.
+-- Replaced rather than kept, so a database that took the first version of
+-- this migration gets the same check.
+alter table public.intake_proposals drop constraint if exists intake_proposals_shape_check;
+alter table public.intake_proposals add constraint intake_proposals_shape_check
+  check (jsonb_typeof(items) = 'array'
+    and octet_length(items::text) <= 4096
+    and char_length(sender) <= 120
+    and char_length(summary) <= 300
+    and char_length(message_id) <= 1000);
 
 create unique index if not exists idx_intake_proposals_user_message
   on public.intake_proposals (user_id, message_id);

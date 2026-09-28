@@ -6,6 +6,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pgBin, pgSkip } from './credential-portal/postgresFixture.mjs';
+import { itemsBytes } from '../supabase/functions/_shared/intakeFacts.mjs';
 
 // The informational-mail notes table (migration 20260928170000), proven
 // against a real PostgreSQL: it applies twice, the owner reads their own
@@ -120,6 +121,21 @@ test('intake proposals: owner reads and answers, only the service role writes, b
     assert.match(big.err, /intake_proposals_shape_check/);
     const bigInsert = await pg.tryRun(pg.service(`insert into public.intake_proposals (user_id, message_id, items) values ('${A}', '<m9@mail.test>', jsonb_build_array(repeat(md5(random()::text), 400)))`));
     assert.match(bigInsert.err, /intake_proposals_shape_check/, 'the cap holds for the service role too');
+  });
+
+  await t.test('the 4 KB cap measures what email-inbound measures: a note it fitted is never refused', async () => {
+    // Many short fields: the shape whose binary size ran furthest over its text.
+    const card = (i) => ({ key: `r${i}`, kind: 'record', section: 'cme', op: 'add', recordId: `c${i}`, fields: { title: 'Spine', category: 'Other', hours: '2', date: '2026-09-12' }, sources: { title: 'x', hours: 'y' }, state: 'written' });
+    let items = [];
+    while (itemsBytes([...items, card(items.length)]) <= 4096) items.push(card(items.length));
+    const json = JSON.stringify(items);
+    assert.equal(await pg.sql(`select octet_length('${json}'::jsonb::text)`), String(itemsBytes(items)), 'the same count on both sides');
+    assert.ok(Number(await pg.sql(`select pg_column_size('${json}'::jsonb)`)) > 4096, 'the binary size would have refused it');
+    await pg.sql(pg.service(`insert into public.intake_proposals (user_id, message_id, items) values ('${A}', '<fit@mail.test>', '${json}')`));
+    const over = JSON.stringify([...items, card(items.length)]);
+    const refused = await pg.tryRun(pg.service(`insert into public.intake_proposals (user_id, message_id, items) values ('${A}', '<over@mail.test>', '${over}')`));
+    assert.match(refused.err, /intake_proposals_shape_check/, 'one card more is over');
+    await pg.sql(`delete from public.intake_proposals where message_id in ('<fit@mail.test>', '<over@mail.test>')`);
   });
 
   await t.test('anon has nothing', async () => {

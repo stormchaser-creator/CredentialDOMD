@@ -237,7 +237,7 @@ import {
 // The facts an informational email states, entered as records: checked by
 // the host, planned against the file, written (a proven forward) or offered
 // in the app on one tap (any other). Nobody is emailed about them.
-import { existingForModel, corpusIndex, attachmentText, planRecords, sourceLine, withSource, fitItems } from "../_shared/intakeFacts.mjs";
+import { existingForModel, corpusIndex, attachmentText, planRecords, sourceLine, withSource, fitItems, minimalItems, asWritten } from "../_shared/intakeFacts.mjs";
 import { recordFromFields, RECORD_SECTIONS } from "../_shared/app/utils/intakeRecords.js";
 import { admitUnderstanding, callUnderstanding, COUNT_TIMEOUT_MS, type Admission } from "../_shared/intakeModelCall.ts";
 // Word, Excel, CSV, text and RTF attachments are read here and screened for
@@ -1996,6 +1996,8 @@ interface Reading {
   /** Informational only: the facts it states, checked by the host (intakeFacts.mjs verifyRecords). */
   records?: VerifiedRecord[];
   recordsDropped?: { section: string; field: string; why: string }[];
+  /** The email names another clinician: its facts are offered, never written. */
+  recordsReview?: boolean;
 }
 
 /** One fact to enter, as the host checked it: camelCase columns in their column's type, and the words each rests on. */
@@ -2004,6 +2006,10 @@ interface VerifiedRecord {
   fields: Record<string, string>;
   sources: Record<string, string>;
   matchExistingId: string | null;
+  /** The email's own sentences the note rests on: the note a record written without the physician's say carries (asWritten). */
+  notesVerbatim?: string;
+  /** Only a note, for the record the reading named. */
+  noteOnly?: boolean;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -2564,12 +2570,14 @@ async function pendingFacts(profileId: string): Promise<RowsBySection> {
  * stored and filed as a delivery's are (a master agreement goes to the
  * agency's contract on file). Its facts (reading.records, checked by the
  * host) are planned against the file (intakeFacts.mjs planRecords): on a
- * POSITIVELY authenticated forward (mayFileFrom) each new fact is written
- * the way the app's own add writes it (every key a real column, created_at
- * and updated_at set, the Credential or Practice write check first), and a
+ * POSITIVELY authenticated forward (mayFileFrom) that names no other
+ * clinician, each new fact is written the way the app's own add writes it
+ * (every key a real column, created_at and updated_at set, the Credential
+ * or Practice write check first, the note in the email's own words), and a
  * fact on a record already on file fills that record's empty fields and
  * adds its note; on any other forward nothing is written and each fact is
- * offered in the app on one tap. What happened goes to intake_proposals for
+ * offered in the app on one tap. The note row is stored once more with the
+ * least it needs if the full one is refused. What happened goes to intake_proposals for
  * the app to show ("From <sender>: <summary>", with Undo or Add). Nobody is
  * emailed. A fact the file already holds adds nothing, so the same letter
  * forwarded twice writes once, and a second copy with nothing new in it adds
@@ -2589,10 +2597,15 @@ async function enterNote(ledgerId: string, profile: MatchedProfile, opts: {
   const [rows, pending] = await Promise.all([loadRecordRows(profile.id), pendingFacts(profile.id)]);
   // Who it was from, as the app shows it: the sender's name, unless it
   // carries a link, an address or a phone number (plainSummary), then the
-  // domain it came from.
-  const sender = plainSummary(opts.senderName, 80) || domainPart(bareAddress(opts.senderAddr));
+  // domain it came from (cut to the table's 120 characters).
+  const sender = plainSummary(opts.senderName, 80) || plainText(domainPart(bareAddress(opts.senderAddr)), 120);
   const line = sourceLine(sender, opts.receivedAt);
-  const plan = planRecords((reading.records ?? []).map((r) => withSource(r, line)), rows, pending);
+  // Written without the physician's say only on a proven forward, and only
+  // when the email names no other clinician (a roster, a colleague's
+  // coverage): then each fact is offered instead. A written record's note is
+  // the email's own sentences (asWritten), never the reading's summary.
+  const writing = mayFile && !reading.recordsReview;
+  const plan = planRecords((reading.records ?? []).map((r) => withSource(writing ? asWritten(r) : r, line)), rows, pending);
   const now = new Date().toISOString();
   const items: NoteItem[] = [];
   let written = 0, proposed = 0, onFile = 0, writeFailed = 0;
@@ -2601,7 +2614,7 @@ async function enterNote(ledgerId: string, profile: MatchedProfile, opts: {
     const rec = p.record as VerifiedRecord;
     const key = `r${items.filter((i) => i.kind === "record").length + 1}`;
     const base = { key, kind: "record", section: p.section, op: p.op === "insert" ? "add" : "append", fields: rec.fields, sources: rec.sources };
-    if (!mayFile) {
+    if (!writing) {
       items.push({ ...base, recordId: p.op === "update" ? p.id : null, state: "proposed" });
       proposed++;
       continue;
@@ -2657,17 +2670,25 @@ async function enterNote(ledgerId: string, profile: MatchedProfile, opts: {
       sender: sender || "a forwarded email", summary: plainText(reading.summary.replace(/^"|"$/g, ""), 280), verified: mayFile,
       status: "new", items: fitItems(items), created_at: now, updated_at: now,
     };
-    const { data, error } = await db.from("intake_proposals").insert(row).select("id").single();
+    let { data, error } = await db.from("intake_proposals").insert(row).select("id").single();
+    // Refused (the 4 KB cap, a bad value): once more with the least the
+    // note needs, so a record already written never lacks its card and Undo.
+    let minimal = false;
     if (error && error.code !== PG_UNIQUE_VIOLATION) {
       console.error(`intake note: ${error.message}`);
+      ({ data, error } = await db.from("intake_proposals").insert({ ...row, items: minimalItems(items) }).select("id").single());
+      minimal = true;
+    }
+    if (error && error.code !== PG_UNIQUE_VIOLATION) {
+      console.error(`intake note, minimal: ${error.message}`);
       noteDetail = "note not saved";
     } else {
       noteId = (data as { id?: string } | null)?.id ?? null;
-      noteDetail = error ? "note already saved" : "note saved";
+      noteDetail = error ? "note already saved" : minimal ? "note saved without sources" : "note saved";
     }
   }
 
-  const detail = `informational, stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}${mayFile ? "" : " (not verified, nothing filed)"}, facts written ${written}, offered ${proposed}${writeFailed ? ` (${writeFailed} failed to write)` : ""}, on file ${onFile}, ${noteDetail}, nobody emailed, skipped ${opts.skipped}, failed ${failed}, ${readingDetail(reading)}`;
+  const detail = `informational, stored ${stored}, duplicates ${duplicates}, ${filingDetail(results)}${mayFile ? "" : " (not verified, nothing filed)"}, facts written ${written}, offered ${proposed}${writeFailed ? ` (${writeFailed} failed to write)` : ""}${mayFile && reading.recordsReview && proposed ? " (another clinician named)" : ""}, on file ${onFile}, ${noteDetail}, nobody emailed, skipped ${opts.skipped}, failed ${failed}, ${readingDetail(reading)}`;
   // Every file failed to save and nothing else was entered: failed, so a
   // redelivery tries again (the facts it would enter are deduplicated).
   await finish(ledgerId, failed > 0 && stored === 0 && duplicates === 0 && !acted ? "failed" : "done", detail, { attachment_count: stored, profile_id: profile.id });

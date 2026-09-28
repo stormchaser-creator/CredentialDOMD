@@ -153,7 +153,7 @@ test("a record names only a record the model was shown, by ref, and a contract t
   const note = "Section 9 of the agreement applies to every assignment with Quillfeather Staffing.";
   const c = ctx([note], { refs });
   const onContract = verifyRecords([{ section: "note", match_existing: "R2", fields: [{ field: "notes", value: note, quote: note }, { field: "facility", value: "Elsewhere", quote: note }] }], c);
-  assert.deepEqual(onContract.records, [{ section: "locumContracts", fields: { notes: note }, sources: { notes: note }, matchExistingId: "con-1" }]);
+  assert.deepEqual(onContract.records, [{ section: "locumContracts", fields: { notes: note }, sources: { notes: note }, matchExistingId: "con-1", notesVerbatim: note, noteOnly: true }]);
   assert.deepEqual(verifyRecords([{ section: "locumContracts", match_existing: "", fields: [{ field: "notes", value: note, quote: note }] }], c).records, [], "never a new contract");
   assert.deepEqual(verifyRecords([{ section: "note", match_existing: "R9", fields: [{ field: "notes", value: note, quote: note }] }], c).records, [], "an unknown ref names nothing");
 });
@@ -231,4 +231,214 @@ test("recordSummary and fitItems: a line the physician reads, and a note that fi
   const small = fitItems(append);
   assert.ok(itemsBytes(small) <= 3800);
   assert.deepEqual([small[0].before, small[0].after], [{ effectiveDate: null }, { effectiveDate: "2026-03-01" }]);
+});
+
+// ── Review findings, 2026-09-28 ─────────────────────────────────────────────
+// New exports are read through the modules' namespaces, so each test below
+// fails on its own (not the whole file) against code without its fix.
+import * as Facts from "../supabase/functions/_shared/intakeFacts.mjs";
+import * as Records from "../src/utils/intakeRecords.js";
+
+const fieldMap = (rec) => Object.fromEntries((rec?.fields || []).map((f) => [f.field, f.value]));
+const limitsOf = (q, text = q) => {
+  const { records } = verifyRecords(one([["provider", "Quillfeather Staffing", "Quillfeather Staffing"], ["coveragePerClaim", "1000000", q], ["coverageAggregate", "3000000", q]]), ctx([text, "Quillfeather Staffing"]));
+  return [records[0]?.fields.coveragePerClaim ?? null, records[0]?.fields.coverageAggregate ?? null];
+};
+
+test("a limit's label may come before its amount: every common layout keeps both limits", () => {
+  for (const q of [
+    "The limits are per incident $1,000,000 and aggregate $3,000,000",
+    "a per claim limit of $1,000,000 and an aggregate limit of $3,000,000",
+    "Each Claim: $1,000,000 Aggregate: $3,000,000",
+    "The limits are $1,000,000 per incident and $3,000,000 aggregate",
+    "an aggregate of $3,000,000 and $1,000,000 per claim",
+    "$1,000,000 per claim $3,000,000 aggregate",
+    "The per claim limit is $1,000,000; the aggregate limit is $3,000,000",
+  ]) assert.deepEqual(limitsOf(q), ["1000000", "3000000"], q);
+  // And still never swapped.
+  const swapped = verifyRecords(one([["provider", "Quillfeather Staffing", "Quillfeather Staffing"], ["coveragePerClaim", "3000000", "Each Claim: $1,000,000 Aggregate: $3,000,000"], ["coverageAggregate", "1000000", "Each Claim: $1,000,000 Aggregate: $3,000,000"]]), ctx(["Each Claim: $1,000,000 Aggregate: $3,000,000 Quillfeather Staffing"]));
+  assert.deepEqual(swapped.records, []);
+});
+
+test("\"1M/3M\" and spelled-out limits are amounts; a bare digit run still is not", () => {
+  assert.deepEqual(amountsIn("The limits are 1M/3M").map((a) => a.value), ["1000000", "3000000"]);
+  assert.deepEqual(amountsIn("limits 1MM per claim and 3MM aggregate").map((a) => a.value), ["1000000", "3000000"]);
+  assert.deepEqual(amountsIn("one million dollars per incident and three million dollars aggregate").map((a) => a.value), ["1000000", "3000000"]);
+  assert.deepEqual(amountsIn("3M Company, suite 4471902"), [], "a scale with no limit word near it, and a bare number, are not amounts");
+  assert.deepEqual(limitsOf("The limits are 1M/3M"), ["1000000", "3000000"]);
+  assert.deepEqual(limitsOf("one million dollars per incident and three million dollars aggregate"), ["1000000", "3000000"]);
+});
+
+test("matchRecord: a policy on file with blank limits is the same policy, by its provider or its name, and is filled rather than doubled", () => {
+  const onFile = [{ id: "hand", provider: "Quillfeather Staffing (through its insurer)", type: "Medical Professional Liability Coverage" }];
+  assert.equal(matchRecord("insurance", OWNER_FIELDS, onFile)?.id, "hand");
+  // The agency in the row's name, the actual carrier in its provider.
+  const named = [{ id: "n", name: "Quillfeather Staffing malpractice", provider: "Osterly Example Mutual", coveragePerClaim: "1000000" }];
+  assert.equal(matchRecord("insurance", OWNER_FIELDS, named)?.id, "n");
+  // A row whose limits differ, or a name that names no one, is not it.
+  assert.equal(matchRecord("insurance", OWNER_FIELDS, [{ id: "x", provider: "Quillfeather Staffing", coveragePerClaim: "2000000" }]), null);
+  assert.equal(matchRecord("insurance", OWNER_FIELDS, [{ id: "y", name: "Malpractice coverage" }]), null);
+  // The exact limits win over a blank row.
+  assert.equal(matchRecord("insurance", OWNER_FIELDS, [...onFile, { id: "exact", provider: "Quillfeather Staffing", coveragePerClaim: "1000000", coverageAggregate: "3000000" }])?.id, "exact");
+  const plan = planRecords([{ section: "insurance", fields: OWNER_FIELDS, sources: {}, matchExistingId: null }], { insurance: onFile });
+  assert.deepEqual([plan[0].op, plan[0].id, Object.keys(plan[0].changes).sort()], ["update", "hand", ["coverageAggregate", "coveragePerClaim", "notes"]]);
+});
+
+test("a record the reading names is used only when the checked fields do not contradict it", () => {
+  const personal = { id: "mine", provider: "Examplecare Mutual", coveragePerClaim: "2000000", coverageAggregate: "4000000", notes: "Personal policy." };
+  const osterly = { id: "osterly", provider: "Osterly Example Mutual" };
+  const rec = { section: "insurance", fields: { ...OWNER_FIELDS, effectiveDate: "2026-03-01" }, sources: {} };
+  for (const named of [personal, osterly]) {
+    const plan = planRecords([{ ...rec, matchExistingId: named.id }], { insurance: [personal, osterly] });
+    assert.deepEqual(plan.map((p) => p.op), ["insert"], named.id);
+  }
+  assert.equal(Records.conflictsWith?.("insurance", OWNER_FIELDS, personal), true);
+  assert.equal(Records.conflictsWith?.("insurance", { effectiveDate: "2026-03-01" }, personal), false, "nothing to contradict");
+  assert.equal(Records.conflictsWith?.("licenses", { type: "State Medical License", state: "TX" }, { type: "State Medical License", state: "CO" }), true);
+  // Named and consistent: added to.
+  const same = { id: "same", provider: "Quillfeather Staffing (through its insurer)" };
+  assert.deepEqual(planRecords([{ ...rec, matchExistingId: "same" }], { insurance: [same] }).map((p) => [p.op, p.id]), [["update", "same"]]);
+  // A note for a record must be about that record.
+  const { refs } = existingForModel({ insurance: [personal] });
+  const text = "The Quillfeather Staffing policy is claims made. Examplecare Mutual renewed your policy.";
+  const off = verifyRecords([{ section: "note", match_existing: "R1", fields: [{ field: "notes", value: "The Quillfeather Staffing policy is claims made.", quote: "The Quillfeather Staffing policy is claims made" }] }], ctx([text], { refs }));
+  assert.deepEqual(off.records, []);
+  assert.equal(off.dropped[0].why, DROP.notAbout);
+  const on = verifyRecords([{ section: "note", match_existing: "R1", fields: [{ field: "notes", value: "Examplecare Mutual renewed the policy.", quote: "Examplecare Mutual renewed your policy" }] }], ctx([text], { refs }));
+  assert.equal(on.records.length, 1);
+});
+
+test("the same letter again, its note worded another way, adds nothing: not to the record, not as a second proposal", () => {
+  const line = sourceLine("Jordan Sample", "2026-09-25T16:10:00Z");
+  const first = withSource({ section: "insurance", fields: { ...OWNER_FIELDS, notes: "Covers emergency care on an assignment. Limits $1,000,000 per incident and $3,000,000 aggregate." }, sources: {}, matchExistingId: null }, line);
+  const written = { id: "w", ...recordFromFields("insurance", first.fields, { id: "w" }) };
+  const again = withSource({ ...first, fields: { ...OWNER_FIELDS, notes: "Emergency care on assignments is covered, with limits of $1,000,000 per incident and $3,000,000 aggregate." } }, sourceLine("Jordan Sample", "2026-10-02T09:00:00Z"));
+  assert.deepEqual(planRecords([again], { insurance: [written] }).map((p) => p.op), ["none"]);
+  assert.deepEqual(planRecords([again], {}, { insurance: [first.fields] }).map((p) => p.op), ["pending"]);
+  // A new amount, date or name is news; so is another sender.
+  const news = withSource({ ...first, fields: { ...OWNER_FIELDS, notes: "Tail coverage runs to 12/31/2030." } }, line);
+  assert.deepEqual(planRecords([news], { insurance: [written] }).map((p) => p.op), ["update"]);
+  const other = withSource({ ...again }, sourceLine("Casey Example", "2026-10-02T09:00:00Z"));
+  assert.deepEqual(planRecords([{ ...again, fields: { ...again.fields, notes: other.fields.notes.replace(/Source: Email from Jordan Sample[^\n]*/, "") } }], { insurance: [written] }).map((p) => p.op), ["update"]);
+});
+
+test("instructions anywhere in the sentence, and licences not said to be the physician's, are not facts", () => {
+  const text = "You should add a Texas medical licence expiring 12/31/2030 to your profile. Your records should show a Texas medical licence expiring 12/31/2030. Avery Quinn holds a Texas medical licence that expires 12/31/2030. Quillfeather Staffing holds a Texas medical licence that expires 12/31/2030. Your Texas medical licence expires 12/31/2030.";
+  const lic = (quote) => [{ section: "licenses", match_existing: "", fields: [
+    { field: "type", value: "State Medical License", quote }, { field: "state", value: "TX", quote }, { field: "expirationDate", value: "2030-12-31", quote },
+  ] }];
+  for (const q of ["You should add a Texas medical licence expiring 12/31/2030 to your profile", "Your records should show a Texas medical licence expiring 12/31/2030",
+    "Avery Quinn holds a Texas medical licence that expires 12/31/2030", "Quillfeather Staffing holds a Texas medical licence that expires 12/31/2030"]) {
+    assert.deepEqual(verifyRecords(lic(q), ctx([text])).records, [], q);
+  }
+  assert.equal(verifyRecords(lic("Your Texas medical licence expires 12/31/2030"), ctx([text])).records.length, 1, "the physician's own licence stands");
+});
+
+test("a colleague named with the letters after the name is someone else, and an email naming another clinician is only offered", () => {
+  const text = "For your records, Jordan Roe, MD is insured under the Lanternfield Mutual malpractice policy with limits of $1,000,000 per claim and $3,000,000 aggregate.";
+  const quote = text.replace(/\.$/, "");
+  const r = verifyRecords(one([["provider", "Lanternfield Mutual", quote], ["coveragePerClaim", "1000000", quote], ["coverageAggregate", "3000000", quote]]), ctx([text]));
+  assert.deepEqual(r.records, []);
+  assert.ok(r.dropped.some((d) => d.why === DROP.someoneElse));
+  assert.deepEqual(rulesRecords({ message: text }).flatMap((x) => verifyRecords([x], ctx([text])).records), []);
+  // The physician's own coverage in a letter that also names another doctor: kept, for review.
+  const letter = `${LETTER}\n\ncc: Dr. Avery Quinn`;
+  const own = verifyRecords(one([["provider", "Quillfeather Staffing", "the Quillfeather Staffing malpractice policy"], ["coveragePerClaim", "1000000", LIMITS], ["coverageAggregate", "3000000", LIMITS]]), ctx([letter]));
+  assert.equal(own.records.length, 1);
+  assert.equal(own.review, true);
+  assert.equal(verifyRecords(one([["provider", "Quillfeather Staffing", "the Quillfeather Staffing malpractice policy"], ["coveragePerClaim", "1000000", LIMITS]]), ctx()).review, false, "\"Dr. Testa\" is the physician");
+  // "Fernwick Example Hospital, MD" is a hospital in Maryland.
+  assert.equal(verifyRecords(one([["provider", "Quillfeather Staffing", "the Quillfeather Staffing malpractice policy"], ["coveragePerClaim", "1000000", LIMITS]]), ctx([`${LETTER} Fernwick Example Hospital, MD`])).review, false);
+});
+
+test("rules: a limit that is a requirement, a limit about another clinician, or \"through December 31\" is never coverage", () => {
+  const agencies = ["Quillfeather Staffing"];
+  const required = "For your file: physicians working with Quillfeather Staffing must carry their own malpractice insurance with limits of $1,000,000 per claim and $3,000,000 aggregate.";
+  assert.deepEqual(rulesRecords({ message: required, agencies }), []);
+  const bylaws = "Fernwick Example Hospital's medical staff bylaws call for malpractice limits of $2,000,000 per occurrence and $4,000,000 aggregate for every locum physician. The Quillfeather Staffing malpractice policy carries lower limits, so please check with them.";
+  assert.deepEqual(rulesRecords({ message: bylaws, agencies }), []);
+  const december = "Your malpractice coverage runs through December 31, 2026 with limits of $1,000,000 per claim and $3,000,000 aggregate.";
+  assert.ok(!JSON.stringify(rulesRecords({ message: december })).includes("December ("), "no insurer named December");
+  // The owner's letter still reads.
+  assert.equal(rulesRecords({ message: LETTER, agencies }).length, 1);
+});
+
+test("rules: the insurer the limits sentence names is the provider, over any agency on file named elsewhere", () => {
+  const letter = "This confirms that your assignment through Quillfeather Staffing is on our schedule. Your malpractice coverage through Examplecare Mutual Insurance of $1,000,000 per claim and $3,000,000 aggregate is on file with the medical staff office.";
+  const f = fieldMap(rulesRecords({ message: letter, agencies: ["Quillfeather Staffing"] })[0]);
+  assert.equal(f.provider, "Examplecare Mutual Insurance");
+  assert.equal(f.name, "Examplecare Mutual Insurance malpractice coverage");
+  const q = rulesRecords({ message: letter, agencies: ["Quillfeather Staffing"] })[0].fields.find((x) => x.field === "provider").quote;
+  assert.match(q, /^Your malpractice coverage through Examplecare/);
+});
+
+test("rules: an effective date only when a sentence says the policy took effect then, never a date that ends something", () => {
+  const base = `${LETTER}\n\n`;
+  const eff = (tail) => fieldMap(rulesRecords({ message: base + tail, agencies: ["Quillfeather Staffing"] })[0]).effectiveDate;
+  assert.equal(eff("Your credentialing file is effective through 12/31/2026."), undefined);
+  assert.equal(eff("Tail coverage is in effect for claims after 12/31/2026."), undefined);
+  assert.equal(eff("The policy took effect on 03/01/2026."), "2026-03-01");
+});
+
+test("an insurance expiration is when the coverage ends, never an agreement's term, a renewal or tail wording", () => {
+  const text = "Master professional services agreement effective March 1, 2026 through February 28, 2027, renewing automatically. Tail coverage is in effect for claims after 12/31/2026. Your Quillfeather Staffing policy expires on 06/30/2027.";
+  const exp = (quote, value) => verifyRecords(one([["provider", "Quillfeather Staffing", "Your Quillfeather Staffing policy expires on 06/30/2027"], ["expirationDate", value, quote]]), ctx([text])).records[0]?.fields.expirationDate;
+  assert.equal(exp("effective March 1, 2026 through February 28, 2027, renewing automatically", "2027-02-28"), undefined);
+  assert.equal(exp("Tail coverage is in effect for claims after 12/31/2026", "2026-12-31"), undefined);
+  assert.equal(exp("Your Quillfeather Staffing policy expires on 06/30/2027", "2027-06-30"), "2027-06-30");
+});
+
+test("a note may use a common abbreviation, or the initials of words the email writes, and no other", () => {
+  const text = `${LETTER}\n\nThe master services agreement governs each assignment.`;
+  const note = (value) => verifyRecords(one([["provider", "Quillfeather Staffing", "the Quillfeather Staffing malpractice policy"], ["coveragePerClaim", "1000000", LIMITS], ["notes", value, "the Quillfeather Staffing malpractice policy covers the emergency care"]]), ctx([text])).records[0].fields.notes;
+  assert.equal(note("Covers ER care on a Quillfeather Staffing assignment."), "Covers ER care on a Quillfeather Staffing assignment.");
+  assert.equal(note("Per the MSA, coverage is per assignment."), "Per the MSA, coverage is per assignment.");
+  assert.equal(note("Also covers the XYZ programme."), undefined);
+});
+
+test("a record written without the physician's say carries the email's own words as its note, never the reading's", () => {
+  const text = "Your Lanternfield Mutual malpractice policy is claims made and does not include tail coverage after your assignment ends. Limits are $1,000,000 per claim and $3,000,000 aggregate.";
+  const { records } = verifyRecords(one([
+    ["provider", "Lanternfield Mutual", "Your Lanternfield Mutual malpractice policy is claims made"],
+    ["coveragePerClaim", "1000000", "Limits are $1,000,000 per claim and $3,000,000 aggregate"],
+    ["notes", "Tail coverage is included after the assignment ends.", "does not include tail coverage after your assignment ends"],
+  ]), ctx([text]));
+  assert.equal(records[0].fields.notes, "Tail coverage is included after the assignment ends.", "the reading's words stay on a proposal, which he reads first");
+  const written = Facts.asWritten?.(records[0]);
+  assert.equal(written?.fields.notes, "Does not include tail coverage after your assignment ends.");
+  assert.equal(written?.fields.coveragePerClaim, "1000000");
+});
+
+test("identifiers the gate missed: \"policy PHY2291B\", \"Policy: PHY2291B\", \"policy BM-7Q2-993\"", () => {
+  for (const q of [
+    "Lanternfield Mutual provides $1,000,000 per claim and $3,000,000 aggregate under policy PHY2291B",
+    "Policy: PHY2291B. Lanternfield Mutual provides $1,000,000 per claim and $3,000,000 aggregate",
+    "Lanternfield Mutual provides $1,000,000 per claim and $3,000,000 aggregate under policy BM-7Q2-993",
+  ]) {
+    const r = verifyRecords(one([["provider", "Lanternfield Mutual", q], ["coveragePerClaim", "1000000", q], ["coverageAggregate", "3000000", q]]), ctx([q]));
+    assert.deepEqual(r.records, [], q);
+    assert.ok(r.dropped.every((d) => d.why === DROP.identifier || d.why === DROP.thin), q);
+  }
+  // Section numbers, years and limits are not identifiers.
+  const fine = "Lanternfield Mutual provides $1,000,000 per claim and $3,000,000 aggregate under Section 7.2 for policy year 2026";
+  assert.equal(verifyRecords(one([["provider", "Lanternfield Mutual", fine], ["coveragePerClaim", "1000000", fine]]), ctx([fine])).records.length, 1);
+});
+
+test("a date filled on a record marked \"date not yet known\" clears the mark, and Undo would put it back", () => {
+  const lic = { id: "L1", type: "State Medical License", state: "CO", expirationDate: null, dateUnknown: true };
+  assert.deepEqual(appendChanges("licenses", lic, { expirationDate: "2028-05-31" }).changes, { expirationDate: "2028-05-31", dateUnknown: false });
+  const [p] = planRecords([{ section: "licenses", fields: { type: "State Medical License", state: "CO", expirationDate: "2028-05-31" }, sources: {}, matchExistingId: "L1" }], { licenses: [lic] });
+  assert.deepEqual([p.op, p.changes, p.before], ["update", { expirationDate: "2028-05-31", dateUnknown: false }, { expirationDate: null, dateUnknown: true }]);
+  // A record not waiting for a date keeps what it has.
+  assert.deepEqual(appendChanges("licenses", { ...lic, dateUnknown: false }, { expirationDate: "2028-05-31" }).changes, { expirationDate: "2028-05-31" });
+});
+
+test("itemsBytes counts what the table's check counts (jsonb as text), and minimalItems fits what the full note could not", () => {
+  const items = [{ key: "r1", kind: "record", fields: { a: "1", b: [1, 2] }, state: "written" }];
+  // PostgreSQL writes jsonb back as {"a": "1", "b": [1, 2]}: a space after each colon and comma.
+  assert.equal(itemsBytes(items), '[{"key": "r1", "kind": "record", "fields": {"a": "1", "b": [1, 2]}, "state": "written"}]'.length);
+  const big = [1, 2, 3, 4, 5, 6].map((i) => ({ key: `r${i}`, kind: "record", section: "cme", op: "add", recordId: `id-${i}`, fields: { title: "t".repeat(100), notes: "n".repeat(600) }, sources: { title: "s".repeat(200), notes: "s".repeat(200) }, before: { notes: "b".repeat(300) }, state: "written" }));
+  const min = Facts.minimalItems?.(big);
+  assert.ok(min && itemsBytes(min) <= 3800);
+  assert.deepEqual(min.map((i) => [i.recordId, i.state, i.fields.title.length]), big.map((i) => [i.recordId, "written", 100]));
 });

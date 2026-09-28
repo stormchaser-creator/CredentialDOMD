@@ -112,8 +112,10 @@ export function IntakeNoteCard({ note, T, isDesktop = false, busyKey = null, err
 
   return h("div", { style: { backgroundColor: T.card, border: `1px solid ${waiting ? T.accent : T.border}`, borderRadius: 14, padding: "12px 14px", boxShadow: T.shadow1, minWidth: 0 } },
     h("div", { style: { fontSize: 15, fontWeight: 700, color: T.text, lineHeight: 1.4, overflowWrap: "anywhere" } }, noteHeadline(note)),
-    !note?.verified && waiting
-      ? h("div", { style: { ...muted, marginTop: 4 } }, "This forward could not be verified as coming from you, so nothing was added. Add what is right, and dismiss the rest.")
+    waiting
+      ? h("div", { style: { ...muted, marginTop: 4 } }, note?.verified
+        ? "Some of it waits for you: add what is yours, and dismiss the rest."
+        : "This forward could not be verified as coming from you, so nothing was added. Add what is right, and dismiss the rest.")
       : null,
     items.length ? null : h("div", { style: { ...muted, marginTop: 4 } }, "There was nothing in it to add."),
     items.map(itemBlock),

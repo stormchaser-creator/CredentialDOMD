@@ -501,3 +501,22 @@ test("fileableFromMixed: an agreement role files an agreement, never a dateless 
   assert.equal(asksToSign([{ quote: "Please sign and return the attached locum agreement" }]), true);
   assert.equal(asksToSign([{ quote: "Please send your updated CV" }]), false);
 });
+
+// ── Review findings, 2026-09-28: a delivery that states a fact ──────────────
+
+test("a letter read as a delivery keeps the facts the host verifies, and becomes informational; with none, it stays a delivery", async () => {
+  const { factsFor } = await import("./intake-eval.mjs");
+  const owner = loadCases(SYNTHETIC_DIR).find((c) => c.id === "informational-malpractice-limits");
+  const { parts, facts } = factsFor({ ...owner, physicianName: "Rowan Testa" });
+  for (const confidence of ["high", "medium"]) {
+    const v = verifyUnderstanding({ ...owner.modelReply, intent: "delivery", confidence }, { subject: owner.subject, parts, attachmentCount: 1, facts });
+    assert.equal(v.intent, "informational", confidence);
+    assert.equal(v.modelIntent, "delivery");
+    assert.deepEqual([v.records.length, v.records[0].fields.coveragePerClaim, v.records[0].fields.coverageAggregate], [1, "1000000", "3000000"], confidence);
+  }
+  const bare = verifyUnderstanding({ ...owner.modelReply, intent: "delivery", records: [] }, { subject: owner.subject, parts, attachmentCount: 1, facts });
+  assert.equal(bare.intent, "delivery", "a delivery that states nothing to enter is filed and confirmed as before");
+  // A request's statements are still never entered.
+  const asking = verifyUnderstanding({ ...owner.modelReply, intent: "request", asks: [{ quote: "Your signed master professional services agreement is attached for reference", kind: "unknown", who: "physician" }] }, { subject: owner.subject, parts, attachmentCount: 1, facts });
+  assert.deepEqual(asking.records, []);
+});

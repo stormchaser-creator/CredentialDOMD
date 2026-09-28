@@ -23,7 +23,7 @@
 // Pure: plans the writes and returns them; the hook and the screen perform
 // them. scripts/intake-proposals.test.mjs runs every case in plain node.
 
-import { recordFromFields, matchRecord, appendChanges, emailFields, recordSummary, SECTION_LABEL, fieldKind, amountValue, dateValue, stateCode } from "./intakeRecords.js";
+import { recordFromFields, matchRecord, appendChanges, conflictsWith, emailFields, recordSummary, SECTION_LABEL, fieldKind, amountValue, dateValue, stateCode } from "./intakeRecords.js";
 import { leaveInbox } from "./inboxDocs.js";
 
 export const NOTE_STATES = Object.freeze(["proposed", "written", "added", "dismissed", "undone"]);
@@ -94,9 +94,13 @@ export function editedFields(item, edits) {
  *   { writes: [{ op: "add" | "edit", key, record }], item }  or  { error }
  * A fact whose record is already on file (matched now, on this device) is
  * added to that record rather than made twice; a fact the record already
- * holds writes nothing.
+ * holds writes nothing. A record the proposal names is used only while the
+ * fact (as the physician may have edited it) does not contradict it
+ * (conflictsWith: another carrier, other limits); otherwise the fact is
+ * matched afresh or added as its own record. The item keeps when it was
+ * entered (`at`), for Undo.
  */
-export function planAccept(item, { data = {}, newId, fields: override } = {}) {
+export function planAccept(item, { data = {}, newId, fields: override, now = new Date().toISOString() } = {}) {
   if (!item || item.state !== "proposed") return { error: "This was already answered." };
   if (item.kind === "link") {
     const doc = (data.documents || []).find((d) => d.id === item.docId);
@@ -109,18 +113,22 @@ export function planAccept(item, { data = {}, newId, fields: override } = {}) {
   const section = item.section;
   const fields = emailFields(section, override || item.fields);
   const rows = data[section] || [];
-  const existing = item.recordId ? rows.find((r) => r.id === item.recordId) || null : matchRecord(section, fields, rows);
-  if (item.recordId && !existing) return { error: "That record is not on this device yet. Refresh the app and try again." };
+  const named = item.recordId ? rows.find((r) => r.id === item.recordId) || null : null;
+  if (item.recordId && !named) return { error: "That record is not on this device yet. Refresh the app and try again." };
+  const existing = named && !conflictsWith(section, fields, named) ? named : matchRecord(section, fields, rows);
   if (existing) {
     const { changes, keys } = appendChanges(section, existing, fields);
     const before = Object.fromEntries(keys.map((k) => [k, existing[k] ?? null]));
-    const next = { ...item, fields, state: "added", recordId: existing.id, op: "append", before, after: changes };
+    const next = { ...item, fields, state: "added", recordId: existing.id, op: "append", before, after: changes, at: now };
     return { writes: keys.length ? [{ op: "edit", key: section, record: { ...existing, ...changes } }] : [], item: next };
   }
+  // Only a note for the record it named (a contract, or any record on file):
+  // nothing to make a record of on its own.
+  if (named && !Object.keys(fields).some((k) => k !== "notes" && k !== "statusSource")) return { error: "That note is not about the record it named. Dismiss it, or add the note by hand." };
   const id = typeof newId === "function" ? newId() : undefined;
   if (!id) return { error: "Could not make a new record here." };
   const record = recordFromFields(section, fields, { id });
-  return { writes: [{ op: "add", key: section, record }], item: { ...item, fields, state: "added", recordId: id, op: "add" } };
+  return { writes: [{ op: "add", key: section, record }], item: { ...item, fields, state: "added", recordId: id, op: "add", at: now } };
 }
 
 /** Dismiss: nothing is written; the item says so. */
@@ -128,21 +136,50 @@ export const planDismiss = (item) => (item && item.state === "proposed" ? { writ
 
 const sameValue = (a, b) => String(a ?? "") === String(b ?? "");
 
+// A record's own insert stamps its two times a moment apart, and clocks
+// differ a little: an edit is a change made later than this.
+const EDIT_GRACE_MS = 2000;
+const timeOf = (v) => { const t = Date.parse(String(v ?? "")); return Number.isFinite(t) ? t : null; };
+
 /**
  * Undo: the writes that take an entered fact back out.
  *   a record the email (or Add) created   deleteItem, which also records the
- *                                         tombstone that keeps it deleted
+ *                                         tombstone that keeps it deleted,
+ *                                         and only while the record is as
+ *                                         it was entered: once the physician
+ *                                         has edited it, or a file has been
+ *                                         attached to it (deleteItem would
+ *                                         delete that file too), Undo is
+ *                                         refused and the record is theirs
+ *                                         to delete from its own screen
  *   fields it filled on a record on file  put back as they were, each only
  *                                         when it still holds what was
  *                                         written (a later edit is the
  *                                         physician's and stays)
- * Returns { writes: [{ op: "delete", key, id } | { op: "edit", key, record }], item } or { error }.
+ * since is the note's created_at (when a proven forward wrote the record).
+ * Returns { writes: [{ op: "delete", key, id } | { op: "edit", key, record }], item, confirm? } or { error }.
+ * confirm is the question to ask before a delete, which cannot be undone.
  */
-export function planUndo(item, { data = {} } = {}) {
+export function planUndo(item, { data = {}, since = null } = {}) {
   if (!item || item.kind !== "record" || !(item.state === "written" || item.state === "added")) return { error: "Nothing to undo." };
   const section = item.section;
   if (item.op === "add") {
-    return { writes: item.recordId ? [{ op: "delete", key: section, id: item.recordId }] : [], item: { ...item, state: "undone" } };
+    if (!item.recordId) return { writes: [], item: { ...item, state: "undone" } };
+    // Not on this device: whether it has been edited, or has files, cannot be told.
+    const record = (data[section] || []).find((r) => r.id === item.recordId);
+    if (!record) return { error: "That record is not on this device yet. Refresh the app and try again." };
+    if ((data.documents || []).some((d) => d && d.linkedTo === `${section}:${item.recordId}`)) {
+      return { error: "A file has been attached to that record since. Open the record to delete it." };
+    }
+    const entered = [timeOf(item.at), timeOf(since), timeOf(record.createdAt)].filter((t) => t !== null);
+    const edited = timeOf(record.updatedAt);
+    if (entered.length && edited !== null && edited > Math.max(...entered) + EDIT_GRACE_MS) {
+      return { error: "That record has been changed since. Open it to delete it." };
+    }
+    return {
+      writes: [{ op: "delete", key: section, id: item.recordId }], item: { ...item, state: "undone" },
+      confirm: "Delete the record this email added? This cannot be undone.",
+    };
   }
   const existing = (data[section] || []).find((r) => r.id === item.recordId);
   if (!existing) return { error: "That record is not on this device yet. Refresh the app and try again." };

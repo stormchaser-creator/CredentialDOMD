@@ -156,3 +156,57 @@ test("the headline, the labels and the corrections carry no values", () => {
   assert.ok(!/1000000|Quillfeather|Jordan/.test(JSON.stringify(c)), "a correction names fields, never values or people");
   assert.equal(recordAnswerCorrection(proposed, proposed.items[0], "something"), null);
 });
+
+// ── Review findings, 2026-09-28: Undo of an added record ────────────────────
+
+import { readFileSync } from "node:fs";
+import { planUndo } from "../src/utils/intakeProposals.js";
+
+const WRITTEN_AT = "2026-09-28T16:00:00.000Z";
+const addedItem = { key: "r1", kind: "record", section: "insurance", op: "add", recordId: "ins-1", fields: FIELDS, sources: SOURCES, state: "written" };
+const asWrittenRow = { id: "ins-1", ...FIELDS, createdAt: WRITTEN_AT, updatedAt: WRITTEN_AT };
+
+test("Undo of a record an email added deletes it only while it is as it was entered, and asks first", () => {
+  const ok = planUndo(addedItem, { data: { insurance: [asWrittenRow], documents: [] }, since: WRITTEN_AT });
+  assert.deepEqual(ok.writes, [{ op: "delete", key: "insurance", id: "ins-1" }]);
+  assert.match(ok.confirm, /cannot be undone/);
+  // Edited since: his record now.
+  const edited = planUndo(addedItem, { data: { insurance: [{ ...asWrittenRow, updatedAt: "2026-10-02T09:00:00.000Z" }] }, since: WRITTEN_AT });
+  assert.equal(edited.writes, undefined);
+  assert.match(edited.error, /changed since\. Open it to delete it/);
+  // A file attached to it since: deleteItem would delete the file too.
+  const linked = planUndo(addedItem, { data: { insurance: [asWrittenRow], documents: [{ id: "coi", linkedTo: "insurance:ins-1" }] }, since: WRITTEN_AT });
+  assert.equal(linked.writes, undefined);
+  assert.match(linked.error, /file has been attached/);
+  // Not on this device yet: nothing can be told, nothing is deleted.
+  assert.match(planUndo(addedItem, { data: { insurance: [] }, since: WRITTEN_AT }).error, /not on this device/);
+  // Added in the app a moment ago, never edited: the insert's own stamps are not an edit.
+  const inApp = { ...addedItem, state: "added", at: WRITTEN_AT };
+  assert.equal(planUndo(inApp, { data: { insurance: [{ ...asWrittenRow, createdAt: "2026-09-28T16:00:00.400Z", updatedAt: "2026-09-28T16:00:00.401Z" }] } }).writes.length, 1);
+  assert.equal(planUndo(inApp, { data: { insurance: [{ id: "ins-1", ...FIELDS }] } }).writes.length, 1, "no stamps on this device yet");
+});
+
+test("the inbox asks before an Undo that deletes, and passes when the note was written", () => {
+  const src = readFileSync(new URL("../src/components/features/RequestsInbox.jsx", import.meta.url), "utf8");
+  assert.match(src, /planUndo\(item, \{ data, since: note\.created_at \}\)/);
+  assert.match(src, /if \(plan\.confirm && typeof window !== "undefined" && !window\.confirm\(plan\.confirm\)\) return;/);
+});
+
+test("Add of a proposal whose named record the fact contradicts makes its own record, never edits the other one", () => {
+  const item = { ...proposed.items[0], recordId: "ins-personal", op: "append" };
+  const personal = { id: "ins-personal", provider: "Examplecare Mutual", coveragePerClaim: "2000000", coverageAggregate: "4000000", notes: "Personal policy." };
+  const plan = planAccept(item, { data: { insurance: [personal] }, newId: () => "new-id", now: WRITTEN_AT });
+  assert.deepEqual(plan.writes.map((w) => [w.op, w.key, w.record.id]), [["add", "insurance", "new-id"]]);
+  assert.deepEqual([plan.item.op, plan.item.recordId, plan.item.at], ["add", "new-id", WRITTEN_AT]);
+  // Named and consistent: added to.
+  const same = { id: "ins-same", provider: "Quillfeather Staffing (through its insurer)" };
+  const onSame = planAccept({ ...item, recordId: "ins-same" }, { data: { insurance: [same] }, newId: () => "x" });
+  assert.deepEqual(onSame.writes.map((w) => [w.op, w.record.id]), [["edit", "ins-same"]]);
+});
+
+test("a proven forward whose facts wait for him says so, without calling the forward unverified", () => {
+  const offered = html({ note: { ...proposed, verified: true } });
+  assert.match(offered, /Some of it waits for you: add what is yours, and dismiss the rest\./);
+  assert.ok(!/could not be verified/.test(offered));
+  assert.ok(!offered.includes(EM_DASH));
+});

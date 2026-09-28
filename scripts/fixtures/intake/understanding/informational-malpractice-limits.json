@@ -88,8 +88,23 @@
           },
           {
             "field": "notes",
-            "value": "Covers emergency care given on a Quillfeather Staffing assignment, within the scope of your licence and hospital privileges, with no age restrictions for emergencies. Limits $1,000,000 per incident and $3,000,000 aggregate (Section 7.2). Provided for each assignment through the agency's insurer, applies whenever a claim is made, with tail coverage from the agency if the policy is claims made. Administrative work is not covered. The agreement took effect March 1, 2026 and renews automatically each year.",
+            "value": "Covers the emergency care given on a Quillfeather Staffing assignment.",
+            "quote": "the Quillfeather Staffing malpractice policy covers the emergency care you give while you are on an assignment with us"
+          },
+          {
+            "field": "notes",
+            "value": "Limits $1,000,000 per incident and $3,000,000 aggregate (Section 7.2 of the professional services agreement).",
             "quote": "The limits are $1,000,000 per incident and $3,000,000 aggregate, as set out in Section 7.2 of your professional services agreement"
+          },
+          {
+            "field": "notes",
+            "value": "Provided for each assignment through the agency's insurer, applies whenever a claim is made, with tail coverage from the agency if the policy is claims made.",
+            "quote": "malpractice coverage is provided for each assignment through the agency's insurer, applies whenever a claim is made, and the agency provides tail coverage if the policy is claims made"
+          },
+          {
+            "field": "notes",
+            "value": "Administrative work is not covered.",
+            "quote": "Administrative work is not covered"
           }
         ]
       }

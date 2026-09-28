@@ -230,8 +230,10 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
   const answerNote = async (note, item, action, extra = {}) => {
     const plan = action === "add" ? planAccept(item, { data, newId: () => crypto.randomUUID(), fields: extra.fields })
       : action === "dismiss" ? planDismiss(item)
-        : planUndo(item, { data });
+        : planUndo(item, { data, since: note.created_at });
     if (plan.error) { setNoteErr({ id: note.id, text: plan.error }); return; }
+    // An Undo that deletes a record asks first, as every other delete does.
+    if (plan.confirm && typeof window !== "undefined" && !window.confirm(plan.confirm)) return;
     setNoteErr(null);
     setNoteBusy({ id: note.id, key: item.key });
     try {
