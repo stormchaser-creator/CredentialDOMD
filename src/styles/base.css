@@ -692,3 +692,9 @@ img, svg {
     50% { transform: rotate(-90deg); }
   }
 }
+
+/* Read-only records (ReadOnlyRecords.jsx): each card draws its own chevron. */
+.cmd-archive summary { list-style: none; }
+.cmd-archive summary::-webkit-details-marker { display: none; }
+.cmd-archive .cmd-archive-chevron { transition: transform 0.15s ease; }
+.cmd-archive details[open] > summary .cmd-archive-chevron { transform: rotate(90deg); }

@@ -87,10 +87,15 @@ for (const preset of ADMIN_PREVIEW_PRESETS) {
 test('the app reads exactly these fields for its gates', async () => {
   const app = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /limitedLaunch\.access\?\.accessStatus/);
-  assert.match(app, /if \(limitedLaunch\.enabled && !canWriteCredential && \["credentials", "documents"\]\.includes\(tab\)\) return <ReadOnlyRecords scope="credential" \/>;/);
+  assert.match(app, /if \(limitedLaunch\.enabled && credentialReadOnly && \["credentials", "documents"\]\.includes\(tab\)\) return <ReadOnlyRecords scope="credential" \/>;/);
   const subscription = await readFile(new URL('../src/hooks/useSubscription.js', import.meta.url), 'utf8');
   assert.match(subscription, /canWriteCredential: !LIMITED_LAUNCH_ACCESS_ENABLED \|\| !!limitedLaunch\.access\?\.capabilities\.credential\.write/);
   assert.match(subscription, /canWritePractice: !LIMITED_LAUNCH_ACCESS_ENABLED \|\| !!limitedLaunch\.access\?\.capabilities\.practice\.write/);
+  // The archives follow the (previewed) server answer, not the freshness of the snapshot.
+  assert.match(subscription, /credentialReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly\(limitedLaunch\.access, "credential"\)/);
+  assert.match(subscription, /practiceReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly\(limitedLaunch\.access, "practice"\)/);
+  const practice = await readFile(new URL('../src/components/features/locum/LocumDashboard.jsx', import.meta.url), 'utf8');
+  assert.match(practice, /if \(limitedLaunch\.enabled && practiceReadOnly\) return <ReadOnlyRecords scope="practice" \/>;/);
 });
 
 test('a preview is ignored for anyone the server has not confirmed as an administrator', () => {
@@ -294,4 +299,26 @@ test('every screen reserves the banner clearance while a preview is on', async (
   assert.match(app, /\{renderContent\(\)\}\n\s*\{previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style=\{\{ height: previewClearance \}\} \/>\}/);
   const { ADMIN_PREVIEW_BANNER_CLEARANCE } = mod.exports;
   assert.ok(ADMIN_PREVIEW_BANNER_CLEARANCE >= 96, 'taller than the banner at phone width');
+});
+
+// Ticket fe321c16: the preview decides its own archive, even while the
+// admin's real snapshot is being re-checked, and never more than the real one.
+test('a previewed membership keeps its own read-only archive while the real snapshot is stale', async () => {
+  const { membershipReadOnly } = await import('../src/utils/limitedLaunchAccess.js');
+  const f = setup();
+  f.store.start(ACCOUNT, 'practice_trial_expired');
+  f.advance(ACCESS_REFRESH_MS + 1);
+  const stale = f.authority.state(ACCOUNT);
+  assert.equal(stale.needsRefresh, true);
+  assert.equal(stale.capabilities.practice.write, false);
+  assert.deepEqual(stale.entitled, { credential: true, practice: false });
+  assert.equal(membershipReadOnly(stale, 'practice'), true);
+  assert.equal(membershipReadOnly(stale, 'credential'), false);
+  f.store.start(ACCOUNT, 'credential_practice');
+  const full = f.authority.state(ACCOUNT);
+  assert.deepEqual(full.entitled, { credential: true, practice: true });
+  assert.equal(full.capabilities.credential.write, false, 'still no write until a fresh answer');
+  const g = setup({ snapshot: adminSnapshot({ lifetime: { credential: true, practice: false }, capabilities: { credential: all(true), practice: { read: true, write: false, export: true } } }) });
+  g.store.start(ACCOUNT, 'credential_practice');
+  assert.deepEqual(g.authority.state(ACCOUNT).entitled, { credential: true, practice: false }, 'a preview never grants what the real answer lacks');
 });

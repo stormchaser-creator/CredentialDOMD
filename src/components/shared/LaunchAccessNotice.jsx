@@ -1,19 +1,30 @@
 import { useApp } from "../../context/AppContext";
 import { canReviewBillingOffer } from "../../utils/limitedLaunchAccess.js";
 import { scheduledMembershipCopy } from "../../utils/membershipTiming.js";
+import { actionButtonStyle } from "./actionButton.js";
 
 const until = value => new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export default function LaunchAccessNotice({ onReviewOffers }) {
-  const { limitedLaunch, data, theme: T } = useApp();
+  const { limitedLaunch, data, theme: T, isDesktop } = useApp();
   if (!limitedLaunch.enabled) return null;
   const access = limitedLaunch.access;
   const hasSavedRecords = Object.values(data || {}).some(value => Array.isArray(value) && value.length > 0);
-  let title, copy;
+  const button = primary => actionButtonStyle(T, { primary, isDesktop });
+  const box = { padding: "12px 16px", marginBottom: 14, background: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 12 };
+  // A check that has not answered yet is not a membership decision. Only a
+  // run of failed checks says anything, and it says the records are safe.
   if (!access || limitedLaunch.error || access.needsRefresh) {
-    title = "Checking membership";
-    copy = "Saved records remain available. Changes are paused until membership can be verified.";
-  } else if (access.accessStatus === "pending" && !hasSavedRecords) {
+    if (!limitedLaunch.reconnecting) return null;
+    return <aside role="status" style={{ ...box, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <p style={{ margin: 0, flex: "1 1 220px", color: T.textMuted, fontSize: 14, lineHeight: 1.5 }}>
+        <strong style={{ color: T.text }}>Reconnecting to your account.</strong> Your records are safe; changes will save once connected.
+      </p>
+      <button type="button" style={button(true)} onClick={() => { void limitedLaunch.refresh(); }}>Try again</button>
+    </aside>;
+  }
+  let title, copy;
+  if (access.accessStatus === "pending" && !hasSavedRecords) {
     title = "Choose your membership";
     copy = "Review your eligible offer and its renewal terms before choosing to pay. Creating an account does not charge you.";
   } else if (access.lifetime.credential && access.lifetime.practice) {
@@ -34,13 +45,15 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
     title = access.freeBeta?.state === "expired" ? "Your free beta has ended" : "Saved records are available";
     copy = "You can keep viewing and exporting saved records. To make changes to features outside your membership, review an offer and choose whether to purchase.";
   } else return null;
-  const canOffer = access && !access.lifetime.credential && !access.lifetime.practice && !access.purchasedOfferId && !access.scheduledMembership
+  const canOffer = !access.lifetime.credential && !access.lifetime.practice && !access.purchasedOfferId && !access.scheduledMembership
     && (access.freeBeta?.state !== "active" || canReviewBillingOffer(access, "core") || canReviewBillingOffer(access, "core_locum"));
-  return <aside style={{ padding: "12px 16px", marginBottom: 14, background: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 10 }}>
+  const actions = [
+    access.scheduledMembership && onReviewOffers && <button key="scheduled" type="button" style={button(true)} onClick={onReviewOffers}>Review scheduled membership</button>,
+    canOffer && onReviewOffers && <button key="offers" type="button" style={button(true)} onClick={onReviewOffers}>Review membership options</button>,
+    access.purchasedOfferId === "core" && !access.capabilities.practice.write && <a key="support" href="mailto:support@credentialdomd.com" style={{ ...button(false), display: "inline-flex", alignItems: "center", textDecoration: "none", color: T.accent }}>Contact support about Practice</a>,
+  ].filter(Boolean);
+  return <aside style={box}>
     <strong>{title}</strong><p style={{ margin: "6px 0", color: T.textMuted, fontSize: 13, lineHeight: 1.5 }}>{copy}</p>
-    {(!access || limitedLaunch.error || access.needsRefresh) && <button onClick={limitedLaunch.refresh}>Check again</button>}
-    {access?.scheduledMembership && onReviewOffers && <button onClick={onReviewOffers}>Review scheduled membership</button>}
-    {canOffer && onReviewOffers && <button onClick={onReviewOffers}>Review membership options</button>}
-    {access?.purchasedOfferId === "core" && !access.capabilities.practice.write && <a href="mailto:support@credentialdomd.com" style={{ color: T.accent }}>Contact support about Practice</a>}
+    {actions.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>{actions}</div>}
   </aside>;
 }

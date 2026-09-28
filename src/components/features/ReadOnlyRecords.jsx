@@ -1,32 +1,28 @@
 import { useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { COLLECTION_KEYS, downloadDocumentFile } from "../../lib/supabase";
-import { scopeForCollection } from "../../utils/limitedLaunchAccess.js";
 import { downloadBlob } from "../../utils/credentialExport";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../utils/invoicePdf";
 import { callDayStartHour } from "../../utils/billing";
-import { isIdentitySection, isIdentityLink } from "../../utils/pausedApplicationRecords.js";
+import { archiveSections, documentDetail, documentLabel } from "../../utils/readOnlyArchive.js";
+import { actionButtonStyle } from "../shared/actionButton.js";
 
-const label = value => String(value).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, ch => ch.toUpperCase());
-const title = record => record.name || record.title || record.number || record.facility || record.type || record.date || "Saved record";
-const fields = record => Object.entries(record).filter(([key]) => !["id", "userId", "data", "storagePath", "favorite"].includes(key));
-
-/** An expiry never removes the physician's file, attachments, or invoice downloads. */
+/**
+ * An expiry never removes the physician's file, attachments, or invoice
+ * downloads. Shown only when the server's answer keeps this scope read-only;
+ * a membership check in progress keeps the normal screens (ticket fe321c16).
+ */
 export default function ReadOnlyRecords({ scope }) {
-  const { data, theme: T, navigate } = useApp();
+  const { data, theme: T, navigate, isDesktop } = useApp();
   const [message, setMessage] = useState(null);
   // Every array in data used to be listed, Protected Identity included: its
   // legal names and notes printed in full, and "Download saved records"
   // wrote them to a file. Identity records, and files linked to them, are
-  // never part of this view.
-  const groups = [...new Set([...COLLECTION_KEYS, ...Object.keys(data).filter(key => Array.isArray(data[key]))])]
-    .filter(key => !isIdentitySection(key))
-    .map(key => [key, (data[key] || []).filter(record => scopeForCollection(key, record) === scope
-      && !(key === "documents" && isIdentityLink(record?.linkedTo)))])
-    .filter(([, records]) => records.length);
-  const button = { border: `1px solid ${T.border}`, borderRadius: 8, background: T.card, color: T.text, padding: "9px 12px", cursor: "pointer" };
+  // never part of this view (archiveSections).
+  const { sections, saved } = archiveSections(data, scope, COLLECTION_KEYS);
+  const button = primary => actionButtonStyle(T, { primary, isDesktop });
+  const small = { ...button(false), minHeight: 40, padding: "8px 14px" };
   const exportRecords = () => {
-    const saved = Object.fromEntries(groups);
     downloadBlob(new Blob([JSON.stringify(saved, null, 2)], { type: "application/json" }), `credentialdomd-${scope}-records.json`);
   };
   const downloadDocument = async record => {
@@ -57,26 +53,49 @@ export default function ReadOnlyRecords({ scope }) {
       downloadBlob(file, file.name);
     } catch { setMessage("This invoice could not render. You can still download the saved records."); }
   };
-  return <section style={{ color: T.text }}>
-    <h2 style={{ fontSize: 20 }}>{scope === "practice" ? "Practice" : "Credential"} saved records</h2>
-    <p style={{ color: T.textMuted, lineHeight: 1.6 }}>These records are read-only. You can view and download them. Membership expiry does not delete your data.</p>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-      <button style={button} onClick={exportRecords}>Download saved records</button>
-      <button style={button} onClick={() => navigate("more", "export")}>All export options</button>
+  const card = { border: `1px solid ${T.border}`, borderRadius: 14, background: T.card, marginBottom: 8, overflowWrap: "anywhere" };
+  const fileRow = (doc, index) => <li key={doc.id || index} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 0", borderTop: index ? `1px solid ${T.border}` : "none" }}>
+    <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{documentLabel(doc, data)}</div>
+      <div style={{ fontSize: 13, color: T.textDim || T.textMuted, marginTop: 2 }}>{documentDetail(doc)}</div>
     </div>
-    {message && <p role="status">{message}</p>}
-    {!groups.length && <p>No saved records in this section.</p>}
-    {groups.map(([key, records]) => <section key={key} style={{ marginTop: 20 }}>
-      <h3 style={{ fontSize: 16 }}>{label(key)} ({records.length})</h3>
-      {records.map((record, index) => <details key={record.id || index} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: 12, marginBottom: 8, overflowWrap: "anywhere" }}>
-        <summary style={{ cursor: "pointer" }}>{title(record)}</summary>
-        <dl style={{ fontSize: 13 }}>{fields(record).map(([name, value]) => <div key={name} style={{ marginTop: 8 }}>
-          <dt style={{ color: T.textMuted }}>{label(name)}</dt>
-          <dd style={{ margin: "2px 0 0", whiteSpace: "pre-wrap" }}>{typeof value === "object" ? JSON.stringify(value, null, 2) : String(value ?? "")}</dd>
-        </div>)}</dl>
-        {key === "documents" && <button style={button} onClick={() => downloadDocument(record)}>Download attachment</button>}
-        {key === "invoices" && <button style={button} onClick={() => downloadInvoice(record)}>Download invoice PDF</button>}
+    <button type="button" style={small} onClick={() => downloadDocument(doc)}>Download attachment</button>
+  </li>;
+  return <section className="cmd-archive" style={{ color: T.text }}>
+    <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 6px" }}>{scope === "practice" ? "Practice" : "Credential"} saved records</h2>
+    <p style={{ color: T.textMuted, lineHeight: 1.6, margin: "0 0 12px", fontSize: 14 }}>These records are read-only. You can view and download them. Membership expiry does not delete your data.</p>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <button type="button" style={button(true)} onClick={exportRecords}>Download saved records</button>
+      <button type="button" style={button(false)} onClick={() => navigate("more", "export")}>All export options</button>
+    </div>
+    {message && <p role="status" style={{ color: T.danger || T.text, fontSize: 14, lineHeight: 1.5 }}>{message}</p>}
+    {!sections.length && <p style={{ color: T.textMuted }}>No saved records in this section.</p>}
+    {sections.map(section => <section key={section.key} style={{ marginTop: 22 }}>
+      <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: T.textMuted, margin: "0 0 8px" }}>{section.label} ({section.records.length || section.files.length})</h3>
+      {section.records.map((entry, index) => <details key={entry.record.id || index} style={card}>
+        <summary style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", minHeight: 44, cursor: "pointer" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{entry.title}</div>
+            {entry.subtitle && <div style={{ fontSize: 13, color: T.textDim || T.textMuted, marginTop: 2 }}>{entry.subtitle}</div>}
+          </div>
+          {entry.files.length > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, border: `1px solid ${T.border}`, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>{entry.files.length} {entry.files.length === 1 ? "file" : "files"}</span>}
+          <span aria-hidden="true" className="cmd-archive-chevron" style={{ color: T.textDim || T.textMuted, fontSize: 18 }}>{"\u{203A}"}</span>
+        </summary>
+        <div style={{ padding: "0 16px 12px" }}>
+          {entry.details.length > 0 && <dl style={{ fontSize: 14, margin: 0, display: "grid", gridTemplateColumns: "minmax(96px, 36%) 1fr", columnGap: 12, rowGap: 6 }}>
+            {entry.details.map((row, at) => [
+              <dt key={`label-${at}`} style={{ color: T.textMuted }}>{row.label}</dt>,
+              <dd key={`value-${at}`} style={{ margin: 0, whiteSpace: "pre-wrap" }}>{row.value}</dd>,
+            ])}
+          </dl>}
+          {entry.files.length > 0 && <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, margin: "12px 0 0", paddingBottom: 2, borderBottom: `1px solid ${T.border}` }}>Files</div>
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>{entry.files.map(fileRow)}</ul>
+          </>}
+          {entry.key === "invoices" && <button type="button" style={{ ...small, marginTop: 12 }} onClick={() => downloadInvoice(entry.record)}>Download invoice PDF</button>}
+        </div>
       </details>)}
+      {section.files?.length > 0 && <ul style={{ ...card, listStyle: "none", padding: "0 16px" }}>{section.files.map(fileRow)}</ul>}
     </section>)}
   </section>;
 }

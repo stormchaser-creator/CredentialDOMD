@@ -109,6 +109,11 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
         && !(result.purchasedOfferId === "core" && result.practiceTrial.state === "active")) result.capabilities.practice.write = false;
     }
   }
+  // What the server's last answer allows at this moment, with a trial or beta
+  // that has run out already applied. The read-only archive and membership
+  // notices follow this, never a snapshot that is merely old or a check that
+  // failed (ticket fe321c16). It never authorizes a write: that stays below.
+  result.entitled = Object.fromEntries(scopes.map(scope => [scope, result.enforcementEnabled === true && result.capabilities[scope].write === true]));
   // An old result can preserve a user's read/export view, never authorize a new write.
   if (result.needsRefresh || !result.enforcementEnabled) {
     for (const scope of scopes) result.capabilities[scope].write = false;
@@ -116,10 +121,33 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
   return result;
 }
 
+/**
+ * True only when the server's own answer keeps this scope read-only. No
+ * snapshot yet, an old one, or a failed check is "verifying", not a denial:
+ * the normal screens stay and the write guard refuses changes meanwhile.
+ */
+export function membershipReadOnly(access, scope) {
+  if (!access || !scopes.includes(scope)) return false;
+  const entitled = access.entitled?.[scope];
+  if (typeof entitled === "boolean") return !entitled;
+  return access.needsRefresh !== true && access.capabilities?.[scope]?.write !== true;
+}
+
 /** In-memory write guard shared by UI and persistence; the server still enforces access. */
 export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED, now = () => globalThis.performance?.now() ?? Date.now(), currentAccount } = {}) {
   let accountId = null, snapshot = null, receivedAt = 0, refreshFailed = false, records = null, previewSource = null;
   const current = () => typeof currentAccount === "function" ? currentAccount() : accountId;
+  // The preview source's answer for `value`, clamped to it, or null.
+  const previewOf = (expectedAccountId, value) => {
+    const real = Object.fromEntries(scopes.map(scope => [scope, Object.fromEntries(operations.map(op => [op, value.capabilities[scope][op] === true]))]));
+    let preview = null;
+    try { preview = previewSource(expectedAccountId, value); } catch { preview = null; }
+    if (!preview || preview === value || typeof preview !== "object" || !scopes.every(scope => preview.capabilities?.[scope] && typeof preview.capabilities[scope] === "object")) return null;
+    for (const scope of scopes) for (const op of operations) {
+      preview.capabilities[scope][op] = preview.capabilities[scope][op] === true && real[scope][op];
+    }
+    return preview;
+  };
   return {
     enabled,
     /**
@@ -150,14 +178,17 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
         for (const scope of scopes) value.capabilities[scope].write = false;
       }
       if (value && previewSource) {
-        const real = Object.fromEntries(scopes.map(scope => [scope, Object.fromEntries(operations.map(op => [op, value.capabilities[scope][op] === true]))]));
-        let preview = null;
-        try { preview = previewSource(expectedAccountId, value); } catch { preview = null; }
-        if (preview && preview !== value && typeof preview === "object" && scopes.every(scope => preview.capabilities?.[scope] && typeof preview.capabilities[scope] === "object")) {
-          for (const scope of scopes) for (const op of operations) {
-            preview.capabilities[scope][op] = preview.capabilities[scope][op] === true && real[scope][op];
-          }
+        const preview = previewOf(expectedAccountId, value);
+        if (preview) {
           if (value.needsRefresh) preview.needsRefresh = true;
+          // The previewed membership's own answer decides its archive, as it
+          // would with a fresh snapshot; it is never more than the real one.
+          const settled = structuredClone(value);
+          settled.needsRefresh = false;
+          for (const scope of scopes) settled.capabilities[scope].write = value.entitled[scope];
+          const settledPreview = previewOf(expectedAccountId, settled);
+          preview.entitled = Object.fromEntries(scopes.map(scope => [scope, value.entitled[scope]
+            && (settledPreview ? settledPreview.capabilities[scope].write === true : true)]));
           return preview;
         }
       }
@@ -186,6 +217,32 @@ export function membershipWriteError() {
   const error = new Error("This record is read-only. Your saved records and exports are still available.");
   error.code = "membership_read_only";
   return error;
+}
+
+// A write refused while membership is being re-checked is momentary, and says so.
+export const RECONNECTING_MESSAGE = "Reconnecting, try again in a moment.";
+
+/** True while this account's membership is unverified: no snapshot yet, an old one, or a failed check. */
+export function accessVerifying(authority = accessAuthority) {
+  if (!authority?.enabled) return false;
+  const value = authority.state();
+  return !value || value.needsRefresh === true;
+}
+
+/** What to tell someone whose change was refused: reconnecting while verifying, read-only otherwise. */
+export function writeRefusalMessage(authority = accessAuthority) {
+  return accessVerifying(authority) ? RECONNECTING_MESSAGE : membershipWriteError().message;
+}
+
+// Once per burst: an import of many records refused while reconnecting says
+// so once, not once per record. Measured from when the message was closed.
+const REFUSAL_QUIET_MS = 3000;
+let refusalShownAt = -Infinity;
+export function alertWriteRefused({ authority = accessAuthority, alert = message => globalThis.window?.alert?.(message), now = () => Date.now() } = {}) {
+  if (now() - refusalShownAt < REFUSAL_QUIET_MS) return false;
+  alert(writeRefusalMessage(authority));
+  refusalShownAt = now();
+  return true;
 }
 
 // A backup restore or direct collection replacement is checked as one operation.

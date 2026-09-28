@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
+import * as refreshFailure from '../../src/utils/accessRefreshFailure.js';
 
 // The real hook with a small synchronous hook scheduler. No Clerk, DOM,
 // transport, provider account, local storage or automatic timer is used.
@@ -25,6 +26,8 @@ function fixture({ publicSignup = true, enabled = true, profileReady = true } = 
     react,
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, ACCESS_REFRESH_MS: 300000, LIMITED_LAUNCH_ACCESS_ENABLED: enabled, PUBLIC_SELF_SERVICE_SIGNUP_ENABLED: publicSignup },
     '../utils/launchInvitation.js': { clearLaunchInvitation: () => calls.push(['clear-invitation']) },
+    '../utils/accessRefreshFailure.js': refreshFailure,
+    '../lib/errorReport.js': { reportError: () => {} },
     '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: ({ accountId: id }) => ({
       bootstrap: () => { calls.push(['bootstrap', id]); return f.bootstrap(id); },
       entitlements: () => { calls.push(['entitlements', id]); return f.entitlements(id); },

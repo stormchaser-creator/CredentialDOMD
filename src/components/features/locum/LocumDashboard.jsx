@@ -31,7 +31,7 @@ const SUBTABS = [
 ];
 
 export default function LocumDashboard({ initialSub, focusId, onFocusConsumed }) {
-  const { theme: T, plan, isDevMode, limitedLaunch, canWritePractice } = useApp();
+  const { theme: T, plan, isDevMode, limitedLaunch, practiceReadOnly } = useApp();
   const [sub, setSub] = useState(initialSub || "work");
   // Home search can land here on a specific sub-view (contracts, invoices...).
   useEffect(() => { if (initialSub) setSub(initialSub); }, [initialSub]);
@@ -40,7 +40,9 @@ export default function LocumDashboard({ initialSub, focusId, onFocusConsumed })
 
   const isLocum = plan === "locum" || isDevMode;
 
-  if (limitedLaunch.enabled && !canWritePractice) return <ReadOnlyRecords scope="practice" />;
+  // The archive is for a membership the server says cannot change Practice,
+  // never for an old snapshot or a check still in progress (ticket fe321c16).
+  if (limitedLaunch.enabled && practiceReadOnly) return <ReadOnlyRecords scope="practice" />;
 
   if (!isLocum) {
     return <UpgradeCard T={T} />;

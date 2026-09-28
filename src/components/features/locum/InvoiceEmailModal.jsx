@@ -8,6 +8,7 @@ import { invokeFn } from "../../../utils/edgeError";
 import { generateId } from "../../../utils/helpers";
 import { fmtBytes } from "../../../utils/docLabel";
 import { money } from "../../../utils/invoiceCover";
+import { RECONNECTING_MESSAGE } from "../../../utils/limitedLaunchAccess.js";
 import { invoicePdfFile, invoiceTextPdfFile } from "../../../utils/invoicePdf";
 import { invoiceDocumentArgs } from "../../../utils/invoiceArgs";
 import { billedReceiptDocs } from "../../../utils/receiptFiles";
@@ -43,7 +44,7 @@ import {
  * `invoke` is injectable for tests; the app uses the Supabase client.
  */
 function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent, invoke: invokeProp }) {
-  const { data, theme: T, limitedLaunch, canWritePractice } = useApp();
+  const { data, theme: T, limitedLaunch, canWritePractice, practiceReadOnly } = useApp();
   const iS = useInputStyle();
   const [phase, setPhase] = useState("idle"); // idle | checking | ready | sending | error
   const [check, setCheck] = useState(null);
@@ -60,7 +61,10 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
   // Set once the physician types in To: a server suggestion never replaces it.
   const toEditedRef = useRef(false);
 
-  const readOnly = !!limitedLaunch?.enabled && !canWritePractice;
+  // Read-only is the server's answer for this membership. A check still in
+  // progress is not: the letter is prepared, and Send waits for the answer.
+  const readOnly = !!limitedLaunch?.enabled && !!practiceReadOnly;
+  const reconnecting = !!limitedLaunch?.enabled && !readOnly && !canWritePractice;
   const invoke = invokeProp || ((name, options) => invokeFn(supabase, name, options));
   const settings = data?.settings;
   const args = useMemo(
@@ -142,7 +146,7 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
   const attempt = unconfirmedAttempt(check);
   const attemptKey = attempt ? `${attempt.status}|${attempt.at}|${attempt.to}` : "";
   const attemptConfirmed = !attempt || confirmedAttempt === attemptKey;
-  const canSend = phase === "ready" && !!draft && !!pdfBase64 && !problem && !stopped && !readOnly && attemptConfirmed;
+  const canSend = phase === "ready" && !!draft && !!pdfBase64 && !problem && !stopped && !readOnly && !reconnecting && attemptConfirmed;
   // The physician's own mailbox (a test send to themselves) is never saved as
   // the agreement's invoice email: every later invoice would print it under
   // BILL TO and pre-fill it here.
@@ -254,6 +258,7 @@ function InvoiceEmailModal({ open, invoice, contract, billName, onClose, onSent,
       )}
 
       {message && <div role="status" style={{ fontSize: 13, fontWeight: 600, color: T.danger, lineHeight: 1.45, marginBottom: 12 }}>{message}</div>}
+      {reconnecting && phase === "ready" && !stopped && <div role="status" style={{ fontSize: 13, fontWeight: 600, color: T.textMuted, lineHeight: 1.45, marginBottom: 12 }}>{RECONNECTING_MESSAGE}</div>}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
         {phase === "error" && !readOnly && (

@@ -44,32 +44,83 @@ function Screen() {
   return React.createElement(Practice);
 }
 
-test('failed membership lookup hides Practice tools without deleting records; lifetime snapshot restores access', () => {
-  const data = { settings: { accessStatus: 'active' },
-    workLog: [{ id: 'work', notes: 'Synthetic saved work entry', date: '2026-09-20' }],
-    cme: [{ id: 'cme', title: 'Synthetic saved CME' }], caseLogs: [{ id: 'case', title: 'Synthetic saved case' }],
-    licenses: [{ id: 'license', name: 'Synthetic saved license' }], documents: [],
-  };
-  const original = structuredClone(data);
+const savedRecords = () => ({ settings: { accessStatus: 'active' },
+  workLog: [{ id: 'work', notes: 'Synthetic saved work entry', date: '2026-09-20' }],
+  cme: [{ id: 'cme', title: 'Synthetic saved CME' }], caseLogs: [{ id: 'case', title: 'Synthetic saved case' }],
+  licenses: [{ id: 'license', name: 'Synthetic saved license' }], documents: [],
+});
+const capability = write => ({ read: true, write, export: true });
+const lifetime = (over = {}) => ({
+  accessStatus: 'active', lifetime: { credential: true, practice: true }, purchasedOfferId: null,
+  freeBeta: { state: 'none' }, practiceTrial: { state: 'none', endsAt: null },
+  capabilities: { credential: capability(true), practice: capability(true) }, ...over,
+});
+
+// Ticket fe321c16: a phone resumed from the background showed the Practice
+// archive and "Checking membership" to a lifetime member, because an old or
+// unanswered check turned every write off and the screens read that as expiry.
+test('a failed membership lookup keeps the Practice screen with writes refused, and deletes nothing', () => {
+  const data = savedRecords(), original = structuredClone(data);
   globalThis.__entitlementRenderAccount = { data, theme: {}, navigate() {},
     limitedLaunch: { enabled: true, status: 'error', access: null, error: 'Membership information could not load.' } };
   const failed = renderToStaticMarkup(React.createElement(Screen));
   assert.equal(derived.plan, 'locum');
-  assert.equal(derived.isPro, false);
   assert.equal(derived.canWriteCredential, false);
   assert.equal(derived.canWritePractice, false);
-  assert.match(failed, /Practice saved records/);
+  assert.equal(derived.credentialReadOnly, false);
+  assert.equal(derived.practiceReadOnly, false);
+  assert.match(failed, /data-editor="\.\/WorkLog"/);
   assert.match(failed, /Synthetic saved work entry/);
-  assert.doesNotMatch(failed, /data-editor|>RVUs<|>Sched\.</);
+  assert.doesNotMatch(failed, /Practice saved records/);
+  assert.deepEqual(data, original);
+  delete globalThis.__entitlementRenderAccount;
+});
+
+test('a stale snapshot on resume keeps the normal Practice screen while writes stay refused', () => {
+  const data = savedRecords();
+  globalThis.__entitlementRenderAccount = { data, theme: {}, navigate() {},
+    limitedLaunch: { enabled: true, status: 'ready', error: null, access: lifetime({
+      needsRefresh: true, entitled: { credential: true, practice: true },
+      capabilities: { credential: capability(false), practice: capability(false) },
+    }) } };
+  const stale = renderToStaticMarkup(React.createElement(Screen));
+  assert.equal(derived.canWritePractice, false);
+  assert.equal(derived.canWriteCredential, false);
+  assert.equal(derived.practiceReadOnly, false);
+  assert.match(stale, /data-editor="\.\/WorkLog"/);
+  assert.doesNotMatch(stale, /Practice saved records/);
+  delete globalThis.__entitlementRenderAccount;
+});
+
+test('a fresh snapshot that denies Practice write shows the archive with every saved record', () => {
+  const data = savedRecords(), original = structuredClone(data);
+  for (const access of [
+    lifetime({ lifetime: { credential: false, practice: false }, purchasedOfferId: 'core', entitled: { credential: true, practice: false },
+      capabilities: { credential: capability(true), practice: capability(false) } }),
+    // A snapshot built without the entitlement field reads its capabilities.
+    lifetime({ lifetime: { credential: false, practice: false }, purchasedOfferId: 'core',
+      capabilities: { credential: capability(true), practice: capability(false) } }),
+  ]) {
+    globalThis.__entitlementRenderAccount = { data, theme: {}, navigate() {}, limitedLaunch: { enabled: true, status: 'ready', error: null, access } };
+    const denied = renderToStaticMarkup(React.createElement(Screen));
+    assert.equal(derived.canWritePractice, false);
+    assert.equal(derived.practiceReadOnly, true);
+    assert.equal(derived.credentialReadOnly, false);
+    assert.match(denied, /Practice saved records/);
+    assert.match(denied, /Synthetic saved work entry/);
+    assert.doesNotMatch(denied, /data-editor|>RVUs<|>Sched\.</);
+  }
   const credentialArchive = renderToStaticMarkup(React.createElement(Archive, { scope: 'credential' }));
   assert.match(credentialArchive, /Synthetic saved CME/);
   assert.match(credentialArchive, /Synthetic saved case/);
+  assert.deepEqual(data, original);
+  delete globalThis.__entitlementRenderAccount;
+});
 
-  globalThis.__entitlementRenderAccount.limitedLaunch = { enabled: true, status: 'ready', error: null, access: {
-    accessStatus: 'active', lifetime: { credential: true, practice: true }, purchasedOfferId: null,
-    freeBeta: { state: 'none' }, practiceTrial: { state: 'none', endsAt: null },
-    capabilities: { credential: { read: true, write: true, export: true }, practice: { read: true, write: true, export: true } },
-  } };
+test('a lifetime snapshot gives the full Practice screen and writes', () => {
+  const data = savedRecords(), original = structuredClone(data);
+  globalThis.__entitlementRenderAccount = { data, theme: {}, navigate() {},
+    limitedLaunch: { enabled: true, status: 'ready', error: null, access: lifetime() } };
   const ready = renderToStaticMarkup(React.createElement(Screen));
   assert.equal(derived.isPro, true);
   assert.equal(derived.isLifetime, true);

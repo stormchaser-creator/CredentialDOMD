@@ -297,7 +297,7 @@ function ProGate({ T, onUpgrade, featureName }) {
 function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [caseLogYear, setCaseLogYear] = useState(currentAcademicYear());
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, setData, loaded, recordsLoadIssue, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, canWriteCredential, manage } = useApp();
+  const { data, setData, loaded, recordsLoadIssue, theme: T, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage } = useApp();
   // Admin, from public.app_admins by way of ai-proxy's status GET. A hook, so
   // the Admin card appears when that answer lands rather than one render too
   // late. It gates a card, not a permission: every admin view and every admin
@@ -2823,7 +2823,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
   /* ─── RENDER ─────────────────────────────────────────────── */
   const renderContent = () => {
-    if (limitedLaunch.enabled && !canWriteCredential && ["credentials", "documents"].includes(tab)) return <ReadOnlyRecords scope="credential" />;
+    // Only the server's own answer swaps in the archive. An old snapshot or a
+    // failed check keeps this screen; the write guard refuses changes meanwhile.
+    if (limitedLaunch.enabled && credentialReadOnly && ["credentials", "documents"].includes(tab)) return <ReadOnlyRecords scope="credential" />;
     if (tab === "home") return renderHome();
     if (tab === "documents") return <DocumentsSection />;
     if (tab === "share") return renderShare();
@@ -2967,9 +2969,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         {tab === "home" && <NotificationBanner onOpenCenter={() => setNotifCenterOpen(true)} onGoSettings={() => { setTab("more"); setSubPage("settings"); }} />}
         {tab === "home" && <AdminMessageCard />}
         <div className={isDesktop ? `cmd-content-inner${isReadingPage ? " cmd-content-inner--reading" : ""}` : undefined} style={isDesktop ? undefined : { padding: "16px 16px 0" }}>
-          {/* Routine membership details belong in the profile. A failed access
-              check still needs an explanation while changes are paused. */}
-          {(!limitedLaunch.access || limitedLaunch.error || limitedLaunch.access.needsRefresh) && <LaunchAccessNotice />}
+          {/* Routine membership details belong in the profile. A check that
+              keeps failing (not one slow resume) gets a small reconnecting note. */}
+          {limitedLaunch.reconnecting && <LaunchAccessNotice />}
           {renderContent()}
           {previewClearance > 0 && <div aria-hidden="true" data-admin-preview-clearance="" style={{ height: previewClearance }} />}
         </div>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange, canReviewBillingOffer } from '../../src/utils/limitedLaunchAccess.js';
+import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange, canReviewBillingOffer, membershipReadOnly, accessVerifying, writeRefusalMessage, alertWriteRefused, RECONNECTING_MESSAGE, membershipWriteError } from '../../src/utils/limitedLaunchAccess.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 
 const t = Date.parse('2026-09-19T12:00:00Z');
@@ -190,4 +190,62 @@ test('resume stops on stale membership, paid/lifetime/scheduled status, revocati
   actor='user_b';
   assert.equal(canReviewBillingOffer(authority.state('user_a'),'core'),false);
   assert.equal(authority.accept('user_a',base),false);
+});
+
+// Ticket fe321c16: an old snapshot or a failed check is "verifying", never a
+// membership decision. Writes stay refused; the archive waits for the server.
+test('an old or failed check keeps the server entitlement for the screens and still refuses every write', () => {
+  let now = 0;
+  const authority = createAccessAuthority({ enabled: true, currentAccount: () => 'user_a', now: () => now });
+  authority.reset('user_a');
+  const snapshot = fixture(); snapshot.practiceTrial = { state: 'none', startsAt: null, endsAt: null, autoCharges: false };
+  authority.accept('user_a', snapshot);
+  assert.deepEqual(authority.state().entitled, { credential: true, practice: true });
+  assert.equal(accessVerifying(authority), false);
+  now = ACCESS_REFRESH_MS + 1;
+  const stale = authority.state();
+  assert.equal(stale.needsRefresh, true);
+  assert.deepEqual(stale.entitled, { credential: true, practice: true });
+  assert.equal(stale.capabilities.practice.write, false);
+  assert.equal(membershipReadOnly(stale, 'practice'), false);
+  assert.equal(authority.allowsMutation('workLog', { id: 'w' }), false);
+  assert.equal(accessVerifying(authority), true);
+  assert.equal(writeRefusalMessage(authority), RECONNECTING_MESSAGE);
+  now = 0; authority.accept('user_a', snapshot); authority.suspendWrites();
+  assert.deepEqual(authority.state().entitled, { credential: true, practice: true });
+  assert.equal(authority.allows('credential', 'write'), false);
+  assert.equal(membershipReadOnly(authority.state(), 'credential'), false);
+});
+
+test('only the server answer makes a scope read-only: a denial, an ended trial, or disabled enforcement', () => {
+  const denied = fixture(); denied.practiceTrial = { state: 'none', startsAt: null, endsAt: null, autoCharges: false };
+  denied.capabilities.practice.write = false;
+  const fresh = accessAt(denied, 0, 0);
+  assert.equal(membershipReadOnly(fresh, 'practice'), true);
+  assert.equal(membershipReadOnly(fresh, 'credential'), false);
+  // Still read-only while that denial is re-checked: no flicker to the editors.
+  assert.equal(membershipReadOnly(accessAt(denied, 0, ACCESS_REFRESH_MS + 1), 'practice'), true);
+  const trialEnded = accessAt(fixture(), 0, 1001);
+  assert.equal(trialEnded.entitled.practice, false);
+  const off = fixture(); off.enforcementEnabled = false;
+  assert.deepEqual(accessAt(off, 0, 0).entitled, { credential: false, practice: false });
+  assert.equal(membershipReadOnly(null, 'practice'), false, 'no answer yet is verifying, not read-only');
+  assert.equal(membershipReadOnly({ needsRefresh: true, capabilities: { practice: { write: false } } }, 'practice'), false);
+  assert.equal(membershipReadOnly({ capabilities: { practice: { write: false } } }, 'practice'), true);
+});
+
+test('a refused change says so once per burst, reconnecting while verifying and read-only otherwise', () => {
+  let clock = 1_000_000;
+  const shown = [];
+  const verifying = { enabled: true, state: () => ({ needsRefresh: true }) };
+  const denied = { enabled: true, state: () => ({ needsRefresh: false }) };
+  assert.equal(alertWriteRefused({ authority: verifying, alert: m => shown.push(m), now: () => clock }), true);
+  for (let i = 0; i < 20; i++) alertWriteRefused({ authority: verifying, alert: m => shown.push(m), now: () => clock });
+  assert.deepEqual(shown, [RECONNECTING_MESSAGE], 'a bulk import refused while reconnecting says it once');
+  clock += 3000;
+  alertWriteRefused({ authority: denied, alert: m => shown.push(m), now: () => clock });
+  assert.deepEqual(shown, [RECONNECTING_MESSAGE, membershipWriteError().message]);
+  assert.doesNotMatch(RECONNECTING_MESSAGE, /\u{2014}/u);
+  assert.equal(accessVerifying({ enabled: false, state: () => null }), false);
+  assert.equal(accessVerifying({ enabled: true, state: () => null }), true);
 });

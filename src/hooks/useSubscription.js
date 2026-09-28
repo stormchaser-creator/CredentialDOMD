@@ -16,7 +16,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
 import { useLimitedLaunchAccess } from "./useLimitedLaunchAccess.js";
-import { LIMITED_LAUNCH_ACCESS_ENABLED, accessAuthority } from "../utils/limitedLaunchAccess.js";
+import { LIMITED_LAUNCH_ACCESS_ENABLED, accessAuthority, membershipReadOnly } from "../utils/limitedLaunchAccess.js";
 import { useUser } from "@clerk/clerk-react";
 import { supabase } from "../lib/supabase";
 import { TIERS, getTier } from "../utils/pricingEngine";
@@ -331,6 +331,11 @@ export function useSubscription(userOverride, { profileReady = false } = {}) {
     limitedLaunch,
     canWriteCredential: !LIMITED_LAUNCH_ACCESS_ENABLED || !!limitedLaunch.access?.capabilities.credential.write,
     canWritePractice: !LIMITED_LAUNCH_ACCESS_ENABLED || !!limitedLaunch.access?.capabilities.practice.write,
+    // The read-only archive and its copy follow the server's answer, never an
+    // old snapshot or a failed check (ticket fe321c16): while membership is
+    // re-checked the normal screens stay and the write guard refuses changes.
+    credentialReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly(limitedLaunch.access, "credential"),
+    practiceReadOnly: LIMITED_LAUNCH_ACCESS_ENABLED && membershipReadOnly(limitedLaunch.access, "practice"),
     ...(LIMITED_LAUNCH_ACCESS_ENABLED ? {
       // Saved Practice records remain reachable after the write entitlement ends.
       plan: "locum", tier: "locum", tierObject: getTier("locum"),
