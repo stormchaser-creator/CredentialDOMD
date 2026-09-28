@@ -54,7 +54,7 @@ const boardCert = {
 };
 const fourItems = {
   id: "22222222-2222-4222-8222-222222222222",
-  from_name: "Tara Domalewski", from_addr: "tdomalewski@hospital.org", subject: "RE: Requested docs",
+  from_name: "Casey Morgan", from_addr: "cmorgan@hospital.org", subject: "RE: Requested docs",
   proposal: {
     v: 1, method: "rules",
     items: [
@@ -64,7 +64,7 @@ const fourItems = {
       { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [] },
     ],
     docIds: ["d2", "d3", "d4", "d5"], missing: ["Logs 12-months"],
-    coverNote: "Hello Tara,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nThese will follow separately:\n- Logs 12-months\n\nRegards,\nEric Whitney, DO",
+    coverNote: "Hello Casey,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nThese will follow separately:\n- Logs 12-months\n\nRegards,\nEric Whitney, DO",
   },
 };
 const nothingFound = {
