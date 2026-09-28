@@ -108,14 +108,22 @@ export function staleRequests(rows, documents) {
  * quote-checked asks against the file as it is now, rather than reading the
  * email again with keywords. Re-reading would lose the model's reading and
  * turn a one-tap packet into a keyword one, or bring back an ask the model
- * had rightly left out. null for a proposal the rules built.
+ * had rightly left out. Each ask carries the kind the MODEL named (an item
+ * whose words the rules read as something else keeps it as modelKind), so
+ * the rebuild disagrees in the same place the server did. A proposal saved
+ * as unclear (nothing in the email read as an ask) stays unclear, whoever
+ * read it. null for a proposal the rules built from a request that asks.
  */
 export function modelReading(proposal) {
-  if (!proposal || typeof proposal !== "object" || proposal.source !== "model" || !Array.isArray(proposal.items)) return null;
-  return {
+  if (!proposal || typeof proposal !== "object") return null;
+  const unclear = proposal.unclear === true;
+  if (proposal.source !== "model" || !Array.isArray(proposal.items)) return unclear ? { unclear: true } : null;
+  const reading = {
     confidence: proposal.confidence,
-    asks: proposal.items.filter((i) => i && typeof i === "object").map((i) => ({ quote: i.quote || i.ask || "", kind: i.kind })),
+    asks: proposal.items.filter((i) => i && typeof i === "object").map((i) => ({ quote: i.quote || i.ask || "", kind: i.modelKind || i.kind })),
   };
+  if (unclear) reading.unclear = true;
+  return reading;
 }
 
 /**

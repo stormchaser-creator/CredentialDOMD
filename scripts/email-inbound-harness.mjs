@@ -130,7 +130,7 @@ export const harness = {
   emails: new Map(),        // email id -> { email, attachments: [{meta, bytes}] }
   sent: [],                 // payloads POSTed to /emails
   gemini: [],               // request bodies sent to Gemini
-  geminiReply: () => null,  // (body) => scan object, or { status, text }
+  geminiReply: () => null,  // (body) => scan object, { status, text }, or { hang: true } for a scan that never answers
   anthropic: [],            // Messages API request bodies sent to the fake Anthropic API
   anthropicCounts: [],      // count_tokens request bodies
   // (body) => the reading object the model "answers" with, { status, body }
@@ -196,6 +196,10 @@ globalThis.fetch = async (input, init = {}) => {
     const body = JSON.parse(init.body);
     harness.gemini.push({ url, body });
     const r = harness.geminiReply(body);
+    if (r && r.hang) {
+      // A scan that never answers: the function's own timeout aborts it.
+      return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    }
     if (r && r.status) return new Response(r.text ?? "{}", { status: r.status, headers: { "content-type": "application/json" } });
     return json({
       candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(r) }] } }],
@@ -206,7 +210,9 @@ globalThis.fetch = async (input, init = {}) => {
   return realFetch(input, init);
 };
 
-const env = {
+// Exported so a test file can shorten a budget before loadFunction(): the
+// function reads its environment once, when it loads.
+export const env = {
   RESEND_API_KEY: "re_test",
   RESEND_API_BASE: RESEND,
   RESEND_WEBHOOK_SECRET: "whsec_test",
@@ -244,9 +250,9 @@ export async function loadFunction() {
 }
 
 /** Deliver one email.received event for `email` (with attachments) and return the handler's JSON. */
-export async function deliver({ id, from, to, subject, text, attachments = [], messageId }) {
+export async function deliver({ id, from, to, subject, text, html, attachments = [], messageId }) {
   harness.emails.set(id, {
-    email: { id, from, to: [to], subject, text, headers: {}, created_at: "2026-09-25T16:10:00Z", raw: { download_url: `https://raw.test/${id}` } },
+    email: { id, from, to: [to], subject, text, ...(html === undefined ? {} : { html }), headers: {}, created_at: "2026-09-25T16:10:00Z", raw: { download_url: `https://raw.test/${id}` } },
     attachments: attachments.map((a, i) => ({ meta: { id: `att-${i}`, filename: a.filename, content_type: a.contentType, content_disposition: "attachment" }, bytes: a.bytes })),
   });
   const event = {

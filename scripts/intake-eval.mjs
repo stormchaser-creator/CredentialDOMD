@@ -122,7 +122,9 @@ export function readFromReply(c, message) {
   const input = caseInput(c);
   const read = readModelReply(message);
   if (!read.ok) return readByRules(c, read.why);
-  return verifyUnderstanding(read.value, { emailText: `${input.subject}\n${input.rawText}`, attachmentCount: input.attachments.length });
+  const parts = splitForward(input.rawText, input.forwardedBody);
+  const reading = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.attachments.length });
+  return reading.needsRules ? readByRules(c, "the reading's asks were not the email's own words") : reading;
 }
 
 /** The request email-inbound would send for this case. */

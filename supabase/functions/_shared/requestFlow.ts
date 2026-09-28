@@ -472,6 +472,14 @@ export interface SummaryInput {
   oneTap?: boolean;
   /** What to check before it goes (requestPacket.ts reviewReason). */
   review?: string;
+  /**
+   * Nothing in the email read as an ask, although it was taken for a request
+   * (intakeUnderstanding.mjs, reading.unclear): what it was about, and the
+   * sentences of it that name a document. The summary then says it is
+   * unclear, never "sent a document request" and never "Nothing was asked of
+   * you": either could be false.
+   */
+  unclear?: { about?: string | null; mentions?: string[] | null } | null;
 }
 
 // The next step names the control that is on the screen: the request's
@@ -506,6 +514,19 @@ export function physicianSummaryText(input: SummaryInput): string {
   const p = input.proposal;
   const lines: string[] = [];
   let saidNotFound = false;
+
+  if (input.unclear) {
+    // Saved so a deadline is not lost, and said plainly: nobody could tell.
+    const about = String(input.unclear.about ?? "").replace(/\s+/g, " ").trim();
+    const whose = input.requesterFound ? `${who}'s email` : "the forwarded email";
+    lines.push(`Got it. It is not clear whether ${whose}${about ? ` about ${about}` : ""} asks you for anything, so it is saved under Requests for you to read. No acknowledgement was sent, and nothing goes to ${input.requesterFound ? who : "anyone"} unless you send it.`);
+    const mentions = (Array.isArray(input.unclear.mentions) ? input.unclear.mentions : [])
+      .map((m) => String(m ?? "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 3);
+    if (mentions.length) lines.push("", "It mentions:", ...mentions.map((m) => `- "${m}"`));
+    lines.push("", `${input.appUrl}#requests (opens your requests)`);
+    if (!input.requesterFound) lines.push("", NOT_FOUND_NOTE);
+    return lines.join("\n");
+  }
 
   if (!p || !Array.isArray(p.items) || p.items.length === 0) {
     const noList = Boolean(p && Array.isArray(p.items));

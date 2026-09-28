@@ -153,8 +153,10 @@ test("an informational letter with an agreement attached: no request, the agreem
   assert.ok(claude.prompt_chars > 1000);
   assert.equal(usage("gemini").length, 1, "the attachment was read once, and the reading reused for filing");
 
+  // The understanding step's own daily allowance, never Vera's "anthropic" one.
   const [reserve] = ledger("reserve_ai_call");
-  assert.deepEqual([reserve.args.p_user, reserve.args.p_scope, reserve.args.p_limit], [PROFILE, "anthropic", 60]);
+  assert.equal(ledger("reserve_ai_call").length, 1);
+  assert.deepEqual([reserve.args.p_user, reserve.args.p_scope, reserve.args.p_limit], [PROFILE, "anthropic_intake", 30]);
   const [hold] = ledger("reserve_ai_spend");
   assert.equal(hold.args.p_cap_usd, 15);
   assert.ok(hold.args.p_worst_case_usd > claude.cost_usd, "held at the worst case");
@@ -288,7 +290,7 @@ test("a request's attachment that reads as a patient record is never kept, and n
 
 // ── The host's check ─────────────────────────────────────────────────────────
 
-test("an ask that is not the email's own words is dropped, and with none left the email is not a request", async () => {
+test("a request whose every ask is not the email's own words is set aside, and the rules read the email", async () => {
   seedContracts();
   const r = await sendCase(INFO, {
     anthropicReply: () => ({
@@ -299,19 +301,32 @@ test("an ask that is not the email's own words is dropped, and with none left th
       ],
     }),
   });
-  assert.equal(r.body.intent, "informational", "the first quote is invented, the second is not in the email as quoted");
+  // The first quote is invented, the second is not in the email as quoted:
+  // no evidence either way, so the rules decide (a delivery here, from the
+  // signed agreement), and nothing says "Nothing was asked of you".
+  assert.equal(r.body.read, "rules");
+  assert.equal(r.body.intent, "delivery");
   assert.equal(rows("document_requests").length, 0);
   assert.equal(toOthers().length, 0);
-  assert.match(rows("inbound_emails")[0].detail, /read by model \(medium, 2 ask\(s\) dropped\)/);
+  assert.ok(!toPhysician()[0].text.includes("Nothing was asked"));
+  assert.match(rows("inbound_emails")[0].detail, /read by rules \(the reading's asks were not the email's own words\)/);
 });
 
-test("a quote that is in the email but asked of someone else is not the physician's ask", async () => {
+test("a quote that is in the email but asked of someone else is not the physician's ask, and the email is saved as unclear", async () => {
   seedContracts();
   const r = await sendCase(INFO, {
     anthropicReply: () => ({ ...INFO.modelReply, intent: "request", asks: [{ quote: "Proof of malpractice coverage is required for every provider on our panel", kind: "coi_malpractice", who: "someone_else" }] }),
   });
-  assert.equal(r.body.intent, "informational");
-  assert.equal(rows("document_requests").length, 0);
+  // Called a request with no ask left: kept for the physician to read, never
+  // acknowledged, never one tap; the agreement is still filed.
+  assert.equal(r.body.intent, "mixed");
+  assert.equal(r.body.one_tap, false);
+  assert.equal(toOthers().length, 0, "no acknowledgement");
+  const [req] = rows("document_requests");
+  assert.equal(req.proposal.unclear, true);
+  assert.deepEqual(req.proposal.items, []);
+  assert.match(toPhysician()[0].text, /^Got it\. It is not clear whether Jordan Sample's email about .* asks you for anything/);
+  assert.ok(rows("documents").some((d) => d.linked_to === "locumContracts:contract-now"), "the agreement is attached to the agency's contract");
 });
 
 test("a quote survives the mail client's wrapping, curly quotes and dashes", async () => {
@@ -341,15 +356,22 @@ for (const [name, reply] of [
   ["declines", () => ({ message: { id: "m", type: "message", role: "assistant", model: "claude-opus-5", content: [], stop_reason: "refusal", usage: { input_tokens: 10, output_tokens: 0 } } })],
   ["answers outside the schema", () => ({ intent: "request", asks: "the malpractice certificate", attachments: [], summary: "x", confidence: "high" })],
 ]) {
-  test(`the model ${name}: the rules stand in, and a statement is still never an ask`, async () => {
+  test(`the model ${name}: the rules stand in, a statement is still never an ask, and the physician is not told nothing was asked`, async () => {
     const r = await sendCase(REQUIRED_WORDS, { anthropicReply: reply });
     assert.equal(r.body.read, "rules");
-    assert.notEqual(r.body.intent, "request");
-    assert.equal(rows("document_requests").length, 0, "no request, so nothing can be sent to the agency");
-    assert.equal(toOthers().length, 0);
-    assert.match(toPhysician()[0].text, /^Read Jordan Sample's note about "Your credentialing file"\. Nothing was asked of you\./);
-    assert.ok(!/could not tell/i.test(toPhysician()[0].text));
-    assert.match(rows("inbound_emails")[0].detail, /read by rules \(/);
+    // The rules cannot tell a letter from a request worded as a statement, so
+    // the email is kept for the physician to read: no ask, no draft to the
+    // agency, no acknowledgement, never one tap.
+    assert.equal(r.body.one_tap, false);
+    const [req] = rows("document_requests");
+    assert.equal(req.proposal.unclear, true);
+    assert.deepEqual(req.proposal.items, [], "a statement is never an ask");
+    assert.ok(!req.proposal.coverNote.includes("your request"), req.proposal.coverNote);
+    assert.equal(toOthers().length, 0, "nothing to the agency");
+    const text = toPhysician()[0].text;
+    assert.match(text, /^Got it\. It is not clear whether Jordan Sample's email about "Your credentialing file" asks you for anything, so it is saved under Requests for you to read\./);
+    assert.ok(!/could not tell|Nothing was asked|sent a document request/i.test(text), text);
+    assert.match(rows("inbound_emails")[0].detail, /ack skipped: the email may not ask for anything, .*read by rules \(.*\), unclear/);
   });
 }
 
@@ -378,7 +400,8 @@ test("over the day's limit or the month's budget, or with the ledger down, no ca
     assert.equal(r.body.read, "rules", name);
     assert.equal(harness.anthropic.length, 0, `${name}: no paid call`);
     assert.equal(usage("anthropic").length, 0);
-    assert.equal(rows("document_requests").length, 0);
+    assert.equal(rows("document_requests")[0].proposal.unclear, true);
+    assert.equal(toOthers().length, 0);
   }
 });
 
@@ -394,11 +417,11 @@ test("an account that is not active, or a deployment with no Anthropic key, neve
   assert.equal(harness.anthropic.length, 0);
 });
 
-test("an admin's call is not held against a budget, as in ai-proxy, and is still metered", async () => {
+test("an admin's proven forward is not held against a budget, as in ai-proxy, but still counts against the day's reads and is metered", async () => {
   resetWorld(); harness.rawAuth = AUTH_PASS; seed({ admin: true });
   await sendCase(REQUIRED_WORDS);
   assert.equal(harness.anthropic.length, 1);
-  assert.equal(harness.ledger.calls.length, 0);
+  assert.deepEqual(harness.ledger.calls.map((c) => [c.name, c.args.p_scope, c.args.p_limit]), [["reserve_ai_call", "anthropic_intake", 30]]);
   assert.equal(harness.anthropicCounts.length, 0);
   assert.equal(usage("anthropic").length, 1);
 });
@@ -466,5 +489,251 @@ test("nothing the physician is sent carries an em dash, even when the model's su
   const text = toPhysician()[0].text;
   assert.ok(!text.includes(EM_DASH), text);
   assert.ok(!text.includes("phish.example"), "a link in the model's summary is never repeated");
-  assert.match(text, /^Read Jordan Sample's note about the agency policy, emergency care, see\. Nothing was asked of you\./);
+  // A summary that carried a link is not repeated at all.
+  assert.match(text, /^Read Jordan Sample's note\. Nothing was asked of you\./);
+});
+
+// ── Review of the reading, 2026-09-28 (evening) ─────────────────────────────
+// Each case below reproduced a way the reading could still answer a letter
+// as a request, send the wrong document, or tell the physician nothing was
+// asked when something was. Every email is synthetic and paraphrased.
+
+/** A malpractice COI, a DEA registration and a driver's licence on file, so a wrong kind has something to match. */
+function seedMore() {
+  rows("insurance").push({ id: "ins-coi", user_id: PROFILE, type: "Professional Liability", name: "Malpractice COI", provider: "Example Mutual", expiration_date: "2027-06-30" });
+  rows("licenses").push({ id: "lic-dea", user_id: PROFILE, type: "DEA Registration", name: "DEA Registration", state: "CO", expiration_date: "2028-03-31" });
+  rows("travel_docs").push({ id: "td-dl", user_id: PROFILE, type: "Driver's License", provider: "Example DMV", expiration_date: "2029-04-01" });
+  rows("documents").push(
+    { id: "doc-coi", user_id: PROFILE, name: "coi.pdf", mime_type: null, type: "application/pdf", linked_to: "insurance:ins-coi", uploaded_at: "2026-01-02T10:00:00Z", size_bytes: 13 },
+    { id: "doc-dea", user_id: PROFILE, name: "dea.pdf", mime_type: null, type: "application/pdf", linked_to: "licenses:lic-dea", uploaded_at: "2026-01-02T10:00:00Z", size_bytes: 14 },
+    { id: "doc-dl", user_id: PROFILE, name: "dl.jpg", mime_type: null, type: "image/jpeg", linked_to: "travelDocs:td-dl", uploaded_at: "2026-01-02T10:00:00Z", size_bytes: 15 },
+  );
+}
+const fresh = (over = {}) => { resetWorld(); harness.rawAuth = AUTH_PASS; seed(over); };
+const MORGAN = { name: "Morgan Placeholder", address: "morgan@ridgeway-locums.example" };
+const reading = (asks, over = {}) => ({ intent: "request", asks, attachments: [], summary: "documents for your file", confidence: "high", ...over });
+
+test("a statement the model takes for an ask is dropped: no acknowledgement, never one tap, and the agreement is filed", async () => {
+  const statement = "Proof of malpractice coverage is required for every provider on our panel";
+  for (const [label, asks, intent] of [
+    ["a bare noun phrase", [{ quote: "malpractice coverage", kind: "coi_malpractice", who: "physician" }], "request"],
+    ["the policy statement word for word", [{ quote: statement, kind: "coi_malpractice", who: "physician" }], "request"],
+    ["called informational, with the ask listed anyway", [{ quote: statement, kind: "coi_malpractice", who: "physician" }], "informational"],
+  ]) {
+    fresh(); seedContracts(); seedMore();
+    const r = await sendCase(INFO, { anthropicReply: () => ({ ...INFO.modelReply, intent, asks }) });
+    assert.equal(toOthers().length, 0, `${label}: nothing to the consultant`);
+    assert.notEqual(r.body.one_tap, true, label);
+    const [req] = rows("document_requests");
+    if (req) {
+      assert.equal(req.proposal.unclear, true, label);
+      assert.deepEqual(req.proposal.items, [], label);
+    }
+    const text = toPhysician()[0].text;
+    assert.ok(!/Packet ready|Approve and send|Nothing was asked/.test(text), `${label}: ${text}`);
+    assert.ok(rows("documents").some((d) => d.linked_to === "locumContracts:contract-now"), `${label}: the agreement went to the agency's contract, not a request`);
+  }
+});
+
+test("an ask found only in the quoted history, or in the physician's own note above the forward, is not the sender's", async () => {
+  const told = "Thanks, we have everything we need now and your file is complete. Nothing else is needed from you.";
+  const historyAsk = { quote: "Please send a copy of your current DEA registration", kind: "dea", who: "physician" };
+  for (const [label, c] of [
+    ["history under an attribution line", { body: `${told}\n\nMorgan\n\nOn Fri, Sep 18, 2026 at 9:00 AM Morgan Placeholder wrote:\n> Please send a copy of your current DEA registration.`, asks: [historyAsk] }],
+    ["history quoted with chevrons alone", { body: `${told}\n\n> Please send a copy of your current DEA registration.\n> Thanks, Morgan`, asks: [historyAsk] }],
+    ["the physician's own note", {
+      note: "can you send them my DEA when they ask",
+      body: "Welcome to the Ridgeway panel! We are glad to have you, and your onboarding is complete.\n\nMorgan",
+      asks: [{ quote: "send them my DEA", kind: "dea", who: "physician" }],
+    }],
+  ]) {
+    fresh(); seedMore();
+    const r = await sendCase({ id: label, subject: "Your file", from: MORGAN, note: c.note, body: c.body, attachments: [], modelReply: reading(c.asks) });
+    assert.equal(toOthers().length, 0, `${label}: no acknowledgement`);
+    assert.equal(r.body.one_tap, false, label);
+    assert.ok(!rows("document_requests")[0]?.proposal?.docIds?.includes("doc-dea"), `${label}: the DEA is not proposed`);
+    assert.ok(!/Packet ready|Approve and send/.test(toPhysician()[0].text), label);
+  }
+});
+
+test("a later message that points to the history may carry its ask, but never on one tap", async () => {
+  fresh(); seedMore();
+  const r = await sendCase({
+    id: "points-below", subject: "Re: Your file", from: MORGAN, attachments: [],
+    body: "Hi Dr. Testa, following up on the below.\n\nMorgan\n\nOn Fri, Sep 18, 2026 at 9:00 AM Morgan Placeholder wrote:\n> Please send a copy of your current DEA registration.",
+    modelReply: reading([{ quote: "Please send a copy of your current DEA registration", kind: "dea", who: "physician" }]),
+  });
+  assert.equal(r.body.intent, "request");
+  assert.equal(r.body.one_tap, false, "an ask from the history is at most medium");
+  assert.deepEqual(rows("document_requests")[0].proposal.docIds, ["doc-dea"]);
+  assert.equal(toOthers().length, 0, "and it is not acknowledged");
+});
+
+test("the model's kind never overrides the quoted words: a BLS ask read as a malpractice COI drafts the BLS card, for Review", async () => {
+  seedCredentials(); seedMore();
+  const r = await sendCase({
+    id: "bls-as-coi", subject: "BLS", from: MORGAN, attachments: [],
+    body: "Hi Dr. Testa,\n\nCould you send a copy of your current BLS card? We need it before your October assignment.\n\nThanks,\nMorgan",
+    modelReply: reading([{ quote: "Could you send a copy of your current BLS card?", kind: "coi_malpractice", who: "physician" }]),
+  });
+  assert.equal(r.body.one_tap, false);
+  const p = rows("document_requests")[0].proposal;
+  assert.deepEqual(p.items.map((i) => [i.kind, i.modelKind, i.confidence, i.docIds]), [["bls", "coi_malpractice", "medium", ["doc-bls"]]]);
+  assert.ok(!p.docIds.includes("doc-coi"), "the malpractice certificate is never proposed");
+  assert.match(toPhysician()[0].text, /Read two ways: ".*BLS card.*" \(BLS card by its words, malpractice certificate by the reading\)/);
+});
+
+test("a kind only the model names (an attestation read as a photo ID) is never one tap", async () => {
+  seedMore();
+  const r = await sendCase({
+    id: "attestation-as-id", subject: "Attestation", from: MORGAN,
+    body: "Hi Dr. Testa,\n\nPlease sign and return the attached attestation.\n\nMorgan",
+    attachments: [{ name: "Attestation.pdf", scan: { documentType: "other", confidence: "medium", extracted: { name: "Attestation", issuer: "Ridgeway" } } }],
+    modelReply: reading([{ quote: "Please sign and return the attached attestation", kind: "photo_id", who: "physician" }], { attachments: [{ index: 1, role: "form_to_complete", filing: "Keep with the request" }] }),
+  });
+  assert.equal(r.body.one_tap, false);
+  const p = rows("document_requests")[0].proposal;
+  assert.deepEqual(p.items.map((i) => [i.kind, i.ruleKind]), [["photo_id", "unknown"]]);
+  assert.match(toPhysician()[0].text, /Named by the reading alone: ".*" as photo ID\. Check that is what they meant\./);
+});
+
+test("a near-verbatim quote keeps a real request: a mended typo, a zero-width space, an HTML entity", async () => {
+  // The model mends "curent"; the ask is still the email's, at medium.
+  fresh(); seedCredentials();
+  let r = await sendCase({
+    id: "typo", subject: "BLS", from: MORGAN, attachments: [],
+    body: "Could you send a copy of your curent BLS card by Friday? Our deadline for the committee is Monday.\n\nMorgan",
+    modelReply: reading([{ quote: "Could you send a copy of your current BLS card by Friday", kind: "bls", who: "physician" }]),
+  });
+  assert.equal(r.body.intent, "request");
+  assert.deepEqual(rows("document_requests")[0].proposal.docIds, ["doc-bls"]);
+  assert.equal(r.body.one_tap, false, "a quote the host found only nearly is not certain");
+  assert.ok(!toPhysician()[0].text.includes("Nothing was asked"));
+
+  // Outlook's zero-width space inside the sentence.
+  fresh(); seedCredentials();
+  r = await sendCase({
+    id: "zwsp", subject: "BLS", from: MORGAN, attachments: [],
+    body: "Could you send a copy of your current\u200b BLS card by Friday?\n\nMorgan",
+    modelReply: reading([{ quote: "Could you send a copy of your current BLS card by Friday?", kind: "bls", who: "physician" }]),
+  });
+  assert.equal(r.body.intent, "request");
+  assert.equal(r.body.one_tap, true, "an exact quote once the invisible character is gone");
+
+  // An HTML-only email whose apostrophe arrives as &rsquo;.
+  fresh(); seedCredentials();
+  const c = { id: "html", subject: "BLS", from: MORGAN, attachments: [], body: "Could you send the BLS card you&rsquo;ve renewed?\n\nMorgan",
+    modelReply: reading([{ quote: "Could you send the BLS card you\u2019ve renewed?", kind: "bls", who: "physician" }]) };
+  const html = composeForward(c).split("\n").map((l) => `<div>${l.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/&amp;rsquo;/g, "&rsquo;")}</div>`).join("");
+  r = await sendCase(c, { text: "", html });
+  assert.equal(r.body.intent, "request");
+  assert.deepEqual(rows("document_requests")[0].proposal.docIds, ["doc-bls"]);
+});
+
+test("the rules alone: a requirement on the physician's own file is an ask, and the physician is never told otherwise", async () => {
+  fresh({ anthropic: false }); seedCredentials();
+  const r = await sendCase({
+    id: "implicit", subject: "Orientation", from: MORGAN, attachments: [], modelReply: null,
+    body: "Dr. Testa,\n\nA current BLS card is required before your start date on 10/5. Your file cannot be finalized until we have it.\n\nMorgan",
+  });
+  assert.equal(r.body.read, "rules");
+  assert.equal(r.body.intent, "request");
+  const p = rows("document_requests")[0].proposal;
+  assert.ok(p.items.some((i) => i.kind === "bls" && i.docIds.includes("doc-bls")), JSON.stringify(p.items));
+  assert.equal(p.unclear, undefined);
+  assert.ok(!/Nothing was asked|not clear/.test(toPhysician()[0].text));
+});
+
+test("the rules alone: 'please note', an out-of-office and a do-not-reply footer ask for nothing, and nobody is acknowledged", async () => {
+  for (const [label, body] of [
+    ["please note", "Dr. Testa,\n\nPlease note that proof of malpractice coverage is required for every provider on our panel, and our group policy provides that coverage for emergency care. The policy covers emergency department encounters documented under your name, so no separate certificate is required from you.\n\nPlease keep this letter for your records. Please do not reply to this email.\n\nJordan Sample"],
+    ["out of office", "I am out of the office until Monday with limited access to email. For urgent matters, please contact the credentialing desk.\n\nPlease consider the environment before printing this email."],
+  ]) {
+    fresh({ anthropic: false }); seedMore();
+    const r = await sendCase({ id: label, subject: "Coverage", from: { name: "Jordan Sample", address: "jordan.sample@quillfeather.example" }, attachments: [], modelReply: null, body });
+    assert.equal(r.body.read, "rules", label);
+    assert.equal(toOthers().length, 0, `${label}: no acknowledgement`);
+    assert.equal(r.body.one_tap, false, label);
+    const p = rows("document_requests")[0]?.proposal;
+    assert.ok(!p || (p.unclear === true && p.items.length === 0), `${label}: ${JSON.stringify(p?.items)}`);
+    assert.ok(!/Attached are the documents you asked for/.test(p?.coverNote ?? ""), label);
+  }
+});
+
+test("mixed: a blank form the model calls an agreement is not filed as a credential", async () => {
+  const r = await sendCase({
+    id: "dea-attestation", subject: "Approval and one more form", from: MORGAN,
+    body: "Hi Dr. Testa,\n\nYour approval letter is attached. Please also complete the attached DEA attestation and send it back.\n\nMorgan",
+    attachments: [
+      { name: "Approval_Letter.pdf", scan: { documentType: "privilege", confidence: "high", extracted: { facility: "Tallowmere Example Clinic", type: "Active", appointmentDate: "2026-09-01", expirationDate: "2028-08-31" } } },
+      { name: "DEA_Registration.pdf", scan: { documentType: "license", confidence: "medium", extracted: { type: "DEA Registration" } } },
+    ],
+    modelReply: reading([{ quote: "Please also complete the attached DEA attestation and send it back", kind: "dea", who: "physician" }], {
+      intent: "mixed", attachments: [{ index: 1, role: "credential_for_physician", filing: "Privileges" }, { index: 2, role: "agreement_or_contract", filing: "Contracts" }],
+    }),
+  });
+  assert.equal(r.body.intent, "mixed");
+  assert.equal(rows("licenses").length, 0, "no DEA record from a blank form");
+  assert.equal(rows("documents").find((d) => d.name === "DEA_Registration.pdf").type, "request-attachment-inbox");
+  assert.equal(rows("privileges").length, 1, "the approval is filed");
+});
+
+test("mixed: an agreement to sign stays with the request, and a low-confidence agreement is never made a contract", async () => {
+  for (const [label, body, confidence] of [
+    ["an ask to sign it", "Privileges approved (letter attached). Please sign and return the attached locum agreement for November.", "high"],
+    ["read with low confidence", "Privileges approved (letter attached). Please send your updated CV. The November locum agreement is attached.", "low"],
+  ]) {
+    fresh(); seedContracts();
+    const asks = label === "an ask to sign it"
+      ? [{ quote: "Please sign and return the attached locum agreement for November", kind: "unknown", who: "physician" }]
+      : [{ quote: "Please send your updated CV", kind: "cv", who: "physician" }];
+    const r = await sendCase({
+      id: label, subject: "November", from: MORGAN, body: `Hi Dr. Testa,\n\n${body}\n\nMorgan`,
+      attachments: [{ name: "November_Locum_Agreement.pdf", scan: { documentType: "agreement", confidence, extracted: { agency: "Quillfeather Staffing", facility: "Brackwater Example Hospital", startDate: "2026-11-01", endDate: "2026-11-30" } } }],
+      modelReply: reading(asks, { intent: "mixed", attachments: [{ index: 1, role: "agreement_or_contract", filing: "Contracts" }] }),
+    });
+    assert.equal(r.body.intent, "mixed", label);
+    assert.equal(rows("locum_contracts").length, 2, `${label}: no new contract from an unsigned or unsure agreement`);
+    assert.equal(rows("documents").find((d) => d.name === "November_Locum_Agreement.pdf").type, "request-attachment-inbox", label);
+  }
+});
+
+test("a request that carries the physician's signed agreement is mixed, so the agreement is filed rather than parked", async () => {
+  seedContracts();
+  const r = await sendCase({
+    id: "cv-and-msa", subject: "CV", from: { name: "Jordan Sample", address: "jordan.sample@quillfeather.example" },
+    body: "Dr. Testa,\n\nPlease send your updated CV. Your signed master agreement is attached for your records.\n\nJordan",
+    attachments: [INFO.attachments[0]],
+    modelReply: reading([{ quote: "Please send your updated CV", kind: "cv", who: "physician" }], { attachments: [{ index: 1, role: "agreement_or_contract", filing: "Contracts" }] }),
+  });
+  assert.equal(r.body.intent, "mixed");
+  assert.equal(rows("document_requests").length, 1);
+  assert.ok(rows("documents").some((d) => d.linked_to === "locumContracts:contract-now"), "the agreement is attached to the agency's contract");
+});
+
+test("forwards that only fail to fail: never an admin's, a small daily allowance, and nothing scanned past it", async () => {
+  fresh({ admin: true });
+  harness.rawAuth = AUTH_NONE;
+  // The ledger as the database keeps it: a limit per user, scope and day.
+  const used = new Map();
+  harness.ledger.reserve_ai_call = (a) => {
+    const k = `${a.p_user}|${a.p_scope}`;
+    const n = used.get(k) ?? 0;
+    if (n >= a.p_limit) return { data: [], error: null };
+    used.set(k, n + 1);
+    return { data: [{ id: `r-${k}-${n}` }], error: null };
+  };
+  const c = {
+    subject: "Forms", from: MORGAN, body: "Hi Dr. Testa,\n\nPlease send your DEA. The attestation form is attached.\n\nMorgan",
+    attachments: [{ name: "Attestation_Form.pdf", scan: { documentType: "other", confidence: "medium", extracted: { name: "Attestation" } } }],
+    modelReply: reading([{ quote: "Please send your DEA", kind: "dea", who: "physician" }], { attachments: [{ index: 1, role: "form_to_complete", filing: "Keep with the request" }] }),
+  };
+  for (let i = 0; i < 7; i++) await sendCase({ ...c, id: `forged-${i}` });
+  assert.equal(harness.anthropic.length, 5, "five reads a day for unproven forwards");
+  assert.equal(harness.gemini.length, 5, "and nothing is scanned for a reading that will not happen");
+  const reserves = ledger("reserve_ai_call");
+  assert.equal(reserves.length, 7);
+  assert.ok(reserves.every((x) => x.args.p_scope === "anthropic_intake_unverified" && x.args.p_limit === 5));
+  assert.equal(ledger("reserve_ai_spend").length, 5, "an unproven forward is never an admin's: every call is held against the month");
+  assert.equal(toOthers().length, 0);
 });

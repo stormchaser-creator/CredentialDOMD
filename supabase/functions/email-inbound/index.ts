@@ -22,14 +22,18 @@
  *   docs@ | requests@ | packets@credentialdomd.com   Documents and requests.
  *     Same sender matching and authentication as cme@. The email is first
  *     READ for what it is FOR, before any rule decides anything: one model
- *     call (Vera's model, on the shared Anthropic key, under ai-proxy's
- *     daily cap, dollar hold and ai_usage metering; _shared/intakeModelCall.ts)
- *     sees the forward, its subject and sender, each attachment's scanner
- *     result and the account's last corrections, and answers in a strict
- *     schema (_shared/intakeUnderstanding.mjs). The host checks the answer:
- *     an ask must quote the email word for word and be asked of the
- *     physician, or it is dropped, and with no ask left the email is not a
- *     request. When the call cannot run or fails, the rules
+ *     call (Vera's model, on the shared Anthropic key, under its own daily
+ *     allowance per account, a much smaller one for a forward that is not
+ *     positively authenticated, ai-proxy's dollar hold and ai_usage
+ *     metering; _shared/intakeModelCall.ts) sees the forward, its subject and
+ *     sender, each attachment's scanner result and the account's last
+ *     corrections, and answers in a strict schema
+ *     (_shared/intakeUnderstanding.mjs). The host checks the answer: an ask
+ *     must be asked of the physician, in the sender's own words (the subject
+ *     or the current message, not the physician's note, and the history only
+ *     when the message points to it), in a sentence that asks, or it is
+ *     dropped. A reading that called the email a request and kept no ask is
+ *     "unclear" (below). When the call cannot run or fails, the rules
  *     (_shared/intakeIntent.mjs) answer instead, and even then a sentence
  *     with no asking form is never an ask.
  *       "delivery"       a document forwarded to keep (an approval letter, a
@@ -39,15 +43,27 @@
  *                        document_requests row, no acknowledgement to anyone.
  *       "informational"  a note that asks for nothing (an agency explaining
  *                        its policy). Filed as a delivery; the physician is
- *                        told "Read <sender>'s note about <summary>. Nothing
- *                        was asked of you." and where each attachment went.
- *                        A master agreement is attached to the agency's
- *                        existing contract, never made into a new one.
- *       "mixed"          a document AND an ask. A form or checklist stays
- *                        with the request; a credential is filed only when
- *                        it is a built-in credential with a date
- *                        (fileableFromRequest), an agreement goes to the
- *                        agency's contract; then the request flow below runs.
+ *                        told "Read <sender>'s note about <summary>." and,
+ *                        only when a confident reading dropped nothing,
+ *                        "Nothing was asked of you.", and where each
+ *                        attachment went. A master agreement is attached to
+ *                        the agency's existing contract, never made into a
+ *                        new one.
+ *       "mixed"          a document AND an ask, or a request that carries
+ *                        a credential or an agreement to keep. A form or
+ *                        checklist stays with the request; a credential is
+ *                        filed only when it is a built-in credential with a
+ *                        date, an agreement goes to the agency's contract
+ *                        unless it is the thing asked to be signed
+ *                        (fileableFromMixed); then the request flow below
+ *                        runs.
+ *       unclear          taken for a request (by the model, or by the rules'
+ *                        keywords) with nothing in it that reads as an ask.
+ *                        Saved as a request so a deadline is not lost, with
+ *                        no draft that says "your request", no
+ *                        acknowledgement, never one tap, and the physician
+ *                        told it is unclear and which sentences name a
+ *                        document.
  *       "request"        everything below. The proposal is built from the
  *                        quote-checked asks, and is offered on one tap only
  *                        when every ask is matched with high confidence
@@ -194,16 +210,17 @@ import { ackAllowed, ackText, authEvidence, physicianSummaryText, replySubject a
 // scripts/sync-shared-app-modules.mjs so the two can never read a file
 // differently.
 import { attachmentRole } from "../_shared/intakeIntent.mjs";
-import { planFiling, roleTarget, scannableMime, unfiledLine, filingReplyText, sectionScope, plain as plainText, EMAIL_INBOX_DOC_TYPE, SECTION_TABLE, fileableFromRequest, patientRecordScreen } from "../_shared/intakeFiling.mjs";
+import { planFiling, roleTarget, scannableMime, unfiledLine, filingReplyText, sectionScope, plain as plainText, EMAIL_INBOX_DOC_TYPE, SECTION_TABLE, fileableFromMixed, patientRecordScreen } from "../_shared/intakeFiling.mjs";
 // What the email MEANS, read before any rule decides anything: one model call
-// on the shared Anthropic key (intakeModelCall.ts, under ai-proxy's admission
-// and metering), checked by the host (every ask must quote the email), with
-// the rules as the fallback. See _shared/intakeUnderstanding.mjs.
+// on the shared Anthropic key (intakeModelCall.ts: its own daily allowance,
+// ai-proxy's dollar hold and metering), checked by the host (every ask must
+// be the sender's own words, in a sentence that asks), with the rules as the
+// fallback. See _shared/intakeUnderstanding.mjs.
 import {
   buildUnderstandingRequest, readModelReply, verifyUnderstanding, rulesUnderstanding, splitForward, correctionExamples,
-  informationalReplyText, asksElsewhereLine, UNDERSTANDING_TIMEOUT_MS, MAX_CORRECTIONS,
+  informationalReplyText, asksElsewhereLine, ackWarranted, asksToSign, decodeEntities, UNDERSTANDING_TIMEOUT_MS, MAX_CORRECTIONS,
 } from "../_shared/intakeUnderstanding.mjs";
-import { callUnderstanding } from "../_shared/intakeModelCall.ts";
+import { admitUnderstanding, callUnderstanding, COUNT_TIMEOUT_MS, type Admission } from "../_shared/intakeModelCall.ts";
 // Word, Excel, CSV, text and RTF attachments are read here and screened for
 // patient records BEFORE they are stored, as the app screens them before upload.
 import { officeText } from "../_shared/officeText.mjs";
@@ -283,23 +300,37 @@ const MAX_CONTACTS_PER_EMAIL = 25;       // a multi-select share, not a mailing 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/";
 const GEMINI_SECRET_NAME = "gemini_shared_key";
 const SCAN_TIMEOUT_MS = 45_000;
-const SCAN_BUDGET_MS = 100_000;
 const SCAN_CONCURRENCY = 3;
-// The understanding step's model call draws on the same allowances as Vera's
-// calls through ai-proxy, read from the same secrets with the same defaults:
-// ANTHROPIC_DAILY_LIMIT calls a day and AI_BUDGET_HARD_USD a month per
-// account (admins uncapped).
 const ANTHROPIC_SECRET_NAME = "anthropic_shared_key";
 const positiveEnv = (name: string, fallback: number, parse: (s: string) => number) => {
   const n = parse(Deno.env.get(name) || "");
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
-const ANTHROPIC_DAILY_LIMIT = positiveEnv("ANTHROPIC_DAILY_LIMIT", 60, (s) => parseInt(s, 10));
+// INTAKE_SCAN_BUDGET_MS may only shorten the budget (a harness test does).
+const SCAN_BUDGET_MS = Math.min(100_000, positiveEnv("INTAKE_SCAN_BUDGET_MS", 100_000, (s) => parseInt(s, 10)));
+// The understanding step's model call has its OWN daily allowance per
+// account (intakeModelCall.ts), apart from Vera's, and it applies to admins
+// too: INTAKE_DAILY_LIMIT reads a day of positively authenticated forwards,
+// and INTAKE_UNVERIFIED_DAILY_LIMIT of forwards that only failed to fail
+// (anyone can send those in the physician's name). Past either, the email is
+// read by the rules and nothing is scanned for the reading. The month's
+// dollars are Vera's AI_BUDGET_HARD_USD, held and settled as ai-proxy does.
+const INTAKE_DAILY_LIMIT = positiveEnv("INTAKE_ANTHROPIC_DAILY_LIMIT", 30, (s) => parseInt(s, 10));
+const INTAKE_UNVERIFIED_DAILY_LIMIT = positiveEnv("INTAKE_UNVERIFIED_DAILY_LIMIT", 5, (s) => parseInt(s, 10));
 const BUDGET_HARD_USD = positiveEnv("AI_BUDGET_HARD_USD", 15, parseFloat);
 // The model call's timeout. INTAKE_UNDERSTANDING_TIMEOUT_MS may only shorten
 // it (the local harness uses a fraction of a second); it is never longer
 // than UNDERSTANDING_TIMEOUT_MS, because the webhook is still open.
 const UNDERSTAND_TIMEOUT_MS = Math.min(UNDERSTANDING_TIMEOUT_MS, positiveEnv("INTAKE_UNDERSTANDING_TIMEOUT_MS", UNDERSTANDING_TIMEOUT_MS, (s) => parseInt(s, 10)));
+// The model call runs INSIDE the scan budget, after the scans it reads: the
+// scans for the reading stop MODEL_RESERVE_MS early (the call's timeout, the
+// token count before it, and two seconds for the ledger), and the call is
+// not started with less than MIN_MODEL_MS left. Before, ten slow scans could
+// spend the whole budget and the call then added forty seconds past it,
+// close to the function's wall-clock limit; a killed run left the ledger row
+// "processing", and the retry paid for every scan and the call again.
+const MODEL_RESERVE_MS = UNDERSTAND_TIMEOUT_MS + Math.min(COUNT_TIMEOUT_MS, UNDERSTAND_TIMEOUT_MS) + 2_000;
+const MIN_MODEL_MS = Math.min(8_000, UNDERSTAND_TIMEOUT_MS);
 // Same-size files compared byte for byte to find a duplicate that was renamed
 // when it was filed. More candidates than this is not a duplicate check any more.
 const MAX_CONTENT_COMPARES = 3;
@@ -461,20 +492,16 @@ function lowerKeys(o: Record<string, string> | undefined | null): Record<string,
 }
 
 function stripHtml(html: string): string {
-  return html
+  const text = html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .replace(/<[^>]+>/g, "");
+  // Every entity, once (intakeUnderstanding.mjs decodeEntities). With six
+  // decoded, "&rsquo;" stayed in the text while the model read an
+  // apostrophe, and the ask it quoted failed the host's check.
+  return decodeEntities(text).replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function escapeHtml(s: string): string {
@@ -1096,7 +1123,7 @@ interface ScanContext {
   why: string;              // why the key is "" (for the ledger), else ""
   deadline: number;         // epoch ms after which no new scan starts
   active: boolean;          // profiles.access_status is active
-  admin: boolean;           // an app admin (uncapped, as in ai-proxy)
+  admin: boolean;           // an app admin (no dollar hold on a proven forward, as in ai-proxy)
   anthropicKey: string;     // the shared Anthropic key for the understanding step, "" when unset
 }
 
@@ -1459,13 +1486,14 @@ https://credentialdomd.com`);
   // does not answer and the reply points to docs@ for. The rules have
   // nothing to add here, so without a model reading cme@ is unchanged.
   const ctx = await scanContext(profile);
-  const prescanned = await prescanAll(profile.id, screened.keep, ctx);
+  const admission = await admitFor(profile, ctx, mayFile);
+  const prescanned = await prescanAll(profile.id, screened.keep, ctx, admission);
   let reading: Reading | null = null;
-  if (canUnderstand(ctx)) {
+  if (admission.ok) {
     const rawText = (email.text && email.text.trim()) ? email.text : (email.html ? stripHtml(email.html) : "");
     const parsed = parseForwarded(rawText);
-    const read = await understandEmail(profile, ctx, {
-      subject: parsed.subject ?? stripFwdPrefix(subject), subjectRaw: subject, senderName: parsed.found ? parsed.from_name : null,
+    const read = await understandEmail(profile, ctx, admission, {
+      subject: parsed.subject ?? stripFwdPrefix(subject), senderName: parsed.found ? parsed.from_name : null,
       senderAddr: parsed.found ? parsed.from_addr : "", rawText, forwardedBody: parsed.found ? parsed.body_text : null,
       rulesBody: parsed.body_text, attachmentNames: screened.keep.map((f) => f.filename), attachmentCount: screened.keep.length,
       forwarded: parsed.found, files: screened.keep, prescanned,
@@ -1489,7 +1517,7 @@ https://credentialdomd.com`);
 
   let text: string;
   if (total === 0 && reading?.intent === "informational") {
-    text = informationalReplyText({ senderName: "", summary: reading.summary, results: [], notes, appUrl: APP_URL });
+    text = informationalReplyText({ senderName: "", summary: reading.summary, settled: reading.settled, results: [], notes, appUrl: APP_URL });
   } else if (total === 0) {
     text = `No PDF or image attachment was found in that email, so nothing was added. Forward the certificate itself as an attachment (PDF or photo) to ${CME_LOCAL}@${INBOX_DOMAIN}.`;
     if (notes.length) text += `\n\n${notes.join("\n")}`;
@@ -1909,6 +1937,16 @@ interface Reading {
   attachments: { index: number; role: string; filing: string }[];
   summary: string;
   confidence: string;
+  /** Taken for a request, but nothing in it read as an ask: saved for the physician to read, never answered on its own. */
+  unclear: boolean;
+  /** Only then is the physician told "Nothing was asked of you". */
+  settled: boolean;
+  /** Model readings only: the caller must read the email with the rules instead. */
+  needsRules?: boolean;
+  /** Rules readings only: some sentence of the message asks (for the acknowledgement). */
+  askForm?: boolean;
+  /** For an unclear email: its sentences that name a document. */
+  mentions: string[];
 }
 
 /**
@@ -1930,16 +1968,27 @@ async function recentCorrections(profileId: string): Promise<string[]> {
   }
 }
 
-/** May the understanding step's model call run for this account? */
-const canUnderstand = (ctx: ScanContext) => Boolean(ctx.anthropicKey) && (ctx.active || ctx.admin);
+/**
+ * May the model read this email? Reserves one of the day's reads on the
+ * understanding step's own allowance (intakeModelCall.ts). `verified` is
+ * mayFileFrom: an unproven forward is never an admin's and draws on the
+ * small unverified allowance. Asked before anything is scanned for the
+ * reading. Never throws.
+ */
+function admitFor(profile: MatchedProfile, ctx: ScanContext, verified: boolean): Promise<Admission> {
+  return admitUnderstanding({
+    db, profileId: profile.id, isAdmin: ctx.admin, active: ctx.active, verified, key: ctx.anthropicKey,
+    dailyLimit: INTAKE_DAILY_LIMIT, unverifiedDailyLimit: INTAKE_UNVERIFIED_DAILY_LIMIT,
+  });
+}
 
 /**
- * Read the email: the model when it may run and answers usably, the rules
- * otherwise. `files` are the kept attachments in the order the model sees
- * them, `prescanned` their scanner results. Never throws.
+ * Read the email: the model when it was admitted and answers usably, the
+ * rules otherwise. `files` are the kept attachments in the order the model
+ * sees them, `prescanned` their scanner results. Never throws.
  */
-async function understandEmail(profile: MatchedProfile, ctx: ScanContext, input: {
-  subject: string; subjectRaw: string; senderName: string | null; senderAddr: string; rawText: string;
+async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admission: Admission, input: {
+  subject: string; senderName: string | null; senderAddr: string; rawText: string;
   forwardedBody: string | null; rulesBody: string; attachmentNames: string[]; attachmentCount: number;
   forwarded: boolean; files: Downloaded[]; prescanned: Map<Downloaded, ScanOutcome>;
 }): Promise<Reading> {
@@ -1947,14 +1996,16 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, input:
     subject: input.subject, body: input.rulesBody, attachmentNames: input.attachmentNames,
     attachmentCount: input.attachmentCount, forwarded: input.forwarded, why,
   }) as Reading;
-  if (!ctx.anthropicKey) return rules("shared Anthropic key not configured");
-  if (!ctx.active && !ctx.admin) return rules("account not active");
+  if (!admission.ok) return rules(admission.why);
   try {
     const corrections = await recentCorrections(profile.id);
+    // The note, the sender's message and the history, kept apart: an ask
+    // counts only in the sender's own words (verifyUnderstanding).
+    const parts = splitForward(input.rawText, input.forwardedBody);
     const request = buildUnderstandingRequest({
       subject: input.subject,
       sender: { name: input.senderName ?? "", address: input.senderAddr },
-      ...splitForward(input.rawText, input.forwardedBody),
+      ...parts,
       // A file that reads as a patient record is named as one and nothing
       // it says goes to the model.
       attachments: input.files.map((f) => {
@@ -1964,13 +2015,17 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, input:
       corrections,
     });
     const call = await callUnderstanding({
-      db, profileId: profile.id, isAdmin: ctx.admin, active: ctx.active, key: ctx.anthropicKey, request,
-      dailyLimit: ANTHROPIC_DAILY_LIMIT, budgetHardUsd: BUDGET_HARD_USD, timeoutMs: UNDERSTAND_TIMEOUT_MS,
+      db, profileId: profile.id, admission, key: ctx.anthropicKey, request,
+      budgetHardUsd: BUDGET_HARD_USD, timeoutMs: UNDERSTAND_TIMEOUT_MS, deadline: ctx.deadline, minMs: MIN_MODEL_MS,
     });
     if (!call.ok) return rules(call.why);
     const read = readModelReply(call.message);
     if (!read.ok) return rules(read.why);
-    return verifyUnderstanding(read.value, { emailText: `${input.subjectRaw}\n${input.rawText}`, attachmentCount: input.files.length }) as Reading;
+    const reading = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.files.length }) as Reading;
+    // Called a request, with asks the email does not hold word for word: a
+    // paraphrase is no evidence that nothing was asked, so the rules read it.
+    if (reading.needsRules) return rules("the reading's asks were not the email's own words");
+    return reading;
   } catch (err) {
     console.error(`understanding failed: ${err instanceof Error ? err.name : "unknown"}`);
     return rules("understanding failed");
@@ -1985,17 +2040,21 @@ function rolesByFile(files: Downloaded[], reading: Reading): Map<Downloaded, str
   return roles;
 }
 
-/** Scan every kept attachment once, up front, when the model will read the email. */
-async function prescanAll(profileId: string, files: Downloaded[], ctx: ScanContext): Promise<Map<Downloaded, ScanOutcome>> {
+/**
+ * Scan every kept attachment once, up front, when the model was admitted to
+ * read the email (and only then). The scans stop MODEL_RESERVE_MS before the
+ * budget ends, so the call after them still fits inside it.
+ */
+async function prescanAll(profileId: string, files: Downloaded[], ctx: ScanContext, admission: Admission): Promise<Map<Downloaded, ScanOutcome>> {
   const out = new Map<Downloaded, ScanOutcome>();
-  if (!files.length || !canUnderstand(ctx)) return out;
-  const scans = await scanFiles(profileId, files.map((file) => ({ file })), ctx);
+  if (!files.length || !admission.ok) return out;
+  const scans = await scanFiles(profileId, files.map((file) => ({ file })), { ...ctx, deadline: ctx.deadline - MODEL_RESERVE_MS });
   files.forEach((f, i) => { if (scans[i]) out.set(f, scans[i]); });
   return out;
 }
 
 /** "model" or "rules (why)", for the ledger and the log. */
-const readingDetail = (r: Reading) => (r.method === "model" ? `read by model (${r.confidence}${r.dropped.length ? `, ${r.dropped.length} ask(s) dropped` : ""})` : `read by rules${r.why ? ` (${r.why})` : ""}`);
+const readingDetail = (r: Reading) => `${r.method === "model" ? `read by model (${r.confidence}${r.dropped.length ? `, ${r.dropped.length} ask(s) dropped` : ""})` : `read by rules${r.why ? ` (${r.why})` : ""}`}${r.unclear ? ", unclear" : ""}`;
 
 async function handleDocsRequest(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
   const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "docs").neq("id", ledgerId));
@@ -2085,10 +2144,13 @@ https://credentialdomd.com`);
   const files = screened.keep;
   const refusedNotes = [...screened.notes];
   const ctx = await scanContext(profile);
+  // Admitted first: over the day's allowance, or for an unproven forward past
+  // its small one, nothing is scanned for the reading and the rules read it.
+  const admission = await admitFor(profile, ctx, mayFile);
   // Read once, used twice: the reading sees each result, and filing reuses it.
-  const prescanned = await prescanAll(profile.id, files, ctx);
-  const reading = await understandEmail(profile, ctx, {
-    subject: requestSubject ?? "", subjectRaw: subject, senderName: requesterName, senderAddr: parsed.found ? fromAddr : "",
+  const prescanned = await prescanAll(profile.id, files, ctx, admission);
+  const reading = await understandEmail(profile, ctx, admission, {
+    subject: requestSubject ?? "", senderName: requesterName, senderAddr: parsed.found ? fromAddr : "",
     rawText, forwardedBody: parsed.found ? parsed.body_text : null, rulesBody: parsed.body_text,
     attachmentNames: keepable.map((a) => safeFilename(a.filename, "")), attachmentCount: keepable.length,
     forwarded: parsed.found, files, prescanned,
@@ -2117,6 +2179,9 @@ https://credentialdomd.com`);
   let requestFiles = files;
   let deliveredFailed = 0;
   if (intent === "mixed") {
+    // An ask to sign, complete or return something makes the agreement in
+    // the same email the thing to sign: it stays with the request.
+    const signAsk = asksToSign(reading.asks);
     const candidate = (f: Downloaded) => {
       const role = roles.get(f);
       if (role) return role === "credential_for_physician" || role === "agreement_or_contract";
@@ -2134,7 +2199,7 @@ https://credentialdomd.com`);
       const scan = prescanned.get(f)?.scan ?? null;
       if (scan && patientRecordScreen(f.filename, scan)) {
         refusedNotes.push(`Not kept: ${plainText(f.filename, 120) || "an attachment"} reads like a patient record. CredentialDOMD holds your credentials, not patient charts, so it was not saved.`);
-      } else if (scan && (roles.get(f) === "agreement_or_contract" || fileableFromRequest(scan))) {
+      } else if (fileableFromMixed(scan, roles.get(f), { signAsk })) {
         toFile.push(f);
       } else {
         requestFiles.push(f);
@@ -2207,7 +2272,8 @@ https://credentialdomd.com`);
       catalogue,
       { name: phys.name, degree: phys.degree },
       undefined,
-      reading.method === "model" ? { asks: reading.asks, confidence: reading.confidence } : null,
+      reading.method === "model" ? { asks: reading.asks, confidence: reading.confidence, unclear: reading.unclear }
+        : (reading.unclear ? { unclear: true } : null),
     );
     const now = new Date().toISOString();
     const { error: uErr } = await db.from("document_requests")
@@ -2235,6 +2301,7 @@ https://credentialdomd.com`);
   let text = physicianSummaryText({
     requesterName, requesterAddr: fromAddr, requesterFound: parsed.found, proposal, appUrl: APP_URL,
     oneTap: proposal ? oneTapReady(proposal) : false, review: proposal ? reviewReason(proposal) : "",
+    unclear: reading.unclear ? { about: reading.summary, mentions: reading.mentions } : null,
   });
   if (notes.length) text += `\n\n${notes.join("\n")}`;
   text += `\n\nCredentialDOMD\nhttps://credentialdomd.com`;
@@ -2263,7 +2330,14 @@ https://credentialdomd.com`);
       requesterAddr: fromAddr, requesterName, forwarderAddr: from, physicianEmail: phys.email, ownAddresses: own,
       requesterFound: parsed.found, ackRequests: phys.ackRequests, senderAuthenticated: authOk,
     });
-    if (!allowed.ok) {
+    // The acknowledgement tells its reader they made a request, so it goes
+    // only when the reading is sure they did (ackWarranted): never for an
+    // unclear email, a reading short of high confidence, or a keyword
+    // reading with no asking sentence and no ask named to a document.
+    const warranted = ackWarranted(reading);
+    if (!warranted.ok) {
+      ackDetail = `ack skipped: ${warranted.why}`;
+    } else if (!allowed.ok) {
       ackDetail = `ack skipped: ${allowed.why}${auth.positive === null ? " (raw message unavailable)" : ""}`;
     } else if (!phys.name) {
       ackDetail = "ack skipped: no name on the profile";
@@ -2345,7 +2419,7 @@ async function deliverDocs(
   const unverified = unverifiedNote(results, from);
   if (unverified) notes.push(unverified);
   const text = kind === "informational"
-    ? informationalReplyText({ senderName: opts.senderName ?? "", summary: opts.reading?.summary ?? "", results, notes, appUrl: APP_URL })
+    ? informationalReplyText({ senderName: opts.senderName ?? "", summary: opts.reading?.summary ?? "", settled: opts.reading?.settled === true, results, notes, appUrl: APP_URL })
     : filingReplyText({ results, notes, appUrl: APP_URL });
   const r = await sendEmail({ from: FROM_DOCS, to: [from], subject: replySubject, headers: replyHeaders, text });
   // Worded so "ack sent" can never appear here: ledgerAcksSince counts on it.

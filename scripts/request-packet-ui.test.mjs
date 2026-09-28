@@ -47,7 +47,7 @@ const boardCert = {
   from_name: "Madeline Castorena", from_addr: "mcastorena@ruhealth.org", subject: "BOARD CERTIFICATE",
   proposal: {
     v: 2, method: "rules", source: "model", confidence: "high",
-    items: [{ ask: "a copy of your board certificate", kind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"], confidence: "high" }],
+    items: [{ ask: "a copy of your board certificate", kind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"], confidence: "high", ruleKind: "board_cert" }],
     docIds: ["d1"], missing: [],
     coverNote: "Hello Madeline,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)\n\nRegards,\nEric Whitney, DO",
   },
@@ -58,10 +58,10 @@ const fourItems = {
   proposal: {
     v: 2, method: "rules", source: "model", confidence: "high",
     items: [
-      { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"], confidence: "high" },
-      { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d3", "d4"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"], confidence: "high" },
-      { ask: "TB form", kind: "tb", status: "found", docIds: ["d5"], labels: ["QuantiFERON-TB Gold, Negative"], confidence: "high" },
-      { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [], confidence: "high" },
+      { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"], confidence: "high", ruleKind: "coi_malpractice" },
+      { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d3", "d4"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"], confidence: "high", ruleKind: "mmr" },
+      { ask: "TB form", kind: "tb", status: "found", docIds: ["d5"], labels: ["QuantiFERON-TB Gold, Negative"], confidence: "high", ruleKind: "tb" },
+      { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [], confidence: "high", ruleKind: "case_logs" },
     ],
     docIds: ["d2", "d3", "d4", "d5"], missing: ["Logs 12-months"],
     coverNote: "Hello Casey,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nThese will follow separately:\n- Logs 12-months\n\nRegards,\nEric Whitney, DO",
@@ -83,8 +83,8 @@ const twoDocs = {
   proposal: {
     v: 2, method: "rules", source: "model", confidence: "high",
     items: [
-      { ask: "DEA", kind: "dea", status: "found", docIds: ["d6"], labels: ["DEA Registration, CO"], confidence: "high" },
-      { ask: "Colorado license", kind: "state_license", status: "found", docIds: ["d7"], labels: ["State Medical License (DO), CO"], confidence: "high" },
+      { ask: "DEA", kind: "dea", status: "found", docIds: ["d6"], labels: ["DEA Registration, CO"], confidence: "high", ruleKind: "dea" },
+      { ask: "Colorado license", kind: "state_license", status: "found", docIds: ["d7"], labels: ["State Medical License (DO), CO"], confidence: "high", ruleKind: "state_license" },
     ],
     docIds: ["d6", "d7"], missing: [],
     coverNote: "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CO\n- State Medical License (DO), CO\n\nRegards,\nEric Whitney, DO",
@@ -282,6 +282,18 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
     ["rules-client", "model", "high", [["board certificate", "board_cert", "found", "your board certificate"]]]);
   ok("and, every ask now matched, it may go on one tap", canSendOnOneTap({ proposal: p }));
   eq("modelReading is null for a rules proposal", modelReading(boardCert.proposal === null ? null : { ...boardCert.proposal, source: "rules" }), null);
+  // The rebuild disagrees where the server did (the model's kind, not the
+  // words' kind, goes back in), and an unclear email stays unclear.
+  eq("modelReading hands back the model's kind", modelReading({ source: "model", confidence: "high", items: [{ ask: "BLS card", quote: "your BLS card", kind: "bls", modelKind: "coi_malpractice" }] }).asks,
+    [{ quote: "your BLS card", kind: "coi_malpractice" }]);
+  eq("an unclear rules proposal stays unclear", modelReading({ source: "rules", items: [], unclear: true }), { unclear: true });
+  const unclearRow = { ...modelRow, id: "r-unclear", body_text: "The credentialing committee reviewed your file last week, and your coverage is provided through the group policy.",
+    proposal: { v: 2, method: "rules", source: "rules", confidence: "keyword", items: [], docIds: [], missing: [], coverNote: "", unclear: true } };
+  const rebuilt = buildClientProposals([unclearRow], data, { now: NOW })["r-unclear"];
+  ok("a rebuilt unclear proposal is still unclear and never one tap", rebuilt.unclear === true && !canSendOnOneTap({ proposal: rebuilt }), JSON.stringify(rebuilt));
+  eq("an unclear proposal's line says so", proposalSummary(rebuilt).line, "Not clear that it asks for anything");
+  const note = render(UnclearNote, { request: { ...unclearRow, proposal: rebuilt }, T });
+  ok("the note asks the physician to read it, and says nothing about keyword asks", note.includes("It is not clear whether this email asks you for anything") && !note.includes("keyword"), note);
 }
 
 // ── unwrapInvoke: the response the way EmailPacketModal reads it ─────────

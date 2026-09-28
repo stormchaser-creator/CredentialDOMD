@@ -449,5 +449,18 @@ ok("an array body is refused", approveRequestBody([RID]).ok === false);
   ok("no compliance claims in anything this module says", !/HIPAA|SOC ?2|bank-level|military-grade/i.test(all));
 }
 
+// ── An unclear email: saved for the physician, never called a request ──────
+{
+  const unclear = { about: "\"Your credentialing file\"", mentions: ["Your malpractice certificate is kept on file by our office."] };
+  const emptyProposal = { v: 2, method: "rules", source: "rules", confidence: "keyword", items: [], docIds: [], missing: [], coverNote: "", unclear: true };
+  const s = physicianSummaryText({ requesterName: "Jordan Sample", requesterAddr: "jordan@quillfeather.example", requesterFound: true, proposal: emptyProposal, appUrl: "https://app.example/", unclear });
+  eq("unclear: says it is unclear, what it named, and where it is", s,
+    "Got it. It is not clear whether Jordan Sample's email about \"Your credentialing file\" asks you for anything, so it is saved under Requests for you to read. No acknowledgement was sent, and nothing goes to Jordan Sample unless you send it.\n\nIt mentions:\n- \"Your malpractice certificate is kept on file by our office.\"\n\nhttps://app.example/#requests (opens your requests)");
+  ok("unclear: never 'sent a document request', never 'Nothing was asked'", !/sent a document request|Nothing was asked|Approve and send/.test(s));
+  const nf = physicianSummaryText({ requesterName: null, requesterAddr: "", requesterFound: false, proposal: emptyProposal, appUrl: "u", unclear: { about: "", mentions: [] } });
+  ok("unclear, requester not found: nobody is named and the address note follows", nf.startsWith("Got it. It is not clear whether the forwarded email asks you for anything") && nf.includes("Requester's email"), nf);
+  noEmDash("unclear summary", s);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

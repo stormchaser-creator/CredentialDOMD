@@ -47,8 +47,10 @@ const uniq = (xs) => {
  * log report, which the checklist itself calls "Follows separately", told
  * the physician a document was missing. A proposal with no items at all
  * says "Nothing could be read from this email", a statement about the
- * email, not about the physician's file. An absent proposal yields an empty
- * line, so a card without one prints nothing rather than a false zero.
+ * email, not about the physician's file; one saved as unclear (nothing in
+ * the email read as an ask, requestPacket.js Proposal.unclear) says so. An
+ * absent proposal yields an empty line, so a card without one prints
+ * nothing rather than a false zero.
  */
 export function proposalSummary(proposal) {
   if (!proposal || typeof proposal !== "object") return { ready: 0, missing: 0, report: 0, unclear: 0, line: "" };
@@ -65,7 +67,8 @@ export function proposalSummary(proposal) {
     : (Array.isArray(proposal.missing) ? proposal.missing.length : 0);
   const base = ready > 0
     ? `${plural(ready, "document")} ready`
-    : (hasItems && items.length === 0 ? "Nothing could be read from this email" : "Nothing on file for this yet");
+    : proposal.unclear === true ? "Not clear that it asks for anything"
+      : (hasItems && items.length === 0 ? "Nothing could be read from this email" : "Nothing on file for this yet");
   const parts = [base];
   if (ready > 0 && missing) parts.push(`${missing} not on file`);
   if (report) parts.push(`${report} ${report === 1 ? "follows" : "follow"} separately`);
@@ -401,16 +404,20 @@ export function UnclearNote({ request, T, onSayNotOnFile, canEdit = true }) {
   const missing = items.filter((i) => i.status !== "found" && i.status !== "report" && i.kind !== "unknown");
   const keyword = proposal.source !== "model";
   const line = (text, key, extra = null) => h("div", { key, style: { ...WRAP, fontSize: 13, color: T.text, lineHeight: 1.45 } }, text, extra);
+  // Saved as unclear: there are no asks to go through, only the email to read.
+  const unclearEmail = proposal.unclear === true;
   const link = (label, onClick) => h("button", {
     type: "button", onClick,
     style: { marginLeft: 6, padding: 0, border: "none", background: "none", color: T.accent, font: "inherit", fontWeight: 700, cursor: "pointer", textDecoration: "underline" },
   }, label);
   return h("div", { style: { marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.warning}`, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 } },
     h("div", { style: { fontSize: 12, fontWeight: 700, color: T.warning, textTransform: "uppercase", letterSpacing: 0.4 } }, "Check before sending"),
+    unclearEmail ? line(reviewReason(proposal), "x") : null,
     ...unclear.map((i, n) => line(`"${String(i.ask || "")}": not recognised. What did they mean? The draft says nothing about it.`, `u${n}`)),
     missing.length ? line(`Not on file: ${missing.map((i) => `"${String(i.ask || "")}"`).join(", ")}. The draft says nothing about ${missing.length === 1 ? "it" : "them"}.`, "m",
       canEdit && onSayNotOnFile ? link("Say so in the draft", () => onSayNotOnFile()) : null) : null,
-    keyword ? line("These asks were read by keyword matching, so check that each one is really something they asked for.", "k")
+    unclearEmail ? null
+      : keyword ? line("These asks were read by keyword matching, so check that each one is really something they asked for.", "k")
       : proposal.confidence !== "high" ? line("The reading of this email is not certain, so check the draft before it goes.", "c") : null,
   );
 }

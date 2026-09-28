@@ -245,10 +245,14 @@ export function filingTarget(scan) {
  *
  *   form_to_complete        unfiled: a blank form is not the physician's record
  *   request_checklist       unfiled: the sender's list of what they want
- *   agreement_or_contract   Contracts, where a master agreement with no
- *                           facility or dates is attached to the agency's
- *                           existing contract or left unfiled, never made
- *                           into a new assignment (planFiling)
+ *   agreement_or_contract   Contracts when the scanner read an agreement,
+ *                           or a document of no built-in type ("other"),
+ *                           where a master agreement with no facility or
+ *                           dates is attached to the agency's existing
+ *                           contract or left unfiled, never made into a new
+ *                           assignment (planFiling); a receipt, a CV or an
+ *                           unreadable scan stays unfiled, and a scan of a
+ *                           built-in credential keeps its own section
  *   informational           filed only when the scanner read a built-in
  *                           credential; never a new category of its own
  *   credential_for_physician, or no role   the scanner decides, as before
@@ -259,9 +263,10 @@ export function roleTarget(scan, role) {
   if (role === "form_to_complete") return { kind: "unfiled", reason: "form" };
   if (role === "request_checklist") return { kind: "unfiled", reason: "checklist" };
   if (role === "agreement_or_contract") {
-    if (base.kind === "section") return base;
-    if (base.kind === "unfiled" && base.reason === "error") return base;
-    return { kind: "section", section: "locumContracts" };
+    // Only an "other" scan is moved, so the role narrows and never widens:
+    // a receipt read as an agreement is still a receipt, and one with no
+    // reading at all is not a contract.
+    return base.kind === "custom" ? { kind: "section", section: "locumContracts" } : base;
   }
   if (role === "informational" && base.kind !== "section") return base.kind === "unfiled" && base.reason === "error" ? base : { kind: "unfiled", reason: "informational" };
   return base;
@@ -517,6 +522,36 @@ export function fileableFromRequest(scan) {
   const { placed } = builtInFields(target.section, scan.extracted);
   const [key] = PRIMARY_DATE[target.section] || [];
   return validDate(placed.expirationDate) || (key ? validDate(String(placed[key] ?? "")) : false);
+}
+
+/**
+ * In an email that also asks for something ("mixed"), may this attachment be
+ * filed as the physician's own rather than kept with the request? The
+ * scanner's reading decides, as fileableFromRequest says, and the reading's
+ * role can only take a file OUT of filing, with one exception: a role of
+ * agreement_or_contract files an agreement the scanner also read as an
+ * agreement or as "other" (attached to the agency's contract, never made a
+ * new one: planFiling), read with more than low confidence. It never files a
+ * scan of a built-in credential without the dates fileableFromRequest wants:
+ * a blank "DEA attestation" scanned as a DEA registration with no number or
+ * dates became a licences row once, and a later "Please send your DEA" would
+ * have mailed the blank form out as the registration. And when an ask in the
+ * same email is to sign, complete or return something (signAsk), an
+ * agreement is the thing to sign, and it stays with the request.
+ *
+ * @param {any} scan the scanner's reading (null when there is none)
+ * @param {string|null|undefined} role the reading's role for the attachment
+ * @param {{ signAsk?: boolean }} [opts]
+ */
+export function fileableFromMixed(scan, role, { signAsk = false } = {}) {
+  if (!scan || typeof scan !== "object") return false;
+  if (role === "form_to_complete" || role === "request_checklist") return false;
+  if (role === "agreement_or_contract") {
+    if (signAsk) return false;
+    const agreementLike = scan.documentType === "agreement" || filingTarget(scan).kind === "custom";
+    if (agreementLike) return String(scan.confidence ?? "").toLowerCase() !== "low" && !patientRecordScreen("", scan);
+  }
+  return fileableFromRequest(scan);
 }
 
 // A category the email path creates is named by the model, unreviewed, and
