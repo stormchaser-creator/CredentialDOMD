@@ -7,6 +7,7 @@ import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import { generateId, formatDate, copyToClipboard, nextInvoiceNumber } from "../../../utils/helpers";
 import { checkPlacement } from "../../../utils/scheduleGuard";
 import { exportInvoice } from "../../../utils/invoiceExport";
+import { writeAllowedNow } from "../../../utils/limitedLaunchAccess.js";
 import { invoiceSubject } from "../../../utils/invoicePdf";
 import { money, invoiceCoverNotice } from "../../../utils/invoiceCover";
 import { invoicePlainText } from "../../../utils/invoiceLayout";
@@ -146,11 +147,10 @@ function DutyLog({ contract }) {
   const markDutyBilled = (method) => {
     if (!invoicePreview) return;
     const invId = generateId();
-    for (const id of invoicePreview.dutyIds) {
-      const d = (data.dutyDays || []).find(x => x.id === id);
-      if (d) editItem("dutyDays", { ...d, invoiceId: invId });
-    }
-    addItem("invoices", {
+    // The invoice record goes first: refused (the membership check went
+    // stale while the share sheet was open), nothing is marked billed and
+    // the preview stays, with a note that the invoice went out.
+    const recorded = addItem("invoices", {
       id: invId,
       number: invoicePreview.number,
       contractId: contract.id,
@@ -167,12 +167,23 @@ function DutyLog({ contract }) {
       lines: invoicePreview.lines,
       terms: invoicePreview.terms,
     });
+    if (recorded === false) {
+      // An alert: the page notice sits under this open preview.
+      window.alert(`Invoice ${invoicePreview.number} went out but is not on the Invoices tab yet, and these days are still unbilled. Tap Copy text & mark sent once connected to record it.`);
+      return;
+    }
+    for (const id of invoicePreview.dutyIds) {
+      const d = (data.dutyDays || []).find(x => x.id === id);
+      if (d) editItem("dutyDays", { ...d, invoiceId: invId });
+    }
     setSent(true);
     setTimeout(() => { setSent(false); setInvoicePreview(null); }, 1500);
   };
 
   const [fmtOpen, setFmtOpen] = useState(false);
   const sendDutyInvoice = async (format) => {
+    // An invoice that goes out has to be recorded: never send one the record would refuse.
+    if (!writeAllowedNow("practice")) return;
     const s = data.settings || {};
     const args = {
       number: invoicePreview.number,
@@ -233,8 +244,11 @@ function DutyLog({ contract }) {
       placementOk: confirmed || !!form.placementOk,
     };
     clean.amount = dutyDayPay(contract, clean).total;
-    if (editing === "new") addItem("dutyDays", { id: generateId(), createdAt: new Date().toISOString(), ...clean });
-    else editItem("dutyDays", { ...form, ...clean });
+    const saved = editing === "new"
+      ? addItem("dutyDays", { id: generateId(), createdAt: new Date().toISOString(), ...clean })
+      : editItem("dutyDays", { ...form, ...clean });
+    // Refused (membership being re-checked): the day stays open to save again.
+    if (saved === false) return;
     setEditing(null);
     setForm({});
   };
@@ -413,7 +427,7 @@ function DutyLog({ contract }) {
                 <InvoiceFormatChooser open={fmtOpen} onClose={() => setFmtOpen(false)}
                   onPick={(f) => { setFmtOpen(false); sendDutyInvoice(f); }} />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => { copyToClipboard(invoicePreview.text); markDutyBilled("copy"); }} style={{
+                  <button onClick={() => { if (!writeAllowedNow("practice")) return; copyToClipboard(invoicePreview.text); markDutyBilled("copy"); }} style={{
                     flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${T.border}`,
                     backgroundColor: "transparent", color: T.text, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
                   }}>Copy text &amp; mark sent</button>

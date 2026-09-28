@@ -85,7 +85,7 @@ function StandingBadge({ tone, style }) {
  * slips. Deleting an invoice releases its work entries back to unbilled.
  */
 function Invoices({ onOpenContract }) {
-  const { data, editItem, deleteItem, updateSection, theme: T, isDesktop, limitedLaunch, canWritePractice } = useApp();
+  const { data, editItem, deleteItem, updateSection, theme: T, isDesktop, limitedLaunch, practiceReadOnly } = useApp();
   const [viewInv, setViewInv] = useState(null);
   const [notice, setNotice] = useState(null);
   const contracts = data.locumContracts || [];
@@ -322,7 +322,8 @@ function Invoices({ onOpenContract }) {
   // Server-sent email (send-invoice-email): paragraphs intact, receipts from
   // the account's storage, replies and a copy to the physician. Read-only
   // memberships never see the option; the server refuses them regardless.
-  const canEmail = !limitedLaunch?.enabled || !!canWritePractice;
+  // A membership check in progress keeps it (the send waits for the answer).
+  const canEmail = !limitedLaunch?.enabled || !practiceReadOnly;
   const [emailFor, setEmailFor] = useState(null);
   const lastEmailedNote = (inv) => (inv?.lastEmailedAt
     ? `Last emailed ${sentWhen(inv.lastEmailedAt)}${inv.lastEmailedTo ? ` to ${inv.lastEmailedTo}` : ""}.`

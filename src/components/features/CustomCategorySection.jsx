@@ -25,7 +25,7 @@ const ROLE_FIELDS = [
 ];
 
 function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOpenCategory }) {
-  const { data, addItem, editItem, deleteItem, theme: T, canWriteCredential } = useApp();
+  const { data, addItem, editItem, deleteItem, theme: T, credentialReadOnly } = useApp();
   const iS = useInputStyle();
   const unsorted = categoryId === "unsorted";
   const category = useMemo(() => {
@@ -131,7 +131,7 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
   const btn = { padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`, background: "transparent", color: T.textMuted, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
   return (
     <div>
-      {!unsorted && canWriteCredential !== false && (
+      {!unsorted && !credentialReadOnly && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           <button style={btn} onClick={() => { setEditing("rename"); setDraft(category.name); }}>Rename</button>
           <button style={btn} onClick={() => { setEditing("field"); setDraft(""); setFieldType("text"); }}>Add a field</button>
@@ -165,7 +165,7 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
         emptyIcon={category.icon}
         emptyTitle={`Nothing in ${category.name} yet`}
         emptySub="Upload a document from Files, or ask Vera, and it can be filed here."
-        renderExtra={(item) => others.length > 0 && canWriteCredential !== false ? (
+        renderExtra={(item) => others.length > 0 && !credentialReadOnly ? (
           moving === item.id ? (
             <select autoFocus defaultValue="" onChange={e => e.target.value && move(item, e.target.value)} onBlur={() => setMoving(null)} style={{ ...iS, marginTop: 6 }}>
               <option value="" disabled>Move to...</option>
@@ -187,7 +187,7 @@ function CustomCategorySection({ categoryId, onShare, crudTargetProps = {}, onOp
 // Create a category by hand. Same rules as Vera and the uploader: a name that
 // dedupes against what exists, and fields that never hold identifiers.
 export function NewCategoryPanel({ onCreated }) {
-  const { data, addItem, editItem, theme: T, canWriteCredential } = useApp();
+  const { data, addItem, editItem, theme: T, credentialReadOnly } = useApp();
   const iS = useInputStyle();
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("");
@@ -227,9 +227,9 @@ export function NewCategoryPanel({ onCreated }) {
       <textarea value={fieldText} onChange={e => setFieldText(e.target.value)} rows={3} placeholder="Badge number, Facility, Access level" style={{ ...iS, marginBottom: 4 }} />
       <div style={{ fontSize: 12, color: T.textDim, marginBottom: 14 }}>Separate with commas. Every record already has a name, issuer, number, issued and expiry date.</div>
       {msg && <div style={{ fontSize: 13, color: T.danger, marginBottom: 10 }}>{msg}</div>}
-      <button type="button" disabled={!name.trim() || canWriteCredential === false} onClick={create} style={{
+      <button type="button" disabled={!name.trim() || !!credentialReadOnly} onClick={create} style={{
         padding: "12px 18px", borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 15, fontWeight: 700,
-        cursor: "pointer", opacity: name.trim() && canWriteCredential !== false ? 1 : 0.5, fontFamily: "inherit",
+        cursor: "pointer", opacity: name.trim() && !credentialReadOnly ? 1 : 0.5, fontFamily: "inherit",
       }}>{clash ? `Open ${clash.name}` : "Create category"}</button>
     </div>
   );

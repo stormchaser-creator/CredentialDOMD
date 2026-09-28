@@ -186,7 +186,9 @@ function RVULog() {
   const save = useCallback(() => {
     if (!review?.items?.length) return;
     const encId = generateId();
-    addItem("encounters", {
+    // A refused save (membership being re-checked) keeps the dictation and
+    // the reviewed codes on screen to save again; addItem has said why.
+    const saved = addItem("encounters", {
       id: encId,
       createdAt: new Date().toISOString(),
       contractId: contractId || null,
@@ -195,6 +197,7 @@ function RVULog() {
       note: "",
       spokenText: text,
     });
+    if (saved === false) return;
     // Surgery-section CPTs (1xxxx-6xxxx) are cases, not rounding — they land
     // in the career case log automatically, missing role/category, and the
     // home dashboard nags until the surgeon completes them.
@@ -202,13 +205,14 @@ function RVULog() {
       const n = parseInt(code, 10);
       return Number.isFinite(n) && n >= 10000 && n < 70000;
     });
+    let caseLogged = false;
     if (surgical.length) {
       const wRvu = surgical.reduce((s2, c) => s2 + (c.wRVU || 0) * (c.units || 1), 0);
       // The codes already say what kind of case this is, so the log stops
       // filing everything as "Other" when the picker was left alone. A picked
       // category always wins; "Other" is only written when the codes genuinely
       // do not decide one.
-      addItem("caseLogs", {
+      caseLogged = addItem("caseLogs", {
         id: generateId(),
         date,
         title: surgical[0].desc || `CPT ${surgical[0].code}`,
@@ -221,11 +225,15 @@ function RVULog() {
         facility: contracts.find(c2 => c2.id === contractId)?.facility || "",
         source: "RVU log",
         customFields: { "From RVU entry": encId },
-      });
+      }) !== false;
     }
-    setSaveNote(surgical.length
+    // The note says only what was saved: a case log that was refused leaves
+    // the Add to case log button, as for evaluation and management codes.
+    setSaveNote(caseLogged
       ? { text: `Saved. ${surgical.length} operative code${surgical.length === 1 ? "" : "s"} also went to your case log.`, encId: null }
-      : { text: "Saved to the RVU log. These are evaluation and management codes, so nothing went to the career case log.", encId, date, codes: review.items, cid: contractId });
+      : surgical.length
+        ? { text: "Saved to the RVU log. The case log could not be updated just now.", encId, date, codes: review.items, cid: contractId }
+        : { text: "Saved to the RVU log. These are evaluation and management codes, so nothing went to the career case log.", encId, date, codes: review.items, cid: contractId });
     setTimeout(() => setSaveNote(n => (n && n.encId === encId ? null : n)), 12000);
     setText(""); setReview(null); setCaseCategory("");
   }, [review, contractId, date, text, addItem, contracts, caseCategory]);
@@ -236,7 +244,7 @@ function RVULog() {
   const addToCaseLog = useCallback((info) => {
     if (!info) return;
     const wRvu = (info.codes || []).reduce((s2, c) => s2 + (c.wRVU || 0) * (c.units || 1), 0);
-    addItem("caseLogs", {
+    const added = addItem("caseLogs", {
       id: generateId(),
       date: info.date,
       title: (info.codes || [])[0]?.desc || "Case from RVU log",
@@ -247,6 +255,7 @@ function RVULog() {
       source: "RVU log",
       customFields: { "From RVU entry": info.encId },
     });
+    if (added === false) return;
     setSaveNote({ text: "Added to your case log.", encId: null });
     setCaseCategory("");
     setTimeout(() => setSaveNote(null), 8000);
@@ -694,7 +703,8 @@ function RVULog() {
 
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button onClick={() => {
-                editItem("encounters", { ...encDraft, codes: (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? 0, modifier: c.modifier || "" })) });
+                // Refused: the edit stays open with its changes.
+                if (editItem("encounters", { ...encDraft, codes: (encDraft.codes || []).map(c => ({ code: c.code, desc: c.desc, units: c.units || 1, wRVU: c.wRVU ?? CPT_DESCS[c.code]?.w ?? 0, modifier: c.modifier || "" })) }) === false) return;
                 // A case log born from this RVU entry froze its facility at
                 // creation, so re-tagging the entry to another agreement used
                 // to leave the case at the old hospital. Move the linked case

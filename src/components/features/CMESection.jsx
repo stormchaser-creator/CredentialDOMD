@@ -96,8 +96,9 @@ function CMESection({ onShare }) {
   const handleSave = useCallback(() => {
     const itemId = editItem ? editItem.id : generateId();
     const entry = { ...form, id: itemId };
-    if (editItem) editItemCtx("cme", entry);
-    else addItem("cme", entry);
+    // Refused (membership being re-checked): the form stays open with what
+    // was typed and attached, to save again; addItem has said why.
+    if ((editItem ? editItemCtx("cme", entry) : addItem("cme", entry)) === false) return;
 
     // Same behavior as every other credential form: attached files are
     // saved to Documents and linked to this record.

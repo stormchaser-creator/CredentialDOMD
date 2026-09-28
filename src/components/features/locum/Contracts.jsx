@@ -140,8 +140,9 @@ function Contracts() {
     // it always did.
     if ("splitAtDayStart" in form) entry.splitAtDayStart = form.splitAtDayStart === true;
     if ("dayStartHour" in form) entry.dayStartHour = callDayStartHour(form);
-    if (editItem) editCtx("locumContracts", entry);
-    else addItem("locumContracts", entry);
+    // Refused (membership being re-checked): the form stays open with the
+    // terms typed in it, to save again; addItem has said why.
+    if ((editItem ? editCtx("locumContracts", entry) : addItem("locumContracts", entry)) === false) return;
 
     for (const doc of attachedDocs) {
       if (doc.existingId) {

@@ -13,7 +13,7 @@
  * App.jsx see the same status, and a run in flight is never doubled.
  */
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import { accessAuthority } from "../utils/limitedLaunchAccess.js";
+import { accessAuthority, accessVerifying, requestAccessCheck, RECONNECTING_MESSAGE } from "../utils/limitedLaunchAccess.js";
 import { useApp } from "../context/AppContext";
 import { BASE_KEYS, lsGetJSON, lsSetJSON } from "../utils/storageScope";
 import { generateId } from "../utils/helpers";
@@ -93,8 +93,24 @@ async function fetchFeed(url) {
 }
 
 // ─── The run ──────────────────────────────────────────────────
+// A refused run is shown in the panel like any other result, but is not
+// saved: it records no attempt, so the next due check is not pushed back.
+function refuse(error, message, trigger) {
+  const rec = { ...(state.record || {}), ok: false, error, message, trigger };
+  setState({ record: rec });
+  return rec;
+}
+
 async function runSync({ data, addItem, editItem, deleteItem, trigger }) {
-  if (!accessAuthority.allows("practice", "write")) return { ok: false, error: "membership_read_only", message: "Practice is read-only. Saved records and exports are available." };
+  if (!accessAuthority.allows("practice", "write")) {
+    // A membership check in progress is momentary; it is not a read-only
+    // membership. Ask for the answer now, so trying again soon works.
+    if (accessVerifying(accessAuthority, "practice")) {
+      requestAccessCheck();
+      return refuse("membership_verifying", RECONNECTING_MESSAGE, trigger);
+    }
+    return refuse("membership_read_only", "Practice is read-only. Saved records and exports are available.", trigger);
+  }
   if (state.running) return state.record;
   const s = data?.settings || {};
   const url = parseFeedUrl(s.callsyncFeedUrl);
@@ -146,6 +162,10 @@ async function runSync({ data, addItem, editItem, deleteItem, trigger }) {
 
 // ─── Hooks ────────────────────────────────────────────────────
 
+// How an automatic run waits for a membership answer that is being checked.
+export const AUTO_VERIFY_WAIT_MS = 5000;
+export const AUTO_VERIFY_WAITS = 24;
+
 /** Status + a manual trigger for the Sched. panel. */
 export function useCallSync() {
   const { data, addItem, editItem, deleteItem, user } = useApp();
@@ -166,7 +186,7 @@ export function useCallSync() {
  * day old, sync. A failed attempt waits fifteen minutes before retrying.
  */
 export function useCallSyncAutoRun() {
-  const { data, loaded, offlineMode, user, addItem, editItem, deleteItem } = useApp();
+  const { data, loaded, offlineMode, user, addItem, editItem, deleteItem, canWritePractice } = useApp();
   useEffect(() => { ensureOwner(user?.id); }, [user?.id]);
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
@@ -175,16 +195,26 @@ export function useCallSyncAutoRun() {
   useEffect(() => {
     if (!loaded || offlineMode || !user?.id || !parseFeedUrl(feedUrl)) return;
     ensureOwner(user.id);
+    let waits = 0, retry = null;
     const check = () => {
+      clearTimeout(retry);
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       if (!isDueForAutoSync(state.record)) return;
-      runSync({ data: dataRef.current, addItem, editItem, deleteItem, trigger: "auto" }).catch(() => {});
+      runSync({ data: dataRef.current, addItem, editItem, deleteItem, trigger: "auto" }).then(rec => {
+        // Coming back to the app is when the membership answer is re-checked,
+        // so a due sync on resume usually finds it pending. It waits for the
+        // answer (checked every few seconds, for a couple of minutes) rather
+        // than for the next app switch.
+        if (rec?.error === "membership_verifying" && waits < AUTO_VERIFY_WAITS) { waits += 1; retry = setTimeout(check, AUTO_VERIFY_WAIT_MS); }
+        else waits = 0;
+      }, () => {});
     };
     // Let the first render settle before the calendar starts changing.
     const timer = setTimeout(check, 3000);
-    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    const onVisible = () => { if (document.visibilityState === "visible") { waits = 0; check(); } };
     document.addEventListener("visibilitychange", onVisible);
-    return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [loaded, offlineMode, user?.id, feedUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { clearTimeout(timer); clearTimeout(retry); document.removeEventListener("visibilitychange", onVisible); };
+    // Practice becoming writable (the first answer of a cold start) runs a due sync.
+  }, [loaded, offlineMode, user?.id, feedUrl, canWritePractice]); // eslint-disable-line react-hooks/exhaustive-deps
 }

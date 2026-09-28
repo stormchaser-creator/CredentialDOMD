@@ -412,7 +412,7 @@ test("Send by email: a retried Send after a lost answer is not mailed twice", as
 
 test("Send by email: a Credential-only account is not offered it, and the screen never calls the server", async () => {
   const env = fakeWorld({ access: { practice: false } });
-  const ctx = context(env, { invoices: [workInvoice()] }, { limitedLaunch: { enabled: true }, canWritePractice: false });
+  const ctx = context(env, { invoices: [workInvoice()] }, { limitedLaunch: { enabled: true }, canWritePractice: false, practiceReadOnly: true });
   await withApp(env, ctx, async (invocations) => {
     const invoices = harness("Invoices", {});
     button(invoices.render(), "Resend").props.onClick({ stopPropagation() {} });
@@ -429,5 +429,24 @@ test("Send by email: a Credential-only account is not offered it, and the screen
     // And the server refuses it regardless.
     const res = await env.call({ action: "check", invoiceId: IDS.workInvoice, pdfBytes: 10 });
     assert.equal(res.status, 403);
+  });
+});
+
+test("Send by email while membership is being re-checked: offered and prepared, Send waits for the answer (ticket fe321c16)", async () => {
+  const env = fakeWorld();
+  const ctx = context(env, { invoices: [workInvoice()], locumContracts: [contract("billing@hospital.example")] },
+    { limitedLaunch: { enabled: true }, canWritePractice: false, practiceReadOnly: false });
+  await withApp(env, ctx, async (invocations) => {
+    const { modal } = await openFromResend(ctx);
+    let tree = modal.render();
+    assert.match(textOf(tree), /Reconnecting, try again in a moment\./);
+    assert.doesNotMatch(textOf(tree), /needs Practice access/);
+    assert.equal(button(tree, "Send to billing@hospital.example").props.disabled, true);
+    assert.deepEqual(invocations.map((b) => b.action), ["check"], "nothing is sent while the check is pending");
+    // The fresh answer arrives: Send opens without reopening the screen.
+    ctx.canWritePractice = true;
+    tree = modal.render();
+    assert.doesNotMatch(textOf(tree), /Reconnecting/);
+    assert.equal(button(tree, "Send to billing@hospital.example").props.disabled, false);
   });
 });

@@ -1,4 +1,5 @@
 import { PUBLIC_BILLING_POLICY } from "../../supabase/functions/_shared/accessPolicy.mjs";
+import { BASE_KEYS, lsGetJSON, lsSetJSON } from "./storageScope.js";
 
 // This client switch never enables checkout or changes an account entitlement.
 export const LIMITED_LAUNCH_ACCESS_ENABLED = import.meta.env?.VITE_LIMITED_LAUNCH_ACCESS_ENABLED === "true";
@@ -91,6 +92,9 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
   const elapsed = Math.max(0, now - receivedAt);
   result.needsRefresh = elapsed >= ACCESS_REFRESH_MS;
   const serverNow = Date.parse(snapshot.evaluatedAt) + elapsed;
+  // How long this answer stays fresh enough to authorize a write. The access
+  // hook asks again before then, so a visible session never goes stale.
+  result.freshForMs = Math.max(0, ACCESS_REFRESH_MS - elapsed);
   result.nextCheckInMs = Math.max(1, ACCESS_REFRESH_MS - elapsed);
   if (result.practiceTrial.state === "active" && Date.parse(result.practiceTrial.endsAt) > serverNow) {
     result.nextCheckInMs = Math.min(result.nextCheckInMs, Date.parse(result.practiceTrial.endsAt) - serverNow);
@@ -109,6 +113,11 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
         && !(result.purchasedOfferId === "core" && result.practiceTrial.state === "active")) result.capabilities.practice.write = false;
     }
   }
+  // What the server's last answer allows at this moment, with a trial or beta
+  // that has run out already applied. The read-only archive and membership
+  // notices follow this, never a snapshot that is merely old or a check that
+  // failed (ticket fe321c16). It never authorizes a write: that stays below.
+  result.entitled = Object.fromEntries(scopes.map(scope => [scope, result.enforcementEnabled === true && result.capabilities[scope].write === true]));
   // An old result can preserve a user's read/export view, never authorize a new write.
   if (result.needsRefresh || !result.enforcementEnabled) {
     for (const scope of scopes) result.capabilities[scope].write = false;
@@ -116,10 +125,72 @@ export function accessAt(snapshot, receivedAt, now = Date.now()) {
   return result;
 }
 
+/**
+ * The server's last answer for this scope: true (may change it), false (it
+ * is read-only), or null when there is no answer to go on. With no snapshot
+ * this session, the answer this device remembered for the account stands in
+ * (`remembered`, from the authority), so a lapsed membership opens on its
+ * archive and a current one on its screens.
+ */
+export function lastAnswer(access, scope, remembered = null) {
+  if (!scopes.includes(scope)) return null;
+  if (access) {
+    const entitled = access.entitled?.[scope];
+    if (typeof entitled === "boolean") return entitled;
+    if (access.needsRefresh === true) return null;
+    return access.capabilities?.[scope]?.write === true;
+  }
+  const cached = remembered?.[scope];
+  return typeof cached === "boolean" ? cached : null;
+}
+
+/**
+ * True when the server's answer keeps this scope read-only. An old snapshot
+ * or a failed check keeps the answer it had: the normal screens stay and the
+ * write guard refuses changes meanwhile (ticket fe321c16). With no answer at
+ * all, this session or remembered, the archive shows until one arrives.
+ */
+export function membershipReadOnly(access, scope, remembered = null) {
+  if (!scopes.includes(scope)) return false;
+  const answer = lastAnswer(access, scope, remembered);
+  return answer === null ? !access : !answer;
+}
+
+// The last answer per account, kept on this device (two booleans; removed
+// with the account's other device keys on sign-out).
+const deviceAnswers = {
+  read(accountId) {
+    const value = lsGetJSON(BASE_KEYS.accessAnswer, accountId);
+    return value && scopes.every(scope => typeof value[scope] === "boolean")
+      ? Object.fromEntries(scopes.map(scope => [scope, value[scope]])) : null;
+  },
+  write(accountId, value) { lsSetJSON(BASE_KEYS.accessAnswer, value, accountId); },
+};
+const sameAnswer = (a, b) => !!a && !!b && scopes.every(scope => a[scope] === b[scope]);
+
 /** In-memory write guard shared by UI and persistence; the server still enforces access. */
-export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED, now = () => globalThis.performance?.now() ?? Date.now(), currentAccount } = {}) {
+export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED, now = () => globalThis.performance?.now() ?? Date.now(), currentAccount, memory = deviceAnswers } = {}) {
   let accountId = null, snapshot = null, receivedAt = 0, refreshFailed = false, records = null, previewSource = null;
+  // The answer remembered for this account, why writes are suspended, and
+  // how to start a membership check at once (set by the access hook).
+  let remembered = null, outdated = false, recheck = null;
   const current = () => typeof currentAccount === "function" ? currentAccount() : accountId;
+  const remember = value => {
+    if (!value || sameAnswer(value, remembered)) return;
+    remembered = { ...value };
+    try { memory?.write(accountId, remembered); } catch { /* the device cannot keep it; this session still does */ }
+  };
+  // The preview source's answer for `value`, clamped to it, or null.
+  const previewOf = (expectedAccountId, value) => {
+    const real = Object.fromEntries(scopes.map(scope => [scope, Object.fromEntries(operations.map(op => [op, value.capabilities[scope][op] === true]))]));
+    let preview = null;
+    try { preview = previewSource(expectedAccountId, value); } catch { preview = null; }
+    if (!preview || preview === value || typeof preview !== "object" || !scopes.every(scope => preview.capabilities?.[scope] && typeof preview.capabilities[scope] === "object")) return null;
+    for (const scope of scopes) for (const op of operations) {
+      preview.capabilities[scope][op] = preview.capabilities[scope][op] === true && real[scope][op];
+    }
+    return preview;
+  };
   return {
     enabled,
     /**
@@ -129,7 +200,11 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
      * did not. A source that throws or returns nothing leaves the real state.
      */
     setPreviewSource(source) { previewSource = typeof source === "function" ? source : null; },
-    reset(nextAccountId = null) { accountId = nextAccountId; snapshot = null; receivedAt = 0; refreshFailed = false; records = null; },
+    reset(nextAccountId = null) {
+      accountId = nextAccountId; snapshot = null; receivedAt = 0; refreshFailed = false; records = null; outdated = false;
+      remembered = null;
+      if (accountId) { try { remembered = memory?.read(accountId) || null; } catch { remembered = null; } }
+    },
     registerRecords(expectedAccountId, value) {
       if (accountId === expectedAccountId && current() === expectedAccountId) records = value;
     },
@@ -137,27 +212,56 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
       if (!expectedAccountId || current() !== expectedAccountId || accountId !== expectedAccountId) return null;
       return records?.[key]?.find(record => record.id === id) || null;
     },
-    suspendWrites() { refreshFailed = true; },
+    /** A failed check refuses writes until a fresh answer. `outdated`: this build cannot read the answer. */
+    suspendWrites({ outdated: stale = false } = {}) { refreshFailed = true; outdated = outdated || stale === true; },
+    /** True after a check this build could not read (an older app version); a reload is the fix. */
+    outdated() { return outdated; },
     accept(expectedAccountId, value) {
       if (!expectedAccountId || current() !== expectedAccountId || accountId !== expectedAccountId) return false;
-      snapshot = validateAccessSnapshot(value); receivedAt = now(); refreshFailed = false; return true;
+      snapshot = validateAccessSnapshot(value); receivedAt = now(); refreshFailed = false; outdated = false;
+      remember(accessAt(snapshot, receivedAt, receivedAt).entitled);
+      return true;
+    },
+    /** The answer this device remembered for the account, or null. Only for the screens, never for a write. */
+    remembered(expectedAccountId = accountId) {
+      if (!expectedAccountId || current() !== expectedAccountId) return null;
+      // The first render for a newly signed-in account comes before reset():
+      // read the device's copy so a cold start opens on the right screens.
+      if (accountId !== expectedAccountId) { try { return memory?.read(expectedAccountId) || null; } catch { return null; } }
+      return remembered ? { ...remembered } : null;
+    },
+    /** The access hook's way to start a check now; returns the unsubscribe. */
+    setRecheck(fn) {
+      recheck = typeof fn === "function" ? fn : null;
+      return () => { if (recheck === fn) recheck = null; };
+    },
+    requestCheck() {
+      if (!recheck) return false;
+      try { recheck(); } catch { return false; }
+      return true;
     },
     state(expectedAccountId = accountId) {
       if (!expectedAccountId || current() !== expectedAccountId || accountId !== expectedAccountId) return null;
       const value = accessAt(snapshot, receivedAt, now());
+      // A trial or beta that ends while the app is open changes the answer
+      // the next launch should open on.
+      if (value) remember(value.entitled);
       if (value && refreshFailed) {
         value.needsRefresh = true;
         for (const scope of scopes) value.capabilities[scope].write = false;
       }
       if (value && previewSource) {
-        const real = Object.fromEntries(scopes.map(scope => [scope, Object.fromEntries(operations.map(op => [op, value.capabilities[scope][op] === true]))]));
-        let preview = null;
-        try { preview = previewSource(expectedAccountId, value); } catch { preview = null; }
-        if (preview && preview !== value && typeof preview === "object" && scopes.every(scope => preview.capabilities?.[scope] && typeof preview.capabilities[scope] === "object")) {
-          for (const scope of scopes) for (const op of operations) {
-            preview.capabilities[scope][op] = preview.capabilities[scope][op] === true && real[scope][op];
-          }
+        const preview = previewOf(expectedAccountId, value);
+        if (preview) {
           if (value.needsRefresh) preview.needsRefresh = true;
+          // The previewed membership's own answer decides its archive, as it
+          // would with a fresh snapshot; it is never more than the real one.
+          const settled = structuredClone(value);
+          settled.needsRefresh = false;
+          for (const scope of scopes) settled.capabilities[scope].write = value.entitled[scope];
+          const settledPreview = previewOf(expectedAccountId, settled);
+          preview.entitled = Object.fromEntries(scopes.map(scope => [scope, value.entitled[scope]
+            && (settledPreview ? settledPreview.capabilities[scope].write === true : true)]));
           return preview;
         }
       }
@@ -186,6 +290,73 @@ export function membershipWriteError() {
   const error = new Error("This record is read-only. Your saved records and exports are still available.");
   error.code = "membership_read_only";
   return error;
+}
+
+// A write refused while membership is being re-checked is momentary, and says so.
+export const RECONNECTING_MESSAGE = "Reconnecting, try again in a moment.";
+// A build that cannot read the server's answer never recovers on its own.
+export const OUTDATED_MESSAGE = "This version of the app is out of date. Reload to continue.";
+
+/** The scopes a change to this record needs: both for a new file not filed to anything. */
+export function scopesForWrite(key, record, previous = null) {
+  if (key === "documents" && !previous && !record?.linkedTo) return [...scopes];
+  return [...new Set([scopeForCollection(key, record), ...(previous ? [scopeForCollection(key, previous)] : [])])];
+}
+
+/**
+ * True while this account's membership is being re-checked (no snapshot yet,
+ * an old one, or a failed check) and the last answer did not already deny
+ * `scope`. A scope the server said is read-only is not "reconnecting": it
+ * stays read-only whatever the next check says. `scope` may be a list (all
+ * must be open); with none, any open scope counts.
+ */
+export function accessVerifying(authority = accessAuthority, scope = null) {
+  if (!authority?.enabled) return false;
+  const value = authority.state();
+  if (value && value.needsRefresh !== true) return false;
+  const remembered = authority.remembered?.() ?? null;
+  const open = name => lastAnswer(value, name, remembered) !== false;
+  if (Array.isArray(scope)) return scope.every(open);
+  if (scope) return open(scope);
+  return scopes.some(open);
+}
+
+/** What to tell someone whose change was refused: out of date, reconnecting, or read-only. */
+export function writeRefusalMessage(authority = accessAuthority, scope = null) {
+  if (authority?.enabled && authority.outdated?.() === true) return OUTDATED_MESSAGE;
+  return accessVerifying(authority, scope) ? RECONNECTING_MESSAGE : membershipWriteError().message;
+}
+
+/** Start a membership check at once (the hook's own, coalesced with one in flight). */
+export function requestAccessCheck(authority = accessAuthority) {
+  return authority?.requestCheck?.() === true;
+}
+
+// Once per burst: an import of many records refused while reconnecting says
+// so once, not once per record. Measured from when the message was closed.
+// "Try again in a moment" is made true by asking for a fresh answer now,
+// whatever the retry schedule had reached.
+const REFUSAL_QUIET_MS = 3000;
+let refusalShownAt = -Infinity;
+export function alertWriteRefused({ authority = accessAuthority, scope = null, alert = message => globalThis.window?.alert?.(message), now = () => Date.now() } = {}) {
+  const verifying = authority?.outdated?.() !== true && accessVerifying(authority, scope);
+  if (verifying) requestAccessCheck(authority);
+  if (now() - refusalShownAt < REFUSAL_QUIET_MS) return false;
+  alert(writeRefusalMessage(authority, scope));
+  refusalShownAt = now();
+  return true;
+}
+
+/**
+ * Before work that has to end in a saved record (an invoice sent from the
+ * share sheet), ask whether the write would be allowed now. A refusal is
+ * explained exactly as a refused save is, and nothing is started.
+ */
+export function writeAllowedNow(scope, options = {}) {
+  const authority = options.authority || accessAuthority;
+  if (authority.allows(scope, "write")) return true;
+  alertWriteRefused({ ...options, authority, scope });
+  return false;
 }
 
 // A backup restore or direct collection replacement is checked as one operation.

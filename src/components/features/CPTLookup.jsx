@@ -78,7 +78,8 @@ function CPTLookup() {
     // Only a single CURRENT agreement is assumed: an archived or long-ended
     // one no longer counts toward "there is only one".
     const contracts = pickableContracts(data.locumContracts, null);
-    addItem("encounters", {
+    // Refused (membership being re-checked): no "logged" tick; addItem has said why.
+    const logged = addItem("encounters", {
       id: generateId(),
       createdAt: new Date().toISOString(),
       contractId: contracts.length === 1 ? contracts[0].id : null,
@@ -92,6 +93,7 @@ function CPTLookup() {
       note: "",
       spokenText: "",
     });
+    if (logged === false) return;
     setLogged(c.code);
     setTimeout(() => setLogged(l => (l === c.code ? null : l)), 2600);
   }, [addItem, data.locumContracts]);

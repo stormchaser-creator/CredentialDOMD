@@ -273,9 +273,11 @@ function StatementImport({ open, onClose }) {
 
   const saveBatch = () => {
     let billed = 0, deducted = 0;
+    const saved = new Set();
     for (const r of included) {
-      if (willBill(r)) {
-        addItem("travelExpenses", {
+      const bill = willBill(r);
+      const ok = bill
+        ? addItem("travelExpenses", {
           id: generateId(),
           date: r.date,
           amount: parseFloat(r.amount) || 0,
@@ -283,10 +285,8 @@ function StatementImport({ open, onClose }) {
           vendor: r.merchant,
           agency: r.agency.trim(),
           notes: "Imported from statement",
-        });
-        billed++;
-      } else {
-        addItem("deductibles", {
+        })
+        : addItem("deductibles", {
           id: generateId(),
           date: r.date,
           category: r.category,
@@ -296,9 +296,13 @@ function StatementImport({ open, onClose }) {
           taxYear: String(r.date || "").slice(0, 4),
           source: "card import",
         });
-        deducted++;
-      }
+      if (ok === false) break;
+      saved.add(r);
+      if (bill) billed++; else deducted++;
     }
+    // Refused (membership being re-checked; addItem has said why): the saved
+    // lines leave the review and the rest stay in it, to save again.
+    if (saved.size < included.length) { setRows(rs => rs.filter(r => !saved.has(r))); return; }
     setDone({ count: deducted, billed });
     setRows(null);
   };

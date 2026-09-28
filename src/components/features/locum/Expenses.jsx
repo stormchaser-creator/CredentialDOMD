@@ -10,6 +10,7 @@ import {
   money, INVOICE_COVER_ON_CLIPBOARD, INVOICE_COVER_FOR_EMAIL, EXPENSE_INVOICE_TERMS, expenseLineDetail,
 } from "../../../utils/invoiceCover";
 import { sendExpenseInvoiceFiles } from "../../../utils/expenseInvoiceSend";
+import { writeAllowedNow } from "../../../utils/limitedLaunchAccess.js";
 import { checkStorageQuota } from "../../../utils/storageQuota";
 import { TrashIcon, SendIcon, CameraIcon, UploadIcon } from "../../shared/Icons";
 import { EXPENSE_CATEGORIES as CATEGORIES } from "../../../constants/expenseCategories";
@@ -160,8 +161,10 @@ function Expenses() {
       ...form, id, amount: Math.round(amount * 100) / 100,
       vendor: (form.vendor || "").trim(), agency: (form.agency || "").trim(),
     };
-    if (editing === "new") addItem("travelExpenses", rec);
-    else editItem("travelExpenses", rec);
+    const saved = editing === "new" ? addItem("travelExpenses", rec) : editItem("travelExpenses", rec);
+    // Refused (membership being re-checked): the form and its staged receipt
+    // photos stay, to save again; addItem has said why.
+    if (saved === false) return;
     for (const f of pendingFiles) {
       addItem("documents", {
         id: generateId(), name: f.name, type: f.type,
@@ -212,6 +215,8 @@ function Expenses() {
   const sendExpenseInvoice = async () => {
     const sel = unbilled.filter(e => checked[e.id]);
     if (!sel.length) { showNotice("Nothing selected."); return; }
+    // An invoice that goes out has to be recorded: never send one the record would refuse.
+    if (!writeAllowedNow("practice")) return;
     setBusy(true);
     try {
       const s = data.settings || {};
@@ -259,7 +264,7 @@ function Expenses() {
       if (!sent) { setBusy(false); return; }   // cancelled: record nothing
       const { how, coverCopied, droppedForSize } = sent;
       const invoiceId = generateId();
-      addItem("invoices", {
+      const recorded = addItem("invoices", {
         id: invoiceId, number, contractId: null, kind: "expenses",
         billToLabel: invAgency || "Locums agency",
         periodStart: dates[0], periodEnd: dates[dates.length - 1],
@@ -269,6 +274,11 @@ function Expenses() {
         sentAt: new Date().toISOString(),
         text: `Invoice ${number}: ${invAgency || "Locums agency"}, ${money(total)} (${sel.length} item${sel.length > 1 ? "s" : ""})`,
       });
+      // Refused while the share sheet was open: nothing is marked billed.
+      if (recorded === false) {
+        window.alert(`Invoice ${number} went out but is not on the Invoices tab yet, and these expenses are still unbilled.`);
+        return;
+      }
       for (const e of sel) editItem("travelExpenses", { ...e, invoiceId });
       setInvOpen(false);
       // Same clipboard notice as every other invoice send (ticket e8cc2a02).
