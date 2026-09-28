@@ -24,10 +24,10 @@ const noEmDash = (name, s) => ok(`${name}: no em dash`, !String(s).includes("\u2
 
 // ── ackAllowed: the one good case, then every refusal ────────────────────────
 const good = {
-  requesterAddr: "madeline.castorena@ruhealth.org",
-  requesterName: "Madeline Castorena",
-  forwarderAddr: "stormchaser@elryx.com",
-  physicianEmail: "stormchaser@elryx.com",
+  requesterAddr: "casey.example@osterly-health.example",
+  requesterName: "Casey Example",
+  forwarderAddr: "rowan.testa@clinic.example",
+  physicianEmail: "rowan.testa@clinic.example",
   requesterFound: true,
   ackRequests: true,
   senderAuthenticated: true,
@@ -47,9 +47,9 @@ refused("requester is not an email address", { requesterAddr: "madeline" }, "no 
 refused("our own domain", { requesterAddr: "docs@credentialdomd.com" }, "credentialdomd.com");
 refused("a subdomain of ours", { requesterAddr: "x@mail.credentialdomd.com" }, "credentialdomd.com");
 ok("a lookalike domain is not ours", ackAllowed({ ...good, requesterAddr: "a@notcredentialdomd.com" }).ok);
-refused("requester is the forwarder", { requesterAddr: "stormchaser@elryx.com" }, "forwarding address");
-refused("requester is the forwarder, any case", { requesterAddr: "StormChaser@Elryx.com", physicianEmail: "other@x.org" }, "forwarding address");
-refused("requester is the physician's profile address", { requesterAddr: "eric@hospital.org", physicianEmail: "ERIC@hospital.org" }, "physician's own address");
+refused("requester is the forwarder", { requesterAddr: "rowan.testa@clinic.example" }, "forwarding address");
+refused("requester is the forwarder, any case", { requesterAddr: "Rowan.Testa@Clinic.Example", physicianEmail: "other@x.org" }, "forwarding address");
+refused("requester is the physician's profile address", { requesterAddr: "rowan@hospital.example", physicianEmail: "ROWAN@hospital.example" }, "physician's own address");
 // The forward itself must be positively authenticated. This is the one send
 // that leaves our domain addressed by the forwarded text, so "no failure
 // recorded" (the rule that files a certificate) is not enough here.
@@ -76,18 +76,18 @@ ok("the refusal order puts 'not found' first, so a not-found self-address reads 
   ackAllowed({ ...good, requesterFound: false, requesterAddr: good.physicianEmail }).why.includes("not found"));
 
 // ── ackText: what the credentialer reads ─────────────────────────────────────
-const ack = ackText({ requesterName: "Madeline Castorena", physicianName: "Eric Whitney", degree: "DO", askCount: 1, receivedAtIso: "2026-09-11T17:03:12.000Z" });
+const ack = ackText({ requesterName: "Casey Example", physicianName: "Rowan Testa", degree: "DO", askCount: 1, receivedAtIso: "2026-09-11T17:03:12.000Z" });
 eq("the ack, one ask, with degree", ack,
-  "Hello Madeline,\n\nThis confirms that your request to Eric Whitney was received on September 11, 2026. Any documents will come from this address; a reply to this email reaches Eric Whitney directly.\n\nRegards,\nEric Whitney, DO");
+  "Hello Casey,\n\nThis confirms that your request to Rowan Testa was received on September 11, 2026. Any documents will come from this address; a reply to this email reaches Rowan Testa directly.\n\nRegards,\nRowan Testa, DO");
 // The ack is not a commitment. "will be sent once approved" read to a
 // credentialer as a promise to send, and they chased it.
 ok("the ack promises nothing about sending", !/will be sent|once approved|documents will follow/i.test(ack));
-ok("the ack says where any documents would come from and where a reply lands", ack.includes("Any documents will come from this address; a reply to this email reaches Eric Whitney directly."));
-ok("several asks say how many", ackText({ requesterName: "Tara Domalewski", physicianName: "Eric Whitney", degree: "DO", askCount: 4, receivedAtIso: "2026-08-05T16:57:00Z" })
-  .includes("your request for 4 items to Eric Whitney was received on August 5, 2026"));
-ok("no degree, no trailing comma", ackText({ requesterName: "Tara", physicianName: "Eric Whitney", degree: "", askCount: 1, receivedAtIso: "2026-08-05T16:57:00Z" }).endsWith("Regards,\nEric Whitney"));
-ok("no requester name greets 'there'", ackText({ requesterName: "", physicianName: "Eric Whitney", degree: "DO", askCount: 1, receivedAtIso: "2026-08-05T16:57:00Z" }).startsWith("Hello there,"));
-ok("an office as the requester greets 'there', not 'Hello Medical,'", ackText({ requesterName: "Medical Staff Services", physicianName: "Eric Whitney", degree: "DO", askCount: 1, receivedAtIso: "2026-08-05T16:57:00Z" }).startsWith("Hello there,"));
+ok("the ack says where any documents would come from and where a reply lands", ack.includes("Any documents will come from this address; a reply to this email reaches Rowan Testa directly."));
+ok("several asks say how many", ackText({ requesterName: "Tara Example", physicianName: "Rowan Testa", degree: "DO", askCount: 4, receivedAtIso: "2026-08-05T16:57:00Z" })
+  .includes("your request for 4 items to Rowan Testa was received on August 5, 2026"));
+ok("no degree, no trailing comma", ackText({ requesterName: "Tara", physicianName: "Rowan Testa", degree: "", askCount: 1, receivedAtIso: "2026-08-05T16:57:00Z" }).endsWith("Regards,\nRowan Testa"));
+ok("no requester name greets 'there'", ackText({ requesterName: "", physicianName: "Rowan Testa", degree: "DO", askCount: 1, receivedAtIso: "2026-08-05T16:57:00Z" }).startsWith("Hello there,"));
+ok("an office as the requester greets 'there', not 'Hello Medical,'", ackText({ requesterName: "Medical Staff Services", physicianName: "Rowan Testa", degree: "DO", askCount: 1, receivedAtIso: "2026-08-05T16:57:00Z" }).startsWith("Hello there,"));
 ok("an unparseable date drops the date rather than printing garbage",
   ackText({ requesterName: "T", physicianName: "E W", degree: "", askCount: 1, receivedAtIso: "not a date" }).includes("to E W was received. Any documents will come from this address"));
 ok("no physician name signs as CredentialDOMD, not as a blank line",
@@ -95,21 +95,21 @@ ok("no physician name signs as CredentialDOMD, not as a blank line",
 noEmDash("ack", ack);
 
 // ── firstName / longDate, the two helpers the texts lean on ─────────────────
-eq("first word of a plain name", firstName("Madeline Castorena"), "Madeline");
-eq("Outlook's signature stars are stripped", firstName("*Madeline Castorena *"), "Madeline");
-eq("Last, First is read the right way round", firstName("Castorena, Madeline"), "Madeline");
-eq("First Last, Title keeps the given name", firstName("Tara Domalewski, CPCS"), "Tara");
+eq("first word of a plain name", firstName("Casey Example"), "Casey");
+eq("Outlook's signature stars are stripped", firstName("*Casey Example *"), "Casey");
+eq("Last, First is read the right way round", firstName("Example, Casey"), "Casey");
+eq("First Last, Title keeps the given name", firstName("Tara Example, CPCS"), "Tara");
 eq("an honorific is skipped", firstName("Dr. Jane Smith"), "Jane");
 eq("empty is 'there'", firstName(""), "there");
 eq("null is 'there'", firstName(null), "there");
 // The same rule as the cover note's firstName in requestPacket.ts, so the
 // two emails a requester reads greet them the same way.
-for (const org of ["Medical Staff Services", "RUHS Credentialing Department", "Credentialing Team", "noreply", "Provider Enrollment", "Hospital Privileging Office"]) {
+for (const org of ["Medical Staff Services", "Osterly Credentialing Department", "Credentialing Team", "noreply", "Provider Enrollment", "Hospital Privileging Office"]) {
   eq(`an office is 'there': ${org}`, firstName(org), "there");
 }
 eq("an address is 'there'", firstName("medstaff@hospital.org"), "there");
-eq("a shouted name is calmed", firstName("MARISOL CASTELLANO"), "Marisol");
-eq("a lone initial is 'there'", firstName("M. Castellano"), "there");
+eq("a shouted name is calmed", firstName("AVERY SAMPLE"), "Avery");
+eq("a lone initial is 'there'", firstName("A. Sample"), "there");
 eq("longDate formats in full", longDate("2026-01-02T00:00:00Z"), "January 2, 2026");
 eq("longDate on rubbish is empty", longDate("yesterday"), "");
 
@@ -125,23 +125,23 @@ ok("a long subject is capped", replySubject("s".repeat(400)).length === MAX_REPL
 ok("a subject that is nothing but prefixes falls back", replySubject("Re: Fwd: FW:") === "Re: your document request");
 
 // ── senderPositivelyAuthenticated: the gate on the third-party send ──────────
-const FROM = "stormchaser@elryx.com";
-ok("dmarc=pass is enough", senderPositivelyAuthenticated("mx.resend.com; dkim=pass header.d=elryx.com; spf=pass smtp.mailfrom=elryx.com; dmarc=pass", FROM));
+const FROM = "rowan.testa@clinic.example";
+ok("dmarc=pass is enough", senderPositivelyAuthenticated("mx.resend.com; dkim=pass header.d=clinic.example; spf=pass smtp.mailfrom=clinic.example; dmarc=pass", FROM));
 ok("dmarc=pass in any case", senderPositivelyAuthenticated("DMARC=PASS", FROM));
-ok("spf=pass with an aligned dkim=pass (header.d)", senderPositivelyAuthenticated("spf=pass smtp.mailfrom=elryx.com; dkim=pass header.d=elryx.com header.s=k1", FROM));
-ok("spf=pass with an aligned dkim=pass (header.i)", senderPositivelyAuthenticated("dkim=pass header.i=@elryx.com; spf=pass", FROM));
-ok("a subdomain signature aligns with the organisational domain", senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=mail.elryx.com", FROM));
-ok("a sender on a subdomain aligns with the parent signature", senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=elryx.com", "eric@mail.elryx.com"));
+ok("spf=pass with an aligned dkim=pass (header.d)", senderPositivelyAuthenticated("spf=pass smtp.mailfrom=clinic.example; dkim=pass header.d=clinic.example header.s=k1", FROM));
+ok("spf=pass with an aligned dkim=pass (header.i)", senderPositivelyAuthenticated("dkim=pass header.i=@clinic.example; spf=pass", FROM));
+ok("a subdomain signature aligns with the organisational domain", senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=mail.clinic.example", FROM));
+ok("a sender on a subdomain aligns with the parent signature", senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=clinic.example", "rowan@mail.clinic.example"));
 ok("no header at all is a no", !senderPositivelyAuthenticated("", FROM));
 ok("null is a no", !senderPositivelyAuthenticated(null, FROM));
 ok("spf=none dmarc=none is a no", !senderPositivelyAuthenticated("spf=none; dkim=none; dmarc=none", FROM));
-ok("spf=pass alone is a no", !senderPositivelyAuthenticated("spf=pass smtp.mailfrom=elryx.com", FROM));
-ok("dkim=pass alone is a no", !senderPositivelyAuthenticated("dkim=pass header.d=elryx.com", FROM));
+ok("spf=pass alone is a no", !senderPositivelyAuthenticated("spf=pass smtp.mailfrom=clinic.example", FROM));
+ok("dkim=pass alone is a no", !senderPositivelyAuthenticated("dkim=pass header.d=clinic.example", FROM));
 ok("spf=pass with a dkim=pass from another domain is a no", !senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=attacker.example", FROM));
-ok("a lookalike signing domain does not align", !senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=notelryx.com", FROM));
-ok("dkim=fail beside spf=pass is a no", !senderPositivelyAuthenticated("spf=pass; dkim=fail header.d=elryx.com", FROM));
-ok("dmarc=fail beside passing spf and dkim is a no", !senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=elryx.com; dmarc=fail", FROM));
-ok("no sender address cannot align", !senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=elryx.com", ""));
+ok("a lookalike signing domain does not align", !senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=notclinic.example", FROM));
+ok("dkim=fail beside spf=pass is a no", !senderPositivelyAuthenticated("spf=pass; dkim=fail header.d=clinic.example", FROM));
+ok("dmarc=fail beside passing spf and dkim is a no", !senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=clinic.example; dmarc=fail", FROM));
+ok("no sender address cannot align", !senderPositivelyAuthenticated("spf=pass; dkim=pass header.d=clinic.example", ""));
 
 // The MTA's own header echoes sender-chosen identifiers beside its verdicts
 // (smtp.mailfrom=, smtp.helo=, header.i=), and each accepts "=" in the
@@ -185,14 +185,14 @@ eq("authVerdicts on nothing", [authVerdicts(""), authVerdicts(null), authVerdict
 // own account). "dkim=pass" echoed in the envelope sender beside
 // spf=softfail once rescued the filing; the text it returns is the lowercased
 // header, for the ledger detail.
-eq("dmarc=fail is a failure", senderAuthFailure("mx.resend.com; dmarc=fail header.from=elryx.com"), "mx.resend.com; dmarc=fail header.from=elryx.com");
+eq("dmarc=fail is a failure", senderAuthFailure("mx.resend.com; dmarc=fail header.from=clinic.example"), "mx.resend.com; dmarc=fail header.from=clinic.example");
 eq("spf=softfail with no dkim=pass is a failure", senderAuthFailure("mx.resend.com; spf=softfail; dkim=none"), "mx.resend.com; spf=softfail; dkim=none");
 ok("spf=fail with dkim=fail is a failure", senderAuthFailure("spf=fail; dkim=fail").length > 0);
 eq("spf=softfail rescued by a real dkim=pass is ok", senderAuthFailure("mx.resend.com; spf=softfail smtp.mailfrom=x@y.example; dkim=pass header.d=y.example; dmarc=none"), "");
 eq("spf=softfail is NOT rescued by 'dkim=pass' echoed in smtp.mailfrom",
   senderAuthFailure("mx.resend.com; spf=softfail smtp.mailfrom=dkim=pass@attacker.example; dkim=none; dmarc=none"),
   "mx.resend.com; spf=softfail smtp.mailfrom=dkim=pass@attacker.example; dkim=none; dmarc=none");
-eq("echoed 'dmarc=fail' does not refuse an honest message", senderAuthFailure("mx.resend.com; spf=pass smtp.mailfrom=dmarc=fail@elryx.com; dkim=pass header.d=elryx.com; dmarc=pass"), "");
+eq("echoed 'dmarc=fail' does not refuse an honest message", senderAuthFailure("mx.resend.com; spf=pass smtp.mailfrom=dmarc=fail@clinic.example; dkim=pass header.d=clinic.example; dmarc=pass"), "");
 eq("the ARC header map value still refuses on its dmarc=fail", senderAuthFailure("i=1; mx.resend.com; dmarc=fail"), "i=1; mx.resend.com; dmarc=fail");
 eq("a missing header passes (filing only)", [senderAuthFailure(""), senderAuthFailure(null), senderAuthFailure("mx.resend.com; none")], ["", "", ""]);
 eq("the returned text is lowercased", senderAuthFailure("MX; DMARC=FAIL"), "mx; dmarc=fail");
@@ -201,7 +201,7 @@ eq("the returned text is lowercased", senderAuthFailure("MX; DMARC=FAIL"), "mx; 
 // anyone else, or by nobody (no authserv-id at all), is a no when the list is
 // set; with the list empty nothing changes, and the top-most-header rule in
 // email-inbound carries the protection alone.
-const RESEND_AR = "mx.resend.com; dkim=pass header.d=elryx.com; spf=pass smtp.mailfrom=elryx.com; dmarc=pass";
+const RESEND_AR = "mx.resend.com; dkim=pass header.d=clinic.example; spf=pass smtp.mailfrom=clinic.example; dmarc=pass";
 ok("trusted list, matching authserv-id: yes", senderPositivelyAuthenticated(RESEND_AR, FROM, ["mx.resend.com"]));
 ok("trusted list, another authserv-id: no, whatever the verdict", !senderPositivelyAuthenticated("mail.attacker.example; dmarc=pass", FROM, ["mx.resend.com"]));
 ok("trusted list, no authserv-id at all: no", !senderPositivelyAuthenticated("dmarc=pass", FROM, ["mx.resend.com"]));
@@ -225,17 +225,17 @@ eq("authservId on null is empty", authservId(null), "");
 // Resend's header map collapses duplicate headers to one value and does not
 // say which; the raw message keeps them in order and the receiving MTA's
 // own line is prepended above anything the sender typed in.
-const RAW_TWO = "Received: from mail.elryx.com by mx.resend.com\r\n"
-  + "Authentication-Results: mx.resend.com; dmarc=fail header.from=elryx.com\r\n"
-  + "From: Eric <stormchaser@elryx.com>\r\n"
-  + "Authentication-Results: mx.resend.com; dmarc=pass header.from=elryx.com\r\n"
+const RAW_TWO = "Received: from mail.clinic.example by mx.resend.com\r\n"
+  + "Authentication-Results: mx.resend.com; dmarc=fail header.from=clinic.example\r\n"
+  + "From: Rowan <rowan.testa@clinic.example>\r\n"
+  + "Authentication-Results: mx.resend.com; dmarc=pass header.from=clinic.example\r\n"
   + "Subject: Fwd: docs\r\n"
   + "\r\n"
   + "Authentication-Results: mx.resend.com; dmarc=pass\r\nbody text\r\n";
-eq("the top-most header wins over one inserted lower", topAuthenticationResults(RAW_TWO), "mx.resend.com; dmarc=fail header.from=elryx.com");
+eq("the top-most header wins over one inserted lower", topAuthenticationResults(RAW_TWO), "mx.resend.com; dmarc=fail header.from=clinic.example");
 eq("a folded value is unfolded onto one line",
-  topAuthenticationResults("Authentication-Results: mx.resend.com;\r\n\tdkim=pass header.d=elryx.com;\r\n  spf=pass smtp.mailfrom=elryx.com\r\nFrom: x@y.z\r\n\r\nbody"),
-  "mx.resend.com; dkim=pass header.d=elryx.com; spf=pass smtp.mailfrom=elryx.com");
+  topAuthenticationResults("Authentication-Results: mx.resend.com;\r\n\tdkim=pass header.d=clinic.example;\r\n  spf=pass smtp.mailfrom=clinic.example\r\nFrom: x@y.z\r\n\r\nbody"),
+  "mx.resend.com; dkim=pass header.d=clinic.example; spf=pass smtp.mailfrom=clinic.example");
 eq("LF line endings read the same as CRLF",
   topAuthenticationResults("Received: x\nAuthentication-Results: mx.resend.com; dmarc=pass\nFrom: a@b.co\n\nbody"), "mx.resend.com; dmarc=pass");
 eq("CRLF line endings", topAuthenticationResults("Authentication-Results: mx.resend.com; spf=pass\r\n\r\nbody"), "mx.resend.com; spf=pass");
@@ -265,10 +265,10 @@ ok("raw with no header is not authenticated (null is a no)", !senderPositivelyAu
 // field), which put the forgeable value back on the one path it had been
 // removed from. Now the two readings never meet: `positive` is the raw
 // top-most header or null, `negative` is the map.
-const MAP_PASS = { "Authentication-Results": "mx.resend.com; dmarc=pass header.from=elryx.com" };
+const MAP_PASS = { "Authentication-Results": "mx.resend.com; dmarc=pass header.from=clinic.example" };
 {
   const ev = authEvidence(null, MAP_PASS);
-  eq("raw unavailable: positive is null, the map sits on the negative side only", ev, { positive: null, negative: "mx.resend.com; dmarc=pass header.from=elryx.com" });
+  eq("raw unavailable: positive is null, the map sits on the negative side only", ev, { positive: null, negative: "mx.resend.com; dmarc=pass header.from=clinic.example" });
   const authOk = ev.positive !== null && senderPositivelyAuthenticated(ev.positive, FROM);
   ok("raw unavailable: the ack is refused even though the header map says dmarc=pass",
     authOk === false && ackAllowed({ ...good, senderAuthenticated: authOk }).ok === false);
@@ -276,7 +276,7 @@ const MAP_PASS = { "Authentication-Results": "mx.resend.com; dmarc=pass header.f
   eq("raw empty is unavailable too (an empty file was not read)", authEvidence("", MAP_PASS).positive, null);
   eq("a raw message with no header is read as '' (a no for the ack, a pass for filing), whatever the map says",
     authEvidence("From: a@b.co\r\n\r\nbody", MAP_PASS).positive, "");
-  eq("a raw message's top-most header is the positive side", authEvidence(RAW_TWO, MAP_PASS).positive, "mx.resend.com; dmarc=fail header.from=elryx.com");
+  eq("a raw message's top-most header is the positive side", authEvidence(RAW_TWO, MAP_PASS).positive, "mx.resend.com; dmarc=fail header.from=clinic.example");
   ok("the raw top-most header authorises on its own, with an empty map", (() => {
     const e = authEvidence("Authentication-Results: mx.resend.com; dmarc=pass\r\nFrom: a@b.co\r\n\r\n", {});
     return e.positive !== null && senderPositivelyAuthenticated(e.positive, FROM) && e.negative === "";
@@ -301,9 +301,9 @@ const proposal2 = {
   ],
   docIds: ["d1", "d2", "d3"], missing: ["TB form", "Logs 12-months"], coverNote: "Hello Tara,",
 };
-const sum2 = physicianSummaryText({ requesterName: "Tara Domalewski", requesterAddr: "tara@mychg.com", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/", oneTap: true });
+const sum2 = physicianSummaryText({ requesterName: "Tara Example", requesterAddr: "tara@ridgeway-group.example", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/", oneTap: true });
 eq("the summary, four asks", sum2,
-  "Got it. Tara Domalewski asked for 4 items:\n"
+  "Got it. Tara Example asked for 4 items:\n"
   + "- MPLT COI: Professional Liability COI, ProAssurance Specialty Insurance\n"
   + "- MMR dose #2: MMR (Measles, Mumps, Rubella) vaccination, MMR (Measles, Mumps, Rubella) vaccination\n"
   + "- TB form: not on file. The reply says nothing about it unless you add it.\n"
@@ -313,18 +313,18 @@ eq("the summary, four asks", sum2,
   + "https://credentialdomd.com/app/#requests (opens your requests)");
 // Since 2026-09-28 a proposal that may not go on one tap sends the physician
 // to Review, with what to check, and never names Approve and send.
-const review2 = physicianSummaryText({ requesterName: "Tara Domalewski", requesterAddr: "tara@mychg.com", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/",
+const review2 = physicianSummaryText({ requesterName: "Tara Example", requesterAddr: "tara@ridgeway-group.example", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/",
   review: 'Not on file: "TB form". The asks were read by keyword matching, so check the draft before it goes.' });
-ok("not one tap: Review, not Approve and send", review2.includes("\nDraft ready: 3 documents. Open the app and tap Review. Nothing goes to Tara Domalewski until you send it.\n") && !review2.includes("Approve and send"));
+ok("not one tap: Review, not Approve and send", review2.includes("\nDraft ready: 3 documents. Open the app and tap Review. Nothing goes to Tara Example until you send it.\n") && !review2.includes("Approve and send"));
 ok("not one tap: what to check comes before the link", review2.includes('\nTo check: Not on file: "TB form". The asks were read by keyword matching, so check the draft before it goes.\nhttps://credentialdomd.com/app/#requests'));
 ok("oneTap absent reads as not one tap", !physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: proposal2, appUrl: "u" }).includes("Approve and send"));
 const proposal1 = { v: 1, method: "rules", items: [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["d9"], labels: ["Board Certification (AOA)"] }], docIds: ["d9"], missing: [], coverNote: "x" };
-const sum1 = physicianSummaryText({ requesterName: "Madeline Castorena", requesterAddr: "m@ruhealth.org", requesterFound: true, proposal: proposal1, appUrl: "https://credentialdomd.com/app/", oneTap: true });
-ok("one ask is singular", sum1.startsWith("Got it. Madeline Castorena asked for 1 item:\n- board certificate: Board Certification (AOA)"));
+const sum1 = physicianSummaryText({ requesterName: "Casey Example", requesterAddr: "c@osterly-health.example", requesterFound: true, proposal: proposal1, appUrl: "https://credentialdomd.com/app/", oneTap: true });
+ok("one ask is singular", sum1.startsWith("Got it. Casey Example asked for 1 item:\n- board certificate: Board Certification (AOA)"));
 ok("one document is singular", sum1.includes("Packet ready: 1 document. Open the app and tap Approve and send."));
-ok("no name falls back to the address", physicianSummaryText({ requesterName: null, requesterAddr: "m@ruhealth.org", requesterFound: true, proposal: proposal1, appUrl: "u" }).startsWith("Got it. m@ruhealth.org asked for"));
-const notFound = physicianSummaryText({ requesterName: null, requesterAddr: "stormchaser@elryx.com", requesterFound: false, proposal: proposal1, appUrl: "u" });
-ok("requester not found: the physician's own address is not named as the asker", !notFound.includes("stormchaser@elryx.com asked"));
+ok("no name falls back to the address", physicianSummaryText({ requesterName: null, requesterAddr: "c@osterly-health.example", requesterFound: true, proposal: proposal1, appUrl: "u" }).startsWith("Got it. c@osterly-health.example asked for"));
+const notFound = physicianSummaryText({ requesterName: null, requesterAddr: "rowan.testa@clinic.example", requesterFound: false, proposal: proposal1, appUrl: "u" });
+ok("requester not found: the physician's own address is not named as the asker", !notFound.includes("rowan.testa@clinic.example asked"));
 // The control named is the one on the screen: the request's detail view
 // carries a "Requester's email" field above the send button. An earlier
 // wording said "tap Review", and that screen has no Review.
@@ -338,14 +338,14 @@ ok("requester not found: the packet count is still there, without the not-found 
 ok("requester not found: opens with the request, not 'The forwarded email asks'",
   notFound.startsWith("Got it. A document request came in for 1 item (the requester's address was not found in the forwarded text):\n- board certificate: Board Certification (AOA)\n") && !notFound.includes("forwarded email"));
 ok("requester not found: said once, not twice", notFound.split("was not found in the forwarded text").length === 2);
-const notFoundEmpty = physicianSummaryText({ requesterName: null, requesterAddr: "stormchaser@elryx.com", requesterFound: false, proposal: { ...proposal1, items: [{ ...proposal1.items[0], status: "missing", docIds: [], labels: [] }], docIds: [] }, appUrl: "u" });
+const notFoundEmpty = physicianSummaryText({ requesterName: null, requesterAddr: "rowan.testa@clinic.example", requesterFound: false, proposal: { ...proposal1, items: [{ ...proposal1.items[0], status: "missing", docIds: [], labels: [] }], docIds: [] }, appUrl: "u" });
 ok("requester not found, nothing on file: the not-found fact is in the opening, not repeated on the next step",
   notFoundEmpty.includes("came in for 1 item (the requester's address was not found in the forwarded text):") && !notFoundEmpty.includes("Packet ready")
   && notFoundEmpty.split("was not found in the forwarded text").length === 2);
 // Both nothing-on-file variants name the button that is live once the
 // address is typed, "Send reply (nothing to attach)", by its first words.
 ok("requester not found, nothing on file: names the field and the button", notFoundEmpty.includes("Nothing on file to attach yet. Open the request, enter their address under Requester's email and tap Send reply.") && !notFoundEmpty.includes("Review"));
-const notFoundNoProposal = physicianSummaryText({ requesterName: null, requesterAddr: "stormchaser@elryx.com", requesterFound: false, proposal: null, appUrl: "u" });
+const notFoundNoProposal = physicianSummaryText({ requesterName: null, requesterAddr: "rowan.testa@clinic.example", requesterFound: false, proposal: null, appUrl: "u" });
 ok("requester not found, no proposal: the not-found note still appears", notFoundNoProposal.includes("was not found in the forwarded text") && notFoundNoProposal.includes("under Requester's email") && !notFoundNoProposal.includes("Review"));
 // Nobody to name and nothing to list. "The forwarded email sent a document
 // request" read as if an email were a person.
@@ -354,7 +354,7 @@ ok("requester not found, no proposal: opens with what happened and what was miss
 ok("requester not found, no proposal: never 'The forwarded email sent'", !notFoundNoProposal.includes("The forwarded email sent") && !notFoundNoProposal.includes("forwarded email"));
 ok("requester not found, no proposal: said once", notFoundNoProposal.split("was not found in the forwarded text").length === 2);
 ok("requester not found, no proposal: says the packet could not be prepared", notFoundNoProposal.includes("could not be prepared automatically"));
-const notFoundNoItems = physicianSummaryText({ requesterName: null, requesterAddr: "stormchaser@elryx.com", requesterFound: false, proposal: { ...proposal1, items: [], docIds: [] }, appUrl: "u" });
+const notFoundNoItems = physicianSummaryText({ requesterName: null, requesterAddr: "rowan.testa@clinic.example", requesterFound: false, proposal: { ...proposal1, items: [], docIds: [] }, appUrl: "u" });
 ok("requester not found, no items: the same opening", notFoundNoItems.startsWith("Got it. A document request came in, but the requester's address was not found in the forwarded text."));
 ok("requester not found, no items: says no list could be read and names the next step", notFoundNoItems.includes("No list of documents could be read from it") && notFoundNoItems.includes("enter their address under Requester's email") && !notFoundNoItems.includes("Review"));
 ok("requester not found, no items: said once", notFoundNoItems.split("was not found in the forwarded text").length === 2);

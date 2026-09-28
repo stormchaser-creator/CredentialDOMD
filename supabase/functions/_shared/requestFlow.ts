@@ -100,7 +100,7 @@ const ORG_WORD_RE = /\b(?:office|department|dept|credentialing|credentials|team|
 const HONORIFIC_RE = /^(?:dr|doctor|mr|mrs|ms|miss|mx|prof|rn|md|do|np|pa|cpcs|cpmsm|mba|phd|jr|sr|ii|iii)\.?,?$/i;
 
 /**
- * "Madeline Castorena" -> "Madeline"; "Castorena, Madeline" -> "Madeline";
+ * "Casey Example" -> "Casey"; "Example, Casey" -> "Casey";
  * "Dr. Jane Smith" -> "Jane"; "Medical Staff Services" -> "there"; "" ->
  * "there". Signature stars and quotes that Outlook leaves around a name are
  * stripped first. The rule is the cover note's rule, word for word, so the
@@ -111,7 +111,7 @@ export function firstName(name: string | null | undefined): string {
   if (!s || s.includes("@") || ORG_WORD_RE.test(s)) return "there";
   const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
   if (parts.length >= 2) {
-    // "Castorena, Madeline" is surname first; "Tara Domalewski, CPCS" is a
+    // "Example, Casey" is surname first; "Tara Example, CPCS" is a
     // name with credentials after it.
     s = parts[0].split(" ").length === 1 && !HONORIFIC_RE.test(parts[1].split(" ")[0]) ? `${parts[1]} ${parts[0]}` : parts[0];
   }

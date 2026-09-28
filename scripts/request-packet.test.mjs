@@ -2,8 +2,10 @@
 // email in, a packet proposal out, so the forward to docs@ is the last thing
 // the physician types.
 //
-// The two requests at the top are the two real ones on file (names, numbers
-// and addresses changed). Everything below runs against a catalogue built
+// The two requests at the top are shaped on the two real ones on file: the
+// layout, the list, the signature and the thread are kept, and every name,
+// address, number and organisation in them is invented (this repository is
+// public). Everything below runs against a catalogue built
 // from a fixture shaped like the owner's own file: the section keys and type
 // vocabulary are the ones the app actually stores. No licence numbers are
 // invented; the matcher never reads them.
@@ -20,34 +22,34 @@ import {
 } from "../src/utils/requestPacket.js";
 
 export const NOW = "2026-09-11";
-export const PHYSICIAN = { name: "Eric Whitney", degree: "DO" };
+export const PHYSICIAN = { name: "Rowan Testa", degree: "DO" };
 
 // ── Request 1: one line, no list, a map link and a disclaimer ────────────────
 export const REQUEST_1 = {
   subject: "BOARD CERTIFICATE",
-  fromName: "Marisol Castellano",
-  fromAddr: "m.castellano@ruhealth.example",
-  body: `Hello Dr Whitney
+  fromName: "Avery Sample",
+  fromAddr: "avery.sample@osterly-health.example",
+  body: `Hello Dr Testa
 
 Can you please send me a copy of your board certificate.  Thank you
-<https://www.google.com/maps/search/26520+Cactus+Ave+Ste+A2006?entry=gmail&source=g>
+<https://www.google.com/maps/search/4100+Example+Ave+Ste+B200?entry=gmail&source=g>
 
-*Marisol Castellano *
+*Avery Sample *
 *Neurosurgery Dept. *
-26520 Cactus Ave Ste A2006
-Moreno Valley, CA 92555
+4100 Example Ave Ste B200
+Osterly, CA 90000
 951-555-0146
 
-RUHS Confidentiality Disclaimer
+Osterly Health Confidentiality Disclaimer
 The information contained in this electronic message is intended only for the use of the individual or entity named above. If the reader of this message is not the intended recipient, you are hereby notified that any dissemination, distribution or copying of this communication is strictly prohibited. Please send documents to the sender by secure means.`,
 };
 
 // ── Request 2: a bulleted list, a PTO note, a signature and the thread below ─
 export const REQUEST_2 = {
   subject: "RE: Requested docs",
-  fromName: "Tonya Dombrowski",
-  fromAddr: "tonya.dombrowski@weatherby.example",
-  body: `jacob.rubin@weatherby.example>, nsyleaderswby <nsyleaderswby@mychg.example
+  fromName: "Morgan Placeholder",
+  fromAddr: "morgan.placeholder@ridgeway-locums.example",
+  body: `sam.sample@ridgeway-locums.example>, rlleaders <rlleaders@ridgeway-group.example
 
 Good afternoon,
 
@@ -62,19 +64,19 @@ Thank you! Please see below items needed for your credentialing process:
 
 Thank you and have a great day!
 
-Tonya Dombrowski
+Morgan Placeholder
 Sr. Medical Staff Coordinator, Hospital Privileging
-Weatherby Healthcare
+Ridgeway Locums
 954-555-0100
 
-*From:* Eric Whitney <stormchaser@elryx.com>
+*From:* Rowan Testa <rowan.testa@clinic.example>
 *Sent:* Wednesday, August 5, 2026 9:57 AM
-*To:* Tonya Dombrowski
+*To:* Morgan Placeholder
 *Subject:* Re: Requested docs
 
 Anything else pending? Please send me the notarized ID form.
 
-On Wed, Aug 5, 2026 at 6:13 AM Tonya Dombrowski wrote:
+On Wed, Aug 5, 2026 at 6:13 AM Morgan Placeholder wrote:
 Hello, Thank you! I do not need a hard copy of the notarized ID, the DEA and CSR were received.`,
 };
 
@@ -194,7 +196,7 @@ export const DOCS = [
   doc("doc-mal", "Closure.pdf", pdf, "malpracticeHistory:mal-1", "2025-01-02T10:00:00Z"),
   doc("doc-contract", "ND locum agreement license terms.pdf", pdf, "locumContracts:lc-1", "2026-05-02T10:00:00Z"),
   doc("doc-receipt", "Marriott receipt.pdf", pdf, "travelExpenses:te-1", "2026-05-03T10:00:00Z"),
-  doc("doc-cv", "Eric Whitney CV 2026.pdf", pdf, null, "2026-04-01T10:00:00Z"),
+  doc("doc-cv", "Rowan Testa CV 2026.pdf", pdf, null, "2026-04-01T10:00:00Z"),
   doc("doc-img", "IMG_4412.jpeg", jpg, null, "2026-04-02T10:00:00Z"),
   { id: "doc-checklist", name: "Credentialing checklist.pdf", type: "request-attachment-inbox", mimeType: pdf, linkedTo: null, uploadedAt: "2026-08-05T10:00:00Z" },
   doc("doc-orphan", "DEA renewal.pdf", pdf, "licenses:gone", "2026-01-02T10:00:00Z"),
@@ -220,11 +222,11 @@ const isMain = (() => {
 export const REQUESTS = {
   outlookNumbered: {
     subject: "Credentialing packet",
-    fromName: "Castellano, Marisol",
-    fromAddr: "m.castellano@ruhealth.example",
+    fromName: "Sample, Avery",
+    fromAddr: "avery.sample@osterly-health.example",
     body: `CAUTION: This email originated from outside of the organization. Do not click links or open attachments unless you recognize the sender.
 
-Dr. Whitney,
+Dr. Testa,
 
 We need the following to complete your file:
 
@@ -237,10 +239,10 @@ We need the following to complete your file:
 * Passport photo
 
 Thanks,
-Marisol
+Avery
 
 -----Original Message-----
-From: Eric Whitney
+From: Rowan Testa
 Sent: Monday
 Subject: Re: Credentialing packet
 
@@ -248,19 +250,19 @@ Please send me the notarized ID form.`,
   },
   sentenceOnly: {
     subject: "Fwd: Re: Quick question",
-    fromName: "Dr. Tonya Dombrowski",
-    fromAddr: "tonya@weatherby.example",
-    body: `Hi Dr. Whitney, could you send over your malpractice COI and your driver's license when you get a chance?
+    fromName: "Dr. Morgan Placeholder",
+    fromAddr: "morgan@ridgeway-locums.example",
+    body: `Hi Dr. Testa, could you send over your malpractice COI and your driver's license when you get a chance?
 
 Thank you so much!
 
-On Tue, Sep 1, 2026 at 8:00 AM Eric Whitney <stormchaser@elryx.com> wrote:
+On Tue, Sep 1, 2026 at 8:00 AM Rowan Testa <rowan.testa@clinic.example> wrote:
 > Happy to. Which documents?`,
   },
   nothingOnFile: {
     subject: "Documents",
-    fromName: "RUHS Medical Staff Office",
-    fromAddr: "medstaff@ruhealth.example",
+    fromName: "Osterly Medical Staff Office",
+    fromAddr: "medstaff@osterly-health.example",
     body: `Please send:
 - NPI letter
 - Peer references
@@ -271,14 +273,14 @@ On Tue, Sep 1, 2026 at 8:00 AM Eric Whitney <stormchaser@elryx.com> wrote:
   empty: { subject: "", fromName: null, fromAddr: "x@y.example", body: "   \n\n  " },
   emDashes: {
     subject: "Re: docs \u2014 today",
-    fromName: "Marisol \u2014 RUHS",
-    fromAddr: "m@ruhealth.example",
+    fromName: "Avery \u2014 Osterly",
+    fromAddr: "a@osterly-health.example",
     body: "- TB form \u2014 sent via Docusign\n- Logs \u2014 12 months\n- W-9 \u2014 signed",
   },
   heading: {
     subject: "Immunizations",
-    fromName: "Tonya Dombrowski, CPCS",
-    fromAddr: "t@weatherby.example",
+    fromName: "Morgan Placeholder, CPCS",
+    fromAddr: "m@ridgeway-locums.example",
     body: `Still missing:
 - Immunizations:
    o MMR
@@ -290,14 +292,14 @@ On Tue, Sep 1, 2026 at 8:00 AM Eric Whitney <stormchaser@elryx.com> wrote:
   },
   gmailQuote: {
     subject: "Re: privileges",
-    fromName: "Marisol Castellano",
-    fromAddr: "m@ruhealth.example",
+    fromName: "Avery Sample",
+    fromAddr: "a@osterly-health.example",
     body: `Please forward your reappointment letter and a headshot.
 
 Regards,
-Marisol
+Avery
 
-> On Aug 1, 2026, Eric Whitney wrote:
+> On Aug 1, 2026, Rowan Testa wrote:
 > - DEA
 > - CSR`,
   },
@@ -307,9 +309,9 @@ Marisol
   // certificate, a Livescan, and a form the rules cannot name.
   compounds: {
     subject: "Colorado file",
-    fromName: "Kyle Ortega",
-    fromAddr: "k.ortega@penrose.example",
-    body: `Dr. Whitney,
+    fromName: "Kyle Sample",
+    fromAddr: "kyle.sample@brackwater.example",
+    body: `Dr. Testa,
 
 For the Colorado file we need the following.
 
@@ -327,9 +329,11 @@ Kyle`,
   },
   // Sanford Health Plan's credentialing approval, forwarded to docs@ on
   // 2026-09-25, body verbatim from the document_requests row it produced. The
-  // forward wrapped its Subject: line, so the body opens with the tail
-  // "E. Whitney, DO" and a stray "To:" line, and the old reading took "E." for
-  // a lettered list item asking for "Whitney, DO".
+  // forward wrapped its Subject: line, so the body opens with the tail of
+  // the physician's name ("E. <surname>, DO") and a stray "To:" line, and the
+  // old reading took "E." for a lettered list item asking for "<surname>, DO".
+  // (This file still carries the owner's name; see the note in the commit
+  // that took the correspondents' names out of REQUEST_1 and REQUEST_2.)
   sanfordApproval: {
     subject: "Sanford Health Plan Initial Application Approval Letter for Eric",
     fromName: null,
@@ -361,7 +365,7 @@ if (isMain) {
       [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["doc-board"], labels: ["Board Certification (AOA)"] }]);
     eq("R1: docIds and nothing missing", [p.docIds, p.missing], [["doc-board"], []]);
     eq("R1: the cover note", p.coverNote,
-      "Hello Marisol,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)\n\nRegards,\nEric Whitney, DO");
+      "Hello Avery,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)\n\nRegards,\nRowan Testa, DO");
     ok("R1: the disclaimer's 'send documents' sentence is not an ask", !asks.some((a) => /sender|secure/i.test(a)));
   }
 
@@ -383,7 +387,7 @@ if (isMain) {
     eq("R2: docIds unique in item order", p.docIds, ["doc-coi", "doc-mmr2", "doc-mmr1", "doc-measles", "doc-tb"]);
     eq("R2: missing lists the report", p.missing, ["Logs 12-months"]);
     eq("R2: the cover note", p.coverNote, [
-      "Hello Tonya,", "",
+      "Hello Morgan,", "",
       "Attached are the documents you asked for:",
       "- Professional Liability COI, ProAssurance Specialty Insurance",
       "- MMR (Measles, Mumps, Rubella) vaccination",
@@ -392,7 +396,7 @@ if (isMain) {
       "- QuantiFERON-TB Gold, Negative", "",
       "These will follow separately:",
       "- Logs 12-months", "",
-      "Regards,", "Eric Whitney, DO",
+      "Regards,", "Rowan Testa, DO",
     ].join("\n"));
     ok("R2: the quoted history produced no ask (notarized ID, DEA, CSR are old news)",
       !asks.some((a) => /notarized|\bid\b|dea|csr|anything/i.test(a)), asks.join(" | "));
@@ -490,7 +494,7 @@ if (isMain) {
     const p = buildProposal({ subject: "docs", fromName: "Sam", fromAddr: "s@x.example", body: "- Copy of your ND DEA\n- PPD" }, CATALOGUE, PHYSICIAN, NOW);
     ok("the cover note carries the expiry beside each attached document", p.coverNote.includes("Attached are the documents you asked for:\n- DEA Registration, ND, expired 2026-01-31\n- PPD (Tuberculin Skin Test), Negative, expired 2026-06-01"));
     eq("a trimmed note keeps the expiry too", noteForSelection(p, ["doc-dea-nd"], PHYSICIAN, "Sam"),
-      "Hello Sam,\n\nAttached are the documents you asked for:\n- DEA Registration, ND, expired 2026-01-31\n\nNot enclosed this time:\n- PPD\n\nRegards,\nEric Whitney, DO");
+      "Hello Sam,\n\nAttached are the documents you asked for:\n- DEA Registration, ND, expired 2026-01-31\n\nNot enclosed this time:\n- PPD\n\nRegards,\nRowan Testa, DO");
     ok("all state licences: only the lapsed one is dated", (() => {
       const l = labelsFor("- all state licenses")[0];
       return l[0] === "State Medical License (DO), CA" && l[1] === "State Medical License (DO), CO" && l[2] === "State Medical License (DO), ND, expired 2025-12-31";
@@ -595,7 +599,7 @@ if (isMain) {
   eq("titer label", describeEntry(entry("doc-varicella")), "Varicella Zoster IgG titer, Immune");
   eq("fit test label", describeEntry(entry("doc-fit")), "N95 Respirator fit test");
   eq("privileges label carries the facility", describeEntry(entry("doc-priv")), "Hospital Privileges, Arrowhead Regional Medical Center");
-  eq("an unlinked document is its filename", describeEntry(entry("doc-cv")), "Eric Whitney CV 2026.pdf");
+  eq("an unlinked document is its filename", describeEntry(entry("doc-cv")), "Rowan Testa CV 2026.pdf");
   eq("a CME entry is its title", describeEntry(entry("doc-cme")), "Stroke update 2026");
   eq("null is empty", describeEntry(null), "");
   eq("an em dash typed into a record does not reach the note",
@@ -610,8 +614,8 @@ if (isMain) {
   eq("a sentence with no list becomes the asks, split on 'and'", parseAsks(REQUESTS.sentenceOnly.body), ["malpractice COI", "driver's license"]);
   ok("'On <date> ... wrote:' ends the reading", !parseAsks(REQUESTS.sentenceOnly.body).some((a) => /which|happy/i.test(a)));
   eq("a chevron-quoted block ends the reading", parseAsks(REQUESTS.gmailQuote.body), ["reappointment letter", "headshot"]);
-  eq("a bare From: line ends the reading", parseAsks("- DEA\nFrom: Eric Whitney\n- CSR"), ["DEA"]);
-  eq("a *From:* line ends the reading", parseAsks("- DEA\n*From:* Eric Whitney\n- CSR"), ["DEA"]);
+  eq("a bare From: line ends the reading", parseAsks("- DEA\nFrom: Rowan Testa\n- CSR"), ["DEA"]);
+  eq("a *From:* line ends the reading", parseAsks("- DEA\n*From:* Rowan Testa\n- CSR"), ["DEA"]);
   eq("a heading over sub-bullets is not an ask; same-kind and generic-word compounds stay whole",
     parseAsks(REQUESTS.heading.body),
     ["MMR", "Varicella titer", "Hep B surface antibody and titer", "OIG / SAM", "BLS", "ACLS", "Residency", "fellowship certificates"]);
@@ -629,17 +633,17 @@ if (isMain) {
   eq("a one-line body of unknown kind is the ask, not the subject", [parseAsks("CAQH ID", "Re: Items needed for credentialing"), parseAsks("Tax ID", "RE: Requested docs")], [["CAQH ID"], ["Tax ID"]]);
   eq("the same lines in a list read the same", parseAsks("- CAQH ID\n- Tax ID"), ["CAQH ID", "Tax ID"]);
   eq("a bare sign-off name under a short message is not an ask",
-    [parseAsks("DEA and CSR please\nTonya", "Re: docs"), parseAsks("CAQH ID\nTara Domalewski, CPCS"), parseAsks("Hi Dr. Whitney,\nCAQH ID\nThanks"), parseAsks("Good morning Dr. Whitney:\nTax ID")],
+    [parseAsks("DEA and CSR please\nMorgan", "Re: docs"), parseAsks("CAQH ID\nTara Example, CPCS"), parseAsks("Hi Dr. Testa,\nCAQH ID\nThanks"), parseAsks("Good morning Dr. Testa:\nTax ID")],
     [["DEA", "CSR"], ["CAQH ID"], ["CAQH ID"], ["Tax ID"]]);
-  eq("a one-line unknown body that is only a name still falls back to the subject", parseAsks("Tonya", "Re: DEA certificate"), ["DEA certificate"]);
+  eq("a one-line unknown body that is only a name still falls back to the subject", parseAsks("Morgan", "Re: DEA certificate"), ["DEA certificate"]);
   {
-    const p = buildProposal({ subject: "Re: Items needed for credentialing", fromName: "Sam Reyes", fromAddr: "s@x.example", body: "CAQH ID" }, CATALOGUE, PHYSICIAN, NOW);
+    const p = buildProposal({ subject: "Re: Items needed for credentialing", fromName: "Sam Example", fromAddr: "s@x.example", body: "CAQH ID" }, CATALOGUE, PHYSICIAN, NOW);
     eq("a one-line unknown body: the proposal item is the body line", p.items.map((i) => [i.ask, i.kind, i.status]), [["CAQH ID", "unknown", "missing"]]);
     ok("and the PHYSICIAN is asked about it by name; the requester's note says nothing about it", reviewReason(p).includes('Not recognised: "CAQH ID".') && !p.coverNote.includes("CAQH") && !p.coverNote.includes("credentialing"));
   }
   eq("a signature title in a long body is not an ask",
-    parseAsks("Hello,\n\nPer our call, nothing further is needed.\n\nTonya\nSr. Medical Staff Coordinator, Hospital Privileging\n954-555-0100\n"), []);
-  eq("a line with a link or an email is never an ask", parseAsks("- https://forms.example/tb\n- tonya@weatherby.example\n- TB form"), ["TB form"]);
+    parseAsks("Hello,\n\nPer our call, nothing further is needed.\n\nMorgan\nSr. Medical Staff Coordinator, Hospital Privileging\n954-555-0100\n"), []);
+  eq("a line with a link or an email is never an ask", parseAsks("- https://forms.example/tb\n- morgan@ridgeway-locums.example\n- TB form"), ["TB form"]);
   eq("duplicates collapse", parseAsks("- DEA\n- dea\n- Copy of DEA"), ["DEA"]);
   eq("MMR (Measles, Mumps, Rubella) is one ask", parseAsks("- MMR (Measles, Mumps, Rubella)"), ["MMR (Measles, Mumps, Rubella)"]);
   eq("Board certificate (ABMS) is one ask", parseAsks("- Board certificate (ABMS)"), ["Board certificate (ABMS)"]);
@@ -673,16 +677,16 @@ if (isMain) {
     // Livescan receipt the physician never had brought the credentialer back
     // two weeks later asking where it was.
     eq("nothing found: the reports follow, the DEA is neither promised nor named, and an office is 'there'", p.coverNote,
-      "Hello there,\n\nThese will follow separately:\n- NPI letter\n- Peer references\n- Case logs for the last 24 months\n\nRegards,\nEric Whitney, DO");
+      "Hello there,\n\nThese will follow separately:\n- NPI letter\n- Peer references\n- Case logs for the last 24 months\n\nRegards,\nRowan Testa, DO");
     eq("nothing found: the DEA is the physician's question", reviewReason(p), 'Not on file: "Colorado DEA". The asks were read by keyword matching, so check the draft before it goes.');
     eq("nothing found: said only when the physician adds it", noteWithNotOnFile(p.coverNote, p),
-      "Hello there,\n\nThese will follow separately:\n- NPI letter\n- Peer references\n- Case logs for the last 24 months\n\nNot on file:\n- Colorado DEA\n\nRegards,\nEric Whitney, DO");
+      "Hello there,\n\nThese will follow separately:\n- NPI letter\n- Peer references\n- Case logs for the last 24 months\n\nNot on file:\n- Colorado DEA\n\nRegards,\nRowan Testa, DO");
     eq("adding it twice adds it once", noteWithNotOnFile(noteWithNotOnFile(p.coverNote, p), p), noteWithNotOnFile(p.coverNote, p));
     eq("nothing found: docIds empty, missing is every ask", [p.docIds, p.missing.length], [[], 4]);
   }
   {
     const p = buildProposal(REQUESTS.outlookNumbered, CATALOGUE, PHYSICIAN, NOW);
-    eq("surname-first From is greeted by first name", p.coverNote.split("\n")[0], "Hello Marisol,");
+    eq("surname-first From is greeted by first name", p.coverNote.split("\n")[0], "Hello Avery,");
     eq("'all of them' attaches every state licence", p.items[1].docIds, ["doc-lic-ca", "doc-lic-co", "doc-lic-nd"]);
     eq("the missing block lists only what is not attached", p.missing, ["attestation form"]);
     ok("the note attaches, and says nothing to the requester about what it could not name",
@@ -719,23 +723,23 @@ if (isMain) {
   {
     const p = buildProposal({ subject: "Forms", fromName: "Sam", fromAddr: "s@x.example", body: "- Signed attestation form (attached)\n- W-9" }, CATALOGUE, PHYSICIAN, NOW);
     eq("nothing but unnamed asks: the note is a plain thank-you, and the questions go to the physician", p.coverNote,
-      "Hello Sam,\n\nThank you for your email.\n\nRegards,\nEric Whitney, DO");
+      "Hello Sam,\n\nThank you for your email.\n\nRegards,\nRowan Testa, DO");
     ok("and the physician is asked what both meant", reviewReason(p).startsWith('Not recognised: "attestation form", "W-9". What did they mean?'));
     eq("an unnamed ask is never added as 'Not on file'", noteWithNotOnFile(p.coverNote, p), p.coverNote);
     eq("but they still count as missing for the app", p.missing, ["attestation form", "W-9"]);
   }
-  eq("Dr. is dropped from the greeting", buildProposal(REQUESTS.sentenceOnly, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello Tonya,");
-  eq("credentials after the name are dropped", buildProposal(REQUESTS.heading, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello Tonya,");
+  eq("Dr. is dropped from the greeting", buildProposal(REQUESTS.sentenceOnly, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello Morgan,");
+  eq("credentials after the name are dropped", buildProposal(REQUESTS.heading, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello Morgan,");
   eq("no name is 'there'", buildProposal(REQUESTS.subjectOnly, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello there,");
-  eq("a shouted name is calmed", buildProposal({ ...REQUEST_1, fromName: "MARISOL CASTELLANO" }, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello Marisol,");
-  eq("no degree, no comma", buildProposal(REQUEST_1, CATALOGUE, { name: "Eric Whitney", degree: "" }, NOW).coverNote.split("\n").pop(), "Eric Whitney");
+  eq("a shouted name is calmed", buildProposal({ ...REQUEST_1, fromName: "AVERY SAMPLE" }, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n")[0], "Hello Avery,");
+  eq("no degree, no comma", buildProposal(REQUEST_1, CATALOGUE, { name: "Rowan Testa", degree: "" }, NOW).coverNote.split("\n").pop(), "Rowan Testa");
   // A note with no name under it once ended "Regards," over a blank line,
   // or over a bare "DO": a letter nobody signed. Both lines go together.
   eq("no physician at all: the note ends on its last line, with no dangling Regards",
-    buildProposal(REQUEST_1, CATALOGUE, null, NOW).coverNote, "Hello Marisol,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)");
+    buildProposal(REQUEST_1, CATALOGUE, null, NOW).coverNote, "Hello Avery,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)");
   eq("a degree without a name is not a sign-off either", buildProposal(REQUEST_1, CATALOGUE, PHYSICIAN_NO_NAME, NOW).coverNote.split("\n").slice(-2), ["Attached are the documents you asked for:", "- Board Certification (AOA)"]);
   ok("no name: 'Regards,' appears nowhere", !buildProposal(REQUEST_2, CATALOGUE, PHYSICIAN_NO_NAME, NOW).coverNote.includes("Regards"));
-  eq("with a name the sign-off is unchanged", buildProposal(REQUEST_1, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n").slice(-3), ["", "Regards,", "Eric Whitney, DO"]);
+  eq("with a name the sign-off is unchanged", buildProposal(REQUEST_1, CATALOGUE, PHYSICIAN, NOW).coverNote.split("\n").slice(-3), ["", "Regards,", "Rowan Testa, DO"]);
   eq("the subject alone makes a proposal", buildProposal(REQUESTS.subjectOnly, CATALOGUE, PHYSICIAN, NOW).items.map((i) => [i.ask, i.kind, i.docIds]), [["DEA certificate", "dea", ["doc-dea-ca"]]]);
   {
     const p = buildProposal(REQUESTS.empty, CATALOGUE, PHYSICIAN, NOW);
@@ -752,18 +756,18 @@ if (isMain) {
   // stored note then said "Attached are the documents you asked for" over a
   // licence that was no longer in the packet.
   {
-    const two = buildProposal({ subject: "DEA and license", fromName: "Kyle Ortega", fromAddr: "k@penrose.example", body: "- DEA\n- Colorado license" }, CATALOGUE, PHYSICIAN, NOW);
+    const two = buildProposal({ subject: "DEA and license", fromName: "Kyle Sample", fromAddr: "k@brackwater.example", body: "- DEA\n- Colorado license" }, CATALOGUE, PHYSICIAN, NOW);
     eq("two-doc proposal: two found items", two.items.map((i) => [i.ask, i.status, i.docIds]), [["DEA", "found", ["doc-dea-ca"]], ["Colorado license", "found", ["doc-lic-co"]]]);
-    eq("untick one: the note lists one and names the other as not enclosed", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Kyle Ortega"),
-      "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CA\n\nNot enclosed this time:\n- Colorado license\n\nRegards,\nEric Whitney, DO");
-    eq("untick both: the not-enclosed block alone, nothing promised", noteForSelection(two, [], PHYSICIAN, "Kyle Ortega"),
-      "Hello Kyle,\n\nNot enclosed this time:\n- DEA\n- Colorado license\n\nRegards,\nEric Whitney, DO");
-    eq("null selection means nothing attached", noteForSelection(two, null, PHYSICIAN, "Kyle Ortega"), noteForSelection(two, [], PHYSICIAN, "Kyle Ortega"));
-    eq("a Set works as the selection", noteForSelection(two, new Set(["doc-lic-co"]), PHYSICIAN, "Kyle Ortega"),
-      "Hello Kyle,\n\nAttached are the documents you asked for:\n- State Medical License (DO), CO\n\nNot enclosed this time:\n- DEA\n\nRegards,\nEric Whitney, DO");
-    eq("ids not in the proposal change nothing", noteForSelection(two, ["doc-dea-ca", "doc-cv", "nope"], PHYSICIAN, "Kyle Ortega"), noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Kyle Ortega"));
-    ok("the not-enclosed block promises nothing", !noteForSelection(two, [], PHYSICIAN, "Kyle Ortega").includes("follow"));
-    eq("no name: the trimmed note ends without a sign-off too", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN_NO_NAME, "Kyle Ortega"),
+    eq("untick one: the note lists one and names the other as not enclosed", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Kyle Sample"),
+      "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CA\n\nNot enclosed this time:\n- Colorado license\n\nRegards,\nRowan Testa, DO");
+    eq("untick both: the not-enclosed block alone, nothing promised", noteForSelection(two, [], PHYSICIAN, "Kyle Sample"),
+      "Hello Kyle,\n\nNot enclosed this time:\n- DEA\n- Colorado license\n\nRegards,\nRowan Testa, DO");
+    eq("null selection means nothing attached", noteForSelection(two, null, PHYSICIAN, "Kyle Sample"), noteForSelection(two, [], PHYSICIAN, "Kyle Sample"));
+    eq("a Set works as the selection", noteForSelection(two, new Set(["doc-lic-co"]), PHYSICIAN, "Kyle Sample"),
+      "Hello Kyle,\n\nAttached are the documents you asked for:\n- State Medical License (DO), CO\n\nNot enclosed this time:\n- DEA\n\nRegards,\nRowan Testa, DO");
+    eq("ids not in the proposal change nothing", noteForSelection(two, ["doc-dea-ca", "doc-cv", "nope"], PHYSICIAN, "Kyle Sample"), noteForSelection(two, ["doc-dea-ca"], PHYSICIAN, "Kyle Sample"));
+    ok("the not-enclosed block promises nothing", !noteForSelection(two, [], PHYSICIAN, "Kyle Sample").includes("follow"));
+    eq("no name: the trimmed note ends without a sign-off too", noteForSelection(two, ["doc-dea-ca"], PHYSICIAN_NO_NAME, "Kyle Sample"),
       "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CA\n\nNot enclosed this time:\n- Colorado license");
   }
   for (const [name, r] of Object.entries({ REQUEST_1, REQUEST_2, ...REQUESTS })) {
@@ -775,7 +779,7 @@ if (isMain) {
     const p = buildProposal(REQUEST_2, CATALOGUE, PHYSICIAN, NOW);
     eq("unticking one dose of a series keeps the ask: two of three listed, nothing held",
       noteForSelection(p, p.docIds.filter((id) => id !== "doc-mmr1"), PHYSICIAN, REQUEST_2.fromName), [
-        "Hello Tonya,", "",
+        "Hello Morgan,", "",
         "Attached are the documents you asked for:",
         "- Professional Liability COI, ProAssurance Specialty Insurance",
         "- MMR (Measles, Mumps, Rubella) vaccination",
@@ -783,11 +787,11 @@ if (isMain) {
         "- QuantiFERON-TB Gold, Negative", "",
         "These will follow separately:",
         "- Logs 12-months", "",
-        "Regards,", "Eric Whitney, DO",
+        "Regards,", "Rowan Testa, DO",
       ].join("\n"));
     eq("unticking every TB document holds that ask; the report still follows separately, word for word",
       noteForSelection(p, ["doc-coi", "doc-mmr2", "doc-mmr1", "doc-measles"], PHYSICIAN, REQUEST_2.fromName), [
-        "Hello Tonya,", "",
+        "Hello Morgan,", "",
         "Attached are the documents you asked for:",
         "- Professional Liability COI, ProAssurance Specialty Insurance",
         "- MMR (Measles, Mumps, Rubella) vaccination",
@@ -797,56 +801,60 @@ if (isMain) {
         "- TB form", "",
         "These will follow separately:",
         "- Logs 12-months", "",
-        "Regards,", "Eric Whitney, DO",
+        "Regards,", "Rowan Testa, DO",
       ].join("\n"));
     eq("nothing ticked: the missing block reads as buildProposal writes it when nothing is attached",
       noteForSelection(p, [], PHYSICIAN, REQUEST_2.fromName), [
-        "Hello Tonya,", "",
+        "Hello Morgan,", "",
         "Not enclosed this time:",
         "- MPLT COI", "- MMR dose #2", "- TB form", "",
         "These will follow separately:",
         "- Logs 12-months", "",
-        "Regards,", "Eric Whitney, DO",
+        "Regards,", "Rowan Testa, DO",
       ].join("\n"));
   }
   {
     const p = buildProposal(REQUESTS.compounds, CATALOGUE, PHYSICIAN, NOW);
     const note = noteForSelection(p, p.docIds.filter((id) => id !== "doc-bls" && id !== "doc-acls"), PHYSICIAN, REQUESTS.compounds.fromName);
     ok("the held cards read as held, and nothing unmatched or unnamed follows them",
-      note.includes("Not enclosed this time:\n- BLS\n- ACLS\n\nRegards,\nEric Whitney, DO") && !note.includes("Colorado DEA") && !note.includes("attestation"));
+      note.includes("Not enclosed this time:\n- BLS\n- ACLS\n\nRegards,\nRowan Testa, DO") && !note.includes("Colorado DEA") && !note.includes("attestation"));
     ok("and the held cards are not in the attached list", !note.includes("- BLS Certification") && !note.includes("- ACLS Certification"));
   }
   {
     const p = buildProposal(REQUESTS.empty, CATALOGUE, PHYSICIAN, NOW);
     eq("an empty proposal reads the same either way", noteForSelection(p, [], PHYSICIAN, null), p.coverNote);
-    eq("no proposal at all is the empty note", noteForSelection(null, null, PHYSICIAN, "Sam"), "Hello Sam,\n\nI did not find a list of documents in your request. Reply with what you need and I will send it.\n\nRegards,\nEric Whitney, DO");
+    eq("no proposal at all is the empty note", noteForSelection(null, null, PHYSICIAN, "Sam"), "Hello Sam,\n\nI did not find a list of documents in your request. Reply with what you need and I will send it.\n\nRegards,\nRowan Testa, DO");
     eq("a stored proposal with thin items does not crash",
       noteForSelection({ items: [{ ask: "DEA", status: "found", docIds: ["a"] }, { ask: "x", status: "weird" }, null] }, ["a"], PHYSICIAN, "Sam"),
-      "Hello Sam,\n\nAttached are the documents you asked for:\n- Document\n\nRegards,\nEric Whitney, DO");
-    ok("no em dash in a trimmed note from em-dashed input", !noteForSelection(buildProposal(REQUESTS.emDashes, CATALOGUE, PHYSICIAN, NOW), [], PHYSICIAN, "Marisol \u2014 RUHS").includes("\u2014"));
+      "Hello Sam,\n\nAttached are the documents you asked for:\n- Document\n\nRegards,\nRowan Testa, DO");
+    ok("no em dash in a trimmed note from em-dashed input", !noteForSelection(buildProposal(REQUESTS.emDashes, CATALOGUE, PHYSICIAN, NOW), [], PHYSICIAN, "Avery \u2014 Osterly").includes("\u2014"));
   }
 
   // -- Signature and header lines are never asks ----------------------------
   {
     const asks = parseAsks(REQUESTS.sanfordApproval.body, REQUESTS.sanfordApproval.subject);
-    ok("Sanford: no ask names the physician", !asks.some((a) => /whitney/i.test(a)), JSON.stringify(asks));
+    // The name the letter opens with, read from the fixture rather than written here.
+    const nameTail = REQUESTS.sanfordApproval.body.split("\n")[0].replace(/^[A-Z]\.\s*/, "").trim();
+    const surname = nameTail.split(",")[0].trim().toLowerCase();
+    ok("Sanford: the letter opens with a lettered name line", /^[A-H]\.\s+\S+, DO$/.test(REQUESTS.sanfordApproval.body.split("\n")[0].trim()));
+    ok("Sanford: no ask names the physician", !asks.some((a) => a.toLowerCase().includes(surname)), JSON.stringify(asks));
     ok("Sanford: no ask is a header or a contact line", !asks.some((a) => /^to\b|@|\d{3}\)?[ .-]\d{3}/i.test(a)), JSON.stringify(asks));
     // Before 2026-09-28 the subject stood in when the body asked nothing,
     // and an approval letter's subject became an ask. A letter that asks
     // nothing is not a request because its subject names a document.
     eq("Sanford: nothing in the body asks, and the subject does not either", asks, []);
     const p = buildProposal(REQUESTS.sanfordApproval, CATALOGUE, PHYSICIAN, NOW);
-    ok("Sanford: the cover note never asks what 'Whitney, DO' means", !/whitney, do/i.test(p.coverNote.split("\n").slice(0, -1).join("\n")), p.coverNote);
+    ok("Sanford: the cover note never asks what the name line means", !p.coverNote.split("\n").slice(0, -1).join("\n").toLowerCase().includes(nameTail.toLowerCase()), p.coverNote);
     const none = [
-      "E. Whitney, DO", "Whitney, DO", "Eric E. Whitney, DO", "Dr. Eric Whitney, DO, FAANS", "Tara Domalewski, CPCS",
-      "Madeline Castorena, CPMSM", "Sincerely,", "Best regards,", "To: Credentialing Committee", "Cc: Medical Staff Office",
+      "E. Testa, DO", "Testa, DO", "Rowan E. Testa, DO", "Dr. Rowan Testa, DO, FAANS", "Tara Example, CPCS",
+      "Casey Example, CPMSM", "Sincerely,", "Best regards,", "To: Credentialing Committee", "Cc: Medical Staff Office",
       "Subject: Reappointment", "Fax: 605-328-6877", "Phone: (605) 328-6877", "(800) 601-5086",
     ];
     for (const line of none) eq(`"${line}" alone is not an ask`, parseAsks(line, ""), []);
     eq("a lettered name line inside a list is dropped, the list kept",
-      parseAsks("Please send:\na. DEA\nb. CSR\n\nE. Whitney, DO", ""), ["DEA", "CSR"]);
+      parseAsks("Please send:\na. DEA\nb. CSR\n\nE. Testa, DO", ""), ["DEA", "CSR"]);
     eq("a name line among bullets is dropped",
-      parseAsks("- DEA\n- Eric E. Whitney, DO\n- Board certificate", ""), ["DEA", "Board certificate"]);
+      parseAsks("- DEA\n- Rowan E. Testa, DO\n- Board certificate", ""), ["DEA", "Board certificate"]);
     eq("a state written as a degree is still an ask when the kind is known",
       parseAsks("a. State license, MD\nb. DEA", ""), ["State license, MD", "DEA"]);
   }
@@ -902,7 +910,7 @@ if (isMain) {
 
   // ── A model's reading: quote-checked asks, and when one tap may send ─────
   {
-    const req = { subject: "Documents for your file", fromName: "Sam Reyes", fromAddr: "s@x.example", body: "unused when a reading is given" };
+    const req = { subject: "Documents for your file", fromName: "Sam Example", fromAddr: "s@x.example", body: "unused when a reading is given" };
     const reading = { confidence: "high", asks: [
       { quote: "Please send a copy of your current board certificate.", kind: "board_cert" },
       { quote: "your BLS card", kind: "bls" },
@@ -945,7 +953,7 @@ if (isMain) {
     ok("no em dash in any proposal, label or ask, even from em-dashed input", produced.every((s) => !s.includes("\u2014")), produced.filter((s) => s.includes("\u2014")).join("\n"));
     const p = buildProposal(REQUESTS.emDashes, CATALOGUE, PHYSICIAN, NOW);
     eq("em-dashed items are read as notes and asks", p.items.map((i) => [i.ask, i.kind]), [["TB form", "tb"], ["Logs 12 months", "case_logs"], ["W-9", "unknown"]]);
-    eq("an em-dashed From name is still a first name", p.coverNote.split("\n")[0], "Hello Marisol,");
+    eq("an em-dashed From name is still a first name", p.coverNote.split("\n")[0], "Hello Avery,");
   }
   ok("no em dash in this file or the module source",
     !(await import("node:fs")).readFileSync(new URL("../src/utils/requestPacket.js", import.meta.url), "utf8").includes("\u2014")

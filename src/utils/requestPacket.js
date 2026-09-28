@@ -179,7 +179,7 @@ function stateIn(ask) {
 // Bullets a mail client renders in plain text: "-", "•", "*", "1.", "1)",
 // "(1)", "a.", "[ ]", "[x]", checkbox glyphs, and Outlook's "o" (which is only
 // a bullet when indented or followed by a run of spaces or a tab, so "or"
-// and "ok" at the start of a sentence are not). A bold Gmail name "*Madeline Castorena *" starts with "*" and no
+// and "ok" at the start of a sentence are not). A bold Gmail name "*Casey Example *" starts with "*" and no
 // space, so it is not an item.
 const LIST_ITEM_RE = /^\s*(?:[-\u2013\u2014\u2022\u00b7\u25aa\u25e6\u2023\u25cf\u25cb\u25a0\u25a1\u27a2\u27a4\u25ba\u25b6\u2713\u2714\u2610\u2611\u2612]|\*(?!\*)|\d{1,2}[.)]|\(\d{1,2}\)|[a-hA-H][.)]|\[\s?[xX\u2713\u2714]?\s?\]|o(?=\s{2,}|\t)|(?<=^\s+)o(?=\s))\s+(\S.*?)\s*$/;
 
@@ -671,7 +671,7 @@ export function parseAsks(text, subject = "") {
   return out;
 }
 
-// A bare name under a short message ("Tonya", "Tara Domalewski, CPCS"), or
+// A bare name under a short message ("Morgan", "Tara Example, CPCS"), or
 // what is left of a greeting once cleanAsk has taken the "Hi Dr." off it, is
 // the sign-off or the salutation, not an ask: one to three capitalised
 // words, an optional credential after a comma, no digits. "Tax ID" and
@@ -1113,13 +1113,13 @@ export function matchAsk(classified, catalogue, now) {
 const ORG_WORD_RE = /\b(?:office|department|dept|credentialing|credentials|team|services|staff|hospital|health|medical|center|centre|group|clinic|system|university|llc|inc|corp|hr|admin|administration|support|noreply|no-reply|privileging|enrollment|verification|onboarding)\b/i;
 const HONORIFIC_RE = /^(?:dr|doctor|mr|mrs|ms|miss|mx|prof|rn|md|do|np|pa|cpcs|cpmsm|mba|phd|jr|sr|ii|iii)\.?,?$/i;
 
-/** "Madeline" from "Madeline Castorena", "Castorena, Madeline" or "Dr. Madeline Castorena"; "there" when the name is an office or missing. */
+/** "Casey" from "Casey Example", "Example, Casey" or "Dr. Casey Example"; "there" when the name is an office or missing. */
 function firstName(fromName) {
   let s = String(fromName ?? "").replace(/["'*_()<>]/g, " ").replace(/\s+/g, " ").trim();
   if (!s || s.includes("@") || ORG_WORD_RE.test(s)) return "there";
   const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
   if (parts.length >= 2) {
-    // "Castorena, Madeline" is surname first; "Tara Domalewski, CPCS" is a
+    // "Example, Casey" is surname first; "Tara Example, CPCS" is a
     // name with credentials after it.
     s = parts[0].split(" ").length === 1 && !HONORIFIC_RE.test(parts[1].split(" ")[0]) ? `${parts[1]} ${parts[0]}` : parts[0];
   }

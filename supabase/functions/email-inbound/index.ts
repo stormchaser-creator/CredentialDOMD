@@ -81,7 +81,7 @@
  *           (_shared/requestPacket.ts) and the proposal is stored on the row
  *           (proposal, proposal_at); a matcher failure leaves it null and the
  *           request intact;
- *       (2) the physician gets a summary from docs@ ("Madeline Castorena asked
+ *       (2) the physician gets a summary from docs@ ("Casey Example asked
  *           for 1 item: board certificate: Board Certification (AOA). Packet
  *           ready: 1 document. Open the app and tap Approve and send");
  *       (3) the REQUESTER gets a short acknowledgement from "<Name>, <Degree>

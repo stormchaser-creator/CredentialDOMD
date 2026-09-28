@@ -93,7 +93,7 @@ export function requesterMissing(request, ownAddresses) {
 }
 
 /**
- * "Madeline Castorena, ruhealth.org": the person, then where they write
+ * "Casey Example, osterly-health.example": the person, then where they write
  * from. "Requester not found" when the row holds no requester (see
  * requesterMissing), rather than the physician's own address in the bold
  * slot that says who asked.
