@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Trusted, read-only context collection. Ticket text is evidence, never authority.
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
@@ -187,6 +187,12 @@ export const RESULT_SCHEMA = { type: 'object', additionalProperties: false, prop
     completed_follow_up: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { work: text, verification: text }, required: ['work', 'verification'] } },
     verification: { type: 'object', additionalProperties: false, properties: { kind: { enum: ['not_run', 'source_review', 'verified_change'] }, reproduction: text, checks: text, release: text }, required: ['kind', 'reproduction', 'checks', 'release'] },
   }, required: ['acceptance_criteria', 'answered_questions', 'prior_fixes', 'questions', 'follow_up', 'completed_follow_up', 'verification'] },
+  // Optional: set when the run changed code. The host writes the commit
+  // (this subject, sanitised) and runs these tests itself (G2).
+  change: { type: 'object', additionalProperties: false, properties: { subject: { type: 'string', minLength: 1, maxLength: 200 },
+    tests: { type: 'array', maxItems: 20, items: { type: 'object', additionalProperties: false, properties: {
+      file: { type: 'string', minLength: 1, maxLength: 200 }, name: { type: 'string', minLength: 1, maxLength: 300 } }, required: ['file', 'name'] } } },
+    required: ['subject', 'tests'] },
 }, required: ['reply', 'summary', 'needs_owner_review', 'assessment'] };
 
 function checkShape(value, schema) {
@@ -200,7 +206,7 @@ function checkShape(value, schema) {
   }
   if (schema.type === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !(k in schema.properties)) || schema.required.some(k => !(k in value))) throw Error('Invalid review object');
-    for (const [key, child] of Object.entries(schema.properties)) checkShape(value[key], child);
+    for (const [key, child] of Object.entries(schema.properties)) if (key in value || schema.required.includes(key)) checkShape(value[key], child);
   }
 }
 const questionKey = value => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -412,15 +418,15 @@ export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // feeds a failure here back to the model (up to twice) before it counts.
 // {{FIX_COMMIT}} is taken only from the one commit this run made (committer
 // identity) that touches a file cited in verification.checks.
-export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, fetchBuild } = {}) {
+export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild } = {}) {
   validateAssessment(result, context);
   if (context.run_mode === 'continuation') return null;
-  return prepareAgentReply({ reply: result.reply, ticketId: context.target_id, git: gitRunner(repo), preHead, runStarted, runCommitter, runId,
+  return prepareAgentReply({ reply: result.reply, ticketId: context.target_id, git: gitRunner(repo), preHead, runStarted, runCommitter, runId, release,
     citedFiles: filesCitedIn(result.assessment.verification.checks), verificationKind: result.assessment.verification.kind,
     ...(fetchBuild ? { fetchBuild } : {}) });
 }
-export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, fetchBuild } = {}) {
-  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, fetchBuild });
+export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild } = {}) {
+  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild });
   if (context.run_mode === 'continuation') {
     const rows = await query(continuationSQL(context));
     if (rows.length !== 1 || rows[0].id !== context.target_id || rows[0].user_id !== context.owner_id || rows[0].updated_at !== context.target_version) throw Error('Continuation changed or approval withdrawn; no result applied');
@@ -452,7 +458,18 @@ const runFacts = () => ({
   runStarted: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(process.env.TICKET_RUN_STARTED || '') ? process.env.TICKET_RUN_STARTED : null,
   runCommitter: RUN_COMMITTER.test(process.env.TICKET_RUN_COMMITTER || '') ? process.env.TICKET_RUN_COMMITTER : null,
   runId: /^[0-9a-f]{16}$/.test(process.env.TICKET_RUN_ID || '') ? process.env.TICKET_RUN_ID : null,
+  release: releaseRecord(process.env.TICKET_RELEASE_FILE),
 });
+// The G7 release record for this run's merged fix (ticket-fix/release.mjs),
+// written by the host after the merge. No record: nothing may be called live.
+function releaseRecord(file) {
+  if (!file) return null;
+  if (!path.isAbsolute(file)) throw Error('TICKET_RELEASE_FILE must be an absolute path');
+  const stat = statSync(file);
+  if (!stat.isFile() || stat.uid !== process.getuid() || (stat.mode & 0o077) || stat.size > 1024 * 1024) throw Error('The release record must be an owner-only file');
+  const record = JSON.parse(readFileSync(file, 'utf8'));
+  return { verified: record?.verified === true, fix_commit: typeof record?.fix_commit === 'string' ? record.fix_commit : null };
+}
 // The runner runs these steps from a copy of its own code taken before the
 // model ran (ticket-agent.sh), so the repository is named, not derived.
 function repository() {
@@ -490,7 +507,7 @@ export function logSafe(error) {
   if (error?.violations) return `Reply breaks fixed reply rules: ${ruleNames(error.violations)}`;
   return String(error?.message ?? error);
 }
-const refusalHead = error => (error?.violations ? ruleNames(error.violations) : String(error?.message ?? error).split(':')[0].slice(0, 160));
+export const refusalHead = error => (error?.violations ? ruleNames(error.violations) : String(error?.message ?? error).split(':')[0].slice(0, 160));
 export async function databaseQuery(query) {
   const token = process.env.TICKET_DATABASE_TOKEN;
   if (!token) throw Error('Existing runner database credential is required');

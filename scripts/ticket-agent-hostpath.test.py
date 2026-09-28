@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Full legacy shell path with synthetic credentials/model and local PostgreSQL only.
+"""Full shell path with synthetic credentials/model and local PostgreSQL only.
 
 The copied shell changes only its fixed repository/log/lock/CLI/state paths. Its
-node entry points, queue, context, assessment and SQL writer are the real sources:
-the runner copies them out of the last commit of its repository, so each scenario
-gets a throwaway git repository holding the current working-tree versions.
+node entry points, queue, context, assessment, SQL writer and stage 2 runner
+(scripts/ticket-fix/run.mjs: worktree, reproduction, contained worker, gates,
+review, held merge) are the real sources: the runner copies them out of the last
+commit of its repository, so each scenario gets a throwaway git repository
+holding the current working-tree versions, with a local bare origin.
 No installed model CLI, Keychain command, HTTP client or production worker runs.
 """
 import json
@@ -124,7 +126,12 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
             else:
                 (repo / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, repo / rel)
-        for args in (['init', '-q', '-b', 'main'], ['add', '-A'], ['commit', '-q', '-m', 'Synthetic host code']):
+        origin = run / 'origin.git'
+        made = subprocess.run(['/usr/bin/git', 'init', '-q', '--bare', '-b', 'main', str(origin)], text=True, capture_output=True, env=env, timeout=30)
+        if made.returncode:
+            raise RuntimeError(made.stderr)
+        for args in (['init', '-q', '-b', 'main'], ['add', '-A'], ['commit', '-q', '-m', 'Synthetic host code'],
+                     ['remote', 'add', 'origin', str(origin)], ['push', '-q', 'origin', 'main']):
             made = subprocess.run(GIT + ['-C', str(repo)] + args, text=True, capture_output=True, env=env, timeout=30)
             if made.returncode:
                 raise RuntimeError(made.stderr)
@@ -142,7 +149,10 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
               ' *) exit 89;;\nesac\n', 0o700)
         write(binary / 'node', '#!/bin/sh\nexec ' + quoted(NODE) + ' --import ' +
               quoted(FIXTURES / 'database.mjs') + ' "$@"\n', 0o700)
-        write(binary / 'claude', '#!/bin/sh\nexec ' + quoted(NODE) + ' ' +
+        # run.mjs gives each session an allowlisted environment, so the
+        # fixture's own settings are written into the shim.
+        fixture_env = ' '.join(f'{k}={quoted(v)}' for k, v in env.items() if k.startswith('SUPPORT_FIXTURE_'))
+        write(binary / 'claude', '#!/bin/sh\nexport ' + fixture_env + '\nexec ' + quoted(NODE) + ' ' +
               quoted(FIXTURES / 'model.mjs') + ' "$@"\n', 0o700)
         # The owner notifier records the message instead of sending an iMessage.
         write(binary / 'notify', '#!/bin/sh\nprintf "%s\\n" "$1" >> ' + quoted(run / 'notify.log') + '\n', 0o700)
@@ -158,6 +168,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
             'CLAUDE="$HOME/.local/share/fnm/node-versions/v24.15.0/installation/bin/claude"': 'CLAUDE=' + quoted(binary / 'claude'),
             'CASE_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-context"': 'CASE_STATE=' + quoted(state),
             'FIX_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-fix"': 'FIX_STATE=' + quoted(run / 'ticket-fix'),
+            'WORK_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-work"': 'WORK_STATE=' + quoted(run / 'work'),
             'NOTIFY="$HOST/notify-owner.sh"': 'NOTIFY=' + quoted(binary / 'notify'),
             **(extra or {}),
         }
@@ -175,6 +186,13 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
     def invocations(run):
         filename = run / 'model-inputs.jsonl'
         return [json.loads(line) for line in filename.read_text().splitlines()] if filename.exists() else []
+
+    def sessions(run):
+        filename = run / 'sessions.jsonl'
+        return [json.loads(line) for line in filename.read_text().splitlines()] if filename.exists() else []
+
+    def git_out(repo, *args):
+        return subprocess.run(['/usr/bin/git', '-C', str(repo)] + list(args), text=True, capture_output=True, env=env, timeout=30).stdout.strip()
 
     def count(ticket=T):
         return int(sql(f"select count(*) from support_messages where ticket_id='{ticket}' and is_admin_reply"))
@@ -197,6 +215,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
 
     try:
         run, state, script, repo = scenario('normal', two_owners=True)
+        owner_head, origin_head = git_out(repo, 'rev-parse', 'HEAD'), git_out(run / 'origin.git', 'rev-parse', 'main')
         result = execute(script)
         check('full shell path replies successfully', result.returncode == 0 and count() == 1 and count(X) == 1)
         inputs = invocations(run)
@@ -218,6 +237,14 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('reconcile finds every stored reply in a ledger and alerts nobody', notified(run) == [] and 'reconcile: 2 verifications, 0 without a ledger entry, 0 agent replies from no logged run' in log(run), (notified(run), log(run)[-3000:]))
         check('the stored result says it was not emailed', '"emailed":false' in log(run))
         check('the verification records the run and that its prose is unbound', sql(f"select (report->>'claims') || '|' || length(report->>'run_id') from support_reply_verifications where ticket_id='{T}'") == 'unbound|16')
+        # Stage 2: every session is contained and runs in a worktree; the
+        # reproduction comes first; the owner's checkout and main are untouched.
+        roles = [v['role'] for v in sessions(run)]
+        check('each ticket gets a reproduction session before its worker', roles[:2] == ['repro', 'worker'] and roles.count('repro') == 2 and roles.count('worker') == 2, roles)
+        check('every session ran in a worktree under the work directory, never the owner checkout', all(v['cwd'].startswith(str(run / 'work' / 'worktrees')) for v in sessions(run)))
+        check('the worker has Read, Grep and Glob but no git or rg', all(v['tools'] == 'Read,Grep,Glob,Edit,Write,Bash' for v in sessions(run)))
+        check('the owner checkout and origin main are untouched', git_out(repo, 'rev-parse', 'HEAD') == owner_head and git_out(repo, 'status', '--porcelain') == '' and git_out(run / 'origin.git', 'rev-parse', 'main') == origin_head)
+        check('a run with no change leaves no worktree and no branch', not any((run / 'work' / 'worktrees').iterdir()) and git_out(repo, 'branch', '--list', 'agent/*') == '')
 
         for name in ['reapprove', 'withdraw', 'new_input', 'change_owner']:
             run, state, script, repo = scenario(name)
@@ -268,10 +295,19 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
             handle.write('\n// Synthetic work in progress, uncommitted before the run.\n')
         check('edits already present before the run do not hold it', execute(script).returncode == 0 and count() == 1 and 'PROTECTED' not in log(run))
 
-        run, state, script, repo = scenario('timeout', extra={'alarm 1500': 'alarm 2'})
-        check('a model killed by the alarm counts toward the breaker', execute(script).returncode != 0 and count() == 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '1' and 'model run failed or timed out (exit 142)' in log(run))
-        run, state, script, repo = scenario('timeout_park', parked=2, extra={'alarm 1500': 'alarm 2'})
+        run, state, script, repo = scenario('timeout', extra={'WORKER_SECONDS=1500': 'WORKER_SECONDS=2'})
+        check('a model killed by the alarm counts toward the breaker', execute(script).returncode != 0 and count() == 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '1' and 'REJECTED — ' + T + ' model run failed or timed out' in log(run) and 'worker session timed out after 2 s' in log(run), log(run)[-1500:])
+        run, state, script, repo = scenario('timeout_park', parked=2, extra={'WORKER_SECONDS=1500': 'WORKER_SECONDS=2'})
         check('the third timeout parks the ticket and alerts the owner', execute(script).returncode != 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '3' and len(notified(run)) == 1 and 'parked' in notified(run)[0])
+
+        run, state, script, repo = scenario('code_refused')
+        origin_head = git_out(run / 'origin.git', 'rev-parse', 'main')
+        result = execute(script)
+        check('a change with no reproduction is refused by the gates, but the reply is still recorded', result.returncode == 0 and count() == 1 and 'CODE REFUSED — ' + T in log(run), log(run)[-2500:])
+        check('the refused change counts toward the breaker and alerts the owner', (state / 'failed' / f'{T}.count').read_text().strip() == '1' and any('was not merged' in m for m in notified(run)), notified(run))
+        check('the gate failure went back to the worker once, as rule names', [v.get('resumed') for v in invocations(run)] == [None, True] and 'reproduction_recorded' in invocations(run)[1]['repair_prompt'])
+        check('nothing reached origin main; the branch is kept for inspection', git_out(run / 'origin.git', 'rev-parse', 'main') == origin_head and git_out(repo, 'branch', '--list', 'agent/*') != '')
+        check('a refused change leaves no worktree once the reply is recorded', not any((run / 'work' / 'worktrees').iterdir()))
 
         run, state, script, repo = scenario('forged')
         sql(f"""

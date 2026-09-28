@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "about": "Sibling groups for the blast radius (G11, failure mode 5: one path fixed out of several). When an agent diff touches one member of a group, every other member must also be touched or excluded by the independent reviewer with a reason. Add a group whenever an audit finds a sibling that was missed.",
+  "groups": [
+    { "name": "scan entry points", "members": ["src/components/features/DocumentsSection.jsx", "src/components/features/CrudSection.jsx", "src/components/features/DocAttach.jsx", "src/components/features/setup/CaptureRun.jsx", "src/components/features/setup/DateFixList.jsx"] },
+    { "name": "document scanners", "members": ["src/utils/documentScanner.js", "src/utils/cvScan.js", "src/utils/scannerCore.js"] },
+    { "name": "send channels (share sheet, mailto, SMS, clipboard, server mail)", "members": ["src/utils/shareText.js", "src/utils/outgoingText.js", "src/utils/invoiceEmailSend.js", "src/utils/expenseInvoiceSend.js", "src/utils/invoiceEmail.js", "src/components/features/ShareModal.jsx", "src/components/features/EmailPacketModal.jsx", "src/components/features/locum/InvoiceEmailModal.jsx"] },
+    { "name": "ticket forms (physician form and admin ticket modal)", "members": ["src/components/pages/SupportModal.jsx", "src/utils/adminTicketDraft.js", "src/components/pages/AdminDashboard.jsx"] },
+    { "name": "locum log notices", "members": ["src/components/features/locum/WorkLog.jsx", "src/components/features/locum/DutyLog.jsx", "src/components/features/locum/Expenses.jsx", "src/components/features/locum/Invoices.jsx"] },
+    { "name": "save gates (manual form and scan review)", "members": ["src/components/features/CrudSection.jsx", "src/components/features/ScanReviewCard.jsx"] },
+    { "name": "invoice outputs", "members": ["src/utils/invoicePdf.js", "src/utils/invoiceCover.js", "src/utils/invoiceExport.js", "src/utils/invoiceLayout.js"] }
+  ]
+}

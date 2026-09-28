@@ -124,8 +124,10 @@ with tempfile.TemporaryDirectory(prefix='support-cli-contract-', dir='/private/t
     try:
         env = {**base_env, 'ANTHROPIC_BASE_URL': f'http://127.0.0.1:{port}'}
         version = subprocess.check_output(prefix + [str(CLI), '--version'], env=env, cwd=folder, text=True, timeout=10).strip()
+        # The runner's containment flags (scripts/ticket-fix/worker.mjs): dontAsk,
+        # never a skipped permission check.
         command = prefix + [str(CLI), '--bare', '-p', '--model', 'claude-sonnet-5',
-                            '--dangerously-skip-permissions', '--output-format', 'json', '--json-schema', json.dumps(schema),
+                            '--permission-mode', 'dontAsk', '--output-format', 'json', '--json-schema', json.dumps(schema),
                             '--setting-sources', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
                             '--tools', '', '--disable-slash-commands', '--no-chrome', '--no-session-persistence',
                             '--system-prompt', 'This is an offline synthetic structured output test. Use StructuredOutput only.']

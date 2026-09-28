@@ -205,9 +205,11 @@ export function filesCitedIn(text) {
 // commit in HEAD that the live build contains and that touches a file the
 // reply cites (the c237149 and aae81ff replies cited commits that changed none
 // of the files involved). On the post-reply path it is the --fix commit. On
-// the agent path it is the ONE commit this run made (committer identity set by
-// ticket-agent.sh) that touches a file verification.checks cites; a docs note,
-// a co-worker's pulled commit or two candidate commits are never guessed from.
+// the agent path it is the ONE commit this run made (the host commits the
+// model's work with the run's committer identity, ticket-fix/worktree.mjs)
+// that touches a file verification.checks cites, and that the host merged and
+// release-checked (G7); a docs note, a co-worker's pulled commit or two
+// candidate commits are never guessed from.
 function hostValues(names, { git, live, fixRef = null, citedFiles = new Set(), agent = null }) {
   const values = {}, facts = {}, violations = [];
   if (!names.size) return { values, facts, violations };
@@ -240,6 +242,13 @@ function hostValues(names, { git, live, fixRef = null, citedFiles = new Set(), a
   if (!git.isAncestor(fix, 'HEAD')) return refuse('fix_commit_unavailable', 'the commit is not in HEAD');
   facts.fix_live = Boolean(live?.commit && git.isAncestor(fix, live.commit));
   if (!facts.fix_live) return refuse('fix_commit_unavailable', 'the commit is not in the live build');
+  // Agent path (stage 2): the host merged the fix and ran the G7 release
+  // check (the live build descends from it and the bundle probes passed).
+  // Without that record nothing may be called live.
+  if (agent) {
+    facts.release_verified = agent.release?.verified === true && agent.release.fix_commit === fix;
+    if (!facts.release_verified) return refuse('fix_commit_unavailable', 'no passing release check (G7) for this commit');
+  }
   values.FIX_COMMIT = fix.slice(0, 7);
   return { values, facts, violations };
 }
@@ -251,7 +260,7 @@ function hostValues(names, { git, live, fixRef = null, citedFiles = new Set(), a
 // claims: 'unbound' so it is never mistaken for a checked claim set. Throws
 // ReplyRuleError, which the runner feeds back to the model in its repair loop.
 export async function prepareAgentReply({ reply, ticketId = null, git = null, preHead = null, runCommitter = null, runStarted = null, runId = null,
-  citedFiles = new Set(), fetchBuild = fetchLiveBuild, verificationKind = null }) {
+  citedFiles = new Set(), fetchBuild = fetchLiveBuild, verificationKind = null, release = null }) {
   const text = customerReplyText(reply);
   if (!text.trim()) throw Error('Invalid reply');
   const isCommit = git ? token => git.resolveCommit(token) !== null : null;
@@ -260,7 +269,7 @@ export async function prepareAgentReply({ reply, ticketId = null, git = null, pr
   const names = placeholdersIn(text);
   if (names.size && !git) throw new ReplyRuleError([{ rule: 'fix_commit_unavailable', excerpt: 'no repository available' }]);
   const live = names.size ? await readLiveBuild(git, fetchBuild) : null;
-  const host = hostValues(names, { git, live, citedFiles, agent: { preHead, runCommitter } });
+  const host = hostValues(names, { git, live, citedFiles, agent: { preHead, runCommitter, release } });
   if (host.violations.length) throw new ReplyRuleError(host.violations);
   const filled = names.size ? fillPlaceholders(text, host.values) : text;
   if (filled.length > BODY_MAX) throw new ReplyRuleError([{ rule: 'too_long', excerpt: String(filled.length) }]);

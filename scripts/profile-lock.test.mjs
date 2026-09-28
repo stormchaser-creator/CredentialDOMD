@@ -243,12 +243,16 @@ ok("APPROVED admits the owner or an owner-released ticket, nothing else",
 ok("a failed queue read is an ERROR and a non-zero exit, never an empty queue",
   /NOT an empty queue/.test(agentRaw) && /exit 1/.test(agentRaw));
 
-console.log("\n── The runner's autonomy is untouched ──");
-// The owner chose the model, the permission flag and the workflow. This item
-// was allowed to add a filter and nothing else.
+console.log("\n── The runner's autonomy ──");
+// The owner chose the model and the workflow. This item was allowed to add a
+// filter and nothing else. The permission flag changed on 2026-09-28 (ticket
+// fix gates, stage 2): the model now runs contained in a worktree
+// (scripts/ticket-fix/worker.mjs) and the host commits, gates and holds merges.
+const workerRaw = read("scripts/ticket-fix/worker.mjs");
 ok("still runs headless claude on the prompt file", agentRaw.includes("scripts/ticket-agent-prompt.md"));
-ok("model is still claude-sonnet-5", agentRaw.includes("--model claude-sonnet-5"));
-ok("still --dangerously-skip-permissions (deliberate, unchanged)", agentRaw.includes("--dangerously-skip-permissions"));
+ok("model is still claude-sonnet-5", workerRaw.includes("WORKER_MODEL = 'claude-sonnet-5'"));
+ok("no longer skips permissions: dontAsk with explicit allow and deny rules (stage 2)",
+  !agentRaw.includes("--dangerously-skip-permissions") && workerRaw.includes("'--permission-mode', 'dontAsk'"));
 ok("still single-instance via the lock directory", agentRaw.includes('mkdir "$LOCK"'));
 // PR11 shortened the cap when it split the run into one session per ticket.
 // The number is the runner owner's to choose; that a cap exists is the property.

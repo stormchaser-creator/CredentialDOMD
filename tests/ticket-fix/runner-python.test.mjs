@@ -2,7 +2,8 @@
 // before (pipeline map, 2026-09-28): the real zsh runner against a local
 // PostgreSQL with a model stand-in, and the exact context and publication SQL.
 // Both now carry the verified-reply migration, the repair loop, parked-ticket
-// skipping, owner alerts and the stale-lock check.
+// skipping, owner alerts and the stale-lock check; the shell path also runs
+// stage 2 (worktree, reproduction, contained sessions, gates, held merges).
 //
 // The full shell path needs zsh and macOS temp paths; it skips elsewhere.
 import test from 'node:test';
@@ -34,7 +35,7 @@ test('publication SQL on PostgreSQL: verified replies, refused operator inserts,
 });
 
 const shellSkip = () => skipBase() || (process.platform !== 'darwin' || !existsSync('/bin/zsh') ? 'the full runner path needs macOS and zsh' : false);
-test('the real runner shell end to end: repair loop, parked skip, alerts, stale lock, verification, host-code hold, timeouts, reconcile', { skip: shellSkip(), timeout: 480000 }, () => {
+test('the real runner shell end to end: repair loop, parked skip, alerts, stale lock, verification, host-code hold, timeouts, reconcile, worktrees and refused changes', { skip: shellSkip(), timeout: 480000 }, () => {
   const result = run('scripts/ticket-agent-hostpath.test.py');
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /\d+ synthetic full-host checks passed/);
@@ -46,5 +47,10 @@ test('the real runner shell end to end: repair loop, parked skip, alerts, stale 
     'edits already present before the run do not hold it', 'a model killed by the alarm counts toward the breaker',
     'the third timeout parks the ticket and alerts the owner', 'reconcile reports it to the owner by id prefix',
     'reconcile finds every stored reply in a ledger and alerts nobody', 'the log names the broken rules, never the refused reply text',
-    'the verification records the run and that its prose is unbound']) assert.ok(result.stdout.includes(`ok ${name}`), name);
+    'the verification records the run and that its prose is unbound',
+    // Stage 2: branch-only work, runner-owned gates, held merges.
+    'each ticket gets a reproduction session before its worker', 'every session ran in a worktree under the work directory, never the owner checkout',
+    'the owner checkout and origin main are untouched', 'a run with no change leaves no worktree and no branch',
+    'a change with no reproduction is refused by the gates, but the reply is still recorded', 'the refused change counts toward the breaker and alerts the owner',
+    'the gate failure went back to the worker once, as rule names', 'nothing reached origin main; the branch is kept for inspection']) assert.ok(result.stdout.includes(`ok ${name}`), name);
 });

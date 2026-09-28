@@ -277,3 +277,61 @@ the private case records: the previous worker ignores them, and removing them
 would discard follow-through history. Do not replay messages or delete published
 replies. The application release and staged isolated runner need no separate
 database migration for this support-context change.
+
+## Stage 2: branch-only work, runner-owned gates, held merges (2026-09-28)
+
+`ticket-agent.sh` still owns the lock, the queue, the circuit breaker and the reply
+recording. For each loaded ticket it runs `scripts/ticket-fix/run.mjs work`:
+
+1. **Worktree.** `git fetch origin main` in the owner's checkout (refs only), then a
+   worktree on a new branch `agent/<id8>-<runid>` under
+   `~/Library/Application Support/CredentialDOMD/ticket-work/worktrees/`. The owner's
+   checkout and branch are never touched. `node_modules` is linked when the lockfiles
+   match, otherwise `npm ci` runs in the worktree.
+2. **Reproduction.** A separate session (`repro-prompt.md`) sees the ticket and the base
+   code and may write only under `tests/`. The host runs its tests on base; each must fail
+   with `ERR_ASSERTION` (a TypeError, a missing module or a pass is refused; one resume
+   with the verdicts). The files are hash-frozen.
+3. **Worker.** The fixer runs contained (`worker.mjs`): `--permission-mode dontAsk`,
+   `--setting-sources ""`, explicit allow and deny rules, `--strict-mcp-config`, a fresh
+   `CLAUDE_CONFIG_DIR` per session, an allowlisted environment (no database or GitHub
+   token; git cannot push; hooks off). It may edit `src/`, `tests/` (not
+   `tests/ticket-fix/`, not the frozen files), `public/` and `landing/`, and run exactly
+   `npm test`, `node --test tests/<file>` and `npm run build:site`; it reads with Read,
+   Grep and Glob. The reply checks and their two repairs run as before.
+4. **G0 and commit.** A change to the runner's own code holds every later run (exit 4);
+   anything else outside the editable paths refuses the run (exit 5). The host makes one
+   commit (hooks off, author "CredentialDOMD Ticket Agent", committer the run identity,
+   trailers `Ticket:`, `Ticket-Agent-Run:`, and `Gates:` once the gates pass).
+5. **G2.** `gates/tests.mjs` records `gates.json`: the reproduction frozen and green, the
+   declared tests in the diff and green, every test failing when one product hunk is
+   reverted, `npm test` passing no fewer tests than base (less removed, plus added
+   declarations), `npm run build:site`, eslint errors per changed file not rising and
+   `npm run lint:hooks`, and the save-and-reload rule for TABLE_MAP, defaults, sync code
+   and storage keys. One resume of the worker with the failing check names.
+6. **G11.** `protected-paths.json` (database, scripts, CI, dependencies, legal pages,
+   auth, admin and pricing code, and numeric literals in money modules) holds the merge
+   for the owner. `gates/owner-rules.mjs` builds the blast radius from `git grep` and
+   `sibling-paths.json`.
+7. **G4.** `review.mjs`: a fresh `claude-opus-5-5` session at effort high with Read, Grep
+   and Glob only, given the thread, the diff, `gates.json`, the protected report and the
+   blast radius, never the worker's reply or summary. Citations are checked against the
+   files (one fresh rerun for an invented one). Billing, pay, invoice and sync diffs get
+   two reviews that must agree. A "revise" resumes the worker once.
+8. **G3.** With every gate passed and the review approving, the change merges only if
+   `ticket-work/AUTO_MERGE` exists (off by default). Otherwise the run is HELD:
+   `ticket-work/runs/<id8>-<runid>/HELD.txt`, an owner alert and one command,
+   `node scripts/ticket-fix/merge.mjs <run-id>`. The merge is fast-forward only; if main
+   moved it rebases, re-runs the gates, and re-runs the review when `git patch-id
+   --stable` changed; a conflict or a changed `.git/hooks` holds it.
+9. **G7.** After a merge, `release.mjs` waits for `version.json` to name a build that
+   descends from the fix and checks the strings the diff added (present) and removed
+   (absent) in the live bundle. `{{FIX_COMMIT}}` in an agent reply needs that record.
+
+A refused change still records the reply (it claims nothing) but counts toward the
+breaker. A continuation for a ticket with a held change waits without a model run. One
+code change per scheduled run.
+
+**Not contained (critique B1):** a test the worker writes runs as the owner's user in
+the session and in the gates, and could read the keychain or call `gh`. The permission
+rules bind the model's own tool calls. The container runner is the owner's decision.

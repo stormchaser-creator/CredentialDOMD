@@ -146,42 +146,65 @@ test('--validate returns 2 with the reason for a repairable result, and --sessio
   } finally { state.cleanup(); }
 });
 
-test('the runner shell: lock owner, bounded repair loop, park alert, status on every exit, autonomy unchanged', () => {
+test('the runner shell: lock owner, park alert, status on every exit; the model is started only by run.mjs, never with skipped permissions (stage 2)', () => {
   const sh = read('scripts/ticket-agent.sh');
   assert.match(sh, /printf 'pid=%s\\nstarted=%s\\n' "\$\$" "\$\(date \+%s\)" > "\$LOCK\/owner"/);
   assert.match(sh, /trap '[^']*\/bin\/rm -f "\$LOCK\/owner"; rmdir "\$LOCK"[^']*' EXIT/);
   assert.match(sh, /trap 'EXIT_RC=\$\?; node "\$ALERT" status --state "\$CASE_STATE" --rc "\$EXIT_RC"/);
   assert.match(sh, /SKIP[^\n]*\n\s+node "\$ALERT" lock --state "\$CASE_STATE" --lock "\$LOCK" --notify "\$NOTIFY"/);
-  assert.match(sh, /if \[ "\$VALID_RC" -ne 2 \] \|\| \[ "\$REPAIRS" -ge 2 \]; then/);
-  assert.match(sh, /"\$CLAUDE" -p --resume "\$SESSION" --model claude-sonnet-5 --dangerously-skip-permissions \\\n\s+--output-format json --json-schema "\$SCHEMA"/);
   assert.match(sh, /if \[ \$\(\(FAILS \+ 1\)\) -eq 3 \]; then\n\s+node "\$ALERT" park --state "\$CASE_STATE" --ticket "\$TICKET_ID" --count 3 --notify "\$NOTIFY"/);
   assert.match(sh, /RUN_STARTED=\$\(date -u '\+%Y-%m-%dT%H:%M:%SZ'\)/);
-  // Stage 1 leaves the model, its flags and the push-to-main workflow alone.
-  assert.equal((sh.match(/"\$CLAUDE" -p/g) || []).length, 2);
-  assert.equal((sh.match(/alarm 1500/g) || []).length, 1);
+  // The shell no longer starts a model: run.mjs does, contained (worker.mjs).
+  assert.doesNotMatch(sh, /"\$CLAUDE" -p/);
+  for (const file of ['scripts/ticket-agent.sh', 'scripts/ticket-fix/run.mjs', 'scripts/ticket-fix/worker.mjs', 'scripts/ticket-fix/review.mjs', 'scripts/ticket-fix/merge.mjs']) {
+    assert.doesNotMatch(read(file), /dangerously-skip-permissions|bypassPermissions"?\s*[,)]/, file);
+  }
+  assert.match(sh, /\/usr\/bin\/perl -e 'alarm 10800; exec @ARGV' -- node "\$HOST\/ticket-fix\/run.mjs" work --ticket "\$TICKET_ID" --context "\$CONTEXT" --output "\$OUTPUT" --run-file "\$RUN_FILE"/);
+  assert.match(sh, /--claude "\$CLAUDE" --committer "\$RUN_COMMITTER" --notify "\$NOTIFY" --worker-seconds "\$WORKER_SECONDS"/);
+  assert.match(sh, /--work "\$WORK_STATE" --state "\$CASE_STATE" --fix-state "\$FIX_STATE"/);
+  assert.match(sh, /WORK_STATE="\$HOME\/Library\/Application Support\/CredentialDOMD\/ticket-work"/);
+  assert.equal((sh.match(/WORKER_SECONDS=1500/g) || []).length, 1);
+  // Exit codes: every failure counts toward the breaker; runner code holds.
+  assert.match(sh, /if host_code_changed \|\| \[ "\$WORK_RC" -eq 4 \]; then hold_run; RC=1; break; fi/);
+  assert.match(sh, /2\) reject "review not recorded"; RC=1; break ;;/);
+  assert.match(sh, /3\) reject "model run failed or timed out"; RC=1; break ;;/);
+  assert.match(sh, /5\) reject "changed files outside its scope"; RC=1; break ;;/);
+  assert.match(sh, /\*\) reject "host step failed \(exit \$WORK_RC\)"; RC=1; break ;;/);
+  // A refused change is recorded (the reply claims nothing) but counts.
+  assert.match(sh, /if \[ "\$CODE" = refused \]; then[\s\S]*?echo \$\(\(FAILS \+ 1\)\) > "\$FAIL_COUNT"/);
+  // Held changes: continuations wait; one code change per scheduled run.
+  assert.match(sh, /if \[ "\$RUN_MODE" = continuation \] && HELD_RUN=\$\(node "\$HOST\/ticket-fix\/run.mjs" held-for --work "\$WORK_STATE" --ticket "\$TICKET_ID"/);
+  assert.match(sh, /case "\$CODE" in none\) ;; \*\) break ;; esac/);
+  assert.match(sh, /node "\$HOST\/ticket-fix\/run.mjs" finish --run-file "\$RUN_FILE" --work "\$WORK_STATE"/);
+  // No token reaches run.mjs or the log.
   assert.doesNotMatch(sh, /echo[^\n]*\$TOKEN/);
+  const work = sh.slice(sh.indexOf('ticket-fix/run.mjs" work'), sh.indexOf('WORK_RC=$?'));
+  assert.doesNotMatch(work, /TOKEN/);
+  assert.doesNotMatch(sh, /export\s+(?:TOKEN|TICKET_DATABASE_TOKEN)=/);
 });
 
 test('the runner judges a run with host code copied before the model ran, and holds on any change to it (review)', () => {
   const sh = read('scripts/ticket-agent.sh');
-  const firstModel = sh.indexOf('"$CLAUDE" -p');
+  const firstModel = sh.indexOf('ticket-fix/run.mjs" work');
   const copy = sh.indexOf('/usr/bin/git -C "$REPO" archive "$HOST_HEAD"');
   assert.ok(copy > 0 && copy < firstModel, 'the copy is taken before any model runs');
   for (const file of ['scripts/ticket-agent-context.mjs', 'scripts/ticket-agent-isolated.mjs', 'scripts/ticket-agent-prompt.md', 'scripts/ticket-fix', 'scripts/notify-owner.sh']) {
     assert.ok(sh.slice(copy, copy + 400).includes(file), file);
   }
-  // No host step runs from the checkout the model edits.
+  // No host step runs from the checkout the model could reach.
   assert.doesNotMatch(sh, /node "\$REPO\//);
   assert.doesNotMatch(sh, /cat "\$REPO\/scripts/);
-  for (const step of ['--schema', '--load', '--validate', '--session', '--record-and-reply']) assert.match(sh, new RegExp(`node "\\$HOST/ticket-agent-context.mjs"[^\\n]*(?:\\\\\\n[^\\n]*)?${step}`), step);
+  for (const step of ['--load', '--record-and-reply']) assert.match(sh, new RegExp(`node "\\$HOST/ticket-agent-context.mjs"[^\\n]*(?:\\\\\\n[^\\n]*)?${step}`), step);
   assert.match(sh, /ALERT="\$HOST\/ticket-fix\/alert.mjs"/);
   assert.match(sh, /NOTIFY="\$HOST\/notify-owner.sh"/);
   assert.match(sh, /PROTECTED=\(scripts\/ticket-fix 'scripts\/ticket-agent\*' scripts\/notify-owner.sh 'supabase\/migrations\/\*support_reply\*' supabase\/functions\/send-ticket-reply\)/);
-  assert.match(sh, /MODEL_RC=\$\?\n\s+if host_code_changed; then hold_run; RC=1; break; fi/);
-  assert.match(sh, /done\n\s+if host_code_changed; then hold_run; RC=1; break; fi\n/, 'checked again after the repair resumes');
   assert.match(sh, /if \[ -e "\$HOLD" \]; then[^\n]*\n[^\n]*HOLD[^\n]*\n\s+exit 0/);
-  // The repository the host steps act on is named, not derived from the copy.
-  assert.match(sh, /TICKET_REPO="\$REPO"[^\n]*\\\n\s+node "\$HOST\/ticket-agent-context.mjs" --validate/);
+  // The reply is recorded against the run's worktree (or the owner checkout
+  // when nothing changed), at the run's base, with its release record.
+  assert.match(sh, /TICKET_RUN_KEY="\$RUN_KEY" TICKET_REPO="\$RECORD_REPO" TICKET_PRE_HEAD="\$BASE"[^\n]*\\\n[^\n]*TICKET_RELEASE_FILE="\$RELEASE_FILE"[^\n]*\\\n\s+--record-and-reply/);
+  // run.mjs's own list of the runner's code matches the shell's.
+  const worktree = read('scripts/ticket-fix/worktree.mjs');
+  for (const p of ['scripts\\/ticket-fix\\/', 'scripts\\/ticket-agent', 'scripts\\/notify-owner\\.sh', 'supabase\\/migrations\\/[^/]*support_reply', 'supabase\\/functions\\/send-ticket-reply\\/']) assert.ok(worktree.includes(p), p);
 });
 
 test('the runner: per-run key and committer, timeouts count, rule names only in the log (review)', () => {
@@ -190,14 +213,9 @@ test('the runner: per-run key and committer, timeouts count, rule names only in 
   assert.doesNotMatch(sh, /export[^\n]*RUN_KEY/, 'never exported');
   assert.equal((sh.match(/TICKET_RUN_KEY="\$RUN_KEY"/g) || []).length, 2, 'only --load and --record-and-reply get it');
   assert.match(sh, /TICKET_RUN_KEY="\$RUN_KEY" TICKET_DATABASE_TOKEN="\$TOKEN" node "\$HOST\/ticket-agent-context.mjs" \\\n\s+--load/);
-  assert.match(sh, /TICKET_RUN_KEY="\$RUN_KEY" TICKET_REPO="\$REPO"[^\n]*\\\n[^\n]*\\\n\s+--record-and-reply/);
-  for (const run of sh.match(/[^\n]*\n[^\n]*"\$CLAUDE" -p[^\n]*/g)) assert.match(run, /GIT_COMMITTER_NAME="CredentialDOMD Ticket Agent" GIT_COMMITTER_EMAIL="\$RUN_COMMITTER"/, run);
   assert.match(sh, /RUN_COMMITTER="ticket-agent\+\$RUN_ID@credentialdomd.invalid"/);
-  assert.match(sh, /if \[ "\$MODEL_RC" -ne 0 \]; then reject "model run failed or timed out \(exit \$MODEL_RC\)"; RC=\$MODEL_RC; break; fi/);
   assert.match(sh, /reject\(\) \{[\s\S]*?echo \$\(\(FAILS \+ 1\)\) > "\$FAIL_COUNT"[\s\S]*?node "\$ALERT" park/);
-  assert.doesNotMatch(sh, /head -c 400 "\$RUN_DIR\/\$TICKET_ID-refusal.txt"/, 'the refusal text stays out of the log');
-  assert.match(sh, /--validate "\$CONTEXT" "\$OUTPUT" > "\$RUN_DIR\/\$TICKET_ID-refusal.txt" 2> "\$RUN_DIR\/\$TICKET_ID-rules.txt"/);
-  assert.match(sh, /REPAIR \u2014 \$TICKET_ID attempt \$REPAIRS: \$RULES/);
+  assert.match(read('scripts/ticket-fix/run.mjs'), /log\(`REPAIR \u2014 \$\{ticket\} attempt \$\{repairs \+ 1\}: \$\{rules\}`\)/);
   assert.match(sh, /node "\$HOST\/ticket-fix\/reconcile.mjs" --state "\$CASE_STATE" \\\n\s+--ledger "\$CASE_STATE\/replies" --ledger "\$FIX_STATE\/replies" --runs "\$CASE_STATE\/runs.log"/);
   assert.match(sh, /RUN \$RUN_ID[^\n]*\n(?:#[^\n]*\n)*printf '%s %s\\n' "\$RUN_ID" [^\n]*>> "\$CASE_STATE\/runs.log"/);
 });
@@ -300,7 +318,16 @@ test('the migrations state the rollout order that keeps the live runner working,
 test('the prompt tells the model the rules the host now enforces', () => {
   const prompt = read('scripts/ticket-agent-prompt.md');
   assert.match(prompt, /The reply reports no results/);
-  assert.match(prompt, /touches a file you cite in `verification.checks`/);
+  assert.match(prompt, /touches a file you cite in\s+`verification.checks`/);
+  // Stage 2: branch only; the host commits, gates, reviews and holds merges.
+  assert.match(prompt, /Do NOT commit, push, deploy or poll `version.json`/);
+  assert.match(prompt, /The only\s+commands allowed are `npm test`, `node --test tests\/<file>` and `npm run build:site`/);
+  assert.match(prompt, /Those files are frozen/);
+  assert.doesNotMatch(prompt, /push to main/i);
+  assert.doesNotMatch(prompt, /Wait for the CDN/);
+  for (const text of ['scripts/ticket-fix/repro-prompt.md', 'scripts/ticket-fix/review-prompt.md']) {
+    assert.ok(!read(text).includes('\u2014'), `${text}: no em dashes`);
+  }
   assert.match(prompt, /Never edit, create or delete anything under `scripts\/ticket-fix\/`/);
   assert.doesNotMatch(prompt, /Cite the fix commit/);
   assert.match(prompt, /\{\{FIX_COMMIT\}\}/);
@@ -331,8 +358,10 @@ test('sessions are told to post support replies only through post-reply.mjs', ()
     for (const ban of ['Never read the vault secret `support_reply_hmac_key`', 'never write `support_reply_verifications` directly',
       'never write `support_messages` with a service-role key', 'never call `send-ticket-reply` directly', '`--record-and-reply` by hand']) assert.ok(text.includes(ban), `${file}: ${ban}`);
     assert.match(text, /not emailed to members/, file);
+    assert.match(text, /node scripts\/ticket-fix\/merge\.mjs <run-id>/, file);
+    assert.match(text, /never create `ticket-work\/AUTO_MERGE` unless the owner says so/, file);
   }
-  for (const cli of ['post-reply', 'verify-claims', 'run-tests', 'record-query', 'alert', 'reconcile']) {
+  for (const cli of ['post-reply', 'verify-claims', 'run-tests', 'record-query', 'alert', 'reconcile', 'merge', 'run']) {
     assert.ok(existsSync(path.join(root, `scripts/ticket-fix/${cli}.mjs`)), cli);
     accessSync(path.join(root, `scripts/ticket-fix/${cli}.mjs`), constants.X_OK);
   }

@@ -1,6 +1,10 @@
 #!/bin/zsh
-# Hourly CredentialDOMD ticket agent — launchd runs this; it runs headless
-# Claude Code on scripts/ticket-agent-prompt.md. One instance at a time.
+# Hourly CredentialDOMD ticket agent — launchd runs this. It keeps the lock,
+# the queue, the circuit breaker and the reply recording, and hands each
+# ticket to scripts/ticket-fix/run.mjs (stage 2): the model works only in a
+# worktree on its own branch, the host commits, runs the gates and an
+# independent review, and holds every merge for the owner unless
+# $WORK_STATE/AUTO_MERGE exists. One instance at a time.
 set -u
 umask 077
 
@@ -12,10 +16,16 @@ export PATH="$(dirname "$CLAUDE"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 CASE_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-context"
 # post-reply.mjs keeps its ledger here; reconcile.mjs reads it with the runner's.
 FIX_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-fix"
+# Stage 2 work: worktrees/, runs/<id8>-<runid>/ (gates, review, HELD.txt),
+# baseline/ and the AUTO_MERGE flag (absent: every merge is held).
+WORK_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-work"
 HOLD="$CASE_STATE/HOLD-host-code-changed"
+# Per-session limits (seconds) for the model sessions run.mjs starts.
+WORKER_SECONDS=1500
 
 mkdir -p "$(dirname "$LOG")"
 /bin/mkdir -p "$CASE_STATE" && /bin/chmod 700 "$CASE_STATE"
+/bin/mkdir -p "$WORK_STATE" && /bin/chmod 700 "$WORK_STATE"
 
 # A model run changed the runner's own code (see PROTECTED below). Nothing
 # runs until the owner has reviewed that change and removed the hold file.
@@ -25,10 +35,10 @@ if [ -e "$HOLD" ]; then
 fi
 
 # The host's own code (the reply checks, the node steps, the prompt, the
-# notifier) is copied out of the last commit before any model runs, and every
-# host step below runs from that copy. The model works in $REPO with full
-# permissions and pushes to main, so the checks it is judged by must not be
-# files it can edit during the same run (review 2026-09-28).
+# notifier, the gates) is copied out of the last commit before any model
+# runs, and every host step below runs from that copy. The model works in a
+# worktree, never in $REPO, but a test it writes runs as this user, so the
+# checks it is judged by must not be files it can reach (review 2026-09-28).
 HOST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-ticket-host.XXXXXX") || exit 1
 trap '/bin/rm -rf "$HOST_DIR"' EXIT
 HOST_HEAD=$(/usr/bin/git -C "$REPO" rev-parse --verify HEAD 2>/dev/null) || { echo "$(date '+%F %T') ERROR — cannot read the repository HEAD" >> "$LOG"; exit 1; }
@@ -36,8 +46,9 @@ HOST_HEAD=$(/usr/bin/git -C "$REPO" rev-parse --verify HEAD 2>/dev/null) || { ec
     scripts/ticket-agent-prompt.md scripts/ticket-fix scripts/notify-owner.sh | /usr/bin/tar -x -C "$HOST_DIR" ) 2>/dev/null &&
   [ -f "$HOST_DIR/scripts/ticket-agent-context.mjs" ] || { echo "$(date '+%F %T') ERROR — cannot copy the host code from $HOST_HEAD" >> "$LOG"; exit 1; }
 HOST="$HOST_DIR/scripts"
-# Paths a model run may not change. A change to any of them, committed or
-# not, records nothing, alerts the owner and holds every later run (G11).
+# Paths a model run may not change. A change to any of them in $REPO
+# (checked here) or in the run's worktree (run.mjs exit 4), committed or not,
+# records nothing, alerts the owner and holds every later run (G11).
 PROTECTED=(scripts/ticket-fix 'scripts/ticket-agent*' scripts/notify-owner.sh 'supabase/migrations/*support_reply*' supabase/functions/send-ticket-reply)
 # What the protected paths hold: commits since the copy, the working tree
 # against it, and untracked files. Edits that were already there before the
@@ -74,8 +85,8 @@ case "$HOST_FINGERPRINT" in *FAILED*) echo "$(date '+%F %T') ERROR — cannot re
 
 # This run's identity. RUN_KEY signs the context --load writes and is checked
 # by --record-and-reply; it is passed to those two steps only, never exported,
-# never given to the model. The model's commits carry RUN_COMMITTER, so
-# {{FIX_COMMIT}} can only be a commit this run made, never a pulled one.
+# never given to the model. The host's commit of the model's work carries
+# RUN_COMMITTER, so {{FIX_COMMIT}} can only be a commit this run made.
 RUN_KEY=$(/usr/bin/openssl rand -hex 32) && RUN_ID=$(/usr/bin/openssl rand -hex 8) || { echo "$(date '+%F %T') ERROR — no random source" >> "$LOG"; exit 1; }
 RUN_COMMITTER="ticket-agent+$RUN_ID@credentialdomd.invalid"
 
@@ -136,11 +147,11 @@ fi
 cd "$REPO" || exit 1
 
 # Every failed run counts toward the circuit breaker, whatever failed: a
-# result the host refused, a model that exited non-zero or was killed by the
-# alarm, or a run that changed the host's code. Three in a row park the ticket
-# and alert the owner. Without this, one unrecordable ticket burned 71
-# consecutive model runs (2026-09-20/21) with no alert, and a ticket that
-# always timed out would never have parked.
+# result the host refused, a model session that failed or timed out, a run
+# that changed the host's code or files outside its scope. Three in a row
+# park the ticket and alert the owner. Without this, one unrecordable ticket
+# burned 71 consecutive model runs (2026-09-20/21) with no alert, and a
+# ticket that always timed out would never have parked.
 reject() {
   KEPT="$FAIL_DIR/$TICKET_ID-$(date '+%Y%m%dT%H%M%S').json"
   if [ -s "$OUTPUT" ] && /bin/cp "$OUTPUT" "$KEPT" 2>/dev/null; then
@@ -162,9 +173,9 @@ hold_run() {
   node "$ALERT" hold --state "$CASE_STATE" --ticket "$TICKET_ID" --notify "$NOTIFY" >> "$LOG" 2>&1
   reject "changed protected host code"
 }
+run_field() { node "$HOST/ticket-fix/run.mjs" get --run-file "$RUN_FILE" --field "$1" 2>> "$LOG"; }
 
 # Separate model sessions keep each reporter's context bound to one target.
-SCHEMA=$(node "$HOST/ticket-agent-context.mjs" --schema) || exit 1
 RC=0
 for TARGET in ${(f)TARGETS}; do
   [ -n "$TARGET" ] || continue
@@ -172,6 +183,7 @@ for TARGET in ${(f)TARGETS}; do
   RUN_MODE="${TARGET#*:}"
   CONTEXT="$RUN_DIR/$TICKET_ID-context.json"
   OUTPUT="$RUN_DIR/$TICKET_ID-output.json"
+  RUN_FILE="$RUN_DIR/$TICKET_ID-run.json"
   # Circuit breaker (see reject). The queue already leaves parked tickets
   # out; this check only catches a race.
   FAIL_DIR="$CASE_STATE/failed"; FAIL_COUNT="$FAIL_DIR/$TICKET_ID.count"
@@ -182,63 +194,60 @@ for TARGET in ${(f)TARGETS}; do
     echo "$(date '+%F %T') PARKED — $TICKET_ID rejected $FAILS runs in a row; inspect $FAIL_DIR then remove $FAIL_COUNT" >> "$LOG"
     RC=1; continue
   fi
+  # Internal follow-up for a ticket whose change is held for the owner waits
+  # for the merge: no model run, no continuation attempt used.
+  if [ "$RUN_MODE" = continuation ] && HELD_RUN=$(node "$HOST/ticket-fix/run.mjs" held-for --work "$WORK_STATE" --ticket "$TICKET_ID" 2>> "$LOG"); then
+    echo "$(date '+%F %T') WAITING — $TICKET_ID has a change held for the owner (run $HELD_RUN)" >> "$LOG"
+    continue
+  fi
   TICKET_RUN_KEY="$RUN_KEY" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --load "$TICKET_ID" "$CONTEXT" "$CASE_STATE" "$RUN_MODE" >> "$LOG" 2>&1 || { RC=1; break; }
 
-  # Stream customer evidence through stdin, never argv/process listings. JSON
-  # output is validated and saved privately before the host publishes a reply.
-  # The 25-minute per-ticket cap keeps two targets within the hourly run window.
-  # PRE_HEAD and RUN_COMMITTER let the host fill {{FIX_COMMIT}} only from a
-  # commit this run made (not one a pull brought in).
-  PRE_HEAD=$(/usr/bin/git -C "$REPO" rev-parse --verify HEAD 2>/dev/null) || PRE_HEAD=""
+  # run.mjs (stage 2) runs the reproduction, the contained worker, the reply
+  # checks and repair loop, the host commit, the gates, the independent review
+  # and the merge decision. Customer evidence reaches the model through stdin
+  # only. Its exit: 0 ready to record, 2 reply refused after two repairs, 3
+  # model failed or timed out, 4 runner code changed, 5 files outside scope.
+  # The 3-hour alarm is a backstop; every session and gate has its own limit
+  # and run.mjs kills whole process groups when it is signalled.
   RUN_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  { cat "$HOST/ticket-agent-prompt.md"; printf '\n\n## Untrusted support evidence supplied by the runner\n'; cat "$CONTEXT"; } | \
-    GIT_COMMITTER_NAME="CredentialDOMD Ticket Agent" GIT_COMMITTER_EMAIL="$RUN_COMMITTER" /usr/bin/perl -e 'alarm 1500; exec @ARGV' -- \
-    "$CLAUDE" -p --model claude-sonnet-5 --dangerously-skip-permissions \
-    --output-format json --json-schema "$SCHEMA" > "$OUTPUT" 2>> "$LOG"
-  MODEL_RC=$?
-  if host_code_changed; then hold_run; RC=1; break; fi
-  if [ "$MODEL_RC" -ne 0 ]; then reject "model run failed or timed out (exit $MODEL_RC)"; RC=$MODEL_RC; break; fi
-  # Repair loop: when the host's own checks refuse the result (exit 2), resume
-  # the same session with the exact reason, at most twice, before the run
-  # counts as rejected. 70 of the 71 rejections from 09-19 to 09-28 were
-  # bookkeeping or format errors, not truth checks, and each cost a full run.
-  # The reason quotes the refused sentences, so it stays in the private run
-  # directory for the model; the log gets the rule names only.
-  REPAIRS=0
-  while :; do
-    TICKET_REPO="$REPO" TICKET_PRE_HEAD="$PRE_HEAD" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" TICKET_RUN_ID="$RUN_ID" \
-      node "$HOST/ticket-agent-context.mjs" --validate "$CONTEXT" "$OUTPUT" > "$RUN_DIR/$TICKET_ID-refusal.txt" 2> "$RUN_DIR/$TICKET_ID-rules.txt"
-    VALID_RC=$?
-    RULES=$(/usr/bin/head -c 300 "$RUN_DIR/$TICKET_ID-rules.txt" | /usr/bin/tr '\n' ' '); RULES=${RULES% }
-    if [ "$VALID_RC" -ne 2 ] || [ "$REPAIRS" -ge 2 ]; then
-      [ "$VALID_RC" -eq 0 ] || echo "$(date '+%F %T') REFUSED — $TICKET_ID: $RULES" >> "$LOG"
-      break
-    fi
-    SESSION=$(node "$HOST/ticket-agent-context.mjs" --session "$OUTPUT" 2>> "$LOG") || break
-    REPAIRS=$((REPAIRS + 1))
-    echo "$(date '+%F %T') REPAIR — $TICKET_ID attempt $REPAIRS: $RULES" >> "$LOG"
-    { printf 'The trusted host refused the structured result you returned, so nothing was recorded or sent. The reason:\n'
-      cat "$RUN_DIR/$TICKET_ID-refusal.txt"
-      printf '\nReturn a corrected structured result for the same target_id. Change only what the reason names. Do not repeat code changes, commits, pushes or deploys that already happened.\n'; } | \
-      GIT_COMMITTER_NAME="CredentialDOMD Ticket Agent" GIT_COMMITTER_EMAIL="$RUN_COMMITTER" /usr/bin/perl -e 'alarm 600; exec @ARGV' -- \
-      "$CLAUDE" -p --resume "$SESSION" --model claude-sonnet-5 --dangerously-skip-permissions \
-      --output-format json --json-schema "$SCHEMA" > "$OUTPUT.next" 2>> "$LOG" || break
-    /bin/mv "$OUTPUT.next" "$OUTPUT"
-  done
-  if host_code_changed; then hold_run; RC=1; break; fi
+  /usr/bin/perl -e 'alarm 10800; exec @ARGV' -- node "$HOST/ticket-fix/run.mjs" work --ticket "$TICKET_ID" --context "$CONTEXT" --output "$OUTPUT" --run-file "$RUN_FILE" \
+    --run-id "$RUN_ID" --run-dir "$RUN_DIR" --repo "$REPO" --work "$WORK_STATE" --state "$CASE_STATE" --fix-state "$FIX_STATE" \
+    --claude "$CLAUDE" --committer "$RUN_COMMITTER" --notify "$NOTIFY" --worker-seconds "$WORKER_SECONDS" --run-started "$RUN_STARTED" >> "$LOG" 2>&1
+  WORK_RC=$?
+  if host_code_changed || [ "$WORK_RC" -eq 4 ]; then hold_run; RC=1; break; fi
+  case "$WORK_RC" in
+    0) ;;
+    2) reject "review not recorded"; RC=1; break ;;
+    3) reject "model run failed or timed out"; RC=1; break ;;
+    5) reject "changed files outside its scope"; RC=1; break ;;
+    *) reject "host step failed (exit $WORK_RC)"; RC=1; break ;;
+  esac
+  RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) || {
+    reject "unreadable run record"; RC=1; break; }
   # Rechecks target approval, freshness and actionability inside the write
   # transaction. No model-selected target/recipient/SQL is accepted.
-  if TICKET_RUN_KEY="$RUN_KEY" TICKET_REPO="$REPO" TICKET_PRE_HEAD="$PRE_HEAD" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" \
-    TICKET_RUN_ID="$RUN_ID" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
+  if TICKET_RUN_KEY="$RUN_KEY" TICKET_REPO="$RECORD_REPO" TICKET_PRE_HEAD="$BASE" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" \
+    TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1; then
-    /bin/rm -f "$FAIL_COUNT"
+    if [ "$CODE" = refused ]; then
+      # The reply is recorded (it claims nothing), but a change the gates or
+      # the review refused counts toward the breaker.
+      echo $((FAILS + 1)) > "$FAIL_COUNT"
+      echo "$(date '+%F %T') CODE REFUSED — $TICKET_ID change not merged ($((FAILS + 1)) in a row)" >> "$LOG"
+      [ $((FAILS + 1)) -eq 3 ] && node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --notify "$NOTIFY" >> "$LOG" 2>&1
+    else
+      /bin/rm -f "$FAIL_COUNT"
+    fi
   else
     # The rejected review is kept privately so the rejection can be diagnosed;
     # the run directory is deleted on exit. Newest five per target are kept.
     reject "review not recorded"
     RC=1; break
   fi
+  node "$HOST/ticket-fix/run.mjs" finish --run-file "$RUN_FILE" --work "$WORK_STATE" >> "$LOG" 2>&1
+  # One code change per scheduled run: the gates and review take long enough.
+  case "$CODE" in none) ;; *) break ;; esac
 done
 
 echo "$(date '+%F %T') DONE rc=$RC" >> "$LOG"

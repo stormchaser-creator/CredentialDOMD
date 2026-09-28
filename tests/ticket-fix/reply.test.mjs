@@ -122,14 +122,20 @@ test('agent {{FIX_COMMIT}}: the one commit this run made that touches a cited fi
     await assert.rejects(agent({ fetchBuild: liveBuild(coworker) }), /not in the live build/);
     await assert.rejects(agent({ citedFiles: new Set(), fetchBuild: liveBuild(note) }), /cites no repository file/);
     await assert.rejects(agent({ citedFiles: new Set(['src/other.js']), fetchBuild: liveBuild(note) }), /no commit from this run touches/);
-    const live = await agent({ fetchBuild: liveBuild(note) });
+    // Stage 2: live in version.json is not enough; the host's release check
+    // (G7) for exactly this commit must have passed.
+    await assert.rejects(agent({ fetchBuild: liveBuild(note) }), /no passing release check \(G7\)/);
+    await assert.rejects(agent({ fetchBuild: liveBuild(note), release: { verified: false, fix_commit: fix } }), /no passing release check/);
+    await assert.rejects(agent({ fetchBuild: liveBuild(note), release: { verified: true, fix_commit: note } }), /no passing release check/, 'a release record for another commit');
+    const live = await agent({ fetchBuild: liveBuild(note), release: { verified: true, fix_commit: fix } });
     assert.equal(live.text, `The change for this report is in ${fix.slice(0, 7)}.`, 'the fix, not the newer docs note');
     assert.deepEqual(live.report.host.run_commits, [note, fix]);
     assert.deepEqual(live.report.host.fix_candidates, [fix]);
     assert.equal(live.report.host.fix_live, true);
+    assert.equal(live.report.host.release_verified, true);
     // Two commits of this run touch the cited file: never pick one.
     const second = repo.commit({ 'src/a.js': 'export const a = 4;\n' }, 'Synthetic second fix', null, me);
-    await assert.rejects(agent({ fetchBuild: liveBuild(second) }), /more than one commit from this run/);
+    await assert.rejects(agent({ fetchBuild: liveBuild(second), release: { verified: true, fix_commit: second } }), /more than one commit from this run/);
     assert.deepEqual([...filesCitedIn('Checked src/a.js:12 and `tests/a.test.mjs`; see (src/b.jsx:3), not src/../x.js or /etc/passwd.')].sort(), ['src/a.js', 'src/b.jsx', 'tests/a.test.mjs']);
   } finally { repo.cleanup(); }
 });
