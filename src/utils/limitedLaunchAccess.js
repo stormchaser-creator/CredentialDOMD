@@ -157,7 +157,8 @@ export function membershipReadOnly(access, scope, remembered = null) {
 }
 
 // The last answer per account, kept on this device (two booleans; removed
-// with the account's other device keys on sign-out).
+// with the account's other device keys on Sign out and on a server wipe; a
+// session that merely expired keeps it, as it keeps the vault).
 const deviceAnswers = {
   read(accountId) {
     const value = lsGetJSON(BASE_KEYS.accessAnswer, accountId);
@@ -222,9 +223,15 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
       remember(accessAt(snapshot, receivedAt, receivedAt).entitled);
       return true;
     },
-    /** The answer this device remembered for the account, or null. Only for the screens, never for a write. */
+    /**
+     * The answer this device remembered for the account, or null. Only for
+     * the screens, never for a write. A moment when Clerk reports no user (an
+     * offline session, or Clerk between sessions on a resume) still has it;
+     * a different signed-in account never does.
+     */
     remembered(expectedAccountId = accountId) {
-      if (!expectedAccountId || current() !== expectedAccountId) return null;
+      const signedIn = current();
+      if (!expectedAccountId || (signedIn && signedIn !== expectedAccountId)) return null;
       // The first render for a newly signed-in account comes before reset():
       // read the device's copy so a cold start opens on the right screens.
       if (accountId !== expectedAccountId) { try { return memory?.read(expectedAccountId) || null; } catch { return null; } }

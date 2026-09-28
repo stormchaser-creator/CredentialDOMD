@@ -236,6 +236,22 @@ test('no answer yet and none remembered on this device: the neutral Checking mem
   assert.doesNotMatch(html, /read-only|beta has ended|Reconnecting|\u{2014}/u);
 });
 
+test('with no ready profile the note says it is reconnecting and offers a reload; an offline session leaves it to the offline banner', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  Object.assign(value.limitedLaunch, { status: 'loading', access: null, remembered: { credential: true, practice: true },
+    checking: false, reconnecting: true, profileReady: false });
+  const html = render(Notice);
+  assert.match(html, /Reconnecting to your account\./);
+  assert.match(html, /<button type="button" style="[^"]*">Reload<\/button>/);
+  assert.doesNotMatch(html, /Checking membership|Try again|\u{2014}/u);
+  value.offlineMode = true;
+  assert.equal(render(Notice), '', 'the offline banner already says so, with its own Retry');
+  // A check that can run keeps its Try again.
+  value.offlineMode = false;
+  Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not load.', profileReady: true });
+  assert.match(render(Notice), /<button type="button" style="[^"]*">Try again<\/button>/);
+});
+
 test('an out-of-date build asks for a reload instead of saying it is reconnecting', () => {
   const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
   Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not be verified.', access: null,

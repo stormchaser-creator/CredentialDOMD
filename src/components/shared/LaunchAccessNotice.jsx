@@ -8,7 +8,7 @@ const OUTDATED_PARTS = [OUTDATED_MESSAGE.slice(0, OUTDATED_MESSAGE.indexOf(".") 
 const until = value => new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export default function LaunchAccessNotice({ onReviewOffers }) {
-  const { limitedLaunch, data, theme: T, isDesktop } = useApp();
+  const { limitedLaunch, data, theme: T, isDesktop, offlineMode } = useApp();
   if (!limitedLaunch.enabled) return null;
   const access = limitedLaunch.access;
   const hasSavedRecords = Object.values(data || {}).some(value => Array.isArray(value) && value.length > 0);
@@ -34,12 +34,16 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
       return line("Checking membership.", "Saved records remain available. Changes are paused until membership can be verified.",
         <button type="button" style={button(false)} onClick={() => { void limitedLaunch.refresh(); }}>Check again</button>);
     }
-    // Only a run of failed checks says it is reconnecting, and never about a
-    // membership the last answer already made read-only: that stays so.
+    // Only a run of failed checks, or an account load that could not reach
+    // the server, says it is reconnecting, and never about a membership the
+    // last answer already made read-only: that stays so. An offline session
+    // already has its own banner with its own Retry.
     const open = ["credential", "practice"].some(scope => lastAnswer(access, scope, limitedLaunch.remembered) !== false);
-    if (!limitedLaunch.reconnecting || !open) return null;
+    if (!limitedLaunch.reconnecting || !open || offlineMode) return null;
+    // With no ready profile no check can run; only a reload loads the account again.
+    const reload = limitedLaunch.profileReady === false;
     return line("Reconnecting to your account.", "Changes can't be saved until the connection is back.",
-      <button type="button" style={button(true)} onClick={() => { void limitedLaunch.refresh(); }}>Try again</button>);
+      <button type="button" style={button(true)} onClick={() => { if (reload) globalThis.location?.reload(); else void limitedLaunch.refresh(); }}>{reload ? "Reload" : "Try again"}</button>);
   }
   let title, copy;
   if (access.accessStatus === "pending" && !hasSavedRecords) {

@@ -168,6 +168,10 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
   if (!keepVault || retireRecovery) clearSupportTextDrafts(userId);
   for (const [name, base] of Object.entries(BASE_KEYS)) {
     if (name === "vault" && keepVault) continue;
+    // Session expiry also keeps the membership answer (two booleans), so the
+    // re-sign-in opens on the right screens instead of "Checking membership".
+    // Sign out and a server wipe remove it with everything else.
+    if (name === "accessAnswer" && keepVault && !retireRecovery) continue;
     lsRemove(base, userId);
   }
   try { await window.storage?.remove?.(scopedKey(BASE_KEYS.data, userId)); } catch { /* unavailable */ }

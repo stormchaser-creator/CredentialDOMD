@@ -420,6 +420,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         return;
       }
       console.warn("CredentialDOMD: Supabase load failed:", err.message);
+      // The app now opens on this device's copy. When the profile never became
+      // ready, no membership check can run until a reload (the page shows the
+      // reconnecting note). Tell the operator once per session, with a fixed
+      // reference and never the underlying error.
+      reportError("Account load used this device's copy (DATA-LOAD-LOCAL).");
     }
 
     // Fallback to this account's own local copy (offline)

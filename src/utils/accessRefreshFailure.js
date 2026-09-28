@@ -21,8 +21,12 @@ export function describeAccessRefreshFailure(error) {
   return { phase, during, httpStatus, code };
 }
 
-/** The reporter the refresh loop calls on every failure; it sends each code once. */
-export function createAccessRefreshReporter(report) {
+/**
+ * The reporter the refresh loop calls on every failure; it sends each code
+ * once. Enrollment (bootstrap-launch-access) has its own reporter, named so,
+ * with its own set of codes already sent.
+ */
+export function createAccessRefreshReporter(report, { label = "Membership check failed", event = "access_refresh_failed" } = {}) {
   const sent = new Set();
   return error => {
     const failure = describeAccessRefreshFailure(error);
@@ -30,7 +34,7 @@ export function createAccessRefreshReporter(report) {
     if (sent.has(key)) return false;
     sent.add(key);
     try {
-      report(`Membership check failed (${key})`, "error", { event: "access_refresh_failed", ...failure });
+      report(`${label} (${key})`, "error", { event, ...failure });
     } catch { /* Reporting must never stop the retry. */ }
     return true;
   };

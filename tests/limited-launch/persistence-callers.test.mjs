@@ -331,6 +331,18 @@ test('identity failure displays and reports only an allowlisted support referenc
   for (const name of ['loadData', 'replayPendingOps', 'loadFromSupabase', 'saveData']) assert.equal(f.named(name).length, 0);
 });
 
+test('an account load that falls back to this device\'s copy is reported with a fixed reference, never the provider text', async () => {
+  const f = fixture();
+  f.handlers.ensureProfile = async () => { throw new Error('private@example.test profile lookup failed'); };
+  await f.api.loadDataForUser(ownerA); await tick();
+  // No ready profile, so the membership hook cannot ask; this row is how the operator learns it.
+  assert.equal(f.named('setProfileOwner').length, 0);
+  assert.equal(f.named('loadData')[0].args[0], ownerA);
+  assert.equal(f.named('setLoadedFrom').at(-1).value, 'local');
+  assert.deepEqual(f.named('reportError').map(call => call.args), [["Account load used this device's copy (DATA-LOAD-LOCAL)."]]);
+  assert.equal(JSON.stringify(f.named('reportError')).includes('private'), false);
+});
+
 test('failed collections without a cache stop before partial hydration, link repair or cache writes', async () => {
   const f = fixture();
   f.handlers.loadFromSupabase = async () => ({ _userId: 'profileA', settings: { name: 'Cloud A', accessStatus: 'active' },

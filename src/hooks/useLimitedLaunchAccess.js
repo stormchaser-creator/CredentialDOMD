@@ -20,6 +20,14 @@ export const ACCESS_REFRESH_LEAD_MS = 60000;
 const PERMANENT_PHASES = new Set(["invalid", "config"]);
 
 const reportRefreshFailure = createAccessRefreshReporter(reportError);
+// An enrollment failure used to vanish into enrollmentError; it is reported
+// once per session per code, under its own name.
+const reportEnrollmentFailure = createAccessRefreshReporter(reportError, { label: "Membership enrollment failed", event: "access_enrollment_failed" });
+// An answer that arrives while Clerk reports another account, or none, is not
+// taken. That is a failed check like any other: retried on the schedule and
+// reported, never a silent return that leaves the first answer missing.
+const notAccepted = () => Object.assign(new Error("Membership information could not load. Your saved records have not changed."),
+  { code: "access_answer_not_accepted", phase: "session", httpStatus: null });
 const clock = () => globalThis.performance?.now?.() ?? Date.now();
 const hidden = () => globalThis.document?.visibilityState === "hidden";
 const freshFailures = () => ({ count: 0, since: 0, shown: false });
@@ -53,15 +61,19 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
           await client.bootstrap();
           if (!current()) return;
           enrolled.current = accountId;
-        } catch (error) { enrollmentError = error.code; }
+        } catch (error) {
+          if (!current()) return;
+          enrollmentError = error.code;
+          reportEnrollmentFailure(error);
+        }
       }
       if (!current()) return;
       const value = await client.entitlements();
       if (!current()) return;
-      if (!accessAuthority.accept(accountId, value)) return;
+      if (!accessAuthority.accept(accountId, value)) throw notAccepted();
       backoff.current = 0;
       failures.current = freshFailures();
-      setResult({ accountId, status: "ready", error: null, enrollmentError, reconnecting: false });
+      setResult({ accountId, status: "ready", error: null, enrollmentError, reconnecting: false, answered: true });
     } catch (error) {
       if (!current()) return;
       // Retrying cannot fix a build that cannot read the answer: no backoff,
@@ -73,7 +85,9 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       run.count += 1;
       run.shown = run.shown || (run.count >= RECONNECT_NOTICE_FAILURES && now - run.since >= RECONNECT_NOTICE_MS);
       reportRefreshFailure(error);
-      setResult({ accountId, status: "error", error: error.message, reconnecting: run.shown && !outdated, outdated });
+      // A failure after an answer this session does not undo that answer.
+      setResult(previous => ({ accountId, status: "error", error: error.message, reconnecting: run.shown && !outdated, outdated,
+        answered: previous.accountId === accountId && previous.answered === true }));
     }
   }, [accountId, client]);
   // Automatic checks (mount, resume, the timer, a retry) share the one in flight.
@@ -167,6 +181,13 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
   const remembered = LIMITED_LAUNCH_ACCESS_ENABLED && accountId ? accessAuthority.remembered(accountId) : null;
   const mine = result.accountId === accountId;
   const outdated = mine && result.status === "error" && result.outdated === true;
+  // Signed in, but no check can run and no fresh answer is left: the profile
+  // is not ready (an offline session, or an account load that fell back to
+  // this device's copy). Nothing will answer until it is, so this is never
+  // "Checking membership".
+  const unreachable = LIMITED_LAUNCH_ACCESS_ENABLED && !!accountId && !profileReady && (!access || access.needsRefresh === true);
+  // Otherwise only sustained failure makes the page say it is reconnecting.
+  const reconnecting = unreachable || (mine && result.status === "error" && result.reconnecting === true);
   return {
     enabled: LIMITED_LAUNCH_ACCESS_ENABLED,
     access,
@@ -178,11 +199,13 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     // The last answer this device remembered for the account, which decides
     // the archives until this session's first answer arrives.
     remembered,
-    // No answer at all yet, this session or remembered: the archives show
-    // with a neutral "Checking membership" line until one arrives.
-    checking: LIMITED_LAUNCH_ACCESS_ENABLED && !!accountId && !access && !remembered && !outdated,
-    // Only after sustained failure does the page say it is reconnecting.
-    reconnecting: mine && result.status === "error" && result.reconnecting === true,
+    // No answer at all yet, this session or remembered, while a check can
+    // run: the archives show with a neutral "Checking membership" line until
+    // the first answer arrives. Sustained failure turns it into the
+    // reconnecting note instead; it never stays for good.
+    checking: LIMITED_LAUNCH_ACCESS_ENABLED && !!accountId && profileReady && !access && !remembered
+      && !(mine && result.answered === true) && !outdated && !reconnecting,
+    reconnecting,
     // This build cannot read the answer; only a reload helps.
     outdated,
     profileReady,
