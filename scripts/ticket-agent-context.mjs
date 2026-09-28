@@ -4,6 +4,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { checkFixedRules, customerReplyText, describeViolations } from './ticket-fix/claims.mjs';
+import { prepareAgentReply, readVerificationKey, buildVerification, agentReplyBody, gitRunner, readOnly as readOnlySQL, MIGRATION } from './ticket-fix/reply.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 export const AWAITING = `t.status IN ('open', 'in_progress', 'resolved')
@@ -21,10 +23,37 @@ const FIELDS = `t.id,t.user_id,t.subject,left(t.body,24000) AS body,
   t.context_payload->'attachment_path' AS attachment_path,
   t.context_payload->'attachment_paths' AS attachment_paths`;
 
-export function queueSQL(includeArchived = false) {
+// Parked targets are left out of the query itself, so a parked ticket can
+// never hold one of the two slots (09-25 to 09-28: 126 runs logged PARKED for
+// two tickets while fe321c16 waited behind them).
+export function queueSQL(includeArchived = false, parked = []) {
+  const skip = parked.length ? ` AND t.id NOT IN (${parked.map(p => `'${id(p)}'::uuid`).join(',')})` : '';
   return readOnly(`SELECT t.id,t.updated_at,public.is_admin(t.user_id) AS from_admin FROM support_tickets t
-    WHERE ${APPROVED} AND ${AWAITING}${includeArchived ? '' : ' AND t.archived_at IS NULL'}
+    WHERE ${APPROVED} AND ${AWAITING}${includeArchived ? '' : ' AND t.archived_at IS NULL'}${skip}
     ORDER BY t.created_at,t.id LIMIT 2`);
+}
+export const PARK_AFTER = 3;
+// The shell's circuit breaker writes <state>/failed/<ticket>.count; a count of
+// PARK_AFTER or more parks the ticket until a human removes the file.
+export async function parkedTargets(directory) {
+  let names;
+  try { names = await fs.readdir(path.join(directory, 'failed')); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  const parked = [];
+  for (const name of names) {
+    const ticketId = name.endsWith('.count') ? name.slice(0, -6) : '';
+    if (!UUID.test(ticketId)) continue;
+    const raw = (await fs.readFile(path.join(directory, 'failed', name), 'utf8')).trim();
+    if (/^\d+$/.test(raw) && Number(raw) >= PARK_AFTER) parked.push(ticketId.toLowerCase());
+  }
+  if (parked.length > 500) throw Error('Parked queue exceeds bound; operator review required');
+  return parked.sort();
+}
+// Replies are stored only with a verification row (20260928150000); without
+// the table and key the runner would reach the model and then fail to store.
+export async function assertReplyVerificationInstalled(query) {
+  const rows = await query(readOnlySQL(`SELECT to_regclass('public.support_reply_verifications') IS NOT NULL AS installed,
+    EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'support_reply_hmac_key') AS keyed`));
+  if (rows.length !== 1 || rows[0].installed !== true || rows[0].keyed !== true) throw Error(`Reply verification is not installed; apply ${MIGRATION} before the runner stores replies`);
 }
 export function approvalSQL(approval) {
   if (typeof approval?.from_admin !== 'boolean') throw Error('Captured approval is required');
@@ -197,6 +226,12 @@ export function validateAssessment(result, context, { isolated = false } = {}) {
     if (unknown.length) throw Error(`Review cites unavailable evidence: ${unknown.slice(0, 3).map(ref => JSON.stringify(String(ref).slice(0, 48))).join(', ')} is not a ticket or message id in the supplied context`);
     if (item.state === 'customer_confirmed' && !item.evidence_ids.some(ref => customerMessages.has(ref))) throw Error('Customer confirmation needs a customer message, not a legacy support claim');
   }
+  // Fixed reply rules (G5 phase 0) on the text the customer would see. A
+  // continuation's reply is an internal note and is never published.
+  if (context.run_mode !== 'continuation') {
+    const broken = checkFixedRules(customerReplyText(result.reply));
+    if (broken.length) throw Error(`Reply breaks fixed reply rules: ${describeViolations(broken)}`);
+  }
   if (!context.history_complete && review.questions.length) throw Error('Read missing history before asking the customer');
   const answered = new Set([...review.answered_questions, ...context.prior_reviews.flatMap(r => [...(r.assessment?.answered_questions || []), ...(r.remembered_answers || [])])].map(q => questionKey(q.question)));
   const replyQuestions = [...result.reply.matchAll(/(?:^|[.!\n])\s*([^?\n]+\?)(?=\s|$)/g)].map(m => questionKey(m[1]));
@@ -270,7 +305,8 @@ async function readCase(directory, ticketId) {
 }
 export async function collectQueue(query, directory, { includeArchived = false, now = Date.now() } = {}) {
   await ensureState(directory);
-  const incoming = await query(queueSQL(includeArchived));
+  const parked = await parkedTargets(directory);
+  const incoming = await query(queueSQL(includeArchived, parked));
   if (incoming.length > 2 || incoming.some(t => !UUID.test(t.id || '') || typeof t.from_admin !== 'boolean')) throw Error('Malformed approved queue');
   const names = (await fs.readdir(directory)).filter(n => UUID.test(n.slice(0, -5)) && n.endsWith('.json'));
   if (names.length > 5000) throw Error('Case queue exceeds bound; operator review required');
@@ -278,7 +314,7 @@ export async function collectQueue(query, directory, { includeArchived = false, 
   for (const name of names) {
     const record = await readCase(directory, name.slice(0, -5));
     const queue = record.continuation;
-    if (!queue || incoming.some(t => t.id === record.target_id)) continue;
+    if (!queue || incoming.some(t => t.id === record.target_id) || parked.includes(record.target_id)) continue;
     if (queue.state === 'stalled') { attention.push(record.target_id); continue; }
     if (queue.state !== 'pending') continue; // Owner/customer waits never invoke the worker.
     if (!Number.isInteger(queue.attempts) || queue.attempts < 0 || !Number.isFinite(Date.parse(queue.due_at))) throw Error('Malformed continuation state');
@@ -305,7 +341,7 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     // This target may have fresh input beyond the first two new-message rows.
     continuations.push({ id: record.target_id, mode: rows[0].awaiting_reply ? 'reply' : 'continuation' });
   }
-  return { items: [...incoming.slice(0, 2 - continuations.length).map(t => ({ id: t.id, mode: 'reply' })), ...continuations], attention };
+  return { items: [...incoming.slice(0, 2 - continuations.length).map(t => ({ id: t.id, mode: 'reply' })), ...continuations], attention, parked };
 }
 export async function loadQueuedContext(query, item, directory, options = {}) {
   if (!['reply', 'continuation'].includes(item.mode)) throw Error('Invalid trusted run mode');
@@ -368,8 +404,18 @@ export async function saveReview(directory, context, result, sourceRevision, { n
   await writePrivate(filename, serialized);
   return record;
 }
-export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false } = {}) {
+export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Everything the host checks before anything is stored: the case assessment,
+// then the reply's fixed rules and host-filled ids. The runner's repair loop
+// feeds a failure here back to the model (up to twice) before it counts.
+export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, fetchBuild } = {}) {
   validateAssessment(result, context);
+  if (context.run_mode === 'continuation') return null;
+  return prepareAgentReply({ reply: result.reply, git: gitRunner(repo), preHead, runStarted, verificationKind: result.assessment.verification.kind,
+    ...(fetchBuild ? { fetchBuild } : {}) });
+}
+export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, fetchBuild } = {}) {
+  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, fetchBuild });
   if (context.run_mode === 'continuation') {
     const rows = await query(continuationSQL(context));
     if (rows.length !== 1 || rows[0].id !== context.target_id || rows[0].user_id !== context.owner_id || rows[0].updated_at !== context.target_version) throw Error('Continuation changed or approval withdrawn; no result applied');
@@ -377,11 +423,20 @@ export async function finishRun(query, directory, context, result, { sourceRevis
     return { kind: 'continuation_saved', continuation_state: record.continuation.state };
   }
   assertReplyMode(context);
+  // Same path as post-reply.mjs: a verification row bound to the exact body,
+  // signed with the vault key, written in the same statement as the reply.
+  const secret = await readVerificationKey(query);
+  const verification = buildVerification({ ticketId: context.target_id, body: agentReplyBody(prepared.text), report: prepared.report, secret });
   await saveReview(directory, context, result, sourceRevision);
   const { replySQL } = await import('./ticket-agent-isolated.mjs');
-  const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, result.reply, { includeArchived }));
-  return { kind: rows.length === 1 ? 'reply_stored' : 'reply_withheld' };
+  const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, prepared.text, { includeArchived, verification }));
+  return { kind: rows.length === 1 ? 'reply_stored' : 'reply_withheld', verification_id: rows.length === 1 ? verification.id : null };
 }
+// Set by ticket-agent.sh just before the model run: HEAD then, and the time.
+const runFacts = () => ({
+  preHead: /^[0-9a-f]{40}$/.test(process.env.TICKET_PRE_HEAD || '') ? process.env.TICKET_PRE_HEAD : null,
+  runStarted: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(process.env.TICKET_RUN_STARTED || '') ? process.env.TICKET_RUN_STARTED : null,
+});
 export async function databaseQuery(query) {
   const token = process.env.TICKET_DATABASE_TOKEN;
   if (!token) throw Error('Existing runner database credential is required');
@@ -400,6 +455,7 @@ async function main(args) {
   const [mode, ticketId, filename, stateDirectory, runMode = 'reply'] = args;
   if (mode === '--schema' && args.length === 1) { console.log(JSON.stringify(RESULT_SCHEMA)); return; }
   if (mode === '--queue' && args.length === 3) {
+    await assertReplyVerificationInstalled(databaseQuery);
     const queue = await collectQueue(databaseQuery, filename, { includeArchived: true });
     await writePrivate(ticketId, JSON.stringify(queue));
     if (queue.attention.length) console.error(`ATTENTION: stalled internal work requires operational review: ${queue.attention.join(', ')}`);
@@ -410,14 +466,29 @@ async function main(args) {
     const context = await loadQueuedContext(databaseQuery, { id: ticketId, mode: runMode }, stateDirectory, { includeArchived: true });
     await writePrivate(filename, JSON.stringify(context)); return;
   }
+  if (mode === '--validate' && args.length === 3) {
+    // Exit 2 = the model's result broke a rule it can repair; the reason goes
+    // to stdout for the runner's repair prompt. Any other failure is exit 1.
+    const context = JSON.parse(await fs.readFile(ticketId, 'utf8'));
+    const output = JSON.parse(await fs.readFile(filename, 'utf8'));
+    if (output.is_error || !output.structured_output) throw Error('Model run failed; nothing to validate');
+    try { await prepareResult(context, output.structured_output, runFacts()); }
+    catch (error) { console.log([...String(error.message)].map(c => (c.charCodeAt(0) < 32 ? ' ' : c)).join('').slice(0, 1500)); process.exitCode = 2; }
+    return;
+  }
+  if (mode === '--session' && args.length === 2) {
+    const output = JSON.parse(await fs.readFile(ticketId, 'utf8'));
+    if (!UUID.test(output?.session_id || '')) throw Error('No resumable session in the model output');
+    console.log(output.session_id); return;
+  }
   if (mode === '--record-and-reply' && args.length === 4) {
     const context = JSON.parse(await fs.readFile(ticketId, 'utf8'));
     const output = JSON.parse(await fs.readFile(filename, 'utf8'));
     if (output.is_error) throw Error('Model run failed; no reply sent');
     const result = validateAssessment(output.structured_output, context);
-    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true });
+    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, ...runFacts() });
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });

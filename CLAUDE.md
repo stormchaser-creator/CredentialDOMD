@@ -28,3 +28,9 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 ## Important Context
 - This is the proof-of-concept for AutoAIBiz's "Automate What You Have" product line
 - Founding member only — never add freemium
+
+## Support replies (2026-09-28)
+
+- Post every support reply written outside the app with `node scripts/ticket-fix/post-reply.mjs --ticket <uuid> --reply <file.json>`, one ticket per call. Check a draft first with `node scripts/ticket-fix/verify-claims.mjs` (same arguments, nothing is stored). Never insert into `support_messages` with SQL, and never batch replies to several tickets.
+- The reply file holds claims, not prose: each claim cites a test that passed in a gates file from `scripts/ticket-fix/run-tests.mjs`, a query recorded with `scripts/ticket-fix/record-query.mjs`, or a `file:line` at HEAD. Anything unproven is shown to the customer as not done yet. Never type a commit or build id; write `{{FIX_COMMIT}}` (with `--fix <commit>`) or `{{BUILD}}`.
+- After migration `20260928150000_support_reply_verifications.sql` the database refuses an operator-SQL support reply without a matching verification. Do not disable the trigger to get around it.

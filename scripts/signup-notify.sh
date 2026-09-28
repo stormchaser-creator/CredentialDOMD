@@ -60,12 +60,7 @@ PY
 ) || exit 1
 
 if [ -n "$MSG" ]; then
-  osascript -e 'on run argv
-    tell application "Messages"
-      set svc to 1st account whose service type = iMessage
-      send (item 1 of argv) to participant "stormchaser@elryx.com" of svc
-    end tell
-  end run' "$MSG" || exit 1
+  "${0:A:h}/notify-owner.sh" "$MSG" || exit 1
   echo "$(date) sent: $MSG" >> "$HOME/.credentialdomd-signup-notify.log"
 fi
 echo "$NOW" > "$STATE"

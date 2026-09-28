@@ -87,7 +87,15 @@ The approval timestamp is compared separately from `updated_at`: withdrawing and
 reapproving a ticket cannot authorize a reply begun under the previous approval.
 An originally admin-filed target must still belong to the same, still-admin profile.
 New input or changed approval withholds the reply; the saved draft remains available. Related
-context is never a publication target. Existing status-open behavior is preserved.
+context is never a publication target. Since 2026-09-28 a reply keeps the ticket's status
+(it never reopens a resolved or archived ticket) and is stored only with a
+`support_reply_verifications` row written in the same statement: the reply passed the fixed
+reply rules in `scripts/ticket-fix/claims.mjs`, and the row carries the body's sha256 and an
+HMAC keyed with the vault secret `support_reply_hmac_key`, which the database trigger from
+migration 20260928150000 checks. Interactive sessions use the same path through
+`scripts/ticket-fix/post-reply.mjs`. A result the host refuses is fed back to the same model
+session, at most twice (`--validate`, `--session`), before the run counts as rejected; parked
+tickets are left out of the queue; parking and a lock held over 4 h alert the owner.
 `publication: not_confirmed` intentionally prevents treating a saved draft as proof of
 successful delivery. Customer publication is not an exactly-once queue; the separate internal continuation
 queue below never retries a reply.

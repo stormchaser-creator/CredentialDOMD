@@ -67,3 +67,9 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 
 - An unanswered CME applicability question must identify the missing information and provide a direct action to review it. Missing MD/DO selection belongs in Profile & settings; conditional requirements belong with the affected state's CME details.
 - Keep the tracked-standing ring's numeric deadline score visible. Explain its meaning and show unanswered questions separately. Do not change compliance calculations, presume an exemption, or treat a deadline score as proof that all CME requirements are complete.
+
+## Support replies (2026-09-28)
+
+- Post every support reply written outside the app with `node scripts/ticket-fix/post-reply.mjs --ticket <uuid> --reply <file.json>`, one ticket per call. Check a draft first with `node scripts/ticket-fix/verify-claims.mjs` (same arguments, nothing is stored). Never insert into `support_messages` with SQL, and never batch replies to several tickets.
+- The reply file holds claims, not prose: each claim cites a test that passed in a gates file from `scripts/ticket-fix/run-tests.mjs`, a query recorded with `scripts/ticket-fix/record-query.mjs`, or a `file:line` at HEAD. Anything unproven is shown to the customer as not done yet. Never type a commit or build id; write `{{FIX_COMMIT}}` (with `--fix <commit>`) or `{{BUILD}}`.
+- After migration `20260928150000_support_reply_verifications.sql` the database refuses an operator-SQL support reply without a matching verification. Do not disable the trigger to get around it.

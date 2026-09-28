@@ -266,7 +266,7 @@ test('crashes consume bounded continuation attempts and stalled work is surfaced
       // Simulate a crash: no output/result saved after reservation.
     }
     const exhausted = await collectQueue(makeQuery(), directory, { now: START + 4 * HOUR });
-    assert.deepEqual(exhausted, { items: [], attention: [targetId] });
+    assert.deepEqual(exhausted, { items: [], attention: [targetId], parked: [] });
     assert.equal((await current()).continuation.state, 'stalled');
     const newMessage = await collectQueue(makeQuery([{ id: targetId, from_admin: false }]), directory, { now: START + 5 * HOUR });
     assert.deepEqual(newMessage.items, [{ id: targetId, mode: 'reply' }]);

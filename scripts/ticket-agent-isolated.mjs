@@ -7,7 +7,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, RESULT_SCHEMA } from './ticket-agent-context.mjs';
+import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, RESULT_SCHEMA, assertReplyVerificationInstalled } from './ticket-agent-context.mjs';
+import { customerReplyText } from './ticket-fix/claims.mjs';
+import { checkVerification, verificationInsertSQL } from './ticket-fix/reply.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT = 'hkpnnsjcwprrwobmpqyy';
@@ -70,23 +72,15 @@ function secret(service, label = false) {
 function sqlText(s) {
   return `convert_from(decode('${Buffer.from(s, 'utf8').toString('hex')}', 'hex'), 'UTF8')`;
 }
-// Customer-facing hygiene applied on the host, where the model cannot skip it
-// (ticket 821d2f76). The model sometimes echoes the label it was told the host
-// adds; strip any leading copies so a customer never sees the header twice
-// (seen on two replies 2026-09-21). Em dashes read as machine-written to this
-// product's customers: a dash at the start of a line is dropped, one right
-// before punctuation or at a line's end is dropped, and one between words
-// becomes a comma. Only the em dash is touched: an en dash is a range
-// ("Aug 1 \u{2013} Aug 15", "9\u{2013}5") and turning it into a comma would
-// make a range read as a list. Nothing else in the reply is rewritten.
-export function customerReplyText(reply) {
-  return String(reply)
-    .replace(/^(?:\s*CredentialDOMD Support · Automated\s*)+/u, '')
-    .replace(/^[ \t]*\u{2014}[ \t]*/gmu, '')
-    .replace(/[ \t]*\u{2014}[ \t]*(?=[,.;:!?)]|$)/gmu, '')
-    .replace(/[ \t]*\u{2014}[ \t]*/gu, ', ');
-}
-export function replySQL(ticket, reply, { includeArchived = false } = {}) {
+// Customer-facing hygiene (em dashes, a doubled label) lives with the other
+// fixed reply rules in scripts/ticket-fix/claims.mjs; re-exported here for
+// the callers that import it from the broker.
+export { customerReplyText };
+// A reply is stored only with its verification row (scripts/ticket-fix/reply.mjs,
+// migration 20260928150000), written in the same statement. The ticket keeps
+// its status: a reply never reopens a resolved or archived ticket (on 09-25/26
+// seven resolved tickets were reopened by "confirming" replies).
+export function replySQL(ticket, reply, { includeArchived = false, verification } = {}) {
   if (!/^[a-f0-9-]{36}$/.test(ticket.id)) throw Error('Invalid ticket id');
   if (!/^[a-f0-9-]{36}$/.test(ticket.owner_id || '')) throw Error('Invalid ticket owner');
   if (typeof ticket.updated_at !== 'string' || !Number.isFinite(Date.parse(ticket.updated_at))) throw Error('Invalid ticket version');
@@ -102,6 +96,7 @@ export function replySQL(ticket, reply, { includeArchived = false } = {}) {
   const body = customerReplyText(reply);
   if (!body.trim() || body.length > 4000) throw Error('Invalid reply');
   const labeledReply = `CredentialDOMD Support · Automated\n\n${body}`;
+  checkVerification(verification, ticket.id, labeledReply);
   const awaiting = includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;
   const messageId = randomUUID();
   return `DO $ticket_broker$
@@ -112,9 +107,10 @@ export function replySQL(ticket, reply, { includeArchived = false } = {}) {
       AND t.updated_at = ${sqlText(ticket.updated_at)}::timestamptz
       AND ${awaiting} AND ${APPROVED} AND ${approval} FOR UPDATE;
     IF NOT FOUND THEN RETURN; END IF;
-    INSERT INTO support_messages (id, ticket_id, author_id, body, is_admin_reply, created_at)
-      VALUES ('${messageId}'::uuid, target.id, target.user_id, ${sqlText(labeledReply)}, true, now());
-    UPDATE support_tickets SET status = 'open', updated_at = now(), agent_last_reply_at = now()
+    ${verificationInsertSQL(verification)};
+    INSERT INTO support_messages (id, ticket_id, author_id, body, is_admin_reply, created_at, verification_id)
+      VALUES ('${messageId}'::uuid, target.id, target.user_id, ${sqlText(labeledReply)}, true, now(), '${verification.id}'::uuid);
+    UPDATE support_tickets SET updated_at = now(), agent_last_reply_at = now()
       WHERE id = target.id;
   END $ticket_broker$;
   SELECT id FROM support_messages WHERE id = '${messageId}'::uuid`;
@@ -199,9 +195,12 @@ export async function main(argv = process.argv.slice(2)) {
   // Same lock as the existing job: a canary/replacement must not double-reply with it.
   const lock = '/tmp/credentialdomd-ticket-agent.lock';
   try { await fs.mkdir(lock, { mode: 0o700 }); } catch (e) { if (e.code === 'EEXIST') { console.log('SKIP: ticket worker already running'); return; } throw e; }
+  // Same owner record as scripts/ticket-agent.sh, so a stale lock can be aged.
+  await fs.writeFile(path.join(lock, 'owner'), `pid=${process.pid}\nstarted=${Math.floor(Date.now() / 1000)}\n`, { mode: 0o600 });
   let containerName;
   try {
     const databaseToken = secret('Supabase CLI', true);
+    await assertReplyVerificationInstalled(query => dbQuery(databaseToken, query));
     const caseDirectory = path.join(c.stateDirectory, 'cases');
     await ensureState(caseDirectory);
     const queue = await collectQueue(query => dbQuery(databaseToken, query), caseDirectory);
@@ -239,7 +238,7 @@ export async function main(argv = process.argv.slice(2)) {
       // Never execute model-produced code. These source files are review artifacts only.
       await writePrivate(path.join(runDirectory, 'review.json'), JSON.stringify({ ticketId: ticket.id, sourceRevision: sha, ...result }, null, 2));
       if (context.run_mode === 'continuation' || c.sendReplies) {
-        console.log(JSON.stringify(await finishRun(query => dbQuery(databaseToken, query), caseDirectory, context, result, { sourceRevision: sha })));
+        console.log(JSON.stringify(await finishRun(query => dbQuery(databaseToken, query), caseDirectory, context, result, { sourceRevision: sha, repo: c.repository })));
       } else {
         await saveReview(caseDirectory, context, result, sha);
         console.log('Draft prepared; sending is disabled');
@@ -250,6 +249,7 @@ export async function main(argv = process.argv.slice(2)) {
     if (containerName) {
       try { command(c.dockerBinary, ['rm', '-f', containerName]); } catch { console.error('ERROR: container cleanup failed; inspect the isolated runtime'); }
     }
+    await fs.rm(path.join(lock, 'owner'), { force: true });
     await fs.rmdir(lock);
   }
 }
