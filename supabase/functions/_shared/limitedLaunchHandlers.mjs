@@ -10,6 +10,21 @@ class Refusal extends Error { constructor(status, code) { super(code); this.stat
 const refuse = (status, code) => { throw new Refusal(status, code); };
 const sha256 = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(x => x.toString(16).padStart(2, '0')).join('');
 
+// What a failure log may carry: fixed words and numbers, never a message
+// (a Stripe message can quote a customer or session id), an identity or a URL.
+const ERROR_TYPE = /^(Stripe[A-Za-z]{0,48}Error|TypeError|RangeError|SyntaxError|Error)$/;
+const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
+export function failureLog(route, trace, status, code, error) {
+  const entry = { event: 'limited_billing_failure', route, status, code, phase: trace.phase };
+  if (error && !(error instanceof Refusal)) {
+    const type = typeof error?.type === 'string' && ERROR_TYPE.test(error.type) ? error.type : typeof error?.name === 'string' && ERROR_TYPE.test(error.name) ? error.name : 'unknown';
+    entry.cause = type;
+    if (typeof error?.code === 'string' && ERROR_CODE.test(error.code)) entry.causeCode = error.code;
+    if (Number.isInteger(error?.statusCode) && error.statusCode >= 100 && error.statusCode <= 599) entry.causeStatus = error.statusCode;
+  }
+  return entry;
+}
+
 /** New routes; source defaults OFF. All provider/store I/O is injected for local tests. */
 export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
   validateLimitedConfig(config);
@@ -24,11 +39,20 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     deps.assertConfigured();
     return deps.mode === 'live';
   };
-  const route = (fn, webhook = false) => async req => {
+  const log = deps.log || (entry => console.error(JSON.stringify(entry)));
+  // Every refusal and failure is logged once with a fixed code and the phase
+  // it stopped in, so a checkout that never reached Stripe can be told apart
+  // from one Stripe refused. Nothing about who: no ids, emails or messages.
+  const route = (fn, name, webhook = false) => async req => {
     if (!webhook && req.method === 'OPTIONS') return reply(200, {});
     if (req.method !== 'POST') return reply(405, { error: 'method_not_allowed' });
     if (!webhook && req.headers.get('origin') && req.headers.get('origin') !== origin) return reply(403, { error: 'origin_not_allowed' });
-    try { return await fn(req); } catch (e) { return reply(e instanceof Refusal ? e.status : 503, { error: e instanceof Refusal ? e.message : 'billing_unavailable' }); }
+    const trace = { phase: 'request' };
+    try { return await fn(req, trace); } catch (e) {
+      const status = e instanceof Refusal ? e.status : 503, code = e instanceof Refusal ? e.message : 'billing_unavailable';
+      try { log(failureLog(name, trace, status, code, e)); } catch { /* A log must never change the answer. */ }
+      return reply(status, { error: code });
+    }
   };
   async function text(req, limit) {
     if (Number(req.headers.get('content-length')) > limit) refuse(413, 'request_too_large');
@@ -50,14 +74,17 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     } else if ((kind === 'quote' && !['core', 'core_locum'].includes(data.offerId)) || (kind === 'activate' && !data.invitationToken) || (data.invitationToken != null && !/^[A-Za-z0-9_-]{43,128}$/.test(data.invitationToken))) refuse(400, 'invalid_request');
     return data;
   }
-  async function purchaser(req, data, live) {
+  async function purchaser(req, data, live, trace) {
+    trace.phase = 'identity';
     const identity = await deps.authenticate(req);
     if (!identity?.profileId || !identity.clerkSubject) refuse(401, 'unauthorized');
     const profile = await deps.store.profile(identity.profileId);
     if (!profile || profile.id !== identity.profileId || profile.auth_user_id !== identity.clerkSubject || !/^user_[A-Za-z0-9]+$/.test(profile.auth_user_id || '') || !['active', 'pending'].includes(profile.access_status) || profile.deleted_at) refuse(403, 'membership_unavailable');
+    trace.phase = 'eligibility';
     let eligibility = await deps.store.eligibility(profile.id, profile.auth_user_id, live);
     if (eligibility.state === 'lifetime_access_already_granted') refuse(409, eligibility.state);
     if (data.invitationToken) {
+      trace.phase = 'invitation';
       // Backend Clerk API, never editable profiles.email or browser supplied email.
       const verifiedEmails = await deps.verifiedEmails(profile.auth_user_id);
       if (!Array.isArray(verifiedEmails) || !verifiedEmails.length) refuse(409, 'verified_invitation_email_required');
@@ -65,40 +92,86 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       catch { refuse(409, 'invitation_unavailable'); }
       eligibility = await deps.store.eligibility(profile.id, profile.auth_user_id, live);
     }
+    trace.phase = 'eligibility';
     if (eligibility.state !== 'eligible') refuse(403, eligibility.state === 'membership_unavailable' ? eligibility.state : 'invitation_required');
     return { profile, eligibility };
   }
   function summary(offer, preview) {
     return { schemaVersion: 1, policyVersion: config.policyVersion, offerId: offer.id, name: offer.name, annualCents: offer.unitAmount, currency: 'usd', interval: 'year', pricePhase: offer.pricePhase, priceLockedWhileActive: offer.priceLockedWhileActive, practiceTrialDays: offer.practiceTrialDays, trialAutoCharges: false, checkoutEnabled: true, ...limitedBillingTiming(preview) };
   }
-  const quote = route(async req => {
-    const live = mode(true), data = await input(req);
-    const { profile, eligibility } = await purchaser(req, data, live);
+  const quote = route(async (req, trace) => {
+    trace.phase = 'config';
+    const live = mode(true);
+    trace.phase = 'input';
+    const data = await input(req);
+    const { profile, eligibility } = await purchaser(req, data, live, trace);
     if (eligibility.checkout_enabled !== true) refuse(503, 'billing_disabled');
     if (data.offerId === 'core' && ['reserved', 'disabled', 'unavailable'].includes(eligibility.founding_state)) refuse(409, 'founding_capacity_pending');
+    trace.phase = 'preview';
     const preview = await deps.store.createPreview(profile.id, profile.auth_user_id, live, data.offerId);
     const offer = limitedOffer(preview.offer_id, preview.price_phase, config.productIds);
     if (preview.annual_cents !== offer.unitAmount) refuse(409, 'quote_mismatch');
     if (eligibility.free_beta?.state === 'active' && limitedBillingTiming(preview).paymentTiming !== 'after_beta') refuse(409, 'quote_expired');
     return reply(200, { ...summary(offer, preview), quoteId: preview.id, expiresAt: preview.expires_at, consentVersion: preview.consent_version, consentHash: preview.consent_hash, consentText: preview.consent_text });
-  });
-  const activate = route(async req => {
+  }, 'quote');
+  const activate = route(async (req, trace) => {
     if (!config.invitationEnabled || !['test','live'].includes(deps.mode)) refuse(503, 'invitation_activation_disabled');
     // Free beta activation does not initialize Stripe or need a payment secret.
+    trace.phase = 'input';
     const data = await input(req, 'activate');
-    const { profile, eligibility } = await purchaser(req, data, deps.mode === 'live');
+    const { profile, eligibility } = await purchaser(req, data, deps.mode === 'live', trace);
     return reply(200, { schemaVersion: 1, policyVersion: config.policyVersion, profileId: profile.id, freeBeta: eligibility.free_beta || {state:'none',startsAt:null,endsAt:null,autoCharges:false}, cardRequired: false, subscriptionCreated: false });
-  });
-  const checkout = route(async req => {
-    const live = mode(true), data = await input(req, 'checkout');
-    const { profile, eligibility } = await purchaser(req, data, live);
+  }, 'activate');
+  // A previous attempt that never took payment is retired only on fresh
+  // provider evidence: every Stripe session made for it is expired here and
+  // read back as expired with no subscription, then the database retires the
+  // attempt under its account lock. A session this cannot prove unpaid stops
+  // the new checkout; nothing is retired on a guess.
+  async function supersede(stripe, customer, profile, live, prior, trace) {
+    if (!/^[0-9a-f-]{36}$/.test(prior?.attempt_id || '') || !['creating', 'open'].includes(prior.state) || (prior.state === 'open' && !/^cs_[A-Za-z0-9_]+$/.test(prior.session_id || ''))) refuse(503, 'checkout_pending');
+    const since = Math.floor(Date.parse(prior.created_at) / 1000) - 300;
+    if (!Number.isSafeInteger(since)) refuse(503, 'checkout_pending');
+    trace.phase = 'prior_sessions';
+    const sessions = new Map();
+    if (prior.session_id) sessions.set(prior.session_id, await stripe.checkout.sessions.retrieve(prior.session_id));
+    // A creation whose save was lost may still have reached Stripe: find it by its attempt.
+    const listed = await stripe.checkout.sessions.list({ customer: customer.id, created: { gte: since }, limit: 100 });
+    if (!Array.isArray(listed?.data) || listed.has_more) refuse(503, 'checkout_pending');
+    for (const found of listed.data) if (found?.metadata?.checkout_attempt_id === prior.attempt_id && !sessions.has(found.id)) sessions.set(found.id, found);
+    for (const [sessionId, found] of sessions) {
+      if (found?.id !== sessionId || id(found.customer) !== customer.id || found.livemode !== live || found.metadata?.checkout_attempt_id !== prior.attempt_id || found.metadata?.clerk_user_id !== profile.auth_user_id || found.metadata?.catalog_version !== config.version) refuse(409, 'checkout_owner_mismatch');
+    }
+    const expired = [];
+    for (const [sessionId, found] of sessions) {
+      let session = found;
+      if (session.status === 'open') {
+        trace.phase = 'expire_session';
+        // Another request may have expired it first; read it back either way.
+        try { session = await stripe.checkout.sessions.expire(sessionId); } catch { session = await stripe.checkout.sessions.retrieve(sessionId); }
+      }
+      if (session?.id !== sessionId || session.status === 'complete' || session.subscription) refuse(409, 'subscription_already_exists');
+      if (session.status !== 'expired') refuse(503, 'checkout_pending');
+      expired.push(sessionId);
+    }
+    trace.phase = 'supersede';
+    const proof = { attempt_id: prior.attempt_id, customer_id: customer.id, status: 'expired', subscription_id: null, session_ids: expired };
+    if (await deps.store.supersedeCheckout(profile.id, profile.auth_user_id, live, prior.attempt_id, proof) !== true) refuse(503, 'checkout_pending');
+  }
+  const checkout = route(async (req, trace) => {
+    trace.phase = 'config';
+    const live = mode(true);
+    trace.phase = 'input';
+    const data = await input(req, 'checkout');
+    const { profile, eligibility } = await purchaser(req, data, live, trace);
     if (eligibility.checkout_enabled !== true) refuse(503, 'billing_disabled');
+    trace.phase = 'preview';
     const preview = await deps.store.previewById(data.quoteId);
     if (!preview || preview.profile_id !== profile.id || preview.clerk_subject !== profile.auth_user_id || preview.livemode !== live || preview.policy_version !== config.policyVersion || preview.consent_hash !== data.consentHash || !Number.isFinite(Date.parse(preview.expires_at)) || Date.parse(preview.expires_at) <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
     const previewTiming = limitedBillingTiming(preview);
     if (eligibility.free_beta?.state === 'active' && previewTiming.paymentTiming !== 'after_beta') refuse(409, 'quote_expired');
     if (previewTiming.paymentTiming === 'after_beta' && (!['active','expired'].includes(eligibility.free_beta?.state) || Date.parse(eligibility.free_beta?.endsAt) !== Date.parse(previewTiming.betaEndsAt))) refuse(409, 'quote_expired');
     data.offerId = preview.offer_id;
+    trace.phase = 'stripe_customer';
     const stripe = deps.stripe();
     let account = await deps.store.account(profile.id, live);
     if (!account) {
@@ -108,14 +181,27 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     }
     const customer = await stripe.customers.retrieve(account.stripe_customer_id);
     if (account.profile_id !== profile.id || account.livemode !== live || customer.id !== account.stripe_customer_id || customer.deleted || customer.livemode !== live || customer.metadata?.app !== config.app || customer.metadata?.profile_id !== profile.id || (customer.metadata.clerk_user_id && customer.metadata.clerk_user_id !== profile.auth_user_id)) refuse(409, 'billing_account_mismatch');
+    trace.phase = 'stripe_subscriptions';
     const existing = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 100 });
     if (!Array.isArray(existing.data) || existing.has_more) refuse(409, 'subscription_already_exists');
     const unfinished = existing.data.filter(s => !['canceled', 'incomplete_expired'].includes(s.status));
     // The pinned pre-Basil Checkout API can create an incomplete subscription
     // after a card failure. Resume only its already-saved, owned open session.
     if (unfinished.length > 1 || unfinished.some(s => s.status !== 'incomplete')) refuse(409, 'subscription_already_exists');
+    trace.phase = 'claim';
     let claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
+    // The other offer, or a retry after a first attempt that never reached a
+    // saved session: retire the unpaid attempt, then claim again.
+    if (['offer_conflict', 'reconciliation_required'].includes(claim.state) && claim.prior) {
+      if (unfinished.length) refuse(409, 'subscription_already_exists');
+      await supersede(stripe, customer, profile, live, claim.prior, trace);
+      trace.phase = 'claim';
+      claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
+      // A concurrent request saved a session meanwhile; the next try resumes it.
+      if (claim.state === 'existing') refuse(503, 'checkout_pending');
+    }
     if (claim.state === 'existing') {
+      trace.phase = 'prior_sessions';
       const prior = await stripe.checkout.sessions.retrieve(claim.session_id);
       if (id(prior.customer) !== customer.id || prior.livemode !== live || prior.metadata?.checkout_attempt_id !== claim.attempt_id || prior.metadata?.clerk_user_id !== profile.auth_user_id || prior.metadata?.catalog_version !== config.version) refuse(409, 'checkout_owner_mismatch');
       if (prior.status === 'open') {
@@ -126,12 +212,18 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       }
       if (unfinished.length) refuse(409, 'subscription_already_exists');
       if (!['expired', 'complete'].includes(prior.status)) refuse(503, 'checkout_unavailable');
+      trace.phase = 'close_attempt';
+      let closed = false;
       if (prior.status === 'expired' && claim.quote?.public_founding_slot) {
         const proof = expiredFoundingCheckoutProof(prior, claim.quote, account, config);
         if (!await deps.store.releaseFoundingCheckout(profile.id, profile.auth_user_id, live, claim.attempt_id, proof)) refuse(503, 'checkout_pending');
+        // The release already marked the attempt expired; closing it again
+        // finds no open attempt and would fail the retry it just made possible.
+        closed = true;
       }
-      await deps.store.closeCheckout(profile.id, live, claim.attempt_id, prior.status);
+      if (!closed) await deps.store.closeCheckout(profile.id, live, claim.attempt_id, prior.status);
       if (prior.status === 'complete') refuse(409, 'subscription_already_exists');
+      trace.phase = 'claim';
       claim = await deps.store.claimLimitedCheckout(profile.id, profile.auth_user_id, live, data.offerId, data.quoteId, data.consentHash);
     }
     if (unfinished.length) refuse(409, 'subscription_already_exists');
@@ -147,6 +239,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (billingAnchor !== null && billingAnchor * 1000 <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
     const offer = limitedOffer(q.offer_id, q.price_phase, { ...config.productIds, ...(q.product_id ? { [q.offer_id]: q.product_id } : {}) });
     if (q.annual_cents !== offer.unitAmount) refuse(409, 'quote_mismatch');
+    trace.phase = 'price';
     let price;
     if (q.price_id) price = await stripe.prices.retrieve(q.price_id, { expand: ['product'] });
     else {
@@ -155,6 +248,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       price = list.data[0];
     }
     assertLimitedPrice(price, offer, live);
+    trace.phase = 'pin_price';
     await deps.store.pinPrice(claim.attempt_id, profile.id, profile.auth_user_id, live, offer.productId, price.id);
     const metadata = { app: config.app, profile_id: profile.id, clerk_user_id: profile.auth_user_id, offer_id: offer.id, catalog_version: config.version, pricing_policy_version: config.policyVersion, price_phase: offer.pricePhase, checkout_attempt_id: claim.attempt_id };
     if (billingAnchor !== null) metadata.billing_start_at = String(billingAnchor);
@@ -162,6 +256,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const expiresAt = Math.floor(Math.min(Date.parse(q.created_at) + 86400000, Date.parse(eligibility.expires_at)) / 1000);
     if (!Number.isSafeInteger(expiresAt) || expiresAt < Math.floor((deps.now?.() ?? Date.now()) / 1000) + 1800) refuse(409, 'checkout_needs_reconciliation');
     if (billingAnchor !== null && billingAnchor * 1000 <= (deps.now?.() ?? Date.now())) refuse(409, 'quote_expired');
+    trace.phase = 'create_session';
     const session = await stripe.checkout.sessions.create({
       customer: customer.id, mode: 'subscription', line_items: [{ price: price.id, quantity: 1 }], payment_method_collection: 'always', payment_method_types: ['card'],
       success_url: `${origin}/app/?billing=complete`, cancel_url: `${origin}/app/?billing=canceled`, expires_at: expiresAt,
@@ -169,14 +264,19 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       ...(billingAnchor !== null ? { custom_text: { submit: { message: deferredCheckoutMessage(q) } } } : {}),
     }, { idempotencyKey: `${config.app}:checkout:${claim.attempt_id}` });
     if (session.livemode !== live || !/^https:\/\/checkout\.stripe\.com\//.test(session.url || '') || !session.id) refuse(503, 'checkout_unavailable');
+    trace.phase = 'save_session';
     await deps.store.saveCheckout(profile.id, live, claim.attempt_id, claim.token, session.id);
     return reply(200, { url: session.url });
-  });
-  const webhook = route(async req => {
+  }, 'checkout');
+  const webhook = route(async (req, trace) => {
+    trace.phase = 'config';
     const live = mode();
     let event;
+    trace.phase = 'input';
     const raw = await text(req, 262144);
+    trace.phase = 'signature';
     try { event = await deps.verifyEvent(raw, req.headers.get('stripe-signature')); } catch { refuse(400, 'invalid_signature'); }
+    trace.phase = 'event';
     if (event.livemode !== live) refuse(400, 'wrong_billing_mode');
     if (event.type === 'checkout.session.expired') {
       // Expired Checkout has no subscription ID to enter the normal settlement
@@ -184,6 +284,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       // reservation. Paid, committed or ambiguous places remain occupied.
       const eventSession = event.data?.object;
       if (!/^cs_[A-Za-z0-9_]+$/.test(eventSession?.id || '')) refuse(400, 'invalid_checkout_event');
+      trace.phase = 'expired_session';
       const session = await deps.stripe().checkout.sessions.retrieve(eventSession.id);
       if (session.id !== eventSession.id) refuse(503, 'checkout_unavailable');
       if (session.metadata?.app !== config.app || session.metadata.catalog_version !== config.version) return reply(200, { received: true });
@@ -199,6 +300,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const obj = event.data.object;
     const subId = event.type.startsWith('customer.subscription.') ? obj.id : id(obj.subscription) || id(obj.parent?.subscription_details?.subscription);
     if (!subId || (event.type.startsWith('checkout.') && obj.mode !== 'subscription')) return reply(200, { received: true });
+    trace.phase = 'subscription';
     const stripe = deps.stripe();
     let sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
     if (sub.metadata?.app !== config.app) return reply(200, { received: true });
@@ -206,10 +308,12 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (sub.metadata.catalog_version !== config.version) refuse(409, 'subscription_catalog_mismatch');
     const account = await deps.store.accountByCustomer(id(sub.customer), live);
     if (!account || account.profile_id !== sub.metadata.profile_id) refuse(409, 'subscription_owner_mismatch');
+    trace.phase = 'reconcile';
     const lease = await deps.store.claimReconcile(account.profile_id, live, account.stripe_customer_id, event.id);
     if (lease.state === 'duplicate') return reply(200, { received: true });
     if (lease.state !== 'claimed') refuse(503, 'billing_reconciliation_pending');
     try {
+      trace.phase = 'verify_subscription';
       sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
       const profile = await deps.store.profile(account.profile_id);
       const q = await deps.store.quoteByAttempt(sub.metadata?.checkout_attempt_id);
@@ -224,14 +328,17 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
         const invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
         if (invoice.status === 'paid' && invoice.paid === true) proof = verifiedLimitedPayment({ profile, account, subscription: sub, invoice, offer, quote: q, livemode: live });
       }
+      trace.phase = 'settle';
       await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: sub.cancel_at_period_end === true, p_billing_anchor: billingAnchor }, q.attempt_id, proof);
     } finally { await deps.store.releaseReconcile(account.profile_id, live, lease.token); }
     return reply(200, { received: true });
-  }, true);
+  }, 'webhook', true);
   // Cancellation remains available to a revoked member who owns the billing account.
-  const portal = route(async req => {
+  const portal = route(async (req, trace) => {
+    trace.phase = 'config';
     mode();
+    trace.phase = 'portal';
     return createBillingHandlers(deps, { ...BILLING_CATALOG, billingEnabled: true }).portal(req);
-  });
+  }, 'portal');
   return { activate, quote, checkout, webhook, portal };
 }
