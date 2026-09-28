@@ -15,7 +15,8 @@ export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS N
 export const AWAITING = `t.archived_at IS NULL AND t.status IN ('open', 'in_progress', 'resolved')
   AND (t.agent_last_reply_at IS NULL OR EXISTS (
     SELECT 1 FROM support_messages m WHERE m.ticket_id = t.id
-      AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE 'Status set to%'))`;
+      AND m.created_at > t.agent_last_reply_at AND m.body NOT ILIKE 'Status set to%'
+      AND m.body NOT ILIKE 'CredentialDOMD Support%'))`;
 export const QUEUE_SQL = queueSQL();
 const SCHEMA = RESULT_SCHEMA;
 const SETTINGS = {

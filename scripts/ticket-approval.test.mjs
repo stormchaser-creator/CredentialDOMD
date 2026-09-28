@@ -28,6 +28,13 @@ const context = read("../scripts/ticket-agent-context.mjs");
 ok("the shared approval clause is defined once", (context.match(/export const APPROVED =/g) || []).length === 1);
 ok("it admits an admin's own ticket without an approval row",
    /public\.is_admin\(t\.user_id\) OR t\.agent_approved_at IS NOT NULL/.test(context));
+// A reply signed "CredentialDOMD Support" (the agent's own, or one posted by
+// the owner's admin profile on the owner's own ticket) is support output, not
+// new input. Counting it re-ran the agent on 7 resolved tickets on 2026-09-25,
+// reopened them with "confirming" follow-ups, and parked two in a failure loop.
+for (const [name, text] of [["context", context], ["isolated", readFileSync(new URL("./ticket-agent-isolated.mjs", import.meta.url), "utf8")]]) {
+  ok(`${name}: support-signed replies are not new input`, /m\.body NOT ILIKE 'CredentialDOMD Support%'/.test(text));
+}
 ok("new-message targets use the shared approval rule", /WHERE \$\{APPROVED\} AND \$\{AWAITING\}/.test(context));
 ok("internal continuation rechecks original approval and owner", /AND t\.user_id=.*AND \$\{APPROVED\} AND \$\{approval\}/.test(context));
 ok("the legacy runner uses the shared queue", /--queue "\$RUN_DIR\/queue.json" "\$CASE_STATE"/.test(sh));
