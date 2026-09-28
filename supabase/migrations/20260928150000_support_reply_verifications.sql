@@ -19,27 +19,33 @@
 --   * trg_require_verified_support_reply, BEFORE INSERT OR UPDATE:
 --       - a support reply (is_admin_reply, or an admin author, which is what
 --         notify_ticket_reply emails) inserted from an operator session needs a
---         verification_id. An operator session is session_user postgres or
---         supabase_admin: the management API, the SQL editor, psql.
+--         verification_id.
 --       - any verification_id, from any role, must exist, belong to the same
 --         ticket, match sha256 of the body, carry a valid HMAC and be unused.
 --         It is then marked used.
 --       - an operator UPDATE may not rewrite the body, ticket, author, flag or
 --         verification of a support reply.
---     Edge functions (reply-ticket, create-ticket, support-operations run as
---     service_role through PostgREST) and the in-app admin reply
---     (authenticated) are unaffected: their session_user is authenticator.
---     session_user, not current_user: SET ROLE does not change it, so an
---     operator session cannot step around the rule with SET ROLE service_role.
+--     20260928160000 replaces this function: it treats every session except
+--     PostgREST as an operator (the CLI's cli_login_* roles were missed here),
+--     no longer exempts service_role, and refuses a rewrite from every role.
 --   * The vault secret is created here from 32 random bytes if it is absent.
 --     It is never selected, printed or copied by this file.
 --
--- Bypassing it takes ALTER TABLE ... DISABLE TRIGGER, which is deliberate and
--- visible. Idempotent.
+-- What this is not. The management API runs SQL as postgres, which can read
+-- vault.decrypted_secrets, and the HMAC recipe above is public. A session
+-- holding that token can sign its own reply in plain SQL, or through
+-- scripts/ticket-fix/reply.mjs, without disabling the trigger. The trigger
+-- stops the accidental path (a session that inserts a reply with SQL is
+-- refused and pointed at post-reply.mjs); scripts/ticket-fix/reconcile.mjs
+-- reports any verification no checked path recorded. It is not a boundary
+-- against someone who sets out to forge a reply. Idempotent.
 --
--- Order: apply this BEFORE merging the runner change that writes
--- verification_id (scripts/ticket-agent-isolated.mjs replySQL). Until then
--- the new runner stops at its preflight and sends nothing.
+-- Order: merge the runner change FIRST. Until this migration is applied, the
+-- new runner stops at its preflight (the verification table is missing) and
+-- sends nothing. Applied before the merge, the old runner on main keeps
+-- inserting replies with no verification_id, every one is refused after the
+-- model has already run, and each ticket parks after three runs. Or unload
+-- the launchd job across both steps. Then apply 20260928160000.
 -- Rollback: docs/rollback/20260928150000_support_reply_verifications.rollback.sql
 begin;
 

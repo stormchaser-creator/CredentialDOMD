@@ -12,8 +12,14 @@
 // No ticket text is ever written or sent: ids and counts only.
 //
 //   alert.mjs park   --state DIR --ticket UUID --count N [--notify PATH]
+//   alert.mjs hold   --state DIR --ticket UUID [--notify PATH]
 //   alert.mjs lock   --state DIR --lock DIR [--notify PATH] [--max-hours 4]
 //   alert.mjs status --state DIR --rc N [--lock DIR]
+//
+// "hold": a model run changed the runner's own code (the reply checks, the
+// runner, the notifier, the support reply migrations or send-ticket-reply).
+// The runner records nothing for it and writes HOLD_FILE; no run starts
+// until the owner reviews the change and removes that file.
 import { promises as fs, constants } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -23,6 +29,7 @@ import { randomUUID } from 'node:crypto';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export const PARK_AFTER = 3;
 export const STALE_LOCK_HOURS = 4;
+export const HOLD_FILE = 'HOLD-host-code-changed';
 
 async function writePrivate(filename, content) {
   const temporary = `${filename}.${randomUUID()}.tmp`;
@@ -80,7 +87,9 @@ export async function writeStatus(state, { lock = null, rc = undefined, now = Da
   let previous = {};
   try { previous = JSON.parse(await fs.readFile(path.join(state, 'status.json'), 'utf8')); } catch { previous = {}; }
   const lockInfo = lock ? await lockState(lock, now) : null;
-  const status = { version: 1, updated_at: new Date(now).toISOString(),
+  let hold = false;
+  try { await fs.lstat(path.join(state, HOLD_FILE)); hold = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const status = { version: 1, updated_at: new Date(now).toISOString(), hold,
     last_run: rc === undefined ? previous.last_run ?? null : { rc, finished_at: new Date(now).toISOString() },
     parked: await parkedList(state),
     lock: lockInfo && { ...lockInfo, started_ms: undefined },
@@ -131,6 +140,15 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
     await writeStatus(options.state, { now });
     return;
   }
+  if (command === 'hold') {
+    if (!UUID.test(options.ticket || '')) throw Error('hold needs --ticket UUID');
+    const id8 = options.ticket.slice(0, 8);
+    await raise(options.state, 'host_code_changed', `ticket=${id8}`,
+      `CredentialDOMD ticket agent: the run for ticket ${id8} changed the runner's own code (reply checks, runner, notifier, support reply migrations or send-ticket-reply). Nothing was recorded. Every run is held until ticket-context/${HOLD_FILE} is removed after review.`,
+      { notify, now, send });
+    await writeStatus(options.state, { now });
+    return;
+  }
   if (command === 'lock') {
     if (!options.lock || !path.isAbsolute(options.lock)) throw Error('lock needs --lock DIR');
     const info = await lockState(options.lock, now);
@@ -157,7 +175,7 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
     await writeStatus(options.state, { lock: options.lock ?? null, rc: Number(options.rc), now });
     return;
   }
-  throw Error('Usage: alert.mjs park|lock|status --state DIR ...');
+  throw Error('Usage: alert.mjs park|hold|lock|status --state DIR ...');
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

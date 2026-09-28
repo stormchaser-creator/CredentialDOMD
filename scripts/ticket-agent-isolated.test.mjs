@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateConfig, safeSourcePath, validateResult, reserveBudget,
   replySQL, containerArgs, QUEUE_SQL, APPROVED } from './ticket-agent-isolated.mjs';
-import { buildVerification, agentReplyBody } from './ticket-fix/reply.mjs';
+import { agentReplyBody } from './ticket-fix/reply.mjs';
+import { signForTest } from '../tests/ticket-fix/helpers.mjs';
 
 const config = {
   repository: '/tmp/repo', stateDirectory: '/tmp/private-worker', dockerBinary: '/usr/local/bin/docker',
@@ -62,7 +63,7 @@ test('replies cannot choose another recipient, SQL or extra actions', () => {
   assert.throws(() => validateResult({ structured_output: { ...result.structured_output, reply: 'a'.repeat(4001) } }, context));
 });
 // Synthetic key: the real one lives only in the vault.
-const verified = (reply, id = ticket.id) => ({ verification: buildVerification({ ticketId: id, body: agentReplyBody(reply), report: { path: 'test' }, secret: 'synthetic-key-0123456789abcdef0123456789abcdef' }) });
+const verified = (reply, id = ticket.id) => ({ verification: signForTest({ ticketId: id, body: agentReplyBody(reply), report: { path: 'test' }, secret: 'synthetic-key-0123456789abcdef0123456789abcdef' }) });
 test('host broker enforces approval, queue scope, freshness, verification and keeps the status', () => {
   assert.ok(QUEUE_SQL.includes(APPROVED));
   assert.match(QUEUE_SQL, /LIMIT 2; rollback;$/);

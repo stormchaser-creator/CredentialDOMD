@@ -3,9 +3,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
-import { checkFixedRules, customerReplyText, describeViolations } from './ticket-fix/claims.mjs';
-import { prepareAgentReply, readVerificationKey, buildVerification, agentReplyBody, gitRunner, readOnly as readOnlySQL, MIGRATION } from './ticket-fix/reply.mjs';
+import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
+import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames } from './ticket-fix/claims.mjs';
+import { prepareAgentReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
+  MIGRATION, EMAIL_NOT_SENT, RUN_COMMITTER } from './ticket-fix/reply.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 export const AWAITING = `t.status IN ('open', 'in_progress', 'resolved')
@@ -226,11 +227,12 @@ export function validateAssessment(result, context, { isolated = false } = {}) {
     if (unknown.length) throw Error(`Review cites unavailable evidence: ${unknown.slice(0, 3).map(ref => JSON.stringify(String(ref).slice(0, 48))).join(', ')} is not a ticket or message id in the supplied context`);
     if (item.state === 'customer_confirmed' && !item.evidence_ids.some(ref => customerMessages.has(ref))) throw Error('Customer confirmation needs a customer message, not a legacy support claim');
   }
-  // Fixed reply rules (G5 phase 0) on the text the customer would see. A
+  // Fixed reply rules (G5 phase 0) on the text the customer would see, and no
+  // sentence reporting a result: nothing binds this prose to evidence yet. A
   // continuation's reply is an internal note and is never published.
   if (context.run_mode !== 'continuation') {
-    const broken = checkFixedRules(customerReplyText(result.reply));
-    if (broken.length) throw Error(`Reply breaks fixed reply rules: ${describeViolations(broken)}`);
+    const broken = checkFixedRules(customerReplyText(result.reply), { claims: true });
+    if (broken.length) throw new ReplyRuleError(broken);
   }
   if (!context.history_complete && review.questions.length) throw Error('Read missing history before asking the customer');
   const answered = new Set([...review.answered_questions, ...context.prior_reviews.flatMap(r => [...(r.assessment?.answered_questions || []), ...(r.remembered_answers || [])])].map(q => questionKey(q.question)));
@@ -408,14 +410,17 @@ export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // Everything the host checks before anything is stored: the case assessment,
 // then the reply's fixed rules and host-filled ids. The runner's repair loop
 // feeds a failure here back to the model (up to twice) before it counts.
-export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, fetchBuild } = {}) {
+// {{FIX_COMMIT}} is taken only from the one commit this run made (committer
+// identity) that touches a file cited in verification.checks.
+export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, fetchBuild } = {}) {
   validateAssessment(result, context);
   if (context.run_mode === 'continuation') return null;
-  return prepareAgentReply({ reply: result.reply, git: gitRunner(repo), preHead, runStarted, verificationKind: result.assessment.verification.kind,
+  return prepareAgentReply({ reply: result.reply, ticketId: context.target_id, git: gitRunner(repo), preHead, runStarted, runCommitter, runId,
+    citedFiles: filesCitedIn(result.assessment.verification.checks), verificationKind: result.assessment.verification.kind,
     ...(fetchBuild ? { fetchBuild } : {}) });
 }
-export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, fetchBuild } = {}) {
-  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, fetchBuild });
+export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, fetchBuild } = {}) {
+  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, fetchBuild });
   if (context.run_mode === 'continuation') {
     const rows = await query(continuationSQL(context));
     if (rows.length !== 1 || rows[0].id !== context.target_id || rows[0].user_id !== context.owner_id || rows[0].updated_at !== context.target_version) throw Error('Continuation changed or approval withdrawn; no result applied');
@@ -426,17 +431,66 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   // Same path as post-reply.mjs: a verification row bound to the exact body,
   // signed with the vault key, written in the same statement as the reply.
   const secret = await readVerificationKey(query);
-  const verification = buildVerification({ ticketId: context.target_id, body: agentReplyBody(prepared.text), report: prepared.report, secret });
+  const verification = signPreparedReply(prepared, { ticketId: context.target_id, secret });
   await saveReview(directory, context, result, sourceRevision);
   const { replySQL } = await import('./ticket-agent-isolated.mjs');
   const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, prepared.text, { includeArchived, verification }));
-  return { kind: rows.length === 1 ? 'reply_stored' : 'reply_withheld', verification_id: rows.length === 1 ? verification.id : null };
+  if (rows.length !== 1) return { kind: 'reply_withheld', verification_id: null };
+  // The runner's own record of the reply: reconcile.mjs reports any stored
+  // verification that neither this ledger nor post-reply's has.
+  const ledger = path.join(directory, 'replies', context.target_id);
+  await ensurePrivateDir(ledger);
+  await writePrivate(path.join(ledger, `${verification.id}.json`), JSON.stringify({ kind: 'reply_stored', path: 'agent', ticket_id: context.target_id,
+    message_id: rows[0].id, verification_id: verification.id, body_sha256: verification.body_sha256, run_id: prepared.report.run_id,
+    recorded_at: new Date().toISOString() }, null, 2));
+  return { kind: 'reply_stored', verification_id: verification.id, emailed: false, email: EMAIL_NOT_SENT };
 }
-// Set by ticket-agent.sh just before the model run: HEAD then, and the time.
+// Set by ticket-agent.sh for this run: HEAD before the model ran, the start
+// time, the committer identity the model's git used, and a run id.
 const runFacts = () => ({
   preHead: /^[0-9a-f]{40}$/.test(process.env.TICKET_PRE_HEAD || '') ? process.env.TICKET_PRE_HEAD : null,
   runStarted: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(process.env.TICKET_RUN_STARTED || '') ? process.env.TICKET_RUN_STARTED : null,
+  runCommitter: RUN_COMMITTER.test(process.env.TICKET_RUN_COMMITTER || '') ? process.env.TICKET_RUN_COMMITTER : null,
+  runId: /^[0-9a-f]{16}$/.test(process.env.TICKET_RUN_ID || '') ? process.env.TICKET_RUN_ID : null,
 });
+// The runner runs these steps from a copy of its own code taken before the
+// model ran (ticket-agent.sh), so the repository is named, not derived.
+function repository() {
+  const repo = process.env.TICKET_REPO;
+  if (!repo) return REPO;
+  if (!path.isAbsolute(repo) || repo.includes('\n')) throw Error('TICKET_REPO must be an absolute path');
+  return repo;
+}
+// --load and --record-and-reply are runner steps. The runner makes a random
+// key per run and passes it only to these two commands (never to the model):
+// --load signs the context file with it and --record-and-reply refuses a
+// context it did not sign, so --record-and-reply run by hand with a
+// hand-written result is refused. A session that also runs --load with a key
+// of its own gets past this on purpose; its reply names no run the runner
+// logged, and reconcile.mjs reports it to the owner.
+const RUN_KEY = /^[0-9a-f]{64}$/;
+function runKey() {
+  const key = process.env.TICKET_RUN_KEY;
+  if (!RUN_KEY.test(key || '')) throw Error('This step runs only inside scripts/ticket-agent.sh (no run key). Post a support reply with node scripts/ticket-fix/post-reply.mjs.');
+  return key;
+}
+export const contextMac = (key, raw) => createHmac('sha256', Buffer.from(key, 'hex')).update(raw, 'utf8').digest('hex');
+export async function readRunnerContext(filename, key) {
+  const raw = await fs.readFile(filename, 'utf8');
+  let mac = '';
+  try { mac = (await fs.readFile(`${filename}.mac`, 'utf8')).trim(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const expected = contextMac(key, raw);
+  if (!/^[0-9a-f]{64}$/.test(mac) || !timingSafeEqual(Buffer.from(mac, 'hex'), Buffer.from(expected, 'hex'))) {
+    throw Error('The context was not loaded by this runner run; nothing was stored. Post a support reply with node scripts/ticket-fix/post-reply.mjs.');
+  }
+  return JSON.parse(raw);
+}
+// Logs get rule names and fixed message heads, never reply text.
+export function logSafe(error) {
+  if (error?.violations) return `Reply breaks fixed reply rules: ${ruleNames(error.violations)}`;
+  return String(error?.message ?? error);
+}
+const refusalHead = error => (error?.violations ? ruleNames(error.violations) : String(error?.message ?? error).split(':')[0].slice(0, 160));
 export async function databaseQuery(query) {
   const token = process.env.TICKET_DATABASE_TOKEN;
   if (!token) throw Error('Existing runner database credential is required');
@@ -462,9 +516,12 @@ async function main(args) {
     return;
   }
   if (mode === '--load' && args.length === 5) {
+    const key = runKey();
     await ensureState(stateDirectory);
     const context = await loadQueuedContext(databaseQuery, { id: ticketId, mode: runMode }, stateDirectory, { includeArchived: true });
-    await writePrivate(filename, JSON.stringify(context)); return;
+    const serialized = JSON.stringify(context);
+    await writePrivate(filename, serialized);
+    await writePrivate(`${filename}.mac`, contextMac(key, serialized)); return;
   }
   if (mode === '--validate' && args.length === 3) {
     // Exit 2 = the model's result broke a rule it can repair; the reason goes
@@ -472,8 +529,14 @@ async function main(args) {
     const context = JSON.parse(await fs.readFile(ticketId, 'utf8'));
     const output = JSON.parse(await fs.readFile(filename, 'utf8'));
     if (output.is_error || !output.structured_output) throw Error('Model run failed; nothing to validate');
-    try { await prepareResult(context, output.structured_output, runFacts()); }
-    catch (error) { console.log([...String(error.message)].map(c => (c.charCodeAt(0) < 32 ? ' ' : c)).join('').slice(0, 1500)); process.exitCode = 2; }
+    // The full reason (it quotes the refused sentences) goes to stdout, which
+    // the runner keeps in its private run directory for the repair prompt; the
+    // log line on stderr carries rule names only.
+    try { await prepareResult(context, output.structured_output, { repo: repository(), ...runFacts() }); }
+    catch (error) {
+      console.log([...String(error.message)].map(c => (c.charCodeAt(0) < 32 ? ' ' : c)).join('').slice(0, 1500));
+      console.error(refusalHead(error)); process.exitCode = 2;
+    }
     return;
   }
   if (mode === '--session' && args.length === 2) {
@@ -482,13 +545,13 @@ async function main(args) {
     console.log(output.session_id); return;
   }
   if (mode === '--record-and-reply' && args.length === 4) {
-    const context = JSON.parse(await fs.readFile(ticketId, 'utf8'));
+    const context = await readRunnerContext(ticketId, runKey());
     const output = JSON.parse(await fs.readFile(filename, 'utf8'));
     if (output.is_error) throw Error('Model run failed; no reply sent');
     const result = validateAssessment(output.structured_output, context);
-    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, ...runFacts() });
+    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, repo: repository(), ...runFacts() });
     console.log(JSON.stringify(status)); return;
   }
   throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

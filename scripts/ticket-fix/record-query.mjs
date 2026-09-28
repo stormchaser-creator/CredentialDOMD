@@ -6,16 +6,20 @@
 //
 //   node scripts/ticket-fix/record-query.mjs --ticket <uuid> --id <name> --sql <file|->
 //
-// The statement must be one SELECT (or WITH ... SELECT). It runs inside
-// "begin read only; ...; rollback;" through the management API. At most 200
-// rows are kept, under <state>/queries/<ticket>/<id>.json (owner-only, never
-// in the repository). An absence claim ({"expect": {"rows": 0}}) must name a
-// positive control recorded the same way within 15 minutes.
+// The statement must be one SELECT (or WITH ... SELECT) that reads a table and
+// names the ticket id or the ticket owner's id (a claim is about this
+// customer's data). It runs inside "begin read only; ...; rollback;" through
+// the management API. At most 200 rows are kept, under
+// <state>/queries/<ticket>/<id>.json (owner-only, never in the repository),
+// with the ticket owner's id. The stored rows are only the dry run's cache:
+// post-reply.mjs runs the stored SQL again when it posts. A claim that
+// something is absent must name a positive control on the same table,
+// recorded the same way within 15 minutes.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { readOnly, managementQuery, databaseToken, stateDirectory, ensurePrivateDir, writePrivate, queryRecordPath, sha256Hex } from './reply.mjs';
+import { readOnly, managementQuery, databaseToken, stateDirectory, ensurePrivateDir, writePrivate, queryRecordPath, sha256Hex, ticketSQL } from './reply.mjs';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -35,9 +39,11 @@ export async function recordQuery({ ticketId, id, sql, query, state, now = Date.
   if (!UUID.test(ticketId || '')) throw Error('--ticket <uuid> is required');
   if (!ID.test(id || '')) throw Error('--id is lowercase letters, digits, - and _');
   const statement = checkSelect(sql);
+  const tickets = await query(ticketSQL(ticketId));
+  if (tickets.length !== 1 || tickets[0].id !== ticketId || !UUID.test(tickets[0].user_id || '')) throw Error('Ticket not found');
   const rows = await query(readOnly(statement));
   if (rows.length > MAX_ROWS) throw Error(`The query returned more than ${MAX_ROWS} rows; narrow it`);
-  const record = { version: 1, producer: 'scripts/ticket-fix/record-query.mjs', id, ticket_id: ticketId, sql: statement,
+  const record = { version: 1, producer: 'scripts/ticket-fix/record-query.mjs', id, ticket_id: ticketId, owner_id: tickets[0].user_id, sql: statement,
     sql_sha256: createHash('sha256').update(statement).digest('hex'), ran_at: new Date(now).toISOString(),
     row_count: rows.length, rows_sha256: sha256Hex(JSON.stringify(rows)), rows };
   const file = queryRecordPath(state, ticketId, id);

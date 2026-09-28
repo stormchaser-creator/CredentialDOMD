@@ -8,6 +8,7 @@ BIN = Path(os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 # LC_ALL: on macOS the postmaster aborts at startup without a valid locale.
 ENV = {**{k: v for k, v in os.environ.items() if not k.startswith('PG')}, 'LC_ALL': 'C'}
 MIGRATION = (ROOT / 'supabase/migrations/20260928150000_support_reply_verifications.sql').read_text()
+HARDENING = (ROOT / 'supabase/migrations/20260928160000_support_reply_hardening.sql').read_text()
 # Supabase's Vault and pgcrypto, reduced to what the migration and trigger use.
 PLATFORM = '''
 create role anon nologin; create role authenticated nologin; create role service_role nologin;
@@ -30,7 +31,7 @@ def check(name, okay):
     if not okay: raise AssertionError(name)
     checks.append(name)
 def js(expression):
-    source = "import {targetSQL,historySQL,messagesSQL,continuationSQL,queueSQL} from './scripts/ticket-agent-context.mjs';import {replySQL} from './scripts/ticket-agent-isolated.mjs';import {buildVerification,agentReplyBody} from './scripts/ticket-fix/reply.mjs';console.log(JSON.stringify(" + expression + "));"
+    source = "import {targetSQL,historySQL,messagesSQL,continuationSQL,queueSQL} from './scripts/ticket-agent-context.mjs';import {replySQL} from './scripts/ticket-agent-isolated.mjs';import {agentReplyBody} from './scripts/ticket-fix/reply.mjs';import {signForTest} from './tests/ticket-fix/helpers.mjs';console.log(JSON.stringify(" + expression + "));"
     return json.loads(subprocess.check_output(['node','--input-type=module','-e',source],cwd=ROOT,text=True,env=ENV))
 with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
     folder=Path(tmp);sock=folder/'sock';sock.mkdir()
@@ -47,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         assert query.startswith('begin read only; ') and query.endswith('; rollback;')
         inner=query[len('begin read only; '):-len('; rollback;')]
         return json.loads(sql("begin read only; select coalesce(json_agg(x),'[]'::json) from ("+inner+") x; rollback;"))
-    def verified(ticket,text):return f"{{verification:buildVerification({{ticketId:'{ticket}',body:agentReplyBody('{text}'),report:{{path:'test'}},secret:'{key}'}})}}"
+    def verified(ticket,text):return f"{{verification:signForTest({{ticketId:'{ticket}',body:agentReplyBody('{text}'),report:{{path:'test'}},secret:'{key}'}})}}"
     def reply(version=VERSION):return js(f"replySQL({{id:'{T}',owner_id:'{A}',updated_at:'{version}',approval:{{from_admin:false,approved_at:'{approved_at}'}}}},'Your earlier answer is recorded.',{verified(T,'Your earlier answer is recorded.')})")
     try:
         sql(PLATFORM)
@@ -70,6 +71,7 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         """)
         # The legacy rows above predate the rule; everything after it is enforced.
         sql(MIGRATION)
+        sql(HARDENING)
         key=sql("select decrypted_secret from vault.decrypted_secrets where name='support_reply_hmac_key'")
         check('migration creates a random verification key',len(key)==64)
         target=rows(js(f"targetSQL('{T}')"));check('approved target selected',len(target)==1 and target[0]['id']==T)

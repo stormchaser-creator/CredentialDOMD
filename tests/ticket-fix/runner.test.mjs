@@ -4,11 +4,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, readFileSync, statSync, utimesSync, existsSync, accessSync, constants } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { queueSQL, parkedTargets, collectQueue, saveReview, loadContext } from '../../scripts/ticket-agent-context.mjs';
-import { main as alert, lockState } from '../../scripts/ticket-fix/alert.mjs';
+import { queueSQL, parkedTargets, collectQueue, saveReview, loadContext, contextMac, logSafe } from '../../scripts/ticket-agent-context.mjs';
+import { main as alert, lockState, HOLD_FILE } from '../../scripts/ticket-fix/alert.mjs';
+import { reconcile, reconcileSQL } from '../../scripts/ticket-fix/reconcile.mjs';
+import { ReplyRuleError } from '../../scripts/ticket-fix/claims.mjs';
 import { uuid, privateDir } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -128,6 +131,9 @@ test('--validate returns 2 with the reason for a repairable result, and --sessio
     assert.match(bad.stdout, /commit_or_build_id/);
     assert.match(bad.stdout, /owner_name/);
     assert.match(bad.stdout, /device_not_tested/);
+    assert.match(bad.stdout, /works on your iPhone/, 'the model gets the sentence it has to fix');
+    // Review: the runner's REPAIR line carried these excerpts into the shared log.
+    assert.equal(bad.stderr.trim(), 'commit_or_build_id, owner_name, unverified_claim, device_not_tested', 'the log gets rule names only');
     const good = node(['--validate', ctx, file('good.json', result('Your report is recorded; the investigation continues.'))]);
     assert.equal(good.status, 0, good.stdout + good.stderr);
     const failed = node(['--validate', ctx, file('failed.json', { type: 'result', is_error: true })]);
@@ -146,20 +152,156 @@ test('the runner shell: lock owner, bounded repair loop, park alert, status on e
   assert.match(sh, /trap '[^']*\/bin\/rm -f "\$LOCK\/owner"; rmdir "\$LOCK"[^']*' EXIT/);
   assert.match(sh, /trap 'EXIT_RC=\$\?; node "\$ALERT" status --state "\$CASE_STATE" --rc "\$EXIT_RC"/);
   assert.match(sh, /SKIP[^\n]*\n\s+node "\$ALERT" lock --state "\$CASE_STATE" --lock "\$LOCK" --notify "\$NOTIFY"/);
-  assert.match(sh, /if \[ "\$VALID_RC" -ne 2 \] \|\| \[ "\$REPAIRS" -ge 2 \]; then break; fi/);
+  assert.match(sh, /if \[ "\$VALID_RC" -ne 2 \] \|\| \[ "\$REPAIRS" -ge 2 \]; then/);
   assert.match(sh, /"\$CLAUDE" -p --resume "\$SESSION" --model claude-sonnet-5 --dangerously-skip-permissions \\\n\s+--output-format json --json-schema "\$SCHEMA"/);
   assert.match(sh, /if \[ \$\(\(FAILS \+ 1\)\) -eq 3 \]; then\n\s+node "\$ALERT" park --state "\$CASE_STATE" --ticket "\$TICKET_ID" --count 3 --notify "\$NOTIFY"/);
-  assert.match(sh, /TICKET_PRE_HEAD="\$PRE_HEAD" TICKET_RUN_STARTED="\$RUN_STARTED" TICKET_DATABASE_TOKEN="\$TOKEN" node "\$REPO\/scripts\/ticket-agent-context.mjs" \\\n\s+--record-and-reply/);
   assert.match(sh, /RUN_STARTED=\$\(date -u '\+%Y-%m-%dT%H:%M:%SZ'\)/);
-  assert.match(sh, /NOTIFY="\$REPO\/scripts\/notify-owner.sh"/);
   // Stage 1 leaves the model, its flags and the push-to-main workflow alone.
   assert.equal((sh.match(/"\$CLAUDE" -p/g) || []).length, 2);
   assert.equal((sh.match(/alarm 1500/g) || []).length, 1);
   assert.doesNotMatch(sh, /echo[^\n]*\$TOKEN/);
 });
 
+test('the runner judges a run with host code copied before the model ran, and holds on any change to it (review)', () => {
+  const sh = read('scripts/ticket-agent.sh');
+  const firstModel = sh.indexOf('"$CLAUDE" -p');
+  const copy = sh.indexOf('/usr/bin/git -C "$REPO" archive "$HOST_HEAD"');
+  assert.ok(copy > 0 && copy < firstModel, 'the copy is taken before any model runs');
+  for (const file of ['scripts/ticket-agent-context.mjs', 'scripts/ticket-agent-isolated.mjs', 'scripts/ticket-agent-prompt.md', 'scripts/ticket-fix', 'scripts/notify-owner.sh']) {
+    assert.ok(sh.slice(copy, copy + 400).includes(file), file);
+  }
+  // No host step runs from the checkout the model edits.
+  assert.doesNotMatch(sh, /node "\$REPO\//);
+  assert.doesNotMatch(sh, /cat "\$REPO\/scripts/);
+  for (const step of ['--schema', '--load', '--validate', '--session', '--record-and-reply']) assert.match(sh, new RegExp(`node "\\$HOST/ticket-agent-context.mjs"[^\\n]*(?:\\\\\\n[^\\n]*)?${step}`), step);
+  assert.match(sh, /ALERT="\$HOST\/ticket-fix\/alert.mjs"/);
+  assert.match(sh, /NOTIFY="\$HOST\/notify-owner.sh"/);
+  assert.match(sh, /PROTECTED=\(scripts\/ticket-fix 'scripts\/ticket-agent\*' scripts\/notify-owner.sh 'supabase\/migrations\/\*support_reply\*' supabase\/functions\/send-ticket-reply\)/);
+  assert.match(sh, /MODEL_RC=\$\?\n\s+if host_code_changed; then hold_run; RC=1; break; fi/);
+  assert.match(sh, /done\n\s+if host_code_changed; then hold_run; RC=1; break; fi\n/, 'checked again after the repair resumes');
+  assert.match(sh, /if \[ -e "\$HOLD" \]; then[^\n]*\n[^\n]*HOLD[^\n]*\n\s+exit 0/);
+  // The repository the host steps act on is named, not derived from the copy.
+  assert.match(sh, /TICKET_REPO="\$REPO"[^\n]*\\\n\s+node "\$HOST\/ticket-agent-context.mjs" --validate/);
+});
+
+test('the runner: per-run key and committer, timeouts count, rule names only in the log (review)', () => {
+  const sh = read('scripts/ticket-agent.sh');
+  assert.match(sh, /RUN_KEY=\$\(\/usr\/bin\/openssl rand -hex 32\)/);
+  assert.doesNotMatch(sh, /export[^\n]*RUN_KEY/, 'never exported');
+  assert.equal((sh.match(/TICKET_RUN_KEY="\$RUN_KEY"/g) || []).length, 2, 'only --load and --record-and-reply get it');
+  assert.match(sh, /TICKET_RUN_KEY="\$RUN_KEY" TICKET_DATABASE_TOKEN="\$TOKEN" node "\$HOST\/ticket-agent-context.mjs" \\\n\s+--load/);
+  assert.match(sh, /TICKET_RUN_KEY="\$RUN_KEY" TICKET_REPO="\$REPO"[^\n]*\\\n[^\n]*\\\n\s+--record-and-reply/);
+  for (const run of sh.match(/[^\n]*\n[^\n]*"\$CLAUDE" -p[^\n]*/g)) assert.match(run, /GIT_COMMITTER_NAME="CredentialDOMD Ticket Agent" GIT_COMMITTER_EMAIL="\$RUN_COMMITTER"/, run);
+  assert.match(sh, /RUN_COMMITTER="ticket-agent\+\$RUN_ID@credentialdomd.invalid"/);
+  assert.match(sh, /if \[ "\$MODEL_RC" -ne 0 \]; then reject "model run failed or timed out \(exit \$MODEL_RC\)"; RC=\$MODEL_RC; break; fi/);
+  assert.match(sh, /reject\(\) \{[\s\S]*?echo \$\(\(FAILS \+ 1\)\) > "\$FAIL_COUNT"[\s\S]*?node "\$ALERT" park/);
+  assert.doesNotMatch(sh, /head -c 400 "\$RUN_DIR\/\$TICKET_ID-refusal.txt"/, 'the refusal text stays out of the log');
+  assert.match(sh, /--validate "\$CONTEXT" "\$OUTPUT" > "\$RUN_DIR\/\$TICKET_ID-refusal.txt" 2> "\$RUN_DIR\/\$TICKET_ID-rules.txt"/);
+  assert.match(sh, /REPAIR \u2014 \$TICKET_ID attempt \$REPAIRS: \$RULES/);
+  assert.match(sh, /node "\$HOST\/ticket-fix\/reconcile.mjs" --state "\$CASE_STATE" \\\n\s+--ledger "\$CASE_STATE\/replies" --ledger "\$FIX_STATE\/replies" --runs "\$CASE_STATE\/runs.log"/);
+  assert.match(sh, /RUN \$RUN_ID[^\n]*\n(?:#[^\n]*\n)*printf '%s %s\\n' "\$RUN_ID" [^\n]*>> "\$CASE_STATE\/runs.log"/);
+});
+
+test('--load and --record-and-reply run only inside the runner: a hand-made context is refused before any database call', async () => {
+  const state = privateDir('ticket-record-');
+  try {
+    const context = JSON.stringify({ version: 1, target_id: T, run_mode: 'reply', owner_id: OWNER, history_complete: true, tickets: [{ id: T, messages: [] }], prior_reviews: [], attachments: [] });
+    const ctx = path.join(state.dir, 'ctx.json'); writeFileSync(ctx, context);
+    const out = path.join(state.dir, 'out.json'); writeFileSync(out, JSON.stringify({ structured_output: { reply: 'Your export is fixed.' } }));
+    const refused = [
+      node(['--record-and-reply', ctx, out, state.dir]),
+      node(['--load', T, ctx, state.dir, 'reply']),
+      node(['--record-and-reply', ctx, out, state.dir], { TICKET_RUN_KEY: 'a'.repeat(64) }),
+    ];
+    for (const r of refused.slice(0, 2)) { assert.equal(r.status, 1); assert.match(r.stderr, /runs only inside scripts\/ticket-agent.sh/); }
+    assert.equal(refused[2].status, 1);
+    assert.match(refused[2].stderr, /was not loaded by this runner run/);
+    // A session that signs its own context with its own key is a deliberate
+    // bypass; reconcile.mjs reports the reply it stores (no runner ledger).
+    const key = randomBytes(32).toString('hex');
+    writeFileSync(`${ctx}.mac`, contextMac(randomBytes(32).toString('hex'), context));
+    assert.match(node(['--record-and-reply', ctx, out, state.dir], { TICKET_RUN_KEY: key }).stderr, /was not loaded by this runner run/, 'signed with another key');
+    writeFileSync(`${ctx}.mac`, contextMac(key, context));
+    assert.match(node(['--record-and-reply', ctx, out, state.dir], { TICKET_RUN_KEY: key }).stderr, /Existing runner database credential|unverified_claim|Invalid/, 'past the key check');
+    assert.equal(logSafe(new ReplyRuleError([{ rule: 'device_not_tested', excerpt: 'Works on your iPhone.' }])), 'Reply breaks fixed reply rules: device_not_tested');
+  } finally { state.cleanup(); }
+});
+
+test('a held run alerts the owner once by id prefix, and the status file says it is held', async () => {
+  const state = privateDir('ticket-hold-');
+  const sent = [];
+  try {
+    await alert(['hold', '--state', state.dir, '--ticket', T], { send: async m => { sent.push(m); return true; }, now: Date.parse('2026-09-28T12:00:00Z') });
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], new RegExp(`ticket ${T.slice(0, 8)} changed the runner's own code`));
+    assert.match(sent[0], new RegExp(HOLD_FILE));
+    assert.ok(!sent[0].includes('\u2014'));
+    assert.equal(JSON.parse(readFileSync(path.join(state.dir, 'status.json'), 'utf8')).hold, false);
+    writeFileSync(path.join(state.dir, HOLD_FILE), 'trusted=x\n', { mode: 0o600 });
+    await alert(['status', '--state', state.dir, '--rc', '0'], { now: Date.parse('2026-09-28T12:05:00Z') });
+    assert.equal(JSON.parse(readFileSync(path.join(state.dir, 'status.json'), 'utf8')).hold, true);
+  } finally { state.cleanup(); }
+});
+
+test('reconcile: a stored reply no checked path recorded, or one text sent to several tickets, alerts the owner once', async () => {
+  const state = privateDir('ticket-reconcile-');
+  const ledgerA = path.join(state.dir, 'agent'), ledgerB = path.join(state.dir, 'post');
+  const sent = [];
+  const send = async m => { sent.push(m); return true; };
+  const sha = n => String(n).repeat(64).slice(0, 64);
+  const rows = [
+    { id: uuid(11), ticket_id: uuid(1), body_sha256: sha(1), path: 'agent', run_id: '0123456789abcdef' },
+    { id: uuid(12), ticket_id: uuid(2), body_sha256: sha(2), path: 'post-reply' },
+    { id: uuid(13), ticket_id: uuid(3), body_sha256: sha(3), path: 'post-reply' },
+    { id: uuid(14), ticket_id: uuid(4), body_sha256: sha(3), path: 'post-reply' },
+    { id: uuid(15), ticket_id: uuid(5), body_sha256: sha(3), path: 'post-reply' },
+    { id: uuid(16), ticket_id: uuid(6), body_sha256: sha(1), path: 'agent', run_id: '0123456789abcdef' },
+    // Review: --load and --record-and-reply driven by hand with a key of the
+    // session's own. The runner ledger is written, but no logged run made it.
+    { id: uuid(17), ticket_id: uuid(7), body_sha256: sha(4), path: 'agent', run_id: 'fedcba9876543210' },
+  ];
+  const ledger = (dir, row, changes = {}) => {
+    mkdirSync(path.join(dir, row.ticket_id), { recursive: true, mode: 0o700 });
+    writeFileSync(path.join(dir, row.ticket_id, `${row.id}.json`), JSON.stringify({ verification_id: row.id, body_sha256: row.body_sha256, ...changes }), { mode: 0o600 });
+  };
+  try {
+    ledger(ledgerA, rows[0]); ledger(ledgerB, rows[1]); ledger(ledgerB, rows[2]); ledger(ledgerB, rows[3], { body_sha256: sha(9) }); ledger(ledgerB, rows[4]); ledger(ledgerA, rows[5]); ledger(ledgerA, rows[6]);
+    const runsLog = path.join(state.dir, 'runs.log');
+    writeFileSync(runsLog, '0123456789abcdef 2026-09-28T11:00:00Z\nnot-a-run-id\n', { mode: 0o600 });
+    let seen;
+    const query = async sql => { seen = sql; return rows; };
+    const result = await reconcile({ query, state: state.dir, ledgers: [ledgerA, ledgerB], runsLog, send, now: Date.parse('2026-09-28T12:00:00Z') });
+    assert.equal(seen, reconcileSQL());
+    assert.match(seen, /^begin read only; SELECT v.id, v.ticket_id, v.body_sha256, v.report->>'path' AS path, v.report->>'run_id' AS run_id/);
+    assert.deepEqual(result, { checked: 7, unledgered: 1, unlogged: 1, shared: 1, alerts: 3 }, 'two tickets sharing a short text is not a batch; three is');
+    assert.equal(sent.length, 3);
+    assert.match(sent[0], new RegExp(`verification ${uuid(14).slice(0, 8)}, ticket ${uuid(4).slice(0, 8)}\\) has no record`), 'a ledger entry for another text does not count');
+    assert.match(sent[1], new RegExp(`ticket ${uuid(7).slice(0, 8)}\\) says it came from the hourly runner, but no logged run made it`));
+    assert.match(sent[2], /stored on 3 tickets/);
+    for (const message of sent) assert.ok(!message.includes('\u2014'));
+    await reconcile({ query, state: state.dir, ledgers: [ledgerA, ledgerB], runsLog, send });
+    assert.equal(sent.length, 3, 'each finding alerts once');
+    await assert.rejects(reconcile({ query: async () => [{ id: 'x' }], state: state.dir, ledgers: [ledgerA], send }), /Unusable verification rows/);
+    await assert.rejects(reconcile({ query, state: state.dir, ledgers: ['relative'], send }), /absolute/);
+  } finally { state.cleanup(); }
+});
+
+test('the migrations state the rollout order that keeps the live runner working, and do not overclaim the HMAC (review)', () => {
+  const first = read('supabase/migrations/20260928150000_support_reply_verifications.sql');
+  const second = read('supabase/migrations/20260928160000_support_reply_hardening.sql');
+  assert.doesNotMatch(first, /apply this BEFORE merging/i);
+  assert.match(first, /Order: merge the runner change FIRST/);
+  assert.doesNotMatch(first, /Bypassing it takes ALTER TABLE/);
+  assert.match(first, /can read\n-- vault.decrypted_secrets/);
+  assert.match(second, /Deploy reply-ticket \(admin replies written as the caller\) and\n--\s+send-ticket-reply \(stored row, once\) first/);
+  assert.match(second, /What this does NOT do/);
+});
+
 test('the prompt tells the model the rules the host now enforces', () => {
   const prompt = read('scripts/ticket-agent-prompt.md');
+  assert.match(prompt, /The reply reports no results/);
+  assert.match(prompt, /touches a file you cite in `verification.checks`/);
+  assert.match(prompt, /Never edit, create or delete anything under `scripts\/ticket-fix\/`/);
   assert.doesNotMatch(prompt, /Cite the fix commit/);
   assert.match(prompt, /\{\{FIX_COMMIT\}\}/);
   assert.match(prompt, /\{\{BUILD\}\}/);
@@ -186,8 +328,11 @@ test('sessions are told to post support replies only through post-reply.mjs', ()
     const text = read(file);
     assert.match(text, /node scripts\/ticket-fix\/post-reply\.mjs --ticket <uuid> --reply <file\.json>/, file);
     assert.match(text, /one ticket per call/i, file);
+    for (const ban of ['Never read the vault secret `support_reply_hmac_key`', 'never write `support_reply_verifications` directly',
+      'never write `support_messages` with a service-role key', 'never call `send-ticket-reply` directly', '`--record-and-reply` by hand']) assert.ok(text.includes(ban), `${file}: ${ban}`);
+    assert.match(text, /not emailed to members/, file);
   }
-  for (const cli of ['post-reply', 'verify-claims', 'run-tests', 'record-query', 'alert']) {
+  for (const cli of ['post-reply', 'verify-claims', 'run-tests', 'record-query', 'alert', 'reconcile']) {
     assert.ok(existsSync(path.join(root, `scripts/ticket-fix/${cli}.mjs`)), cli);
     accessSync(path.join(root, `scripts/ticket-fix/${cli}.mjs`), constants.X_OK);
   }

@@ -7,8 +7,22 @@
 // sha256(stored body) and an HMAC-SHA256 over "<id>:<ticket_id>:<body_sha256>"
 // keyed with the vault secret support_reply_hmac_key, read through the
 // management API at run time and held only in memory. The database trigger
-// from 20260928150000_support_reply_verifications.sql refuses an operator-SQL
-// support reply without a matching, unused verification.
+// (20260928150000, tightened by 20260928160000) refuses a support reply that
+// has no matching, unused verification, unless the admin wrote it in the app.
+//
+// What the signature is, and is not. The vault key is readable by the same
+// database role the management API runs as (postgres), so a session holding
+// that token can read the key and sign anything; so can anything running as
+// the owner's macOS user. The HMAC is therefore NOT a boundary against an
+// operator who sets out to forge a reply. It stops the accidental path (a
+// session that inserts a reply with SQL is refused, and told to use
+// post-reply.mjs), and scripts/ticket-fix/reconcile.mjs reports any
+// verification that no checked path recorded. A real boundary needs a signer
+// the owner's shell cannot read (design section 9; owner decision).
+//
+// The signer below is deliberately not exported: only a reply that came out
+// of prepareAgentReply or prepareStructuredReply in this process, with no
+// rule violations, can be signed (signPreparedReply).
 //
 // Imports only claims.mjs and Node built-ins, so the agent modules can import
 // it without a cycle.
@@ -17,39 +31,53 @@ import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AUTOMATED_LABEL, BODY_MAX, customerReplyText, checkFixedRules, describeViolations, placeholdersIn,
-  fillPlaceholders, parseStructuredReply, writerViolations, verifyEvidence, renderStructured, safeRepoPath } from './claims.mjs';
+import { AUTOMATED_LABEL, BODY_MAX, ReplyRuleError, customerReplyText, checkFixedRules, placeholdersIn,
+  fillPlaceholders, parseStructuredReply, writerViolations, verifyClaim, renderStructured, safeRepoPath, isTimestamp } from './claims.mjs';
 
+export { ReplyRuleError };
 export const VERIFICATION_KEY = 'support_reply_hmac_key';
 export const VERSION_URL = 'https://credentialdomd.com/app/version.json';
 export const MIGRATION = 'supabase/migrations/20260928150000_support_reply_verifications.sql';
+// Both writers store the ticket owner as author_id with is_admin_reply, and
+// notify_ticket_reply emails only an admin author on someone else's ticket.
+// Until the owner decides how these reach members (design 9.3), say so.
+export const EMAIL_NOT_SENT = 'not emailed: the reply is stored with the ticket owner as author, and notify_ticket_reply emails only an admin author on someone else\'s ticket. It shows in the app thread. How member replies are emailed is an owner decision (design 9.3).';
 const PROJECT = 'hkpnnsjcwprrwobmpqyy';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const SHA = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-
-export class ReplyRuleError extends Error {
-  constructor(violations) {
-    super(`Reply breaks fixed reply rules: ${describeViolations(violations)}`);
-    this.violations = violations;
-  }
-}
+// The committer identity ticket-agent.sh gives the model's git, per run.
+export const RUN_COMMITTER = /^ticket-agent\+[0-9a-f]{16}@credentialdomd\.invalid$/;
+const RUN_ID = /^[0-9a-f]{16}$/;
 
 export const sha256Hex = text => createHash('sha256').update(text, 'utf8').digest('hex');
 export const labeledBody = text => `${AUTOMATED_LABEL}\n\n${text}`;
 // The exact body the agent's replySQL stores for a reply text.
 export const agentReplyBody = reply => labeledBody(customerReplyText(reply));
 export const hmacMessage = v => `${v.id}:${v.ticket_id}:${v.body_sha256}`;
-export function replyHmac(verification, secret) {
+
+// ---------------------------------------------------------------------------
+// Signing: only for a reply this process prepared and checked.
+// ---------------------------------------------------------------------------
+const PREPARED = new WeakSet();
+function sealPrepared(prepared) {
+  Object.freeze(prepared.report);
+  Object.freeze(prepared.violations ?? []);
+  PREPARED.add(Object.freeze(prepared));
+  return prepared;
+}
+function hmacOf(verification, secret) {
   if (typeof secret !== 'string' || secret.length < 32) throw Error('Reply verification key is unusable');
   return createHmac('sha256', Buffer.from(secret, 'utf8')).update(hmacMessage(verification), 'utf8').digest('hex');
 }
-export function buildVerification({ ticketId, body, report, secret, id = randomUUID() }) {
-  if (!UUID.test(ticketId || '') || !UUID.test(id)) throw Error('Invalid verification ids');
-  if (typeof body !== 'string' || !body.trim()) throw Error('Invalid reply body');
-  const verification = { id, ticket_id: ticketId, body_sha256: sha256Hex(body), report: report ?? {} };
-  return { ...verification, hmac: replyHmac(verification, secret) };
+export function signPreparedReply(prepared, { ticketId, secret, id = randomUUID() } = {}) {
+  if (!PREPARED.has(prepared)) throw Error('Only a reply prepared and checked by prepareAgentReply or prepareStructuredReply in this process can be signed');
+  if (prepared.violations?.length) throw Error('A reply that breaks a fixed rule cannot be signed');
+  if (!UUID.test(ticketId || '') || prepared.ticketId !== ticketId) throw Error('The reply was prepared for another ticket');
+  if (!UUID.test(id)) throw Error('Invalid verification id');
+  const verification = { id, ticket_id: ticketId, body_sha256: sha256Hex(prepared.body), report: prepared.report };
+  return { ...verification, hmac: hmacOf(verification, secret) };
 }
 // Shape and binding only; the HMAC itself is checked by the database.
 export function checkVerification(verification, ticketId, body) {
@@ -84,13 +112,14 @@ export function ticketSQL(ticketId) {
   return readOnly(`SELECT t.id, t.user_id, t.status, t.updated_at, t.archived_at FROM support_tickets t WHERE t.id = '${ticketId}'::uuid`);
 }
 
-// Operator path: one ticket, the version the author read, the ticket's
-// current status kept (a reply never reopens a resolved or archived ticket).
-// Author is the ticket owner with is_admin_reply, the same storage the agent
-// uses, so the body label, not author_id, says who wrote it.
+// Operator path: one ticket, at the version the AUTHOR read (the reply file's
+// ticket_version, not a fresh read), the ticket's current status kept (a
+// reply never reopens a resolved or archived ticket). Author is the ticket
+// owner with is_admin_reply, the same storage the agent uses, so the body
+// label, not author_id, says who wrote it.
 export function postReplySQL({ ticket, body, verification }) {
   if (!UUID.test(ticket?.id || '') || !UUID.test(ticket?.user_id || '')) throw Error('Invalid ticket');
-  if (ticket.updated_at !== null && (typeof ticket.updated_at !== 'string' || !Number.isFinite(Date.parse(ticket.updated_at)))) throw Error('Invalid ticket version');
+  if (ticket.updated_at !== null && !isTimestamp(ticket.updated_at)) throw Error('Invalid ticket version');
   if (typeof body !== 'string' || !body.startsWith(`${AUTOMATED_LABEL}\n\n`) || body.length > BODY_MAX + AUTOMATED_LABEL.length + 2 || body.includes('\0')) throw Error('Invalid reply body');
   checkVerification(verification, ticket.id, body);
   const version = ticket.updated_at === null ? 't.updated_at IS NULL' : `t.updated_at = ${sqlText(ticket.updated_at)}::timestamptz`;
@@ -110,7 +139,7 @@ export function postReplySQL({ ticket, body, verification }) {
 }
 
 // ---------------------------------------------------------------------------
-// Host facts: git at HEAD and the live build. The writer never supplies them.
+// Host facts: git at HEAD and at the live build. The writer never supplies them.
 // ---------------------------------------------------------------------------
 export function gitRunner(repo, { binary = 'git' } = {}) {
   const run = (args, allowFail = false) => {
@@ -122,8 +151,12 @@ export function gitRunner(repo, { binary = 'git' } = {}) {
   return {
     repo,
     head: () => run(['rev-parse', '--verify', 'HEAD']).trim(),
-    dirty: () => run(['status', '--porcelain', '--untracked-files=no']).trim() !== '',
+    // Modified tracked files, or new files under src/ or tests/: a committed
+    // test that imports an untracked source file is not a clean run.
+    dirty: () => run(['status', '--porcelain', '--untracked-files=no']).trim() !== '' ||
+      run(['status', '--porcelain', '--untracked-files=all', '--', 'src', 'tests']).split('\n').some(line => line.startsWith('??')),
     fileAtHead: file => (safeRepoPath(file) ? run(['show', `HEAD:${file}`], true) : null),
+    fileAt: (commit, file) => (SHA.test(commit || '') && safeRepoPath(file) ? run(['show', `${commit}:${file}`], true) : null),
     resolveCommit: value => {
       if (!ref(value)) return null;
       const out = run(['rev-parse', '--verify', '--quiet', `${value}^{commit}`], true)?.trim();
@@ -132,10 +165,12 @@ export function gitRunner(repo, { binary = 'git' } = {}) {
     parents: sha => run(['rev-list', '--parents', '-n', '1', sha]).trim().split(' ').slice(1),
     isAncestor: (a, b) => spawnSync(binary, ['-C', repo, 'merge-base', '--is-ancestor', a, b], { timeout: 30000 }).status === 0,
     changedFiles: sha => run(['diff-tree', '--no-commit-id', '--name-only', '-r', '--root', sha]).split('\n').filter(Boolean),
-    // Non-merge commits after base, newest first; with `since`, only those
-    // committed at or after it (a pull during the run brings in other people's).
-    commitsSince: (base, since = null) => (ref(base)
-      ? run(['rev-list', '--no-merges', ...(ISO.test(since || '') ? [`--since=${since}`] : []), `${base}..HEAD`]).split('\n').filter(Boolean) : []),
+    // Non-merge commits after base whose committer is this run's identity,
+    // newest first. A pull brings in commits with other committers; a docs
+    // note the run also made is filtered later by the files it touches.
+    commitsBy: (base, committer) => (ref(base) && RUN_COMMITTER.test(committer || '')
+      ? run(['log', '--no-merges', '--format=%H%x09%ce', `${base}..HEAD`]).split('\n').filter(Boolean)
+        .map(line => line.split('\t')).filter(([, email]) => email === committer).map(([sha]) => sha) : []),
   };
 }
 export async function fetchLiveBuild(fetchImpl = globalThis.fetch) {
@@ -146,60 +181,86 @@ export async function fetchLiveBuild(fetchImpl = globalThis.fetch) {
   if (!match) throw Error('version.json carries no usable build id');
   return { build: data.build, short: match[1] };
 }
+// The live build as this repository knows it. contains_head: every commit at
+// HEAD is live, so something tested or read at HEAD is what customers run.
+export async function readLiveBuild(git, fetchBuild = fetchLiveBuild) {
+  let fetched;
+  try { fetched = await fetchBuild(); } catch (error) {
+    return { build: null, short: null, commit: null, contains_head: false, error: `could not read the live build (${String(error.message).slice(0, 120)})` };
+  }
+  const commit = git.resolveCommit(fetched.short);
+  if (!commit) return { build: fetched.build, short: fetched.short, commit: null, contains_head: false, error: 'the live build is not in this repository (fetch origin first)' };
+  let head = null;
+  try { head = git.head(); } catch { head = null; }
+  return { build: fetched.build, short: fetched.short, commit, contains_head: Boolean(head && git.isAncestor(head, commit)) };
+}
+// Repository files named in free text such as the agent's verification.checks
+// ("src/x.js:12", "tests/y.test.mjs").
+export function filesCitedIn(text) {
+  return new Set([...String(text ?? '').matchAll(/(?:^|[\s(`'"[,;])((?:src|supabase|public|landing|scripts|tests)\/[\w.@()/-]*?\.[A-Za-z]{1,5})(?=[:\s)`'",;\]]|$)/g)]
+    .map(m => m[1]).filter(safeRepoPath));
+}
 
 // Values for {{BUILD}} and {{FIX_COMMIT}}. A fix commit must be a single-parent
-// commit in HEAD that the live build contains. On the post-reply path it must
-// also touch a file a confirmed claim cites (the c237149 and aae81ff replies
-// cited commits that changed none of the files involved). On the agent path it
-// must be a commit this run made: after preHead and committed after the run
-// started, so commits a pull brought in are never taken for the fix.
-async function hostValues(names, { git, fixRef = null, preHead = null, runStarted = null, citedFiles = null, fetchBuild }) {
+// commit in HEAD that the live build contains and that touches a file the
+// reply cites (the c237149 and aae81ff replies cited commits that changed none
+// of the files involved). On the post-reply path it is the --fix commit. On
+// the agent path it is the ONE commit this run made (committer identity set by
+// ticket-agent.sh) that touches a file verification.checks cites; a docs note,
+// a co-worker's pulled commit or two candidate commits are never guessed from.
+function hostValues(names, { git, live, fixRef = null, citedFiles = new Set(), agent = null }) {
   const values = {}, facts = {}, violations = [];
   if (!names.size) return { values, facts, violations };
-  const refuse = (rule, why) => { violations.push({ rule, excerpt: why }); };
-  let live = null;
-  try { live = await fetchBuild(); facts.build = live.build; } catch (error) { facts.build_error = String(error.message).slice(0, 200); }
-  if (names.has('BUILD')) { if (live) values.BUILD = live.build; else refuse('build_unavailable', 'version.json unavailable'); }
+  const refuse = (rule, why) => { violations.push({ rule, excerpt: why }); return { values, facts, violations }; };
+  if (live?.build) facts.build = live.build; else if (live?.error) facts.build_error = live.error;
+  if (names.has('BUILD')) { if (live?.build) values.BUILD = live.build; else refuse('build_unavailable', 'version.json unavailable'); }
   if (!names.has('FIX_COMMIT')) return { values, facts, violations };
-  let fix = null;
-  if (citedFiles) {
-    if (!fixRef) { refuse('fix_commit_unavailable', 'pass --fix <commit>'); return { values, facts, violations }; }
-    fix = git.resolveCommit(fixRef);
-    if (!fix) { refuse('fix_commit_unavailable', 'the --fix commit does not exist here'); return { values, facts, violations }; }
-  } else {
-    if (!SHA.test(preHead || '')) { refuse('fix_commit_unavailable', 'no pre-run revision was recorded'); return { values, facts, violations }; }
-    if (!ISO.test(runStarted || '')) { refuse('fix_commit_unavailable', 'no run start time was recorded'); return { values, facts, violations }; }
-    const made = git.commitsSince(preHead, runStarted);
+  let fix;
+  if (agent) {
+    if (!SHA.test(agent.preHead || '')) return refuse('fix_commit_unavailable', 'no pre-run revision was recorded');
+    if (!RUN_COMMITTER.test(agent.runCommitter || '')) return refuse('fix_commit_unavailable', 'no run committer was recorded');
+    const made = git.commitsBy(agent.preHead, agent.runCommitter);
     facts.run_commits = made;
-    fix = made[0] ?? null;
-    if (!fix) { refuse('fix_commit_unavailable', 'this run made no commit'); return { values, facts, violations }; }
-  }
-  facts.fix_commit = fix;
-  if (git.parents(fix).length !== 1) { refuse('fix_commit_unavailable', 'a merge or root commit is not a fix'); return { values, facts, violations }; }
-  if (!git.isAncestor(fix, 'HEAD')) { refuse('fix_commit_unavailable', 'the commit is not in HEAD'); return { values, facts, violations }; }
-  const buildCommit = live ? git.resolveCommit(live.short) : null;
-  facts.fix_live = Boolean(buildCommit && git.isAncestor(fix, buildCommit));
-  if (!facts.fix_live) { refuse('fix_commit_unavailable', 'the commit is not in the live build'); return { values, facts, violations }; }
-  if (citedFiles) {
+    if (!made.length) return refuse('fix_commit_unavailable', 'this run made no commit');
+    if (!citedFiles.size) return refuse('fix_commit_unavailable', 'verification.checks cites no repository file');
+    const candidates = made.filter(sha => git.changedFiles(sha).some(file => citedFiles.has(file)));
+    facts.fix_candidates = candidates;
+    if (candidates.length !== 1) return refuse('fix_commit_unavailable', candidates.length ? 'more than one commit from this run touches the cited files' : 'no commit from this run touches a file verification.checks cites');
+    [fix] = candidates;
+  } else {
+    if (!fixRef) return refuse('fix_commit_unavailable', 'pass --fix <commit>');
+    fix = git.resolveCommit(fixRef);
+    if (!fix) return refuse('fix_commit_unavailable', 'the --fix commit does not exist here');
     const touched = git.changedFiles(fix).filter(file => citedFiles.has(file));
     facts.fix_touches = touched;
-    if (!touched.length) { refuse('fix_commit_unavailable', 'the commit touches none of the files the confirmed claims cite'); return { values, facts, violations }; }
+    if (!touched.length) return refuse('fix_commit_unavailable', 'the commit touches none of the files the confirmed claims cite');
   }
+  facts.fix_commit = fix;
+  if (git.parents(fix).length !== 1) return refuse('fix_commit_unavailable', 'a merge or root commit is not a fix');
+  if (!git.isAncestor(fix, 'HEAD')) return refuse('fix_commit_unavailable', 'the commit is not in HEAD');
+  facts.fix_live = Boolean(live?.commit && git.isAncestor(fix, live.commit));
+  if (!facts.fix_live) return refuse('fix_commit_unavailable', 'the commit is not in the live build');
   values.FIX_COMMIT = fix.slice(0, 7);
   return { values, facts, violations };
 }
 
-// The agent's free-text reply (this stage keeps its schema): fixed rules,
-// then host-filled ids. Throws ReplyRuleError, which the runner feeds back to
-// the model in its repair loop.
-export async function prepareAgentReply({ reply, git = null, preHead = null, runStarted = null, fetchBuild = fetchLiveBuild, verificationKind = null }) {
+// The agent's free-text reply. Nothing binds its prose to evidence yet (the
+// structured agent schema is the next stage), so: the fixed rules, plus a
+// refusal of any sentence that reports a result or a finished change
+// (unverified_claim), then host-filled ids. The verification records
+// claims: 'unbound' so it is never mistaken for a checked claim set. Throws
+// ReplyRuleError, which the runner feeds back to the model in its repair loop.
+export async function prepareAgentReply({ reply, ticketId = null, git = null, preHead = null, runCommitter = null, runStarted = null, runId = null,
+  citedFiles = new Set(), fetchBuild = fetchLiveBuild, verificationKind = null }) {
   const text = customerReplyText(reply);
   if (!text.trim()) throw Error('Invalid reply');
-  const violations = checkFixedRules(text);
+  const isCommit = git ? token => git.resolveCommit(token) !== null : null;
+  const violations = checkFixedRules(text, { claims: true, isCommit });
   if (violations.length) throw new ReplyRuleError(violations);
   const names = placeholdersIn(text);
   if (names.size && !git) throw new ReplyRuleError([{ rule: 'fix_commit_unavailable', excerpt: 'no repository available' }]);
-  const host = await hostValues(names, { git, preHead, runStarted, fetchBuild });
+  const live = names.size ? await readLiveBuild(git, fetchBuild) : null;
+  const host = hostValues(names, { git, live, citedFiles, agent: { preHead, runCommitter } });
   if (host.violations.length) throw new ReplyRuleError(host.violations);
   const filled = names.size ? fillPlaceholders(text, host.values) : text;
   if (filled.length > BODY_MAX) throw new ReplyRuleError([{ rule: 'too_long', excerpt: String(filled.length) }]);
@@ -208,38 +269,52 @@ export async function prepareAgentReply({ reply, git = null, preHead = null, run
   if (tail.length) throw new ReplyRuleError(tail);
   let head = null;
   try { head = git ? git.head() : null; } catch { head = null; }
-  return { text: filled, body, report: { version: 1, path: 'agent', rules: 'passed', verification_kind: verificationKind,
-    pre_head: SHA.test(preHead || '') ? preHead : null, run_started: ISO.test(runStarted || '') ? runStarted : null, head, host: host.facts } };
+  return sealPrepared({ ticketId, text: filled, body, report: { version: 2, path: 'agent', claims: 'unbound', rules: 'passed', verification_kind: verificationKind,
+    pre_head: SHA.test(preHead || '') ? preHead : null, run_started: ISO.test(runStarted || '') ? runStarted : null,
+    run_id: RUN_ID.test(runId || '') ? runId : null, head, host: host.facts } });
 }
 
 // The post-reply path (A3): the reply is rendered by the host from claims.
 // Never throws for an unverified claim: it is rendered under "Not done yet".
 // Throws only when the file itself is malformed. Rule violations are
 // returned; nothing may be posted while any remain.
-export async function prepareStructuredReply({ reply: raw, ticketId, git, gates = null, gatesSha256 = null, readQuery = async () => null, fixRef = null, fetchBuild = fetchLiveBuild }) {
+//   runTestsFor(files) -> gates   at post time the host runs the cited tests
+//                                 itself; `gates` (a file) is the dry run's cache
+//   readQuery(id) -> record       at post time the stored SQL is run again
+export async function prepareStructuredReply({ reply: raw, ticketId, ownerId = null, git, gates = null, gatesSha256 = null, runTestsFor = null,
+  readQuery = async () => null, fixRef = null, fetchBuild = fetchLiveBuild }) {
   const reply = parseStructuredReply(raw, ticketId);
   const head = git.head();
-  const violations = writerViolations(reply);
+  const live = await readLiveBuild(git, fetchBuild);
+  const violations = writerViolations(reply, { isCommit: token => git.resolveCommit(token) !== null, liveShort: live.short });
+  const testFiles = [...new Set(reply.claims.filter(c => c.evidence?.kind === 'test').map(c => c.evidence.ref.split('::')[0]))];
+  let tests = gates, testsSha256 = gatesSha256, testsSource = gates ? 'gates_file' : null;
+  if (runTestsFor && testFiles.length) { tests = await runTestsFor(testFiles); testsSha256 = null; testsSource = 'host_run_at_post'; }
   const queryIds = new Set(reply.claims.flatMap(c => (c.evidence?.kind === 'query' ? [c.evidence.ref, c.evidence.expect?.control].filter(Boolean) : [])));
   const records = new Map();
   for (const id of queryIds) records.set(id, await readQuery(id));
-  const sources = { head, fileAtHead: file => git.fileAtHead(file), gates, query: id => records.get(id) ?? null };
-  const results = reply.claims.map(claim => ({ ...claim, ...verifyEvidence(claim.evidence, sources) }));
+  // The dry run has no database: it scopes by the owner record-query stored.
+  const owner = ownerId ?? [...records.values()].find(r => UUID.test(r?.owner_id || ''))?.owner_id ?? null;
+  const sources = { head, live, gates: tests, fileAtHead: file => git.fileAtHead(file), fileAtLive: file => (live.commit ? git.fileAt(live.commit, file) : null),
+    query: id => records.get(id) ?? null, scope: [ticketId, owner] };
+  const results = reply.claims.map(claim => ({ ...claim, ...verifyClaim(claim, sources) }));
   const confirmed = results.filter(r => r.verified);
   const pending = [...results.filter(r => !r.verified).map(r => r.text), ...reply.not_done];
   if (reply.closing === 'follow_up' && !pending.length) violations.push({ rule: 'follow_up_without_pending', excerpt: '', field: 'closing' });
   const citedFiles = new Set(confirmed.flatMap(r => (r.evidence.kind === 'file' ? [r.evidence.file] : r.evidence.kind === 'test' ? [r.evidence.ref.split('::')[0]] : [])));
   const draft = renderStructured({ opening: reply.opening, context: reply.context, confirmed: confirmed.map(r => r.text), pending, closing: reply.closing });
-  const host = await hostValues(placeholdersIn(draft), { git, fixRef, citedFiles, fetchBuild });
+  const host = hostValues(placeholdersIn(draft), { git, live, fixRef, citedFiles });
   violations.push(...host.violations.map(v => ({ ...v, field: 'placeholders' })));
   const rendered = host.violations.length ? draft : fillPlaceholders(draft, host.values);
   const body = labeledBody(rendered);
   if (!violations.length) violations.push(...checkFixedRules(rendered, { hex: false }).map(v => ({ ...v, field: 'rendered' })));
-  const report = { version: 1, path: 'post-reply', head, opening: reply.opening, closing: reply.closing,
-    rendered_sha256: sha256Hex(rendered),
-    claims: results.map(r => ({ id: r.id, text: r.text, evidence: r.evidence && { kind: r.evidence.kind, ref: r.evidence.ref }, verified: r.verified, reason: r.reason })),
-    not_done: reply.not_done, gates: gates ? { head: gates.head, ran_at: gates.ran_at ?? null, sha256: gatesSha256 } : null, host: host.facts };
-  return { violations, body, rendered, confirmed: confirmed.length, pending: pending.length, report };
+  const report = { version: 2, path: 'post-reply', claims: 'bound', head, ticket_version: reply.ticket_version, opening: reply.opening, context: reply.context, closing: reply.closing,
+    rendered_sha256: sha256Hex(rendered), live: { build: live.build, commit: live.commit, contains_head: live.contains_head },
+    claims_checked: results.map(r => ({ id: r.id, text: r.text, evidence: r.evidence && { kind: r.evidence.kind, ref: r.evidence.ref }, verified: r.verified, reason: r.reason })),
+    not_done: reply.not_done, tests: tests ? { source: testsSource, head: tests.head, ran_at: tests.ran_at ?? null, sha256: testsSha256 } : null,
+    queries: [...records.entries()].map(([id, r]) => ({ id, found: Boolean(r), reexecuted: Boolean(r?.reexecuted), matches_stored: r?.reexecuted ? r.rows_sha256 === r.stored_rows_sha256 : null })),
+    host: host.facts };
+  return sealPrepared({ ticketId, ticketVersion: reply.ticket_version, violations, body, rendered, confirmed: confirmed.length, pending: pending.length, report });
 }
 
 // ---------------------------------------------------------------------------
@@ -271,9 +346,15 @@ export async function readQueryRecord(state, ticketId, id) {
   const found = await readPrivateJSON(queryRecordPath(state, ticketId, id));
   const r = found?.value;
   if (!r || r.version !== 1 || r.ticket_id !== ticketId || r.id !== id || !Array.isArray(r.rows) || r.row_count !== r.rows.length ||
-      r.rows_sha256 !== sha256Hex(JSON.stringify(r.rows)) || !Number.isFinite(Date.parse(r.ran_at))) return null;
+      r.rows_sha256 !== sha256Hex(JSON.stringify(r.rows)) || !Number.isFinite(Date.parse(r.ran_at)) || typeof r.sql !== 'string' ||
+      (r.owner_id !== undefined && r.owner_id !== null && !UUID.test(r.owner_id))) return null;
+  // A stored record is the writer's file and could be written by hand
+  // (review 2026-09-28). The dry run reads it as a cache; post-reply runs its
+  // SQL again when posting and checks what comes back.
   return r;
 }
+// A gates file is likewise only the dry run's cache: post-reply runs the cited
+// tests itself on a clean tree when it posts.
 export async function loadGates(filename) {
   const found = await readPrivateJSON(filename, 16 * 1024 * 1024);
   const g = found?.value;

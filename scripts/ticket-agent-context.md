@@ -96,6 +96,20 @@ migration 20260928150000 checks. Interactive sessions use the same path through
 `scripts/ticket-fix/post-reply.mjs`. A result the host refuses is fed back to the same model
 session, at most twice (`--validate`, `--session`), before the run counts as rejected; parked
 tickets are left out of the queue; parking and a lock held over 4 h alert the owner.
+
+Review fixes (2026-09-28): every host step (`--schema`, `--load`, `--validate`, `--session`,
+`--record-and-reply`, `alert.mjs`, `reconcile.mjs`) runs from a copy of the host code taken
+from HEAD before any model runs (`TICKET_REPO` names the real checkout), and a run that changes
+the reply checks, the runner, the notifier, the support reply migrations or `send-ticket-reply`
+records nothing and holds every later run (`HOLD-host-code-changed`). `--load` and
+`--record-and-reply` need the per-run `TICKET_RUN_KEY`; the context file is signed with it, so
+the agent path cannot be driven by hand. The model's commits carry a per-run committer identity
+and `{{FIX_COMMIT}}` is the one such commit that touches a file cited in `verification.checks`.
+The free-text reply may not report a result (`unverified_claim`); its verification records
+`claims: "unbound"`. A model that fails or is killed by the alarm counts toward the breaker. The
+log carries rule names only; the full refusal stays in the private run directory. Stored
+replies are not emailed to members (author is the ticket owner); `--record-and-reply` prints
+`"emailed": false`.
 `publication: not_confirmed` intentionally prevents treating a saved draft as proof of
 successful delivery. Customer publication is not an exactly-once queue; the separate internal continuation
 queue below never retries a reply.

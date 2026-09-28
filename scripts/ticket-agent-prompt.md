@@ -158,9 +158,10 @@ A prior completion claim or a resolved related ticket is not itself task verific
    during this run. When the fix was committed in an earlier run and you confirmed the live build
    includes it (for example `version.json` reports a build at or after that revision), that is
    `verified_change`: record how you reproduced or checked it, the checks you ran, and the release
-   revision. Use `source_review` only when you did not confirm a live release, and in that case the
-   reply must not say the work is fixed, shipped, deployed or live. A completion claim in the reply
-   without `verified_change` discards the whole run.
+   revision. Use `source_review` only when you did not confirm a live release. Whatever the kind,
+   the reply itself never says the work is fixed, shipped, deployed or live (see "The reply reports
+   no results" below): `verified_change` is your own account, and nothing checks the reply's prose
+   against it yet.
 
 ## Reply and durable follow-through
 
@@ -193,15 +194,24 @@ this session with the exact reason, at most twice, before the run counts as reje
 only what the reason names.
 
 - **Never write a commit, build or ticket id in the reply.** Any 7 to 40 character hex token
-  you write is refused. Write `{{FIX_COMMIT}}` where the fix commit belongs and `{{BUILD}}`
-  where the live build belongs, and the host fills them in: `{{FIX_COMMIT}}` only from a
-  single-parent commit this run made that the live build contains, `{{BUILD}}` from the live
-  `version.json`. If that is not true, leave the placeholder out and say the change is not
-  live yet. Actual revisions belong in `verification.release`.
-- **A result on a phone or other device must say it was not tested there.** The host cannot
-  run the customer's iPhone, Safari or Mail app. A sentence that reports how something works,
-  shows or looks on a device must also say, for example, "this has not been tested on an
-  iPhone". Ask the customer to check it instead of promising it.
+  you write is refused, and so is a build id or a digits-only commit id. Write `{{FIX_COMMIT}}`
+  where the fix commit belongs and `{{BUILD}}` where the live build belongs, and the host fills
+  them in: `{{FIX_COMMIT}}` only from the ONE single-parent commit this run made (your commits
+  carry this run's committer identity) that touches a file you cite in `verification.checks`
+  and that the live build contains; `{{BUILD}}` from the live `version.json`. If that is not
+  true, leave the placeholder out. Actual revisions belong in `verification.release`.
+- **The reply reports no results.** Nothing checks the reply's prose against evidence yet, so
+  the host refuses any sentence (other than a question) that says something is fixed, shipped,
+  deployed, live or resolved, works, shows, displays, lists, includes, appears, is saved, was
+  added, removed, deleted, restored, corrected, updated or changed, is "now" or "no longer" so,
+  or that "you'll see" it. Say what you recorded, what happens next, and ask what you need.
+  A confirmed result reaches the customer only as a claim with evidence, posted by the owner's
+  tools (`scripts/ticket-fix/post-reply.mjs`).
+- **A sentence that names a device must say it was not tested there.** The host cannot run the
+  customer's iPhone, iPad, Android phone, Safari, Chrome, Mail, Gmail, Outlook, share sheet or
+  Messages. Any sentence naming one must also say, for example, "this has not been tested on an
+  iPhone", unless it is a question or a plain instruction ("Open Settings on your phone").
+  Ask the customer to check it instead of promising it.
 - **Never write "HIPAA" or "compliant".** The app is no-PHI-by-design and makes no compliance
   claim.
 - **Every sentence that describes app behaviour is checked against current source before
@@ -221,6 +231,12 @@ only what the reason names.
   customer's clipboard, and do not tell the customer to do something the app should do.
 
 ## DO NOT — hard limits, no exceptions
+
+- Never edit, create or delete anything under `scripts/ticket-fix/`, `scripts/ticket-agent*`,
+  `scripts/notify-owner.sh`, `supabase/migrations/*support_reply*` or
+  `supabase/functions/send-ticket-reply/`, committed or not. These are the checks your result is
+  judged by. A run that changes them records nothing, alerts the owner and stops every later run
+  until the owner has reviewed it.
 
 - Never ship a HIPAA-compliance claim anywhere (app, site, Vera). The app is no-PHI-by-design.
 - Never send patient identifiers to any cloud service or store them in synced fields.

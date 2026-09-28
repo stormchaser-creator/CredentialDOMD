@@ -1,6 +1,7 @@
 // Deterministic model boundary fixture. Does not launch the installed model CLI.
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { RESULT_SCHEMA } from '../ticket-agent-context.mjs';
 import { newInput, sql } from './database.mjs';
@@ -35,6 +36,21 @@ if (resumed) {
 }
 const scenario = process.env.SUPPORT_FIXTURE_SCENARIO;
 const target = context.target_id;
+// The model works in the runner's repository with full permissions. These
+// scenarios weaken the reply checks it is about to be judged by; the runner
+// must notice, record nothing and hold.
+if (scenario === 'tamper' || scenario === 'tamper_uncommitted') {
+  assert.equal(process.cwd(), process.env.SUPPORT_FIXTURE_REPO);
+  appendFileSync('scripts/ticket-fix/claims.mjs', '\nexport const weakened = true;\n');
+  if (scenario === 'tamper') {
+    const committed = spawnSync('/usr/bin/git', ['commit', '-qam', 'Synthetic weakening'], { encoding: 'utf8',
+      env: { ...process.env, GIT_AUTHOR_NAME: 'Synthetic Model', GIT_AUTHOR_EMAIL: 'model@example.invalid' } });
+    assert.equal(committed.status, 0, committed.stderr);
+    // The run's committer identity reaches the model's git.
+    assert.match(spawnSync('/usr/bin/git', ['log', '-1', '--format=%ce'], { encoding: 'utf8' }).stdout.trim(), /^ticket-agent\+[0-9a-f]{16}@credentialdomd\.invalid$/);
+  }
+}
+if (scenario === 'timeout' || scenario === 'timeout_park') await new Promise(resolve => setTimeout(resolve, 20000));
 assert.match(target, /^[a-f0-9-]{36}$/);
 if (scenario === 'reapprove') sql(`UPDATE support_tickets SET agent_approved_at=agent_approved_at+interval '1 second' WHERE id='${target}'`);
 if (scenario === 'withdraw') sql(`UPDATE support_tickets SET agent_approved_at=null WHERE id='${target}'`);

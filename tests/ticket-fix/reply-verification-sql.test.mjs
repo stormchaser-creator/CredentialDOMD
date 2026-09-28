@@ -1,8 +1,9 @@
-// Migration 20260928150000 on a disposable PostgreSQL, driven the way
-// production is: operator SQL as session user postgres (the management API),
-// edge functions as service_role and the app as authenticated, both behind
-// authenticator (PostgREST). Then the two real writers (the agent's replySQL
-// and post-reply.mjs) end to end against it.
+// Migrations 20260928150000 and 20260928160000 on a disposable PostgreSQL,
+// driven the way production is: operator SQL as session user postgres (the
+// management API) or a CLI login role, edge functions as service_role and the
+// app as authenticated with a token, both behind authenticator (PostgREST).
+// Then the two real writers (the agent's replySQL and post-reply.mjs) end to
+// end against it, and the RLS dry-run probe with the trigger in place.
 //
 // Synthetic ids and text only. Own port: node --test runs files in parallel.
 import test from 'node:test';
@@ -12,16 +13,19 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
-import { buildVerification, readVerificationKey, agentReplyBody, labeledBody, sha256Hex } from '../../scripts/ticket-fix/reply.mjs';
+import { readVerificationKey, agentReplyBody, labeledBody, sha256Hex, EMAIL_NOT_SENT } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { main as postReply } from '../../scripts/ticket-fix/post-reply.mjs';
 import { main as verifyClaims } from '../../scripts/ticket-fix/verify-claims.mjs';
-import { tempRepo, privateDir, noBuild, uuid } from './helpers.mjs';
+import { tempRepo, privateDir, noBuild, liveBuild, uuid, signForTest as buildVerification } from './helpers.mjs';
 
 const PORT = '58311';
 const read = rel => fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
 const MIGRATION = read('supabase/migrations/20260928150000_support_reply_verifications.sql');
+const HARDENING = read('supabase/migrations/20260928160000_support_reply_hardening.sql');
 const ROLLBACK = read('docs/rollback/20260928150000_support_reply_verifications.rollback.sql');
+const HARDENING_ROLLBACK = read('docs/rollback/20260928160000_support_reply_hardening.rollback.sql');
+const DRYRUN = read('scripts/sql/ticket-admission-dryrun.sql');
 
 function startPostgres() {
   const bin = pgBin();
@@ -49,6 +53,8 @@ const ROLES = `
   create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
   create role authenticator login noinherit; grant anon, authenticated, service_role to authenticator;
   create role supabase_admin login superuser;
+  -- The Supabase CLI's login role: NOINHERIT, member of postgres (it runs SET ROLE postgres).
+  create role cli_login_postgres login noinherit; grant postgres to cli_login_postgres;
 `;
 const PLATFORM = `
   grant usage on schema public to anon, authenticated, service_role;
@@ -65,7 +71,12 @@ const PLATFORM = `
   revoke all on schema vault from public; grant usage on schema vault to service_role;
   grant select on vault.secrets, vault.decrypted_secrets to service_role;
 
-  create table public.profiles (id uuid primary key, email text);
+  create schema auth; grant usage on schema auth to anon, authenticated, service_role;
+  create function auth.jwt() returns jsonb language sql stable
+    as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+  create table public.profiles (id uuid primary key, email text, auth_user_id text);
+  create function public.current_profile_id() returns uuid language sql stable security definer set search_path = public
+    as $$ select id from profiles where auth_user_id = (auth.jwt()->>'sub') limit 1 $$;
   create table public.app_admins (profile_id uuid primary key references public.profiles(id));
   create function public.is_admin(user_id uuid) returns boolean language sql stable security definer set search_path = public
     as $$ select exists (select 1 from app_admins a where a.profile_id = user_id) $$;
@@ -94,7 +105,7 @@ const PLATFORM = `
 const ADMIN = uuid(0xad01), MEMBER = uuid(0xbe01);
 const MEMBER_TICKET = uuid(0xc001), RESOLVED_TICKET = uuid(0xc002), SPARE_TICKET = uuid(0xc003);
 const SEED = `
-  insert into public.profiles values ('${ADMIN}', 'owner@example.test'), ('${MEMBER}', 'member@example.test');
+  insert into public.profiles values ('${ADMIN}', 'owner@example.test', 'sub-admin'), ('${MEMBER}', 'member@example.test', 'sub-member');
   insert into public.app_admins values ('${ADMIN}');
   insert into public.support_tickets (id, user_id, subject, body, status, updated_at) values
     ('${MEMBER_TICKET}', '${MEMBER}', 'Synthetic export question', 'Synthetic body', 'open', '2026-09-28T12:00:00Z'),
@@ -105,6 +116,8 @@ const text = s => `convert_from(decode('${Buffer.from(s).toString('hex')}','hex'
 const insertMessage = ({ ticket = MEMBER_TICKET, author = MEMBER, body = 'Synthetic reply', admin = true, verification = null }) =>
   `insert into public.support_messages (ticket_id, author_id, body, is_admin_reply, verification_id)
    values ('${ticket}', '${author}', ${text(body)}, ${admin}, ${verification ? `'${verification}'` : 'null'}) returning id`;
+// The app: PostgREST as authenticator, the caller's role and token claims.
+const asApp = (role, sub, statement) => `set role ${role}; set request.jwt.claims to '${JSON.stringify({ sub })}'; ${statement}`;
 const insertVerification = v => `insert into public.support_reply_verifications (id, ticket_id, body_sha256, hmac, report)
   values ('${v.id}', '${v.ticket_id}', '${v.body_sha256}', '${v.hmac}', ${text(JSON.stringify(v.report))}::jsonb)`;
 // The management API as the writers see it: read-only wrappers return rows,
@@ -118,7 +131,7 @@ const management = pg => async query => {
   throw Error('Unexpected SQL shape');
 };
 
-test('support reply verification: the database refuses unverified operator replies and nothing else', { skip: pgSkip(), timeout: 180000 }, async t => {
+test('support reply verification: the database refuses unverified support replies except the admin in the app', { skip: pgSkip(), timeout: 240000 }, async t => {
   const pg = startPostgres();
   t.after(() => pg.close());
   pg.sql(ROLES);
@@ -129,15 +142,16 @@ test('support reply verification: the database refuses unverified operator repli
   const query = management(pg);
   let key;
 
-  await t.test('applies twice; creates the vault key once and never prints it', () => {
-    const first = pg.tryRun(MIGRATION);
+  await t.test('both migrations apply twice; the vault key is created once and never printed', () => {
+    const first = pg.tryRun(`${MIGRATION}\n${HARDENING}`);
     assert.ok(first.ok, first.err);
     key = pg.sql(`select decrypted_secret from vault.decrypted_secrets where name = 'support_reply_hmac_key'`);
     assert.match(key, /^[0-9a-f]{64}$/);
-    const second = pg.tryRun(MIGRATION);
+    const second = pg.tryRun(`${MIGRATION}\n${HARDENING}`);
     assert.ok(second.ok, second.err);
     assert.equal(pg.sql(`select count(*) || '|' || min(decrypted_secret) from vault.decrypted_secrets where name = 'support_reply_hmac_key'`), `1|${key}`);
     for (const output of [first.out, first.err, second.out, second.err]) assert.ok(!output.includes(key), 'the key is never printed');
+    assert.equal(pg.sql(`select count(*) from information_schema.columns where table_name = 'support_messages' and column_name = 'emailed_at'`), '1');
     pg.sql('create database keyed');
     pg.sql(PLATFORM, { db: 'keyed' });
     pg.sql(`select vault.create_secret('an-existing-synthetic-key-0123456789abcdef', 'support_reply_hmac_key')`, { db: 'keyed' });
@@ -159,28 +173,36 @@ test('support reply verification: the database refuses unverified operator repli
     assert.equal(denied.ok, false);
   });
 
-  await t.test('operator SQL cannot insert a support reply without a verification, whatever role it sets', () => {
+  await t.test('no session but the admin in the app can store an unverified support reply, whatever role it sets', () => {
     for (const [label, statement, opts] of [
       ['admin-flagged reply', insertMessage({}), {}],
       ['admin author, flag off (still emailed)', insertMessage({ author: ADMIN, admin: false }), {}],
       ['after SET ROLE service_role', `set role service_role; ${insertMessage({})}`, {}],
-      ['after SET ROLE authenticated', `set role authenticated; ${insertMessage({})}`, {}],
+      ['after SET ROLE authenticated', asApp('authenticated', 'sub-admin', insertMessage({ author: ADMIN })), {}],
       ['supabase_admin session', insertMessage({}), { user: 'supabase_admin' }],
+      // Review: the CLI logs in as its own role and SET ROLE postgres.
+      ['Supabase CLI login role', `set role postgres; ${insertMessage({ author: ADMIN })}`, { user: 'cli_login_postgres' }],
+      // Review: the service_role key is one API call away from the management token.
+      ['service_role through PostgREST', `set role service_role; ${insertMessage({ author: ADMIN, body: 'Edge function reply' })}`, { user: 'authenticator' }],
+      ['service_role with an admin token claim', asApp('service_role', 'sub-admin', insertMessage({ author: ADMIN })), { user: 'authenticator' }],
+      ['the app, writing as someone else', asApp('authenticated', 'sub-member', insertMessage({ author: ADMIN })), { user: 'authenticator' }],
+      ['the app, no token', `set role authenticated; ${insertMessage({ author: ADMIN })}`, { user: 'authenticator' }],
     ]) {
       const refused = pg.tryRun(statement, opts);
       assert.equal(refused.ok, false, label);
-      assert.match(refused.err, /support replies written with operator SQL need a verified reply/, label);
+      assert.match(refused.err, /support replies need a verified reply unless an admin writes them in the app/, label);
       assert.match(refused.err, /post-reply\.mjs/, label);
     }
     assert.equal(pg.sql('select count(*) from public.support_messages'), '0');
     assert.equal(pg.sql('select count(*) from public.sent_emails'), '0', 'nothing was emailed');
     assert.match(pg.sql(insertMessage({ admin: false, body: 'A member message' })), /^[0-9a-f-]{36}$/, 'a customer message is not a support reply');
+    assert.match(pg.sql(`set role service_role; ${insertMessage({ admin: false, body: 'A member message via reply-ticket' })}`, { user: 'authenticator' }), /^[0-9a-f-]{36}$/, 'reply-ticket still writes customer replies');
   });
 
-  await t.test('edge functions (service_role) and the in-app admin reply (authenticated) are unaffected', () => {
-    assert.match(pg.sql(`set role service_role; ${insertMessage({ author: ADMIN, body: 'Edge function reply' })}`, { user: 'authenticator' }), /^[0-9a-f-]{36}$/);
-    assert.match(pg.sql(`set role authenticated; ${insertMessage({ author: ADMIN, body: 'In-app reply' })}`, { user: 'authenticator' }), /^[0-9a-f-]{36}$/);
-    assert.equal(pg.sql('select count(*) from public.sent_emails'), '2', 'notify_ticket_reply still fires for them');
+  await t.test("the admin's own reply in the app (reply-ticket as the caller) is stored and emailed", () => {
+    assert.match(pg.sql(asApp('authenticated', 'sub-admin', insertMessage({ author: ADMIN, body: 'In-app reply' })), { user: 'authenticator' }), /^[0-9a-f-]{36}$/);
+    assert.match(pg.sql(asApp('anon', 'sub-admin', insertMessage({ author: ADMIN, body: 'In-app reply, anon role' })), { user: 'authenticator' }), /^[0-9a-f-]{36}$/);
+    assert.equal(pg.sql('select count(*) from public.sent_emails'), '2', 'notify_ticket_reply still fires for it');
   });
 
   await t.test('a valid verification is accepted once, and the SQL HMAC matches the Node one', () => {
@@ -219,17 +241,24 @@ test('support reply verification: the database refuses unverified operator repli
     assert.match(pg.sql(insertMessage({ body, verification: v.id })), /^[0-9a-f-]{36}$/, 'the honest insert still works');
   });
 
-  await t.test('operator SQL cannot rewrite a support reply afterwards; other edits are unaffected', () => {
+  await t.test('no role can rewrite a support reply afterwards; other edits, and the email claim, are unaffected', () => {
     const reply = pg.sql(`select id from public.support_messages where verification_id is not null limit 1`);
-    for (const change of [`body = 'Rewritten'`, 'is_admin_reply = false', `ticket_id = '${SPARE_TICKET}'`, 'verification_id = null']) {
-      const refused = pg.tryRun(`update public.support_messages set ${change} where id = '${reply}'`);
-      assert.equal(refused.ok, false, change);
-      assert.match(refused.err, /cannot be rewritten with operator SQL/, change);
+    const inApp = pg.sql(`select id from public.support_messages where body = 'In-app reply'`);
+    for (const target of [reply, inApp]) {
+      for (const change of [`body = 'Rewritten'`, 'is_admin_reply = false', `ticket_id = '${SPARE_TICKET}'`, target === reply ? 'verification_id = null' : `author_id = '${MEMBER}'`]) {
+        for (const [who, prefix, opts] of [['operator', '', {}], ['service_role', 'set role service_role; ', { user: 'authenticator' }], ['CLI login', 'set role postgres; ', { user: 'cli_login_postgres' }]]) {
+          const refused = pg.tryRun(`${prefix}update public.support_messages set ${change} where id = '${target}'`, opts);
+          assert.equal(refused.ok, false, `${who}: ${change}`);
+          assert.match(refused.err, /cannot be rewritten/, `${who}: ${change}`);
+        }
+      }
     }
+    assert.equal(pg.sql(`select body from public.support_messages where id = '${reply}'`), labeledBody('Synthetic verified reply.'), 'the verified text is what is stored');
     const customer = pg.sql(`select id from public.support_messages where body = 'A member message'`);
     pg.sql(`update public.support_messages set body = 'A corrected member message' where id = '${customer}'`);
     pg.sql(`update public.support_messages set attachment_path = null where id = '${reply}'`);
-    pg.sql(`set role service_role; update public.support_messages set body = body where id = '${reply}'`, { user: 'authenticator' });
+    pg.sql(`set role service_role; update public.support_messages set body = body, emailed_at = now() where id = '${reply}'`, { user: 'authenticator' });
+    assert.equal(pg.sql(`select emailed_at is not null from public.support_messages where id = '${reply}'`), 't', 'send-ticket-reply can claim a reply');
   });
 
   await t.test("the agent's replySQL stores a verified reply and keeps a resolved ticket resolved", async () => {
@@ -247,17 +276,20 @@ test('support reply verification: the database refuses unverified operator repli
     assert.deepEqual(await query(replySQL(ticket, replyText, { verification: buildVerification({ ticketId: RESOLVED_TICKET, body: agentReplyBody(replyText), report: {}, secret: key }) })), [], 'a stale version is withheld');
   });
 
-  await t.test('post-reply.mjs end to end: one ticket, verified claims, status kept, a rerun refused', async () => {
-    const repo = tempRepo({ 'src/export.js': 'export const options = {\n  includeExpired: true,\n};\n' });
+  await t.test('post-reply.mjs end to end: one ticket, host-produced evidence, status kept, not emailed, a rerun refused', async () => {
+    const repo = tempRepo({ 'src/export.js': 'export const options = {\n  label: "Export expired licences",\n};\n',
+      'tests/export.test.mjs': "import test from 'node:test';\ntest('export label', () => {});\n" });
     const state = privateDir('ticket-fix-post-');
     const lines = [];
     const log = line => lines.push(line);
     try {
+      const version = () => pg.sql(`select updated_at from public.support_tickets where id = '${MEMBER_TICKET}'`);
       const replyFile = path.join(state.dir, 'reply.json');
-      fs.writeFileSync(replyFile, JSON.stringify({ ticket_id: MEMBER_TICKET, opening: 'update', closing: 'reply_here',
-        claims: [{ id: 'AC-1', text: 'Expired licences are now included in the export.', evidence: { file: 'src/export.js', line: 2, text: 'includeExpired: true' } },
-          { id: 'AC-2', text: 'The PDF uses the new layout.', evidence: { file: 'src/export.js', line: 2, text: 'pdfLayout: 2' } }] }));
-      const deps = { git: repo.git, stateDir: state.dir, fetchBuild: noBuild, log };
+      const writeReply = changes => fs.writeFileSync(replyFile, JSON.stringify({ ticket_id: MEMBER_TICKET, ticket_version: version(), opening: 'update', closing: 'reply_here',
+        claims: [{ id: 'AC-1', text: 'The export button says "Export expired licences".', evidence: { file: 'src/export.js', line: 2, text: 'Export expired licences' } },
+          { id: 'AC-2', text: 'The PDF uses the new layout.', evidence: { file: 'src/export.js', line: 2, text: 'pdfLayout: 2' } }], ...changes }));
+      writeReply({});
+      const deps = { git: repo.git, stateDir: state.dir, fetchBuild: liveBuild(repo.first), log };
       const offline = async () => { throw Error('a dry run must not reach the database'); };
       assert.equal(await verifyClaims(['--ticket', MEMBER_TICKET, '--reply', replyFile], { ...deps, query: offline }), 3);
       assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile, '--dry-run'], { ...deps, query: offline }), 3);
@@ -266,32 +298,96 @@ test('support reply verification: the database refuses unverified operator repli
       const before = pg.sql('select count(*) from public.support_messages');
       assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile], { ...deps, query }), 0, lines.join('\n'));
       const posted = JSON.parse(lines.at(-1));
+      // Review: a stored reply here is never emailed; say so instead of "stored".
+      assert.equal(posted.emailed, false);
+      assert.equal(posted.email, EMAIL_NOT_SENT);
       assert.equal(pg.sql('select count(*) from public.support_messages'), String(Number(before) + 1));
       const stored = JSON.parse(pg.sql(`select row_to_json(m) from (select body, author_id, is_admin_reply, verification_id from public.support_messages where id = '${posted.message_id}') m`));
       assert.equal(stored.verification_id, posted.verification_id);
       assert.equal(stored.author_id, MEMBER);
       assert.equal(stored.is_admin_reply, true);
-      assert.match(stored.body, /^CredentialDOMD Support · Automated\n\nHere is where your request stands\.\n\nWhat we confirmed:\n- Expired licences are now included in the export\.\n\nNot done yet:\n- The PDF uses the new layout\./);
+      assert.match(stored.body, /^CredentialDOMD Support · Automated\n\nHere is where your request stands\.\n\nWhat we confirmed:\n- The export button says "Export expired licences"\.\n\nNot done yet:\n- The PDF uses the new layout\./);
       const report = JSON.parse(pg.sql(`select report from public.support_reply_verifications where id = '${posted.verification_id}'`));
-      assert.deepEqual(report.claims.map(c => c.verified), [true, false]);
+      assert.deepEqual(report.claims_checked.map(c => c.verified), [true, false]);
+      assert.equal(report.claims, 'bound');
       assert.equal(report.head, repo.first);
       assert.ok(!JSON.stringify(report).includes(key), 'the key is not in the report');
       assert.equal(pg.sql(`select status from public.support_tickets where id = '${MEMBER_TICKET}'`), 'open');
       const ledger = path.join(state.dir, 'replies', MEMBER_TICKET, `${posted.verification_id}.json`);
       assert.equal(fs.statSync(ledger).mode & 0o777, 0o600);
+      assert.equal(JSON.parse(fs.readFileSync(ledger, 'utf8')).emailed, false);
       assert.ok(!fs.readFileSync(ledger, 'utf8').includes(key));
+      assert.equal(pg.sql('select count(*) from public.sent_emails where message_id = ' + `'${posted.message_id}'`), '0', 'and it indeed was not');
+      writeReply({ ticket_version: version() });
       assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile], { ...deps, query }), 2, 'the same reply twice is refused');
       assert.match(lines.at(-1), /already stored/);
-      // A new customer message between reading the ticket and writing: withheld.
-      fs.writeFileSync(replyFile, JSON.stringify({ ticket_id: MEMBER_TICKET, opening: 'answer', closing: 'none', not_done: ['A second synthetic answer.'] }));
-      const racing = async sql => {
-        if (sql.includes('vault.decrypted_secrets')) pg.sql(`set role service_role; ${insertMessage({ admin: false, body: 'Racing input' })}`, { user: 'authenticator' });
-        return query(sql);
-      };
-      assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile], { ...deps, query: racing }), 4);
+
+      // Review replay (5ed50a64): the writer read the ticket, then the customer
+      // wrote again BEFORE post-reply started. The version the writer read wins.
+      writeReply({ opening: 'answer', closing: 'none', claims: [], not_done: ['A second synthetic answer.'] });
+      pg.sql(`set role service_role; ${insertMessage({ admin: false, body: 'It is the admin modal, not the form.' })}`, { user: 'authenticator' });
+      assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile], { ...deps, query }), 4);
+      assert.match(lines.at(-1), /changed after the version in ticket_version was read/);
       assert.equal(pg.sql(`select count(*) from public.support_messages where body like '%A second synthetic answer.%'`), '0');
       assert.equal(pg.sql(`select count(*) from public.support_reply_verifications v where not exists (select 1 from public.support_messages m where m.verification_id = v.id) and v.report->>'path' = 'post-reply'`), '0', 'a withheld reply leaves no verification behind');
+
+      // Review replay: hand-written evidence. The gates file claims a pass and
+      // the stored query rows claim zero; post-reply produces both itself.
+      const gatesFile = path.join(state.dir, 'gates.json');
+      fs.writeFileSync(gatesFile, JSON.stringify({ version: 1, producer: 'scripts/ticket-fix/run-tests.mjs', head: repo.first, dirty: false,
+        tests: [{ id: 'tests/export.test.mjs::invoice lists every receipt', status: 'pass' }] }), { mode: 0o600 });
+      const queries = path.join(state.dir, 'queries', MEMBER_TICKET);
+      fs.mkdirSync(queries, { recursive: true, mode: 0o700 });
+      const sql = `select id from support_messages where ticket_id = '${MEMBER_TICKET}' and is_admin_reply = false and body like 'It is the admin modal%'`;
+      fs.writeFileSync(path.join(queries, 'modal.json'), JSON.stringify({ version: 1, id: 'modal', ticket_id: MEMBER_TICKET, owner_id: MEMBER, sql,
+        ran_at: new Date().toISOString(), row_count: 0, rows: [], rows_sha256: sha256Hex('[]') }), { mode: 0o600 });
+      fs.writeFileSync(path.join(queries, 'modal-control.json'), JSON.stringify({ version: 1, id: 'modal-control', ticket_id: MEMBER_TICKET, owner_id: MEMBER,
+        sql: `select id from support_messages where ticket_id = '${MEMBER_TICKET}' limit 1`, ran_at: new Date().toISOString(), row_count: 1, rows: [{ id: uuid(1) }], rows_sha256: sha256Hex(JSON.stringify([{ id: uuid(1) }])) }), { mode: 0o600 });
+      writeReply({ opening: 'checked', closing: 'none', claims: [
+        { text: 'Your invoice lists every receipt you uploaded.', evidence: { test: 'tests/export.test.mjs::invoice lists every receipt' } },
+        { text: 'No message about the admin modal came in.', evidence: { query: 'modal', expect: { rows: 0, control: 'modal-control' } } }] });
+      const dry = lines.length;
+      assert.equal(await verifyClaims(['--ticket', MEMBER_TICKET, '--reply', replyFile, '--gates', gatesFile], { ...deps, query: offline }), 0, 'the dry run trusts its cache');
+      const ranTests = [];
+      assert.equal(await postReply(['--ticket', MEMBER_TICKET, '--reply', replyFile, '--gates', gatesFile], { ...deps, query,
+        runTests: async files => { ranTests.push(...files); return { version: 1, head: repo.first, dirty: false, tests: [{ id: 'tests/export.test.mjs::export label', status: 'pass' }] }; } }), 0, lines.slice(dry).join('\n'));
+      assert.deepEqual(ranTests, ['tests/export.test.mjs']);
+      const second = JSON.parse(lines.at(-1));
+      assert.equal(second.confirmed, 0, 'neither hand-written result confirmed anything');
+      const body = pg.sql(`select body from public.support_messages where id = '${second.message_id}'`);
+      assert.match(body, /Not done yet:\n- Your invoice lists every receipt you uploaded\.\n- No message about the admin modal came in\./);
+      const checked = JSON.parse(pg.sql(`select report from public.support_reply_verifications where id = '${second.verification_id}'`));
+      assert.match(checked.claims_checked[0].reason, /did not run/);
+      assert.match(checked.claims_checked[1].reason, /returned 1 rows, expected 0/);
+      assert.deepEqual(checked.queries.map(q => [q.id, q.reexecuted]), [['modal', true], ['modal-control', true]]);
+      assert.equal(checked.queries[0].matches_stored, false, 'the stored rows were not what the database holds');
     } finally { repo.cleanup(); state.cleanup(); }
+  });
+
+  await t.test('the RLS dry-run measures RLS, not the reply trigger, and records why a probe was refused', () => {
+    // scripts/sql/ticket-admission-dryrun.sql runs as postgres through the
+    // management API; with the trigger on, an admin reply it expects to be
+    // "allowed" by RLS was refused by the trigger instead.
+    const off = DRYRUN.match(/do \$off\$[\s\S]*?\$off\$;/);
+    assert.ok(off, 'the dry run turns the verification trigger off for its transaction');
+    const table = DRYRUN.match(/create temp table probe_out\([^;]*;/)[0];
+    const probe = DRYRUN.match(/create function pg_temp\.probe\([\s\S]*?end \$f\$;/)[0];
+    const out = pg.sql(`begin;
+      alter table public.support_messages enable row level security;
+      create policy probe_insert on public.support_messages for insert with check (author_id = public.current_profile_id());
+      ${off[0]}
+      ${table}
+      ${probe}
+      select pg_temp.probe('admin signs a reply on their own thread', 'sub-admin',
+        $q$insert into public.support_messages (ticket_id, author_id, body, is_admin_reply) values ('${SPARE_TICKET}', '${ADMIN}', 'probe reply', true)$q$, 'allowed');
+      select pg_temp.probe('a member cannot write as the admin', 'sub-member',
+        $q$insert into public.support_messages (ticket_id, author_id, body, is_admin_reply) values ('${SPARE_TICKET}', '${ADMIN}', 'probe forgery', true)$q$, 'blocked');
+      select name || '|' || actual || '|' || verdict || '|' || coalesce(detail, '') from pg_temp.probe_out;
+      rollback;`);
+    const [allowed, blocked] = out.split('\n').filter(line => line.includes('|'));
+    assert.equal(allowed, 'admin signs a reply on their own thread|allowed|PASS|');
+    assert.match(blocked, /^a member cannot write as the admin\|blocked\|PASS\|42501 new row violates row-level security policy/);
+    assert.equal(pg.sql(`select tgenabled from pg_trigger where tgname = 'trg_require_verified_support_reply'`), 'O', 'the rollback restored the trigger');
   });
 
   await t.test('deleting a ticket removes its verified replies and verifications together', () => {
@@ -299,10 +395,16 @@ test('support reply verification: the database refuses unverified operator repli
     assert.equal(pg.sql(`select count(*) from public.support_reply_verifications where ticket_id = '${RESOLVED_TICKET}'`), '0');
   });
 
-  await t.test('the rollback turns enforcement off and the migration turns it back on', () => {
+  await t.test('each rollback turns its own rules off, and reapplying turns them back on', () => {
+    const cli = `set role postgres; ${insertMessage({ body: 'Unverified from the CLI' })}`;
+    assert.equal(pg.tryRun(cli, { user: 'cli_login_postgres' }).ok, false);
+    pg.sql(HARDENING_ROLLBACK);
+    assert.equal(pg.tryRun(cli, { user: 'cli_login_postgres' }).ok, true, 'the 150000 rules again: the CLI role was not on the list');
+    assert.equal(pg.tryRun(insertMessage({ body: 'Unverified operator reply' })).ok, false, 'operator SQL still refused');
     pg.sql(ROLLBACK);
     assert.match(pg.sql(insertMessage({ body: 'Unverified after rollback' })), /^[0-9a-f-]{36}$/);
-    pg.sql(MIGRATION);
+    pg.sql(`${MIGRATION}\n${HARDENING}`);
     assert.equal(pg.tryRun(insertMessage({ body: 'Unverified after reapply' })).ok, false);
+    assert.equal(pg.tryRun(cli, { user: 'cli_login_postgres' }).ok, false);
   });
 });

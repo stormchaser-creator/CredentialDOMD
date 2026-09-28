@@ -151,7 +151,9 @@ test('case assessment rejects already-answered questions, nonexistent evidence, 
   const falseRuntime = assessment(context); falseRuntime.assessment.verification.kind = 'verified_change';
   assert.throws(() => validateAssessment(falseRuntime, context, { isolated: true }), /runtime verification/);
   assert.throws(() => validateAssessment({ ...out, target_id: uuid(2) }, context), /object/);
-  assert.throws(() => validateAssessment({ ...out, reply: 'This is fixed and live.' }, context), /Completion claim/);
+  // A completion claim in the reply is refused before the older completion
+  // check is reached: the agent's prose may not report a result at all.
+  assert.throws(() => validateAssessment({ ...out, reply: 'This is fixed and live.' }, context), /unverified_claim/);
   assert.throws(() => validateAssessment({ ...out, reply: 'Which Add button?' }, context), /answered question/);
   assert.throws(() => validateAssessment({ ...out, reply: 'What happens after saving?' }, context), /missing from the review/);
   const fakeConfirmation = assessment(context); fakeConfirmation.assessment.acceptance_criteria[0].state = 'customer_confirmed';

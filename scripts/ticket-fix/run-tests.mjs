@@ -5,8 +5,12 @@
 //
 //   node scripts/ticket-fix/run-tests.mjs --out <gates.json> -- <test file> [...]
 //
-// The file records HEAD and whether tracked files were modified; a claim is
-// confirmed only from a clean run at the HEAD the reply is checked at.
+// The file records HEAD and whether the tree was clean (no modified tracked
+// file, no untracked file under src/ or tests/); a claim is confirmed only
+// from a clean run at the HEAD the reply is checked at, and only when the
+// live build contains that HEAD. The file is the dry run's cache:
+// post-reply.mjs runs the cited tests again itself (runTestsNow) when it
+// posts, so a hand-written gates file confirms nothing.
 // Exits with the test run's own exit code.
 import { spawnSync } from 'node:child_process';
 import { promises as fs, mkdtempSync, rmSync, realpathSync } from 'node:fs';
@@ -48,6 +52,12 @@ export async function runTests({ repo: given, files, out, env = process.env, qui
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 }
 
+// A fresh host run into a private scratch file, for post-reply.mjs.
+export async function runTestsNow({ repo, files, env = process.env }) {
+  const scratch = mkdtempSync(path.join(os.tmpdir(), 'ticket-post-gates-'));
+  try { return await runTests({ repo, files, out: path.join(scratch, 'gates.json'), env, quiet: true }); } finally { rmSync(scratch, { recursive: true, force: true }); }
+}
+
 async function main(argv = process.argv.slice(2)) {
   const split = argv.indexOf('--');
   const options = split < 0 ? argv : argv.slice(0, split);
@@ -58,7 +68,7 @@ async function main(argv = process.argv.slice(2)) {
   const out = path.resolve(options[1]);
   const gates = await runTests({ repo, files, out });
   const count = status => gates.tests.filter(t => t.status === status).length;
-  console.log(`gates: ${count('pass')} passed, ${count('fail')} failed, ${count('skip') + count('todo')} skipped at ${gates.head.slice(0, 12)}${gates.dirty ? ' (uncommitted changes: no claim can cite this run)' : ''}; wrote ${out}`);
+  console.log(`gates: ${count('pass')} passed, ${count('fail')} failed, ${count('skip') + count('todo')} skipped at ${gates.head.slice(0, 12)}${gates.dirty ? ' (uncommitted or untracked changes: no claim can cite this run)' : ''}; wrote ${out}`);
   return gates.exit_code;
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
