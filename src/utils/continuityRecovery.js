@@ -12,15 +12,21 @@ const HASH = /^[a-f0-9]{64}$/;
 const isUuid = value => typeof value === 'string' && UUID.test(value);
 const isSubject = value => typeof value === 'string' && SUBJECT.test(value);
 // The journal (schemaVersion 1) stores one entry per base, in this order, and
-// validateJournal refuses any other list. It is written once per device and
-// read on every load, so this list must never follow BASE_KEYS: adding
-// accessAnswer to BASE_KEYS (a5379beb) made every existing journal invalid
-// and stopped the account from loading. A new base needs a new schemaVersion
-// that still accepts version 1 journals.
+// validateJournal refuses any other list but d0c0935's below. It is written
+// once per device and read on every load, so this list must never follow
+// BASE_KEYS: adding accessAnswer to BASE_KEYS (a5379beb) made every existing
+// journal invalid and stopped the account from loading. A new base needs a
+// new schemaVersion that still accepts version 1 journals.
 const BASES = Object.freeze([
   BASE_KEYS.data, BASE_KEYS.vault, BASE_KEYS.chat, BASE_KEYS.archives, BASE_KEYS.timer,
   BASE_KEYS.lastContract, BASE_KEYS.pendingOps, BASE_KEYS.callsync, DEVICE_KEYS_BASE, WIPE_SEEN_KEY,
 ]);
+// d0c0935 derived the list from BASE_KEYS after accessAnswer joined it, so a
+// device that first recovered while that build was live holds a version 1
+// journal with an eleventh entry, accessAnswer, at index 8. It is accepted,
+// and that entry is dropped: accessAnswer is never copied between accounts.
+const ACCESS_ANSWER_BASE = 'credentialdomd-access-answer';
+const BASES_D0C0935 = Object.freeze([...BASES.slice(0, 8), ACCESS_ANSWER_BASE, ...BASES.slice(8)]);
 const issued = new WeakMap();
 const running = new Map();
 const encoder = new TextEncoder();
@@ -115,16 +121,19 @@ async function sha256(value) {
 function validateJournal(raw, context) {
   let journal;
   try { journal = JSON.parse(raw); } catch { throw failure('continuity_invalid_journal'); }
+  const bases = journal?.entries?.length === BASES_D0C0935.length ? BASES_D0C0935 : BASES;
   if (journal?.schemaVersion !== 1 || journal.continuityId !== context.continuityId
     || journal.profileId !== context.profileId || journal.subject !== context.subject
     || journal.sourceSubject !== context.sourceSubject || !['recovering', 'complete'].includes(journal.state)
-    || !Array.isArray(journal.entries) || journal.entries.length !== BASES.length
-    || journal.entries.some((entry, index) => entry?.base !== BASES[index]
+    || !Array.isArray(journal.entries) || journal.entries.length !== bases.length
+    || journal.entries.some((entry, index) => entry?.base !== bases[index]
       || !['pending', 'copied', 'absent'].includes(entry.state)
       || (entry.state === 'absent' ? entry.digest !== null : typeof entry.digest !== 'string' || !HASH.test(entry.digest)))
     || (journal.state === 'complete' && journal.entries.some(entry => entry.state === 'pending'))) {
     throw failure('continuity_invalid_journal');
   }
+  // The next save writes the pinned version 1 list back.
+  if (bases === BASES_D0C0935) journal.entries = journal.entries.filter(entry => entry.base !== ACCESS_ANSWER_BASE);
   return journal;
 }
 

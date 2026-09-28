@@ -225,6 +225,51 @@ test('a journal written before a device key was added still loads (ID-RECOVER-IN
   assert.equal(result.alreadyComplete, true);
 });
 
+// d0c0935 derived the list from BASE_KEYS after accessAnswer joined it, so a
+// device that first recovered while that build was live wrote this eleven-base
+// version 1 journal. Pinned as literals, like the list above.
+const JOURNAL_V1_BASES_D0C0935 = ['credentialdomd-data', 'credentialdomd-private-vault', 'credentialdomd-assistant-chat',
+  'credentialdomd-assistant-archives', 'credentialdomd-live-timer', 'credentialdomd-last-contract',
+  'credentialdomd-pending-ops', 'credentialdomd-callsync', 'credentialdomd-access-answer', 'credentialdomd-keys', 'credentialdomd-wipe-seen'];
+
+test('a journal written by d0c0935 (eleven bases, accessAnswer included) still loads', async () => {
+  const f = fixture();
+  f.values.set(continuityJournalKey(f.binding), JSON.stringify({ schemaVersion: 1,
+    continuityId: f.proof.continuity.id, profileId: f.proof.profileId, subject: current, sourceSubject: legacy,
+    state: 'complete', entries: JOURNAL_V1_BASES_D0C0935.map(base => ({ base, digest: null, state: 'absent' })) }));
+  const result = await f.recover();
+  assert.equal(result.alreadyComplete, true);
+});
+
+test('an unfinished d0c0935 journal finishes on the version 1 list and never copies the membership answer', async () => {
+  const f = fixture();
+  f.values.set(f.source(BASE_KEYS.data), 'synthetic-file');
+  f.values.set(f.source(BASE_KEYS.accessAnswer), '{"credential":true,"practice":true}');
+  const entries = [];
+  for (const base of JOURNAL_V1_BASES_D0C0935) {
+    const value = f.values.get(f.source(base)) ?? null;
+    entries.push({ base, digest: value === null ? null : await digest(value), state: value === null ? 'absent' : 'pending' });
+  }
+  const key = continuityJournalKey(f.binding);
+  f.values.set(key, JSON.stringify({ schemaVersion: 1, continuityId: f.proof.continuity.id, profileId: f.proof.profileId,
+    subject: current, sourceSubject: legacy, state: 'recovering', entries }));
+  const result = await f.recover();
+  assert.equal(result.state, 'complete');
+  assert.equal(f.values.get(f.target(BASE_KEYS.data)), 'synthetic-file');
+  assert.equal(f.values.has(f.target(BASE_KEYS.accessAnswer)), false, 'one account\'s answer is never copied to another');
+  assert.deepEqual(JSON.parse(f.values.get(key)).entries.map(entry => entry.base), JOURNAL_V1_BASES, 'saved back on the version 1 list');
+  assert.equal((await f.recover()).alreadyComplete, true);
+});
+
+test('only the exact d0c0935 list is accepted beside the version 1 list', async () => {
+  const f = fixture();
+  const moved = [...JOURNAL_V1_BASES_D0C0935]; [moved[8], moved[9]] = [moved[9], moved[8]];
+  f.values.set(continuityJournalKey(f.binding), JSON.stringify({ schemaVersion: 1,
+    continuityId: f.proof.continuity.id, profileId: f.proof.profileId, subject: current, sourceSubject: legacy,
+    state: 'complete', entries: moved.map(base => ({ base, digest: null, state: 'absent' })) }));
+  await assert.rejects(f.recover(), error => error.code === 'continuity_invalid_journal');
+});
+
 test('a new journal records exactly the version 1 bases, whatever BASE_KEYS gains', async () => {
   const f = fixture(); await f.recover();
   assert.deepEqual(JSON.parse(f.values.get(continuityJournalKey(f.binding))).entries.map(entry => entry.base), JOURNAL_V1_BASES);

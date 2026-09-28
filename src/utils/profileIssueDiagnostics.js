@@ -29,6 +29,18 @@ export function profileSupportReference(error) {
   return `ID-${stage}-${code}${status === null ? '' : `-H${status}`}`;
 }
 
+/**
+ * The reference for an account load that fell back to this device's copy:
+ * DATA-LOAD-LOCAL, the stage it reached (PROFILE: the profile never became
+ * ready, so no membership check can run until a reload; RECORDS: it had),
+ * and an allowlisted error code or browser error name, else UNKNOWN.
+ */
+export function localFallbackReference(stage, error) {
+  const where = stage === 'records' ? 'RECORDS' : 'PROFILE';
+  const cause = CODES.get(error?.code) || BROWSER_ERRORS.get(error?.name) || 'UNKNOWN';
+  return `DATA-LOAD-LOCAL-${where}-${cause}`;
+}
+
 export function profileInitializationError(stage, cause, httpStatus = cause?.httpStatus) {
   const error = new Error('Your account identity could not be verified. Your existing records have not changed.');
   error.code = 'continuity_initialization_failed';

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { profileSupportReference, profileInitializationError } from '../../src/utils/profileIssueDiagnostics.js';
+import { localFallbackReference, profileSupportReference, profileInitializationError } from '../../src/utils/profileIssueDiagnostics.js';
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from '../../src/utils/accountRecordsLoad.js';
 import { reconcileDocumentLinks } from '../../src/utils/documentLinks.js';
 
@@ -50,7 +50,7 @@ function fixture({ offline = false, deferReact = false, documents = [] } = {}) {
     user: { id: ownerA }, useCallback: callback => callback, accessAuthority: { enabled: false, suspendWrites: () => calls.push({ name: 'suspendWrites' }) },
     DEFAULT_DATA: { settings: {}, documents: [], licenses: [] }, COLLECTION_KEYS: ['licenses', 'documents'], WIPE_SEEN_KEY: 'synthetic-wipe',
     getActiveUserId: () => actor,
-    profileSupportReference,
+    profileSupportReference, localFallbackReference,
     ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords,
     reportError: (...args) => record('reportError', args),
     ensureProfile: asyncDependency('ensureProfile', { id: 'profileA' }),
@@ -339,8 +339,29 @@ test('an account load that falls back to this device\'s copy is reported with a 
   assert.equal(f.named('setProfileOwner').length, 0);
   assert.equal(f.named('loadData')[0].args[0], ownerA);
   assert.equal(f.named('setLoadedFrom').at(-1).value, 'local');
-  assert.deepEqual(f.named('reportError').map(call => call.args), [["Account load used this device's copy (DATA-LOAD-LOCAL)."]]);
+  assert.deepEqual(f.named('reportError').map(call => call.args), [["Account load used this device's copy (DATA-LOAD-LOCAL-PROFILE-UNKNOWN)."]]);
   assert.equal(JSON.stringify(f.named('reportError')).includes('private'), false);
+});
+
+// Review of 43edb23c: the report said only DATA-LOAD-LOCAL, so the operator
+// could not tell a profile that never became ready (no membership check can
+// run until a reload) from a failure after it did, or what kind of failure.
+test('the fallback report names the stage reached and an allowlisted cause, never the message', async () => {
+  const early = fixture();
+  early.handlers.ensureProfile = async () => { throw new TypeError('Failed to fetch private@example.test'); };
+  await early.api.loadDataForUser(ownerA); await tick();
+  assert.deepEqual(early.named('reportError').map(call => call.args), [["Account load used this device's copy (DATA-LOAD-LOCAL-PROFILE-BROWSER_TYPE)."]]);
+  const late = fixture();
+  late.handlers.readCachedData = () => { throw new RangeError('Synthetic private@example.test cache shape'); };
+  await late.api.loadDataForUser(ownerA); await tick();
+  assert.equal(late.named('setProfileOwner').length, 1, 'the profile was ready: the membership check can run');
+  assert.equal(late.named('setLoadedFrom').at(-1).value, 'local');
+  assert.deepEqual(late.named('reportError').map(call => call.args), [["Account load used this device's copy (DATA-LOAD-LOCAL-RECORDS-UNKNOWN)."]]);
+  const coded = fixture();
+  coded.handlers.ensureProfile = async () => { throw Object.assign(new Error('permission denied for private@example.test'), { code: '42501' }); };
+  await coded.api.loadDataForUser(ownerA); await tick();
+  assert.deepEqual(coded.named('reportError').map(call => call.args), [["Account load used this device's copy (DATA-LOAD-LOCAL-PROFILE-42501)."]]);
+  assert.doesNotMatch(JSON.stringify([early, late, coded].map(f => f.named('reportError'))), /private|Synthetic|fetch|permission/);
 });
 
 test('failed collections without a cache stop before partial hydration, link repair or cache writes', async () => {

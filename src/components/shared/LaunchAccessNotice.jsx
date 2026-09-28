@@ -40,10 +40,15 @@ export default function LaunchAccessNotice({ onReviewOffers }) {
     // already has its own banner with its own Retry.
     const open = ["credential", "practice"].some(scope => lastAnswer(access, scope, limitedLaunch.remembered) !== false);
     if (!limitedLaunch.reconnecting || !open || offlineMode) return null;
-    // With no ready profile no check can run; only a reload loads the account again.
-    const reload = limitedLaunch.profileReady === false;
+    // With no ready profile no check can run, and nothing loads the account
+    // again on its own when the connection returns: only a reload does, and
+    // the note says exactly that.
+    if (limitedLaunch.profileReady === false) {
+      return line("Showing this device's copy.", "Reload to reconnect your account. Changes can't be saved until then.",
+        <button type="button" style={button(true)} onClick={() => globalThis.location?.reload()}>Reload</button>);
+    }
     return line("Reconnecting to your account.", "Changes can't be saved until the connection is back.",
-      <button type="button" style={button(true)} onClick={() => { if (reload) globalThis.location?.reload(); else void limitedLaunch.refresh(); }}>{reload ? "Reload" : "Try again"}</button>);
+      <button type="button" style={button(true)} onClick={() => { void limitedLaunch.refresh(); }}>Try again</button>);
   }
   let title, copy;
   if (access.accessStatus === "pending" && !hasSavedRecords) {

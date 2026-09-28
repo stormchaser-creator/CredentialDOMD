@@ -1,17 +1,20 @@
 // "Checking membership" kept showing for the owner: a lifetime Credential and
-// Practice member whose server answer was correct and complete. These run the
-// real hook and the real access authority with the production rollout flags
-// (public signup on, so enrollment runs first), a profile readiness and a
-// Clerk user that change on their own, a fake clock, fake timers and fake page
-// events. No network, account, provider or database is used, and every
-// identity and answer is synthetic.
+// Practice member whose server answer was correct and complete. Which path
+// did it on his iPhone is not confirmed; these pin each path that could leave
+// the line up, and what the page says instead. They run the real hook and the
+// real access authority with the production rollout flags (public signup on,
+// so enrollment runs first), a profile readiness and a Clerk user that change
+// on their own, a fake clock, fake timers and fake page events. No network,
+// account, provider or database is used, and every identity and answer is
+// synthetic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import * as refreshFailure from '../../src/utils/accessRefreshFailure.js';
-import { ACCESS_REFRESH_MS, createAccessAuthority, membershipReadOnly, validateAccessSnapshot } from '../../src/utils/limitedLaunchAccess.js';
+import { ACCESS_REFRESH_MS, NOT_CONNECTED_MESSAGE, RECONNECTING_MESSAGE, createAccessAuthority, membershipReadOnly, membershipWriteError, validateAccessSnapshot, writeRefusalMessage } from '../../src/utils/limitedLaunchAccess.js';
+import { createLimitedLaunchClient } from '../../src/utils/limitedLaunchClient.js';
 import { BASE_KEYS, purgeForSignOut, purgeUserStorage } from '../../src/utils/storageScope.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 
@@ -46,7 +49,7 @@ const deviceMemory = (seed = {}) => {
   return { saved, read: id => saved.get(id) ?? null, write: (id, value) => { saved.set(id, { ...value }); } };
 };
 
-function fixture({ signup = true, profileReady = true, clerkUser = OWNER, memory = deviceMemory(), entitlements, bootstrap } = {}) {
+function fixture({ signup = true, profileReady = true, clerkUser = OWNER, memory = deviceMemory(), entitlements, bootstrap, makeClient } = {}) {
   let now = 0, nextTimer = 1, ready = profileReady, clerk = clerkUser, visibility = 'visible';
   const timers = new Map(), listeners = new Map(), calls = [], reports = [];
   const schedule = (fn, ms, every) => { const id = nextTimer++; timers.set(id, { fn, at: now + Math.max(0, ms || 0), every }); return id; };
@@ -82,7 +85,8 @@ function fixture({ signup = true, profileReady = true, clerkUser = OWNER, memory
     react,
     '../utils/limitedLaunchAccess.js': { accessAuthority: authority, ACCESS_REFRESH_MS, LIMITED_LAUNCH_ACCESS_ENABLED: true, PUBLIC_SELF_SERVICE_SIGNUP_ENABLED: signup },
     '../utils/launchInvitation.js': { clearLaunchInvitation() {} },
-    '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: () => client },
+    // `makeClient` swaps in production's own client, given the fake clock and Clerk.
+    '../utils/limitedLaunchClient.js': { createLimitedLaunchClient: args => (makeClient ? makeClient(args, { later, clerk: () => clerk }) : client) },
     '../utils/accessRefreshFailure.js': refreshFailure,
     '../lib/errorReport.js': { reportError: (...args) => reports.push(args) },
   };
@@ -130,7 +134,10 @@ function fixture({ signup = true, profileReady = true, clerkUser = OWNER, memory
   return f;
 }
 
-test('the owner case: a first answer that arrives while Clerk briefly reports no user is asked for again within a second, and reported once', async () => {
+// A guard, not the owner's confirmed path: production's client checks the
+// Clerk session again after reading the answer (next test), so an answer this
+// late in the round trip is practically never refused here.
+test('an answer the authority does not take (Clerk reports no user as it lands) is a failed check: asked again within a second, and reported once', async () => {
   const f = fixture({ entitlements: ({ later }) => later(500, () => validateAccessSnapshot(lifetimeAnswer())) });
   assert.equal(f.value.checking, true, 'a cold start with nothing remembered says it is checking');
   await f.advance(0);
@@ -149,7 +156,7 @@ test('the owner case: a first answer that arrives while Clerk briefly reports no
   assert.deepEqual(f.memory.saved.get(OWNER), { credential: true, practice: true }, 'and remembered for the next launch');
 });
 
-test('the owner case: once answered this session, a moment with no Clerk user never brings back Checking membership', async () => {
+test('once answered this session, a moment with no Clerk user never brings back Checking membership', async () => {
   const f = fixture();
   await f.advance(0);
   assert.equal(f.value.checking, false);
@@ -164,7 +171,7 @@ test('the owner case: once answered this session, a moment with no Clerk user ne
   assert.equal(f.render().remembered, null, 'never shown to another signed-in account');
 });
 
-test('the owner case: the next cold start on the same device opens without Checking membership, even before its answer', async () => {
+test('the next cold start on the same device opens without Checking membership, even before its answer', async () => {
   const memory = deviceMemory();
   const first = fixture({ memory });
   await first.advance(0);
@@ -178,14 +185,96 @@ test('the owner case: the next cold start on the same device opens without Check
   assert.equal(second.authority.allowsMutation('workLog', { id: 'w1' }), true);
 });
 
-test('an offline session remembers the owner\'s answer although Clerk has no user, so it never says Checking membership', async () => {
+// Review of 43edb23c: offline, a remembered active answer opened the editing
+// screens, every save was refused with "Reconnecting, try again in a moment."
+// (nothing could make that true: no check runs offline), and the note that
+// changes were paused was gone. No save can be authorized without a ready
+// profile, so the archive shows and a refusal says what is true.
+test('an offline session keeps the archive: a remembered active answer never opens editing screens no save can reach', async () => {
   const f = fixture({ profileReady: false, clerkUser: null, memory: deviceMemory({ [OWNER]: { credential: true, practice: true } }) });
   await f.advance(10 * 60_000);
-  assert.deepEqual(f.value.remembered, { credential: true, practice: true });
   assert.equal(f.value.checking, false);
-  assert.equal(membershipReadOnly(f.value.access, 'practice', f.value.remembered), false, 'the normal screens, not the archive');
+  for (const scope of ['credential', 'practice']) {
+    assert.equal(membershipReadOnly(f.value.access, scope, f.value.remembered), true, `${scope}: the archive, not the editors`);
+  }
   assert.equal(f.calls.length, 0, 'nothing is asked without a ready profile');
   assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), false, 'and nothing is authorized');
+  // A save that still reaches the guard is told the truth.
+  assert.equal(f.authority.canCheck(), false);
+  assert.equal(writeRefusalMessage(f.authority, 'practice'), NOT_CONNECTED_MESSAGE);
+  assert.doesNotMatch(writeRefusalMessage(f.authority, 'practice'), /try again|moment|sync/i);
+  // The session reconnects and the profile is ready: the remembered answer
+  // opens the screens again before the first answer lands, and a refusal
+  // meanwhile is the momentary kind, with a check that can run.
+  f.setClerkUser(OWNER);
+  const back = f.setProfileReady(true);
+  assert.equal(membershipReadOnly(back.access, 'practice', back.remembered), false);
+  assert.equal(writeRefusalMessage(f.authority, 'practice'), RECONNECTING_MESSAGE);
+  await f.advance(0);
+  assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true);
+});
+
+test('offline, a remembered denial still counts: that scope stays read-only and its refusal says read-only', async () => {
+  const f = fixture({ profileReady: false, clerkUser: null, memory: deviceMemory({ [OWNER]: { credential: true, practice: false } }) });
+  await f.advance(0);
+  assert.deepEqual({ ...f.value.remembered }, { credential: null, practice: false }, 'only the denial is shown');
+  assert.equal(membershipReadOnly(f.value.access, 'practice', f.value.remembered), true);
+  assert.equal(membershipReadOnly(f.value.access, 'credential', f.value.remembered), true);
+  assert.equal(writeRefusalMessage(f.authority, 'practice'), membershipWriteError().message);
+});
+
+// Production's client, not a stub: the Clerk session is compared again after
+// the answer is read, so a session that goes away mid-check fails there (a
+// "response" failure, retried like any other) before the authority sees the
+// answer. This is what production can do; the not-accepted guard above is not
+// reached this way.
+test('with production\'s client, a Clerk session lost while the answer is on its way fails the check at the client, and the retry answers', async () => {
+  const sessions = new Map();
+  const sessionFor = id => {
+    if (!sessions.has(id)) sessions.set(id, { user: { id }, getToken: async () => 'synthetic-token' });
+    return sessions.get(id);
+  };
+  const json = value => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+  const enrollment = { schemaVersion: 1, policyVersion: PUBLIC_BILLING_POLICY.version, enrollmentKind: 'lifetime', accessStatus: 'active',
+    subscriptionCreated: false, cardRequired: false, pricePhase: null, freeBeta: { state: 'none', startsAt: null, endsAt: null, autoCharges: false } };
+  const requests = [];
+  const f = fixture({ makeClient: ({ accountId }, { later, clerk }) => createLimitedLaunchClient({
+    accountId, enabled: true, url: 'https://synthetic.invalid', anonKey: 'synthetic-anon', timeoutMs: 60_000,
+    getSession: () => (clerk() ? sessionFor(clerk()) : null),
+    fetchImpl: url => {
+      requests.push(url.slice(url.lastIndexOf('/') + 1));
+      return url.endsWith('/bootstrap-launch-access') ? Promise.resolve(json(enrollment)) : later(500, () => json(lifetimeAnswer()));
+    },
+  }) });
+  await f.advance(0);
+  assert.deepEqual(requests, ['bootstrap-launch-access', 'billing-entitlements']);
+  f.setClerkUser(null);                       // no session as the answer arrives
+  await f.advance(600);
+  f.setClerkUser(OWNER);                      // the same session is back
+  f.render();
+  assert.equal(f.authority.state(OWNER), null, 'the answer read under no session was not used');
+  assert.equal(f.value.status, 'error');
+  await f.advance(1000 + 600);
+  assert.deepEqual(requests, ['bootstrap-launch-access', 'billing-entitlements', 'billing-entitlements'], 'asked again one second later');
+  assert.equal(f.value.status, 'ready');
+  assert.equal(f.value.checking, false);
+  assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true);
+  assert.equal(f.reports.length, 1);
+  assert.match(f.reports[0][0], /^Membership check failed \(response:/);
+  assert.doesNotMatch(JSON.stringify(f.reports), /access_answer_not_accepted|synthetic-token|user_/);
+});
+
+test('Sign out drops a check still in flight: no answer written back, no failure reported, no retry', async () => {
+  const memory = deviceMemory();
+  const f = fixture({ memory, entitlements: ({ later }) => later(2000, () => validateAccessSnapshot(lifetimeAnswer())) });
+  await f.advance(0);
+  f.authority.reset(null);                    // handleSignOut, before its purge
+  await f.advance(2000);                      // the answer lands while Clerk still reports the account
+  assert.equal(memory.saved.has(OWNER), false, 'nothing of the account is written back');
+  assert.equal(f.authority.state(OWNER), null);
+  assert.equal(f.reports.length, 0, 'not a failed check');
+  await f.advance(60_000);
+  assert.equal(f.entitlementCalls(), 1, 'and not asked again');
 });
 
 test('a hook that cannot ask (no ready profile) never shows Checking membership; it shows the reconnecting note at once', async () => {

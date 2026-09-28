@@ -52,7 +52,9 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
   const client = useMemo(() => createLimitedLaunchClient({ accountId }), [accountId]);
   const active = LIMITED_LAUNCH_ACCESS_ENABLED && !!accountId && profileReady;
   const attempt = useCallback(async turn => {
-    const current = () => generation.current === turn && owner.current === accountId;
+    // Sign out resets the authority to nobody before it purges the device, so
+    // a check still in flight then is dropped: no write-back, no failure.
+    const current = () => generation.current === turn && owner.current === accountId && accessAuthority.serves?.(accountId) !== false;
     if (!current()) return;
     try {
       let enrollmentError = null;
@@ -179,6 +181,13 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
   }, [active, accountId, result, check]);
   const access = LIMITED_LAUNCH_ACCESS_ENABLED ? accessAuthority.state(accountId) : null;
   const remembered = LIMITED_LAUNCH_ACCESS_ENABLED && accountId ? accessAuthority.remembered(accountId) : null;
+  // With no ready profile (an offline session, or an account load that fell
+  // back to this device's copy) no check runs, so no write can be authorized
+  // this session. The remembered answer may then keep a scope read-only, but
+  // never opens its editing screens: the archive shows, as before any answer.
+  const shown = remembered && !profileReady
+    ? Object.fromEntries(Object.entries(remembered).map(([scope, value]) => [scope, value === false ? false : null]))
+    : remembered;
   const mine = result.accountId === accountId;
   const outdated = mine && result.status === "error" && result.outdated === true;
   // Signed in, but no check can run and no fresh answer is left: the profile
@@ -197,8 +206,9 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     // failed check. The normal screens stay; writes wait for a fresh answer.
     verifying: LIMITED_LAUNCH_ACCESS_ENABLED && !!accountId && (!access || access.needsRefresh === true),
     // The last answer this device remembered for the account, which decides
-    // the archives until this session's first answer arrives.
-    remembered,
+    // the archives until this session's first answer arrives. Without a ready
+    // profile only its denials count (see `shown`).
+    remembered: shown,
     // No answer at all yet, this session or remembered, while a check can
     // run: the archives show with a neutral "Checking membership" line until
     // the first answer arrives. Sustained failure turns it into the

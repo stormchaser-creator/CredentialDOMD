@@ -227,7 +227,8 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
      * The answer this device remembered for the account, or null. Only for
      * the screens, never for a write. A moment when Clerk reports no user (an
      * offline session, or Clerk between sessions on a resume) still has it;
-     * a different signed-in account never does.
+     * a different signed-in account never does. While no check can run, the
+     * access hook lets it keep a scope read-only but never open one.
      */
     remembered(expectedAccountId = accountId) {
       const signedIn = current();
@@ -237,11 +238,24 @@ export function createAccessAuthority({ enabled = LIMITED_LAUNCH_ACCESS_ENABLED,
       if (accountId !== expectedAccountId) { try { return memory?.read(expectedAccountId) || null; } catch { return null; } }
       return remembered ? { ...remembered } : null;
     },
+    /**
+     * True while this authority holds `expectedAccountId`. Sign out resets it
+     * to nobody before the purge, so a check still in flight for the account
+     * is simply dropped: it neither writes the answer back nor counts as a
+     * failed check.
+     */
+    serves(expectedAccountId) { return !!expectedAccountId && accountId === expectedAccountId; },
     /** The access hook's way to start a check now; returns the unsubscribe. */
     setRecheck(fn) {
       recheck = typeof fn === "function" ? fn : null;
       return () => { if (recheck === fn) recheck = null; };
     },
+    /**
+     * False when no membership check can run in this session: the hook is not
+     * running (an offline session, or an account load that never reached the
+     * server). Nothing will answer until the app reconnects.
+     */
+    canCheck() { return recheck !== null; },
     requestCheck() {
       if (!recheck) return false;
       try { recheck(); } catch { return false; }
@@ -301,6 +315,9 @@ export function membershipWriteError() {
 
 // A write refused while membership is being re-checked is momentary, and says so.
 export const RECONNECTING_MESSAGE = "Reconnecting, try again in a moment.";
+// With no check able to run (offline, or an account that never finished
+// loading), "try again in a moment" cannot come true. This is what is true.
+export const NOT_CONNECTED_MESSAGE = "Changes can't be saved until you reconnect.";
 // A build that cannot read the server's answer never recovers on its own.
 export const OUTDATED_MESSAGE = "This version of the app is out of date. Reload to continue.";
 
@@ -328,10 +345,11 @@ export function accessVerifying(authority = accessAuthority, scope = null) {
   return scopes.some(open);
 }
 
-/** What to tell someone whose change was refused: out of date, reconnecting, or read-only. */
+/** What to tell someone whose change was refused: out of date, reconnecting, not connected, or read-only. */
 export function writeRefusalMessage(authority = accessAuthority, scope = null) {
   if (authority?.enabled && authority.outdated?.() === true) return OUTDATED_MESSAGE;
-  return accessVerifying(authority, scope) ? RECONNECTING_MESSAGE : membershipWriteError().message;
+  if (!accessVerifying(authority, scope)) return membershipWriteError().message;
+  return authority.canCheck?.() === false ? NOT_CONNECTED_MESSAGE : RECONNECTING_MESSAGE;
 }
 
 /** Start a membership check at once (the hook's own, coalesced with one in flight). */

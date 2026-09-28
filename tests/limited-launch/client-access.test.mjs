@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange, canReviewBillingOffer, membershipReadOnly, accessVerifying, writeRefusalMessage, alertWriteRefused, RECONNECTING_MESSAGE, OUTDATED_MESSAGE, membershipWriteError, scopesForWrite, writeAllowedNow } from '../../src/utils/limitedLaunchAccess.js';
+import { accessAt, validateAccessSnapshot, createAccessAuthority, ACCESS_REFRESH_MS, allowsDataChange, canReviewBillingOffer, membershipReadOnly, accessVerifying, writeRefusalMessage, alertWriteRefused, RECONNECTING_MESSAGE, NOT_CONNECTED_MESSAGE, OUTDATED_MESSAGE, membershipWriteError, scopesForWrite, writeAllowedNow } from '../../src/utils/limitedLaunchAccess.js';
 import { BASE_KEYS } from '../../src/utils/storageScope.js';
 import { PUBLIC_BILLING_POLICY } from '../../supabase/functions/_shared/accessPolicy.mjs';
 
@@ -199,6 +199,7 @@ test('an old or failed check keeps the server entitlement for the screens and st
   let now = 0;
   const authority = createAccessAuthority({ enabled: true, currentAccount: () => 'user_a', now: () => now });
   authority.reset('user_a');
+  authority.setRecheck(() => {}); // the access hook is running, so a check can start
   const snapshot = fixture(); snapshot.practiceTrial = { state: 'none', startsAt: null, endsAt: null, autoCharges: false };
   authority.accept('user_a', snapshot);
   assert.deepEqual(authority.state().entitled, { credential: true, practice: true });
@@ -263,6 +264,7 @@ test('a refusal is "reconnecting" only for a scope the last answer did not deny'
   let now = 0, clock = 1e12;
   const authority = createAccessAuthority({ enabled: true, currentAccount: () => 'user_a', now: () => now, memory: null });
   authority.reset('user_a');
+  authority.setRecheck(() => {}); // the access hook is running, so a check can start
   const beta = fixture(); beta.purchasedOfferId = null; beta.practiceTrial = { state: 'none', startsAt: null, endsAt: null, autoCharges: false };
   beta.capabilities.credential.write = false; beta.capabilities.practice.write = false;
   authority.accept('user_a', beta);
@@ -281,6 +283,35 @@ test('a refusal is "reconnecting" only for a scope the last answer did not deny'
   assert.equal(writeRefusalMessage(authority, 'practice'), membershipWriteError().message);
   assert.equal(writeRefusalMessage(authority, ['credential', 'practice']), membershipWriteError().message, 'a new unfiled file needs both');
   assert.equal(accessVerifying(authority), true, 'one scope is still open');
+});
+
+// Review of 43edb23c: with no check able to run (the access hook is not
+// running: an offline session, or an account load that never reached the
+// server), "Reconnecting, try again in a moment." could never come true.
+test('a refusal while no check can run says changes wait for the connection, never "try again in a moment"', () => {
+  let now = 0;
+  const authority = createAccessAuthority({ enabled: true, currentAccount: () => 'user_a', now: () => now, memory: null });
+  authority.reset('user_a');
+  assert.equal(authority.canCheck(), false);
+  assert.equal(accessVerifying(authority, 'practice'), true);
+  assert.equal(writeRefusalMessage(authority, 'practice'), NOT_CONNECTED_MESSAGE);
+  const shown = [];
+  alertWriteRefused({ authority, scope: 'practice', alert: m => shown.push(m), now: () => 1.5e12 });
+  assert.deepEqual(shown, [NOT_CONNECTED_MESSAGE]);
+  assert.doesNotMatch(NOT_CONNECTED_MESSAGE, /try again|moment|sync|\u{2014}/iu);
+  // Once the hook runs, the same refusal is the momentary kind, and asks.
+  const checks = [];
+  const unsubscribe = authority.setRecheck(() => checks.push(now));
+  assert.equal(writeRefusalMessage(authority, 'practice'), RECONNECTING_MESSAGE);
+  alertWriteRefused({ authority, scope: 'practice', alert: m => shown.push(m), now: () => 1.6e12 });
+  assert.deepEqual(shown, [NOT_CONNECTED_MESSAGE, RECONNECTING_MESSAGE]);
+  assert.equal(checks.length, 1);
+  unsubscribe();
+  assert.equal(writeRefusalMessage(authority, 'practice'), NOT_CONNECTED_MESSAGE);
+  // A scope the last answer denied is read-only either way.
+  authority.accept('user_a', (() => { const denied = fixture(); denied.practiceTrial = { state: 'none', startsAt: null, endsAt: null, autoCharges: false }; denied.capabilities.practice.write = false; return denied; })());
+  now = ACCESS_REFRESH_MS + 1;
+  assert.equal(writeRefusalMessage(authority, 'practice'), membershipWriteError().message);
 });
 
 test('each write names the scopes it needs, for its refusal', () => {

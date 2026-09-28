@@ -5,12 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { membershipReadOnly } from '../../src/utils/limitedLaunchAccess.js';
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL('../..', import.meta.url));
 // Render the real components with synthetic account data and no network/provider.
 const bundled = await build({
-  stdin: { contents: 'export {default as Archive} from "./src/components/features/ReadOnlyRecords.jsx"; export {default as Notice} from "./src/components/shared/LaunchAccessNotice.jsx"; export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx";', resolveDir: root, loader: 'jsx' },
+  stdin: { contents: 'export {default as Archive} from "./src/components/features/ReadOnlyRecords.jsx"; export {default as Notice} from "./src/components/shared/LaunchAccessNotice.jsx"; export {default as Membership} from "./src/components/pages/LimitedLaunchMembership.jsx"; export {default as OfflineBanner} from "./src/components/shared/OfflineBanner.jsx";', resolveDir: root, loader: 'jsx' },
   bundle: true, define: {'import.meta.env':'{}'}, platform: 'node', format: 'cjs', write: false, jsx: 'automatic', external: ['react', 'react/jsx-runtime'],
   plugins: [{ name: 'synthetic-account', setup(builder) {
     builder.onResolve({ filter: /context\/AppContext$/ }, () => ({ path: 'context', namespace: 'fixture' }));
@@ -24,7 +25,7 @@ const bundled = await build({
 });
 const mod = { exports: {} };
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(require, mod, mod.exports);
-const { Archive, Notice, Membership } = mod.exports;
+const { Archive, Notice, Membership, OfflineBanner } = mod.exports;
 const capability = write => ({ read: true, write, export: true });
 const fixture = () => ({
   user: { id: 'user_synthetic' }, theme: { text: '#111', textMuted: '#666', border: '#aaa', card: '#fff', bg: '#eee' },
@@ -236,20 +237,48 @@ test('no answer yet and none remembered on this device: the neutral Checking mem
   assert.doesNotMatch(html, /read-only|beta has ended|Reconnecting|\u{2014}/u);
 });
 
-test('with no ready profile the note says it is reconnecting and offers a reload; an offline session leaves it to the offline banner', () => {
+// Review of 43edb23c: with no ready profile nothing loads the account again
+// when the connection returns, so a note promising that was untrue. It says
+// what the Reload button does.
+test('with no ready profile the note offers the reload that reconnects, and promises nothing else; an offline session leaves it to the offline banner', () => {
   const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
-  Object.assign(value.limitedLaunch, { status: 'loading', access: null, remembered: { credential: true, practice: true },
+  Object.assign(value.limitedLaunch, { status: 'loading', access: null, remembered: { credential: null, practice: null },
     checking: false, reconnecting: true, profileReady: false });
   const html = render(Notice);
-  assert.match(html, /Reconnecting to your account\./);
+  assert.match(html, /Showing this device&#x27;s copy\./);
+  assert.match(html, /Reload to reconnect your account\. Changes can&#x27;t be saved until then\./);
   assert.match(html, /<button type="button" style="[^"]*">Reload<\/button>/);
-  assert.doesNotMatch(html, /Checking membership|Try again|\u{2014}/u);
+  assert.doesNotMatch(html, /Checking membership|Try again|connection is back|Reconnecting|\u{2014}/u);
   value.offlineMode = true;
   assert.equal(render(Notice), '', 'the offline banner already says so, with its own Retry');
   // A check that can run keeps its Try again.
   value.offlineMode = false;
   Object.assign(value.limitedLaunch, { status: 'error', error: 'Membership information could not load.', profileReady: true });
   assert.match(render(Notice), /<button type="button" style="[^"]*">Try again<\/button>/);
+});
+
+// Review of 43edb23c: an offline session (no Clerk, no ready profile) on a
+// device that remembers an active membership. No save can be authorized
+// offline, so the archive shows (the access hook no longer lets a remembered
+// answer open a scope without a ready profile), the notice leaves it to the
+// offline banner, and no copy promises that changes will sync or that trying
+// again in a moment will work.
+test('offline under limited launch: the archive, and copy that says changes cannot be saved until reconnecting', () => {
+  const value = fixture(); themed(value); globalThis.__limitedLaunchRenderFixture = value;
+  value.offlineMode = true;
+  // What useLimitedLaunchAccess returns offline for a remembered {true, true}.
+  Object.assign(value.limitedLaunch, { status: 'loading', access: null, error: null, remembered: { credential: null, practice: null },
+    checking: false, reconnecting: true, profileReady: false });
+  assert.equal(render(Notice), '');
+  for (const scope of ['credential', 'practice']) assert.equal(membershipReadOnly(value.limitedLaunch.access, scope, value.limitedLaunch.remembered), true, `${scope}: the archive`);
+  const banner = render(OfflineBanner, { limitedLaunch: true });
+  assert.match(banner, /Changes can&#x27;t be saved until you reconnect\./);
+  assert.doesNotMatch(banner, /sync|try again|\u{2014}/iu);
+  const archive = render(Archive, { scope: 'practice' });
+  assert.match(archive, /These records are read-only/);
+  assert.doesNotMatch(archive, /Record payment|Delete/);
+  // Without limited launch an offline edit is queued and does sync.
+  assert.match(render(OfflineBanner, { limitedLaunch: false }), /Changes will sync when you reconnect\./);
 });
 
 test('an out-of-date build asks for a reload instead of saying it is reconnecting', () => {

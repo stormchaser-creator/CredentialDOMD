@@ -9,7 +9,7 @@ import { setActiveUserId, getActiveUserId, purgeUserStorage, adoptLegacyStorage,
 import { recordLastIdentity } from "../utils/offlineSession";
 import { resetSharedAiStatus } from "../utils/aiClient";
 import { configureSecretContinuity } from "../utils/secretBox.js";
-import { profileSupportReference } from "../utils/profileIssueDiagnostics.js";
+import { localFallbackReference, profileSupportReference } from "../utils/profileIssueDiagnostics.js";
 import { ACCOUNT_RECORDS_SUPPORT_REFERENCE, accountRecordsLoadError, assertCompleteAccountRecords } from "../utils/accountRecordsLoad.js";
 import { reportError } from "../lib/errorReport.js";
 import { vaultCount } from "../utils/privateVault";
@@ -207,12 +207,16 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     // same read path the normal load falls back to when the cloud is
     // unreachable. No profile fetch, no Clerk token, no cloud reads.
     if (offlineMode) return loadLocalData(authUserId, current);
+    // How far the load got, for the fallback report below: "profile" until
+    // the profile is ready (so the membership check can run), then "records".
+    let loadStage = "profile";
     try {
       // Ensure profile exists for this auth user
       const profile = await ensureProfile(authUserId, { isCurrent: current });
       if (!current()) return;
       if (profile) {
         setProfileOwner(authUserId);
+        loadStage = "records";
         setProfileIssue(null);
         // The server wiped this account (Delete All My Data on another
         // device, or the deletion 7 days after a cancellation) and took the
@@ -421,10 +425,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       }
       console.warn("CredentialDOMD: Supabase load failed:", err.message);
       // The app now opens on this device's copy. When the profile never became
-      // ready, no membership check can run until a reload (the page shows the
-      // reconnecting note). Tell the operator once per session, with a fixed
-      // reference and never the underlying error.
-      reportError("Account load used this device's copy (DATA-LOAD-LOCAL).");
+      // ready (PROFILE), no membership check can run until a reload, and the
+      // page says so with a Reload button. Tell the operator once per session,
+      // with fixed vocabulary only (the stage, and an allowlisted error code or
+      // browser error name), never the underlying message.
+      reportError(`Account load used this device's copy (${localFallbackReference(loadStage, err)}).`);
     }
 
     // Fallback to this account's own local copy (offline)
@@ -493,6 +498,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     try { retireContinuityRecovery(ownerId); }
     catch (error) { window.alert(error.message); return; }
     invalidateAccountWrites(ownerId);
+    // The membership authority serves nobody from here on. A check still in
+    // flight can otherwise land while Clerk still reports this account and
+    // write its answer back after the purge; session expiry keeps that key,
+    // so the listener's purge would leave it behind.
+    accessAuthority.reset(null);
     dataLoadGeneration.current += 1;
     configureSecretContinuity(null);
     // Past the point of no return. Drop the in-memory file and its owner
