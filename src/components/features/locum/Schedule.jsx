@@ -4,6 +4,7 @@ import EmptyState from "../../shared/EmptyState";
 import Forecast from "./Forecast";
 import CallSyncPanel from "./CallSyncPanel";
 import { formatDate } from "../../../utils/helpers";
+import { timedBlock, timedSpan, timedBlockLabel, blockCallDays } from "../../../utils/coverageBlocks";
 
 const localDate = (d) => {
   const x = new Date(d);
@@ -27,11 +28,14 @@ function Schedule() {
         : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
       for (const p of periods) {
         if (!p.start) continue;
-        const end = p.end || p.start;
-        const days = Math.round((new Date(end) - new Date(p.start)) / 86400000) + 1;
+        // A block with times runs between its start and end moments (Sep 25
+        // 4:00 PM to Sep 28 7:00 AM: three call days, on site through Sep 28).
+        const span = timedSpan(p);
+        const end = span ? span.end : (p.end || p.start);
+        const days = span ? blockCallDays(timedBlock(p)).length : Math.round((new Date(end) - new Date(p.start)) / 86400000) + 1;
         const status = today > end ? "past" : today >= p.start ? "active" : "upcoming";
         const daysUntil = Math.ceil((new Date(p.start) - new Date(today)) / 86400000);
-        out.push({ c, start: p.start, end, days, status, daysUntil });
+        out.push({ c, start: p.start, end, days, status, daysUntil, label: timedBlockLabel(p) });
       }
     }
     // Active first, then upcoming by soonest, past at the bottom (recent first)
@@ -82,8 +86,8 @@ function Schedule() {
                     {[b.c.location, b.c.agency].filter(Boolean).join(" · ")}
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginTop: 4 }}>
-                    {formatDate(b.start)}{b.end !== b.start ? ` – ${formatDate(b.end)}` : ""}
-                    <span style={{ color: T.textDim, fontWeight: 500 }}> · {b.days} day{b.days > 1 ? "s" : ""}</span>
+                    {b.label || <>{formatDate(b.start)}{b.end !== b.start ? ` – ${formatDate(b.end)}` : ""}</>}
+                    <span style={{ color: T.textDim, fontWeight: 500 }}> · {b.days} {b.label ? "call " : ""}day{b.days > 1 ? "s" : ""}</span>
                   </div>
                   {(b.c.callStipend || 0) > 0 && (
                     <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>

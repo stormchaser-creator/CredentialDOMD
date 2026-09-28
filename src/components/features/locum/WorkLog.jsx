@@ -26,7 +26,20 @@ import {
   localDate, callDayOf, deriveCallDay, entryOrder, fmtTime, findContainer, overlapSiblings,
   money, billedSpan, isStipendDay as isStipendDayPure, rateFor as rateForPure, computeBilling as computeBillingPure,
   callDayStartHour, currentCallDay, splitRows, splitGroupOf, splitPieceNote, hourLabel,
+  startedCoverageDays, stipendMinutesOf, outsideChargeOf, coveragePartsOf, callDayCuts,
 } from "../../../utils/billing";
+import { hasTimedPeriods, isTimedPeriod, periodHasCallDay, clockLabel } from "../../../utils/coverageBlocks";
+
+// What a saved entry's time before or after its timed coverage block bills,
+// said once at save (null when none of it is outside the block).
+function outsideNote(c, r) {
+  const parts = coveragePartsOf(c, r);
+  if (!parts) return null;
+  const said = [];
+  if (parts.before) said.push(`${parts.before} min before the call began at ${clockLabel(parts.block.startMs)}`);
+  if (parts.after) said.push(`${parts.after} min after the call ended at ${clockLabel(parts.block.endMs)}`);
+  return `This ${r.type} has ${said.join(" and ")}: that time bills at ${money(outsideChargeOf(c, r).rate)}/hr, outside the stipend.`;
+}
 
 // The fields a save sets on a work entry. Editing a split entry rewrites only
 // these on each existing piece, so everything else a piece carries (its id,
@@ -184,7 +197,8 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     for (const e of day) {
       if (beforeEntryId && e.id === beforeEntryId) break;
       if (findContainer(e, sibs)) continue; // inside another entry's time — no draw
-      used += e.billedMin || 0;
+      // Time before or after a timed coverage block never draws the allowance.
+      used += stipendMinutesOf(c, e);
     }
     return used;
   }, [entries]);
@@ -205,7 +219,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       ? c.coveragePeriods
       : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
     if (!ps.length) return true;
-    return ps.some(p => (!p.start || dateStr >= p.start) && (!(p.end || p.start) || dateStr <= (p.end || p.start)));
+    // A block with times holds the call days between its start and end moments.
+    return ps.some(p => (isTimedPeriod(p)
+      ? periodHasCallDay(p, dateStr)
+      : (!p.start || dateStr >= p.start) && (!(p.end || p.start) || dateStr <= (p.end || p.start))));
   }, []);
 
   // Shared with Forecast — see utils/billing.js for the full implementation
@@ -271,7 +288,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const t = { contractId: contract.id, type, startedAt: new Date().toISOString() };
     setTimer(t); saveTimer(t);
     rememberContract(contract.id);
-    if (!inScheduledCoverage(contract, deriveCallDay(t.startedAt, callDayStartHour(contract)))) {
+    if (!inScheduledCoverage(contract, deriveCallDay(t.startedAt, contract))) {
       showNotice(`Heads up: today isn't inside a scheduled coverage block for ${contract.facility || "this contract"} — make sure you're logging against the right agreement (see the Schedule tab).`);
     }
   }, [contract, rememberContract, inScheduledCoverage, showNotice]);
@@ -315,7 +332,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const sibsN = overlapSiblings(entries, c.id, dateKey);
     const others = entries
       .filter(e => e.contractId === c.id && e.type !== "CallDay" && e.type !== "Orientation" && callDayOf(e) === dateKey && !excluded.includes(e.id))
-      .reduce((s, e) => s + (findContainer(e, sibsN) ? 0 : (e.billedMin || 0)), 0);
+      .reduce((s, e) => s + (findContainer(e, sibsN) ? 0 : stipendMinutesOf(c, e)), 0);
     const used = others + (newMin || 0);
     const left = allowance - used;
     const fmtH = (m) => `${Math.floor(Math.abs(m) / 60)}h ${String(Math.abs(m) % 60).padStart(2, "0")}m`;
@@ -329,11 +346,16 @@ function WorkLog({ billDraft, onBillDraftDone }) {
   // entry gets.
   const noticeSaved = useCallback((c, rows, excluded = []) => {
     const msgs = [];
-    const hour = hourLabel(callDayStartHour(c));
+    // Where the call day turned over inside this entry: the contract's start
+    // hour, or on a contract with timed blocks the moment it changed there.
+    const cut = hasTimedPeriods(c) && rows[0]?.startTime
+      ? (rows.length > 1 ? rows[1].startTime : callDayCuts(c, new Date(rows[0].startTime).getTime(), new Date(rows[0].endTime || rows[0].startTime).getTime())[0])
+      : null;
+    const hour = cut ? clockLabel(cut) : hourLabel(callDayStartHour(c));
     if (rows.length > 1) {
       const where = rows.map((r, i) => `${fmtTime(r.startTime)}–${fmtTime(r.endTime)} counts toward ${i === 0 ? "the " : ""}${formatDate(r.callDay)}${i === 0 ? " call day" : ""}`);
       msgs.push(`This ${rows[0].type} crossed the ${hour} start of the call day, so it is split: ${where.slice(0, -1).join(", ")} and ${where.at(-1)}.`);
-    } else if (rows[0]?.startTime && rows[0]?.callDay && deriveCallDay(rows[0].startTime, callDayStartHour(c)) !== rows[0].callDay) {
+    } else if (rows[0]?.startTime && rows[0]?.callDay && deriveCallDay(rows[0].startTime, c) !== rows[0].callDay) {
       // Rule R2 kept it whole under the later day: the part before the start
       // hour was too short to earn a billing increment.
       msgs.push(`This ${rows[0].type} crossed ${hour}, but the part before ${hour} did not earn a billing increment of its own, so all ${rows[0].billedMin} min count toward the ${formatDate(rows[0].callDay)} call day.`);
@@ -342,8 +364,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       if (r.type === "CallDay" || r.type === "Orientation") continue;
       const overlap = overlapMessage(c, r, excluded, rows);
       if (overlap) { msgs.push(overlap); continue; }
-      const allowance = allowanceMessage(c, callDayOf(r), r.billedMin, excluded);
+      const allowance = allowanceMessage(c, callDayOf(r), stipendMinutesOf(c, r), excluded);
       if (allowance) msgs.push(allowance);
+      const outside = outsideNote(c, r);
+      if (outside) msgs.push(outside);
     }
     if (msgs.length) showNotice(msgs.join(" "));
   }, [overlapMessage, allowanceMessage, showNotice]);
@@ -371,7 +395,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       contractId: timer.contractId,
       type: timer.type,
       date: localDate(f.s),
-      callDay: deriveCallDay(f.s, callDayStartHour(c)),
+      callDay: deriveCallDay(f.s, c),
       startTime: f.s,
       endTime: f.e,
       durationMin: f.raw,
@@ -476,7 +500,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
         const f = finalizeEntry(type, s2, e2, rawMin, target);
         const edited = {
           ...orig, contractId: target.id, type, date: manual.date,
-          callDay: f.s ? deriveCallDay(f.s, callDayStartHour(target)) : manual.date,
+          callDay: f.s ? deriveCallDay(f.s, target) : manual.date,
           startTime: f.s, endTime: f.e,
           durationMin: f.raw, billedMin: f.billed,
           description: manual.description || "",
@@ -539,7 +563,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       contractId: target.id,
       type,
       date: manual.date,
-      callDay: f.s ? deriveCallDay(f.s, callDayStartHour(target)) : manual.date,
+      callDay: f.s ? deriveCallDay(f.s, target) : manual.date,
       startTime: f.s,
       endTime: f.e,
       durationMin: f.raw,
@@ -644,8 +668,9 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (stipendModel && isStipendDay(c, dateKey, entries)) {
       const usedBefore = allowanceUsed(c, dateKey, e.id);
       const remaining = Math.max(0, (c.stipendHours || 0) * 60 - usedBefore);
-      const over = Math.max(0, billed - remaining);
-      return (over / 60) * (c.overageHourlyRate || 0);
+      const over = Math.max(0, stipendMinutesOf(c, e) - remaining);
+      // Plus any time before or after a timed coverage block, billed hourly.
+      return (over / 60) * (c.overageHourlyRate || 0) + outsideChargeOf(c, e).amount;
     }
     const rate = rateFor(e.type, c) || (stipendModel ? (c.overageHourlyRate || 0) : 0);
     return (billed / 60) * rate;
@@ -661,7 +686,7 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     if (!isStipendDay(c, dateKey, entries)) return 0;
     const usedBefore = allowanceUsed(c, dateKey, e.id);
     const remaining = Math.max(0, (c.stipendHours || 0) * 60 - usedBefore);
-    return Math.max(0, (e.billedMin || 0) - remaining);
+    return Math.max(0, stipendMinutesOf(c, e) - remaining);
   }, [isStipendDay, allowanceUsed, entries, containerFor]);
 
   // Everything a row says about one entry's money, computed once for both
@@ -675,9 +700,12 @@ function WorkLog({ billDraft, onBillDraftDone }) {
     const container = !isCoverage && e.type !== "Orientation" ? containerFor(e, contract) : null;
     const stipDay = !isCoverage && e.type !== "Orientation" && dayStipend && !container;
     const overMin = stipDay ? overMinFor(e, contract) : 0;
-    const covered = stipDay && overMin === 0;
+    // Minutes before or after a timed coverage block bill on their own, so
+    // an entry with any is never "included".
+    const outsideMin = stipDay ? outsideChargeOf(contract, e).minutes : 0;
+    const covered = stipDay && overMin === 0 && outsideMin === 0;
     const noRate = stipDay && overMin > 0 && !((contract?.overageHourlyRate || 0) > 0);
-    return { isCoverage, amt, container, overMin, covered, noRate };
+    return { isCoverage, amt, container, overMin, covered, noRate, outsideMin };
   }, [amountForEntry, containerFor, overMinFor, contract]);
 
   // Re-derived on every render so the 7am call-day rollover is picked up
@@ -712,15 +740,10 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       by.get(k).push(e);
     }
     // Coverage days with nothing logged still earn their stipend — show them
+    // (the same days computeBilling bills: startedCoverageDays).
     if ((contract.callStipend || 0) > 0) {
-      const today = todayKey;
-      for (const p of contract.coveragePeriods || []) {
-        if (!p.start) continue;
-        const last = (p.end || p.start) < today ? (p.end || p.start) : today;
-        for (let d = new Date(p.start + "T12:00"); localDate(d) <= last; d.setDate(d.getDate() + 1)) {
-          const k = localDate(d);
-          if (!by.has(k)) by.set(k, []);
-        }
+      for (const k of startedCoverageDays(contract, new Date(now))) {
+        if (!by.has(k)) by.set(k, []);
       }
     }
     return [...by.keys()].sort().reverse().map(k => {
@@ -729,16 +752,20 @@ function WorkLog({ billDraft, onBillDraftDone }) {
       // Day totals always come from the FULL entry set — the 60-entry render
       // window must never understate a day's dollars.
       const dayAll = entries.filter(e => e.contractId === contract.id && callDayOf(e) === k);
-      let totalAmt = 0, loggedMin = 0, includedMin = 0;
+      let totalAmt = 0, loggedMin = 0, includedMin = 0, outsideMin = 0;
       const sibs = overlapSiblings(entries, contract.id, k);
       if (stipDay) {
         const allowance = (contract.stipendHours || 0) * 60;
-        loggedMin = dayAll
-          .filter(e => e.type !== "CallDay" && e.type !== "Orientation")
-          .reduce((s, e) => s + (findContainer(e, sibs) ? 0 : (e.billedMin || 0)), 0);
+        const work = dayAll.filter(e => e.type !== "CallDay" && e.type !== "Orientation" && !findContainer(e, sibs));
+        loggedMin = work.reduce((s, e) => s + stipendMinutesOf(contract, e), 0);
         includedMin = Math.min(allowance, loggedMin);
         totalAmt = (contract.callStipend || 0)
           + ((loggedMin - includedMin) / 60) * (contract.overageHourlyRate || 0);
+        // Time before or after a timed coverage block: billed hourly, on top.
+        for (const e of work) {
+          const out = outsideChargeOf(contract, e);
+          if (out.minutes) { outsideMin += out.minutes; totalAmt += out.amount; }
+        }
         for (const e of dayAll.filter(x => x.type === "Orientation")) totalAmt += amountForEntry(e, contract);
       } else {
         for (const e of dayAll) {
@@ -746,21 +773,21 @@ function WorkLog({ billDraft, onBillDraftDone }) {
           if (e.type !== "CallDay" && !findContainer(e, sibs)) loggedMin += e.billedMin || 0;
         }
       }
-      return { key: k, list, stipDay, totalAmt, loggedMin, includedMin };
+      return { key: k, list, stipDay, totalAmt, loggedMin, includedMin, outsideMin };
     });
-  }, [contractEntries, contract, entries, isStipendDay, amountForEntry, todayKey]);
+  }, [contractEntries, contract, entries, isStipendDay, amountForEntry, now]);
 
   // The line under a day's date: what was logged and how the stipend covers
   // it. One string for the phone day header and the desk subtotal row; the
   // verb names the minutes it reports (g.loggedMin is billed minutes), so
   // the desk row, which sits beside a raw Logged min column, says "billed".
-  const dayNote = (g, verb = "logged") => (
-    g.stipDay
-      ? (g.loggedMin > 0
-        ? `${fmtHM(g.loggedMin)} ${verb} · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond ${(contract?.overageHourlyRate || 0) > 0 ? `@ ${money(contract.overageHourlyRate)}/hr` : "· no after-stipend rate set"}` : ""}`
-        : `on call · nothing logged yet`)
-      : `${fmtHM(g.loggedMin)} ${verb}`
-  );
+  const dayNote = (g, verb = "logged") => {
+    if (!g.stipDay) return `${fmtHM(g.loggedMin)} ${verb}`;
+    // Time before or after a timed coverage block is said on its own.
+    const outside = g.outsideMin > 0 ? ` · ${fmtHM(g.outsideMin)} outside the call hours, billed hourly` : "";
+    if (!(g.loggedMin > 0)) return outside ? `on call · nothing logged inside the call hours${outside}` : `on call · nothing logged yet`;
+    return `${fmtHM(g.loggedMin)} ${verb} · first ${contract?.stipendHours || 0}h in the stipend${g.loggedMin > g.includedMin ? ` · ${fmtHM(g.loggedMin - g.includedMin)} beyond ${(contract?.overageHourlyRate || 0) > 0 ? `@ ${money(contract.overageHourlyRate)}/hr` : "· no after-stipend rate set"}` : ""}${outside}`;
+  };
 
   // Desk table inputs: the same day groups flattened to rows, plus the
   // minute sums each day's subtotal row carries. Logged is the raw clock
@@ -1482,6 +1509,11 @@ function WorkLog({ billDraft, onBillDraftDone }) {
             e.type !== "CallDay" && ["Logged", `${e.durationMin} min`],
             e.type !== "CallDay" && ["Billed", `${e.billedMin} min`],
             splitPieceNote(e, entries) && ["Split at the call-day start", splitPieceNote(e, entries)],
+            (() => {
+              const c2 = contracts.find(c => c.id === e.contractId) || contract;
+              const note = c2 && !containerFor(e, c2) ? outsideNote(c2, e) : null;
+              return note && ["Outside the call hours", note];
+            })(),
             (() => {
               const c2 = contracts.find(c => c.id === e.contractId) || contract;
               const a2 = amountForEntry(e, c2);

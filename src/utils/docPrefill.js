@@ -7,6 +7,8 @@
 // the duplicate before analysis is how an Add Agreement form ended up blank.
 
 import { officeKind } from "./officeText.js";
+import { toClock } from "./coverageBlocks.js";
+import { withStatedTimes } from "./coverageText.js";
 import { docMime, INBOX_DOC_TYPE, leaveInbox } from "./inboxDocs.js";
 // mergeExtracted, splitScanned and mergeScanned live in scanSplit.js, which the
 // email-inbound edge function shares; re-exported so every import keeps working.
@@ -91,8 +93,14 @@ export function isoDate(v) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-/** Analyzer JSON → the exact shape the Contracts form and Work Log expect. */
-export function normalizeAgreementFields(extracted) {
+/**
+ * Analyzer JSON → the exact shape the Contracts form and Work Log expect.
+ * A coverage block keeps startTime/endTime (24-hour "HH:MM", see
+ * coverageBlocks.js) only when the agreement stated them; `text`, the
+ * agreement's own words when they are at hand, fills in any the model left
+ * out (coverageText.js).
+ */
+export function normalizeAgreementFields(extracted, { text = "" } = {}) {
   if (!extracted || typeof extracted !== "object" || Array.isArray(extracted)) return {};
   const out = { ...extracted };
 
@@ -112,10 +120,17 @@ export function normalizeAgreementFields(extracted) {
   const end = isoDate(out.endDate);
   let periods = Array.isArray(out.coveragePeriods)
     ? out.coveragePeriods
-        .map((p) => ({ start: isoDate(p?.start), end: isoDate(p?.end) }))
+        .map((p) => ({ start: isoDate(p?.start), end: isoDate(p?.end), startTime: toClock(p?.startTime), endTime: toClock(p?.endTime) }))
         .filter((p) => p.start || p.end)
-        .map((p) => ({ start: p.start || p.end, end: p.end }))
+        // Times only on a block with its own start date, and an end time
+        // only with an end date: a time on half a block would be a guess.
+        .map((p) => ({
+          start: p.start || p.end, end: p.end,
+          ...(p.start && p.startTime ? { startTime: p.startTime } : {}),
+          ...(p.start && p.end && p.endTime ? { endTime: p.endTime } : {}),
+        }))
     : [];
+  if (text) periods = withStatedTimes(periods, text);
   // A single assignment span with no blocks listed is one block.
   if (periods.length === 0 && (start || end)) periods = [{ start: start || end, end }];
   if (periods.length) out.coveragePeriods = periods; else delete out.coveragePeriods;
@@ -134,8 +149,8 @@ export function normalizeAgreementFields(extracted) {
   return out;
 }
 
-/** Wrap an analyzer result so its `extracted` block is normalized in place. */
-export function withAgreementFields(result) {
+/** Wrap an analyzer result so its `extracted` block is normalized in place (opts.text: the agreement's text, when read from one). */
+export function withAgreementFields(result, opts = {}) {
   if (!result || typeof result !== "object") return result;
-  return { ...result, extracted: normalizeAgreementFields(result.extracted) };
+  return { ...result, extracted: normalizeAgreementFields(result.extracted, opts) };
 }

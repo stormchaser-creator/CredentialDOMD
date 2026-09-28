@@ -6,6 +6,7 @@ import Field from "../../shared/Field";
 import { generateId, formatDate } from "../../../utils/helpers";
 import { iso, actualByDate, contractDayAverage, contractDayKindAverages, yearOutlook } from "../../../utils/forecast";
 import { contractsForDate, termLabel, selectableContracts, pickableContracts, hiddenEndedCount, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
+import { isTimedPeriod, timedBlock, blockCallDays } from "../../../utils/coverageBlocks";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const short = (n) => {
@@ -145,14 +146,22 @@ function Forecast() {
         : (c.startDate ? [{ start: c.startDate, end: c.endDate || c.startDate }] : []);
       for (const p of periods) {
         if (!p.start) continue;
-        const end = p.end || p.start;
-        // A multi-year agreement (ANMG) is not a solid block of worked
-        // days — skip periods longer than 62 days rather than fabricate.
-        const span = Math.round((new Date(end) - new Date(p.start)) / 86400000) + 1;
-        if (span > 62 || span < 1) continue;
-        const d = new Date(p.start + "T00:00:00");
-        for (let i = 0; i < span; i++) {
-          const date = iso(d);
+        // A block with times holds the call days between its start and end
+        // moments (Sep 25 4:00 PM to Sep 28 7:00 AM: Sep 25, 26 and 27).
+        let dates;
+        if (isTimedPeriod(p)) {
+          dates = blockCallDays(timedBlock(p));
+        } else {
+          const end = p.end || p.start;
+          // A multi-year agreement (ANMG) is not a solid block of worked
+          // days — skip periods longer than 62 days rather than fabricate.
+          const span = Math.round((new Date(end) - new Date(p.start)) / 86400000) + 1;
+          dates = [];
+          const d = new Date(p.start + "T00:00:00");
+          for (let i = 0; i < span; i++) { dates.push(iso(d)); d.setDate(d.getDate() + 1); }
+        }
+        if (dates.length > 62 || dates.length < 1) continue;
+        for (const date of dates) {
           if (!have.has(`${c.id}|${date}`)) {
             addItem("scheduleDays", {
               id: generateId(), date, contractId: c.id,
@@ -161,7 +170,6 @@ function Forecast() {
             });
             added++;
           }
-          d.setDate(d.getDate() + 1);
         }
       }
     }

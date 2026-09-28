@@ -16,11 +16,13 @@ import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils
 import { STATE_NAMES } from "../../../constants/states";
 import { isArchived } from "../../../utils/contractsForDate";
 import { callDayStartHour, hourLabel } from "../../../utils/billing";
+import { toClock, savedPeriod, periodProblem, coveragePeriodText } from "../../../utils/coverageBlocks";
 
 // The analyzer JSON goes through one normalizer so dates, dollar figures, and
 // coverage blocks land in the exact shape the form and the Work Log expect.
 const agreementAnalyzer = async (dataUrl, apiKey) => withAgreementFields(await analyzeAgreement(dataUrl, apiKey));
-const agreementTextAnalyzer = async (text, apiKey) => withAgreementFields(await analyzeAgreementText(text, apiKey));
+// A text upload's own words also fill in any block time the model left out.
+const agreementTextAnalyzer = async (text, apiKey) => withAgreementFields(await analyzeAgreementText(text, apiKey), { text });
 
 // Work-state hint reads from the tax engine's own list so it never promises a
 // state the estimator cannot model.
@@ -80,10 +82,12 @@ function Contracts() {
       setFormError("Nothing is filled in yet. Upload the agreement or pick one already in Files (AI fills the form), or enter the facility and rates.");
       return;
     }
+    // startDate/endDate = the span of all coverage periods (oldest → newest)
+    const periods = (form.coveragePeriods || []).filter(p => p.start || p.end).map(savedPeriod);
+    const problem = periods.map((p, i) => periodProblem(p, i + 1)).find(Boolean);
+    if (problem) { setFormError(problem); return; }
     setFormError(null);
     const itemId = editItem ? editItem.id : generateId();
-    // startDate/endDate = the span of all coverage periods (oldest → newest)
-    const periods = (form.coveragePeriods || []).filter(p => p.start || p.end);
     const starts = periods.map(p => p.start).filter(Boolean).sort();
     const ends = periods.map(p => p.end || p.start).filter(Boolean).sort();
     const entry = {
@@ -204,16 +208,38 @@ function Contracts() {
         </Field>
         <Field label="Location" hint="City / state of the facility"><input value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={iS} placeholder="e.g. Colorado Springs, CO" /></Field>
         <Field label="Invoice recipient email" hint="Where invoices get sent"><input type="email" value={form.billTo || ""} onChange={e => setForm(f => ({ ...f, billTo: e.target.value }))} style={iS} placeholder="billing@hospital.org" /></Field>
-        <Field label="Coverage dates" hint={`Every scheduled block. A block's end date is your last call day: the 24-hour call that ends the next morning. A contract reading 'through Aug 10, ${hourLabel(callDayStartHour(form))}' ends Aug 9. Work that starts after that final ${hourLabel(callDayStartHour(form))} bills hourly with no stipend. ${form.splitAtDayStart === true ? "An entry that runs past it is split between the two call days (a side too short to earn a billing increment stays with the other side)." : "An entry that starts before it and runs past it counts whole toward Aug 9's call day: inside its stipend hours while any are left, then at the after-stipend rate."}`}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {(form.coveragePeriods || []).map((p, i) => (
-              <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input type="date" value={p.start || ""} onChange={e => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.map((x, j) => j === i ? { ...x, start: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
-                <span style={{ color: T.textDim, flexShrink: 0 }}>–</span>
-                <input type="date" value={p.end || ""} onChange={e => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.map((x, j) => j === i ? { ...x, end: e.target.value } : x) }))} style={{ ...iS, minWidth: 0 }} />
-                <button onClick={() => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "6px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>&times;</button>
-              </div>
-            ))}
+        <Field label="Coverage dates" hint={`Every scheduled block. Without times, a block's end date is your last call day: the 24-hour call that ends the next morning. A contract reading 'through Aug 10, ${hourLabel(callDayStartHour(form))}' ends Aug 9. Work that starts after that final ${hourLabel(callDayStartHour(form))} bills hourly with no stipend. ${form.splitAtDayStart === true ? "An entry that runs past it is split between the two call days (a side too short to earn a billing increment stays with the other side)." : "An entry that starts before it and runs past it counts whole toward Aug 9's call day: inside its stipend hours while any are left, then at the after-stipend rate."} When the agreement states times, add them and enter the date coverage actually ends: Sep 25 4:00 PM to Sep 28 7:00 AM is three call days, each turning over at 7:00 AM, and work before 4:00 PM on Sep 25 or after 7:00 AM on Sep 28 bills hourly with no stipend.`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {(form.coveragePeriods || []).map((p, i) => {
+              // One block: when it starts and when it ends, each a date and an
+              // optional time (the time the agreement states, "4pm", "7am").
+              // Captions sit above the inputs so a phone gives the date and
+              // time the whole row.
+              const set = (key) => (e) => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.map((x, j) => j === i ? { ...x, [key]: e.target.value } : x) }));
+              const cap = { fontSize: 12, fontWeight: 700, color: T.textMuted, letterSpacing: 0.3 };
+              const dateS = { ...iS, minWidth: 0, flex: "1.4 1 0", padding: "12px 8px" };
+              const timeS = { ...iS, minWidth: 0, flex: "1 1 0", padding: "12px 8px" };
+              return (
+                <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: i ? 10 : 0, borderTop: i ? `1px solid ${T.border}` : "none" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={cap}>Starts</span>
+                    <button aria-label={`Remove block ${i + 1}`} onClick={() => setForm(f => ({ ...f, coveragePeriods: f.coveragePeriods.filter((_, j) => j !== i) }))} style={{ padding: "4px 10px", borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Remove</button>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input type="date" aria-label={`Block ${i + 1} start date`} value={p.start || ""} onChange={set("start")} style={dateS} />
+                    <input type="time" aria-label={`Block ${i + 1} start time (optional)`} value={toClock(p.startTime)} onChange={set("startTime")} style={timeS} />
+                  </div>
+                  <span style={{ ...cap, marginTop: 4 }}>Ends</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input type="date" aria-label={`Block ${i + 1} end date`} value={p.end || ""} onChange={set("end")} style={dateS} />
+                    <input type="time" aria-label={`Block ${i + 1} end time (optional)`} value={toClock(p.endTime)} onChange={set("endTime")} style={timeS} />
+                  </div>
+                </div>
+              );
+            })}
+            {(form.coveragePeriods || []).length > 0 && (
+              <div style={{ fontSize: 12, color: T.textDim }}>Times are optional: enter them when the agreement states them.</div>
+            )}
             <button onClick={() => setForm(f => ({ ...f, coveragePeriods: [...(f.coveragePeriods || []), { start: "", end: "" }] }))} style={{
               padding: "10px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: "transparent",
               color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",
@@ -287,7 +313,7 @@ function Contracts() {
                       item.agency,
                       item.location,
                       item.coveragePeriods?.length
-                        ? item.coveragePeriods.map(p => `${formatDate(p.start)}${p.end && p.end !== p.start ? " – " + formatDate(p.end) : ""}`).join(", ")
+                        ? item.coveragePeriods.map(p => coveragePeriodText(p, formatDate)).join(", ")
                         : item.startDate && `${formatDate(item.startDate)}${item.endDate ? " – " + formatDate(item.endDate) : ""}`,
                     ].filter(Boolean).join(" · ")}
                   </div>
