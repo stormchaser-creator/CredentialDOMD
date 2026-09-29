@@ -348,6 +348,16 @@ export async function sessionLaunch({ claude, args, cwd, sessionDir, baseEnv = p
   const credential = modelCredential(baseEnv);
   const env = { ...sessionEnv({ base: baseEnv, configDir, credentials: false }), ...(credential ? { [credential.variable]: String(CREDENTIAL_FD) } : {}),
     ...(apiBaseUrl ? { ANTHROPIC_BASE_URL: apiBaseUrl } : {}) };
+  // The CLI runs `security` at start to look for a keychain credential. The
+  // sandbox denies /usr/bin/security (and the security daemon), and the CLI
+  // then crashed with EPERM before reading the credential it was handed on a
+  // pipe: every run from 2026-09-29 16:17Z ended "extraction session exited 1".
+  // A shim first on PATH answers "not found" (errSecItemNotFound, 44), so no
+  // keychain item is read and the CLI falls through to the piped credential.
+  const shims = path.join(sessionDir, 'shims');
+  await fs.mkdir(shims, { recursive: true, mode: 0o700 });
+  await fs.writeFile(path.join(shims, 'security'), '#!/bin/sh\nexit 44\n', { mode: 0o700 });
+  env.PATH = `${shims}:${env.PATH ?? '/usr/bin:/bin'}`;
   if (!sandbox) return { command: claude, args, env, secret: credential?.value ?? null };
   const tmp = real(await sessionTemp(sessionDir));
   // The CLI keeps its own temporary files under /tmp/claude-<uid> unless told
