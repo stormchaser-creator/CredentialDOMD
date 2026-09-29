@@ -2,6 +2,7 @@
 <html data-public-launch="founding-signup" lang="en">
 <head>
 <meta charset="UTF-8">
+<script id="https-redirect">if(location.protocol==="http:"&&location.hostname==="credentialdomd.com")location.replace(location.href.replace(/^http:/,"https:"))</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>4 agencies, 9 states, 1 ledger: locum tenens invoices, taxes, licenses | CredentialDOMD</title>
 <meta name="description" content="One ledger across every locum agency: invoices priced from your signed contract with a payment ledger, cash-basis multistate tax estimates cited to Rev. Proc. 2025-32, dictation to CPT with CY2026 work RVUs, and license, DEA and CME tracking in all 50 states. Credential: $99/year for the first 100 paid founding members, then $149 early bird and $199 standard. Check availability in the app. Early release; card required at checkout.">
@@ -164,8 +165,8 @@
   ]
 }
 </script>
-<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. -->
-<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname,r:document.referrer||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
+<script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname,r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
 
 
 <!-- Favicon -->
