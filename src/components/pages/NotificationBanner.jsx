@@ -3,9 +3,10 @@ import { useApp } from "../../context/AppContext";
 import { AlertIcon, EmailIcon, TextMsgIcon } from "../shared/Icons";
 import { generateAlerts, buildNotificationMessage, composeEmail, textAlert } from "../../utils/notifications";
 import { MS_PER_DAY } from "../../utils/helpers";
+import { emailRemindersOn } from "../../utils/reminderPreferences";
 
-function NotificationBanner({ onOpenCenter, onGoSettings }) {
-  const { data, setData, updateSettings, addItem, theme: T } = useApp();
+function NotificationBanner({ onOpenCenter }) {
+  const { data, updateSettings, addItem, theme: T } = useApp();
   const s = data.settings;
   const alerts = useMemo(() => generateAlerts(data), [data]);
 
@@ -160,7 +161,7 @@ function NotificationBanner({ onOpenCenter, onGoSettings }) {
       </div>
       <div style={{ fontSize: 10, color: T.textDim, marginBottom: 8 }}>Checking {freqLabel}{alerts.closestDays <= 30 ? " (escalated)" : ""} until resolved</div>
       <div style={{ display: "flex", gap: 6 }}>
-        {s.email && s.notifyEmail !== false && (
+        {s.email && emailRemindersOn(s.notifyEmail) && (
           <button onClick={() => sendQuick("email")} style={{
             flex: 1, padding: "9px 10px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff",
             fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4,

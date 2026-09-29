@@ -5,6 +5,7 @@ import { useApp } from "../../context/AppContext";
 import { DESK_KEYS } from "../../utils/deskKeys";
 import { useInputStyle } from "../shared/useInputStyle";
 import Field from "../shared/Field";
+import ToggleRow from "../shared/ToggleRow";
 import Modal from "../shared/Modal";
 import PublicRecordReview from "../features/PublicRecordReview";
 import { EmailIcon, TextMsgIcon } from "../shared/Icons";
@@ -30,9 +31,10 @@ import {
   addProblem, normalizeAddress, pendingLine, resendBlockedReason, rowForAddress,
   accountMailboxVerified, REQUESTS_INBOX, CME_INBOX, LINK_TTL_HOURS,
 } from "../../utils/forwardingAddresses";
+import { emailRemindersOn } from "../../utils/reminderPreferences";
 
 function SettingsSection({ onUpgrade }) {
-  const { data, setData, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
+  const { data, addItem, updateSettings, theme: T, toggleTheme, allTrackedStates, navigate, plan, setMockPlan, isDevMode, isDesktop,
     isPro, isPractice, isLifetime, isFreeBeta, hasSubscription, manage, limitedLaunch } = useApp();
   const iS = useInputStyle();
   const s = data.settings;
@@ -662,8 +664,10 @@ function SettingsSection({ onUpgrade }) {
           </div>
         )}
 
-        {/* Email toggle */}
-        <ToggleRow label="Email reminders" sub={s.email ? `Daily check, sent to ${s.email} only when something is due or changed` : "Add email in profile"} active={s.notifyEmail} onToggle={() => update("notifyEmail", !s.notifyEmail)} color={T.accent} T={T} />
+        {/* Email toggle. Blank means on (utils/reminderPreferences.js), the
+            same rule send-reminders mails by, so the switch never shows a
+            state the server does not act on; only an explicit false is off. */}
+        <ToggleRow label="Email reminders" sub={s.email ? `Daily check, sent to ${s.email} only when something is due or changed` : "Add email in profile"} active={emailRemindersOn(s.notifyEmail)} onToggle={() => update("notifyEmail", !emailRemindersOn(s.notifyEmail))} color={T.accent} T={T} />
         <ToggleRow label="Text Notifications" sub={s.phone ? `${s.phone} (not sending yet; email and in-app alerts are live)` : "Add phone in profile"} active={s.notifyText} onToggle={() => update("notifyText", !s.notifyText)} color="#10b981" T={T} />
         {/* Opt-out, so undefined reads as on: an account that never saw this
             switch still acknowledges its requests, which is the default a
@@ -709,7 +713,7 @@ function SettingsSection({ onUpgrade }) {
               if (typeof Notification !== "undefined" && Notification.permission === "granted") {
                 fireBrowserNotification("CredentialDOMD Test", msg.shortText, "test-" + Date.now());
               }
-              if (s.notifyEmail !== false && s.email) composeEmail(s.email, msg.subject, msg.body);
+              if (emailRemindersOn(s.notifyEmail) && s.email) composeEmail(s.email, msg.subject, msg.body);
               else if (s.notifyText !== false && s.phone) textAlert(s.phone, msg.body, setTestNotice);
               else if (typeof Notification === "undefined" || Notification.permission !== "granted") {
                 alert("Enable browser notifications, or add email/phone above.");
@@ -1356,24 +1360,6 @@ function EmailBlock({ accountEmail, verifiedEmail, T, iS }) {
           color: note.ok ? T.success : T.danger,
         }}>{note.text}</div>
       )}
-    </div>
-  );
-}
-
-function ToggleRow({ label, sub, active, onToggle, color, T }) {
-  // The text block shrinks, the switch never does. Without flexShrink: 0 on
-  // the switch and minWidth: 0 on the text, a long sub-text squeezed the
-  // 44px track to 22px at 375px and the knob rendered past its right edge,
-  // half the tap target gone and on hard to tell from off.
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: `1px solid ${T.border}` }}>
-      <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{label}</div>
-        <div style={{ fontSize: 12, color: T.textDim }}>{sub}</div>
-      </div>
-      <button onClick={onToggle} style={{ width: 44, height: 24, flexShrink: 0, borderRadius: 12, border: "none", backgroundColor: active ? color : T.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
-        <div style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff", position: "absolute", top: 3, left: active ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-      </button>
     </div>
   );
 }
