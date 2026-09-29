@@ -6,6 +6,9 @@
 //   npm run qa:e2e -- --grep @CRED-001      only journeys tagged with a checklist id
 //   npm run qa:e2e -- --headed --workers 1  watch them
 //   npm run qa:e2e -- --list                list journeys and their checklist ids
+//   npm run qa:e2e -- --fresh               rebuild the lab database first (empty, re-seeded:
+//                                           every paid journey takes one of the 100 founding
+//                                           places, so rebuild when the runner warns)
 //
 // Anything after `--` goes to `playwright test`. The lab this starts is stopped
 // again at the end (the stack keeps running, as with qa:lab). Results:
@@ -13,11 +16,13 @@
 // evidence), the HTML report in qa-lab/.generated/e2e/html/, screenshots in
 // qa-lab/.generated/e2e/shots/.
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { QA_LAB_DIR, REPO_ROOT, isMain } from '../lib/paths.mjs';
+import { MOCK_STATE_DIR, QA_LAB_DIR, REPO_ROOT, isMain } from '../lib/paths.mjs';
 import { readRuntime } from '../lab.mjs';
 import { localJson } from '../lib/local-db.mjs';
+import { RESULTS_JSON } from './support/results-reporter.mjs';
 import { waitFor } from '../lib/procs.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -48,7 +53,52 @@ function foundingPlacesLeft() {
   } catch { return null; }
 }
 
+// Tables the app syncs (src/lib/supabase.js TABLE_MAP), for the zombie check.
+const SYNCED = ['licenses', 'cme', 'privileges', 'insurance', 'health_records', 'education', 'case_logs', 'work_history', 'peer_references',
+  'malpractice_history', 'documents', 'locum_contracts', 'work_log', 'encounters', 'screenings', 'publications', 'travel_docs',
+  'travel_expenses', 'invoices', 'duty_days', 'professional_memberships', 'custom_records', 'custom_categories'];
+
+/**
+ * What the lab itself saw during the run, beyond each journey's own checks:
+ * client error reports the app sent, rows that exist although they were
+ * deleted (zombies), and edge-function errors in the runtime's log.
+ */
+export function labHealth(since) {
+  const out = { since };
+  try {
+    out.clientErrors = localJson(`select coalesce(json_agg(json_build_object('message', message, 'n', n) order by n desc), '[]') from (
+      select left(message, 200) as message, count(*)::int as n from public.client_errors where created_at >= '${since}' group by 1) t`);
+  } catch (e) { out.clientErrors = `unavailable: ${e.message}`; }
+  try {
+    out.zombies = localJson(`select coalesce(json_agg(z), '[]') from (${SYNCED.map((t) => `select '${t}' as tbl, x.id from public.${t} x join public.deleted_items d on d.item_id = x.id`).join(' union all ')}) z`);
+  } catch (e) { out.zombies = `unavailable: ${e.message}`; }
+  const logs = spawnSync('docker', ['logs', '--since', since, 'supabase_edge_runtime_credentialdomd-qa-lab'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (logs.status === 0) {
+    const lines = `${logs.stdout}\n${logs.stderr}`.split('\n').filter((l) => /\b(error|uncaught|unhandled|exception)\b/i.test(l) && !/console\.error\(\)|DeprecationWarning/.test(l));
+    const counts = {};
+    for (const l of lines) { const k = l.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z?/g, '').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, '<id>').replace(/\s+/g, ' ').trim().slice(0, 220); counts[k] = (counts[k] || 0) + 1; }
+    out.edgeFunctionErrors = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([line, n]) => ({ n, line }));
+  } else out.edgeFunctionErrors = 'unavailable (docker logs failed)';
+  return out;
+}
+
+/** Stops a running lab, deletes the local database volumes and the mocks' memory; the next start rebuilds. */
+async function rebuildLab() {
+  const rt = readRuntime();
+  if (rt?.pid && alive(rt.pid)) {
+    console.log(`qa-e2e: --fresh: stopping the running lab (pid ${rt.pid})`);
+    process.kill(rt.pid, 'SIGTERM');
+    await waitFor('the lab to stop', async () => !alive(rt.pid), { timeoutMs: 60000 });
+  }
+  console.log('qa-e2e: --fresh: wiping the local database (npm run qa:down -- --wipe)');
+  const r = spawnSync('bash', [path.join(QA_LAB_DIR, 'down.sh'), '--wipe'], { stdio: 'inherit', cwd: REPO_ROOT });
+  if (r.status !== 0) throw new Error('qa:down --wipe failed');
+  rmSync(MOCK_STATE_DIR, { recursive: true, force: true });
+}
+
 export async function runE2e(argv = process.argv.slice(2)) {
+  const since = new Date().toISOString();
+  if (argv.includes('--fresh')) { argv = argv.filter((a) => a !== '--fresh'); await rebuildLab(); }
   const { child } = await ensureLab();
   const left = Number(foundingPlacesLeft());
   if (Number.isFinite(left)) {
@@ -56,6 +106,13 @@ export async function runE2e(argv = process.argv.slice(2)) {
     if (left < 25) console.log('qa-e2e: WARNING: the founding offer will close soon; rebuild the lab database: npm run qa:down -- --wipe && npm run qa:up');
   }
   const r = spawnSync(process.execPath, [PLAYWRIGHT, 'test', '-c', CONFIG, ...argv], { stdio: 'inherit', cwd: REPO_ROOT, env: { ...process.env, LC_ALL: 'C' } });
+  if (!argv.includes('--list') && existsSync(RESULTS_JSON)) {
+    const results = JSON.parse(readFileSync(RESULTS_JSON, 'utf8'));
+    results.labHealth = labHealth(since);
+    writeFileSync(RESULTS_JSON, JSON.stringify(results, null, 2) + '\n');
+    const h = results.labHealth;
+    console.log(`qa-e2e: lab health: ${Array.isArray(h.clientErrors) ? h.clientErrors.reduce((n, e) => n + e.n, 0) : '?'} client error report(s), ${Array.isArray(h.zombies) ? h.zombies.length : '?'} zombie row(s), ${Array.isArray(h.edgeFunctionErrors) ? h.edgeFunctionErrors.reduce((n, e) => n + e.n, 0) : '?'} edge-function error line(s)`);
+  }
   if (child) {
     child.kill('SIGTERM');
     await new Promise((res) => (child.exitCode !== null ? res() : child.once('exit', res)));

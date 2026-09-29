@@ -42,6 +42,8 @@ export default class ResultsReporter {
   }
 
   onEnd(fullResult) {
+    // Nothing ran (--list, or a filter that matched nothing): keep the last results.
+    if (!this.tests.length) return;
     // Keep only the last attempt of each test.
     const last = new Map();
     for (const t of this.tests) last.set(`${t.file}::${t.title}`, t);
