@@ -117,6 +117,11 @@ async function fixture() {
   mkdirSync(attach, { mode: 0o700 }); mkdirSync(neighbour, { mode: 0o700 });
   writeFileSync(path.join(attach, 'att-1.png'), PNG, { mode: 0o600 });
   writeFileSync(path.join(neighbour, 'att-1.png'), PNG, { mode: 0o600 });
+  // The case history file the runner writes into this ticket's folder
+  // (session-context.mjs caseHistory), and another ticket's next to it.
+  const history = line => `{"kind":"case","target_id":"${TICKET}"}\n{"kind":"message","ticket_id":"${TICKET}","id":"m-1","body":"${line}"}\n`;
+  writeFileSync(path.join(attach, 'case-history.jsonl'), history('HISTORY-MARKER synthetic answer'), { mode: 0o600 });
+  writeFileSync(path.join(neighbour, 'case-history.jsonl'), history('NEIGHBOUR-HISTORY-MARKER synthetic'), { mode: 0o600 });
   const sandbox = { home: os.homedir(), denyRead: [p.state, path.join(p.work, 'runs'), path.join(p.work, 'baseline'), run, attachRoot], denyFiles: [path.join(p.work, 'AUTO_MERGE')], profileDir, readable: [attach] };
   return { p, run, secret, outside, wt: wt.dir, sandbox, attach, neighbour, cleanup: () => { removeSessionTemps(); for (const d of [run, outside, attachRoot]) rmSync(d, { recursive: true, force: true }); p.cleanup(); } };
 }
@@ -188,6 +193,12 @@ test('the installed CLI, started as the runner starts it, refuses every escape, 
         ['Read', { file_path: path.join(f.attach, 'att-1.png') }],
         ['Read', { file_path: path.join(f.neighbour, 'att-1.png') }],
         ['Write', { file_path: path.join(f.attach, 'att-1.png'), content: 'overwritten' }],
+        // The case history file (review of 2026-09-29): Grep and a Read of a
+        // few lines work on this ticket's; the neighbour's stays closed.
+        ['Grep', { pattern: 'HISTORY-MARKER', path: path.join(f.attach, 'case-history.jsonl'), output_mode: 'content', '-n': true }],
+        ['Grep', { pattern: 'HISTORY-MARKER', path: f.attach, output_mode: 'content' }],
+        ['Read', { file_path: path.join(f.attach, 'case-history.jsonl'), offset: 2, limit: 1 }],
+        ['Grep', { pattern: 'HISTORY-MARKER', path: path.join(f.neighbour, 'case-history.jsonl'), output_mode: 'content' }],
       ] });
     assert.deepEqual(out.structured_output.reply, workerResult().reply);
     assert.deepEqual([...keys], [KEY], 'the CLI read the credential from its pipe');
@@ -225,6 +236,13 @@ test('the installed CLI, started as the runner starts it, refuses every escape, 
     assert.equal(byStep[22]?.is_error, true, 'the attachment folder is read only');
     assert.deepEqual(readFileSync(path.join(f.attach, 'att-1.png')), PNG);
     assert.deepEqual(reads.filter(x => x.file_path.includes('att-1.png')).map(x => [x.file_path === path.join(f.attach, 'att-1.png'), x.ok]), [[true, true], [false, false]]);
+    for (const step of [23, 24, 25]) {
+      assert.equal(byStep[step]?.is_error, false, `the case history file is searchable: ${JSON.stringify(byStep[step])}`);
+      assert.match(byStep[step].text, /HISTORY-MARKER synthetic answer/);
+      assert.ok(!byStep[step].text.includes('NEIGHBOUR'), 'only this ticket\'s history');
+    }
+    assert.equal(byStep[26]?.is_error, true, `another ticket's history is not: ${JSON.stringify(byStep[26])}`);
+    assert.ok(!byStep[26].text.includes('NEIGHBOUR-HISTORY-MARKER'));
     console.log(`live containment (worker): ${denied.length} tool calls refused; the escape test ran and the sandbox refused all ${Object.keys(report).length} probes (CLI ${spawnSync(CLI, ['--version'], { encoding: 'utf8' }).stdout.trim()})`);
   } finally { f.cleanup(); }
 });

@@ -9,7 +9,10 @@ import { fileURLToPath } from 'node:url';
 // These tests pull the script out of the shipped HTML and run it, which is the only way
 // to know what a visitor's browser will actually send.
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'landing');
-const BEACON = /<script>(navigator\.sendBeacon&&navigator\.sendBeacon\('\/api\/pv',[^<]*)<\/script>/;
+// The script may open with the guard that skips a page switching to https
+// (tests/https-redirect.test.mjs holds it to that); these locations carry no
+// protocol or host, so the guard lets them through.
+const BEACON = /<script>((?:if\(!\([^)]*\)\))?navigator\.sendBeacon&&navigator\.sendBeacon\('\/api\/pv',[^<]*)<\/script>/;
 
 function beaconOf(file) {
   const found = fs.readFileSync(path.join(root, file), 'utf8').match(BEACON);

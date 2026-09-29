@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script id="https-redirect">if(location.protocol==="http:"&&location.hostname==="credentialdomd.com")location.replace(location.href.replace(/^http:/,"https:"))</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>West Virginia Medical License Renewal 2026: $400 fee, 50 hours CME, June 30 deadline | CredentialDOMD</title>
 <meta name="description" content="Renew your West Virginia medical license: $400 fee, 50 hours of CME, Biennial (2 years), due June 30. Board portal link, fees, deadlines, and the traps that catch physicians. Verified from the West Virginia Board of Medicine, August 2026.">
@@ -805,7 +806,7 @@ document.querySelectorAll('.faq-question').forEach(q => {
   });
 });
 </script>
-<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. -->
-<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:document.referrer||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
+<script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
 </body>
 </html>

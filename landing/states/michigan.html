@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script id="https-redirect">if(location.protocol==="http:"&&location.hostname==="credentialdomd.com")location.replace(location.href.replace(/^http:/,"https:"))</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Michigan Medical License Renewal 2026: $314.40 fee, 150 hours CME | CredentialDOMD</title>
 <meta name="description" content="Renew your Michigan medical license: $314.40 fee, 150 hours of CME, Triennial (3 years), due on the anniversary of your license issue date. Board portal link, fees, deadlines, and the traps that catch physicians. Verified from the Michigan Board of Medicine (Bureau of Professional Licensing, Department of Licensing and Regulatory Affairs), August 2026.">
@@ -806,7 +807,7 @@ document.querySelectorAll('.faq-question').forEach(q => {
   });
 });
 </script>
-<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. -->
-<script>navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:document.referrer||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
+<script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
 </body>
 </html>

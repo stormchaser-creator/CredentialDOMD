@@ -20,9 +20,11 @@ export const store = () => { const m = new Map(); return { getItem: k => m.get(k
 export const ticket = (id, extra = {}) => ({ id, subject: `Issue ${id}`, body: 'Synthetic initial report', status: 'open', created_at: '2026-09-20T00:00:00Z', ...extra });
 export const tick = () => new Promise(r => setImmediate(r));
 
-export function fixture({ storage = store(), account = 'user_A', operations = false, tickets = null } = {}) {
+// props: extra SupportModal props (initialTab, initialTicketId);
+// operationsClient: methods added to the synthetic support-operations client.
+export function fixture({ storage = store(), account = 'user_A', operations = false, tickets = null, props: extra = {}, operationsClient = {} } = {}) {
   const hooks = [], effects = [], sends = [], timers = [], writes = [];
-  let cursor = 0, closed = 0, props = { open: true, onClose: () => closed++ };
+  let cursor = 0, closed = 0, props = { open: true, onClose: () => closed++, ...extra };
   const rows = tickets || [ticket(ID), ticket(ID2)];
   const window = { sessionStorage: storage, Clerk: { user: { id: account }, session: {} }, location: { pathname: '/app/' } };
   globalThis.window = window;
@@ -52,7 +54,7 @@ export function fixture({ storage = store(), account = 'user_A', operations = fa
     },
     functions: { invoke(name, args) { const d = deferred(); sends.push({ name, args, ...d }); return d.promise; } },
   };
-  const operationClient = { createDraft: () => null, replyDraft: () => null };
+  const operationClient = { createDraft: () => null, replyDraft: () => null, ...operationsClient };
   const imports = {
     react,
     'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },

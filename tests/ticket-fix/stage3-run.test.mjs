@@ -58,8 +58,13 @@ test('screenshots: the extractor sees them inline, the worker is refused until i
     assert.match(r.calls[2].input, new RegExp(a.local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(r.calls[3].input, /attachments: Read .*att-1\.png \(att-1, the customer's screenshot\) with the Read tool before answering/);
     assert.ok(r.logs.some(l => l === `REPAIR — ${TICKET} attempt 1: attachments`), r.logs.join('\n'));
-    // Sessions may read this ticket's folder and nothing next to it.
+    // Sessions may read this ticket's folder and nothing next to it; the
+    // case history file is in it, and gone when the run ends.
     for (const call of r.calls.filter(c => c.role !== 'extract')) assert.ok(call.settings.permissions.allow.includes(`Read(/${path.join(a.root, TICKET)}/**)`), call.role);
+    const history = path.join(a.root, TICKET, 'case-history.jsonl');
+    for (const call of r.calls.filter(c => ['repro', 'worker'].includes(c.role) && !c.resume)) assert.ok(call.input.includes(`The case history file, \`${history}\``), call.role);
+    assert.equal(existsSync(history), false);
+    assert.equal(existsSync(a.local), true, 'the attachments stay for the shell to remove');
     assert.deepEqual(r.calls[0].settings.permissions.allow, [], 'the extractor has no tool at all');
     // The host's record for the reply step.
     assert.deepEqual(r.stage3.attachments.map(x => [x.attachment, x.access]), [['att-1', 'reviewed']]);

@@ -30,6 +30,10 @@ export const REQUIRED_COLUMNS = {
   // (20260925130000_invoice_email_sends.sql). send-invoice-email writes them
   // and the app only reads them; src/lib/supabase.js strips them from every
   // write (SERVER_OWNED_FIELDS), so a client never sends a key for them.
+  // Not listed: profiles.reminder_email_fingerprint / reminder_emailed_at
+  // (20260929140000_reminder_email_state.sql). Only send-reminders reads and
+  // writes them; they are not in SETTINGS_TO_PROFILE, so the client never
+  // sends them. That migration goes before send-reminders and delete-account.
 };
 
 /** Classify one PostgREST answer. Only a definite "no such column" is missing. */

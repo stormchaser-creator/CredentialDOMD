@@ -4,6 +4,7 @@ import {readFile,access} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {renderCme,validateCme,safeUrl} from './build-cme.mjs';
+import {HTTPS_REDIRECT_SCRIPT,HTTPS_REDIRECT_CSP_HASH} from './https-redirect.mjs';
 import {findGuides,matchesState} from '../public/cme-assets/cme.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const read=path=>readFile(resolve(root,path),'utf8');
@@ -69,11 +70,14 @@ test('state search handles exact abbreviations and multiword names without unrel
  assert.equal(matchesState('new york ny','ny','new york',false),true);
  assert.equal(matchesState('ohio oh','oh','not a state',false),false);
 });
-test('public guide has no chat backend, persistence, inline script or external connection permission',async()=>{
+test('public guide has no chat backend, persistence, inline script beyond the https redirect or external connection permission',async()=>{
  const runtime=await read('public/cme-assets/cme.mjs');
  assert.doesNotMatch(runtime,/\bfetch\s*\(|XMLHttpRequest|sendBeacon|localStorage|sessionStorage|innerHTML|apiKey|aiClient/);
  assert.match(html,/connect-src 'none'/);assert.match(html,/form-action 'none'/);
- assert.doesNotMatch(html,/<script(?![^>]*src=)[^>]*>/);
+ // The one inline script is the https redirect, allowed by its exact hash only.
+ assert.doesNotMatch(html.replace(HTTPS_REDIRECT_SCRIPT,''),/<script(?![^>]*src=)[^>]*>/);
+ assert.ok(html.includes(`script-src 'self' ${HTTPS_REDIRECT_CSP_HASH};`));
+ assert.doesNotMatch(html,/unsafe-inline|unsafe-eval/);
  assert.ok(html.includes('<noscript>'));assert.ok(html.includes('Website navigation'));
  assert.match(html,/Product tutorials do not award CME credit/);
 });

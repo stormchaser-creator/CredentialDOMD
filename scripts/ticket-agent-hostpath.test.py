@@ -278,9 +278,18 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('full shell path replies successfully', result.returncode == 0 and count() == 1 and count(X) == 1, log(run)[-3000:])
         inputs = invocations(run)
         check('two targets use separate model sessions', len(inputs) == 2 and {v['owner_id'] for v in inputs} == {A, B})
-        check('all model histories match that session owner', all(all(t['user_id'] == v['owner_id'] for t in v['tickets']) for v in inputs))
+        # (Both synthetic tickets start 20000000, so they share one run name.)
+        records = [json.loads(f.read_text()) for f in (run / 'work' / 'runs').glob('*/run.json')]
+        check('every session goes on its run record with its cost, and on the log', len(records) >= 1 and
+              all([(e['role'], e['ok'], e['subtype'], e['cost_usd']) for e in r['sessions']] == [('extract', True, 'success', 0.01), ('repro', True, 'success', 0.01), ('worker', True, 'success', 0.01)] and r['cost_usd'] == 0.03 for r in records) and
+              log(run).count(' 1 turn(s), $0.0100') == 6, ([r.get('sessions') for r in records], log(run)[-2000:]))
+        # The worker reads a trimmed history (session-context.mjs): the target
+        # thread whole, the owner's other tickets as a summary.
+        owned = lambda owner: set(sql(f"select string_agg(id::text, ',') from support_tickets where user_id='{owner}'").split(','))
+        seen = lambda v: [v['target']['id']] + [t['id'] for t in v['related_tickets']['detailed'] + v['related_tickets']['index']]
+        check('all model histories match that session owner', all(v['view'] == 'session' and v['target']['user_id'] == v['owner_id'] and set(seen(v)) <= owned(v['owner_id']) for v in inputs))
         first = next(v for v in inputs if v['target_id'] == T)
-        check('resolved archived confirmation reaches the actual stdin context', any(t['id'] == R and t['messages'][0]['body'] == 'Yes the Add button works' for t in first['tickets']))
+        check('resolved archived confirmation reaches the actual stdin context', any(t['id'] == R and t['newest_customer_message']['excerpt'] == 'Yes the Add button works' for t in first['related_tickets']['detailed']))
         check('unapproved related ticket receives no automated reply', count(R) == 0)
         check('real SQL applies automated label and support stamp', sql(f"select body like 'CredentialDOMD Support · Automated%' from support_messages where ticket_id='{T}' and is_admin_reply") == 't' and sql(f"select agent_last_reply_at is not null from support_tickets where id='{T}'") == 't')
         check('every stored reply carries a used verification the database checked', sql("select count(*) from support_messages m join support_reply_verifications v on v.id=m.verification_id and v.used_by_message_id=m.id where m.is_admin_reply") == '2')
@@ -294,6 +303,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('the runner keeps a private ledger entry per stored reply', (state / 'replies' / T / f'{vid}.json').stat().st_mode & 0o777 == 0o600)
         check('reconcile finds every stored reply in a ledger and alerts nobody', notified(run) == [] and 'reconcile: 2 verifications, 0 without a ledger entry, 0 agent replies from no logged run' in log(run), (notified(run), log(run)[-3000:]))
         check('the stored result says it was not emailed', '"emailed":false' in log(run))
+        check('the stored result says the email is attempted, not confirmed', '"email":"attempted, not confirmed: notify_ticket_reply' in log(run) and 'Only support_messages.emailed_at shows it was sent' in log(run))
         check('the verification records the run and that its claims are bound', sql(f"select (report->>'claims') || '|' || length(report->>'run_id') from support_reply_verifications where ticket_id='{T}'") == 'bound|16')
         # Stage 3: the reply is the host's: a fixed opening, the footer with one
         # line per frozen checklist item in the host's state, a fixed closing.
@@ -367,7 +377,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('edits already present before the run do not hold it', execute(script).returncode == 0 and count() == 1 and 'PROTECTED' not in log(run))
 
         run, state, script, repo = scenario('timeout', extra={'WORKER_SECONDS=1500': 'WORKER_SECONDS=2'})
-        check('a model killed by the alarm counts toward the breaker', execute(script).returncode != 0 and count() == 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '1' and 'REJECTED — ' + T + ' model run failed or timed out' in log(run) and 'worker session timed out after 2 s' in log(run), log(run)[-1500:])
+        check('a model killed by the alarm counts toward the breaker', execute(script).returncode != 0 and count() == 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '1' and 'REJECTED — ' + T + ' model run failed or timed out' in log(run) and 'worker session timed out after 2 s' in log(run) and ': worker FAILED timed out after 2 s' in log(run), log(run)[-1500:])
         run, state, script, repo = scenario('timeout_park', parked=2, extra={'WORKER_SECONDS=1500': 'WORKER_SECONDS=2'})
         check('the third timeout parks the ticket and alerts the owner', execute(script).returncode != 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '3' and len(notified(run)) == 1 and 'parked' in notified(run)[0])
 

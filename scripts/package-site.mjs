@@ -10,6 +10,7 @@ import { renderWatchPages, addWatchPagesToSitemap } from './watch-pages.mjs';
 import { PUBLIC_LAUNCH_MODE, assertPublicLaunchReady } from '../src/content/publicLaunch.mjs';
 import { renderPublicLaunch, publicLaunchHelp, publicMembershipEndpoint } from './public-launch-render.mjs';
 import { renderLegalPages } from './generate-legal-pages.mjs';
+import { HTTPS_REDIRECT_SCRIPT, assertHttpsRedirect } from './https-redirect.mjs';
 
 const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
 const cmeAssets = ['cme.css', 'cme.mjs'];
@@ -81,6 +82,14 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
     }
   }
   const watchOutput = watchPages.map(page => ({ ...page, html: renderPublicLaunch(page.html, 'watch-pages', launchMode, liveOffer) }));
+  // Plain http://credentialdomd.com/app/ loaded and every signup call from it
+  // was refused. Every page must switch itself to https before anything else.
+  assertHttpsRedirect(entryHtml, 'dist/index.html');
+  const notFound = `<!doctype html><html lang="en"><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>Page not found</title><h1>Page not found</h1><p><a href="/">CredentialDOMD home</a></p></html>\n`;
+  for (const [page, html] of pageOutput) assertHttpsRedirect(html, `landing/${page}.html`);
+  for (const [name, html] of stateOutput) assertHttpsRedirect(html, `landing/states/${name}`);
+  for (const page of watchOutput) assertHttpsRedirect(page.html, `help/${page.id}/index.html`);
+  assertHttpsRedirect(notFound, '404.html');
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   await cp(resolve(root, 'dist'), resolve(output, 'app'), { recursive: true });
@@ -151,7 +160,7 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   await writeFile(resolve(output, 'CNAME'), 'credentialdomd.com\n');
   // A real 404 prevents Cloudflare's default site-wide SPA fallback. Only the
   // /app/ is the app entry; it uses in-app state rather than URL path routing.
-  await writeFile(resolve(output, '404.html'), '<!doctype html><html lang="en"><meta charset="utf-8"><title>Page not found</title><h1>Page not found</h1><p><a href="/">CredentialDOMD home</a></p></html>\n');
+  await writeFile(resolve(output, '404.html'), notFound);
   // Pages applies redirects even when a static file exists. A wildcard /app/*
   // rewrite would turn JS, sw.js and version.json into HTML and break the PWA.
   await writeFile(resolve(output, '_redirects'), '/app/privacy /privacy 302\n/app/terms /terms 302\n');
@@ -161,6 +170,11 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   const portalHeaders = ['/credential-access', '/credential-access.html', '/credential-access/*'].map(route =>
     `${route}\n  Cache-Control: no-store\n  Referrer-Policy: no-referrer\n  X-Robots-Tag: noindex, nofollow, noarchive\n  X-Content-Type-Options: nosniff\n  Content-Security-Policy: ${portalCsp}; frame-ancestors 'none'\n`).join('\n');
   await writeFile(resolve(output, '_headers'), '/sw.js\n  Cache-Control: no-cache\n/app/sw.js\n  Cache-Control: no-cache\n/app/version.json\n  Cache-Control: no-store\n/app/index.html\n  Cache-Control: no-cache\n\n' + portalHeaders);
+  // Anything else that reached the artifact (a page Vite copied from public/,
+  // a legacy file) is held to the same rule; the deploy stops here if not.
+  for (const name of await readdir(output, { recursive: true })) {
+    if (name.endsWith('.html')) assertHttpsRedirect(await readFile(resolve(output, name), 'utf8'), name);
+  }
   return output;
 }
 

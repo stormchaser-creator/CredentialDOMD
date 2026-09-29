@@ -15,6 +15,7 @@ import HeadshotCropModal from "./setup/HeadshotCropModal";
 import PublicRecordReview from "./PublicRecordReview";
 import CvImportReview from "./CvImportReview";
 import { canFillFromPublicRecord } from "../../utils/publicRecord";
+import { emailRemindersOn } from "../../utils/reminderPreferences";
 import CMEImport from "./CMEImport";
 import EmailPacketModal from "./EmailPacketModal";
 
@@ -285,6 +286,8 @@ function RemindersDrawer() {
   const s = data.settings || {};
   const [email, setEmail] = useState(s.email || user?.email || "");
   const lead = String(s.reminderLeadDays || 90);
+  // Blank means on, as in Settings and send-reminders (utils/reminderPreferences.js).
+  const emailOn = emailRemindersOn(s.notifyEmail);
 
   return (
     <div>
@@ -301,11 +304,11 @@ function RemindersDrawer() {
       />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Email reminders</div>
-        <button onClick={() => updateSettings({ notifyEmail: !s.notifyEmail })} aria-label="Email reminders" style={{
+        <button onClick={() => updateSettings({ notifyEmail: !emailOn })} aria-label="Email reminders" style={{
           width: 52, height: 30, borderRadius: 15, border: "none",
-          backgroundColor: s.notifyEmail ? T.accent : T.border, position: "relative", cursor: "pointer",
+          backgroundColor: emailOn ? T.accent : T.border, position: "relative", cursor: "pointer",
         }}>
-          <span style={{ position: "absolute", top: 3, left: s.notifyEmail ? 25 : 3, width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", transition: "left .15s" }} />
+          <span style={{ position: "absolute", top: 3, left: emailOn ? 25 : 3, width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", transition: "left .15s" }} />
         </button>
       </div>
       <div style={{ padding: "12px 0 0" }}>

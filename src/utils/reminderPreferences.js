@@ -1,0 +1,47 @@
+// What a reminder setting means when the profile row holds nothing.
+//
+// The member's Settings screen merges DEFAULT_SETTINGS over the profile row,
+// so a blank notify_email has always shown "Email reminders" ON and a blank
+// reminder_lead_days has always shown 90 days. send-reminders read the same
+// blanks the other way: it mailed only notify_email = true, and used 60 days
+// for a blank lead. On 2026-09-29, 7 of 8 active accounts and every new
+// signup had notify_email blank, so the switch said ON and nothing was sent.
+//
+// Owner decision (2026-09-29): blank means ON. Only an explicit false turns
+// email reminders off. Every reader goes through these helpers: the Settings
+// and setup switches, the setup board, the administrator's member view and
+// the send-reminders recipient query (supabase/functions/_shared/
+// reminderRecipients.mjs). This file is mirrored into the edge functions by
+// scripts/sync-shared-app-modules.mjs, so the app and the server share one
+// copy of the rule.
+
+/** Lead days a blank setting means: what Settings shows (DEFAULT_SETTINGS). */
+export const DEFAULT_REMINDER_LEAD_DAYS = 90;
+/** Resend cadence a blank setting means: Settings shows "Weekly". */
+export const DEFAULT_NOTIFY_FREQ_DAYS = 7;
+// The range send-reminders accepts; anything outside is clamped into it.
+export const REMINDER_LEAD_DAYS_RANGE = Object.freeze([7, 365]);
+export const NOTIFY_FREQ_DAYS_RANGE = Object.freeze([1, 60]);
+
+/**
+ * Whether email reminders are on, from the stored value (settings.notifyEmail
+ * or profiles.notify_email). Blank (null, undefined) is ON; only false is OFF.
+ */
+export function emailRemindersOn(value) {
+  return value !== false;
+}
+
+// Same arithmetic send-reminders always used (parseInt, fallback on 0 or
+// unreadable, then clamp); only the blank lead changed, from 60 to 90.
+const clampedDays = (value, fallback, [lo, hi]) =>
+  Math.min(Math.max(parseInt(value, 10) || fallback, lo), hi);
+
+/** The digest window in days: blank or unreadable is 90, clamped to 7..365. */
+export function reminderLeadDays(value) {
+  return clampedDays(value, DEFAULT_REMINDER_LEAD_DAYS, REMINDER_LEAD_DAYS_RANGE);
+}
+
+/** Days between repeat digests of an unchanged list: blank is 7, clamped to 1..60. */
+export function notifyFreqDays(value) {
+  return clampedDays(value, DEFAULT_NOTIFY_FREQ_DAYS, NOTIFY_FREQ_DAYS_RANGE);
+}

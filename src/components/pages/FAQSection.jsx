@@ -193,7 +193,7 @@ const FAQ_DATA = [
     items: [
       {
         q: "How do I set up notifications?",
-        a: "Open More > Settings, check your email, and set your lead time and reminder frequency. Enable Email reminders for expiration digests and allow browser notifications on this device if wanted. The service's scheduler and mail delivery determine whether email arrives. The text setting currently does not send automatic SMS. Use Get help if an expected email is missing after checking your settings and spam folder.",
+        a: "Open More > Settings, check your email, and set your lead time and reminder frequency. Email reminders for expiration digests are on unless you turn them off. Allow browser notifications on this device if wanted. The service's scheduler and mail delivery determine whether email arrives. The text setting currently does not send automatic SMS. Use Get help if an expected email is missing after checking your settings and spam folder.",
       },
       {
         q: "What does auto-escalation mean?",

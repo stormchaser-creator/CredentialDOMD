@@ -15,6 +15,7 @@ import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getLegalDocuments, LEGAL_CONTACT } from "../src/content/legalText.js";
+import { HTTPS_REDIRECT_SCRIPT } from "./https-redirect.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = resolve(here, "..", "landing");
@@ -34,6 +35,7 @@ const page = (doc, other) => `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+${HTTPS_REDIRECT_SCRIPT}
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${esc(doc.title)} | CredentialDOMD</title>
 <meta name="description" content="${esc(doc.title)} for CredentialDOMD, the physician credential tracker. Last updated ${esc(doc.updated)}.">

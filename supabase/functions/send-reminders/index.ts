@@ -1,17 +1,24 @@
 /**
- * send-reminders — daily expiration digest by email.
+ * send-reminders: daily expiration digest by email.
  *
  * Runs from pg_cron (see migrations/20260816_reminders.sql) with the hook
  * secret, or by an admin JWT for a manual run. For every active profile with
- * notify_email on and an email address, it collects records whose
+ * email reminders on and an email address (_shared/reminderRecipients.mjs:
+ * a blank notify_email is on, only false is off, which is what the member's
+ * Settings switch shows), it collects records whose
  * expiration_date falls between 30 days ago and reminder_lead_days ahead
- * (default 60), skips items the user has acknowledged (alert_acks.until in
+ * (blank is 90, the lead Settings shows; clamped to 7..365), skips items
+ * the user has acknowledged (alert_acks.until in
  * the future) and records that are historical, superseded, awaiting
  * confirmation or whose date is not known yet (_shared/reminderRows.mjs),
  * and sends ONE plain-text digest through Resend. It re-sends
- * no more often than notify_freq_days (default 7) unless the set of items
- * changed (fingerprint), and stamps profiles.last_notified plus a
- * notification_log row.
+ * no more often than notify_freq_days (blank is 7, clamped to 1..60), counted
+ * in whole UTC days, unless the set of items changed (fingerprint), and sends
+ * nothing while the member's banner snooze (snoozed_until) is in the future
+ * (_shared/reminderCadence.mjs). Its own state is
+ * profiles.reminder_email_fingerprint and reminder_emailed_at, stamped with
+ * updated_at after each send, plus a notification_log row. It never reads or
+ * writes alerts_fingerprint or last_notified: those are the in-app banner's.
  *
  * Body (optional): { profile_id?: uuid, dry_run?: boolean }
  */
@@ -20,6 +27,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import renewalLinks from "./renewalLinks.json" with { type: "json" };
 import { remindable, reminderLabel } from "../_shared/reminderRows.mjs";
+import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
+import { reminderEmailDecision, reminderFingerprint } from "../_shared/reminderCadence.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
 const HOOK = Deno.env.get("WELCOME_HOOK_SECRET") || "";
@@ -40,12 +49,6 @@ const json = (status: number, body: unknown) =>
 
 const dayDiff = (iso: string) => Math.round((new Date(iso + "T00:00:00Z").getTime() - Date.now()) / 86400000);
 const fmt = (iso: string) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-
-async function fingerprint(items: { id: string; exp: string }[]) {
-  const s = items.map(i => `${i.id}:${i.exp}`).sort().join("|");
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return Array.from(new Uint8Array(buf)).slice(0, 12).map(b => b.toString(16).padStart(2, "0")).join("");
-}
 
 function firstName(name: string | null, email: string) {
   const raw = (name || "").replace(/\b(dr\.?|md|do|mbbs|phd)\b/gi, "").trim().split(/\s+/)[0];
@@ -68,22 +71,15 @@ serve(async (req) => {
 
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-  let pq = db.from("profiles")
-    .select("id, name, email, notify_email, reminder_lead_days, notify_freq_days, last_notified, alerts_fingerprint, access_status")
-    .eq("notify_email", true)
-    .not("email", "is", null)
-    .neq("email", "")
-    .eq("access_status", "active");
-  if (body.profile_id) pq = pq.eq("id", body.profile_id);
-  const { data: profiles, error: pe } = await pq;
+  const { data: profiles, error: pe } = await reminderRecipientsQuery(db, body.profile_id);
   if (pe) return json(500, { error: pe.message });
 
   const today = new Date().toISOString().slice(0, 10);
   const results: any[] = [];
 
   for (const p of profiles || []) {
-    const lead = Math.min(Math.max(parseInt(p.reminder_lead_days) || 60, 7), 365);
-    const freq = Math.min(Math.max(parseInt(p.notify_freq_days) || 7, 1), 60);
+    const lead = reminderLeadDays(p.reminder_lead_days);
+    const freq = notifyFreqDays(p.notify_freq_days);
     const lo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     const hi = new Date(Date.now() + lead * 86400000).toISOString().slice(0, 10);
 
@@ -110,11 +106,9 @@ serve(async (req) => {
     }
     if (!items.length) { results.push({ profile: p.id, sent: false, reason: "nothing due" }); continue; }
 
-    const fp = await fingerprint(items);
-    const last = p.last_notified ? new Date(p.last_notified).getTime() : 0;
-    const dueByCadence = Date.now() - last >= freq * 86400000;
-    const changed = fp !== (p.alerts_fingerprint || "");
-    if (!dueByCadence && !changed) { results.push({ profile: p.id, sent: false, reason: "recently notified, unchanged" }); continue; }
+    const fp = await reminderFingerprint(items);
+    const decision = reminderEmailDecision(p, { fingerprint: fp, freqDays: freq });
+    if (!decision.send) { results.push({ profile: p.id, sent: false, reason: decision.reason }); continue; }
 
     items.sort((a, b) => a.days - b.days);
     const expired = items.filter(i => i.days < 0);
@@ -166,9 +160,14 @@ CredentialDOMD`;
     const rj = await r.json().catch(() => ({}));
     if (!r.ok) { console.error("resend failed", p.id, r.status, rj); results.push({ profile: p.id, sent: false, error: rj }); continue; }
     const now = new Date().toISOString();
-    await db.from("profiles").update({ last_notified: now, alerts_fingerprint: fp }).eq("id", p.id);
+    // The server's own columns only; updated_at because this is a server-side
+    // edit of the row (the app's banner state is left alone).
+    const { error: stampError } = await db.from("profiles")
+      .update({ reminder_email_fingerprint: fp, reminder_emailed_at: now, updated_at: now })
+      .eq("id", p.id);
+    if (stampError) console.error("reminder stamp failed", p.id, stampError.message);
     await db.from("notification_log").insert({ user_id: p.id, method: "email", alert_count: items.length, date: now });
-    results.push({ profile: p.id, sent: true, count: items.length, headline, resend_id: rj.id || null });
+    results.push({ profile: p.id, sent: true, reason: decision.reason, count: items.length, headline, resend_id: rj.id || null, ...(stampError ? { stamp_error: stampError.message } : {}) });
   }
 
   return json(200, { ok: true, profiles: (profiles || []).length, results });

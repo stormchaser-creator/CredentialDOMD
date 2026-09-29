@@ -4,6 +4,7 @@ import Modal from "../shared/Modal";
 import { EmailIcon, TextMsgIcon, AlertIcon } from "../shared/Icons";
 import { generateAlerts, buildNotificationMessage, composeEmail, textAlert } from "../../utils/notifications";
 import { getItemLabel, formatDate, MS_PER_DAY } from "../../utils/helpers";
+import { emailRemindersOn } from "../../utils/reminderPreferences";
 
 function NotificationCenter({ open, onClose }) {
   const { data, updateSettings, addItem, theme: T } = useApp();
@@ -138,7 +139,7 @@ function NotificationCenter({ open, onClose }) {
               </div>
               {!sent ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {hasEmail && s.notifyEmail !== false && (
+                  {hasEmail && emailRemindersOn(s.notifyEmail) && (
                     <button onClick={() => { composeEmail(s.email, msg.subject, msg.body); markSent("email"); }} style={{
                       padding: "12px", borderRadius: 12, border: "none", backgroundColor: T.accent, color: "#fff",
                       fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,

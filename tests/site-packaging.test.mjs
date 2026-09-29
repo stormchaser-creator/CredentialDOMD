@@ -12,6 +12,7 @@ import { renderHelp } from "../scripts/build-help.mjs";
 import { renderCme } from "../scripts/build-cme.mjs";
 import { renderLegalPages } from "../scripts/generate-legal-pages.mjs";
 import { loadVideoCatalog, WATCH_PAGES } from "../scripts/help-videos.mjs";
+import { HTTPS_REDIRECT_SCRIPT, httpsRedirectProblem } from "../scripts/https-redirect.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Baseline fixtures test byte-preserving packaging, independent of live launch mode.
@@ -27,12 +28,16 @@ async function siteFixture(t) {
   const root = await mkdtemp(resolve(tmpdir(), "credentialdo-packaging-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const path of ["dist/assets", "landing/states", "public", "scripts"]) await mkdir(resolve(root, path), { recursive: true });
-  await writeFile(resolve(root, "dist/index.html"), '<!doctype html><script type="module" src="/app/assets/synthetic.js"></script>');
+  // The app shell as Vite emits it: the real index.html head, entry rewritten
+  // to a built asset under /app/.
+  const shell = (await read(resolve(sourceRoot, "index.html"))).replace('<script type="module" src="/src/main.jsx"></script>', '<script type="module" crossorigin src="/app/assets/synthetic.js"></script>');
+  assert.ok(shell.includes("/app/assets/synthetic.js"));
+  await writeFile(resolve(root, "dist/index.html"), shell);
   await writeFile(resolve(root, "dist/assets/synthetic.js"), "// synthetic app asset\n");
   await writeFile(resolve(root, "dist/sw.js"), "// synthetic stamped /app/ worker\n");
   await writeFile(resolve(root, "dist/version.json"), '{"build":"synthetic"}\n');
   await writeFile(resolve(root, "public/unreviewed.js"), "// must not become a root asset\n");
-  await writeFile(resolve(root, "landing/states/example.html"), "<!doctype html><title>Synthetic state guide</title>");
+  await writeFile(resolve(root, "landing/states/example.html"), `<!doctype html><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>Synthetic state guide</title>`);
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
     ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
@@ -203,6 +208,52 @@ test("invalid app base or missing retirement script preserves the previous packa
   await rm(resolve(root, "scripts/root-sw-retirement.js"));
   await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), { code: "ENOENT" });
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
+});
+
+test("every packaged page, in either launch mode, switches plain http to https before any other script", async t => {
+  const root = await siteFixture(t);
+  await cp(resolve(sourceRoot, "landing/help-videos"), resolve(root, "landing/help-videos"), { recursive: true });
+  const help = JSON.parse(await read(resolve(root, "public/knowledge/credentialdo-help.json")));
+  await writeFile(resolve(root, "landing/help.html"), renderHelp(help, await loadVideoCatalog(root)));
+  await rm(resolve(root, "landing/states/example.html"));
+  for (const name of (await readdir(resolve(sourceRoot, "landing/states"))).filter(name => name.endsWith(".html"))) {
+    await cp(resolve(sourceRoot, "landing/states", name), resolve(root, "landing/states", name));
+  }
+  const modes = [[BASELINE_LAUNCH_MODE, {}], [{ enabled: true, signupHref: "/signup/" }, { supabaseUrl: "https://synthetic.supabase.co" }]];
+  for (const [mode, config] of modes) {
+    const output = await packageSite(root, undefined, mode, config);
+    const published = (await readdir(output, { recursive: true })).filter(name => name.endsWith(".html"));
+    for (const expected of ["app/index.html", "app/privacy.html", "app/terms.html", "index.html", "help/index.html", "cme/index.html", "credential-access/index.html", "states/index.html", "states/texas.html", "404.html", ...WATCH_PAGES.map(({ id }) => `help/${id}/index.html`)]) {
+      assert.ok(published.includes(expected), expected);
+    }
+    for (const name of published) assert.equal(httpsRedirectProblem(await read(resolve(output, name))), null, name);
+  }
+});
+
+test("an app build or page without the https redirect stops packaging", async t => {
+  const root = await siteFixture(t);
+  await mkdir(resolve(root, "site-dist"));
+  await writeFile(resolve(root, "site-dist/sentinel.txt"), "previous reviewed artifact");
+  const preserved = async () => assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
+  const shell = await read(resolve(root, "dist/index.html"));
+  await writeFile(resolve(root, "dist/index.html"), shell.replace(HTTPS_REDIRECT_SCRIPT, ""));
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), /dist\/index\.html has no https redirect script/);
+  await preserved();
+  // A script ahead of the redirect would still run, and call out, on plain http.
+  await writeFile(resolve(root, "dist/index.html"), shell.replace(HTTPS_REDIRECT_SCRIPT, `<script src="/app/assets/early.js"></script>${HTTPS_REDIRECT_SCRIPT}`));
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), /dist\/index\.html loads or runs something before the https redirect script/);
+  await preserved();
+  await writeFile(resolve(root, "dist/index.html"), shell);
+  const guide = await read(resolve(root, "landing/states/example.html"));
+  await writeFile(resolve(root, "landing/states/example.html"), guide.replace(HTTPS_REDIRECT_SCRIPT, ""));
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), /landing\/states\/example\.html has no https redirect script/);
+  await preserved();
+  await writeFile(resolve(root, "landing/states/example.html"), guide);
+  // A page that reaches the artifact only as a copy (Vite copies public/ into the app build).
+  await writeFile(resolve(root, "dist/stray.html"), "<!doctype html><title>Stray page</title>");
+  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), /app\/stray\.html has no https redirect script/);
+  await rm(resolve(root, "dist/stray.html"));
+  await packageSite(root, undefined, BASELINE_LAUNCH_MODE);
 });
 
 test('paid mode packages all public signup surfaces while retaining guide-only requests and synchronized legal copies', async t => {

@@ -62,26 +62,39 @@
 // later run (exit 6); origin main moving for any other reason alerts the
 // owner.
 //
+// The reproduction and the worker read a trimmed history (session-context.mjs:
+// the target thread, its saved review, answers saved elsewhere and a bounded
+// summary of the related tickets) and may Grep and Read the whole history in
+// a file (case-history.jsonl) in this ticket's own attachment folder; the
+// host checks their cited ids against the full history. Every session's cost,
+// turns and CLI result subtype go on the run record ("sessions") and the log;
+// a failed session's last error line too, and each session's stderr is kept,
+// redacted and owner-only, under <work>/runs/<run>/sessions/ (the shell
+// deletes its run directory on exit). A session in flight when the runner is
+// signalled (the shell's 3-hour alarm, launchd) is recorded as killed, with
+// the stderr it printed so far.
+//
 // Exit: 0 the result is ready to record; 2 the reply was still refused after
 // two repairs; 3 the worker session failed or timed out; 4 the run changed
 // the runner's own code; 5 the run changed files outside its scope; 6 the
 // run changed git state outside its worktree; 7 the checklist could not be
-// extracted; 1 a host step failed. Log lines carry ids, rule and check
-// names and attachment storage paths, never ticket text.
+// extracted; 1 a host step failed. Log lines carry ids, rule and check names,
+// attachment storage paths and a failed session's redacted last error line
+// from the CLI, never ticket text.
 import { createHash } from 'node:crypto';
-import { promises as fs, existsSync, readFileSync, realpathSync } from 'node:fs';
+import { promises as fs, existsSync, readFileSync, realpathSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareResult, refusalHead, RESULT_SCHEMA } from '../ticket-agent-context.mjs';
-import { readManifest, reviewedIds, modelView, selectAttachments } from './attachments.mjs';
+import { readManifest, reviewedIds, modelView, selectAttachments, ATTACH_ROOT_PREFIX } from './attachments.mjs';
 import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
   coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
   checkWorktreeLink, remoteMain, agentCommitsOnMain } from './worktree.mjs';
-import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps } from './worker.mjs';
+import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps, onStop } from './worker.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, gateFailures, validTestRef, readBaseline, DEFAULT_COMMANDS } from './gates/tests.mjs';
 import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
 import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
@@ -89,6 +102,7 @@ import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirecto
 import { raise } from './alert.mjs';
 import { sandboxAvailable } from './sandbox.mjs';
 import { isMain } from './is-main.mjs';
+import { sessionEvidence, caseHistory, HISTORY_FILE, PROMPT_LIMIT, kb } from './session-context.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const WORKER_PROMPT = path.join(HERE, '..', 'ticket-agent-prompt.md');
@@ -190,12 +204,17 @@ export function checklistFacts({ items, bindings = {}, prior = {}, attachments =
 export function checklistWording(items) {
   return `\n\n${UNTRUSTED_HEADING}\n\nEach checklist item\'s wording, by id:\n\`\`\`json\n${JSON.stringify(untrustedItems(items), null, 1)}\n\`\`\``;
 }
-function reproFacts({ worktree, base, stage3 }) {
+// The case history file (session-context.mjs caseHistory): the whole history
+// the evidence below trims, for the session to search when it needs more.
+export function historyFacts(file) {
+  return `- The case history file, \`${file}\`: every ticket, message and saved review of this customer (their own only), one JSON record per line with its \`kind\` first (case, ticket, message, saved_answer, pending_follow_up, saved_review, attachment), so a Grep hit carries the ids you may cite. The evidence below is a trimmed view of it. Grep it before you ask the customer anything or cite a confirmation, and whenever the view leaves out messages you need; Read only the lines you need (offset and limit), never the whole file: every later turn re-reads what you read. The host does not check your questions against the messages, only against answers saved in case reviews.`;
+}
+function reproFacts({ worktree, base, stage3, history }) {
   return ['## Host facts for this run (trusted, from the runner)', '',
     `- Working directory: a fresh git worktree at origin/main ${base.slice(0, 12)} (the base). Nothing you do here reaches main or the customer.`,
-    `- Worktree path: ${worktree}`, checklistFacts(stage3)].join('\n') + checklistWording(stage3.items);
+    `- Worktree path: ${worktree}`, historyFacts(history), checklistFacts(stage3)].join('\n') + checklistWording(stage3.items);
 }
-function hostFacts({ worktree, base, repro, held, stage3 }) {
+function hostFacts({ worktree, base, repro, held, stage3, history }) {
   const lines = ['## Host facts for this run (trusted, from the runner)', '',
     `- Working directory: a git worktree on its own branch, at origin/main ${base.slice(0, 12)}. Nothing you do here reaches main or the customer; the host commits, runs the gates and an independent review, and holds the merge for the owner.`];
   if (held) lines.push(`- A change for this ticket is already held for the owner (run ${held}). Do not change code in this run: answer from the current state and record the next action.`);
@@ -205,16 +224,64 @@ function hostFacts({ worktree, base, repro, held, stage3 }) {
   } else if (repro?.kind === 'no_code') lines.push('- The reproduction step found no code change to make. A product change (src, public, landing) will be refused by the gates, because nothing failing was recorded on base first.');
   else lines.push('- No reproduction was recorded on base. A product change (src, public, landing) will be refused by the gates.');
   lines.push(`- Worktree path: ${worktree}`);
+  lines.push(historyFacts(history));
   lines.push(checklistFacts(stage3));
   return lines.join('\n') + checklistWording(stage3.items);
 }
 
-// The runner's default model session launcher; tests pass a stub.
-export function defaultLauncher({ claude, stderrFile = null, sandbox = null }) {
-  return opts => runSession({ claude, ...opts, stderrFile, sandbox });
+// The runner's default model session launcher; tests pass a stub. Each call
+// names its own stderrFile (runs/<run>/sessions/, see runTicket).
+export function defaultLauncher({ claude, sandbox = null }) {
+  return opts => runSession({ claude, ...opts, sandbox });
+}
+// Where a session's stderr is kept: under the run's own record, which the
+// shell does not delete (its run directory is removed on exit).
+export const SESSION_LOGS = 'sessions';
+const money = n => (Number.isFinite(n) ? `$${n.toFixed(4)}` : '$?');
+// One session's entry on the run record ("sessions"), pass or fail: role,
+// CLI result subtype, cost, turns, and for a failure the reason, the last
+// error line and its kept stderr (relative to the run's record directory,
+// recordDir). phase: "merge" for the owner's merge command's re-reviews.
+export function sessionEntry(r, { n, role, resumed = false, phase = null, recordDir }) {
+  const s = r?.session ?? {};
+  return { n, role, ...(phase ? { phase } : {}), resumed: Boolean(resumed), ok: Boolean(r?.ok), subtype: s.subtype ?? null, cost_usd: s.cost_usd ?? r?.output?.total_cost_usd ?? null,
+    turns: s.turns ?? null, ...(r?.ok ? {} : { reason: String(r?.reason ?? 'failed').slice(0, 400), error: s.error ?? null }),
+    stderr: s.stderr_file ? path.relative(recordDir, s.stderr_file) : null };
+}
+// Its one log line (ids, counts and the redacted reason only).
+export function sessionLine(id8, runName, entry) {
+  const what = entry.phase ? `${entry.phase} ${entry.role}` : entry.role;
+  return entry.ok ? `SESSION — ${id8}: ${what} ${entry.turns ?? '?'} turn(s), ${money(entry.cost_usd)}`
+    : `SESSION — ${id8}: ${what} FAILED ${entry.reason}${entry.stderr ? `; stderr kept in ticket-work/runs/${runName}/${entry.stderr}` : ''}`;
+}
+// The run record, synchronously: for the stop hook, which runs in a signal
+// handler just before the process exits (merge.mjs writeRun is async).
+function writeRunSync(work, value) {
+  const file = path.join(runDirectory(work, value.id), 'run.json');
+  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  renameSync(temporary, file);
+}
+// This ticket's own folder the sessions may read (stage 3, G6): the
+// attachment folder the download step made and the manifest vouches for, or
+// else a fresh one of the same shape (the case history file goes in it), so
+// the sandbox and the permission rules treat it the same way.
+async function sessionReadable(attachDir, ticket) {
+  if (attachDir) return { dir: attachDir, remove: () => {} };
+  const root = realpathSync(await fs.mkdtemp(path.join(realpathSync(os.tmpdir()), ATTACH_ROOT_PREFIX)));
+  const dir = path.join(root, ticket);
+  await fs.mkdir(dir, { mode: 0o700 });
+  return { dir, remove: () => rmSync(root, { recursive: true, force: true }) };
 }
 
+// runTicket: one ticket (see the header). What must go when it ends however
+// it ends (the case history file, a fresh readable folder, the stop hook) is
+// undone here.
 export async function runTicket(o) {
+  const atEnd = [];
+  try { return await workTicket(o, atEnd); } finally { for (const undo of atEnd.reverse()) { try { undo(); } catch { /* best effort */ } } }
+}
+async function workTicket(o, atEnd) {
   const { ticket, contextFile, outputFile, runFile, runId, runDir, repo, work, state, fixState = null, committer, notify = null,
     workerSeconds = 1500, reproSeconds = 900, reviewSeconds = 1200, repairSeconds = 600, extractSeconds = 600, commands = DEFAULT_COMMANDS, binary = 'git',
     env = process.env, home = os.homedir(), fetch = true, installNodeModules, releaseOptions = {}, runStarted = new Date().toISOString().slice(0, 19) + 'Z',
@@ -243,19 +310,43 @@ export async function runTicket(o) {
     manifest = { version: 1, ticket_id: ticket, dir: null, attachments: selectAttachments(context).map(a => ({ ...a, access: 'unavailable', local_path: null, reason: 'the host download did not run' })) };
   }
   const attachDir = manifest.dir && existsSync(manifest.dir) ? realpathSync(manifest.dir) : null;
+  // What the sessions may read besides the worktree: the attachments and the
+  // case history file (written below, removed when the run ends).
+  const readable = await sessionReadable(attachDir, ticket);
+  const readDir = readable.dir;
+  const historyFile = path.join(readDir, HISTORY_FILE);
+  const removeHistory = () => { rmSync(historyFile, { force: true }); readable.remove(); };
+  atEnd.push(removeHistory);
   const reviewed = new Set();
   const seeReads = r => { for (const a of reviewedIds(manifest, r?.reads ?? [])) reviewed.add(a); };
   const attachments = () => modelView(manifest, reviewed);
   // Every model session and every gate step runs sandboxed (finding 1).
-  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: attachDir });
-  const launchSession = o.launchSession ?? defaultLauncher({ claude: o.claude, stderrFile: o.stderrFile ?? null, sandbox: box });
+  const box = sandboxPolicy({ enabled: o.sandbox ?? true, home, work, state: denyState, runDir, profileDir, attachments: readDir });
+  const launchSession = o.launchSession ?? defaultLauncher({ claude: o.claude, sandbox: box });
   const facts = { run: name, record_repo: repo, base: null, release_file: null, code_outcome: 'none', stage3_file: null };
   const writeFacts = () => fs.writeFile(runFile, `${JSON.stringify(facts)}\n`, { mode: 0o600 });
   const alert = (kind, detail, message) => (state ? raise(state, kind, detail, message, { notify, send }).catch(() => false) : Promise.resolve(false));
   const run = { version: 1, id: name, ticket, run_id: runId, committer, repo, mode: context.run_mode, started_at: new Date().toISOString(), status: 'started', auto_merge: Boolean(autoMerge) };
+  // Every session of the run, pass or fail: role, CLI result subtype, cost,
+  // turns, and for a failure the last error line and its kept stderr. Kept
+  // apart from `run` so a record re-read from disk (the merge) never drops it.
+  const sessionLog = [];
+  const spent = () => Math.round(sessionLog.reduce((n, s) => n + (Number.isFinite(s.cost_usd) ? s.cost_usd : 0), 0) * 10000) / 10000;
+  const saveRun = (value = run) => writeRun(work, { ...value, sessions: sessionLog, cost_usd: spent() });
   // Evidence stays private to this run (re-review after a rebase needs it).
   await writeRunFile(work, name, 'context.json', `${JSON.stringify(context)}\n`);
+  const sessionLogs = path.join(runDirectory(work, name), SESSION_LOGS);
+  await fs.mkdir(sessionLogs, { recursive: true, mode: 0o700 });
   const evidence = JSON.stringify(context);
+  let trimmed = null;
+  const promptSizes = {};
+  const measured = (role, text) => {
+    const bytes = Buffer.byteLength(text);
+    promptSizes[role] = bytes;
+    run.prompt_bytes = { ...promptSizes };
+    if (bytes > PROMPT_LIMIT) log(`CONTEXT — ${id8}: the ${role} prompt is ${kb(bytes)}, over the ${kb(PROMPT_LIMIT)} limit`);
+    return text;
+  };
   const tmp = realpathSync(os.tmpdir());
   const gEnv = { ...gatesEnv(env), ...(pgBin(env) ? { PG_BIN: pgBin(env) } : {}) };
   const secrets = credentialValues(env);
@@ -267,14 +358,14 @@ export async function runTicket(o) {
     modules_source: wt.modules_source, origin_at_start: originAtStart, held_earlier: held,
     attachments: manifest.attachments.map(a => ({ id: a.id, target: a.target, access: a.access })) });
   facts.base = wt.base; facts.record_repo = wt.dir;
-  await writeRun(work, run);
+  await saveRun();
   const cleanup = async ({ keepBranch = false } = {}) => {
     removeWorktree({ repo, dir: wt.dir, branch: wt.branch, deleteBranch: !keepBranch, binary });
     facts.record_repo = repo;
   };
   const finishWith = async (code, status, extra = {}) => {
     Object.assign(run, { status, finished_at: new Date().toISOString(), ...extra });
-    await writeRun(work, run); await writeFacts();
+    await saveRun(); await writeFacts();
     return code;
   };
   // Finding 12: what an escape from the sandbox would change outside the
@@ -294,9 +385,65 @@ export async function runTicket(o) {
       }
     }
   };
-  const session = async opts => { const r = await launchSession(opts); await hostCheck(`the ${opts.role} session`); return r; };
+  // Every model session goes through here: its stderr is kept under
+  // runs/<run>/sessions/ (redacted, owner-only), and what it cost, how many
+  // turns it took and, when it failed, why go on the run record and the log.
+  let sessionCount = 0;
+  const recordDir = runDirectory(work, name);
+  // The session in flight, for the stop hook below.
+  let current = null;
+  const session = async opts => {
+    const n = ++sessionCount;
+    const stderrFile = path.join(sessionLogs, `${String(n).padStart(2, '0')}-${opts.role}.stderr.log`);
+    current = { n, role: opts.role, resumed: Boolean(opts.resume), stderrFile };
+    let r;
+    try { r = await launchSession({ ...opts, stderrFile }); } finally { current = null; }
+    const entry = sessionEntry(r, { n, role: opts.role, resumed: opts.resume, recordDir });
+    sessionLog.push(entry);
+    log(sessionLine(id8, name, entry));
+    await hostCheck(`the ${opts.role} session`);
+    return r;
+  };
+  // The runner signalled (the shell's 3-hour alarm, launchd stopping the job):
+  // worker.mjs has killed every session and written the stderr of the one in
+  // flight; this puts that session and the stop on the run record before the
+  // process exits. A run still working is "killed"; once the merge has begun
+  // (status ready) the merge writes the record itself, so the record on disk
+  // is the base and its status is left as it is.
+  atEnd.push(onStop(signal => {
+    const at = new Date().toISOString();
+    const inflight = current ? [{ n: current.n, role: current.role, resumed: current.resumed, ok: false, subtype: null, cost_usd: null, turns: null,
+      reason: `killed by ${signal}`, error: null, stderr: existsSync(current.stderrFile) ? path.relative(recordDir, current.stderrFile) : null }] : [];
+    let base = run;
+    if (run.status === 'ready') { try { base = JSON.parse(readFileSync(path.join(recordDir, 'run.json'), 'utf8')); } catch { base = run; } }
+    const killed = base.status === 'started';
+    try {
+      writeRunSync(work, { ...base, ...(killed ? { status: 'killed', finished_at: at, reason: `the runner was stopped by ${signal}` } : {}), stopped: { signal, at },
+        sessions: [...sessionLog, ...inflight], cost_usd: spent() });
+    } finally { removeHistory(); }
+  }));
+  // A failed session's facts for the run record.
+  const failed = r => ({ reason: r.reason, ...(r.session ? { session: { subtype: r.session.subtype ?? null, cost_usd: r.session.cost_usd ?? null, turns: r.session.turns ?? null,
+    error: r.session.error ?? null, stderr: r.session.stderr_file ? path.relative(recordDir, r.session.stderr_file) : null } } : {}) });
 
   try {
+    // 0. What the reproduction and the worker read, before any model runs: a
+    // trimmed view (every turn re-reads the prompt, and the full history spent
+    // a $3 budget) and the whole history as a file they may search. A history
+    // that cannot be shaped is a host failure on the record (review of
+    // 2026-09-29), never a hang or a throw with no record.
+    try {
+      trimmed = sessionEvidence(context);
+      const history = caseHistory(context);
+      rmSync(historyFile, { force: true });
+      await fs.writeFile(historyFile, history, { mode: 0o600, flag: 'wx' });
+      run.session_context = { ...trimmed.stats, history_bytes: Buffer.byteLength(history) };
+    } catch (error) {
+      const why = String(error.message).split('\n')[0].slice(0, 200);
+      log(`CONTEXT — ${id8}: ${why}; no session started`);
+      await cleanup();
+      return await finishWith(EXIT.host, 'host_failed', { reason: `the session evidence: ${why}` });
+    }
     // 1b. The checklist (G1): every customer message no extraction has read.
     let checklist = readChecklist(state, ticket) ?? emptyChecklist(context);
     const sources = newSources(checklist, context);
@@ -315,7 +462,7 @@ export async function runTicket(o) {
       let r = await call(streamMessage(text, images));
       let accepted = null;
       for (let attempt = 1; attempt <= 2; attempt++) {
-        if (!r.ok) { log(`CHECKLIST — ${id8}: extraction session ${r.reason}`); return await finishWith(EXIT.model, 'model_failed', { reason: `checklist extraction: ${r.reason}` }); }
+        if (!r.ok) { log(`CHECKLIST — ${id8}: extraction session ${r.reason}`); return await finishWith(EXIT.model, 'model_failed', { ...failed(r), reason: `checklist extraction: ${r.reason}` }); }
         const checked = checkExtraction(r.output.structured_output, { context, record: checklist, sources, confirmTriggers: attempt === 1 });
         if (!checked.errors.length && !checked.confirm.length) { accepted = checked; break; }
         if (attempt === 2 || !r.session_id) { log(`CHECKLIST — ${id8}: refused after a repair (${checked.errors.length} problem(s))`); break; }
@@ -350,11 +497,11 @@ export async function runTicket(o) {
     // 2. Reproduction, before any fix.
     let repro = null;
     if (!held) {
-      const settings = sessionSettings({ role: 'repro', worktree: wt.dir, home, work, state: denyState, runDir, tmp, attachments: attachDir });
-      const input = `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base, stage3: { items: workerItems, prior, attachments: attachments() } })}${EVIDENCE_MARKER}${evidence}`;
+      const settings = sessionSettings({ role: 'repro', worktree: wt.dir, home, work, state: denyState, runDir, tmp, attachments: readDir });
+      const input = measured('repro', `${readFileSync(REPRO_PROMPT, 'utf8')}\n\n${reproFacts({ worktree: wt.dir, base: wt.base, stage3: { items: workerItems, prior, attachments: attachments() }, history: historyFile })}${EVIDENCE_MARKER}${trimmed.text}`);
       let r = await session({ role: 'repro', cwd: wt.dir, input, schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: reproSeconds * 1000, baseEnv: env });
       for (let attempt = 1; attempt <= 2; attempt++) {
-        if (!r.ok) { log(`REPRO — ${id8}: session ${r.reason}; no reproduction recorded`); run.repro = { status: 'failed', reason: r.reason }; break; }
+        if (!r.ok) { log(`REPRO — ${id8}: session ${r.reason}; no reproduction recorded`); run.repro = { status: 'failed', ...failed(r) }; break; }
         let out;
         try { out = checkRepro(r.output.structured_output, itemIds); } catch (error) { log(`REPRO — ${id8}: ${error.message}`); run.repro = { status: 'unusable' }; break; }
         const changed = changedPaths(wt.dir, wt.base, { binary });
@@ -375,12 +522,12 @@ export async function runTicket(o) {
       }
       run.repro = repro ? { kind: repro.kind, recorded: repro.recorded, tests: repro.tests, frozen: repro.frozen } : run.repro;
       log(`REPRO — ${id8}: ${repro ? (repro.kind === 'no_code' ? 'no code change to reproduce' : `${repro.tests.length} test(s), ${repro.recorded ? 'recorded failing on base' : 'NOT recorded failing on base'}`) : 'none'}`);
-      await writeRun(work, run);
+      await saveRun();
     }
 
     // 3. The worker (fixer), then the reply checks with up to two repairs.
     const frozen = Object.keys(repro?.frozen ?? {}).filter(f => repro.frozen[f] !== null);
-    const workerSettingsValue = sessionSettings({ role: 'worker', worktree: wt.dir, home, work, state: denyState, runDir, tmp, frozen, attachments: attachDir });
+    const workerSettingsValue = sessionSettings({ role: 'worker', worktree: wt.dir, home, work, state: denyState, runDir, tmp, frozen, attachments: readDir });
     const workerCall = async (input, resume = null, seconds = workerSeconds) => {
       const r = await session({ role: 'worker', resume, cwd: wt.dir, input, schema: o.resultSchema ?? RESULT_SCHEMA,
         settings: workerSettingsValue, sessionDir: path.join(sessions, 'worker'), timeoutMs: seconds * 1000, baseEnv: env });
@@ -395,12 +542,12 @@ export async function runTicket(o) {
     // what released runs bound. The host's decision uses hostBindings().
     const provisional = (out, changed) => mergeBindings(prior, runBindings({ repro, declared: changed ? out?.structured_output?.change?.tests ?? [] : [], items: workerItems }));
     const facts3 = { items: workerItems, bindings: reproBound(), prior, attachments: attachments() };
-    const prompt = `${readFileSync(o.workerPrompt ?? WORKER_PROMPT, 'utf8')}\n\n${hostFacts({ worktree: wt.dir, base: wt.base, repro, held, stage3: facts3 })}${EVIDENCE_MARKER}${evidence}`;
+    const prompt = measured('worker', `${readFileSync(o.workerPrompt ?? WORKER_PROMPT, 'utf8')}\n\n${hostFacts({ worktree: wt.dir, base: wt.base, repro, held, stage3: facts3, history: historyFile })}${EVIDENCE_MARKER}${trimmed.text}`);
     let first = await workerCall(prompt);
     if (!first.ok) {
       log(`MODEL — ${ticket} worker session ${first.reason}`);
       await cleanup();
-      return finishWith(EXIT.model, 'model_failed', { reason: first.reason });
+      return finishWith(EXIT.model, 'model_failed', failed(first));
     }
     let output = first.output, sessionId = first.session_id;
     const saveOutput = () => fs.writeFile(outputFile, JSON.stringify(output), { mode: 0o600 });
@@ -467,7 +614,7 @@ export async function runTicket(o) {
       if (!edges && (observations.length || pendingNonAsks.length || hints.length)) {
         const confirm = await reviewIn(wt.base, dir => confirmChecklist({ context, stage3: stage3Review([]), prompt: readFileSync(CONFIRM_PROMPT, 'utf8'),
           launch: async (input, { attempt }) => session({ role: 'confirm', cwd: dir, input, schema: CONFIRM_SCHEMA,
-            settings: reviewSettings({ worktree: dir, home, work, state: denyState, runDir, tmp, attachments: attachDir }), sessionDir: path.join(sessions, `confirm-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env }) }));
+            settings: reviewSettings({ worktree: dir, home, work, state: denyState, runDir, tmp, attachments: readDir }), sessionDir: path.join(sessions, `confirm-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env }) }));
         await writeRunFile(work, name, 'confirm.json', confirm);
         log(`CONFIRM — ${id8}: ${confirm.pass ? 'observations confirmed, non-asks judged' : `not confirmed (${confirm.reasons.join('; ').slice(0, 300)})`}`);
         edges = confirm;
@@ -530,7 +677,7 @@ export async function runTicket(o) {
     // and one review revision. The reviewer works in a fresh worktree of the
     // commit, so it reads exactly what was committed.
     const reviewLaunch = reviewDir => async (input, { index, attempt }) => session({ role: 'review', cwd: reviewDir, input, schema: REVIEW_SCHEMA,
-      settings: reviewSettings({ worktree: reviewDir, home, work, state: denyState, runDir, tmp, attachments: attachDir }), sessionDir: path.join(sessions, `review-${Date.now()}-${index}-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env });
+      settings: reviewSettings({ worktree: reviewDir, home, work, state: denyState, runDir, tmp, attachments: readDir }), sessionDir: path.join(sessions, `review-${Date.now()}-${index}-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env });
     let gates, gatesText, owner, blast, review = null, round = 0, gateRepairs = 0, revisions = 0;
     for (;;) {
       round++;
@@ -598,7 +745,7 @@ export async function runTicket(o) {
       run.status = 'held'; run.hold_reason = holdReason; run.held_at = new Date().toISOString();
       facts.code_outcome = 'held';
       await decide({ outcome: 'held', gates, review });
-      await writeRun(work, run);
+      await saveRun();
       await writeRunFile(work, name, 'HELD.txt', heldSummary(run, gates));
       log(`HELD — ticket ${id8} run ${name}: ${holdReason}. Merge it with: node scripts/ticket-fix/merge.mjs ${name}`);
       await alert('merge_held', `ticket=${id8} run=${name}`, `CredentialDOMD ticket agent: a change for ticket ${id8} passed its gates and an independent review and is held for you (${holdReason}). Summary: ticket-work/runs/${name}/HELD.txt. Merge it with: node scripts/ticket-fix/merge.mjs ${name}`);
@@ -606,7 +753,7 @@ export async function runTicket(o) {
       return EXIT.ok;
     }
     run.status = 'ready';
-    await writeRun(work, run);
+    await saveRun();
     const support = await mergeSupport({ run, work, launch: reviewLaunch, commands, env: gEnv, binary, sandbox: box, state: denyState, secrets });
     const merged = await mergeRun({ work, runId: name, repo, reviewAgain: support.reviewAgain, regate: support.regate, releaseOptions, binary, env, log,
       ...(o.verify ? { verify: o.verify } : {}) });
@@ -621,7 +768,7 @@ export async function runTicket(o) {
     // The decision reads the merged run record; its bindings go on the record.
     Object.assign(run, after);
     await decide({ outcome: facts.code_outcome, gates, review, released: merged.status === 'released' && after.release?.verified === true });
-    await writeRun(work, { ...(await readRun(work, name)), bindings_met: run.bindings_met, stage3: run.stage3 });
+    await saveRun({ ...(await readRun(work, name)), bindings_met: run.bindings_met, stage3: run.stage3 });
     await writeFacts();
     return EXIT.ok;
   } catch (error) {
@@ -652,10 +799,14 @@ export function heldSummary(run, gates) {
 }
 
 // What a merge needs to re-review and re-gate a rebased commit. The runner
-// passes its own review launcher factory (reviewDir => launcher); the
-// owner's merge.mjs builds one here, sandboxed and denied the case records
-// and ledgers like the runner's (stage 2 review, finding 6).
-export async function mergeSupport({ run, work, launch = null, commands = DEFAULT_COMMANDS, env = null, binary = 'git', claude = null, sandbox = undefined, state = null, secrets = null }) {
+// passes its own review launcher factory (reviewDir => launcher), whose
+// sessions go on its own record; the owner's merge.mjs builds one here,
+// sandboxed and denied the case records and ledgers like the runner's (stage
+// 2 review, finding 6). Each of those sessions is logged (a SESSION line) and
+// returned with the review as `sessions`, which mergeRun adds to the run
+// record's sessions list and cost total (phase "merge").
+export async function mergeSupport({ run, work, launch = null, commands = DEFAULT_COMMANDS, env = null, binary = 'git', claude = null, sandbox = undefined, state = null, secrets = null,
+  log = line => console.log(line) }) {
   const gEnv = env ?? { ...gatesEnv(process.env), ...(pgBin(process.env) ? { PG_BIN: pgBin(process.env) } : {}) };
   const context = JSON.parse(readFileSync(path.join(runDirectory(work, run.id), 'context.json'), 'utf8'));
   const denyState = (state ?? [CASE_STATE, FIX_STATE]).filter(Boolean);
@@ -672,6 +823,8 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
     box = sandboxPolicy({ enabled: true, work, state: denyState, runDir: sessions, profileDir });
     return box;
   };
+  // The owner's re-review sessions not yet handed to mergeRun.
+  const ran = [];
   let factory = launch;
   if (!factory) {
     const bin = claude ?? process.env.CLAUDE_BIN ?? path.join(os.homedir(), '.local/share/fnm/node-versions/v24.15.0/installation/bin/claude');
@@ -680,9 +833,18 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
       const r = spawnSync('/usr/bin/security', ['find-generic-password', '-s', 'Claude Code OAuth', '-w'], { encoding: 'utf8' });
       if (r.status === 0 && r.stdout.trim()) baseEnv.CLAUDE_CODE_OAUTH_TOKEN = r.stdout.trim();
     }
-    factory = reviewDir => async (input, { index, attempt }) => runSession({ claude: bin, role: 'review', cwd: reviewDir, input, schema: REVIEW_SCHEMA,
-      settings: reviewSettings({ worktree: reviewDir, home: os.homedir(), work, state: denyState, runDir: await scratch(), tmp: realpathSync(os.tmpdir()) }),
-      sessionDir: path.join(await scratch(), `review-${index}-${attempt}`), timeoutMs: 1200 * 1000, baseEnv, sandbox: await policy() });
+    const recordDir = runDirectory(work, run.id);
+    factory = reviewDir => async (input, { index, attempt }) => {
+      const r = await runSession({ claude: bin, role: 'review', cwd: reviewDir, input, schema: REVIEW_SCHEMA,
+        settings: reviewSettings({ worktree: reviewDir, home: os.homedir(), work, state: denyState, runDir: await scratch(), tmp: realpathSync(os.tmpdir()) }),
+        sessionDir: path.join(await scratch(), `review-${index}-${attempt}`), timeoutMs: 1200 * 1000, baseEnv, sandbox: await policy(),
+        stderrFile: path.join(recordDir, SESSION_LOGS, `merge-review-${Date.now()}-${index}-${attempt}.stderr.log`) });
+      // n is set when mergeRun adds it to the record.
+      const entry = sessionEntry(r, { n: null, role: 'review', phase: 'merge', recordDir });
+      ran.push(entry);
+      log(sessionLine(String(run.ticket).slice(0, 8), run.id, entry));
+      return r;
+    };
   }
   return {
     // Review transcripts quote the ticket: removed once the merge is done.
@@ -705,8 +867,9 @@ export async function mergeSupport({ run, work, launch = null, commands = DEFAUL
       } catch { stage3 = null; }
       const tree = await gateWorktree({ repo: run.repo, work, commit: head, binary, label: 'review' });
       try {
-        return await reviewDiff({ dir: tree.dir, base, head, context, gates, protectedReport: protectedReport({ dir: run.worktree, base, head, files, binary }),
+        const review = await reviewDiff({ dir: tree.dir, base, head, context, gates, protectedReport: protectedReport({ dir: run.worktree, base, head, files, binary }),
           blast: blastRadius({ dir: run.worktree, base, head, files, binary }), launch: factory(tree.dir), prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3 });
+        return { ...review, sessions: ran.splice(0) };
       } finally { await tree.remove(); }
     },
   };
@@ -771,8 +934,7 @@ async function main([command, ...rest]) {
     if (!['on', 'off'].includes(o.autoMerge)) throw Error('work needs --auto-merge on|off, read before any model ran');
     return runTicket({ ticket: o.ticket, contextFile: o.context, outputFile: o.output, runFile: o.runFile, runId: o.runId, runDir: o.runDir, repo: o.repo,
       work: o.work, state: o.state, fixState: o.fixState, claude: o.claude, committer: o.committer, notify: o.notify ?? null, autoMerge: o.autoMerge === 'on',
-      workerSeconds: seconds(o.workerSeconds), reproSeconds: seconds(o.reproSeconds), reviewSeconds: seconds(o.reviewSeconds),
-      stderrFile: o.runDir ? path.join(o.runDir, `${o.ticket}-model-stderr.log`) : null, runStarted: o.runStarted,
+      workerSeconds: seconds(o.workerSeconds), reproSeconds: seconds(o.reproSeconds), reviewSeconds: seconds(o.reviewSeconds), runStarted: o.runStarted,
       attachmentsDir: o.attachmentsDir ?? null, attachmentsManifest: o.attachmentsManifest ?? null });
   }
   throw Error('Usage: run.mjs work|held-for|get|finish|auto-merge ...');

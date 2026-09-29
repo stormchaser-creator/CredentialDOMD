@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadVideoCatalog, validateVideoCatalog, videoHref, watchHref } from './help-videos.mjs';
+import { HTTPS_REDIRECT_SCRIPT } from './https-redirect.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -74,6 +75,7 @@ export function renderHelp(input, videoCatalog = null) {
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  ${HTTPS_REDIRECT_SCRIPT}
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Help center | CredentialDOMD</title>
   <meta name="description" content="${videos.length ? "Written and video walkthroughs" : "Written walkthroughs"} for license uploads, CME transcripts, locum agreements, work logs, invoices, payments and support in CredentialDOMD.">

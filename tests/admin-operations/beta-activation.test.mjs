@@ -1,8 +1,11 @@
-// The clerk-webhook half of the access fixes. An administrator decides Approve
-// or Pause, never pending (the SQL half, admin_change_profile_access and
-// claim_beta_access, runs against real Postgres in postgres-operations.py),
-// so the webhook refuses only a revoked invitation or a revoked profile, and
-// its two writes are ordered so a retry after a partial failure finishes.
+// The clerk-webhook half of the invitation rules. Owner decision, 2026-09-29:
+// an invitation is an invite to JOIN, never access. A pending account stays
+// pending whatever invitation matches its verified email (it signs up and
+// pays like anyone else); an account that already has access, or is paused,
+// only gets its matching invitation linked, so a later Pause revokes it with
+// the account. The profile is never written here. (The SQL half,
+// claim_beta_access, runs against real Postgres in
+// tests/invite-to-join/sql.test.mjs.)
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
@@ -22,56 +25,49 @@ const invite = over => ({ id: 'invite', email: 'member@example.invalid', status:
 const profile = status => ({ id: PROFILE, access_status: status });
 const quiet = { log() {}, warn() {} };
 
-test('a paused account is never activated, whatever invitation matches', () => {
+test('an invitation never activates a pending account, fresh, consumed or used by an earlier profile', () => {
+  for (const match of [
+    invite(),
+    invite({ status: 'active', activated_at: '2026-09-25T11:59:00Z', profile_id: PROFILE }),
+    invite({ status: 'active', activated_at: '2026-09-01T00:00:00Z', profile_id: 'older-profile' }),
+  ]) {
+    for (const status of ['pending', null, 'PENDING ']) {
+      const decision = decideBetaActivation(match, profile(status), NOW);
+      assert.equal(decision.action, 'none', `${JSON.stringify(match)} / ${status}`);
+      assert.equal('activateProfile' in decision, false);
+      assert.match(decision.log, /invitation to join, not access/);
+    }
+  }
+});
+
+test('a paused account is never activated, and its matching invitation is only linked', () => {
   // What Pause leaves: the linked invitation revoked.
   assert.equal(decideBetaActivation(invite({ status: 'revoked', activated_at: '2026-09-20T00:00:00Z', profile_id: PROFILE }), profile('revoked'), NOW).action, 'none');
-  // An unlinked invitation for the same address (send-invite for an account
-  // that was already active), or for a second verified address the member
-  // makes primary: the profile stays revoked.
   for (const match of [invite(), invite({ email: 'second@example.invalid' })]) {
     const decision = decideBetaActivation(match, profile('revoked'), NOW);
     assert.equal(decision.action, 'apply');
-    assert.equal(decision.activateProfile, false);
+    assert.equal(decision.warn, true);
+    assert.equal('activateProfile' in decision, false);
   }
 });
 
-test('an invitation this profile stamped when its profile write failed still activates it', () => {
-  // The first attempt linked and stamped the invitation, then the profile
-  // update failed and Svix retried. Refusing a "consumed" invitation here
-  // stranded a new invitee nobody had decided on.
-  for (const status of ['active', 'invited']) {
-    const decision = decideBetaActivation(invite({ status, activated_at: '2026-09-25T11:59:00Z', profile_id: PROFILE }), profile('pending'), NOW);
-    assert.equal(decision.action, 'apply', status);
-    assert.equal(decision.activateProfile, true, status);
+test('an active account has its invitation linked and stamped once', () => {
+  const fresh = decideBetaActivation(invite(), profile('active'), NOW);
+  assert.equal(fresh.action, 'apply');
+  assert.deepEqual(fresh.betaPatch, { status: 'active', activated_at: NOW, profile_id: PROFILE });
+  const linked = decideBetaActivation(invite({ status: 'active', activated_at: NOW, profile_id: PROFILE }), profile('active'), NOW);
+  assert.equal(linked.action, 'apply'); assert.deepEqual(linked.betaPatch, {});
+});
+
+test('revoked and unknown invitations are left alone', () => {
+  for (const status of ['pending', 'active']) {
+    assert.equal(decideBetaActivation(invite({ status: 'revoked' }), profile(status), NOW).action, 'none');
+    const unknown = decideBetaActivation(invite({ status: 'expired' }), profile(status), NOW);
+    assert.equal(unknown.action, 'none'); assert.equal(unknown.warn, true);
   }
-  assert.equal(decideBetaActivation(invite({ status: 'active', activated_at: NOW, profile_id: PROFILE }), profile(null), NOW).activateProfile, true);
 });
 
-test('a fresh invitation still activates a pending profile on first sign-in', () => {
-  const decision = decideBetaActivation(invite(), profile('pending'), NOW);
-  assert.equal(decision.action, 'apply');
-  assert.equal(decision.activateProfile, true);
-  assert.deepEqual(decision.betaPatch, { status: 'active', activated_at: NOW, profile_id: PROFILE });
-});
-
-test('an invitation used by a different, earlier profile can still link a new account for the same verified email', () => {
-  const decision = decideBetaActivation(invite({ status: 'active', activated_at: '2026-09-01T00:00:00Z', profile_id: 'older-profile' }), profile('pending'), NOW);
-  assert.equal(decision.action, 'apply');
-  assert.equal(decision.activateProfile, true);
-  assert.deepEqual(decision.betaPatch, { profile_id: PROFILE });
-});
-
-test('existing outcomes are unchanged: revoked invite, unknown status, active and paused profiles', () => {
-  assert.equal(decideBetaActivation(invite({ status: 'revoked' }), profile('pending'), NOW).action, 'none');
-  const unknown = decideBetaActivation(invite({ status: 'expired' }), profile('pending'), NOW);
-  assert.equal(unknown.action, 'none'); assert.equal(unknown.warn, true);
-  const active = decideBetaActivation(invite({ status: 'active', activated_at: NOW, profile_id: PROFILE }), profile('active'), NOW);
-  assert.equal(active.action, 'apply'); assert.equal(active.activateProfile, false); assert.deepEqual(active.betaPatch, {});
-  const paused = decideBetaActivation(invite(), profile('revoked'), NOW);
-  assert.equal(paused.action, 'apply'); assert.equal(paused.activateProfile, false);
-});
-
-// ─── The two writes, against a synthetic client ─────────────────────────
+// ─── The link write, against a synthetic client ─────────────────────────
 function database({ profileStatus = 'pending', failOnce = {} } = {}) {
   const rows = { profiles: { [PROFILE]: { id: PROFILE, access_status: profileStatus } }, beta_access: { invite: invite() } };
   const writes = [];
@@ -82,10 +78,8 @@ function database({ profileStatus = 'pending', failOnce = {} } = {}) {
         const run = async () => {
           writes.push({ table, patch, filters: [...filters] });
           if (failOnce[table]) { failOnce[table] = false; return { error: { message: `synthetic ${table} failure` } }; }
-          const id = filters.find(f => f[0] === 'eq')[2];
-          const row = rows[table][id];
-          const revokedGuard = filters.some(f => f[0] === 'or');
-          if (row && !(revokedGuard && row.access_status === 'revoked')) Object.assign(row, patch);
+          const row = rows[table][filters.find(f => f[0] === 'eq')[2]];
+          if (row) Object.assign(row, patch);
           return { error: null };
         };
         const q = { eq(column, value) { filters.push(['eq', column, value]); return q; }, or(filter) { filters.push(['or', filter]); return q; },
@@ -103,59 +97,49 @@ function database({ profileStatus = 'pending', failOnce = {} } = {}) {
   return { rows, writes, deliver };
 }
 
-test('the profile is written before the invitation', async () => {
+test('a pending account with an invitation: no write at all, and it stays pending on every retry', async () => {
   const db = database();
-  assert.deepEqual(await db.deliver(), { error: null });
-  assert.deepEqual(db.writes.map(w => w.table), ['profiles', 'beta_access']);
-  assert.deepEqual(db.writes[0].filters, [['eq', 'id', PROFILE], ['or', 'access_status.is.null,access_status.neq.revoked']]);
-  assert.equal(db.rows.profiles[PROFILE].access_status, 'active');
-  assert.equal(db.rows.beta_access.invite.profile_id, PROFILE);
+  for (let i = 0; i < 3; i++) assert.deepEqual(await db.deliver(), { error: null });
+  assert.deepEqual(db.writes, []);
+  assert.equal(db.rows.profiles[PROFILE].access_status, 'pending');
+  assert.deepEqual(db.rows.beta_access.invite, invite());
 });
 
-test('a failed profile write leaves the invitation untouched, and the retry activates both', async () => {
-  const db = database({ failOnce: { profiles: true } });
-  const first = await db.deliver();
-  assert.match(first.error, /update profiles\.access_status: synthetic profiles failure/);
-  assert.deepEqual(db.rows.beta_access.invite, invite(), 'no stamp without an active profile');
+test('an active account: only the invitation is written, never the profile', async () => {
+  const db = database({ profileStatus: 'active' });
   assert.deepEqual(await db.deliver(), { error: null });
-  assert.equal(db.rows.profiles[PROFILE].access_status, 'active');
+  assert.deepEqual(db.writes.map(w => w.table), ['beta_access']);
+  assert.equal(db.rows.beta_access.invite.profile_id, PROFILE);
   assert.equal(db.rows.beta_access.invite.status, 'active');
-  assert.equal(db.rows.beta_access.invite.profile_id, PROFILE);
 });
 
-test('a failed invitation write after the profile write: the retry links the invitation', async () => {
-  const db = database({ failOnce: { beta_access: true } });
-  assert.match((await db.deliver()).error, /update beta_access/);
-  assert.equal(db.rows.profiles[PROFILE].access_status, 'active');
+test('a failed link write is reported and the retry finishes it', async () => {
+  const db = database({ profileStatus: 'active', failOnce: { beta_access: true } });
+  assert.match((await db.deliver()).error, /update beta_access: synthetic beta_access failure/);
   assert.equal(db.rows.beta_access.invite.profile_id, null);
   assert.deepEqual(await db.deliver(), { error: null });
-  assert.equal(db.rows.beta_access.invite.status, 'active');
-  assert.equal(db.rows.beta_access.invite.activated_at, NOW);
   assert.equal(db.rows.beta_access.invite.profile_id, PROFILE);
+  assert.ok(db.writes.every(w => w.table === 'beta_access'));
 });
 
-test('the half-applied state the old order left behind (invitation stamped, profile pending) finishes on retry', async () => {
-  const db = database();
-  Object.assign(db.rows.beta_access.invite, { status: 'active', activated_at: '2026-09-25T11:59:00Z', profile_id: PROFILE });
-  assert.deepEqual(await db.deliver(), { error: null });
-  assert.equal(db.rows.profiles[PROFILE].access_status, 'active');
-  assert.deepEqual(db.writes.map(w => w.table), ['profiles']);
-});
-
-test('a paused profile is never written active', async () => {
+test('a paused account is never written active', async () => {
   const db = database({ profileStatus: 'revoked' });
   assert.deepEqual(await db.deliver(), { error: null });
   assert.equal(db.rows.profiles[PROFILE].access_status, 'revoked');
   assert.ok(db.writes.every(w => w.table !== 'profiles'));
 });
 
-test('the webhook routes every activation through the decision and the ordered writes', async () => {
+test('neither the webhook nor its helper can write profiles.access_status', async () => {
   const { readFile } = await import('node:fs/promises');
   const webhook = await readFile(new URL('../../supabase/functions/clerk-webhook/index.ts', import.meta.url), 'utf8');
-  const body = webhook.slice(webhook.indexOf('async function activateBetaAccess('), webhook.indexOf('serve(async'));
+  const body = webhook.slice(webhook.indexOf('async function linkBetaInvitation('), webhook.indexOf('serve(async'));
   assert.match(body, /decideBetaActivation\(match, profile, now\)/);
   assert.match(body, /decision\.action === "none"/);
   assert.match(body, /applyBetaDecision\(supabase, match, profile, decision, now\)/);
-  // No write of its own outside the ordered helper.
   assert.doesNotMatch(body, /\.update\(/);
+  const helper = await readFile(new URL('../../supabase/functions/clerk-webhook/betaActivation.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(helper, /from\("profiles"\)/);
+  assert.doesNotMatch(helper, /access_status: "active"/);
+  // The invite-to-join ledger is not an access record anywhere in the webhook.
+  assert.doesNotMatch(webhook + helper, /from\("invite_to_join|rpc\("[a-z_]*invite_to_join/);
 });

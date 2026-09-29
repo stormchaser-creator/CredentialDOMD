@@ -53,7 +53,6 @@ function server({ missingColumn = false, raceWinner = null, profileId = ADMIN } 
     createClient: () => db, Deno: { env: { get: () => 'synthetic' } },
     clerkProfile: async () => ({ profileId, isAdmin: true, email: 'admin@example.invalid', db }),
     admitActiveAccount: async () => ({ allowed: true }),
-    notifyOperator() {},
     ATTACHMENT_BUCKET: 'documents',
     parseAttachments: body => (body.attachments || []).map(() => ({ ext: 'png', mime: 'image/png', bytes: new Uint8Array(1) })),
     replyScreenshotPathAt: (ticket, message, ext, i) => `tickets/${ticket}/replies/${message}-${i}.${ext}`,

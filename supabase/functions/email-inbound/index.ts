@@ -139,6 +139,24 @@
  *     and a note saying where it came from. Same sender matching and
  *     authentication as cme@. The reply names who was added.
  *
+ *   support+<ticket id>@credentialdomd.com   A reply to a support email.
+ *     send-ticket-reply sets this as the reply_to of every support reply
+ *     (_shared/ticketReplyEmail.ts). The member's words are added to that
+ *     ticket as their own message (as reply-ticket writes one: author the
+ *     ticket owner, not a support reply) only when ALL of these hold: the
+ *     ticket exists and is not archived; the sender is a mailbox the ticket's
+ *     owner has PROVED (matchProfile, as cme@); the account is active; the
+ *     message is POSITIVELY authenticated (dmarc=pass or an aligned spf+dkim
+ *     pass in the raw top-most header, mayFileFrom, the rule filing uses);
+ *     it is not automated mail (auto-reply, bounce, list); it carries no
+ *     file; something is left once the quoted original is cut
+ *     (replyTextWithoutQuote); and fewer than TICKET_REPLIES_PER_DAY replies
+ *     reached that ticket by email in the last 24 hours (an auto-responder
+ *     that slips past the automated-mail check cannot loop with the agent).
+ *     A redelivered message is added once (client_request_id is the ledger
+ *     row). Anything else is relayed to the owner as below, with a line
+ *     saying why it was not added. The ledger route stays "forward".
+ *
  *   anything else (support@, hello@, whit@, privacy@, ...)   Mailbox relay.
  *     The whole message (subject prefixed "[credentialdomd.com <local>] ",
  *     original headers in the body, attachments re-attached within limits) is
@@ -247,6 +265,9 @@ import { screenDocument } from "../_shared/app/utils/phiGuard.js";
 import { scanRequestBody, validateResponse, parseModelJson, SCAN_IMAGE_TEXT, scanPdfText } from "../_shared/app/utils/scannerCore.js";
 import { GEMINI_MODEL } from "../_shared/app/utils/geminiModel.js";
 import { meterUsage } from "../_shared/aiPricing.ts";
+// The support+<ticket id>@ reply address and the quote cut, shared with the
+// email that sets it (send-ticket-reply) so the two cannot drift apart.
+import { ticketFromSupportAddress, replyTextWithoutQuote } from "../_shared/ticketReplyEmail.ts";
 // The routing decision and the rules that hand a mailbox to an account are two
 // halves of one property: a mailbox routes mail only to the account that proved
 // it can read it. They live in one file so they cannot drift apart, and that
@@ -292,6 +313,10 @@ const CME_PER_SENDER_PER_HOUR = 20;
 // cannot multiply.
 const ACK_PER_PROFILE_PER_DAY = 10;
 const UNREG_REPLY_PER_DAY = 1;
+// Replies added to one ticket by email per 24 hours (support+<ticket id>@);
+// more are relayed to the owner instead.
+const TICKET_REPLIES_PER_DAY = 5;
+const TICKET_FILED = "filed on ticket";   // ledger detail prefix the cap counts
 // How much of the raw message is read for its Authentication-Results header.
 // The receiving MTA prepends that header, so it sits in the first few KB;
 // the rest of the file is the body and the attachments, up to tens of MB,
@@ -2705,9 +2730,66 @@ async function enterNote(ledgerId: string, profile: MatchedProfile, opts: {
   });
 }
 
+// ─── Route: support+<ticket id>@ -> the ticket, else relay ────────────────────
+
+/**
+ * A reply to a support email (see the header). Adds the member's words to
+ * the ticket only when every check passes; otherwise the whole message is
+ * relayed to the owner with the reason, exactly as any other address is, so
+ * nothing is dropped.
+ */
+async function handleTicketReply(ledgerId: string, emailId: string, from: string, ourAddr: string, subject: string, messageId: string, ticketId: string) {
+  const short = ticketId.slice(0, 8);
+  const relay = (why: string) => handleForward(ledgerId, emailId, from, ourAddr, subject, messageId, `Not added to ticket ${short}: ${why}.`);
+  const email = await getReceivedEmail(emailId, "cid");
+  if (isAutomatedSender(from, lowerKeys(email.headers))) return relay("automated mail (an auto-reply, bounce or list message)");
+
+  const { data: ticketRow, error: ticketErr } = await db.from("support_tickets")
+    .select("id, user_id, archived_at").eq("id", ticketId).maybeSingle();
+  if (ticketErr) throw new Error(`ticket lookup: ${ticketErr.message}`);
+  const ticket = ticketRow as { id: string; user_id: string; archived_at: string | null } | null;
+  if (!ticket) return relay("there is no such ticket");
+  if (ticket.archived_at) return relay("the ticket is archived");
+
+  const profile = await matchProfile(from);
+  if (!profile || profile.id !== ticket.user_id) return relay("the sender is not a confirmed address of the ticket's owner");
+  if (profile.access_status !== "active") return relay("the ticket owner's account is not active");
+  // An admin's message is a support reply to the database, which takes one
+  // only from the app or a verified writer (20260928161000); relay it.
+  const { data: adminRow, error: adminErr } = await db.from("app_admins").select("profile_id").eq("profile_id", profile.id).maybeSingle();
+  if (adminErr) throw new Error(`admin lookup: ${adminErr.message}`);
+  if (adminRow) return relay("the ticket belongs to an admin");
+  if (!mayFileFrom(await authResultsFrom(email), from)) return relay("the message is not authenticated (no DMARC pass, or aligned SPF and DKIM pass)");
+
+  const files = (await listAttachments(emailId)).filter((a) => (a.content_disposition ?? "").toLowerCase() !== "inline");
+  if (files.length) return relay("it carries files, which are added in the app");
+
+  const plain = (email.text && email.text.trim()) ? email.text : (email.html ? stripHtml(email.html) : "");
+  const words = replyTextWithoutQuote(plain);
+  if (!words) return relay("nothing was left once the quoted email was removed");
+
+  const today = await countSince(24 * 60, (q) => q.eq("to_addr", ourAddr).eq("status", "done").ilike("detail", `${TICKET_FILED}%`));
+  if (today >= TICKET_REPLIES_PER_DAY) return relay(`${TICKET_REPLIES_PER_DAY} replies already reached this ticket by email today`);
+
+  // The member's own message, written the way reply-ticket writes one: the
+  // service role, the ticket owner as author, not a support reply. The
+  // ledger row id is the request key, so a redelivery that re-claims this
+  // row (a stale "processing" attempt) finds the message already there.
+  const { data: saved, error: insertErr } = await db.from("support_messages")
+    .insert({ ticket_id: ticket.id, author_id: profile.id, body: words, is_admin_reply: false, client_request_id: ledgerId })
+    .select("id").single();
+  // 42501: the database refused it as a support reply; retrying cannot help.
+  if (insertErr?.code === "42501") return relay("the database refused it as a support reply");
+  if (insertErr && insertErr.code !== PG_UNIQUE_VIOLATION) throw new Error(`ticket reply insert: ${insertErr.message}`);
+  const savedId = (saved as { id?: string } | null)?.id ?? null;
+  const detail = `${TICKET_FILED} ${short}${savedId ? ` as message ${savedId.slice(0, 8)}` : " (already added)"}`;
+  await finish(ledgerId, "done", detail, { profile_id: profile.id });
+  return json({ ok: true, route: "forward", ticket: ticket.id, filed: true, duplicate: !savedId, message_id: savedId });
+}
+
 // ─── Route: everything else -> relay to the owner ─────────────────────────────
 
-async function handleForward(ledgerId: string, emailId: string, from: string, ourAddr: string, subject: string, messageId: string) {
+async function handleForward(ledgerId: string, emailId: string, from: string, ourAddr: string, subject: string, messageId: string, note = "") {
   const local = localPart(ourAddr) || "unknown";
   const email = await getReceivedEmail(emailId, "cid");
   const headers = lowerKeys(email.headers);
@@ -2721,6 +2803,7 @@ async function handleForward(ledgerId: string, emailId: string, from: string, ou
   const origReplyTo = (email.reply_to ?? []).join(", ");
 
   const metaLines = [
+    note,
     `From: ${origFrom}`,
     `To: ${origTo}`,
     origCc ? `Cc: ${origCc}` : "",
@@ -2764,8 +2847,8 @@ async function handleForward(ledgerId: string, emailId: string, from: string, ou
     await finish(ledgerId, "failed", `forward failed: ${r.status} ${r.body.slice(0, 200)}`);
     return json({ ok: false, route: "forward", error: "forward failed" }, 502);
   }
-  await finish(ledgerId, "done", `forwarded to ${FORWARD_TO}, ${files.length} attachment(s)${skipped ? `, ${skipped} skipped` : ""}`, { attachment_count: files.length });
-  return json({ ok: true, route: "forward", attachments: files.length, skipped });
+  await finish(ledgerId, "done", `forwarded to ${FORWARD_TO}, ${files.length} attachment(s)${skipped ? `, ${skipped} skipped` : ""}${note ? `; ${note}` : ""}`, { attachment_count: files.length });
+  return json({ ok: true, route: "forward", attachments: files.length, skipped, ...(note ? { note } : {}) });
 }
 
 // ─── Entry ────────────────────────────────────────────────────────────────────
@@ -2829,6 +2912,8 @@ Deno.serve(async (req) => {
     if (route === "cme") return await handleCme(ledgerId, emailId, from, subject, messageId);
     if (route === "docs") return await handleDocsRequest(ledgerId, emailId, from, subject, messageId);
     if (route === "contacts") return await handleContacts(ledgerId, emailId, from, subject, messageId);
+    const ticketId = ticketFromSupportAddress(ourAddr);
+    if (ticketId) return await handleTicketReply(ledgerId, emailId, from, ourAddr, subject, messageId, ticketId);
     return await handleForward(ledgerId, emailId, from, ourAddr, subject, messageId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -522,6 +522,9 @@ verify_jwt = false
 [functions.send-guide]
 verify_jwt = false
 
+[functions.invite-to-join]
+verify_jwt = false
+
 [functions.send-invite]
 verify_jwt = false
 

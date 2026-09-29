@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { loadVideoCatalog, WATCH_PAGES, watchHref } from './help-videos.mjs';
 import { renderHelp } from './build-help.mjs';
 import { renderWatchPages, addWatchPagesToSitemap } from './watch-pages.mjs';
+import { HTTPS_REDIRECT_SCRIPT, httpsRedirectProblem } from './https-redirect.mjs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -27,7 +28,9 @@ test('exactly three dedicated pages present one reviewed video, unique metadata 
     assert.match(page.html, /Billing is not open/);
     assert.match(page.html, /card is required at future paid checkout/);
     assert.match(page.html, /href="\/#join"/);
-    assert.doesNotMatch(page.html, /<script\b|\bautoplay\b|<iframe\b|VideoObject|uploadDate/);
+    // The https redirect is the one script a watch page carries.
+    assert.equal(httpsRedirectProblem(page.html), null);
+    assert.doesNotMatch(page.html.replace(HTTPS_REDIRECT_SCRIPT, ''), /<script\b|\bautoplay\b|<iframe\b|VideoObject|uploadDate/);
     assert.ok(page.html.includes(catalog.tutorials.find(video => video.id === page.id).transcriptText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')));
   }
 });
@@ -66,7 +69,7 @@ test('article and transcript markup remains inert in title, description, steps a
   const html = renderWatchPages(altered, media).find(page => page.id === article.id).html;
   assert.ok(html.includes('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;'));
   assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
-  assert.doesNotMatch(html, /<script\b|<img src=x/);
+  assert.doesNotMatch(html.replace(HTTPS_REDIRECT_SCRIPT, ''), /<script\b|<img src=x/);
 });
 
 test('sitemap adds actual watch pages once and keeps source dates unchanged', async () => {

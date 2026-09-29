@@ -59,6 +59,7 @@ import { IntakeNotesBanner } from "./components/features/IntakeNotes";
 import { useRequestProposals } from "./hooks/useRequestProposals";
 import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
+import { supportDeepLink } from "./utils/supportDeepLink.js";
 import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
@@ -243,6 +244,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   const [showPricing, setShowPricing] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportTab, setSupportTab] = useState("new");
+  // A reply email's ticket (/app/#support/<id>): the sheet opens that ticket.
+  const [supportTicketId, setSupportTicketId] = useState(null);
   const [veraSeed, setVeraSeed] = useState(null); // first question for Vera, from Home search
   const [veraRequest, setVeraRequest] = useState(null); // {id, from_addr, subject}: the document request Vera is working
   // The open requests themselves, not just a count: the newest one's proposal
@@ -302,15 +305,18 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
 
 
   const [locumSeed, setLocumSeed] = useState(null); // {sub, id} to open in the Locum dashboard from search
-  // Reply emails link to /app/#support: open the sheet on "Your tickets".
+  // Reply emails link to /app/#support/<ticket id> (older ones to
+  // /app/#support): open the sheet on "Your tickets", and on that ticket.
   // Backup emails link to /app/#backups: open More > Data & Backup, the one
   // place a link to the archive is minted (build-backup emails no link).
   // The "we read your forwarded request" email links to /app/#requests:
   // open More > Requests, where the packet it describes is waiting.
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash === "#support") {
+    const supportLink = supportDeepLink(hash);
+    if (supportLink) {
       setSupportTab("tickets");
+      setSupportTicketId(supportLink.ticketId);
       setShowSupport(true);
     } else if (hash === "#backups") {
       setTab("more");
@@ -2678,7 +2684,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           </button>
 
           {/* Support: file a ticket, read replies */}
-          <button onClick={() => { setSupportTab("tickets"); setShowSupport(true); }} className="cmd-card-hover" style={{
+          <button onClick={() => { setSupportTab("tickets"); setSupportTicketId(null); setShowSupport(true); }} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
             backgroundColor: T.card, border: `1px solid ${T.border}`,
             borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
@@ -2954,7 +2960,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       {/* Billing is cloud-only; in offline mode the context's checkout/manage
           already no-op with a message, and the modal itself stays closed. */}
       <PricingModal open={showPricing && !offlineMode} onClose={() => setShowPricing(false)} />
-      <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); }} initialTab={supportTab} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
+      <SupportModal open={showSupport} onClose={() => { setShowSupport(false); setSupportTab("new"); setSupportTicketId(null); }} initialTab={supportTab} initialTicketId={supportTicketId} contextPage={`${tab}${subPage ? "/" + subPage : ""}`} />
       <NotificationCenter open={notifCenterOpen} onClose={() => setNotifCenterOpen(false)} />
 
       {/* ─── SIDEBAR (desk width only) ─────────────────── */}

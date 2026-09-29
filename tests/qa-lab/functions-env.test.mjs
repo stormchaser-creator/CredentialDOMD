@@ -38,7 +38,7 @@ test('every provider location points at the mock server or a reserved .test name
     const host = new URL(value).hostname;
     assert.ok(['host.docker.internal', '127.0.0.1'].includes(host) || host.endsWith('.qa.credentialdomd.test'), `${name} = ${value}`);
   }
-  for (const name of ['CLERK_API_BASE', 'CLERK_JWKS_URL', 'STRIPE_API_BASE', 'RESEND_API_BASE', 'ANTHROPIC_API_BASE', 'GEMINI_API_BASE', 'TELEGRAM_API_BASE']) {
+  for (const name of ['CLERK_API_BASE', 'CLERK_JWKS_URL', 'STRIPE_API_BASE', 'RESEND_API_BASE', 'ANTHROPIC_API_BASE', 'GEMINI_API_BASE']) {
     assert.match(env[name], /^http:\/\/host\.docker\.internal:54380(\/|$)/, name);
   }
   assert.equal(env.CLERK_ISSUER, LAB_ISSUER);

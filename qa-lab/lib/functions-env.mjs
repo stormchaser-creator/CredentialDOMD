@@ -5,7 +5,7 @@
 //     edge-runtime container through host.docker.internal. The functions read
 //     these through the base-URL overrides added for the lab (CLERK_API_BASE,
 //     CLERK_JWKS_URL, CLERK_PRODUCTION_ISSUER, RESEND_API_BASE, STRIPE_API_BASE,
-//     ANTHROPIC_API_BASE, GEMINI_API_BASE, TELEGRAM_API_BASE); production sets
+//     ANTHROPIC_API_BASE, GEMINI_API_BASE); production sets
 //     none of them, so production keeps the real providers.
 //   * Every key and secret is a lab-generated value (lab-secrets.mjs) or a local
 //     vault value from step 1. None is, or can be, a production value.
@@ -74,10 +74,6 @@ export function functionsEnv({ mockPort, appPort, overrides = process.env, secre
     // AI: mocked by default; the mock forwards to a real provider only with QA_AI=real (capped).
     ANTHROPIC_API_BASE: `${mock}${MOCK_PATHS.anthropic}`,
     GEMINI_API_BASE: `${mock}${MOCK_PATHS.gemini}`,
-    // Operator alerts land in the mock too.
-    TELEGRAM_API_BASE: `${mock}${MOCK_PATHS.telegram}`,
-    TELEGRAM_BOT_TOKEN: s.telegram.botToken,
-    TELEGRAM_OPERATOR_ID: s.telegram.operatorId,
     // Local shared secrets.
     WELCOME_HOOK_SECRET: vault.welcome_hook_secret,
     CREDENTIAL_PORTAL_SECRET: s.credentialPortalSecret,

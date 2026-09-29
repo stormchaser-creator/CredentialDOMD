@@ -1,7 +1,7 @@
 /**
  * clerk-webhook: receives user.created / user.updated / user.deleted events
- * from Clerk and mirrors them into the `profiles` table, then activates beta
- * access for invited physicians.
+ * from Clerk and mirrors them into the `profiles` table, then links a
+ * matching historical invitation to an account that already has access.
  *
  * Why we need this:
  *   Clerk owns the auth user record. Supabase RLS policies still need a
@@ -19,17 +19,16 @@
  *   over a value. Password resets, phone additions and ordinary Clerk
  *   profile edits therefore cannot wipe the name on a CV or invoice.
  *
- * Beta activation:
+ * Invitations (owner decision, 2026-09-29: an invitation is an invite to
+ * join, never access):
  *   `beta_access` (email unique + lowercased, status invited|active|revoked)
- *   is the invite list. On every user.created / user.updated we look the
- *   user's verified email(s) up there. invited|active → mark the invite
- *   active, stamp activated_at (first time only), link profile_id, and set
- *   profiles.access_status = 'active' unless an admin has revoked that
- *   profile. revoked → the profile stays as it is. No row → stays pending.
- *   An invitation that already activated this same profile is spent: if an
- *   administrator has since moved the profile to pending or paused, nothing
- *   here writes, and only an audited Approve restores access
- *   (./betaActivation.ts).
+ *   is the historical invite list. On every user.created / user.updated we
+ *   look the user's verified email(s) up there. A pending account STAYS
+ *   PENDING whatever matches: it signs up and pays like anyone else. An
+ *   account that is already active (or paused) has a matching invited|active
+ *   invitation linked to it, so a later Pause revokes it with the account.
+ *   profiles.access_status is never written here (./betaActivation.ts).
+ *   invite_to_join_sends (the invite-to-join function's ledger) is never read.
  *
  * user.deleted:
  *   The profile row is kept (FK integrity, historical records) and name /
@@ -276,10 +275,11 @@ async function syncProfile(
 }
 
 /**
- * Activate beta access when the user's verified email is on the invite list.
- * Idempotent: repeated user.updated events do not churn rows.
+ * Link a historical invitation to an account that already has access. Never
+ * activates: an invitation is not access (betaActivation.ts). Idempotent:
+ * repeated user.updated events do not churn rows.
  */
-async function activateBetaAccess(
+async function linkBetaInvitation(
   user: ClerkUserPayload,
   profile: ProfileRow,
   now: string,
@@ -305,14 +305,13 @@ async function activateBetaAccess(
     return { error: null };
   }
 
-  // Revoked or unknown: no write. See betaActivation.ts.
+  // A pending account, or a revoked or unknown invitation: no write. See betaActivation.ts.
   const decision = decideBetaActivation(match, profile, now);
   if (decision.action === "none") {
     (decision.warn ? console.warn : console.log)(decision.log);
     return { error: null };
   }
-  // Profile first, then the invitation, so a retry after a partial failure
-  // always finishes (applyBetaDecision).
+  // Links the invitation only; the profile is never written.
   return await applyBetaDecision(supabase, match, profile, decision, now);
 }
 
@@ -443,15 +442,15 @@ async function handle(req: Request, ctx: EventContext): Promise<Response> {
 
       // Routing first, and it CAN fail the event: a revocation that was not
       // written is not a revocation, and a 200 here would tell Clerk never to
-      // send it again. Beta activation below is idempotent, so a retry that
-      // re-runs both steps costs nothing.
+      // send it again. The invitation link below is idempotent, so a retry
+      // that re-runs both steps costs nothing.
       const mailbox = await applyVerifiedMailbox(supabase, event.type, event.data, verifiedEmails(user)[0] ?? null, profile, now);
       if (!mailbox.ok) {
         return fail(500, FAILURE.MAILBOX_NOT_APPLIED, ctx, mailbox.detail);
       }
 
       // A 500 here makes Svix retry, which re-runs both steps idempotently.
-      const beta = await activateBetaAccess(user, profile, now);
+      const beta = await linkBetaInvitation(user, profile, now);
       if (beta.error) {
         return fail(500, FAILURE.BETA_ACTIVATION_FAILED, ctx, beta.error);
       }

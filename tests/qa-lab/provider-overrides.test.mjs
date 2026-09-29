@@ -79,7 +79,8 @@ const OVERRIDES = [
   ['build-backup/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/credentialPortalDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/supportDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
-  ['_shared/telegram.ts', 'TELEGRAM_API_BASE', 'https://api.telegram.org'],
+  ['_shared/limitedLaunchDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
+  ['_shared/inviteToJoinDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
 ];
 
 test('every override defaults to the real provider when its variable is unset', () => {
