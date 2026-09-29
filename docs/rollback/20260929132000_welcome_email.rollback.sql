@@ -1,5 +1,5 @@
--- docs/rollback/20260929130000_welcome_email.rollback.sql
--- Rollback for 20260929130000_welcome_email.sql.
+-- docs/rollback/20260929132000_welcome_email.rollback.sql
+-- Rollback for 20260929132000_welcome_email.sql.
 --
 -- Run as postgres in one transaction (the SQL editor runs a script as one;
 -- with psql use -1). Idempotent.

@@ -9,7 +9,7 @@
 // exact subject, sender and body. The database sends only while the
 // fingerprint the deployed function presents equals the one the owner
 // approved, so any change to a word here stops the email until it is
-// approved again in the app (20260929130000_welcome_email.sql).
+// approved again in the app (20260929132000_welcome_email.sql).
 //
 // Which version a member gets is decided by the database from the verified
 // first payment (limited_paid_purchase_history), never by this module:

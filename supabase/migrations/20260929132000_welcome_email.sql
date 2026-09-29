@@ -103,7 +103,7 @@
 -- still answers Stripe 200, and the sweep answers 503. The sweep's first run
 -- is within 10 minutes of this migration and needs the vault secret
 -- welcome_hook_secret (20260925140000_hook_secret_vault.sql).
--- Rollback: docs/rollback/20260929130000_welcome_email.rollback.sql
+-- Rollback: docs/rollback/20260929132000_welcome_email.rollback.sql
 
 create table if not exists public.welcome_email_settings (
   singleton boolean primary key default true check (singleton),

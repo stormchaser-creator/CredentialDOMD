@@ -2,7 +2,7 @@ import { composeWelcomeEmail, welcomeEmailFingerprint } from './app/utils/welcom
 
 /**
  * Send the welcome email for one paid purchase, at most once
- * (owner decision, 2026-09-29; 20260929130000_welcome_email.sql).
+ * (owner decision, 2026-09-29; 20260929132000_welcome_email.sql).
  *
  * limited-stripe-webhook calls this after a settlement that carried a
  * verified first payment, and its retry sweep (createWelcomeEmailSweep below)
@@ -72,7 +72,7 @@ export function createWelcomeEmailSender({ store, recipient, deliver, configured
 }
 
 /**
- * The retry sweep (20260929130000_welcome_email.sql, item 7). A purchase's
+ * The retry sweep (20260929132000_welcome_email.sql, item 7). A purchase's
  * Stripe events all arrive within seconds of checkout, so a send that failed,
  * an attempt whose function died, or a purchase refused while the deployed
  * wording did not match the approval would otherwise never be tried again.

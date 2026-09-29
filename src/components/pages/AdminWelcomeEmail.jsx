@@ -16,7 +16,7 @@ const when = (value) => {
  * the owner's approval. Off until approved. "Approve and turn on" binds the
  * approval to the fingerprint of every version shown here; the server
  * refuses anyone who is not an administrator and sends only content whose
- * fingerprint matches (20260929130000_welcome_email.sql).
+ * fingerprint matches (20260929132000_welcome_email.sql).
  *
  * The fingerprint here comes from this browser's bundle, which can be a
  * cached one, and the webhook that sends is deployed separately. So the page

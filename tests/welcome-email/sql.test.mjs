@@ -1,4 +1,4 @@
-// The welcome email after a paid purchase (20260929130000_welcome_email.sql),
+// The welcome email after a paid purchase (20260929132000_welcome_email.sql),
 // proven on a real PostgreSQL with the actual billing, access, signup,
 // deferred-beta, founding cap, lifetime-gift, checkout-switch and founding
 // Practice migrations underneath it, then the migration applied twice.
@@ -28,8 +28,8 @@ import { createWelcomeEmailSender, createWelcomeEmailSweep, welcomeIdempotencyKe
 const PORT = '58961';
 const run = promisify(execFile);
 const read = name => fs.readFileSync(new URL(`../../supabase/migrations/${name}`, import.meta.url), 'utf8');
-const MIGRATION = read('20260929130000_welcome_email.sql');
-const ROLLBACK = fs.readFileSync(new URL('../../docs/rollback/20260929130000_welcome_email.rollback.sql', import.meta.url), 'utf8');
+const MIGRATION = read('20260929132000_welcome_email.sql');
+const ROLLBACK = fs.readFileSync(new URL('../../docs/rollback/20260929132000_welcome_email.rollback.sql', import.meta.url), 'utf8');
 const CHAIN = ['20260918_founding_billing_readiness.sql', '20260919183000_access_policy_foundation.sql',
   '20260919213000_limited_launch_billing.sql', '20260919233000_limited_paid_purchase_history.sql',
   '20260920220000_self_service_signup.sql', '20260920221000_continuity_access_evidence.sql',

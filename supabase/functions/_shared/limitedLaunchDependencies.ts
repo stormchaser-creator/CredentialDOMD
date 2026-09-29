@@ -32,7 +32,7 @@ export function limitedLaunchDependencies() {
     return user;
   };
   const store = { ...base.store,
-    // The welcome email ledger (20260929130000_welcome_email.sql): the claim
+    // The welcome email ledger (20260929132000_welcome_email.sql): the claim
     // decides and records the attempt, the finish records the outcome.
     claimWelcome: (subscription: string, live: boolean, fingerprint: string) => checked(db().rpc('welcome_email_claim', { p_subscription_id: subscription, p_livemode: live, p_fingerprint: fingerprint })),
     finishWelcome: (subscription: string, live: boolean, attempt: number, status: string, providerId: string | null, code: string | null) => checked(db().rpc('welcome_email_finish', { p_subscription_id: subscription, p_livemode: live, p_attempt: attempt, p_status: status, p_provider_id: providerId, p_error_code: code })),
