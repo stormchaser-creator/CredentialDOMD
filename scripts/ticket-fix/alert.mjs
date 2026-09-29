@@ -7,9 +7,27 @@
 // told. This writes, under the runner's private state directory:
 //   alerts.log    one line per alert: time, kind, ticket id prefix or lock age
 //   status.json   parked tickets, the lock, the last run and recent alerts
+//   owner-alerts.jsonl  the owner queue: one JSON line per alert (a random
+//                 id, the time, the kind, the detail and the message)
+//   owner-alerts.sent   the queue ids already delivered, one per line
 // and sends the same one-line message through the owner notifier
 // (scripts/notify-owner.sh, the iMessage path signup-notify.sh uses).
 // No ticket text is ever written or sent: ids and counts only.
+//
+// Why a queue (2026-09-29): macOS refuses node's Automation request to drive
+// Messages, so every direct send from this runner failed ("ALERT
+// change_refused was logged but not delivered") and the owner heard nothing.
+// The signup notifier's launchd job (com.credentialdomd.signup-notify) IS
+// allowed to send iMessages, so it drains owner-alerts.jsonl every 10 minutes
+// (scripts/signup-notify.sh, whose own zsh sends; signup-notify.py keeps the
+// books) and appends each id it delivered to owner-alerts.sent. Every alert
+// is queued BEFORE the direct send is tried, so a send that fails, is
+// refused or is killed loses nothing. The direct
+// send stays as a first attempt only because it cannot hang: it is killed
+// (SIGKILL) after DIRECT_SEND_SECONDS. When it does go out, its id is marked
+// sent at once and the drain skips it. Neither file is ever rewritten (an
+// append racing a rewrite could be lost); at a few alerts a day they grow by
+// kilobytes a month.
 //
 //   alert.mjs park   --state DIR --ticket UUID --count N [--why checklist] [--notify PATH]
 //   alert.mjs hold   --state DIR --ticket UUID [--why runner_code|host_state] [--notify PATH]
@@ -30,6 +48,7 @@
 import { promises as fs, constants } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { isMain } from './is-main.mjs';
@@ -38,6 +57,14 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export const PARK_AFTER = 3;
 export const STALE_LOCK_HOURS = 4;
 export const HOLD_FILE = 'HOLD-host-code-changed';
+export const QUEUE_FILE = 'owner-alerts.jsonl';
+export const SENT_FILE = 'owner-alerts.sent';
+export const DIRECT_SEND_SECONDS = 15;
+// The queue holds ids and counts only. The messages are built from fixed
+// templates, but a detail can carry a tool's own error text: an email address
+// or the owner's home path in it never reaches the queue.
+const EMAIL = /[^\s@<>()"',;:]+@[^\s@<>()"',;:]+\.[a-z]{2,}/gi;
+const MAX_MESSAGE = 700;
 
 async function writePrivate(filename, content) {
   const temporary = `${filename}.${randomUUID()}.tmp`;
@@ -109,17 +136,61 @@ export async function writeStatus(state, { lock = null, rc = undefined, now = Da
 async function executable(file) {
   try { await fs.access(file, constants.X_OK); return true; } catch { return false; }
 }
-export async function raise(state, kind, detail, message, { notify = null, now = Date.now(), send = null } = {}) {
+
+// Append to an owner-only file. O_NOFOLLOW: a symlink planted at the name is
+// refused, never followed. One write per call, so a line is never split by a
+// concurrent append.
+async function appendPrivate(file, text) {
+  const handle = await fs.open(file, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.uid !== process.getuid()) throw Error(`${path.basename(file)} must be a regular file owned by this user`);
+    if (stat.mode & 0o077) await handle.chmod(0o600);
+    await handle.write(text);
+  } finally { await handle.close(); }
+}
+export function queueSafe(text) {
+  const home = os.homedir();
+  let out = String(text ?? '').replace(EMAIL, '[email removed]');
+  if (home && home !== '/') out = out.split(home).join('~');
+  out = out.replace(/[\u0000-\u001f\u007f]+/g, ' ');
+  return out.length > MAX_MESSAGE ? `${out.slice(0, MAX_MESSAGE - 3)}...` : out;
+}
+// Queue one alert for the signup notifier's drain. Returns its id.
+export async function enqueue(state, { kind, detail, message, now = Date.now() }) {
+  if (!/^[a-z_]{1,40}$/.test(kind)) throw Error('alert kind must be lowercase letters and underscores');
+  const entry = { v: 1, id: randomUUID(), at: new Date(now).toISOString(), kind, detail: queueSafe(detail), message: queueSafe(message) };
+  await appendPrivate(path.join(state, QUEUE_FILE), `${JSON.stringify(entry)}\n`);
+  return entry.id;
+}
+export async function markSent(state, ids) {
+  const valid = ids.filter(id => UUID.test(id));
+  if (valid.length) await appendPrivate(path.join(state, SENT_FILE), valid.map(id => `${id}\n`).join(''));
+}
+// The direct send, bounded: SIGKILL after the limit, whatever the notifier
+// (or the osascript under it) is waiting for.
+export function directSend(notify, message, { timeoutMs = DIRECT_SEND_SECONDS * 1000 } = {}) {
+  const r = spawnSync(notify, [message], { timeout: timeoutMs, killSignal: 'SIGKILL', stdio: 'ignore' });
+  return !r.error && r.status === 0;
+}
+
+export async function raise(state, kind, detail, message, { notify = null, now = Date.now(), send = null, directTimeoutMs = undefined } = {}) {
   const line = `${new Date(now).toISOString()} ALERT ${kind} ${detail}\n`;
   await fs.appendFile(path.join(state, 'alerts.log'), line, { mode: 0o600 });
   console.log(`${new Date(now).toISOString().slice(0, 19).replace('T', ' ')} ALERT ${kind} ${detail}`);
+  // Queued first: whatever happens to the direct send, the drain has it.
+  let queued = null;
+  try { queued = await enqueue(state, { kind, detail, message, now }); } catch (error) { console.log(`ALERT ${kind} could not be queued for the owner: ${error.message}`); }
   let delivered = false;
   if (send) delivered = await send(message);
-  else if (notify && await executable(notify)) {
-    const r = spawnSync(notify, [message], { timeout: 30000, stdio: 'ignore' });
-    delivered = !r.error && r.status === 0;
+  else if (notify && await executable(notify)) delivered = directSend(notify, message, { timeoutMs: directTimeoutMs });
+  if (delivered && queued) {
+    try { await markSent(state, [queued]); } catch (error) { console.log(`ALERT ${kind} was delivered but not marked sent (${error.message}); the drain may repeat it`); }
   }
-  if (!delivered) console.log(`ALERT ${kind} was logged but not delivered to the owner notifier`);
+  if (!delivered) {
+    console.log(queued ? `ALERT ${kind} was not delivered directly; it is queued for the signup notifier's next run`
+      : `ALERT ${kind} was logged but not delivered to the owner notifier`);
+  }
   return delivered;
 }
 

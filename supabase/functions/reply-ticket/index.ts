@@ -5,7 +5,8 @@
  *         attachment?: { data: "data:<mime>;base64,...." } }
  * Auth: Required. Allowed if the account is admitted (active profile, or
  *       admin by app_admins membership) AND is the ticket owner OR is_admin().
- * Side effect: Telegram ping if reply is from non-admin (i.e., customer).
+ * No operator push here: the signup notifier on the owner's Mac
+ * (scripts/signup-notify.sh) reports a member's reply from support_messages.
  *
  * Up to five files per reply, same type and size rules as create-ticket
  * (_shared/ticketAttachment.ts). It is uploaded to the private "documents"
@@ -16,7 +17,7 @@
  * bucket's owner-prefix storage RLS; readers get a signed link from
  * ticket-attachment-url, which re-checks owner-or-admin. A reply that is
  * only a file gets a stock body, since the column is NOT NULL and the
- * email and Telegram paths both quote it.
+ * email and the owner's notifier both quote it.
  *
  * client_request_id makes a retry of the same composed reply safe. Before
  * anything is uploaded or inserted, a row already saved for this ticket with
@@ -38,7 +39,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { notifyOperator } from "../_shared/telegram.ts";
 import { clerkProfile } from "../_shared/clerkAuth.ts";
 import { admitActiveAccount } from "../_shared/admission.ts";
 import { ATTACHMENT_BUCKET, parseAttachment, replyScreenshotPath , parseAttachments, replyScreenshotPathAt } from "../_shared/ticketAttachment.ts";
@@ -228,16 +228,6 @@ serve(async (req) => {
         updates.resolved_at = new Date().toISOString();
       }
       await user.db.from("support_tickets").update(updates).eq("id", ticketId);
-    }
-
-    // Notify operator only on customer replies (not admin's own replies)
-    if (!isAdmin) {
-      notifyOperator(
-        `💬 *Customer reply* on "${ticketRow.subject || "(unknown)"}"` +
-        (attachmentPath ? " (file attached)" : "") + "\n" +
-        `From: ${user.email}\n\n` +
-        replyBody.slice(0, 500)
-      );
     }
 
     return new Response(JSON.stringify({ id: msg.id, ok: true, attachment_path: attachmentPath, attachment_paths: attachmentPaths }), {

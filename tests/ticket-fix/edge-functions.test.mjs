@@ -123,7 +123,7 @@ function replier({ isAdmin }) {
     Deno: { env: { get: key => ({ SUPABASE_URL: 'https://synthetic.invalid', SUPABASE_ANON_KEY: 'synthetic-anon' }[key]) } },
     createClient: (url, key, options) => { clients.push({ url, key, authorization: options?.global?.headers?.Authorization }); return fake('caller'); },
     clerkProfile: async () => ({ profileId: isAdmin ? ADMIN : MEMBER, isAdmin, email: 'someone@example.test', db: fake('service') }),
-    admitActiveAccount: async () => ({ allowed: true }), notifyOperator() {},
+    admitActiveAccount: async () => ({ allowed: true }),
     ATTACHMENT_BUCKET: 'documents', parseAttachments: () => [], replyScreenshotPathAt: () => 'x',
   };
   new vm.Script(REPLY).runInNewContext(context);

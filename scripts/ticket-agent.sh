@@ -68,9 +68,12 @@ host_fingerprint() {
     } 2>/dev/null | /usr/bin/shasum -a 256 ) || echo FAILED
 }
 # Owner alerts (parked ticket, held run, lock held over 4 h, a stored reply no
-# checked path recorded) go through the same iMessage path as
-# signup-notify.sh; scripts/ticket-fix/alert.mjs also writes
-# $CASE_STATE/alerts.log and $CASE_STATE/status.json. Ids and counts only.
+# checked path recorded): scripts/ticket-fix/alert.mjs writes
+# $CASE_STATE/alerts.log and $CASE_STATE/status.json and queues each one in
+# $CASE_STATE/owner-alerts.jsonl, which signup-notify.sh (a launchd job macOS
+# lets drive Messages; this one's node is refused) sends within 10 minutes.
+# A direct send through $NOTIFY is tried first, killed after 15 s. Ids and
+# counts only.
 NOTIFY="$HOST/notify-owner.sh"
 ALERT="$HOST/ticket-fix/alert.mjs"
 
