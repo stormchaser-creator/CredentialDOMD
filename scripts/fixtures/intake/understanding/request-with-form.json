@@ -1,0 +1,72 @@
+{
+  "id": "request-with-form",
+  "about": "A credentialer asks for two documents and attaches a form to fill in. Synthetic.",
+  "subject": "Reappointment items needed",
+  "from": {
+    "name": "Casey Example",
+    "address": "casey.example@osterly-health.example"
+  },
+  "body": "Hi Dr. Testa,\n\nYour reappointment file is almost complete. Could you please send a copy of your current board certificate and your BLS card?\n\nAlso, please fill out the attached attestation form and return it by October 15.\n\nThank you,\nCasey Example\nCredentialing Coordinator",
+  "attachments": [
+    {
+      "name": "Reappointment_Attestation.pdf",
+      "scan": {
+        "documentType": "other",
+        "confidence": "medium",
+        "extracted": {
+          "name": "Reappointment attestation",
+          "issuer": "Osterly Example Health",
+          "suggestedCategory": {
+            "name": "Attestations"
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "board_cert"
+      },
+      {
+        "kind": "bls"
+      },
+      {
+        "kind": "unknown"
+      }
+    ],
+    "roles": [
+      "form_to_complete"
+    ]
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "a copy of your current board certificate",
+        "kind": "board_cert",
+        "who": "physician"
+      },
+      {
+        "quote": "your BLS card",
+        "kind": "bls",
+        "who": "physician"
+      },
+      {
+        "quote": "please fill out the attached attestation form and return it by October 15",
+        "kind": "unknown",
+        "who": "physician"
+      }
+    ],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "form_to_complete",
+        "filing": "Keep with the request"
+      }
+    ],
+    "summary": "items needed for your reappointment file at Osterly Example Health",
+    "confidence": "high"
+  }
+}

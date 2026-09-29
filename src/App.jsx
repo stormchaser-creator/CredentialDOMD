@@ -54,10 +54,12 @@ import { hasSeparateBoards, STATE_REQS_META } from "./constants/stateRequirement
 import { stateTranscriptModel, shareTranscriptPdf } from "./utils/cmeTranscriptPdf";
 import { LocumDashboard, MultiStateMatrix, RequestsInbox } from "./components/features";
 import { useOpenRequests } from "./hooks/useNewRequestCount";
+import { useIntakeNotes } from "./hooks/useIntakeNotes";
+import { IntakeNotesBanner } from "./components/features/IntakeNotes";
 import { useRequestProposals } from "./hooks/useRequestProposals";
 import { useForwardingAddresses } from "./hooks/useForwardingAddresses";
 import { forwardingSenders } from "./utils/forwardingAddresses";
-import { RequestPacketSummary, ApproveSendButton, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
+import { RequestPacketSummary, ApproveSendButton, ReviewButton, canSendOnOneTap, unwrapInvoke, HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON } from "./components/features/RequestPacket";
 import { REQUEST_REPLIED_EVENT } from "./components/features/EmailPacketModal";
 import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, TeamSection, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
@@ -250,6 +252,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
   // and the inbox's card never disagree about what is ready.
   const { rows: openRequests, count: newRequestCount, refresh: refreshRequests } = useOpenRequests();
   const openRequestRows = useRequestProposals(openRequests);
+  // What informational mail entered or offers (no email goes out for one):
+  // the newest on Home, all of them in More > Requests, counted in its badge.
+  const { notes: intakeNotes } = useIntakeNotes();
+  const requestsBadge = newRequestCount + intakeNotes.length;
   // The request Home's Review link opens. The inbox reports back once it
   // has opened it, and the id is cleared so a later trip to More > Requests
   // starts on the list.
@@ -879,9 +885,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     const homeSearch = <HomeSearch onOpen={openFromSearch} onAskVera={askVera} />;
     // A forwarded request is the last thing the physician types. When the
     // newest open request carries a proposal (built on arrival, or rebuilt
-    // on the client by useRequestProposals), the banner is the packet itself
-    // with one button: Approve and send. Review is a link, not a gate, and
-    // it lands on the request, not the list. The old "N requests waiting"
+    // on the client by useRequestProposals), the banner is the packet itself.
+    // A packet a model read with every ask matched has one button, Approve
+    // and send, with Review as a link beside it. Anything else leads with
+    // Review and says what is unclear: on 2026-09-28 a keyword proposal built
+    // from an informational letter sat here as Approve and send, was tapped,
+    // and answered the agency as if it had asked for documents. The old "N requests waiting"
     // shape is left only for the beat before the file has loaded, since a
     // proposal cannot be built against an empty document list.
     const bannerRows = bannerSentIds.length ? openRequestRows.filter((r) => !bannerSentIds.includes(r.id)) : openRequestRows;
@@ -911,6 +920,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
         and {bannerCount - 1} more waiting
       </button>
     );
+    const intakeBanner = <IntakeNotesBanner notes={intakeNotes} T={T} isDesktop={isDesktop} onReview={goRequests} />;
     const requestBanner = lastSent ? (
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.success}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14, boxShadow: T.shadow1 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", minWidth: 0 }}>
@@ -933,10 +943,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
               banner's only way into the request is Review; the default
               "Open the request" sent a physician on a phone to More >
               Requests instead of the link that lands on it. */}
-          <ApproveSendButton key={newestRequest.id} request={newestRequest} T={T}
-            accountEmail={data.settings?.email || user?.email} ownAddresses={ownSenders} send={sendPacket} onSent={onPacketSent}
-            notFoundReason={HOME_NOT_FOUND_REASON} noMatchReason={HOME_NO_MATCH_REASON} />
-          <button onClick={reviewRequest} style={linkStyle}>Review</button>
+          {canSendOnOneTap(newestRequest) ? (
+            <>
+              <ApproveSendButton key={newestRequest.id} request={newestRequest} T={T}
+                accountEmail={data.settings?.email || user?.email} ownAddresses={ownSenders} send={sendPacket} onSent={onPacketSent}
+                notFoundReason={HOME_NOT_FOUND_REASON} noMatchReason={HOME_NO_MATCH_REASON} />
+              <button onClick={reviewRequest} style={linkStyle}>Review</button>
+            </>
+          ) : (
+            <ReviewButton key={newestRequest.id} request={newestRequest} T={T} onReview={reviewRequest} />
+          )}
         </div>
         {moreWaiting}
       </div>
@@ -1946,6 +1962,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
       return (
         <div className="cmd-fade-in">
           {homeSearch}
+          {intakeBanner}
           {requestBanner}
           {checklist}
           {hasActionColumn ? (
@@ -1990,6 +2007,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
     return (
       <div className="cmd-fade-in">
         {homeSearch}
+        {intakeBanner}
         {requestBanner}
         {checklist}
         {hero}
@@ -2586,7 +2604,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
           {/* Requests: document requests forwarded to docs@ */}
           <button onClick={() => setSubPage("requests")} className="cmd-card-hover" style={{
             display: "flex", alignItems: "center", gap: 12,
-            backgroundColor: T.card, border: `1px solid ${newRequestCount ? T.accent : T.border}`,
+            backgroundColor: T.card, border: `1px solid ${requestsBadge ? T.accent : T.border}`,
             borderRadius: 12, padding: "14px 16px", cursor: "pointer", textAlign: "left", width: "100%",
             boxShadow: T.shadow1,
           }}>
@@ -2594,8 +2612,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>Requests</div>
             </div>
-            {newRequestCount > 0 && (
-              <span style={{ minWidth: 22, padding: "2px 8px", borderRadius: 11, backgroundColor: T.accent, color: "#fff", fontSize: 12, fontWeight: 800, textAlign: "center" }}>{newRequestCount}</span>
+            {requestsBadge > 0 && (
+              <span style={{ minWidth: 22, padding: "2px 8px", borderRadius: 11, backgroundColor: T.accent, color: "#fff", fontSize: 12, fontWeight: 800, textAlign: "center" }}>{requestsBadge}</span>
             )}
             <span style={{ color: T.textDim }}>{"\u203a"}</span>
           </button>

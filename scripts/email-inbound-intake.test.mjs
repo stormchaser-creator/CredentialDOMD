@@ -216,7 +216,7 @@ Kyle`,
   assert.equal(rows("documents")[0].type, "request-attachment-inbox");
 });
 
-test("both: the approval is filed, the form stays with the request, and the request is made", async () => {
+test("mixed: the approval is filed, the form stays with the request, and the request is made", async () => {
   harness.geminiReply = () => SANFORD_SCAN;
   const r = await send({
     subject: "Fwd: Your appointment",
@@ -231,7 +231,7 @@ Congratulations, your application has been approved. Attached is your approval l
 Please sign and return the attached attestation by 10/1.`,
     attachments: [letter(), { filename: "Attestation_Form.pdf", contentType: "application/pdf", bytes: pdf("attestation form") }],
   });
-  assert.equal(r.body.intent, "both");
+  assert.equal(r.body.intent, "mixed", "a delivery and an ask in one email (the rules said both)");
   assert.equal(rows("privileges").length, 1);
   assert.equal(rows("document_requests").length, 1);
   const docs = rows("documents");
@@ -414,7 +414,7 @@ test("a request with a form attached is still a request: the row, the summary, a
   assert.equal(rows("documents")[0].linked_to, null);
 });
 
-test("both: blank forms and generically named files stay with the request; only a finished credential is filed", async () => {
+test("mixed: blank forms and generically named files stay with the request; only a finished credential is filed", async () => {
   // The blank privileges delineation reads as a privilege at St. Mary's, with no dates.
   harness.geminiReply = () => ({ documentType: "privilege", confidence: "medium", extracted: { facility: "St. Mary's Hospital", type: "Neurosurgery core privileges" } });
   const r = await send({
@@ -428,7 +428,7 @@ test("both: blank forms and generically named files stay with the request; only 
       { filename: "DEA Registration.pdf", contentType: "application/pdf", bytes: pdf("blank dea") },
     ],
   });
-  assert.equal(r.body.intent, "both");
+  assert.equal(r.body.intent, "mixed", "a delivery and an ask in one email (the rules said both)");
   assert.equal(rows("document_requests").length, 1);
   assert.equal(rows("privileges").length, 0, "no phantom privilege at St. Mary's");
   assert.equal(rows("insurance").length, 0);

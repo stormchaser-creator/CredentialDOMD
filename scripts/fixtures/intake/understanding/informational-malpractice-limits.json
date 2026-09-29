@@ -1,0 +1,113 @@
+{
+  "id": "informational-malpractice-limits",
+  "about": "Synthetic stand-in for the owner's case of 2026-09-28, paraphrased and with every name invented: an agency consultant confirms that the agency's malpractice policy covers the physician's emergency care, gives the limits and the section of the agreement they are in, and attaches the signed master professional services agreement. It asks for nothing. The target is one insurance record (Medical Professional Liability Coverage, the agency through its insurer, 1000000 per incident, 3000000 aggregate, effective on the agreement's effective date, no expiration) and the agreement linked to the agency's contract, with nobody emailed.",
+  "subject": "Malpractice coverage for emergencies",
+  "from": {
+    "name": "Jordan Sample",
+    "address": "jordan.sample@quillfeather.example"
+  },
+  "body": "Dr. Testa,\n\nThank you for your question about emergencies. I checked with our risk team: the Quillfeather Staffing malpractice policy covers the emergency care you give while you are on an assignment with us.\n\nThe limits are $1,000,000 per incident and $3,000,000 aggregate, as set out in Section 7.2 of your professional services agreement. There are no age restrictions for emergencies, as long as the care is within the scope of your licence and your hospital privileges.\n\nYour signed master professional services agreement is attached for reference.\n\nBest regards,\nJordan Sample\nCredentialing Consultant, Quillfeather Staffing",
+  "attachments": [
+    {
+      "name": "Quillfeather_Master_Services_Agreement_signed.pdf",
+      "scan": {
+        "documentType": "agreement",
+        "confidence": "high",
+        "extracted": {
+          "agency": "Quillfeather Staffing",
+          "notes": "Master professional services agreement effective March 1, 2026, for a one-year term that renews automatically. Section 9: malpractice coverage is provided for each assignment through the agency's insurer, applies whenever a claim is made, and the agency provides tail coverage if the policy is claims made. Administrative work is not covered."
+        }
+      }
+    }
+  ],
+  "expected": {
+    "intent": "informational",
+    "asks": [],
+    "roles": [
+      "agreement_or_contract"
+    ],
+    "records": [
+      {
+        "section": "insurance",
+        "fields": {
+          "type": "Medical Professional Liability Coverage",
+          "provider": "Quillfeather Staffing (through its insurer)",
+          "coveragePerClaim": "1000000",
+          "coverageAggregate": "3000000",
+          "effectiveDate": "2026-03-01"
+        }
+      }
+    ]
+  },
+  "modelReply": {
+    "intent": "informational",
+    "asks": [],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "agreement_or_contract",
+        "filing": "Contracts, with the Quillfeather Staffing contract"
+      }
+    ],
+    "summary": "how Quillfeather Staffing's malpractice policy covers your emergency care",
+    "confidence": "high",
+    "records": [
+      {
+        "section": "insurance",
+        "match_existing": "",
+        "fields": [
+          {
+            "field": "type",
+            "value": "Medical Professional Liability Coverage",
+            "quote": "the Quillfeather Staffing malpractice policy covers the emergency care you give while you are on an assignment with us"
+          },
+          {
+            "field": "name",
+            "value": "Quillfeather Staffing assignment malpractice coverage",
+            "quote": "the Quillfeather Staffing malpractice policy covers the emergency care you give while you are on an assignment with us"
+          },
+          {
+            "field": "provider",
+            "value": "Quillfeather Staffing (through its insurer)",
+            "quote": "malpractice coverage is provided for each assignment through the agency's insurer"
+          },
+          {
+            "field": "coveragePerClaim",
+            "value": "1000000",
+            "quote": "The limits are $1,000,000 per incident and $3,000,000 aggregate"
+          },
+          {
+            "field": "coverageAggregate",
+            "value": "3000000",
+            "quote": "The limits are $1,000,000 per incident and $3,000,000 aggregate"
+          },
+          {
+            "field": "effectiveDate",
+            "value": "2026-03-01",
+            "quote": "Master professional services agreement effective March 1, 2026"
+          },
+          {
+            "field": "notes",
+            "value": "Covers the emergency care given on a Quillfeather Staffing assignment.",
+            "quote": "the Quillfeather Staffing malpractice policy covers the emergency care you give while you are on an assignment with us"
+          },
+          {
+            "field": "notes",
+            "value": "Limits $1,000,000 per incident and $3,000,000 aggregate (Section 7.2 of the professional services agreement).",
+            "quote": "The limits are $1,000,000 per incident and $3,000,000 aggregate, as set out in Section 7.2 of your professional services agreement"
+          },
+          {
+            "field": "notes",
+            "value": "Provided for each assignment through the agency's insurer, applies whenever a claim is made, with tail coverage from the agency if the policy is claims made.",
+            "quote": "malpractice coverage is provided for each assignment through the agency's insurer, applies whenever a claim is made, and the agency provides tail coverage if the policy is claims made"
+          },
+          {
+            "field": "notes",
+            "value": "Administrative work is not covered.",
+            "quote": "Administrative work is not covered"
+          }
+        ]
+      }
+    ]
+  }
+}

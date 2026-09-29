@@ -1,0 +1,455 @@
+// Facts a forwarded email states about the physician, as records.
+//
+// On 2026-09-28 the owner forwarded to docs@ an agency consultant's letter
+// confirming that the agency's malpractice policy covers his emergency care
+// ($1,000,000 per incident, $3,000,000 aggregate) with the signed master
+// services agreement attached. It asked for nothing. His rule: "the docs was
+// supposed to enter the malpractice into the app and not create a email
+// back". So an email that asks nothing is ENTERED as records and nobody is
+// emailed: email-inbound writes the record itself when the forward is
+// positively authenticated, and otherwise stores a proposal the physician
+// adds with one tap (supabase/functions/_shared/intakeFacts.mjs decides what
+// the email states; src/utils/intakeProposals.js applies a tap).
+//
+// This file is the part both sides share, so a record the server writes and
+// the same record added from the app are one shape:
+//   EMAIL_FIELDS     the columns an email may fill, per section, and what
+//                    kind of value each holds. No identifying number is
+//                    among them (no policy, licence, certificate, DEA or NPI
+//                    number): an email never writes one.
+//   amountsIn, datesIn, amountValue, dateValue
+//                    amounts and dates as the email writes them, read to one
+//                    form ($1,000,000 == 1000000 == $1 million; 03/01/2026 ==
+//                    March 1, 2026 == 2026-03-01)
+//   recordFromFields the record to add, as the app's own add would store it
+//   matchRecord      the record already on file that a fact is about
+//   conflictsWith    whether a fact contradicts the record a reading named
+//                    (another carrier, facility, type or state, other limits)
+//   identityKeys     what names a record on file, which a note an email adds
+//                    to it must mention
+//   appendChanges    what a fact adds to a record on file: empty fields
+//                    filled, a note appended, nothing overwritten, and an
+//                    expiration already there never moved
+//   recordSummary    the line the physician reads
+//
+// Pure: plain node tests import it, and scripts/sync-shared-app-modules.mjs
+// copies it for the edge functions.
+
+import { INSURANCE_TYPES, PRIVILEGE_TYPES, LICENSE_TYPES_MD, LICENSE_TYPES_DO, CME_CATEGORIES_MD, CME_CATEGORIES_DO } from "../constants/credentialTypes.js";
+import { STATE_NAMES } from "../constants/states.js";
+import { normalizeLifecycle } from "./lifecycle.js";
+
+/** The sections an email may add a record to, or append a note to. */
+export const RECORD_SECTIONS = Object.freeze(["insurance", "privileges", "licenses", "cme", "locumContracts"]);
+
+/**
+ * The columns an email may fill, by section, and the kind of each:
+ *   type    one of the section's own types (SECTION_TYPES)
+ *   text    a short name; its proper names and numbers must be the email's
+ *   money   an amount, stored as plain digits (the columns are text)
+ *   date    YYYY-MM-DD, written in the email in any common form
+ *   state   a two-letter code
+ *   number  a count (CME hours)
+ *   notes   a short summary; its names and numbers must be the email's
+ * A contract is never made from an email's text (its rates bill invoices):
+ * locumContracts takes a note on a contract already on file, nothing else.
+ */
+export const EMAIL_FIELDS = Object.freeze({
+  insurance: Object.freeze({ type: "type", name: "text", provider: "text", coveragePerClaim: "money", coverageAggregate: "money", effectiveDate: "date", expirationDate: "date", notes: "notes" }),
+  privileges: Object.freeze({ type: "type", name: "text", facility: "text", city: "text", state: "state", appointmentDate: "date", expirationDate: "date", notes: "notes" }),
+  licenses: Object.freeze({ type: "type", name: "text", state: "state", issuedDate: "date", expirationDate: "date", notes: "notes" }),
+  cme: Object.freeze({ title: "text", category: "type", hours: "number", date: "date", provider: "text", notes: "notes" }),
+  locumContracts: Object.freeze({ notes: "notes" }),
+});
+
+const uniq = (xs) => [...new Set(xs)];
+export const SECTION_TYPES = Object.freeze({
+  insurance: Object.freeze([...INSURANCE_TYPES]),
+  privileges: Object.freeze([...PRIVILEGE_TYPES]),
+  licenses: Object.freeze(uniq([...LICENSE_TYPES_MD, ...LICENSE_TYPES_DO])),
+  cme: Object.freeze(uniq([...CME_CATEGORIES_MD, ...CME_CATEGORIES_DO])),
+});
+
+// Sections with a status source column (migration 20260925030000).
+const SOURCE_SECTIONS = new Set(["insurance", "privileges", "licenses"]);
+// NOT NULL columns and what an unread one becomes, as the app's forms default.
+const TYPE_DEFAULTS = Object.freeze({ insurance: { type: "Other" }, privileges: { type: "Other" }, licenses: { type: "Other" }, cme: { category: "Other" } });
+
+export const SECTION_LABEL = Object.freeze({ insurance: "Insurance", privileges: "Privileges", licenses: "Licenses", cme: "CME", locumContracts: "Contracts" });
+export const FIELD_LABEL = Object.freeze({
+  type: "Type", name: "Name", provider: "Provider", coveragePerClaim: "Per claim", coverageAggregate: "Aggregate",
+  effectiveDate: "Effective", expirationDate: "Expires", notes: "Notes", facility: "Facility", city: "City", state: "State",
+  appointmentDate: "Appointed", issuedDate: "Issued", title: "Title", category: "Category", hours: "Hours", date: "Date",
+  statusSource: "Source",
+});
+
+/** The field kind of `key` in `section`, or "" when an email may not fill it. */
+export const fieldKind = (section, key) => (EMAIL_FIELDS[section] && Object.hasOwn(EMAIL_FIELDS[section], key) ? EMAIL_FIELDS[section][key] : "");
+
+// ─── Amounts ─────────────────────────────────────────────────────────────────
+
+const SCALE = { thousand: 1e3, k: 1e3, million: 1e6, mil: 1e6, m: 1e6, mm: 1e6, billion: 1e9, b: 1e9, bn: 1e9 };
+// "$1,000,000", "$1M", "$1.5 million", "1,000,000", "1 million", "$250k".
+// A bare run of digits with no "$", no thousands commas and no scale word is
+// not an amount: it is as likely to be a policy or licence number.
+const AMOUNT_RE = /\$\s?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:\s?(thousand|million|billion|mil|mm|bn|[kmb])\b)?|\b(\d{1,3}(?:,\d{3}){1,4})(\.\d{2})?(?!\d)|\b(\d+(?:\.\d+)?)\s?(thousand|million|billion)\b/gi;
+
+function amountFrom(intPart, frac, scaleWord) {
+  const n = parseFloat(`${String(intPart).replace(/,/g, "")}${frac || ""}`);
+  if (!Number.isFinite(n)) return null;
+  const scale = scaleWord ? SCALE[String(scaleWord).toLowerCase()] || 1 : 1;
+  const v = Math.round(n * scale);
+  return v > 0 && v <= 1e12 ? String(v) : null;
+}
+
+// Limits as a certificate or a letter shortens them, with no "$": "1M/3M",
+// "1MM/3MM", "250k/500k" as a pair, or "1M per claim", "aggregate 3MM" next
+// to a limit word. A bare digit run with no scale is still not an amount.
+const PAIR_RE = /\b(\d+(?:\.\d+)?)\s?(mm|mil|m|k)\s?\/\s?(\d+(?:\.\d+)?)\s?(mm|mil|m|k)\b/gi;
+const SCALED_RE = /\b(\d+(?:\.\d+)?)\s?(mm|mil|m|k)\b/gi;
+const LIMIT_WORD_RE = /\b(?:limits?|claims?|incidents?|occurrences?|aggregate|per|each)\b/i;
+// "one million dollars", "three million": one to ten, spelled, before thousand or million.
+const SPELLED_RE = /\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(thousand|million)\b(?:\s+dollars\b)?/gi;
+const SPELLED = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+
+/** Every amount written in `text`: [{ value: "1000000", index, end }], in order. */
+export function amountsIn(text) {
+  const out = [];
+  const s = String(text ?? "");
+  const free = (index, end) => !out.some((o) => index < o.end && end > o.index);
+  const add = (value, index, end) => { if (value && free(index, end)) out.push({ value, index, end }); };
+  for (const m of s.matchAll(AMOUNT_RE)) {
+    const v = m[1] !== undefined ? amountFrom(m[1], m[2], m[3]) : m[4] !== undefined ? amountFrom(m[4], m[5], null) : amountFrom(m[6], "", m[7]);
+    add(v, m.index, m.index + m[0].length);
+  }
+  for (const m of s.matchAll(PAIR_RE)) {
+    if (!free(m.index, m.index + m[0].length)) continue;
+    const slash = m[0].indexOf("/");
+    add(amountFrom(m[1], "", m[2]), m.index, m.index + m[0].slice(0, slash).trimEnd().length);
+    add(amountFrom(m[3], "", m[4]), m.index + slash + 1 + (m[0].slice(slash + 1).length - m[0].slice(slash + 1).trimStart().length), m.index + m[0].length);
+  }
+  for (const m of s.matchAll(SCALED_RE)) {
+    const end = m.index + m[0].length;
+    if (LIMIT_WORD_RE.test(s.slice(Math.max(0, m.index - 30), m.index)) || LIMIT_WORD_RE.test(s.slice(end, end + 30))) add(amountFrom(m[1], "", m[2]), m.index, end);
+  }
+  for (const m of s.matchAll(SPELLED_RE)) add(amountFrom(String(SPELLED[m[1].toLowerCase()]), "", m[2]), m.index, m.index + m[0].length);
+  return out.sort((a, b) => a.index - b.index);
+}
+
+/** One amount as plain digits ("$1,000,000", "1000000", "1 million" -> "1000000"), or null. */
+export function amountValue(v) {
+  const s = String(v ?? "").trim();
+  if (/^\d+(?:\.\d+)?$/.test(s)) return amountFrom(s, "", null);
+  const found = amountsIn(s);
+  return found.length === 1 ? found[0].value : null;
+}
+
+// ─── Dates ───────────────────────────────────────────────────────────────────
+
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+const MONTH = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+const DATE_RES = [
+  [/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g, (m) => [m[1], m[2], m[3]]],
+  [/\b(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})\b/g, (m) => [m[3], m[1], m[2]]],
+  [new RegExp(`\\b${MONTH}\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})\\b`, "gi"), (m) => [m[3], MONTHS[m[1].slice(0, m[1].toLowerCase().startsWith("sept") ? 4 : 3).toLowerCase()], m[2]]],
+  [new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH}\\.?,?\\s+(\\d{4})\\b`, "gi"), (m) => [m[3], MONTHS[m[2].slice(0, m[2].toLowerCase().startsWith("sept") ? 4 : 3).toLowerCase()], m[1]]],
+];
+
+export const validIsoDate = (s) => {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const t = Date.parse(`${s}T00:00:00Z`);
+  if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== s) return false;
+  const y = Number(s.slice(0, 4));
+  return y >= 1950 && y <= 2100;
+};
+
+function isoFrom(y, m, d) {
+  let year = Number(y);
+  if (String(y).length === 2) year = year <= 79 ? 2000 + year : 1900 + year;
+  const iso = `${String(year).padStart(4, "0")}-${String(Number(m)).padStart(2, "0")}-${String(Number(d)).padStart(2, "0")}`;
+  return validIsoDate(iso) ? iso : null;
+}
+
+/** Every date written in `text`, read to YYYY-MM-DD: [{ iso, index, end }]. MM/DD/YYYY, as US mail writes it. */
+export function datesIn(text) {
+  const s = String(text ?? "");
+  const out = [];
+  for (const [re, parts] of DATE_RES) {
+    for (const m of s.matchAll(re)) {
+      const [y, mo, d] = parts(m);
+      const iso = mo ? isoFrom(y, mo, d) : null;
+      if (iso && !out.some((o) => o.index === m.index)) out.push({ iso, index: m.index, end: m.index + m[0].length });
+    }
+  }
+  return out.sort((a, b) => a.index - b.index);
+}
+
+/** One date as YYYY-MM-DD, from any form datesIn reads, or null. */
+export function dateValue(v) {
+  const s = String(v ?? "").trim();
+  if (validIsoDate(s)) return s;
+  const found = datesIn(s);
+  return found.length === 1 ? found[0].iso : null;
+}
+
+/** "2026-03-01" -> "03/01/2026". */
+export function usDate(iso) {
+  if (!validIsoDate(iso)) return String(iso ?? "");
+  const [y, m, d] = iso.split("-");
+  return `${m}/${d}/${y}`;
+}
+
+/** "$1,000,000" from "1000000". */
+export const dollars = (digits) => {
+  const n = Number(String(digits ?? "").replace(/[^0-9]/g, ""));
+  return Number.isFinite(n) && n > 0 ? `$${n.toLocaleString("en-US")}` : String(digits ?? "");
+};
+
+// ─── States ──────────────────────────────────────────────────────────────────
+
+/** A two-letter code from "CO", "co" or "Colorado", or "". */
+export function stateCode(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return "";
+  const up = s.toUpperCase();
+  if (Object.hasOwn(STATE_NAMES, up)) return up;
+  const hit = Object.entries(STATE_NAMES).find(([, name]) => name.toLowerCase() === s.toLowerCase());
+  return hit ? hit[0] : "";
+}
+
+/** "Colorado" from "CO", or "". */
+export const stateName = (code) => (Object.hasOwn(STATE_NAMES, String(code ?? "")) ? STATE_NAMES[code] : "");
+
+// ─── The record ──────────────────────────────────────────────────────────────
+
+const blank = (v) => v === null || v === undefined || (typeof v === "string" && !v.trim());
+
+/** Only the keys an email may fill for `section`, blanks dropped. */
+export function emailFields(section, fields) {
+  const out = {};
+  for (const [k, v] of Object.entries(fields && typeof fields === "object" ? fields : {})) {
+    if (k === "statusSource" ? !SOURCE_SECTIONS.has(section) : !fieldKind(section, k)) continue;
+    if (blank(v)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * The record to add, as the app's own add stores it (AppContext addItem runs
+ * it through prepareRecord, which this matches): the section's type default
+ * for a NOT NULL column the email left empty, an active lifecycle on a
+ * licence, privilege or policy, and nothing that is not a column. email-
+ * inbound adds user_id, created_at and updated_at; the app's sync layer adds
+ * the same three.
+ */
+export function recordFromFields(section, fields, { id } = {}) {
+  const f = emailFields(section, fields);
+  const record = { ...(TYPE_DEFAULTS[section] || {}), ...f, id };
+  if (section === "cme" && record.hours !== undefined) {
+    const n = Number(record.hours);
+    if (Number.isFinite(n)) record.hours = n; else delete record.hours;
+  }
+  if (SOURCE_SECTIONS.has(section)) {
+    record.lifecycleStatus = "active";
+    record.dateUnknown = false;
+    if (!("statusSource" in record)) record.statusSource = null;
+  }
+  return normalizeLifecycle(section, record);
+}
+
+// ─── Is it on file already? ──────────────────────────────────────────────────
+
+const NOISE = new Set(["the", "inc", "llc", "llp", "pc", "pllc", "pa", "corp", "corporation", "co", "company", "ltd", "of", "and", "group"]);
+const words = (v) => String(v ?? "").toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "")
+  .replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").split(" ").filter((w) => w && !NOISE.has(w));
+/** "Quillfeather Staffing (through its insurer)" -> "quillfeather staffing". */
+export const nameKey = (v) => words(v).join(" ");
+// Two keys are one name: the same, or one written out inside the other, as
+// whole words, two words or more ("Quillfeather Staffing" and "Quillfeather
+// Staffing Services").
+const sameKey = (x, y) => {
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.split(" ").length >= 2 && ` ${long} `.includes(` ${short} `);
+};
+const sameName = (a, b) => sameKey(nameKey(a), nameKey(b));
+// The words that say what a policy is rather than whose it is. Two policies
+// are compared by what is left: "Quillfeather Staffing assignment malpractice
+// coverage" is Quillfeather Staffing's, and "Malpractice coverage" names no
+// one at all.
+const POLICY_WORDS = new Set(["malpractice", "coverage", "insurance", "insurer", "insured", "policy", "professional", "liability", "medical",
+  "assignment", "assignments", "locum", "locums", "tenens", "plan", "through", "its", "agency", "carrier", "claims", "made", "occurrence", "tail"]);
+const carrierKey = (v) => words(v).filter((w) => !POLICY_WORDS.has(w)).join(" ");
+// The carrier or agency a policy's provider and name each point to.
+const carriers = (r) => [r?.provider, r?.name].map(carrierKey).filter(Boolean);
+const sameCarrier = (f, r) => carriers(f).some((a) => carriers(r).some((b) => sameKey(a, b)));
+const sameAmount = (a, b) => { const x = amountValue(a), y = amountValue(b); return !!x && x === y; };
+// A limit on one side and none on the other do not disagree.
+const fitsAmount = (a, b) => blank(a) || blank(b) || sameAmount(a, b);
+const sameText = (a, b) => nameKey(a) !== "" && nameKey(a) === nameKey(b);
+const sameDay = (a, b) => !!a && !!b && String(a).slice(0, 10) === String(b).slice(0, 10);
+const LIMIT_KEYS = ["coveragePerClaim", "coverageAggregate"];
+
+/**
+ * The record on file (camelCase rows) that these fields are about, or null.
+ *   insurance     the same carrier or agency (its provider or its name, on
+ *                 either side) and no limit that differs: the same limits
+ *                 first, then a record whose limits are blank (its type must
+ *                 fit when it has none at all), so a policy entered without
+ *                 its limits is filled in rather than doubled; with no limits
+ *                 read, the same carrier and the same type
+ *   privileges    the same facility (and no other state)
+ *   licenses      the same type in the same state (the same name when
+ *                 neither has a state)
+ *   cme           the same title on the same date
+ *   locumContracts  never by its fields: only a record the reading named
+ */
+export function matchRecord(section, fields, rows) {
+  const f = fields || {};
+  const list = (Array.isArray(rows) ? rows : []).filter((r) => r && typeof r === "object" && r.id);
+  const hit = (pred) => list.find(pred) || null;
+  switch (section) {
+    case "insurance": {
+      const limits = LIMIT_KEYS.some((k) => !blank(f[k]));
+      if (!limits) return hit((r) => sameCarrier(f, r) && sameText(f.type, r.type));
+      const same = (r) => LIMIT_KEYS.every((k) => blank(f[k]) || sameAmount(f[k], r[k]));
+      const fits = (r) => LIMIT_KEYS.every((k) => fitsAmount(f[k], r[k]))
+        && (LIMIT_KEYS.some((k) => !blank(r[k])) || blank(f.type) || blank(r.type) || /^other$/i.test(String(r.type).trim()) || sameText(f.type, r.type));
+      return hit((r) => sameCarrier(f, r) && same(r)) || hit((r) => sameCarrier(f, r) && fits(r));
+    }
+    case "privileges":
+      return hit((r) => sameName(f.facility, r.facility) && (blank(f.state) || blank(r.state) || stateCode(f.state) === stateCode(r.state)));
+    case "licenses":
+      return hit((r) => sameText(f.type, r.type)
+        && (blank(f.state) && blank(r.state) ? sameText(f.name, r.name) : stateCode(f.state) !== "" && stateCode(f.state) === stateCode(r.state)));
+    case "cme":
+      return hit((r) => sameText(f.title, r.title) && sameDay(f.date, r.date));
+    default:
+      return null;
+  }
+}
+
+/**
+ * What names a record on file, as whole lower-case words: its carrier or
+ * agency (insurance), facility (privileges), state (licenses), title (cme),
+ * agency and facility (contracts). A note an email adds to a record must be
+ * about one of them.
+ */
+export function identityKeys(section, row) {
+  const r = row || {};
+  const keys = (() => {
+    switch (section) {
+      case "insurance": return carriers(r);
+      case "privileges": return [nameKey(r.facility)];
+      case "licenses": return [nameKey(stateName(stateCode(r.state)))];
+      case "cme": return [nameKey(r.title)];
+      case "locumContracts": return [nameKey(r.agency), nameKey(r.facility)];
+      default: return [];
+    }
+  })();
+  return [...new Set(keys.filter(Boolean))];
+}
+
+/**
+ * Do these fields say that `row` is another record than the one they are
+ * about? A reading may name a record on file by its ref; the host takes the
+ * name only when the checked fields do not contradict it:
+ *   insurance   a carrier or agency, on both sides, that is not the same; or
+ *               a limit that differs from the one on file
+ *   privileges  another facility, or another state
+ *   licenses    another type, or another state
+ *   cme         another title
+ * A field one side leaves blank contradicts nothing.
+ */
+export function conflictsWith(section, fields, row) {
+  const f = fields || {};
+  const r = row || {};
+  const differs = (a, b, same) => !blank(a) && !blank(b) && !same(a, b);
+  const otherState = () => differs(f.state, r.state, (a, b) => stateCode(a) !== "" && stateCode(a) === stateCode(b));
+  switch (section) {
+    case "insurance":
+      return (carriers(f).length > 0 && carriers(r).length > 0 && !sameCarrier(f, r))
+        || LIMIT_KEYS.some((k) => differs(f[k], r[k], sameAmount));
+    case "privileges": return differs(f.facility, r.facility, sameName) || otherState();
+    case "licenses": return differs(f.type, r.type, sameText) || otherState();
+    case "cme": return differs(f.title, r.title, (a, b) => sameText(a, b) || sameName(a, b));
+    default: return false;
+  }
+}
+
+// A note's own "Source: ..." line names when it was read, not what it says:
+// the same letter forwarded twice must not append its note twice.
+const noteBody = (s) => String(s ?? "").split("\n").filter((l) => !/^\s*\(?source:/i.test(l)).join(" ")
+  .toLowerCase().replace(/[^a-z0-9$]+/g, " ").trim();
+
+/**
+ * What these fields add to `existing` (a camelCase record): every empty
+ * field filled, the note appended when the record's notes do not already
+ * say it, and nothing already there changed. An expiration on file is never
+ * moved: a misread date that extends a licence switches off its reminder.
+ * Returns { changes, keys } (camelCase; keys is what changed).
+ */
+export function appendChanges(section, existing, fields) {
+  const ex = existing || {};
+  const f = emailFields(section, fields);
+  const changes = {};
+  for (const [k, v] of Object.entries(f)) {
+    if (k === "notes") continue;
+    if (blank(ex[k])) changes[k] = k === "hours" ? Number(v) : v;
+  }
+  if (!blank(f.notes)) {
+    const was = String(ex.notes ?? "").trim();
+    if (!was) changes.notes = f.notes;
+    else if (!noteBody(was).includes(noteBody(f.notes))) changes.notes = `${was}\n\n${f.notes}`;
+  }
+  // A date filled on a record marked "date not yet known" answers that
+  // question, as the app's own edit does (normalizeLifecycle): left true, the
+  // new date would never raise an alert. Undo puts the flag back with the date.
+  if (changes.expirationDate && ex.dateUnknown === true && normalizeLifecycle(section, { ...ex, ...changes }, ex)?.dateUnknown === false) {
+    changes.dateUnknown = false;
+  }
+  return { changes, keys: Object.keys(changes) };
+}
+
+// ─── What the physician reads ────────────────────────────────────────────────
+
+/** One field as a line: "Per claim: $1,000,000". */
+export function fieldLine(key, value) {
+  const label = FIELD_LABEL[key] || key;
+  if (key === "coveragePerClaim" || key === "coverageAggregate") return `${label}: ${dollars(value)}`;
+  if (/Date$/.test(key) || key === "date") return `${label}: ${usDate(String(value ?? ""))}`;
+  return `${label}: ${String(value ?? "")}`;
+}
+
+/** The record in a few words: "Insurance: Quillfeather Staffing (through its insurer), $1,000,000 per claim, $3,000,000 aggregate". */
+export function recordSummary(section, fields) {
+  const f = fields || {};
+  const parts = [];
+  switch (section) {
+    case "insurance":
+      parts.push(f.provider || f.name || f.type || "Policy");
+      if (!blank(f.coveragePerClaim)) parts.push(`${dollars(f.coveragePerClaim)} per claim`);
+      if (!blank(f.coverageAggregate)) parts.push(`${dollars(f.coverageAggregate)} aggregate`);
+      if (validIsoDate(f.effectiveDate)) parts.push(`effective ${usDate(f.effectiveDate)}`);
+      if (validIsoDate(f.expirationDate)) parts.push(`expires ${usDate(f.expirationDate)}`);
+      break;
+    case "privileges":
+      parts.push([f.facility || f.name || "Privileges", f.type].filter(Boolean).join(", "));
+      if (validIsoDate(f.expirationDate)) parts.push(`through ${usDate(f.expirationDate)}`);
+      break;
+    case "licenses":
+      parts.push([f.type || f.name || "License", stateCode(f.state)].filter(Boolean).join(", "));
+      if (validIsoDate(f.expirationDate)) parts.push(`expires ${usDate(f.expirationDate)}`);
+      break;
+    case "cme":
+      parts.push(f.title || "CME");
+      if (!blank(f.hours)) parts.push(`${f.hours} hours`);
+      if (validIsoDate(f.date)) parts.push(usDate(f.date));
+      break;
+    default:
+      parts.push("a note");
+  }
+  return `${SECTION_LABEL[section] || "Record"}: ${parts.filter(Boolean).join(", ")}`.replace(/\s*[\u2013\u2014]\s*/g, ", ");
+}

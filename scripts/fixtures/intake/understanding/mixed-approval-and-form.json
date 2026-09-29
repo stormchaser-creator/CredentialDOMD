@@ -1,0 +1,73 @@
+{
+  "id": "mixed-approval-and-form",
+  "about": "An approval letter to keep and a form to return in one email. Synthetic.",
+  "subject": "Your privileges",
+  "from": {
+    "name": "Medical Staff Services",
+    "address": "mss@tallowmere-clinic.example"
+  },
+  "body": "Dr. Testa,\n\nYour privileges have been approved, and the approval letter is attached.\n\nPlease sign and return the attached code of conduct acknowledgement by 10/1.\n\nMedical Staff Services",
+  "attachments": [
+    {
+      "name": "Letter_2291.pdf",
+      "scan": {
+        "documentType": "privilege",
+        "confidence": "high",
+        "extracted": {
+          "type": "Active Privileges",
+          "facility": "Tallowmere Example Clinic",
+          "state": "CO",
+          "appointmentDate": "2026-09-20",
+          "expirationDate": "2028-09-19"
+        }
+      }
+    },
+    {
+      "name": "Code_of_Conduct_Acknowledgement.pdf",
+      "scan": {
+        "documentType": "other",
+        "confidence": "medium",
+        "extracted": {
+          "name": "Code of conduct acknowledgement",
+          "issuer": "Tallowmere Example Clinic"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "intent": "mixed",
+    "asks": [
+      {
+        "kind": "unknown"
+      }
+    ],
+    "roles": [
+      "credential_for_physician",
+      "form_to_complete"
+    ]
+  },
+  "modelReply": {
+    "intent": "mixed",
+    "asks": [
+      {
+        "quote": "Please sign and return the attached code of conduct acknowledgement by 10/1",
+        "kind": "unknown",
+        "who": "physician"
+      }
+    ],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "credential_for_physician",
+        "filing": "Privileges"
+      },
+      {
+        "index": 2,
+        "role": "form_to_complete",
+        "filing": "Keep with the request"
+      }
+    ],
+    "summary": "your approved privileges and a form to sign",
+    "confidence": "high"
+  }
+}

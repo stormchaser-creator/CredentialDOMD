@@ -1,0 +1,44 @@
+{
+  "id": "informational-agreement",
+  "about": "Synthetic stand-in for the 2026-09-28 incident: an agency consultant explains how the agency's malpractice policy covers emergency shifts, asks for nothing, and attaches the physician's signed master services agreement. Paraphrased; every name and address is invented.",
+  "subject": "Malpractice coverage for your emergency shifts",
+  "from": {
+    "name": "Jordan Sample",
+    "address": "jordan.sample@quillfeather.example"
+  },
+  "body": "Dr. Testa,\n\nI wanted to explain how coverage works for the emergency shifts you pick up through Quillfeather Staffing.\n\nProof of malpractice coverage is required for every provider on our panel, and our group policy provides that coverage for emergency care. The policy covers emergency department encounters documented under your name, including tail coverage for those shifts, so no separate certificate is required from you.\n\nYour signed master services agreement is attached for reference.\n\nBest regards,\nJordan Sample\nProvider Relations, Quillfeather Staffing",
+  "attachments": [
+    {
+      "name": "Quillfeather_Master_Services_Agreement_signed.pdf",
+      "scan": {
+        "documentType": "agreement",
+        "confidence": "high",
+        "extracted": {
+          "agency": "Quillfeather Staffing",
+          "billTo": "Quillfeather Staffing",
+          "notes": "Master professional services agreement; assignments are confirmed separately."
+        }
+      }
+    }
+  ],
+  "expected": {
+    "intent": "informational",
+    "asks": [],
+    "roles": [
+      "agreement_or_contract"
+    ]
+  },
+  "modelReply": {
+    "intent": "informational",
+    "asks": [],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "agreement_or_contract",
+        "filing": "Contracts, with the Quillfeather Staffing contract"
+      }
+    ],
+    "summary": "how Quillfeather Staffing's malpractice policy covers your emergency shifts",
+    "confidence": "high"
+  }
+}

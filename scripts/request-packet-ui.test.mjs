@@ -6,9 +6,9 @@
 // label that says what goes where, and the wrapping styles that keep a
 // 375px screen from scrolling sideways.
 //
-// The fixtures are the two real requests on file (names changed): one ask
-// for a board certificate, and a four-item list whose last item is a case
-// log report the app exports separately.
+// The fixtures are shaped on the two real requests on file, with every name
+// and address invented: one ask for a board certificate, and a four-item
+// list whose last item is a case log report the app exports separately.
 //
 // The second half covers src/utils/requestProposals.js, the client-side
 // rebuild of a proposal the server did not make or that the file has since
@@ -19,9 +19,9 @@ import { renderToString } from "react-dom/server";
 import {
   proposalSummary, requesterLine, requesterMissing, askLine, approveBlockedReason, approveBody, unwrapInvoke,
   RequestPacketSummary, ProposalChecklist, ApproveSendButton, REQUESTER_NOT_FOUND_REASON, NOTHING_MATCHED_REASON,
-  HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON,
+  HOME_NOT_FOUND_REASON, HOME_NO_MATCH_REASON, REVIEW_FIRST_REASON, ReviewButton, UnclearNote, canSendOnOneTap, reviewLine,
 } from "../src/components/features/RequestPacket.js";
-import { staleRequests, buildClientProposals, withProposals, documentSetKey } from "../src/utils/requestProposals.js";
+import { staleRequests, buildClientProposals, withProposals, documentSetKey, modelReading } from "../src/utils/requestProposals.js";
 import { DOCS, RECORDS, PHYSICIAN, NOW, REQUEST_1 } from "./request-packet.test.mjs";
 
 let pass = 0, fail = 0;
@@ -44,54 +44,54 @@ const render = (type, props) => renderToString(h(type, props));
 // ── Fixtures ────────────────────────────────────────────────────────────
 const boardCert = {
   id: "11111111-1111-4111-8111-111111111111",
-  from_name: "Madeline Castorena", from_addr: "mcastorena@ruhealth.org", subject: "BOARD CERTIFICATE",
+  from_name: "Casey Example", from_addr: "casey.example@osterly-health.example", subject: "BOARD CERTIFICATE",
   proposal: {
-    v: 1, method: "rules",
-    items: [{ ask: "a copy of your board certificate", kind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"] }],
+    v: 2, method: "rules", source: "model", confidence: "high",
+    items: [{ ask: "a copy of your board certificate", kind: "board_cert", status: "found", docIds: ["d1"], labels: ["Board Certification (AOA)"], confidence: "high", ruleKind: "board_cert" }],
     docIds: ["d1"], missing: [],
-    coverNote: "Hello Madeline,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)\n\nRegards,\nEric Whitney, DO",
+    coverNote: "Hello Casey,\n\nAttached are the documents you asked for:\n- Board Certification (AOA)\n\nRegards,\nRowan Testa, DO",
   },
 };
 const fourItems = {
   id: "22222222-2222-4222-8222-222222222222",
-  from_name: "Casey Morgan", from_addr: "cmorgan@hospital.org", subject: "RE: Requested docs",
+  from_name: "Jordan Sample", from_addr: "jordan.sample@quillfeather.example", subject: "RE: Requested docs",
   proposal: {
-    v: 1, method: "rules",
+    v: 2, method: "rules", source: "model", confidence: "high",
     items: [
-      { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"] },
-      { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d3", "d4"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"] },
-      { ask: "TB form", kind: "tb", status: "found", docIds: ["d5"], labels: ["QuantiFERON-TB Gold, Negative"] },
-      { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [] },
+      { ask: "MPLT COI", kind: "coi_malpractice", status: "found", docIds: ["d2"], labels: ["Professional Liability COI, ProAssurance Specialty Insurance"], confidence: "high", ruleKind: "coi_malpractice" },
+      { ask: "MMR dose #2", kind: "mmr", status: "found", docIds: ["d3", "d4"], labels: ["MMR (Measles, Mumps, Rubella) vaccination", "MMR (Measles, Mumps, Rubella) vaccination"], confidence: "high", ruleKind: "mmr" },
+      { ask: "TB form", kind: "tb", status: "found", docIds: ["d5"], labels: ["QuantiFERON-TB Gold, Negative"], confidence: "high", ruleKind: "tb" },
+      { ask: "Logs 12-months", kind: "case_logs", status: "report", docIds: [], labels: [], confidence: "high", ruleKind: "case_logs" },
     ],
     docIds: ["d2", "d3", "d4", "d5"], missing: ["Logs 12-months"],
-    coverNote: "Hello Casey,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nThese will follow separately:\n- Logs 12-months\n\nRegards,\nEric Whitney, DO",
+    coverNote: "Hello Jordan,\n\nAttached are the documents you asked for:\n- Professional Liability COI\n\nThese will follow separately:\n- Logs 12-months\n\nRegards,\nRowan Testa, DO",
   },
 };
 const nothingFound = {
   id: "33333333-3333-4333-8333-333333333333",
-  from_name: "Sam Reyes", from_addr: "sreyes@clinic.org", subject: "Fingerprints",
+  from_name: "Sam Example", from_addr: "sam.example@clinic.example", subject: "Fingerprints",
   proposal: {
     v: 1, method: "rules",
     items: [{ ask: "Livescan fingerprint receipt", kind: "background", status: "missing", docIds: [], labels: [] }],
     docIds: [], missing: ["Livescan fingerprint receipt"],
-    coverNote: "Hello Sam,\n\nI do not have these on file:\n- Livescan fingerprint receipt\n\nRegards,\nEric Whitney, DO",
+    coverNote: "Hello Sam,\n\nI do not have these on file:\n- Livescan fingerprint receipt\n\nRegards,\nRowan Testa, DO",
   },
 };
 const twoDocs = {
   id: "44444444-4444-4444-8444-444444444444",
-  from_name: "Kyle Ortega", from_addr: "kortega@penrose.org", subject: "DEA and license",
+  from_name: "Kyle Sample", from_addr: "kyle.sample@brackwater.example", subject: "DEA and license",
   proposal: {
-    v: 1, method: "rules",
+    v: 2, method: "rules", source: "model", confidence: "high",
     items: [
-      { ask: "DEA", kind: "dea", status: "found", docIds: ["d6"], labels: ["DEA Registration, CO"] },
-      { ask: "Colorado license", kind: "state_license", status: "found", docIds: ["d7"], labels: ["State Medical License (DO), CO"] },
+      { ask: "DEA", kind: "dea", status: "found", docIds: ["d6"], labels: ["DEA Registration, CO"], confidence: "high", ruleKind: "dea" },
+      { ask: "Colorado license", kind: "state_license", status: "found", docIds: ["d7"], labels: ["State Medical License (DO), CO"], confidence: "high", ruleKind: "state_license" },
     ],
     docIds: ["d6", "d7"], missing: [],
-    coverNote: "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CO\n- State Medical License (DO), CO\n\nRegards,\nEric Whitney, DO",
+    coverNote: "Hello Kyle,\n\nAttached are the documents you asked for:\n- DEA Registration, CO\n- State Medical License (DO), CO\n\nRegards,\nRowan Testa, DO",
   },
 };
 const noProposal = { id: "55555555-5555-4555-8555-555555555555", from_name: null, from_addr: "cred@somewhere.org", subject: "Docs please", proposal: null };
-const ME = "stormchaser@elryx.com";
+const ME = "rowan.testa@clinic.example";
 
 // ── proposalSummary: the line both screens print ─────────────────────────
 eq("one document ready", proposalSummary(boardCert.proposal), { ready: 1, missing: 0, report: 0, unclear: 0, line: "1 document ready" });
@@ -111,15 +111,15 @@ eq("an unnamed ask is 'not recognised', and the counts are separate words",
 eq("nothing on file does not repeat itself as 'N not on file'", proposalSummary({ items: [{ status: "missing", kind: "tb", docIds: [] }], docIds: [] }).line, "Nothing on file for this yet");
 
 // ── requester and ask lines ──────────────────────────────────────────────
-eq("requester is the name and the domain", requesterLine(boardCert), "Madeline Castorena, ruhealth.org");
+eq("requester is the name and the domain", requesterLine(boardCert), "Casey Example, osterly-health.example");
 eq("no name falls back to the address", requesterLine(noProposal), "cred@somewhere.org");
 // A row whose from_addr is the physician's own address has no requester:
 // email-inbound stores the forwarding sender there when the forward carried
 // no From: line. The bold "who asked" slot must not show the physician.
-const ME_FWD = { id: "66666666-6666-4666-8666-666666666666", from_name: null, from_addr: "eric@hospital.org", forwarded_by: "eric@hospital.org", subject: "docs", proposal: boardCert.proposal };
+const ME_FWD = { id: "66666666-6666-4666-8666-666666666666", from_name: null, from_addr: "rowan@hospital.example", forwarded_by: "rowan@hospital.example", subject: "docs", proposal: boardCert.proposal };
 eq("requester equal to the forwarding sender is 'Requester not found'", requesterLine(ME_FWD), "Requester not found");
-eq("requester equal to a confirmed address is 'Requester not found'", requesterLine({ ...ME_FWD, forwarded_by: null }, ["stormchaser@elryx.com", "Eric@Hospital.org"]), "Requester not found");
-eq("a real requester with no name is still their address", requesterLine({ ...ME_FWD, from_addr: "cred@x.org" }, ["eric@hospital.org"]), "cred@x.org");
+eq("requester equal to a confirmed address is 'Requester not found'", requesterLine({ ...ME_FWD, forwarded_by: null }, ["rowan.testa@clinic.example", "Rowan@Hospital.example"]), "Requester not found");
+eq("a real requester with no name is still their address", requesterLine({ ...ME_FWD, from_addr: "cred@x.org" }, ["rowan@hospital.example"]), "cred@x.org");
 eq("requesterMissing: empty, forwarder, own address, or neither", [
   requesterMissing({ from_addr: "" }), requesterMissing(ME_FWD), requesterMissing({ from_addr: "a@b.c" }, ["A@B.C"]), requesterMissing({ from_addr: "a@b.c" }, ["x@y.z"]),
 ], [true, true, true, false]);
@@ -130,14 +130,14 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
 // ── RequestPacketSummary ─────────────────────────────────────────────────
 {
   const html = render(RequestPacketSummary, { request: boardCert, T });
-  ok("summary names the requester", html.includes("Madeline Castorena, ruhealth.org"));
+  ok("summary names the requester", html.includes("Casey Example, osterly-health.example"));
   ok("summary lists the ask", html.includes("Asked for: a copy of your board certificate"));
   ok("summary carries the ready line", html.includes("1 document ready"));
   const compact = render(RequestPacketSummary, { request: fourItems, T, compact: true });
   ok("compact renders the same facts smaller", compact.includes("4 documents ready, 1 follows separately") && compact.includes("font-size:13.5px") && !compact.includes("font-size:15px") && html.includes("font-size:15px"));
   ok("nothing found is coloured as a warning, not a success", render(RequestPacketSummary, { request: nothingFound, T }).includes(T.warning));
   ok("the banner says 'Requester not found' rather than showing the physician's own address as the asker",
-    render(RequestPacketSummary, { request: ME_FWD, T, compact: true, ownAddresses: ["eric@hospital.org"] }).includes("Requester not found"));
+    render(RequestPacketSummary, { request: ME_FWD, T, compact: true, ownAddresses: ["rowan@hospital.example"] }).includes("Requester not found"));
 }
 
 // ── ProposalChecklist ────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   ok("the physician's own address as requester: not found, tap Review (case-insensitive)", self.includes(NOT_FOUND) && self.includes("disabled"));
   const fwd = render(ApproveSendButton, { request: ME_FWD, T, accountEmail: ME, send });
   ok("the forwarding sender as requester (no From: line in the forward): not found, disabled", fwd.includes(NOT_FOUND) && fwd.includes("disabled"));
-  const own = render(ApproveSendButton, { request: { ...ME_FWD, forwarded_by: null }, T, accountEmail: ME, ownAddresses: ["eric@hospital.org"], send });
+  const own = render(ApproveSendButton, { request: { ...ME_FWD, forwarded_by: null }, T, accountEmail: ME, ownAddresses: ["rowan@hospital.example"], send });
   ok("a confirmed forwarding address as requester: not found, disabled", own.includes(NOT_FOUND) && own.includes("disabled"));
   ok("a lookalike domain is not ours", !render(ApproveSendButton, { request: { ...boardCert, from_addr: "a@notcredentialdomd.com" }, T, accountEmail: ME, send }).includes("disabled"));
   // A grey button over "Nothing proposed yet" left the physician not knowing
@@ -187,11 +187,15 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   ok("no proposal: the old jargon is gone", !none.includes("Nothing proposed"));
   // Items but nothing on file is a reply, not a block: the note saying what
   // follows is what the credentialer is waiting for (C4, below).
-  const empty = render(ApproveSendButton, { request: nothingFound, T, accountEmail: ME, send });
-  ok("a proposal with items and no documents: enabled, and says nothing is attached", empty.includes("Send reply (nothing to attach)") && !empty.includes("disabled") && !empty.includes("could be matched"));
+  // Since 2026-09-28 it is never one tap, since nothing on file answers the
+  // ask; on the request's own screen, where the draft is in view, it sends.
+  const empty = render(ApproveSendButton, { request: nothingFound, T, accountEmail: ME, send, reviewed: true });
+  ok("a proposal with items and no documents: enabled in review, and says nothing is attached", empty.includes("Send reply (nothing to attach)") && !empty.includes("disabled") && !empty.includes("could be matched"));
+  const emptyAway = render(ApproveSendButton, { request: nothingFound, T, accountEmail: ME, send });
+  ok("and away from the request it waits for a review", emptyAway.includes("disabled") && emptyAway.includes(REVIEW_FIRST_REASON));
   eq("the reason function agrees with the render", [
     approveBlockedReason(boardCert, ""), approveBlockedReason(noProposal, ME), approveBlockedReason(boardCert, ME),
-    approveBlockedReason(ME_FWD, ME), approveBlockedReason({ ...ME_FWD, forwarded_by: null }, ME, ["eric@hospital.org"]), approveBlockedReason(twoDocs, ME, [], []),
+    approveBlockedReason(ME_FWD, ME), approveBlockedReason({ ...ME_FWD, forwarded_by: null }, ME, ["rowan@hospital.example"]), approveBlockedReason(twoDocs, ME, [], []),
   ], ["Add your email in Settings first", NOTHING_MATCHED_REASON, null, REQUESTER_NOT_FOUND_REASON, REQUESTER_NOT_FOUND_REASON, null]);
   // The detail view renders the address field above the button and hands in
   // words that fit; every other reason keeps its own text.
@@ -236,6 +240,62 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   ok("no send function: not clickable", render(ApproveSendButton, { request: twoDocs, T, accountEmail: ME }).includes("disabled"));
 }
 
+// ── One tap is for a packet a model read with high confidence (2026-09-28) ─
+{
+  const send = async () => ({ ok: true });
+  const keyword = { ...boardCert, id: "77777777-7777-4777-8777-777777777777", proposal: { ...boardCert.proposal, source: "rules", confidence: "keyword", items: boardCert.proposal.items.map(({ confidence: _c, ...i }) => i) } };
+  ok("a model-read packet with every ask matched may go on one tap", canSendOnOneTap(boardCert) && canSendOnOneTap(fourItems) && canSendOnOneTap(twoDocs));
+  ok("a keyword packet may not, however well it matched", !canSendOnOneTap(keyword) && !canSendOnOneTap(nothingFound) && !canSendOnOneTap(noProposal));
+  const away = render(ApproveSendButton, { request: keyword, T, accountEmail: ME, send });
+  ok("away from the request, a keyword packet's button is disabled and says to review first", away.includes("disabled") && away.includes(REVIEW_FIRST_REASON));
+  const inReview = render(ApproveSendButton, { request: keyword, T, accountEmail: ME, send, reviewed: true });
+  ok("on the request, with the draft in view, it sends and says Send, not Approve and send", !inReview.includes("disabled") && inReview.includes("Send 1 document<") && !inReview.includes("Approve"));
+  ok("an address problem still blocks in review", render(ApproveSendButton, { request: { ...keyword, from_addr: "docs@credentialdomd.com" }, T, accountEmail: ME, send, reviewed: true }).includes("disabled"));
+  eq("reviewLine is empty for a one-tap packet", reviewLine(boardCert), "");
+  eq("and names what to check otherwise", reviewLine(keyword), "The asks were read by keyword matching, so check the draft before it goes.");
+  const review = render(ReviewButton, { request: keyword, T, onReview: () => {} });
+  ok("ReviewButton: Review, with what is unclear under it", review.includes(">Review<") && review.includes("keyword matching") && review.includes(T.warning));
+  const unclear = { ...keyword, proposal: { ...keyword.proposal, items: [...keyword.proposal.items,
+    { ask: "attestation form", kind: "unknown", status: "missing", docIds: [], labels: [] },
+    { ask: "Colorado DEA", kind: "dea", status: "missing", docIds: [], labels: [] }] } };
+  const note = render(UnclearNote, { request: unclear, T, onSayNotOnFile: () => {} });
+  ok("UnclearNote asks the physician what an unrecognised ask meant", note.includes("&quot;attestation form&quot;: not recognised. What did they mean? The draft says nothing about it."));
+  ok("UnclearNote names what is not on file and offers to say so", note.includes("Not on file: &quot;Colorado DEA&quot;. The draft says nothing about it.") && note.includes("Say so in the draft"));
+  ok("UnclearNote says the reading was by keyword", note.includes("read by keyword matching"));
+  eq("UnclearNote shows nothing for a one-tap packet", render(UnclearNote, { request: boardCert, T }), "");
+  ok("UnclearNote offers no edit on a request that is not open", !render(UnclearNote, { request: unclear, T, onSayNotOnFile: () => {}, canEdit: false }).includes("Say so in the draft"));
+  ok("no em dash in any of it", ![away, inReview, review, note].some((x) => x.includes("\u2014")));
+}
+
+// ── A client rebuild keeps a model's reading (2026-09-28) ────────────────
+{
+  const data = { documents: DOCS, ...RECORDS, settings: { name: "Rowan Testa", degreeType: "DO" } };
+  const modelRow = {
+    id: "r-model", status: "new", subject: "Docs", from_name: "Sam", from_addr: "s@x.example", proposal_at: "2020-01-01T00:00:00Z",
+    body_text: "Proof of malpractice coverage is required for every provider. Please send your board certificate.",
+    proposal: { v: 2, method: "rules", source: "model", confidence: "high", docIds: [], missing: [], coverNote: "",
+      items: [{ ask: "board certificate", quote: "your board certificate", kind: "board_cert", status: "missing", docIds: [], labels: [], confidence: "high" }] },
+  };
+  const built = buildClientProposals([modelRow], data, { now: NOW });
+  const p = built["r-model"];
+  eq("a stale model proposal is rebuilt from the model's asks, not the email's words", [p.method, p.source, p.confidence, p.items.map((i) => [i.ask, i.kind, i.status, i.quote])],
+    ["rules-client", "model", "high", [["board certificate", "board_cert", "found", "your board certificate"]]]);
+  ok("and, every ask now matched, it may go on one tap", canSendOnOneTap({ proposal: p }));
+  eq("modelReading is null for a rules proposal", modelReading(boardCert.proposal === null ? null : { ...boardCert.proposal, source: "rules" }), null);
+  // The rebuild disagrees where the server did (the model's kind, not the
+  // words' kind, goes back in), and an unclear email stays unclear.
+  eq("modelReading hands back the model's kind", modelReading({ source: "model", confidence: "high", items: [{ ask: "BLS card", quote: "your BLS card", kind: "bls", modelKind: "coi_malpractice" }] }).asks,
+    [{ quote: "your BLS card", kind: "coi_malpractice" }]);
+  eq("an unclear rules proposal stays unclear", modelReading({ source: "rules", items: [], unclear: true }), { unclear: true });
+  const unclearRow = { ...modelRow, id: "r-unclear", body_text: "The credentialing committee reviewed your file last week, and your coverage is provided through the group policy.",
+    proposal: { v: 2, method: "rules", source: "rules", confidence: "keyword", items: [], docIds: [], missing: [], coverNote: "", unclear: true } };
+  const rebuilt = buildClientProposals([unclearRow], data, { now: NOW })["r-unclear"];
+  ok("a rebuilt unclear proposal is still unclear and never one tap", rebuilt.unclear === true && !canSendOnOneTap({ proposal: rebuilt }), JSON.stringify(rebuilt));
+  eq("an unclear proposal's line says so", proposalSummary(rebuilt).line, "Not clear that it asks for anything");
+  const note = render(UnclearNote, { request: { ...unclearRow, proposal: rebuilt }, T });
+  ok("the note asks the physician to read it, and says nothing about keyword asks", note.includes("It is not clear whether this email asks you for anything") && !note.includes("keyword"), note);
+}
+
 // ── unwrapInvoke: the response the way EmailPacketModal reads it ─────────
 {
   const out = await unwrapInvoke({ data: { ok: true, email_id: "e1", attached: 2, skipped: [] } });
@@ -261,7 +321,7 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   const html = render(ApproveSendButton, { request: ME_FWD, T, accountEmail: ME, send });
   ok("the rendered reason carries the same words", html.includes("Open the request and enter it.") && html.includes("disabled"));
   ok("a confirmed forwarding address as requester gets the same next step",
-    approveBlockedReason({ ...ME_FWD, forwarded_by: null }, ME, ["eric@hospital.org"]) === "Requester's address not found. Open the request and enter it.");
+    approveBlockedReason({ ...ME_FWD, forwarded_by: null }, ME, ["rowan@hospital.example"]) === "Requester's address not found. Open the request and enter it.");
 }
 
 // ── C4: nothing to attach still sends the note ───────────────────────────
@@ -307,9 +367,15 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   const newest = Math.max(...DOCS.map((d) => new Date(d.uploadedAt).getTime()));
   const after = new Date(newest + 60_000).toISOString();
   const before = new Date(newest - 60_000).toISOString();
-  const stored = { v: 1, method: "rules", items: [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["doc-board"], labels: ["Board Certification (AOA)"] }], docIds: ["doc-board"], missing: [], coverNote: "stored" };
+  const stored = { v: 2, method: "rules", source: "rules", confidence: "keyword", items: [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["doc-board"], labels: ["Board Certification (AOA)"] }], docIds: ["doc-board"], missing: [], coverNote: "stored" };
   const req = { status: "new", subject: REQUEST_1.subject, body_text: REQUEST_1.body, from_name: REQUEST_1.fromName, from_addr: REQUEST_1.fromAddr };
   const fresh = { ...req, id: "r-fresh", proposal: stored, proposal_at: after };
+  // A version-1 proposal was built by rules that could read a statement as an
+  // ask and wrote "I could not tell" into its note: rebuilt once the file is
+  // visible, and left alone on a device that cannot see it yet.
+  const legacy = { ...req, id: "r-legacy", proposal: { ...stored, v: 1 }, proposal_at: after };
+  eq("a version-1 proposal is stale once the file is visible", staleRequests([legacy], DOCS).map((r) => r.id), ["r-legacy"]);
+  eq("but not on a device that cannot see the file", staleRequests([legacy], []).map((r) => r.id), []);
   const older = { ...req, id: "r-older", proposal: stored, proposal_at: before };
   const gone = { ...req, id: "r-gone", proposal: { ...stored, docIds: ["doc-deleted"], items: [{ ...stored.items[0], docIds: ["doc-deleted"] }] }, proposal_at: after };
   const absent = { ...req, id: "r-absent", proposal: null, proposal_at: null };
@@ -337,8 +403,8 @@ eq("no proposal falls back to the subject", askLine(noProposal), "Docs please");
   const built = buildClientProposals([fresh, older, absent, replied], data, { now: NOW });
   eq("only the stale open rows are rebuilt", Object.keys(built).sort(), ["r-absent", "r-older"]);
   eq("a rebuilt proposal is marked rules-client", built["r-older"].method, "rules-client");
-  eq("and carries the matcher's result", [built["r-older"].v, built["r-older"].docIds, built["r-absent"].items[0].kind], [1, ["doc-board"], "board_cert"]);
-  ok("the cover note greets the requester and signs as the physician", built["r-absent"].coverNote.startsWith("Hello Marisol,") && built["r-absent"].coverNote.endsWith("Eric Whitney, DO"));
+  eq("and carries the matcher's result", [built["r-older"].v, built["r-older"].docIds, built["r-absent"].items[0].kind], [2, ["doc-board"], "board_cert"]);
+  ok("the cover note greets the requester and signs as the physician", built["r-absent"].coverNote.startsWith("Hello Avery,") && built["r-absent"].coverNote.endsWith("Rowan Testa, DO"));
   eq("nothing stale, nothing built", buildClientProposals([fresh], data, { now: NOW }), {});
   eq("no rows, nothing built", buildClientProposals([], data, { now: NOW }), {});
 

@@ -16,9 +16,14 @@ const STUBS = {
   "https://deno.land/std@0.224.0/encoding/base64.ts": `export function encodeBase64(b) { return Buffer.from(b).toString("base64"); }`,
 };
 
+// The Anthropic SDK is the real one from node_modules, pinned in Deno by an
+// npm: specifier; its requests go to the fake API below through fetch.
+const ALIASES = { "npm:@anthropic-ai/sdk@0.115.0": "@anthropic-ai/sdk" };
+
 registerHooks({
   resolve(specifier, context, next) {
     if (STUBS[specifier]) return { url: `data:text/javascript,${encodeURIComponent(STUBS[specifier])}`, shortCircuit: true };
+    if (ALIASES[specifier]) return next(ALIASES[specifier], context);
     return next(specifier, context);
   },
 });
@@ -88,8 +93,19 @@ export function createDb() {
     tables, files, log, rows,
     reset() { tables.clear(); files.clear(); log.length = 0; },
     from: (t) => new Query(t),
-    rpc: async (name) => {
+    rpc: async (name, args) => {
       if (name === "credentialdo_service_write_snapshot") return { data: { enforcementEnabled: true, ...harness.access }, error: null };
+      // The AI ledger, as ai-proxy uses it: a daily reservation and a dollar
+      // hold that is settled after the call. harness.ledger decides the
+      // answers and records what was asked.
+      if (name === "reserve_ai_call" || name === "reserve_ai_spend" || name === "settle_ai_spend") {
+        harness.ledger.calls.push({ name, args });
+        const answer = harness.ledger[name]?.(args);
+        if (answer) return answer;
+        if (name === "reserve_ai_call") return { data: [{ id: crypto.randomUUID() }], error: null };
+        if (name === "reserve_ai_spend") return { data: { outcome: "held", hold: `hold-${harness.ledger.calls.length}` }, error: null };
+        return { data: null, error: null };
+      }
       return { data: null, error: { message: `no rpc ${name}` } };
     },
     storage: {
@@ -114,7 +130,14 @@ export const harness = {
   emails: new Map(),        // email id -> { email, attachments: [{meta, bytes}] }
   sent: [],                 // payloads POSTed to /emails
   gemini: [],               // request bodies sent to Gemini
-  geminiReply: () => null,  // (body) => scan object, or { status, text }
+  geminiReply: () => null,  // (body) => scan object, { status, text }, or { hang: true } for a scan that never answers
+  anthropic: [],            // Messages API request bodies sent to the fake Anthropic API
+  anthropicCounts: [],      // count_tokens request bodies
+  // (body) => the reading object the model "answers" with, { status, body }
+  // for an API error, { hang: true } for a call that never answers, or
+  // { message } for a whole Messages response.
+  anthropicReply: () => null,
+  ledger: { calls: [] },    // AI ledger rpc calls; set reserve_ai_call / reserve_ai_spend / settle_ai_spend to answer
   failInsert: null,
   failRemove: null,         // (paths) => an error message to fail a Storage removal with
   // The raw message's top-most Authentication-Results. The default is a
@@ -148,10 +171,35 @@ globalThis.fetch = async (input, init = {}) => {
     harness.sent.push(JSON.parse(init.body));
     return json({ id: `sent-${harness.sent.length}` });
   }
+  if (url === "https://api.anthropic.com/v1/messages/count_tokens") {
+    harness.anthropicCounts.push(JSON.parse(init.body));
+    return json({ input_tokens: 2400 });
+  }
+  if (url === "https://api.anthropic.com/v1/messages") {
+    const body = JSON.parse(init.body);
+    harness.anthropic.push({ body, headers: init.headers });
+    const r = harness.anthropicReply(body);
+    if (r && r.hang) {
+      // Never answers: the SDK's timeout aborts it.
+      return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    }
+    if (r && r.status) return json(r.body ?? { type: "error", error: { type: "api_error", message: "boom" } }, r.status);
+    if (r && r.message) return json(r.message);
+    return json({
+      id: `msg_${harness.anthropic.length}`, type: "message", role: "assistant", model: body.model,
+      content: [{ type: "text", text: JSON.stringify(r ?? {}) }],
+      stop_reason: "end_turn", stop_sequence: null,
+      usage: { input_tokens: 2300, output_tokens: 420, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+    });
+  }
   if (url.startsWith("https://generativelanguage.googleapis.com/")) {
     const body = JSON.parse(init.body);
     harness.gemini.push({ url, body });
     const r = harness.geminiReply(body);
+    if (r && r.hang) {
+      // A scan that never answers: the function's own timeout aborts it.
+      return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    }
     if (r && r.status) return new Response(r.text ?? "{}", { status: r.status, headers: { "content-type": "application/json" } });
     return json({
       candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(r) }] } }],
@@ -162,12 +210,17 @@ globalThis.fetch = async (input, init = {}) => {
   return realFetch(input, init);
 };
 
-const env = {
+// Exported so a test file can shorten a budget before loadFunction(): the
+// function reads its environment once, when it loads.
+export const env = {
   RESEND_API_KEY: "re_test",
   RESEND_API_BASE: RESEND,
   RESEND_WEBHOOK_SECRET: "whsec_test",
   SUPABASE_URL: "https://db.test",
   SUPABASE_SERVICE_ROLE_KEY: "service",
+  // The understanding step's model call gives up after this long here, so a
+  // test of a call that never answers takes a moment, not thirty seconds.
+  INTAKE_UNDERSTANDING_TIMEOUT_MS: "400",
 };
 let handler = null;
 globalThis.Deno = { env: { get: (k) => env[k] }, serve: (h) => { handler = h; } };
@@ -179,6 +232,10 @@ export function resetWorld() {
   harness.sent.length = 0;
   harness.gemini.length = 0;
   harness.geminiReply = () => null;
+  harness.anthropic.length = 0;
+  harness.anthropicCounts.length = 0;
+  harness.anthropicReply = () => null;
+  harness.ledger = { calls: [] };
   harness.failInsert = null;
   harness.failRemove = null;
   harness.rawAuth = "mx.resend.com; dmarc=pass header.from=elryx.com";
@@ -193,9 +250,9 @@ export async function loadFunction() {
 }
 
 /** Deliver one email.received event for `email` (with attachments) and return the handler's JSON. */
-export async function deliver({ id, from, to, subject, text, attachments = [], messageId }) {
+export async function deliver({ id, from, to, subject, text, html, attachments = [], messageId }) {
   harness.emails.set(id, {
-    email: { id, from, to: [to], subject, text, headers: {}, created_at: "2026-09-25T16:10:00Z", raw: { download_url: `https://raw.test/${id}` } },
+    email: { id, from, to: [to], subject, text, ...(html === undefined ? {} : { html }), headers: {}, created_at: "2026-09-25T16:10:00Z", raw: { download_url: `https://raw.test/${id}` } },
     attachments: attachments.map((a, i) => ({ meta: { id: `att-${i}`, filename: a.filename, content_type: a.contentType, content_disposition: "attachment" }, bytes: a.bytes })),
   });
   const event = {

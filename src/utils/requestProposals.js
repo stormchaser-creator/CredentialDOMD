@@ -1,4 +1,4 @@
-import { buildProposal, catalogueFromRows } from "./requestPacket.js";
+import { buildProposal, catalogueFromRows, PROPOSAL_VERSION } from "./requestPacket.js";
 import { docMime, INBOX_DOC_TYPES as INBOX_TYPES } from "./inboxDocs.js";
 
 // Proposals the server did not make, or made against a file that has since
@@ -16,7 +16,8 @@ import { docMime, INBOX_DOC_TYPES as INBOX_TYPES } from "./inboxDocs.js";
 // hook in hooks/useRequestProposals.js is the only place it meets React.
 //
 // Rebuilt proposals carry method "rules-client" so the two paths can be told
-// apart in the data. Nothing here reads a clock unless the caller leaves
+// apart in the data; a proposal a model read keeps its source "model" and its
+// asks (modelReading), and only the matching is done again. Nothing here reads a clock unless the caller leaves
 // `now` out, so the tests pin a date.
 
 // No emailed-in document that is still in the inbox is the physician's answer
@@ -66,7 +67,8 @@ const isOpen = (r) => !!r && (r.status === undefined || r.status === null || r.s
 
 /**
  * The open rows whose proposal is absent, older than the newest document
- * upload, or names a document id no longer on file. A proposal_at that does
+ * upload, names a document id no longer on file, or was built by an older
+ * version of the matcher. A proposal_at that does
  * not parse counts as older than everything: a row that cannot say when it
  * was built cannot claim to be current.
  *
@@ -90,9 +92,38 @@ export function staleRequests(rows, documents) {
       if (Number.isNaN(at) || at < newestAt) return true;
     }
     if (!documents || !documents.length) return false;
+    // A proposal from before version 2 was built by rules that could turn a
+    // statement into an ask and wrote "I could not tell from your email what
+    // you meant by" into its note; it is rebuilt by today's rules once this
+    // device can see the file.
+    if ((Number(p.v) || 0) < PROPOSAL_VERSION) return true;
     const ids = Array.isArray(p.docIds) ? p.docIds : [];
     return ids.some((id) => !onFile.has(String(id)));
   });
+}
+
+/**
+ * The asks a model read from this email, when the stored proposal came from
+ * one (email-inbound's understanding step): a rebuild matches the SAME
+ * quote-checked asks against the file as it is now, rather than reading the
+ * email again with keywords. Re-reading would lose the model's reading and
+ * turn a one-tap packet into a keyword one, or bring back an ask the model
+ * had rightly left out. Each ask carries the kind the MODEL named (an item
+ * whose words the rules read as something else keeps it as modelKind), so
+ * the rebuild disagrees in the same place the server did. A proposal saved
+ * as unclear (nothing in the email read as an ask) stays unclear, whoever
+ * read it. null for a proposal the rules built from a request that asks.
+ */
+export function modelReading(proposal) {
+  if (!proposal || typeof proposal !== "object") return null;
+  const unclear = proposal.unclear === true;
+  if (proposal.source !== "model" || !Array.isArray(proposal.items)) return unclear ? { unclear: true } : null;
+  const reading = {
+    confidence: proposal.confidence,
+    asks: proposal.items.filter((i) => i && typeof i === "object").map((i) => ({ quote: i.quote || i.ask || "", kind: i.modelKind || i.kind })),
+  };
+  if (unclear) reading.unclear = true;
+  return reading;
 }
 
 /**
@@ -121,7 +152,7 @@ export function buildClientProposals(rows, data, { now } = {}) {
     try {
       const proposal = buildProposal(
         { subject: r.subject || "", body: r.body_text || "", fromName: r.from_name || "", fromAddr: r.from_addr || "" },
-        catalogue, physician, now,
+        catalogue, physician, now, modelReading(r.proposal),
       );
       out[r.id] = { ...proposal, method: "rules-client" };
     } catch (e) {

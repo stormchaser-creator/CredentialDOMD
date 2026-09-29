@@ -34,13 +34,17 @@ async function harness(route,snapshot={enforcementEnabled:true,credential:false,
   const built=await build({stdin:{contents,resolveDir:path.dirname(filename),loader:'ts'},bundle:true,write:false,format:'cjs',platform:'node',logLevel:'silent',plugins:[{name:'offline-only',setup(b){
     b.onResolve({filter:/clerkAuth\.ts$/},()=>({path:'auth',namespace:'mock'}));
     b.onResolve({filter:/^https:/},args=>({path:args.path,namespace:'mock'}));
+    b.onResolve({filter:/^npm:/},args=>({path:args.path,namespace:'mock'}));
     b.onLoad({filter:/.*/,namespace:'mock'},args=>{
       const p=args.path;
       const code=p==='auth'?'export const clerkProfile=async()=>globalThis.identity;':
         p.endsWith('/server.ts')?'export const serve=handler=>{globalThis.handler=handler;};':
         p.includes('supabase-js')?'export const createClient=()=>globalThis.db;':
         p.includes('svix')?'export class Webhook {}':
-        p.includes('base64')?'export const encodeBase64=()=>"SYNTHETIC";':null;
+        p.includes('base64')?'export const encodeBase64=()=>"SYNTHETIC";':
+        // The intake understanding step's SDK. A refusal happens before any
+        // model call, so a class that is never constructed is enough.
+        p.startsWith('npm:@anthropic-ai/sdk@')?'export default class Anthropic {}':null;
       if(code===null)throw Error('unmocked remote import '+p);
       return {contents:code,loader:'js'};
     });

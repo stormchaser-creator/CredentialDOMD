@@ -1,0 +1,41 @@
+{
+  "id": "request-no-attachment",
+  "about": "A plain request with nothing attached. Synthetic.",
+  "subject": "Documents for your file",
+  "from": {
+    "name": "Morgan Placeholder",
+    "address": "morgan@ridgeway-locums.example"
+  },
+  "body": "Good morning Dr. Testa,\n\nBefore your October assignment we still need a copy of your current board certificate and your BLS card. Can you send those over this week?\n\nThanks so much,\nMorgan",
+  "attachments": [],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "board_cert"
+      },
+      {
+        "kind": "bls"
+      }
+    ],
+    "roles": []
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "a copy of your current board certificate",
+        "kind": "board_cert",
+        "who": "physician"
+      },
+      {
+        "quote": "your BLS card",
+        "kind": "bls",
+        "who": "physician"
+      }
+    ],
+    "attachments": [],
+    "summary": "two documents needed before your October assignment",
+    "confidence": "high"
+  }
+}

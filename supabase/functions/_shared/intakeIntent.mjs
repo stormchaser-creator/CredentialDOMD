@@ -46,6 +46,14 @@
  * millisecond, costs nothing, and makes the same mistake every time, which is
  * what makes a mistake fixable. Pure: node tests it
  * (scripts/intake-intent.test.mjs) and the edge function imports it as is.
+ *
+ * Since 2026-09-28 these rules are the FALLBACK. Every docs@ and cme@ email
+ * is first read by one model call (intakeUnderstanding.mjs), because on that
+ * day an agency's informational letter scored as a request here ("required"
+ * leans that way) and was answered as one. The rules decide only when that
+ * call cannot run or fails, and intakeUnderstanding.mjs rulesUnderstanding
+ * then refuses to call an email a request when no sentence in it is in an
+ * asking form.
  */
 
 // A sentence that offers help asks for nothing: "if you have questions,

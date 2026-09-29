@@ -17,15 +17,21 @@
  * Change both, and keep the shared file free of imports so plain node can
  * load it for that test.
  *
- * Rules, not AI. The earlier path spent an AI turn proposing docIds and the
- * physician still had to approve; a table of kinds costs nothing, answers in
- * a millisecond, and makes the same mistake every time, which is what makes
- * a mistake fixable. Pure by design: nothing here reads a clock unless the
+ * Rules, not AI, for the MATCHING. The earlier path spent an AI turn
+ * proposing docIds and the physician still had to approve; a table of kinds
+ * costs nothing, answers in a millisecond, and makes the same mistake every
+ * time, which is what makes a mistake fixable. Since 2026-09-28 the ASKS may
+ * come from a model's reading of the email instead of from parseAsks
+ * (buildProposal's `reading`: quote-checked by email-inbound), and only such
+ * a proposal, every ask matched with high confidence, may go on one tap
+ * (oneTapReady). A sentence with no asking form is never an ask here
+ * (hasAskForm), and an ask the proposal cannot answer is never in the cover
+ * note: it is a question for the physician (reviewReason). Pure by design: nothing here reads a clock unless the
  * caller leaves `now` out, so the tests pin a date and get the same answer
  * on every machine.
  */
 
-export const PROPOSAL_VERSION = 1;
+export const PROPOSAL_VERSION = 2;
 const MAX_ASKS = 25;
 const MAX_ASK_CHARS = 160;
 const MAX_SENTENCE_ASKS = 6;
@@ -173,7 +179,7 @@ function stateIn(ask) {
 // Bullets a mail client renders in plain text: "-", "•", "*", "1.", "1)",
 // "(1)", "a.", "[ ]", "[x]", checkbox glyphs, and Outlook's "o" (which is only
 // a bullet when indented or followed by a run of spaces or a tab, so "or"
-// and "ok" at the start of a sentence are not). A bold Gmail name "*Madeline Castorena *" starts with "*" and no
+// and "ok" at the start of a sentence are not). A bold Gmail name "*Casey Example *" starts with "*" and no
 // space, so it is not an item.
 const LIST_ITEM_RE = /^\s*(?:[-\u2013\u2014\u2022\u00b7\u25aa\u25e6\u2023\u25cf\u25cb\u25a0\u25a1\u27a2\u27a4\u25ba\u25b6\u2713\u2714\u2610\u2611\u2612]|\*(?!\*)|\d{1,2}[.)]|\(\d{1,2}\)|[a-hA-H][.)]|\[\s?[xX\u2713\u2714]?\s?\]|o(?=\s{2,}|\t)|(?<=^\s+)o(?=\s))\s+(\S.*?)\s*$/;
 
@@ -193,8 +199,104 @@ const DISCLAIMER_RE = /confidential(?:ity)?\s+(?:notice|disclaimer|statement|war
 // paragraph is skipped and reading carries on below it.
 const BANNER_RE = /^\W*(?:caution|warning|external(?: email| sender| message)?|attention|notice|alert)\b.{0,40}\b(?:originated|outside|external|do not click|unless you recognize|phishing|untrusted|links or attachments)/i;
 
-const ASK_SENTENCE_RE = /\b(?:send|sending|copy|copies|need|needs|needed|require|required|requires|requirements?|provide|providing|attach|forward|documents?|documentation|missing|request|requesting|requested|submit|upload|obtain|receive|outstanding|pending)\b/i;
-const NOT_ASK_RE = /\blet (?:me|us) know\b|\bif you (?:have|need) any\b|\bquestions?\b|\bdo not hesitate\b|\bfeel free\b|\bthank(?:s| you) for\b|\b(?:i|we)(?:'ve|'ll| have| will)? (?:sent|attached|forwarded|received|send|attach|forward)\b|\battached (?:is|are|please find|you will find)\b|\bplease (?:find|see) (?:the )?attached\b|\bas requested\b|\bhere (?:is|are)\b|\bhas been (?:sent|received|submitted)\b|\bno (?:further|longer|additional)\b|\bdo(?:es)? not need\b|\bdon't need\b|\bnothing (?:else|further|more)\b|\bnot need(?:ed)?\b|\b(?:see|find) (?:below|the list)\b|\bbelow\b|\bas follows\b|\bthe following\b|\bhave a (?:great|good|nice)\b|\bcongrat|\bwelcome\b|\bsigned up\b|\bunsubscribe\b/i;
+const ASK_SENTENCE_RE = /\b(?:send|sending|copy|copies|need|needs|needed|require|required|requires|requirements?|provide|providing|attach|forward|documents?|documentation|missing|request|requesting|requested|submit|upload|obtain|receive|outstanding|pending|incomplete|holding\s+up|on\s+file|finali[sz]ed)\b/i;
+const NOT_ASK_RE = /\blet (?:me|us) know\b|\bif you (?:have|need) any\b|\bquestions?\b|\bdo not hesitate\b|\bfeel free\b|\bthank(?:s| you) for\b|\b(?:i|we)(?:'ve|'ll| have| will)? (?:sent|attached|forwarded|received|send|attach|forward)\b|\battached (?:is|are|please find|you will find)\b|\bplease (?:find|see) (?:the )?attached\b|\bas requested\b|\bhere (?:is|are)\b|\bhas been (?:sent|received|submitted)\b|\bno (?:further|longer|additional)\b|\bnothing (?:is |was )?(?:missing|outstanding|needed|required|due)\b|\bdo(?:es)? not need\b|\bdon't need\b|\bnothing (?:else|further|more)\b|\bnot need(?:ed)?\b|\b(?:see|find) (?:below|the list)\b|\bbelow\b|\bas follows\b|\bthe following\b|\bhave a (?:great|good|nice)\b|\bcongrat|\bwelcome\b|\bsigned up\b|\bunsubscribe\b/i;
+
+// The form of an ask. A sentence names the documents a letter is about far
+// more often than it asks for them: "Proof of malpractice coverage is required
+// for every provider" and "The policy covers emergency care documented in
+// your file" are an agency explaining its policy, and on 2026-09-28 both
+// became asks, one matched to the physician's own malpractice certificate by
+// its keyword and the other sent back to the agency as "I could not tell from
+// your email what you meant by". A sentence is an ask only in an asking form:
+// a question, "please", "need", "can you", "send", "provide", "submit", a
+// sentence that opens on a verb telling the reader to do something, or a word
+// that says something is still missing. Nouns alone ("required",
+// "documentation", "certificate") never make one.
+// "Nothing is missing", "need not", "no further documents", "no separate
+// certificate is required from you", "we have everything we need": the
+// asking words, negated.
+const NEGATED_ASK_RE = /\bnothing\b[^.?!]{0,30}\b(?:missing|outstanding|needed|required|due)\b|\bnot\s+(?:be\s+)?(?:missing|outstanding|needed|required|necessary)\b|n't\s+(?:be\s+)?(?:needed|required|necessary)\b|\bno\s+(?:need|further|longer|additional)\b|\bneed\s+not\b|\bno\b[^.?!]{0,40}\b(?:is|are)\s+(?:needed|required|necessary)\b|\b(?:have|got|received)\s+(?:everything|all|what)\s+(?:we|i)\s+need(?:ed)?\b/i;
+const ASK_FORM_RE = /\?|\b(?:please|pls|kindly)\b|\bneed(?:s|ed)?\b(?!\s+not\b)|\b(?:can|could|would|will)\s+(?:you|we\s+(?:get|have|obtain))\b|\b(?:send|sending|resend|re-send|provide|providing|submit|submitting|upload|uploading)\b|\b(?:missing|outstanding|awaiting)\b|\bwaiting\s+(?:on|for)\b|\b(?:we|i)\s+(?:are\s+|am\s+|will\s+|would\s+|do\s+|shall\s+)?(?:still\s+|also\s+)?(?:request|requesting|require)\b/i;
+// "Please" that asks for nothing: "please note", "please be advised",
+// "please keep this letter for your records", "please do not reply to this
+// email", "please consider the environment before printing", "for urgent
+// matters, please contact the credentialing desk". These are taken out
+// before the asking words are looked for, so "Please note that we still need
+// your DEA" is still an ask ("need") and "Please note that proof of
+// malpractice coverage is required for every provider on our panel" is not:
+// that one-word variant of the 2026-09-28 letter read as a request, and the
+// agency would have been acknowledged for a request it never made.
+const NON_ASK_PLEASE_RE = /\b(?:please|pls|kindly)\s+(?:(?:do\s+)?(?:note|notice)|be\s+(?:advised|aware|informed)|(?:keep|retain|save|print|file)\s+(?:this|these|a\s+copy|it|them|for)|(?:do\s+not|don't|dont)\s+(?:reply|respond|hesitate)|consider\s+the\s+environment|contact|call|phone|reach\s+out(?:\s+to)?|refer\s+to|visit|disregard|allow|accept|remember\s+that|understand|log\s*in|click|see|find|(?:review|read)\s+the\s+(?:attached|enclosed))\b/gi;
+const NON_ASK_PLEASE_TEST = new RegExp(NON_ASK_PLEASE_RE.source, "i");
+// "Do not send originals" asks for nothing; "do not send originals, send a
+// copy" still asks.
+const DONT_SEND_RE = /\b(?:please\s+)?(?:do\s+not|don't|dont)\s+(?:re-?send|send|provide|submit|re-?submit|upload|forward|return|fax|e-?mail|mail)\b/gi;
+// A requirement laid on the reader's own file is an ask however it is
+// worded. With nothing but the forms above, the rules read six of eight such
+// requests as saying nothing, and the physician was told nothing had been
+// asked:
+//   "a copy of your current DEA registration is required by October 15"
+//   "A current TB test is required before your start date"
+//   "The credentials committee requires an updated CV"
+//   "Your file is incomplete until we receive your BLS card"
+//   "Your reappointment file is still incomplete without the malpractice certificate"
+//   "The last thing holding up your privileges is the hepatitis B titer"
+// A requirement stated for everyone ("Proof of malpractice coverage is
+// required for every provider on our panel") is policy, and stays a statement.
+const REQUIRED_PRED_RE = /\b(?:is|are|will\s+be|remains?|also|still)\s+(?:still\s+|also\s+|now\s+)?(?:required|needed|necessary|due|mandatory)\b|\bmust\s+be\s+(?:completed|signed|returned|submitted|received|provided|sent|uploaded|updated|renewed|on\s+file)\b/i;
+const YOURS_RE = /\byour?\b/i;
+const DEADLINE_RE = /\b(?:by|before|no\s+later\s+than|prior\s+to|ahead\s+of)\s+(?:your\b|the\s+(?:end|start|first)\b|(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|tomorrow\b|next\s+week\b|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d|\d{1,2}[/-]\d{1,2}\b)/i;
+const REQUIRES_OBJECT_RE = /\b(?:requires?|will\s+require|would\s+require)\s+(?:(?:a\s+)?cop(?:y|ies)\s+of\s+)?(?:your\b|an?\s+(?:updated|current|renewed|new|signed|valid|copy)\b|the\s+(?:updated|current|renewed|signed)\b|(?:updated|current|renewed)\b)/i;
+const HELD_UP_RE = /\b(?:incomplete|cannot|can't|can\s+not|unable\s+to|not\s+(?:yet\s+)?(?:be\s+)?(?:complete[d]?|finali[sz]ed|approved|processed|granted|scheduled|credentialed|cleared|activated)|on\s+hold|hold\s+(?:your|the)|held)\b[^.?!]{0,80}\b(?:until\s+(?:we|i)\s+(?:receive|have|get|obtain)\b|until\s+(?:your|the|a|an|it)\b[^.?!]{0,60}\b(?:is|are)\s+(?:received|on\s+file|submitted|provided|uploaded|in)\b|without\s+(?:your|the|a|an|it)\b)|\bholding\s+up\b|\bholds\s+up\b/i;
+const EVERYONE_RE = /\b(?:every|all|each|any)\s+(?:of\s+(?:our|the)\s+)?(?:providers?|physicians?|clinicians?|doctors?|members?|practitioners?|locums?|applicants?|staff)\b/i;
+
+/** A requirement on the reader's own file (see REQUIRED_PRED_RE), never one stated for everyone. */
+function requirementForm(t) {
+  if (EVERYONE_RE.test(t)) return false;
+  return REQUIRES_OBJECT_RE.test(t) || HELD_UP_RE.test(t) || (REQUIRED_PRED_RE.test(t) && (YOURS_RE.test(t) || DEADLINE_RE.test(t)));
+}
+// The imperative: the sentence opens on the verb ("Return the signed form",
+// "Attach your COI"), after nothing but a greeting word or two.
+const IMPERATIVE_RE = /^\W*(?:(?:also|and|then|just|kindly|please|now)\s+)*(?:send|resend|provide|submit|upload|forward|return|fax|attach|complete|sign|fill|email|e-mail|mail|bring|include|get|obtain|update|renew)\b/i;
+// A line that is a statement rather than a label: it carries a finite verb.
+// "Board certificate.", "Copy of your DEA and CSR for the state of Colorado"
+// and "Hep B surface antibody and titer" are labels, and a label on its own
+// line is how a short request is written; "Your coverage is active." and
+// "The policy covers emergency care" are statements.
+// Words that make a subject line a request on their own ("Document request",
+// "Action required", "Incomplete application").
+const SUBJECT_ASK_RE = /\b(?:request(?:s|ed)?|required|action\s+required|incomplete|due)\b/i;
+const STATEMENT_VERB_RE = /\b(?:is|are|was|were|be|been|being|has|have|had|will|shall|would|should|does|do|did|covers?|covered|includes?|included|provides?|provided|applies|applied|remains?|means|explains?|confirms?|describes?|extends?|meets?|must|may|might|can|obtain(?:s|ed)?|required|requires)\b/i;
+
+/**
+ * True when a sentence is in an asking form: ASK_FORM_RE once the "please"
+ * that asks for nothing is taken out, the imperative, or a requirement on the
+ * reader's own file; never when the asking words are negated.
+ */
+export function hasAskForm(s) {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  if (!t || NEGATED_ASK_RE.test(t)) return false;
+  const asking = t.replace(NON_ASK_PLEASE_RE, " ").replace(DONT_SEND_RE, " ");
+  return ASK_FORM_RE.test(asking) || IMPERATIVE_RE.test(t) || requirementForm(t);
+}
+
+/** Does a subject line ask on its own ("Documents needed", "Request: DEA", "Action required")? */
+export function asksInSubject(subject) {
+  const s = cleanSubject(subject);
+  return !!s && (hasAskForm(s) || SUBJECT_ASK_RE.test(s));
+}
+
+/** Is this line a list item (a bullet, a number, a letter, a checkbox)? */
+export function isListItem(line) {
+  return LIST_ITEM_RE.test(String(line ?? ""));
+}
+
+/** A statement with no asking form: never an ask, however many document words it names. */
+function factualStatement(s) {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim();
+  return !!t && !hasAskForm(t) && STATEMENT_VERB_RE.test(t);
+}
 
 // Words that carry no ask on their own. "Hep B surface antibody and titer"
 // is one ask, not an ask plus every titer on file, and the check that stops
@@ -518,6 +620,12 @@ export function parseAsks(text, subject = "") {
   }
   lines = lines.slice(0, cut);
 
+  // Whether anything outside the list asks. A checklist under "Please send"
+  // or "Missing items" is a request, and so is a bare list forwarded alone;
+  // a list of statements under nothing that asks ("- The policy covers
+  // emergency care") is a letter explaining itself.
+  const subj = cleanSubject(subject);
+  const asking = hasAskForm(subj) || SUBJECT_ASK_RE.test(subj) || lines.some((l, i) => !itemAt[i] && hasAskForm(l));
   const items = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(LIST_ITEM_RE);
@@ -529,6 +637,7 @@ export function parseAsks(text, subject = "") {
       const next = lines.slice(i + 1).find((l) => l.trim());
       if (next && LIST_ITEM_RE.test(next)) continue;
     }
+    if (!asking && factualStatement(cleanAsk(txt))) continue;
     items.push(txt);
   }
 
@@ -536,8 +645,14 @@ export function parseAsks(text, subject = "") {
   if (!raw.length) raw = sentenceAsks(lines);
   if (!raw.length) raw = shortLineAsks(lines);
   if (!raw.length) {
+    // The subject stands in only when it is itself asking ("Missing items",
+    // "Documents needed", "Request: DEA") or the message says nothing at all.
+    // A letter whose sentences all turned out to be statements is not a
+    // request because its subject names a document: "Malpractice coverage for
+    // emergency care" is what the letter is about, not what it asks for.
     const s = cleanSubject(subject);
-    if (s && !/^\(?no subject\)?$/i.test(s)) raw = [s];
+    const said = lines.join(" ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean).length;
+    if (s && !/^\(?no subject\)?$/i.test(s) && (said < 12 || hasAskForm(s) || SUBJECT_ASK_RE.test(s))) raw = [s];
   }
 
   const out = [];
@@ -556,7 +671,7 @@ export function parseAsks(text, subject = "") {
   return out;
 }
 
-// A bare name under a short message ("Tonya", "Tara Domalewski, CPCS"), or
+// A bare name under a short message ("Morgan", "Tara Example, CPCS"), or
 // what is left of a greeting once cleanAsk has taken the "Hi Dr." off it, is
 // the sign-off or the salutation, not an ask: one to three capitalised
 // words, an optional credential after a comma, no digits. "Tax ID" and
@@ -596,7 +711,10 @@ function isSignatureLine(line) {
 function shortLineAsks(lines) {
   const short = lines.map((l) => l.trim()).filter(Boolean);
   if (!short.length || short.length > 3) return [];
-  return short.filter((l) => l.length <= 100 && !NOISE_LINE_RE.test(l) && !isSignatureLine(l) && (classifyAsk(l).kind !== "unknown" || !NAME_LINE_RE.test(cleanAsk(l))));
+  // "Please consider the environment before printing this email" and
+  // "Please do not reply" are footers, not labels.
+  return short.filter((l) => l.length <= 100 && !NOISE_LINE_RE.test(l) && !isSignatureLine(l) && !factualStatement(cleanAsk(l) || l)
+    && !(NON_ASK_PLEASE_TEST.test(l) && !hasAskForm(l)) && (classifyAsk(l).kind !== "unknown" || !NAME_LINE_RE.test(cleanAsk(l))));
 }
 
 /** No list: the sentences that ask for something, greeting and pleasantries left out. */
@@ -614,12 +732,45 @@ function sentenceAsks(lines) {
     for (const piece of p.split(/(?<=(?:[A-Za-z]{4,}|\d|\)))[.!?]\s+/)) {
       const s = piece.trim();
       if (!s || s.length > 300) continue;
-      if (!ASK_SENTENCE_RE.test(s) || NOT_ASK_RE.test(s)) continue;
+      if (!ASK_SENTENCE_RE.test(s) || NOT_ASK_RE.test(s) || !hasAskForm(s)) continue;
       out.push(s);
       if (out.length >= MAX_SENTENCE_ASKS) return out;
     }
   }
   return out;
+}
+
+/**
+ * Does the email ask its reader for anything at all? True when an ask was
+ * read (parseAsks), and also when any sentence of the message is in an
+ * asking form and is not a pleasantry, an offer of help or a pointer to an
+ * attachment, even one whose object the rules cannot name ("Please complete
+ * and return both documents by 10/15" names nothing a kind can match, and is
+ * still a request). The message ends at the quoted history, the sign-off or
+ * a disclaimer, as parseAsks reads it. The rules' fallback reads an email
+ * that asks nothing as informational, never as a request
+ * (intakeUnderstanding.mjs rulesUnderstanding).
+ */
+export function asksSomething(text, subject = "") {
+  if (parseAsks(text, subject).length) return true;
+  const all = String(text ?? "").replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").split("\n");
+  let end = all.length;
+  for (let i = 0; i < all.length; i++) {
+    const t = all[i].trim();
+    if (isHistoryMarker(all, i) || (t && (SIGNOFF_RE.test(t) || SIGNATURE_RE.test(t) || DISCLAIMER_RE.test(t)))) { end = i; break; }
+  }
+  const paras = [];
+  let cur = [];
+  for (const l of all.slice(0, end)) {
+    if (!l.trim()) { if (cur.length) paras.push(cur.join(" ")); cur = []; continue; }
+    if (NOISE_LINE_RE.test(l) || isSignatureLine(l) || BANNER_RE.test(l.trim())) continue;
+    cur.push(l.trim());
+  }
+  if (cur.length) paras.push(cur.join(" "));
+  return paras.some((p) => p.split(/(?<=[A-Za-z0-9)'"])[.!?]\s+/).some((piece) => {
+    const s = piece.trim();
+    return !!s && hasAskForm(s) && !NOT_ASK_RE.test(s);
+  }));
 }
 
 // ─── Naming the ask ──────────────────────────────────────────────────────────
@@ -962,13 +1113,13 @@ export function matchAsk(classified, catalogue, now) {
 const ORG_WORD_RE = /\b(?:office|department|dept|credentialing|credentials|team|services|staff|hospital|health|medical|center|centre|group|clinic|system|university|llc|inc|corp|hr|admin|administration|support|noreply|no-reply|privileging|enrollment|verification|onboarding)\b/i;
 const HONORIFIC_RE = /^(?:dr|doctor|mr|mrs|ms|miss|mx|prof|rn|md|do|np|pa|cpcs|cpmsm|mba|phd|jr|sr|ii|iii)\.?,?$/i;
 
-/** "Madeline" from "Madeline Castorena", "Castorena, Madeline" or "Dr. Madeline Castorena"; "there" when the name is an office or missing. */
+/** "Casey" from "Casey Example", "Example, Casey" or "Dr. Casey Example"; "there" when the name is an office or missing. */
 function firstName(fromName) {
   let s = String(fromName ?? "").replace(/["'*_()<>]/g, " ").replace(/\s+/g, " ").trim();
   if (!s || s.includes("@") || ORG_WORD_RE.test(s)) return "there";
   const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
   if (parts.length >= 2) {
-    // "Castorena, Madeline" is surname first; "Tara Domalewski, CPCS" is a
+    // "Example, Casey" is surname first; "Tara Example, CPCS" is a
     // name with credentials after it.
     s = parts[0].split(" ").length === 1 && !HONORIFIC_RE.test(parts[1].split(" ")[0]) ? `${parts[1]} ${parts[0]}` : parts[0];
   }
@@ -993,7 +1144,7 @@ function signOff(physician) {
  * proposal stores and the note a trimmed packet sends cannot say different
  * things about the same asks.
  */
-function coverNoteFor(items, fromName, physician, selected) {
+function coverNoteFor(items, fromName, physician, selected, unclear = false) {
   const attached = [];
   const seen = new Set();
   const held = [];
@@ -1007,19 +1158,24 @@ function coverNoteFor(items, fromName, physician, selected) {
     });
     if (!kept && it.docIds.length) held.push(it.ask);
   }
-  // Nothing this note promises is a promise the app cannot keep. A report
-  // (case logs, CV, NPI, references, work history: REPORT_KINDS) does follow
-  // separately, because the app exports it. An ask the rules named but
-  // nothing on file answers is stated as a fact and no more: this note goes
-  // out on one tap, unread, and "they will follow separately" over a
-  // Livescan receipt the physician never had brought the credentialer back
-  // two weeks later asking where it was. An ask the rules could not name is
-  // not promised either; the note asks instead.
+  // Nothing this note promises is a promise the app cannot keep, and nothing
+  // in it is a guess. A report (case logs, CV, NPI, references, work
+  // history: REPORT_KINDS) does follow separately, because the app exports it.
+  // An ask the reading could not name, or named and found nothing on file
+  // for, is a question for the PHYSICIAN and is not in this note at all: on
+  // 2026-09-28 a sentence from an agency's own informational letter was
+  // mailed back to the agency under "I could not tell from your email what
+  // you meant by:", and a statement read as an ask would have read the same
+  // way under "Not on file:". The app asks the physician about both
+  // (reviewReason) and adds "Not on file" lines to the draft only when they
+  // say so (noteWithNotOnFile).
   const report = items.filter((it) => it.status === "report" && it.kind !== "unknown").map((it) => it.ask);
-  const missing = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind !== "unknown").map((it) => it.ask);
-  const unclear = items.filter((it) => it.status !== "found" && it.kind === "unknown").map((it) => it.ask);
   const lines = [`Hello ${firstName(fromName)},`, ""];
-  if (!items.length) {
+  if (!items.length && unclear) {
+    // Nothing in the email read as an ask: a draft that said "your request"
+    // would tell someone who may have asked for nothing that they did.
+    lines.push("Thank you for your email.");
+  } else if (!items.length) {
     lines.push("I did not find a list of documents in your request. Reply with what you need and I will send it.");
   } else {
     if (attached.length) lines.push("Attached are the documents you asked for:", ...attached.map((l) => `- ${l}`));
@@ -1031,14 +1187,7 @@ function coverNoteFor(items, fromName, physician, selected) {
       if (attached.length || held.length) lines.push("");
       lines.push("These will follow separately:", ...report.map((a) => `- ${a}`));
     }
-    if (missing.length) {
-      if (attached.length || held.length || report.length) lines.push("");
-      lines.push(attached.length ? "Not on file:" : "I do not have these on file:", ...missing.map((a) => `- ${a}`));
-    }
-    if (unclear.length) {
-      if (attached.length || held.length || report.length || missing.length) lines.push("");
-      lines.push("I could not tell from your email what you meant by:", ...unclear.map((a) => `- ${a}`), "Reply with details and I will send what is needed.");
-    }
+    if (!attached.length && !held.length && !report.length) lines.push("Thank you for your email.");
   }
   // No name, no sign-off. "Regards," over a blank line, or over a bare
   // "DO", read as a letter nobody signed, so both lines go together.
@@ -1105,30 +1254,196 @@ function labelFor(entry, today) {
  * attached; coverNote = the email body send-packet-email will send (it adds
  * its own footer, so none is added here).
  */
-export function buildProposal(request, catalogue, physician, now) {
+export function buildProposal(request, catalogue, physician, now, reading) {
   const req = request || {};
   const body = req.body !== undefined && req.body !== null ? req.body : (req.body_text !== undefined ? req.body_text : "");
   const fromName = req.fromName !== undefined ? req.fromName : req.from_name;
-  const asks = parseAsks(body, req.subject);
+  const model = readingAsks(reading);
+  const asks = model ? model.map((a) => a.ask) : parseAsks(body, req.subject);
+  const confidence = model ? readingConfidence(reading) : "keyword";
   const today = isoDay(now === undefined || now === null ? new Date() : now) || new Date().toISOString().slice(0, 10);
   const items = [];
   const docIds = [];
   const missing = [];
-  for (const ask of asks) {
+  asks.forEach((ask, n) => {
     const c = classifyAsk(ask);
+    // A model reading names the kind itself, but the quote is the email's own
+    // words and the rules read them too. Where both name a kind and the two
+    // differ, the words win and the item is no longer certain: "Could you
+    // send a copy of your current BLS card?" read as a malpractice COI would
+    // otherwise have gone out on one tap with the wrong certificate. A kind
+    // only the model names is kept, and is not certain either: oneTapReady
+    // sends it to Review, and so does an app built before ruleKind existed,
+    // which reads only the item's confidence.
+    const ruleKind = c.kind;
+    let itemConfidence = confidence;
+    let modelKind = null;
+    if (model && model[n].kind) {
+      const named = model[n].kind;
+      if (ruleKind === named) c.kind = named;
+      else if (ruleKind === "unknown") { c.kind = named; if (named !== "unknown" && confidence === "high") itemConfidence = "medium"; }
+      else { modelKind = named; itemConfidence = confidence === "high" ? "medium" : confidence; }
+    }
     const entries = matchAsk(c, catalogue, now);
     const status = entries.length ? "found" : (REPORT_KINDS.has(c.kind) ? "report" : "missing");
     const ids = entries.map((e) => String(e.id));
-    items.push({ ask, kind: c.kind, status, docIds: ids, labels: entries.map((e) => labelFor(e, today)) });
+    const item = { ask, kind: c.kind, status, docIds: ids, labels: entries.map((e) => labelFor(e, today)) };
+    if (model) {
+      item.quote = model[n].quote;
+      item.confidence = itemConfidence;
+      item.ruleKind = ruleKind;
+      if (modelKind) item.modelKind = modelKind;
+    }
+    items.push(item);
     for (const id of ids) if (!docIds.includes(id)) docIds.push(id);
     if (status !== "found") missing.push(ask);
-  }
-  return {
+  });
+  const unclear = !!(reading && reading.unclear === true) && items.length === 0;
+  const proposal = {
     v: PROPOSAL_VERSION,
     method: "rules",
+    source: model ? "model" : "rules",
+    confidence,
     items,
     docIds,
     missing,
-    coverNote: coverNoteFor(items, fromName, physician, null),
+    coverNote: coverNoteFor(items, fromName, physician, null, unclear),
   };
+  if (unclear) proposal.unclear = true;
+  return proposal;
+}
+
+// What each kind is called in a sentence to the physician.
+const KIND_NAMES = {
+  photo_id: "photo ID", headshot: "headshot", passport: "passport", dea: "DEA registration", csr: "state controlled substance registration",
+  npi: "NPI", ecfmg: "ECFMG certificate", usmle: "exam scores", board_cert: "board certificate", diploma: "diploma",
+  residency_cert: "residency certificate", fellowship_cert: "fellowship certificate", bls: "BLS card", acls: "ACLS card", atls: "ATLS card",
+  coi_malpractice: "malpractice certificate", mmr: "MMR record", hep_b: "hepatitis B record", varicella: "varicella record", tdap: "Tdap record",
+  tb: "TB test", flu: "flu shot record", covid: "COVID vaccine record", fit_test: "fit test", drug_screen: "drug screen", titers: "titers",
+  immunizations: "immunization record", fingerprint: "fingerprints", background: "background check", oig: "exclusion check", cme: "CME certificates",
+  case_logs: "case logs", cv: "CV", privileges: "privileges letter", references: "references", work_history: "work history",
+  fluoroscopy: "fluoroscopy permit", state_license: "state license", unknown: "something the rules could not name",
+};
+
+/** A kind as the physician reads it ("coi_malpractice" is "malpractice certificate"). */
+export function kindName(kind) {
+  const k = String(kind ?? "");
+  return KIND_NAMES[k] || k.replace(/_/g, " ");
+}
+
+// ─── A model's reading, and when one tap may send ────────────────────────────
+
+const CONFIDENCES = new Set(["high", "medium", "low"]);
+const KIND_SET = new Set(KINDS);
+
+/**
+ * The asks of a model reading, cleaned for display, or null when there is no
+ * reading. Each ask is the email's own sentence (the caller has already
+ * checked that it occurs in the email); the item shows it cleaned ("Please
+ * send a copy of your current DEA" reads "DEA"), and the quote is kept as
+ * written. A kind the rules do not know is "unknown".
+ */
+function readingAsks(reading) {
+  if (!reading || !Array.isArray(reading.asks)) return null;
+  const out = [];
+  const seen = new Set();
+  for (const a of reading.asks) {
+    if (!a || typeof a !== "object") continue;
+    const quote = noEmDash(String(a.quote ?? a.ask ?? "").replace(/\s+/g, " ").trim()).slice(0, 300);
+    if (!quote) continue;
+    const ask = noEmDash(cleanAsk(quote) || quote).trim().slice(0, MAX_ASK_CHARS);
+    const key = low(ask);
+    if (!ask || seen.has(key)) continue;
+    seen.add(key);
+    const kind = typeof a.kind === "string" && KIND_SET.has(a.kind) ? a.kind : null;
+    out.push({ ask, quote, kind });
+    if (out.length >= MAX_ASKS) break;
+  }
+  return out;
+}
+
+function readingConfidence(reading) {
+  const c = low(reading && reading.confidence);
+  return CONFIDENCES.has(c) ? c : "low";
+}
+
+const EXPIRED_LABEL_RE = /, expired \d{4}-\d{2}-\d{2}$/;
+
+/**
+ * May this proposal go out on ONE tap, unread? Only when a model read the
+ * email, every ask it read is quote-checked (the caller's job), named, and
+ * matched with high confidence, the rules read the same kind in the quote,
+ * and each is answered by a document that has not lapsed (or is a report the
+ * app exports). A proposal read by keywords
+ * is never one tap, whatever it matched: on 2026-09-28 a keyword read an
+ * agency's statement about its own malpractice policy as an ask for the
+ * physician's malpractice certificate, the app offered Approve and send, and
+ * the owner tapped it.
+ */
+export function oneTapReady(proposal) {
+  const p = proposal || {};
+  if (p.source !== "model" || p.confidence !== "high") return false;
+  if (p.unclear) return false;
+  const items = Array.isArray(p.items) ? p.items : [];
+  if (!items.length) return false;
+  return items.every((it) => {
+    if (!it || typeof it !== "object" || it.kind === "unknown" || it.confidence !== "high") return false;
+    // The rules must read the same document in the quote: a kind only the
+    // model names ("Please sign and return the attached attestation" as a
+    // photo ID) is a guess the physician checks.
+    if (it.ruleKind !== it.kind) return false;
+    if (it.status === "report") return true;
+    if (it.status !== "found") return false;
+    const labels = Array.isArray(it.labels) ? it.labels : [];
+    return labels.some((l) => !EXPIRED_LABEL_RE.test(String(l ?? "")));
+  });
+}
+
+const quoted = (xs) => xs.map((x) => `"${x}"`).join(", ");
+
+/**
+ * What the physician should look at before this goes, in one line, or ""
+ * when it may go on one tap. Every unrecognised or unanswered ask is named
+ * here, because none of them is in the cover note.
+ */
+export function reviewReason(proposal) {
+  const p = proposal || {};
+  if (oneTapReady(p)) return "";
+  if (p.unclear) return "It is not clear whether this email asks you for anything. Read it before you reply.";
+  const items = (Array.isArray(p.items) ? p.items : []).filter((it) => it && typeof it === "object");
+  if (!items.length) return "No asks could be read from this email.";
+  const twoWays = items.filter((it) => it.modelKind && it.modelKind !== it.kind)
+    .map((it) => `"${String(it.ask ?? "")}" (${kindName(it.kind)} by its words, ${kindName(it.modelKind)} by the reading)`);
+  const readingOnly = items.filter((it) => p.source === "model" && it.ruleKind === "unknown" && it.kind !== "unknown" && (it.status === "found" || it.status === "report"))
+    .map((it) => `"${String(it.ask ?? "")}" as ${kindName(it.kind)}`);
+  const unclear = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind === "unknown").map((it) => String(it.ask ?? ""));
+  const missing = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind !== "unknown").map((it) => String(it.ask ?? ""));
+  const lapsed = items.filter((it) => it.status === "found" && Array.isArray(it.labels) && it.labels.length > 0
+    && it.labels.every((l) => EXPIRED_LABEL_RE.test(String(l ?? "")))).map((it) => String(it.ask ?? ""));
+  const parts = [];
+  if (unclear.length) parts.push(`Not recognised: ${quoted(unclear)}. What did they mean?`);
+  if (missing.length) parts.push(`Not on file: ${quoted(missing)}.`);
+  if (lapsed.length) parts.push(`Only an expired copy on file: ${quoted(lapsed)}.`);
+  if (twoWays.length) parts.push(`Read two ways: ${twoWays.join(", ")}.`);
+  if (readingOnly.length) parts.push(`Named by the reading alone: ${readingOnly.join(", ")}. Check that is what they meant.`);
+  if (p.source !== "model") parts.push("The asks were read by keyword matching, so check the draft before it goes.");
+  else if (p.confidence !== "high") parts.push("The reading of this email is not certain, so check the draft before it goes.");
+  else if (!parts.length) parts.push("Check the draft before it goes.");
+  return noEmDash(parts.join(" "));
+}
+
+/**
+ * The draft with a "Not on file:" list added above the sign-off, for the
+ * physician who chose to say so. Asks already listed are not added twice.
+ */
+export function noteWithNotOnFile(note, proposal) {
+  const text = String(note ?? "");
+  const items = (Array.isArray(proposal?.items) ? proposal.items : []).filter((it) => it && typeof it === "object");
+  const missing = items.filter((it) => it.status !== "found" && it.status !== "report" && it.kind !== "unknown")
+    .map((it) => String(it.ask ?? "").trim()).filter((a) => a && !text.includes(`- ${a}`));
+  if (!missing.length) return text;
+  const block = ["Not on file:", ...missing.map((a) => `- ${a}`)].join("\n");
+  const at = text.search(/\n\nRegards,\n/);
+  const out = at >= 0 ? `${text.slice(0, at)}\n\n${block}${text.slice(at)}` : `${text.replace(/\s+$/, "")}${text.trim() ? "\n\n" : ""}${block}`;
+  return noEmDash(out);
 }
