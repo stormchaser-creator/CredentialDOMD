@@ -14,7 +14,11 @@ Built so far:
   stands in for Clerk, Stripe, Resend, the AI providers and Telegram; every edge
   function is served locally and pointed at the mocks (section "The lab").
 
-The feature runner (step 3) adds its own section.
+- **Step 3, the physician journeys**: `npm run qa:e2e` drives the QA build with
+  Playwright the way physicians use the app, one fresh test physician per
+  journey, checking the screen and the local database or the captured email
+  after each step, and writes `.generated/results.json` (checklist id to
+  pass/fail/blocked with evidence). Section "The journeys".
 
 > **The repository is public.** Nothing committed here holds real personal data,
 > secrets or production rows. Test people are synthetic and use the reserved

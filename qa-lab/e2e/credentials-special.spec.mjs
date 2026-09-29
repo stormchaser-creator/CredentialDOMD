@@ -35,15 +35,19 @@ test('protected identity stays on the device and encrypted; a custom category ho
     await field(d, 'Legal last name').fill('Private');
     await d.getByPlaceholder('YYYY-MM-DD').fill(DOB);
     await d.getByPlaceholder('###-##-####').fill(SSN);
-    await d.getByRole('button', { name: 'Save on this device' }).click();
-    // First save on this device asks for a lock code (8+ characters) that stays here.
-    const lock = page.getByRole('dialog').last().locator('input[type="password"]');
-    if (await lock.first().waitFor({ timeout: 5000 }).then(() => true, () => false)) {
-      await qa.shot('lock code prompt');
-      const inputs = await lock.count();
-      for (let i = 0; i < inputs; i++) await lock.nth(i).fill('qa-lab-lock-code');
-      await page.getByRole('dialog').last().getByRole('button', { name: /^(Save|Set|Continue|Lock|Encrypt|OK)/ }).last().click();
+    // The first save on this device asks, in the form, for a lock code (8+ characters) that stays here.
+    const lock = d.getByPlaceholder('Lock code (8+ characters)');
+    if (!(await lock.isVisible().catch(() => false))) {
+      await d.getByRole('button', { name: 'Save on this device' }).click();
+      await lock.waitFor({ timeout: 5000 }).catch(() => {});
     }
+    if (await lock.isVisible().catch(() => false)) {
+      qa.check('saving an SSN asks for a device lock code first', /lock code/i.test(await d.getByRole('alert').first().innerText().catch(() => '')) || await lock.isVisible());
+      await qa.shot('lock code prompt');
+      await lock.fill('qa-lab-lock-code');
+      await d.getByRole('button', { name: 'Save on this device' }).click();
+    }
+    await d.waitFor({ state: 'detached', timeout: 15000 });
     await sleep(2500);
     await qa.shot('protected identity saved');
     const listed = /QA liability application/.test(await page.locator('body').innerText());

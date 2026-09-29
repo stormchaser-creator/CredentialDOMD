@@ -192,6 +192,8 @@ test('welcome email on: the owner approves it in Admin > Emails, the next paid m
       await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: 'Emails' }).click();
       const region = page.getByRole('region', { name: 'Welcome email' });
       await region.waitFor();
+      // The status line fills in once the settings are read.
+      await region.getByText(/^(Off\.|On\.|On, but)/).first().waitFor({ timeout: 20000 }).catch(() => {});
       qa.check('the section loads its settings (no "settings missing")', !(await region.getByText(/settings missing/i).count()));
       qa.check('it starts Off', await region.getByText('Off.', { exact: false }).count() > 0);
       const approve = region.getByRole('button', { name: 'Approve and turn on' });
