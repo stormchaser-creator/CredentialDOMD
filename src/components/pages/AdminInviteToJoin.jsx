@@ -6,6 +6,21 @@ const STATUS = { sent: "Sent", failed: "Not sent (the email service refused it)"
 const when = value => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 
 /**
+ * Loading the recent list is a read, so its failure never reuses a send
+ * message: nothing was being sent, and "could not be confirmed" would read
+ * like a failed invitation on every visit to Users.
+ */
+function listTrouble(code) {
+  switch (code) {
+    case "admin_required": return "Recent invitations could not be loaded: only an authorized administrator can see them.";
+    case "unauthorized": return "Recent invitations could not be loaded because your sign-in could not be verified. Reopen Admin and try again.";
+    case "session_changed": return "Recent invitations could not be loaded because your sign-in changed. Reopen Admin and try again.";
+    case "not_configured": return "Recent invitations could not be loaded: invitation email is not set up on the server yet.";
+    default: return "Recent invitations could not be loaded. Open Users again in a minute to retry.";
+  }
+}
+
+/**
  * Invite to join (owner decision, 2026-09-29): one email, to one address,
  * inviting that person to sign up and pay like anyone else. Preview shows the
  * exact message the server will send; Send sends exactly that. It grants no
@@ -33,7 +48,7 @@ export default function AdminInviteToJoin({ initialName = "", initialEmail = "",
   const refresh = useCallback(async () => {
     if (embedded) return;
     try { const rows = await client.list(); if (mounted.current) { setSends(rows); setListError(""); } }
-    catch (error) { if (mounted.current) { setSends(null); setListError(error.message); } }
+    catch (error) { if (mounted.current) { setSends(null); setListError(listTrouble(error?.code)); } }
   }, [client, embedded]);
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -118,7 +133,7 @@ export default function AdminInviteToJoin({ initialName = "", initialEmail = "",
         </section>
       )}
       {note && <p role={note.bad ? "alert" : "status"} style={{ fontSize: 13, lineHeight: 1.5, margin: "10px 0 0", color: note.bad ? danger : (T.success || T.text) }}>{note.text}</p>}
-      {!embedded && listError && <p role="status" style={{ fontSize: 12, color: T.textMuted, margin: "10px 0 0" }}>Recent invitations could not be loaded. {listError}</p>}
+      {!embedded && listError && <p role="status" style={{ fontSize: 12, color: T.textMuted, margin: "10px 0 0" }}>{listError}</p>}
       {!embedded && sends && sends.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Recent invitations to join</div>

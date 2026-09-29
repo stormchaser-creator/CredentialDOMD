@@ -68,6 +68,14 @@ test('refusals carry their reason, and every message says whether anything was s
     const f = setup(() => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status }));
     await assert.rejects(f.client.send({ email: EMAIL }), error => pattern.test(error.message) && (typeof body === 'string' || error.code === body.error), JSON.stringify(body));
   }
+  // Only a refusal of the message itself points at the address.
+  for (const code of ['provider_not_configured', 'provider_busy']) {
+    const f = setup(() => json({ error: code }, 502));
+    await assert.rejects(f.client.send({ email: EMAIL }), error => error.code === code && /nothing was sent/i.test(error.message)
+      && !/check the address/i.test(error.message) && !/could not be confirmed/.test(error.message), code);
+  }
+  await assert.rejects(setup(() => json({ error: 'provider_not_configured' }, 502)).client.send({ email: EMAIL }), error => /server problem, not the address/.test(error.message));
+  await assert.rejects(setup(() => json({ error: 'provider_busy' }, 502)).client.send({ email: EMAIL }), error => /Try again in a minute/.test(error.message));
   const stale = setup(() => json({ error: 'preview_stale', email: { ...EMAIL, text: 'New text' } }, 409));
   await assert.rejects(stale.client.send({ email: EMAIL }), error => error.code === 'preview_stale' && error.extra.email.text === 'New text');
 });

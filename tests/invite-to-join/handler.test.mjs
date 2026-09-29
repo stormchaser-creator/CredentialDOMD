@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
-  createInviteToJoinHandler, composeInviteToJoin, inviteSender, offerParagraph, validatedOffer,
+  createInviteToJoinHandler, composeInviteToJoin, inviteSender, offerParagraph, validatedOffer, resendOutcome,
   INVITE_TO_JOIN_TEMPLATE_VERSION, MONEY_BACK_GUARANTEE,
 } from '../../supabase/functions/_shared/inviteToJoin.mjs';
 
@@ -290,6 +290,40 @@ test('a provider refusal or silence is a failure, recorded as such, never a succ
   }
 });
 
+test('a refusal says what to fix: only a message refusal points at the address', async () => {
+  // A bad or rotated key, an unverified sender domain or a rate limit is not
+  // the address; telling the owner to check it sends them round a loop.
+  for (const [reason, error] of [['address', 'provider_refused'], ['setup', 'provider_not_configured'], ['busy', 'provider_busy']]) {
+    const h = make({ mail: async () => ({ state: 'failed', reason }) });
+    const { email } = await previewOf(h);
+    assert.deepEqual(await read(await h.handler(post(sendBody(email)))), { status: 502, body: { error } }, reason);
+    assert.deepEqual(h.calls.filter(c => c[0] === 'finish').map(c => c.slice(1)), [[RESERVATION, 'failed', null]], 'recorded as not sent');
+  }
+});
+
+test('each Resend answer is read the same way the edge function reads it', () => {
+  const err = name => JSON.stringify({ statusCode: 0, name, message: 'synthetic' });
+  for (const [status, body, expected] of [
+    [200, '{"id":"re_synthetic123"}', { state: 'sent', providerId: 're_synthetic123' }],
+    [200, 'not json', { state: 'sent', providerId: null }],
+    [200, '{"id":42}', { state: 'sent', providerId: null }],
+    [400, err('validation_error'), { state: 'failed', reason: 'address' }],
+    [422, err('invalid_parameter'), { state: 'failed', reason: 'address' }],
+    [422, '', { state: 'failed', reason: 'address' }],
+    [401, err('missing_api_key'), { state: 'failed', reason: 'setup' }],
+    [403, err('invalid_api_key'), { state: 'failed', reason: 'setup' }],
+    [403, err('validation_error'), { state: 'failed', reason: 'setup' }],
+    [404, '', { state: 'failed', reason: 'setup' }],
+    [422, err('invalid_from_address'), { state: 'failed', reason: 'setup' }],
+    [400, err('invalid_idempotency_key'), { state: 'failed', reason: 'setup' }],
+    [429, err('rate_limit_exceeded'), { state: 'failed', reason: 'busy' }],
+    [429, err('daily_quota_exceeded'), { state: 'failed', reason: 'busy' }],
+    [409, err('concurrent_idempotent_requests'), { state: 'unknown' }],
+    [500, err('application_error'), { state: 'unknown' }],
+    [503, '', { state: 'unknown' }],
+  ]) assert.deepEqual(resendOutcome(status, body), expected, `${status} ${body}`);
+});
+
 test('a confirmed send whose record did not land still reports the send, and says it was not recorded', async () => {
   const h = make({ store: { finish: async () => { throw Error('timeout'); } } });
   const { email } = await previewOf(h);
@@ -323,6 +357,8 @@ test('the function changes no account: its code never writes profiles, beta_acce
   assert.doesNotMatch(code, /beta_access|access_grants|billing_|claim_beta_access|launchEmailReviewHold/);
   assert.deepEqual([...deps.matchAll(/rpc\("([a-z_]+)"/g)].map(m => m[1]).sort(),
     ['finish_invite_to_join', 'invite_to_join_status', 'list_invite_to_join_sends', 'public_membership_offer', 'reserve_invite_to_join']);
+  assert.match(deps, /return resendOutcome\(response\.status, text\);/, 'the edge function reads Resend through the tested classifier');
+  assert.doesNotMatch(deps, /state: "failed"/, 'no second, untested status table in the edge function');
   assert.match(deps, /from\("profiles"\)\s*\.select\("id, name, degree_type, email, verified_email"\)\.eq\("id", profileId\)\.maybeSingle\(\)/);
 });
 

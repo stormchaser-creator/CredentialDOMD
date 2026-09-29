@@ -19,6 +19,8 @@ function message(code, extra = {}) {
     case "send_in_progress": return "An invitation to this address is being sent right now. Nothing new was sent. Refresh the list in a minute.";
     case "daily_cap": return `The daily limit of ${Number.isInteger(extra.dailyCap) ? extra.dailyCap : 20} invitations is used up${date(extra.capResetsAt) ? `; the next one can go at ${when(extra.capResetsAt)}` : ""}. Nothing was sent.`;
     case "provider_refused": return "The email service refused this invitation, so it was not sent. Check the address and try again.";
+    case "provider_not_configured": return "The email service rejected the server's sending setup, so nothing was sent. This is a server problem, not the address; sending again will fail the same way until the setup is fixed.";
+    case "provider_busy": return "The email service is not accepting more email right now (a sending rate or quota limit), so nothing was sent. Try again in a minute; if it refuses again, the sending quota may be used up.";
     case "provider_unconfirmed": return "The email service did not confirm this invitation. It may or may not have gone out, so check with the person before sending again.";
     case "not_configured": return "Invitation email is not set up on the server yet. Nothing was sent.";
     default: return "The invitation could not be confirmed. Nothing is known to have been sent. Refresh the list before trying again.";

@@ -16,6 +16,7 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { clerkProfile } from "./clerkAuth.ts";
+import { resendOutcome } from "./inviteToJoin.mjs";
 
 export function inviteToJoinDependencies() {
   const env = (name: string) => Deno.env.get(name) ?? "";
@@ -55,9 +56,10 @@ export function inviteToJoinDependencies() {
     },
 
     /**
-     * One POST to Resend. "sent" with the id, "failed" when Resend answered
-     * that it did not take the message, "unknown" when it may have (no answer,
-     * a timeout, a server error, an idempotency conflict).
+     * One POST to Resend. "sent" with the id, "failed" with a reason when
+     * Resend answered that it did not take the message, "unknown" when it may
+     * have (no answer, a timeout, a server error, an idempotency conflict).
+     * What each status means is decided in resendOutcome (inviteToJoin.mjs).
      */
     async sendMail(payload: Record<string, unknown>, idempotencyKey: string) {
       let response: Response;
@@ -78,13 +80,8 @@ export function inviteToJoinDependencies() {
       }
       let text = "";
       try { text = await response.text(); } catch { /* the status still says what happened */ }
-      if (response.ok) {
-        let id: string | null = null;
-        try { id = (JSON.parse(text) as { id?: string }).id ?? null; } catch { /* body not JSON */ }
-        return { state: "sent", providerId: id };
-      }
-      console.error("invite-to-join: Resend refused:", response.status, text.slice(0, 300));
-      return { state: [400, 401, 403, 404, 422, 429].includes(response.status) ? "failed" : "unknown" };
+      if (!response.ok) console.error("invite-to-join: Resend refused:", response.status, text.slice(0, 300));
+      return resendOutcome(response.status, text);
     },
   };
 }

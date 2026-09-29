@@ -154,6 +154,24 @@ test('a preview made stale by a changed offer is replaced by the new wording, an
   assert.equal(v.section(), undefined, 'any edit needs a new preview');
 });
 
+test('a recent list that cannot load says so, and never reads like a failed send', async () => {
+  const listLine = v => v.find(n => n.type === 'p' && n.props.role === 'status' && /Recent invitations/.test(v.text(n)));
+  // The client's default message is about a send; the list must not reuse it.
+  const unconfirmed = refusal('invite_unavailable', 'The invitation could not be confirmed. Nothing is known to have been sent. Refresh the list before trying again.');
+  for (const [error, expected] of [
+    [unconfirmed, 'Recent invitations could not be loaded. Open Users again in a minute to retry.'],
+    [Object.assign(new Error('The invitation could not be confirmed.'), { code: undefined }), 'Recent invitations could not be loaded. Open Users again in a minute to retry.'],
+    [refusal('admin_required', 'Only an authorized administrator can send invitations. Nothing was sent.'), 'Recent invitations could not be loaded: only an authorized administrator can see them.'],
+    [refusal('session_changed', 'Your sign-in changed. Reopen Admin and try again. Nothing was sent.'), 'Recent invitations could not be loaded because your sign-in changed. Reopen Admin and try again.'],
+    [refusal('not_configured', 'Invitation email is not set up on the server yet. Nothing was sent.'), 'Recent invitations could not be loaded: invitation email is not set up on the server yet.'],
+  ]) {
+    const v = await mount({ list: async () => { throw error; } });
+    assert.equal(v.text(listLine(v)), expected, error.code);
+    assert.doesNotMatch(v.pageText(), /could not be confirmed|Nothing is known to have been sent|Nothing was sent|Refresh the list/);
+    assert.equal(v.note(), undefined, 'no send note on a page where nothing was sent');
+  }
+});
+
 test('the dialog version is prefilled and does not load the recent list', async () => {
   const v = await mount({}, { embedded: true, initialName: 'Waitlist Person', initialEmail: 'lead@example.com' });
   assert.deepEqual(v.calls, []);

@@ -123,6 +123,34 @@ export function inviteSender(profile) {
   return { displayName, from: `"${displayName}" <${INVITE_TO_JOIN_FROM_ADDRESS}>`, replyTo };
 }
 
+/**
+ * What one Resend answer means (sendMail in inviteToJoinDependencies.ts).
+ * 2xx is "sent", with the email id when the body carries one. A refusal is
+ * "failed" (Resend did not take the message) with the reason the owner can
+ * act on, because only some refusals are about the address:
+ *   400, 422   the message itself, usually the recipient address: 'address'
+ *   401, 403, 404, and 422 invalid_from_address or 400 invalid_idempotency_key
+ *              the server's sending setup (API key, sender domain, endpoint): 'setup'
+ *   429        Resend's rate or quota limit: 'busy'
+ * Anything else (5xx, a 409 idempotency conflict) may have been sent: "unknown".
+ */
+export function resendOutcome(status, bodyText) {
+  let body = null;
+  try { body = JSON.parse(bodyText); } catch { /* not JSON; the status still says what happened */ }
+  if (status >= 200 && status < 300) {
+    const id = typeof body?.id === 'string' ? body.id : null;
+    return { state: 'sent', providerId: id };
+  }
+  const name = typeof body?.name === 'string' ? body.name : '';
+  if (status === 401 || status === 403 || status === 404
+    || (status === 422 && name === 'invalid_from_address') || (status === 400 && name === 'invalid_idempotency_key')) return { state: 'failed', reason: 'setup' };
+  if (status === 429) return { state: 'failed', reason: 'busy' };
+  if (status === 400 || status === 422) return { state: 'failed', reason: 'address' };
+  return { state: 'unknown' };
+}
+// The code the owner's screen gets for each refusal reason.
+const REFUSAL_CODE = Object.freeze({ address: 'provider_refused', setup: 'provider_not_configured', busy: 'provider_busy' });
+
 /** The one fixed template. Plain text; every line is here. */
 export function composeInviteToJoin({ sender, email, name, offer }) {
   const text = [
@@ -269,7 +297,7 @@ export function createInviteToJoinHandler(deps) {
       catch (error) { log.error?.(`invite-to-join: send ${reservation.id} is ${final} but was not recorded: ${error?.message || error}`); }
       const recorded = finished?.state === 'finished';
 
-      if (final === 'failed') refuse(502, 'provider_refused');
+      if (final === 'failed') refuse(502, Object.hasOwn(REFUSAL_CODE, outcome.reason) ? REFUSAL_CODE[outcome.reason] : 'provider_refused');
       if (final === 'unknown') refuse(502, 'provider_unconfirmed');
       return reply(200, { schemaVersion: 1, state: 'sent', id: reservation.id, to: message.to, providerId,
         sentAt: stamp(finished?.sentAt) ? finished.sentAt : new Date().toISOString(), recorded });
