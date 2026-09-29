@@ -100,7 +100,11 @@ export function checkRunPaths(work, run, { repo = null } = {}) {
   let actual = run.worktree;
   try { actual = realpathSync(run.worktree); } catch { actual = run.worktree; }
   if (actual !== expected && run.worktree !== expected) throw Error(`The run record's worktree is not ${expected}`);
-  if (repo !== null && (typeof run.repo !== 'string' || realpathSync(run.repo) !== realpathSync(repo))) throw Error('The run record names another repository');
+  // A repository path that does not exist (the default on a machine without
+  // ~/Projects/CredentialDOMD, such as CI) cannot be the run's: refuse with the
+  // same answer instead of an ENOENT from realpath.
+  const real = (dir) => { try { return realpathSync(dir); } catch { return null; } };
+  if (repo !== null && (typeof run.repo !== 'string' || real(run.repo) === null || real(run.repo) !== real(repo))) throw Error('The run record names another repository');
   if (run.branch !== undefined && !/^agent\/[0-9a-f]{8}-[0-9a-f]{16}$/.test(run.branch)) throw Error('The run record names another branch');
   return expected;
 }
