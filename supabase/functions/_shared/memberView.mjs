@@ -28,6 +28,7 @@
 // Collections in MEMBER_VIEW_NEVER have no entry at all, so there is no code
 // path that reads them.
 import { identifierReason } from './app/utils/identifierGate.js';
+import { emailRemindersOn, reminderLeadDays, notifyFreqDays } from './app/utils/reminderPreferences.js';
 
 export const MEMBER_VIEW_POLICY = Object.freeze({
   grantHours: 24,
@@ -264,11 +265,24 @@ function shapeRecord(section, row) {
   return record;
 }
 
+// The three settings send-reminders obeys, as the member's Settings screen
+// shows them and the digest acts on them: a blank notify_email is "Yes"
+// (blank means on, app/utils/reminderPreferences.js), a blank lead is 90 and
+// a blank frequency 7. Without this, support read a blank row as "not set"
+// for a member whose switch showed ON and who was being emailed.
+const REMINDER_SETTINGS = Object.freeze({
+  notifyEmail: emailRemindersOn,
+  reminderLeadDays,
+  notifyFreqDays,
+});
+
 function shapeProfile(row) {
   const member = {};
   if (!row || typeof row !== 'object') return member;
   for (const field of MEMBER_VIEW_PROFILE_FIELDS) {
-    const value = cleanValue(row[camelToSnake(field.key)] ?? row[field.key]);
+    const raw = row[camelToSnake(field.key)] ?? row[field.key];
+    const effective = REMINDER_SETTINGS[field.key];
+    const value = effective ? effective(raw) : cleanValue(raw);
     if (value === undefined || (typeof value === 'string' && !value.trim())) continue;
     member[field.key] = value;
   }

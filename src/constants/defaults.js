@@ -1,9 +1,12 @@
+import { DEFAULT_REMINDER_LEAD_DAYS, DEFAULT_NOTIFY_FREQ_DAYS } from "../utils/reminderPreferences.js";
+
 export const STORAGE_KEY = "credentialdomd-data";
 
 export const DEFAULT_SETTINGS = {
   primaryState: "",
   additionalStates: [],
-  reminderLeadDays: 90,
+  // One number with send-reminders: a blank lead on the server is this too.
+  reminderLeadDays: DEFAULT_REMINDER_LEAD_DAYS,
   name: "",
   npi: "",
   // Month and day only, as "MM-DD". ACCME asks a CME provider for the
@@ -26,12 +29,14 @@ export const DEFAULT_SETTINGS = {
   // scripts (scripts/*.test.mjs), where import.meta.env does not exist.
   // Vite still statically replaces the member expression at build time.
   apiKey: (typeof import.meta.env !== "undefined" && import.meta.env.VITE_GEMINI_API_KEY) || "",
+  // Blank means on for email reminders (utils/reminderPreferences.js), so
+  // a profile row with no notify_email shows the switch the server obeys.
   notifyEmail: true,
   notifyText: true,
   // A forwarded document request is acknowledged to its requester from
   // docs@ on arrival; the physician still approves before anything is sent.
   ackRequests: true,
-  notifyFreqDays: 7,
+  notifyFreqDays: DEFAULT_NOTIFY_FREQ_DAYS,
   lastNotified: null,
   alertsFingerprint: null,
   snoozedUntil: null,

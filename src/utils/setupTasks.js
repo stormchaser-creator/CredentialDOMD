@@ -25,6 +25,7 @@
 
 import { isNonExpiring } from "./helpers.js";
 import { isAlertable, isInactive } from "./lifecycle.js";
+import { emailRemindersOn } from "./reminderPreferences.js";
 import { STATE_NAMES } from "../constants/states.js";
 import { CV_FILENAME_RE } from "./cvImport.js";
 
@@ -356,7 +357,8 @@ export const TASK_DEFS = [
     why: "Nothing you enter here matters if nothing tells you before it lapses.",
     verb: "Turn on reminders",
     doneWhen: ({ s }) =>
-      !!(s.notifyEmail || s.notifyBrowser || s.notifyText) && !!s.email && Number(s.reminderLeadDays) > 0,
+      // Email reminders read blank as on, as send-reminders mails them.
+      !!(emailRemindersOn(s.notifyEmail) || s.notifyBrowser || s.notifyText) && !!s.email && Number(s.reminderLeadDays) > 0,
     evidenceWhen: null,
     cardLine: () => "Reminders are off. Everything you have entered is sitting here silently.",
     nextPhrase: () => "turning reminders on",

@@ -50,6 +50,9 @@ export const ROOTS = Object.freeze([
   // email-inbound enters the facts an informational email states as the
   // same records the app adds when the physician taps Add (intakeFacts.mjs).
   "utils/intakeRecords.js",
+  // send-reminders and the member view read a blank reminder setting the way
+  // the member's Settings screen shows it (blank email reminders mean on).
+  "utils/reminderPreferences.js",
 ]);
 
 export const banner = (rel) =>
