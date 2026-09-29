@@ -68,7 +68,8 @@ host_fingerprint() {
     } 2>/dev/null | /usr/bin/shasum -a 256 ) || echo FAILED
 }
 # Owner alerts (parked ticket, held run, lock held over 4 h, a stored reply no
-# checked path recorded) go through the same iMessage path as
+# checked path recorded, a reply still not emailed an hour after it was
+# stored) go through the same iMessage path as
 # signup-notify.sh; scripts/ticket-fix/alert.mjs also writes
 # $CASE_STATE/alerts.log and $CASE_STATE/status.json. Ids and counts only.
 NOTIFY="$HOST/notify-owner.sh"
@@ -112,8 +113,10 @@ RUN_COMMITTER="ticket-agent+$RUN_ID@credentialdomd.invalid"
 # Due internal follow-ups use the same target/owner/original approval, never a new
 # recipient. Their action-only runs do not send another reply without new input.
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || { echo "$(date '+%F %T') ERROR — no Supabase token in keychain" >> "$LOG"; exit 1; }
-# Stored replies that no checked writer recorded are reported to the owner
-# (the reply HMAC key is readable with this same token). Never blocks a run.
+# Stored replies that no checked writer recorded, and replies the database
+# handed to send-ticket-reply that are still not emailed an hour later
+# (20260929150000), are reported to the owner (the reply HMAC key is readable
+# with this same token). Never blocks a run.
 TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-fix/reconcile.mjs" --state "$CASE_STATE" \
   --ledger "$CASE_STATE/replies" --ledger "$FIX_STATE/replies" --runs "$CASE_STATE/runs.log" --notify "$NOTIFY" >> "$LOG" 2>&1 ||
   echo "$(date '+%F %T') WARN — reconcile of stored replies failed" >> "$LOG"

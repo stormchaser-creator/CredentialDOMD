@@ -42,14 +42,17 @@ export const MIGRATION = 'supabase/migrations/20260928150000_support_reply_verif
 // Both writers store the ticket owner as author_id with is_admin_reply and a
 // verification. From 20260929134100 (owner decision 2026-09-29),
 // notify_ticket_reply hands such a reply on a member's ticket to
-// send-ticket-reply, which emails it once, after this process has stored it.
-// A reply on an admin's own ticket is never emailed. Nothing here sends mail,
-// so the stored result says emailed: false and which of the two applies.
-export const EMAIL_QUEUED = 'queued: a verified reply on a member\'s ticket is emailed to the member once by send-ticket-reply (notify_ticket_reply, 20260929134100), from CredentialDOMD Support with a link to the ticket; support_messages.emailed_at records the send.';
+// send-ticket-reply after this process has stored it. That call can fail, so
+// this is an attempt, not a promise: only support_messages.emailed_at shows a
+// send. 20260929150000 retries a failed one and reconcile.mjs alerts the owner
+// when one is still not emailed an hour later (review 2026-09-29). A reply on
+// an admin's own ticket is never emailed. Nothing here sends mail, so the
+// stored result says emailed: false and which of the two applies.
+export const EMAIL_ATTEMPTED = 'attempted, not confirmed: notify_ticket_reply (20260929134100) asks send-ticket-reply to email this verified reply to the member once, from CredentialDOMD Support with a link to the ticket. Only support_messages.emailed_at shows it was sent. A failed send is retried for about 11 hours (retry_ticket_reply_emails, 20260929150000), and reconcile.mjs alerts the owner if it is still not emailed an hour after it was stored.';
 export const EMAIL_OWN_TICKET = 'not emailed: the ticket belongs to an admin, and a reply on an admin\'s own ticket is never emailed. It shows in the app thread.';
 export function emailStatus(ownerIsAdmin) {
   if (typeof ownerIsAdmin !== 'boolean') throw Error('Whether the ticket owner is an admin is unknown');
-  return ownerIsAdmin ? EMAIL_OWN_TICKET : EMAIL_QUEUED;
+  return ownerIsAdmin ? EMAIL_OWN_TICKET : EMAIL_ATTEMPTED;
 }
 const PROJECT = 'hkpnnsjcwprrwobmpqyy';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;

@@ -9,7 +9,14 @@
 // Also: scripts/signup-notify.sh's "TICKET REPLY" predicate, run against the
 // same rows, no longer reports a support reply as the member writing.
 //
-// Synthetic ids, text and addresses only. Own port: node --test runs files in
+// Second test, migration 20260929150000 (review 2026-09-29): a reply whose one
+// call fails is called again by retry_ticket_reply_emails until
+// send-ticket-reply's emailed_at claim is set, so it is sent exactly once; a
+// reply stored before the migration is never retried; and reconcile.mjs, the
+// hourly runner's step, alerts the owner once about a reply still not emailed
+// an hour after it was stored. pg_cron is a stand-in too.
+//
+// Synthetic ids, text and addresses only. Own ports: node --test runs files in
 // parallel.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,24 +25,28 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
-import { agentReplyBody, labeledBody, EMAIL_QUEUED, EMAIL_OWN_TICKET, emailStatus } from '../../scripts/ticket-fix/reply.mjs';
+import { agentReplyBody, labeledBody, EMAIL_ATTEMPTED, EMAIL_OWN_TICKET, emailStatus } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { postReplySQL } from '../../scripts/ticket-fix/reply.mjs';
 import { main as postReply } from '../../scripts/ticket-fix/post-reply.mjs';
+import { reconcile, unsentReplies } from '../../scripts/ticket-fix/reconcile.mjs';
 import { tempRepo, privateDir, liveBuild, uuid, signForTest } from './helpers.mjs';
 
 const PORT = '58321';
+const RETRY_PORT = '58322';
 const read = rel => fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
 const HOOK_VAULT = read('supabase/migrations/20260925140000_hook_secret_vault.sql');
 const VERIFICATIONS = read('supabase/migrations/20260928150000_support_reply_verifications.sql');
 const HARDENING = read('supabase/migrations/20260928161000_support_reply_hardening.sql');
 const EMAIL = read('supabase/migrations/20260929134100_support_reply_email.sql');
 const EMAIL_ROLLBACK = read('docs/rollback/20260929134100_support_reply_email.rollback.sql');
+const RETRY = read('supabase/migrations/20260929150000_support_reply_email_retry.sql');
+const RETRY_ROLLBACK = read('docs/rollback/20260929150000_support_reply_email_retry.rollback.sql');
 const NOTIFIER = read('scripts/signup-notify.sh');
 const SEND_URL = 'https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1/send-ticket-reply';
 const HOOK_SECRET = 'synthetic-hook-secret-for-reply-email-0123456789';
 
-function startPostgres() {
+function startPostgres(port = PORT) {
   const bin = pgBin();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reply-email-'));
   const socket = path.join(root, 'socket'); fs.mkdirSync(socket);
@@ -43,9 +54,9 @@ function startPostgres() {
   const exec = (name, args, input) => spawnSync(path.join(bin, name), args, { env, input, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   const must = r => { if (r.status !== 0) throw Error(r.stderr || r.stdout); return r; };
   must(exec('initdb', ['-D', path.join(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale', '--encoding=UTF8']));
-  must(exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${PORT} -c listen_addresses='' -c fsync=off`, '-w', 'start']));
+  must(exec('pg_ctl', ['-D', path.join(root, 'data'), '-l', path.join(root, 'pg.log'), '-o', `-k ${socket} -p ${port} -c listen_addresses='' -c fsync=off`, '-w', 'start']));
   const run = (query, { user = 'postgres', db = 'postgres' } = {}) =>
-    exec('psql', ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', PORT, '-U', user, '-d', db], `set time zone 'UTC';\n${query}`);
+    exec('psql', ['-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', socket, '-p', port, '-U', user, '-d', db], `set time zone 'UTC';\n${query}`);
   const sql = (query, opts) => must(run(query, opts)).stdout.trim();
   const tryRun = (query, opts) => { const r = run(query, opts); return { ok: r.status === 0, out: r.stdout.trim(), err: r.stderr }; };
   const close = () => { exec('pg_ctl', ['-D', path.join(root, 'data'), '-m', 'fast', '-w', 'stop']); fs.rmSync(root, { recursive: true, force: true }); };
@@ -134,12 +145,12 @@ const SEED = `
 `;
 const text = s => `convert_from(decode('${Buffer.from(s).toString('hex')}','hex'),'UTF8')`;
 const asApp = (role, sub, statement) => `set role ${role}; set request.jwt.claims to '${JSON.stringify({ sub })}'; ${statement}`;
-const management = pg => async query => {
+const management = (pg, opts) => async query => {
   if (query.startsWith('begin read only; ') && query.endsWith('; rollback;')) {
     const inner = query.slice('begin read only; '.length, -'; rollback;'.length);
-    return JSON.parse(pg.sql(`begin read only; select coalesce(json_agg(row), '[]'::json) from (${inner}) row; rollback;`));
+    return JSON.parse(pg.sql(`begin read only; select coalesce(json_agg(row), '[]'::json) from (${inner}) row; rollback;`, opts));
   }
-  if (query.startsWith('DO $')) { const out = pg.sql(query); return out ? out.split('\n').map(id => ({ id })) : []; }
+  if (query.startsWith('DO $')) { const out = pg.sql(query, opts); return out ? out.split('\n').map(id => ({ id })) : []; }
   throw Error('Unexpected SQL shape');
 };
 
@@ -217,14 +228,14 @@ test('a verified support reply on a member ticket is handed to send-ticket-reply
     assert.equal(callsFor(id).length, 1, 'the claim does not send a second time');
   });
 
-  await t.test('post-reply.mjs: a member ticket is queued for email and called once; an admin-owned ticket says never and is not', async () => {
+  await t.test('post-reply.mjs: a member ticket is handed to send-ticket-reply once; an admin-owned ticket says never and is not', async () => {
     const repo = tempRepo({ 'src/export.js': 'export const label = "Export expired licences";\n' });
     const state = privateDir('ticket-fix-email-');
     const lines = [];
     try {
       const deps = { git: repo.git, stateDir: state.dir, fetchBuild: liveBuild(repo.first), log: line => lines.push(line), query };
       const replyFile = path.join(state.dir, 'reply.json');
-      for (const [ticket, status, calledTimes] of [[T.post, EMAIL_QUEUED, 1], [T.ownerPost, EMAIL_OWN_TICKET, 0]]) {
+      for (const [ticket, status, calledTimes] of [[T.post, EMAIL_ATTEMPTED, 1], [T.ownerPost, EMAIL_OWN_TICKET, 0]]) {
         fs.writeFileSync(replyFile, JSON.stringify({ ticket_id: ticket, ticket_version: version(ticket), opening: 'answer', closing: 'none', claims: [],
           not_done: [`A synthetic answer for ${ticket.slice(-4)}.`] }));
         assert.equal(await postReply(['--ticket', ticket, '--reply', replyFile], deps), 0, lines.join('\n'));
@@ -236,7 +247,7 @@ test('a verified support reply on a member ticket is handed to send-ticket-reply
         if (ticket === T.post) writerReplies.push(posted.message_id);
       }
     } finally { repo.cleanup(); state.cleanup(); }
-    assert.equal(emailStatus(false), EMAIL_QUEUED);
+    assert.equal(emailStatus(false), EMAIL_ATTEMPTED);
     assert.equal(emailStatus(true), EMAIL_OWN_TICKET);
     assert.throws(() => emailStatus(undefined), /unknown/);
   });
@@ -345,4 +356,223 @@ test('postReplySQL and replySQL store the shape the email rule reads: owner as a
   const agent = replySQL({ id: T.agent, owner_id: MEMBER, updated_at: '2026-09-29T12:00:00Z', approval: { from_admin: false, approved_at: '2026-09-29T00:00:00Z' } }, 'Synthetic.',
     { verification: signForTest({ ticketId: T.agent, body: agentReplyBody('Synthetic.'), secret }) });
   assert.match(agent, /VALUES \('[0-9a-f-]{36}'::uuid, target\.id, target\.user_id, .*, true, now\(\), '[0-9a-f-]{36}'::uuid\)/);
+});
+
+// pg_cron reduced to what 20260929150000 and its rollback call.
+const FAKE_CRON = `
+  create schema cron;
+  create table cron.job (jobid bigserial primary key, jobname text unique, schedule text not null, command text not null);
+  create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql
+    as $$ insert into cron.job (jobname, schedule, command) values (job_name, schedule, command) returning jobid $$;
+  create function cron.unschedule(job_name text) returns boolean language sql
+    as $$ with gone as (delete from cron.job where jobname = job_name returning 1) select exists (select 1 from gone) $$;
+`;
+// One member ticket per reply (the agent answers a ticket once), and one the admin owns.
+const R = {
+  before: uuid(0xd101), agent: uuid(0xd102), admin: uuid(0xd103), secret: uuid(0xd104), spent: uuid(0xd105), old: uuid(0xd106),
+  broken: uuid(0xd107), gone: uuid(0xd108), late: uuid(0xd109), recent: uuid(0xd10a), after: uuid(0xd10b), adminOwn: uuid(0xd1ff),
+};
+const RETRY_SEED = `
+  insert into public.profiles (id, email, auth_user_id) values
+    ('${ADMIN}', 'owner@example.test', 'sub-admin'), ('${MEMBER}', 'member@example.test', 'sub-member');
+  insert into public.app_admins values ('${ADMIN}');
+  insert into public.support_tickets (id, user_id, subject, body, status, updated_at, agent_approved_at)
+  select id::uuid, case when id::uuid = '${R.adminOwn}' then '${ADMIN}'::uuid else '${MEMBER}'::uuid end, 'Synthetic retry fixture', 'Synthetic body', 'open',
+         '2026-09-29T12:00:00Z', case when id::uuid = '${R.adminOwn}' then null else '2026-09-29T00:00:00Z'::timestamptz end
+    from unnest(array['${Object.values(R).join("','")}']) id;
+`;
+
+test('a reply whose email fails is sent by the retry, exactly once; one still not emailed an hour later alerts the owner', { skip: pgSkip(), timeout: 240000 }, async t => {
+  const pg = startPostgres(RETRY_PORT);
+  t.after(() => pg.close());
+  pg.sql(ROLES);
+  const platform = pg.tryRun(`${PLACEHOLDER_NOTIFY}\n${PLATFORM}\n${FAKE_CRON}`);
+  if (!platform.ok && /pgcrypto/.test(platform.err)) { t.skip('pgcrypto is not installed with this PostgreSQL'); return; }
+  assert.ok(platform.ok, platform.err);
+  pg.sql(RETRY_SEED);
+  for (const [label, file] of [['hook secret vault', HOOK_VAULT], ['verifications', VERIFICATIONS], ['hardening', HARDENING], ['reply email', EMAIL]]) {
+    const r = pg.tryRun(file);
+    assert.ok(r.ok, `${label}: ${r.err}`);
+  }
+  const key = pg.sql(`select decrypted_secret from vault.decrypted_secrets where name = 'support_reply_hmac_key'`);
+  const query = management(pg);
+  const calls = () => JSON.parse(pg.sql(`select coalesce(json_agg(json_build_object('url', url, 'id', body->'record'->>'id', 'secret', headers->>'x-hook-secret',
+    'onlyId', (select count(*) from jsonb_object_keys(body->'record')) = 1) order by id), '[]') from net.calls`));
+  const callsFor = id => calls().filter(c => c.id === id);
+  const reply = async (ticket, replyText) => {
+    const v = signForTest({ ticketId: ticket, body: agentReplyBody(replyText), report: { path: 'agent' }, secret: key });
+    const [row] = await query(replySQL({ id: ticket, owner_id: MEMBER, updated_at: pg.sql(`select updated_at from public.support_tickets where id = '${ticket}'`),
+      approval: { from_admin: false, approved_at: pg.sql(`select agent_approved_at from public.support_tickets where id = '${ticket}'`) } }, replyText, { verification: v }));
+    assert.ok(row?.id, 'the agent stored its reply');
+    return row.id;
+  };
+  const retry = () => Number(pg.sql('select public.retry_ticket_reply_emails()'));
+  const record = id => pg.sql(`select coalesce((select attempts || '|' || (last_attempt_at is not null) from public.ticket_reply_emails where message_id = '${id}'), 'none')`);
+  // Moves a recorded reply (and its last call) back in time.
+  const age = (id, minutes, attempts) => pg.sql(`update public.ticket_reply_emails set queued_at = now() - interval '${minutes} minutes',
+    last_attempt_at = case when last_attempt_at is null then null else now() - interval '${minutes} minutes' end${attempts === undefined ? '' : `, attempts = ${attempts}`}
+    where message_id = '${id}'`);
+  // send-ticket-reply's claim, which alone decides whether a call sends: true when this call would send.
+  const deliver = id => pg.sql(`set role service_role; update public.support_messages set emailed_at = now() where id = '${id}' and emailed_at is null returning id`, { user: 'authenticator' }) === id;
+  const hideSecret = () => pg.sql(`update vault.secrets set name = 'welcome_hook_secret_parked' where name = 'welcome_hook_secret'`);
+  const showSecret = () => pg.sql(`update vault.secrets set name = 'welcome_hook_secret' where name = 'welcome_hook_secret_parked'`);
+  const notifyBefore = pg.sql(`select pg_get_functiondef('public.notify_ticket_reply()'::regprocedure)`);
+  const ids = {};
+
+  await t.test('stops without 20260929134100; applies twice with one cron job; a reply stored before it is never retried', async () => {
+    pg.sql('create database bare');
+    pg.sql(`${PLACEHOLDER_NOTIFY}\n${PLATFORM}`, { db: 'bare' });
+    pg.sql(VERIFICATIONS, { db: 'bare' });
+    pg.sql(HARDENING, { db: 'bare' });
+    const none = pg.tryRun(RETRY, { db: 'bare' });
+    assert.equal(none.ok, false);
+    assert.match(none.err, /apply 20260929134100_support_reply_email\.sql first/);
+    assert.deepEqual(await unsentReplies(management(pg, { db: 'bare' })), [], 'reconcile skips the check until the migration exists');
+
+    ids.before = await reply(R.before, 'Synthetic answer stored before the retry existed.');
+    assert.equal(callsFor(ids.before).length, 1);
+    for (const pass of ['first', 'second']) { const r = pg.tryRun(RETRY); assert.ok(r.ok, `${pass}: ${r.err}`); }
+    assert.equal(pg.sql(`select string_agg(jobname || '|' || schedule || '|' || command, ',') from cron.job`),
+      'retry-ticket-reply-emails|*/10 * * * *|select public.retry_ticket_reply_emails()');
+    assert.equal(retry(), 0);
+    assert.equal(record(ids.before), 'none', 'nothing stored before the migration is recorded: that is the cutover');
+    assert.equal(callsFor(ids.before).length, 1);
+  });
+
+  await t.test("a verified reply to a member whose first call fails is called again after 10 minutes and sent once", async () => {
+    const id = ids.agent = await reply(R.agent, 'Synthetic answer whose first email fails.');
+    assert.deepEqual(callsFor(id), [{ url: SEND_URL, id, secret: HOOK_SECRET, onlyId: false }], 'the trigger calls once, with the row');
+    assert.equal(record(id), '1|true', 'and records the call');
+    // That call failed: send-ticket-reply never set emailed_at.
+    assert.equal(retry(), 0, 'not called again at once');
+    age(id, 9);
+    assert.equal(retry(), 0, 'nor after nine minutes');
+    age(id, 11);
+    assert.equal(retry(), 1);
+    assert.deepEqual(callsFor(id)[1], { url: SEND_URL, id, secret: HOOK_SECRET, onlyId: true }, 'the retry names the message by id, with the vault secret');
+    assert.equal(record(id), '2|true');
+    assert.equal(deliver(id), true, 'the second call sends');
+    age(id, 120);
+    assert.equal(retry(), 0, 'an emailed reply is never called again');
+    assert.equal(callsFor(id).length, 2);
+    assert.equal(callsFor(id).filter(() => deliver(id)).length, 0, 'every call delivered again sends nothing more: one email in all');
+  });
+
+  await t.test("an admin's reply in the app is retried the same way; his own ticket and a member's message are never recorded", () => {
+    const admin = pg.sql(asApp('authenticated', 'sub-admin', `insert into public.support_messages (ticket_id, author_id, body, is_admin_reply) values ('${R.admin}', '${ADMIN}', 'Synthetic admin answer', true) returning id`), { user: 'authenticator' });
+    const own = pg.sql(asApp('authenticated', 'sub-admin', `insert into public.support_messages (ticket_id, author_id, body, is_admin_reply) values ('${R.adminOwn}', '${ADMIN}', 'Synthetic note to self', true) returning id`), { user: 'authenticator' });
+    const member = pg.sql(asApp('authenticated', 'sub-member', `insert into public.support_messages (ticket_id, author_id, body) values ('${R.admin}', '${MEMBER}', 'A synthetic follow-up') returning id`), { user: 'authenticator' });
+    assert.deepEqual([record(admin), record(own), record(member)], ['1|true', 'none', 'none']);
+    age(admin, 11);
+    assert.equal(retry(), 1);
+    assert.equal(callsFor(admin).length, 2);
+    assert.equal(callsFor(own).length + callsFor(member).length, 0);
+    assert.equal(deliver(admin), true);
+  });
+
+  await t.test('a reply stored while the hook secret is missing is recorded, and sent once the secret is back', async () => {
+    hideSecret();
+    let id;
+    try {
+      id = await reply(R.secret, 'Synthetic answer stored while the hook secret is missing.');
+      assert.equal(callsFor(id).length, 0);
+      assert.equal(record(id), '0|false', 'recorded with no call');
+      age(id, 11);
+      const failed = pg.tryRun('select public.retry_ticket_reply_emails()');
+      assert.equal(failed.ok, false, 'the cron run fails visibly');
+      assert.match(failed.err, /vault secret welcome_hook_secret is missing/);
+      assert.equal(record(id), '0|false', 'and records nothing');
+    } finally { showSecret(); }
+    assert.equal(retry(), 1);
+    assert.equal(record(id), '1|true');
+    assert.equal(deliver(id), true);
+  });
+
+  await t.test('each wait is 10 minutes times the tries so far; the retry stops after 12 tries or 7 days', async () => {
+    const spent = ids.spent = await reply(R.spent, 'Synthetic answer that never gets out.');
+    const old = ids.old = await reply(R.old, 'Synthetic answer from last week.');
+    age(spent, 29, 3);
+    assert.equal(retry(), 0, 'three tries wait 30 minutes');
+    age(spent, 31, 3);
+    assert.equal(retry(), 1);
+    assert.equal(record(spent), '4|true');
+    age(spent, 24 * 60, 12);
+    assert.equal(retry(), 0, 'twelve tries is the last');
+    age(old, 7 * 24 * 60 + 5);
+    assert.equal(retry(), 0, 'recorded more than 7 days ago');
+    assert.equal(callsFor(old).length, 1);
+  });
+
+  await t.test('a reply that no longer matches its verification is not retried', async () => {
+    const id = ids.broken = await reply(R.broken, 'Synthetic answer whose verification is changed afterwards.');
+    pg.sql(`update public.support_reply_verifications set hmac = repeat('0', 64) where used_by_message_id = '${id}'`);
+    assert.equal(pg.sql(`select public.verified_support_reply_to_member('${id}')`), 'f');
+    age(id, 120);
+    assert.equal(retry(), 0);
+    assert.equal(callsFor(id).length, 1);
+  });
+
+  await t.test('only the owner runs the retry; no API role writes the record; deleting the ticket deletes it', async () => {
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      assert.equal(pg.sql(`select has_function_privilege('${role}', 'public.retry_ticket_reply_emails()', 'EXECUTE')`), 'f', role);
+    }
+    for (const role of ['anon', 'authenticated']) {
+      assert.equal(pg.sql(`select has_table_privilege('${role}', 'public.ticket_reply_emails', 'SELECT,INSERT,UPDATE,DELETE')`), 'f', role);
+    }
+    assert.equal(pg.sql(`select has_table_privilege('service_role', 'public.ticket_reply_emails', 'SELECT')
+      and not has_table_privilege('service_role', 'public.ticket_reply_emails', 'INSERT,UPDATE,DELETE')`), 't');
+    assert.equal(pg.sql(`select relrowsecurity from pg_class where oid = 'public.ticket_reply_emails'::regclass`), 't');
+    const browser = pg.tryRun(asApp('authenticated', 'sub-member', 'select public.retry_ticket_reply_emails()'), { user: 'authenticator' });
+    assert.equal(browser.ok, false);
+    assert.match(browser.err, /permission denied/);
+    const id = await reply(R.gone, 'Synthetic answer on a ticket that is then deleted.');
+    assert.equal(record(id), '1|true');
+    pg.sql(`delete from public.support_tickets where id = '${R.gone}'`);
+    assert.equal(record(id), 'none', 'delete-account removes it with the ticket');
+  });
+
+  await t.test('reconcile.mjs alerts the owner once about each reply still not emailed an hour after it was stored', async () => {
+    const late = await reply(R.late, 'Synthetic answer still not emailed after an hour.');
+    const recent = await reply(R.recent, 'Synthetic answer still inside its first hour.');
+    age(late, 61, 5);
+    age(recent, 50, 3);
+    const state = privateDir('reply-email-reconcile-');
+    const ledger = privateDir('reply-email-ledger-');
+    const sent = [];
+    try {
+      const run = () => reconcile({ query, state: state.dir, ledgers: [ledger.dir], send: async message => { sent.push(message); return true; } });
+      const unsent = () => sent.filter(m => m.includes('has still not been emailed'));
+      const first = await run();
+      assert.equal(first.unemailed, 3, 'late, and the two the retry gave up on (12 tries; older than 7 days)');
+      const named = unsent().map(m => m.match(/\(message ([0-9a-f]{8})\)/)[1]).sort();
+      assert.deepEqual(named, [late, ids.spent, ids.old].map(id => id.slice(0, 8)).sort());
+      assert.ok(unsent().includes(`CredentialDOMD support: a reply on ticket ${R.late.slice(0, 8)} (message ${late.slice(0, 8)}) has still not been emailed to the ticket owner 61 minutes after it was stored, after 5 tries. It is in the app thread. Check send-ticket-reply's logs and the owner's email address.`), unsent().join('\n'));
+      for (const quiet of [recent, ids.broken, ids.agent, ids.before]) assert.ok(!unsent().some(m => m.includes(quiet.slice(0, 8))), `nothing about ${quiet.slice(0, 8)}`);
+      assert.ok(!sent.join('').includes(String.fromCodePoint(0x2014)), 'no em dash');
+      assert.match(fs.readFileSync(path.join(state.dir, 'alerts.log'), 'utf8'), new RegExp(`ALERT reply_not_emailed message=${late.slice(0, 8)} ticket=${R.late.slice(0, 8)} attempts=5`));
+      const before = unsent().length;
+      assert.equal((await run()).unemailed, 3);
+      assert.equal(unsent().length, before, 'each reply is reported once');
+      assert.equal(deliver(late), true);
+      assert.equal((await run()).unemailed, 2, 'an emailed reply is no longer counted');
+    } finally { state.cleanup(); ledger.cleanup(); }
+  });
+
+  await t.test('the rollback restores the one-call trigger and removes the job, the function and the table; 20260929134100 rolls back only after it', async () => {
+    const early = pg.tryRun(EMAIL_ROLLBACK);
+    assert.equal(early.ok, false);
+    assert.match(early.err, /roll back 20260929150000_support_reply_email_retry first/);
+    assert.equal(pg.sql(`select to_regprocedure('public.verified_support_reply_to_member(uuid)') is not null`), 't', 'the refused rollback changed nothing');
+    pg.sql(RETRY_ROLLBACK);
+    pg.sql(RETRY_ROLLBACK);
+    assert.equal(pg.sql(`select pg_get_functiondef('public.notify_ticket_reply()'::regprocedure)`), notifyBefore, 'the trigger function is 20260929134100\'s again');
+    assert.equal(pg.sql('select count(*) from cron.job'), '0');
+    assert.equal(pg.sql(`select to_regclass('public.ticket_reply_emails') is null and to_regprocedure('public.retry_ticket_reply_emails()') is null`), 't');
+    const id = await reply(R.after, 'Synthetic answer after the rollback.');
+    assert.equal(callsFor(id).length, 1, '20260929134100 still calls once');
+    const back = pg.tryRun(EMAIL_ROLLBACK);
+    assert.ok(back.ok, back.err);
+    for (const file of [EMAIL, RETRY]) { const r = pg.tryRun(file); assert.ok(r.ok, r.err); }
+    assert.equal(pg.sql('select count(*) from cron.job'), '1');
+  });
 });

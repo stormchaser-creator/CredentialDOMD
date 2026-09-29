@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import vm from 'node:vm';
-import { ticketReplyEmail, ticketAppLink } from '../../supabase/functions/_shared/ticketReplyEmail.ts';
+import { ticketReplyEmail, ticketAppLink, ticketFromSupportAddress, supportReplyAddress, replyTextWithoutQuote } from '../../supabase/functions/_shared/ticketReplyEmail.ts';
 import { supportDeepLink } from '../../src/utils/supportDeepLink.js';
 
 const load = async rel => transformSync((await readFile(new URL(`../../${rel}`, import.meta.url), 'utf8')).replace(/^import .*;\n/gm, ''), { loader: 'ts', format: 'cjs' }).code;
@@ -68,7 +68,12 @@ function sender({ resendOk = true, claimColumn = true, author = ADMIN, owner = M
       serve: fn => { handler = fn; } },
     createClient: () => db,
     ticketReplyEmail,
-    fetch: async (url, options) => { emails.push({ url, ...JSON.parse(options.body) }); return new Response(resend ? '{"id":"x"}' : '{"error":"x"}', { status: resend ? 200 : 500 }); },
+    // resend: true (accepted), false (refused, 500) or 'unreachable' (fetch throws).
+    fetch: async (url, options) => {
+      if (resend === 'unreachable') throw new TypeError('fetch failed');
+      emails.push({ url, idempotencyKey: options.headers['Idempotency-Key'], ...JSON.parse(options.body) });
+      return new Response(resend ? '{"id":"x"}' : '{"error":"x"}', { status: resend ? 200 : 500 });
+    },
   };
   new vm.Script(SEND).runInNewContext(context);
   const call = async (record, secret = SECRET) => {
@@ -108,6 +113,35 @@ test('send-ticket-reply emails each message once, and releases the claim when th
   assert.equal(s.emails.length, 2, 'one failed attempt, one email');
 });
 
+// Review 2026-09-29: a send that never reached Resend left the claim set, so
+// the retry (retry_ticket_reply_emails, 20260929150000) found the reply
+// "already emailed" and it was never sent.
+test('send-ticket-reply releases the claim when Resend cannot be reached, so the retry sends it once', async () => {
+  const s = sender({ resendOk: 'unreachable' });
+  const failed = await s.call({ id: MESSAGE });
+  assert.equal(failed.status, 502);
+  assert.deepEqual(failed.body, { sent: false, reason: 'email service unreachable' });
+  assert.equal(s.tables.support_messages[0].emailed_at, null, 'released: the retry can send it');
+  s.setResend(true);
+  assert.deepEqual((await s.call({ id: MESSAGE })).body, { sent: true });
+  assert.deepEqual((await s.call({ id: MESSAGE })).body, { sent: false, reason: 'already emailed' });
+  assert.equal(s.emails.length, 1, 'one email in all');
+});
+
+test('every try of one message carries the same Resend idempotency key, and another message a different one', async () => {
+  const s = sender({ resendOk: false });
+  await s.call({ id: MESSAGE });
+  s.setResend(true);
+  await s.call({ id: MESSAGE });
+  assert.deepEqual(s.emails.map(e => e.idempotencyKey), [`ticket-reply/${MESSAGE}`, `ticket-reply/${MESSAGE}`],
+    'a retry of a send whose answer was lost gets the first result back, not a second email');
+  const other = '00000000-0000-4000-8000-00000000d002';
+  const t = sender();
+  t.tables.support_messages[0].id = other;
+  await t.call({ id: other });
+  assert.equal(t.emails[0].idempotencyKey, `ticket-reply/${other}`);
+});
+
 test('send-ticket-reply checks the stored author, and still sends (with a warning) before emailed_at exists', async () => {
   const member = sender({ author: MEMBER });
   assert.deepEqual((await member.call({ id: MESSAGE, author_id: ADMIN })).body, { sent: false, reason: 'author not admin' });
@@ -130,6 +164,11 @@ test('send-ticket-reply emails a verified support reply on a member ticket once,
   const [mail] = s.emails;
   assert.equal(mail.from, 'CredentialDOMD Support <whit@credentialdomd.com>');
   assert.deepEqual(mail.to, ['member@example.test']);
+  // Review 2026-09-29: a member who hits Reply reaches the ticket (email-inbound's
+  // support+<ticket> route), not the owner's personal mailbox.
+  assert.equal(mail.reply_to, `support+${TICKET}@credentialdomd.com`);
+  assert.equal(ticketFromSupportAddress(mail.reply_to), TICKET, 'email-inbound reads the same ticket back');
+  assert.doesNotMatch(JSON.stringify(mail), /elryx/, 'the personal address is nowhere in a support email');
   assert.equal(mail.subject, 'Re: Synthetic subject (CredentialDOMD)');
   assert.ok(mail.text.startsWith('CredentialDOMD Support · Automated\n\nThe stored, verified reply.\n\n'), 'the stored text, not the request');
   assert.ok(mail.text.includes(`https://credentialdomd.com/app/#support/${TICKET}`), 'links to this ticket in the app');
@@ -145,6 +184,7 @@ test('a verified reply is from CredentialDOMD Support even without the automated
   const s = verifiedReply({ body: 'A verified reply whose text carries no label.' });
   assert.deepEqual((await s.call({ id: MESSAGE })).body, { sent: true });
   assert.equal(s.emails[0].from, 'CredentialDOMD Support <whit@credentialdomd.com>');
+  assert.equal(s.emails[0].reply_to, `support+${TICKET}@credentialdomd.com`);
   assert.doesNotMatch(s.emails[0].text, /Eric/);
 });
 
@@ -171,11 +211,33 @@ test("an admin's typed reply keeps his signature, links to the ticket, and is ne
   const typed = sender({ body: 'Thanks, looking at it now.' });
   assert.deepEqual((await typed.call({ id: MESSAGE })).body, { sent: true });
   assert.equal(typed.emails[0].from, 'Eric Whitney, DO <whit@credentialdomd.com>');
+  assert.equal(typed.emails[0].reply_to, 'stormchaser@elryx.com', 'a reply he typed still comes back to him');
   assert.ok(typed.emails[0].text.includes(`#support/${TICKET}`));
   assert.equal(typed.db.rpcs.length, 0, 'the admin rule does not need the verification function');
   const own = sender({ owner: ADMIN });
   assert.deepEqual((await own.call({ id: MESSAGE })).body, { sent: false, reason: 'own ticket' });
   assert.equal(own.emails.length, 0);
+});
+
+test('the support reply address names its ticket; any other address names none', () => {
+  assert.equal(supportReplyAddress(TICKET.toUpperCase()), `support+${TICKET}@credentialdomd.com`);
+  for (const bad of [null, '', 'not-a-uuid']) assert.equal(supportReplyAddress(bad), 'support@credentialdomd.com');
+  assert.equal(ticketFromSupportAddress(`Support+${TICKET.toUpperCase()}@CredentialDOMD.com`), TICKET);
+  for (const other of ['support@credentialdomd.com', `support+${TICKET}@example.test`, `support+${TICKET}x@credentialdomd.com`, `docs+${TICKET}@credentialdomd.com`, `x.support+${TICKET}@credentialdomd.com`, null]) {
+    assert.equal(ticketFromSupportAddress(other), null, String(other));
+  }
+});
+
+test("a reply's own words: the quoted original is cut, quoted lines between answers dropped", () => {
+  const gmail = 'Thanks, that worked.\n\nSent from my iPhone\n\nOn Tue, Sep 29, 2026 at 10:29 AM CredentialDOMD Support <\nwhit@credentialdomd.com> wrote:\n> The export is fixed.\n> Open this ticket';
+  assert.equal(replyTextWithoutQuote(gmail), 'Thanks, that worked.\n\nSent from my iPhone');
+  assert.equal(replyTextWithoutQuote('Yes, please.\r\n\r\n-----Original Message-----\r\nFrom: CredentialDOMD Support <whit@credentialdomd.com>'), 'Yes, please.');
+  assert.equal(replyTextWithoutQuote('Still broken.\n________________________________\nFrom: CredentialDOMD Support'), 'Still broken.');
+  assert.equal(replyTextWithoutQuote('Here.\n\nOpen this ticket in the app to reply: https://credentialdomd.com/app/#support'), 'Here.');
+  assert.equal(replyTextWithoutQuote('> Did the export work?\nYes.\n> And the reminder?\nNot yet.'), 'Yes.\nNot yet.');
+  assert.equal(replyTextWithoutQuote('On the export page I pressed Save and this is what I\nwrote: nothing happened'), 'On the export page I pressed Save and this is what I\nwrote: nothing happened', 'a sentence is not an attribution line');
+  assert.equal(replyTextWithoutQuote('\n> only the quote\n'), '');
+  assert.equal(replyTextWithoutQuote('x'.repeat(12000)).length, 10000);
 });
 
 test('the ticket link: one ticket when the id is a uuid, the ticket list otherwise; the app reads both', () => {

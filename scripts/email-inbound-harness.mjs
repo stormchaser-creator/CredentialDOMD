@@ -63,8 +63,9 @@ export function createDb() {
       log.push({ table: this.table, op: this.op, payload: this.payload });
       if (this.op === "insert") {
         const list = (Array.isArray(this.payload) ? this.payload : [this.payload]).map((r) => ({ id: r.id ?? crypto.randomUUID(), created_at: new Date().toISOString(), ...r }));
+        // A string fails the insert with a generic error; { message, code } with that code.
         const hook = globalThis.__inboundHarness.failInsert?.(this.table, list);
-        if (hook) return { data: null, error: { message: hook, code: "XX000" } };
+        if (hook) return { data: null, error: typeof hook === "object" ? { message: hook.message, code: hook.code } : { message: hook, code: "XX000" } };
         if (this.table === "inbound_emails" && list.some((r) => t.some((x) => x.message_id === r.message_id))) {
           return { data: null, error: { message: "duplicate", code: "23505" } };
         }
@@ -249,11 +250,14 @@ export async function loadFunction() {
   return handler;
 }
 
-/** Deliver one email.received event for `email` (with attachments) and return the handler's JSON. */
-export async function deliver({ id, from, to, subject, text, html, attachments = [], messageId }) {
+/**
+ * Deliver one email.received event for `email` (with attachments) and return the handler's JSON.
+ * `headers` is Resend's header map for the message; an attachment's `disposition` defaults to "attachment".
+ */
+export async function deliver({ id, from, to, subject, text, html, attachments = [], messageId, headers = {} }) {
   harness.emails.set(id, {
-    email: { id, from, to: [to], subject, text, ...(html === undefined ? {} : { html }), headers: {}, created_at: "2026-09-25T16:10:00Z", raw: { download_url: `https://raw.test/${id}` } },
-    attachments: attachments.map((a, i) => ({ meta: { id: `att-${i}`, filename: a.filename, content_type: a.contentType, content_disposition: "attachment" }, bytes: a.bytes })),
+    email: { id, from, to: [to], subject, text, ...(html === undefined ? {} : { html }), headers, created_at: "2026-09-25T16:10:00Z", raw: { download_url: `https://raw.test/${id}` } },
+    attachments: attachments.map((a, i) => ({ meta: { id: `att-${i}`, filename: a.filename, content_type: a.contentType, content_disposition: a.disposition ?? "attachment" }, bytes: a.bytes })),
   });
   const event = {
     type: "email.received",

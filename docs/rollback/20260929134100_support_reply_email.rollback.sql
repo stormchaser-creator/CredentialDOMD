@@ -10,6 +10,18 @@
 --
 -- Nothing already emailed is touched: support_messages.emailed_at stays as it
 -- is. Idempotent.
+--
+-- Stops while 20260929150000 (ticket_reply_emails, the retry) is applied:
+-- its retry function calls verified_support_reply_to_member, dropped below.
+-- Run docs/rollback/20260929150000_support_reply_email_retry.rollback.sql first.
+
+do $after$
+begin
+  if to_regclass('public.ticket_reply_emails') is not null then
+    raise exception 'support_reply_email rollback: roll back 20260929150000_support_reply_email_retry first (docs/rollback/20260929150000_support_reply_email_retry.rollback.sql)';
+  end if;
+end
+$after$;
 
 create or replace function public.notify_ticket_reply()
 returns trigger

@@ -13,7 +13,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pgBin, pgSkip } from '../credential-portal/postgresFixture.mjs';
-import { readVerificationKey, agentReplyBody, labeledBody, sha256Hex, EMAIL_QUEUED } from '../../scripts/ticket-fix/reply.mjs';
+import { readVerificationKey, agentReplyBody, labeledBody, sha256Hex, EMAIL_ATTEMPTED } from '../../scripts/ticket-fix/reply.mjs';
 import { replySQL } from '../../scripts/ticket-agent-isolated.mjs';
 import { main as postReply } from '../../scripts/ticket-fix/post-reply.mjs';
 import { main as verifyClaims } from '../../scripts/ticket-fix/verify-claims.mjs';
@@ -302,7 +302,7 @@ test('support reply verification: the database refuses unverified support replie
       // the reply to send-ticket-reply (20260929134100, tested with the real
       // notify_ticket_reply in reply-email-sql.test.mjs), and it says so.
       assert.equal(posted.emailed, false);
-      assert.equal(posted.email, EMAIL_QUEUED);
+      assert.equal(posted.email, EMAIL_ATTEMPTED);
       assert.equal(pg.sql('select count(*) from public.support_messages'), String(Number(before) + 1));
       const stored = JSON.parse(pg.sql(`select row_to_json(m) from (select body, author_id, is_admin_reply, verification_id from public.support_messages where id = '${posted.message_id}') m`));
       assert.equal(stored.verification_id, posted.verification_id);

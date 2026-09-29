@@ -294,7 +294,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('the runner keeps a private ledger entry per stored reply', (state / 'replies' / T / f'{vid}.json').stat().st_mode & 0o777 == 0o600)
         check('reconcile finds every stored reply in a ledger and alerts nobody', notified(run) == [] and 'reconcile: 2 verifications, 0 without a ledger entry, 0 agent replies from no logged run' in log(run), (notified(run), log(run)[-3000:]))
         check('the stored result says it was not emailed', '"emailed":false' in log(run))
-        check('the stored result says the member is emailed by send-ticket-reply', '"email":"queued: a verified reply on a member' in log(run))
+        check('the stored result says the email is attempted, not confirmed', '"email":"attempted, not confirmed: notify_ticket_reply' in log(run) and 'Only support_messages.emailed_at shows it was sent' in log(run))
         check('the verification records the run and that its claims are bound', sql(f"select (report->>'claims') || '|' || length(report->>'run_id') from support_reply_verifications where ticket_id='{T}'") == 'bound|16')
         # Stage 3: the reply is the host's: a fixed opening, the footer with one
         # line per frozen checklist item in the host's state, a fixed closing.

@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueSQL, parkedTargets, collectQueue, saveReview, loadContext, contextMac, logSafe } from '../../scripts/ticket-agent-context.mjs';
 import { main as alert, lockState, HOLD_FILE } from '../../scripts/ticket-fix/alert.mjs';
-import { reconcile, reconcileSQL } from '../../scripts/ticket-fix/reconcile.mjs';
+import { reconcile, reconcileSQL, unsentInstalledSQL, unsentSQL } from '../../scripts/ticket-fix/reconcile.mjs';
 import { ReplyRuleError } from '../../scripts/ticket-fix/claims.mjs';
 import { uuid, privateDir } from './helpers.mjs';
 
@@ -324,11 +324,12 @@ test('reconcile: a stored reply no checked path recorded, or one text sent to se
     const runsLog = path.join(state.dir, 'runs.log');
     writeFileSync(runsLog, '0123456789abcdef 2026-09-28T11:00:00Z\nnot-a-run-id\n', { mode: 0o600 });
     let seen;
-    const query = async sql => { seen = sql; return rows; };
+    // Before 20260929150000 the not-emailed check finds no table and reports nothing.
+    const query = async sql => { if (sql === unsentInstalledSQL()) return [{ installed: false }]; seen = sql; return rows; };
     const result = await reconcile({ query, state: state.dir, ledgers: [ledgerA, ledgerB], runsLog, send, now: Date.parse('2026-09-28T12:00:00Z') });
     assert.equal(seen, reconcileSQL());
     assert.match(seen, /^begin read only; SELECT v.id, v.ticket_id, v.body_sha256, v.report->>'path' AS path, v.report->>'run_id' AS run_id/);
-    assert.deepEqual(result, { checked: 7, unledgered: 1, unlogged: 1, shared: 1, alerts: 3 }, 'two tickets sharing a short text is not a batch; three is');
+    assert.deepEqual(result, { checked: 7, unledgered: 1, unlogged: 1, shared: 1, unemailed: 0, alerts: 3 }, 'two tickets sharing a short text is not a batch; three is');
     assert.equal(sent.length, 3);
     assert.match(sent[0], new RegExp(`verification ${uuid(14).slice(0, 8)}, ticket ${uuid(4).slice(0, 8)}\\) has no record`), 'a ledger entry for another text does not count');
     assert.match(sent[1], new RegExp(`ticket ${uuid(7).slice(0, 8)}\\) says it came from the hourly runner, but no logged run made it`));
@@ -338,6 +339,40 @@ test('reconcile: a stored reply no checked path recorded, or one text sent to se
     assert.equal(sent.length, 3, 'each finding alerts once');
     await assert.rejects(reconcile({ query: async () => [{ id: 'x' }], state: state.dir, ledgers: [ledgerA], send }), /Unusable verification rows/);
     await assert.rejects(reconcile({ query, state: state.dir, ledgers: ['relative'], send }), /absolute/);
+  } finally { state.cleanup(); }
+});
+
+// Review 2026-09-29: a reply whose email never went out was lost silently.
+test('reconcile: a reply still not emailed an hour after it was stored alerts the owner once, by id prefix', async () => {
+  const state = privateDir('ticket-reconcile-unsent-');
+  const ledger = path.join(state.dir, 'ledger');
+  mkdirSync(ledger, { mode: 0o700 });
+  const sent = [];
+  const send = async m => { sent.push(m); return true; };
+  let unsent = [{ id: uuid(31), ticket_id: uuid(3), attempts: 7, minutes: 190 }, { id: uuid(32), ticket_id: uuid(4), attempts: 1, minutes: 61 }];
+  const asked = [];
+  const query = async sql => {
+    asked.push(sql);
+    if (sql === unsentInstalledSQL()) return [{ installed: true }];
+    if (sql === unsentSQL()) return unsent;
+    return [];
+  };
+  try {
+    const result = await reconcile({ query, state: state.dir, ledgers: [ledger], send });
+    assert.deepEqual(result, { checked: 0, unledgered: 0, unlogged: 0, shared: 0, unemailed: 2, alerts: 2 });
+    assert.match(unsentSQL(), /^begin read only; SELECT e\.message_id AS id/, 'read only');
+    assert.match(unsentSQL(), /m\.emailed_at IS NULL AND e\.queued_at < now\(\) - interval '60 minutes'/);
+    assert.deepEqual(sent, [
+      `CredentialDOMD support: a reply on ticket ${uuid(3).slice(0, 8)} (message ${uuid(31).slice(0, 8)}) has still not been emailed to the ticket owner 3 hours after it was stored, after 7 tries. It is in the app thread. Check send-ticket-reply's logs and the owner's email address.`,
+      `CredentialDOMD support: a reply on ticket ${uuid(4).slice(0, 8)} (message ${uuid(32).slice(0, 8)}) has still not been emailed to the ticket owner 61 minutes after it was stored, after 1 try. It is in the app thread. Check send-ticket-reply's logs and the owner's email address.`,
+    ]);
+    assert.ok(!sent.join('').includes('\u2014'));
+    assert.match(readFileSync(path.join(state.dir, 'alerts.log'), 'utf8'), /ALERT reply_not_emailed message=00000000 ticket=00000000 attempts=7\n/);
+    await reconcile({ query, state: state.dir, ledgers: [ledger], send });
+    assert.equal(sent.length, 2, 'each reply alerts once');
+    unsent = [{ id: 'not-a-uuid', ticket_id: uuid(3), attempts: 1, minutes: 61 }];
+    await assert.rejects(reconcile({ query, state: state.dir, ledgers: [ledger], send }), /Unusable unsent reply rows/);
+    await assert.rejects(reconcile({ query: async sql => (sql === unsentInstalledSQL() ? [] : []), state: state.dir, ledgers: [ledger], send }), /Unusable installation check/);
   } finally { state.cleanup(); }
 });
 
@@ -403,7 +438,10 @@ test('sessions are told to post support replies only through post-reply.mjs', ()
     for (const ban of ['Never read the vault secret `support_reply_hmac_key`', 'never write `support_reply_verifications` directly',
       'never write `support_messages` with a service-role key', 'never call `send-ticket-reply` directly', '`--record-and-reply` by hand']) assert.ok(text.includes(ban), `${file}: ${ban}`);
     // Owner decision 2026-09-29: a verified reply on a member's ticket is emailed once.
-    assert.match(text, /on a member's ticket is emailed to that member once/, file);
+    // Review 2026-09-29: said as an attempt, with emailed_at as the proof, the retry and the alert.
+    assert.match(text, /on a member's ticket is handed to `send-ticket-reply` to be emailed to that member once/, file);
+    assert.match(text, /Only `support_messages\.emailed_at` shows it was sent: a failed send is retried by `retry_ticket_reply_emails`/, file);
+    assert.match(text, /`reply_to` `support\+<ticket id>@credentialdomd\.com`/, file);
     assert.match(text, /A reply on an admin's own ticket is never emailed/, file);
     assert.match(text, /node scripts\/ticket-fix\/merge\.mjs <run-id>/, file);
     assert.match(text, /never create `ticket-work\/AUTO_MERGE` unless the owner says so/, file);

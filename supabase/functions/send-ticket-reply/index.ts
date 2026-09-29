@@ -28,7 +28,18 @@
 // EACH MESSAGE IS EMAILED ONCE. The message is claimed first
 // (support_messages.emailed_at, 20260928161000: update ... where emailed_at is
 // null). A replayed or repeated call finds it claimed and sends nothing. If
-// Resend refuses the send, the claim is released so a retry can go out.
+// Resend refuses the send, or cannot be reached at all, the claim is released
+// so a retry can go out: public.retry_ticket_reply_emails (20260929150000)
+// calls again, every 10 minutes at first, while emailed_at is null, and
+// scripts/ticket-fix/reconcile.mjs alerts the owner about a reply still not
+// emailed an hour after it was stored. Every try carries the same Resend
+// Idempotency-Key, so a send whose answer was lost is not sent twice.
+//
+// REPLIES TO THE EMAIL. A support reply's reply_to is
+// support+<ticket id>@credentialdomd.com, which email-inbound adds to the
+// ticket when it comes from the owner's confirmed, authenticated mailbox and
+// relays to the owner otherwise; a reply the owner typed keeps his own
+// mailbox (_shared/ticketReplyEmail.ts).
 //
 // A reply that carries a file arrives with attachment_path set. The email says
 // so and points at the app rather than embedding the image: the bucket is
@@ -127,23 +138,41 @@ Deno.serve(async (req) => {
   const hasAttachment = !!message.attachment_path || (Array.isArray(message.attachment_paths) && message.attachment_paths.length > 0);
   const subject = `Re: ${String(ticket.subject || "your ticket").slice(0, 150)} (CredentialDOMD)`;
   const mail = ticketReplyEmail(reply, hasAttachment, { support: supportReply, ticketId });
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: mail.from,
-      to: [email],
-      reply_to: "stormchaser@elryx.com",
-      subject,
-      text: mail.text,
-    }),
-  });
-  const body = await r.text();
-  if (!r.ok) {
-    console.error("resend failed:", r.status, body.slice(0, 300));
+  const release = async () => {
     if (claimable) {
       await supabase.from("support_messages").update({ emailed_at: null }).eq("id", messageId).eq("emailed_at", claimedAt);
     }
+  };
+  let r: Response;
+  try {
+    r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      // One key per message, the same on every try: a retry of a send that
+      // did reach Resend (the answer was lost) gets the first result back
+      // instead of a second email. Resend keeps a key 24 hours; the retries
+      // end after about 11.
+      headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json", "Idempotency-Key": `ticket-reply/${messageId}` },
+      body: JSON.stringify({
+        from: mail.from,
+        to: [email],
+        reply_to: mail.replyTo,
+        subject,
+        text: mail.text,
+      }),
+    });
+  } catch (error) {
+    // No answer from Resend. The claim must not stand, or the retry would
+    // find the reply "already emailed" and stop; if the send did get
+    // through, the retry's same Idempotency-Key gets that result back
+    // instead of a second email.
+    console.error(`reply ${messageId}: resend unreachable (${error instanceof Error ? error.name : "error"}); claim released for a retry`);
+    await release();
+    return json({ sent: false, reason: "email service unreachable" }, 502);
+  }
+  const body = await r.text();
+  if (!r.ok) {
+    console.error("resend failed:", r.status, body.slice(0, 300));
+    await release();
   }
   return json({ sent: r.ok });
 });

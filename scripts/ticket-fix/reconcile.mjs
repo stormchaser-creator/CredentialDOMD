@@ -18,6 +18,13 @@
 //   * the same reply text was verified for SHARED_TICKETS or more tickets (the
 //     09-02 and 09-25 batches were one text sent to 11 and 8 tickets; two
 //     tickets can share a short acknowledgement).
+// It also reports, once per message, a reply the database handed to
+// send-ticket-reply (public.ticket_reply_emails, 20260929150000) that is still
+// not emailed UNSENT_AFTER_MINUTES after it was stored and is still one the
+// rules email: the send failed and retry_ticket_reply_emails has not got it
+// out (or is not running). Until then a failed send was lost silently: the
+// only record was a function log or net._http_response, kept about 6 hours
+// (review 2026-09-29). Skipped until that migration is applied.
 // Ids are shown as 8-character prefixes; no reply text is read or sent.
 //
 //   TICKET_DATABASE_TOKEN=... node scripts/ticket-fix/reconcile.mjs --state DIR --ledger DIR [--ledger DIR] [--runs FILE] [--notify PATH]
@@ -33,6 +40,30 @@ export const RECONCILE_DAYS = 14;
 export const SHARED_TICKETS = 3;
 export const reconcileSQL = (days = RECONCILE_DAYS) => readOnly(`SELECT v.id, v.ticket_id, v.body_sha256, v.report->>'path' AS path, v.report->>'run_id' AS run_id, v.created_at
   FROM support_reply_verifications v WHERE v.created_at > now() - interval '${Number(days)} days' ORDER BY v.created_at, v.id LIMIT 1000`);
+export const UNSENT_AFTER_MINUTES = 60;
+export const unsentInstalledSQL = () => readOnly(`SELECT to_regclass('public.ticket_reply_emails') IS NOT NULL AS installed`);
+// The same two rules notify_ticket_reply and retry_ticket_reply_emails apply:
+// a reply that stopped qualifying (its verification no longer matches, the
+// owner became an admin) is correctly not emailed and is not reported.
+export const unsentSQL = (minutes = UNSENT_AFTER_MINUTES, days = RECONCILE_DAYS) => readOnly(`SELECT e.message_id AS id, m.ticket_id, e.attempts,
+    floor(extract(epoch FROM now() - e.queued_at) / 60)::int AS minutes
+  FROM ticket_reply_emails e JOIN support_messages m ON m.id = e.message_id JOIN support_tickets t ON t.id = m.ticket_id
+  WHERE m.emailed_at IS NULL AND e.queued_at < now() - interval '${Number(minutes)} minutes' AND e.queued_at > now() - interval '${Number(days)} days'
+    AND ((public.is_admin(m.author_id) AND t.user_id IS DISTINCT FROM m.author_id)
+      OR (NOT public.is_admin(m.author_id) AND m.verification_id IS NOT NULL AND public.verified_support_reply_to_member(m.id)))
+  ORDER BY e.queued_at, e.message_id LIMIT 200`);
+
+// Replies handed to send-ticket-reply and still not emailed; [] before
+// 20260929150000 exists.
+export async function unsentReplies(query) {
+  const installed = await query(unsentInstalledSQL());
+  if (!Array.isArray(installed) || installed.length !== 1 || typeof installed[0].installed !== 'boolean') throw Error('Unusable installation check');
+  if (!installed[0].installed) return [];
+  const rows = await query(unsentSQL());
+  if (!Array.isArray(rows) || rows.some(r => !UUID.test(r.id || '') || !UUID.test(r.ticket_id || '') || !Number.isInteger(r.attempts) || !Number.isInteger(r.minutes))) throw Error('Unusable unsent reply rows');
+  return rows;
+}
+const age = minutes => (minutes < 120 ? `${minutes} minutes` : minutes < 2880 ? `${Math.floor(minutes / 60)} hours` : `${Math.floor(minutes / 1440)} days`);
 
 async function ledgerNames(ledgers, row) {
   for (const directory of ledgers) {
@@ -91,8 +122,16 @@ export async function reconcile({ query, state, ledgers, runsLog = null, notify 
       { notify, now, send });
     alerts++;
   }
+  const unemailed = await unsentReplies(query);
+  for (const row of unemailed) {
+    if (!(await firstTime(state, `unemailed-${row.id}`))) continue;
+    await raise(state, 'reply_not_emailed', `message=${row.id.slice(0, 8)} ticket=${row.ticket_id.slice(0, 8)} attempts=${row.attempts}`,
+      `CredentialDOMD support: a reply on ticket ${row.ticket_id.slice(0, 8)} (message ${row.id.slice(0, 8)}) has still not been emailed to the ticket owner ${age(row.minutes)} after it was stored, after ${row.attempts} ${row.attempts === 1 ? 'try' : 'tries'}. It is in the app thread. Check send-ticket-reply's logs and the owner's email address.`,
+      { notify, now, send });
+    alerts++;
+  }
   await writeStatus(state, { now });
-  return { checked: rows.length, unledgered: unledgered.length, unlogged: unlogged.length, shared: shared.length, alerts };
+  return { checked: rows.length, unledgered: unledgered.length, unlogged: unlogged.length, shared: shared.length, unemailed: unemailed.length, alerts };
 }
 
 function parse(argv) {
@@ -111,6 +150,6 @@ if (isMain(import.meta.url)) {
   (async () => {
     const options = parse(process.argv.slice(2));
     const result = await reconcile({ query: managementQuery(databaseToken()), state: options.state, ledgers: options.ledger, runsLog: options.runs ?? null, notify: options.notify ?? null });
-    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} reconcile: ${result.checked} verifications, ${result.unledgered} without a ledger entry, ${result.unlogged} agent replies from no logged run, ${result.shared} shared texts, ${result.alerts} new alerts`);
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} reconcile: ${result.checked} verifications, ${result.unledgered} without a ledger entry, ${result.unlogged} agent replies from no logged run, ${result.shared} shared texts, ${result.unemailed} replies not emailed, ${result.alerts} new alerts`);
   })().catch(error => { console.error(`ERROR: reconcile: ${error.message}`); process.exitCode = 1; });
 }
