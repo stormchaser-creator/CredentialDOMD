@@ -473,3 +473,73 @@ it is live; the continuation that confirms it is action-only and never publishes
 record keeps it as pending work). The attachment download needs the service key from the
 management API's key listing; the endpoint's shape was not called against production while
 building this (only its documented forms, with a local stub).
+
+## Session context and failure records (2026-09-29)
+
+The reproduction session of 2026-09-29 16:35Z stopped at its $3 budget
+(`error_max_budget_usd`, $3.0096) before it wrote a test, and the log said only "exited 1":
+its stderr went to the shell's run directory, which is deleted on exit. Every turn re-reads
+the prompt, and the prompt carried the full history of the owner's account (99 tickets, 308
+messages and 78 KB of saved reviews, 418 KB of JSON, a first turn near 196K tokens).
+
+- **Trimmed context** (`scripts/ticket-fix/session-context.mjs`). The reproduction and the
+  worker get at most 40 KB of evidence: the target ticket and its thread (a thread too long
+  for its 20 KB share keeps its first message and the newest that fit, with the count and
+  dates of the rest), this ticket's saved review (pending follow-up with its exact work
+  text, remembered answers, the host's last item states), answers saved on the customer's
+  other tickets, and those tickets newest first: 25 in detail (subject, status, dates, the
+  opening, the newest customer message) and the rest as an index. The owner's account comes
+  to 30 KB. The whole first prompt stays under 96 KB (`PROMPT_LIMIT`; the runner logs one
+  that does not). The extractor (one turn), the reviewer and the confirmer read what they
+  read before. The run record carries `session_context` (bytes shown of the full size,
+  messages and tickets shown, `history_bytes`) and `prompt_bytes`.
+- **The whole history, on demand** (review of 2026-09-29). The host checks cited ids and
+  completed follow-up against the full history, but its question check only compares a
+  question's wording with answers saved in case reviews; it never reads the messages. With
+  only the trimmed view, an answer in a related ticket's middle message (the owner's
+  account: 284 customer messages, 22 shown as excerpts, 1 answer saved on another ticket)
+  was invisible to the worker and would pass the host. The file for that account is 432 KB
+  in 432 lines. So the runner writes the whole history to
+  `case-history.jsonl` in this ticket's own attachment folder (or a fresh folder of the same
+  shape when the download step made none): one JSON record per line, `kind` first (case,
+  ticket, message, saved_answer, pending_follow_up, saved_review, attachment), so a Grep
+  hit carries its ids. The reproduction and the worker may Grep and Read it (the folder's
+  permission rule and sandbox opening, nothing else); the host facts name it and the
+  prompts say to search it before any question and to read only the lines needed. It is
+  removed when the run ends. A view that cannot fit its limit now fails at once (the hard
+  bound looped forever once it had replaced the saved review) and is recorded as
+  `host_failed` before any session starts.
+- **Failure records.** `runSession` reads the CLI's result event even when it exits
+  non-zero, so a failed session's reason reads
+  `exited 1 (error_max_budget_usd, 57 turns, $3.0096): Reached maximum budget ($3)`.
+  Every session goes on the run record's `sessions` list (role, whether it resumed, the
+  result subtype, cost, turns, and for a failure the reason and the last error line) with
+  a `cost_usd` total, and on one `SESSION` log line. Each session's stderr is kept under
+  `ticket-work/runs/<run>/sessions/NN-<role>.stderr.log` (the newest 64 KB, owner-only in an
+  owner-only directory no session can read), after `scripts/ticket-fix/redact.mjs` removes
+  the runner's own credential, token shapes, values after a key or token name and any long
+  opaque string. The merge command's re-reviews keep theirs there too, and go on the
+  `sessions` list (`phase: merge`) and the cost total, with a `SESSION` line in the merge
+  output.
+- **A stopped runner** (the shell's 3-hour alarm, launchd). The stop handler kills every
+  process group, writes the stderr of the session in flight (redacted, with a last line
+  saying the runner was stopped), puts that session on the run record as
+  `killed by SIGALRM` (or the signal it was) and marks a run still working `killed`, with
+  `stopped: { signal, at }`, before it exits. Once a merge has begun the merge's own record
+  is kept and only the sessions and `stopped` are added.
+- **Budgets are unchanged** (worker $6, reproduction $3, reviewer $5, confirmer $3,
+  extractor $2). The successful 27-turn reproduction of 17:01Z (same account) read 5.8M
+  cached tokens, about $1.93 at Sonnet 5 list prices, most of it the history re-read each
+  turn. With the trimmed evidence the first turn is estimated near 35K tokens instead of
+  196K, and the same session near $0.70, so $3 leaves room for more than twice the turns. If a reproduction still records `error_max_budget_usd`, its `sessions` entry has
+  the turns and cost to decide a new budget from.
+
+Tests: `tests/ticket-fix/session-context.test.mjs` (the bound on a large synthetic history,
+a very long target thread, multibyte text; the prompt size through `run.mjs`; an answer in
+a related ticket's middle message found in the case history file the sessions may read; a
+view that cannot fit fails instead of looping, and is a recorded host failure),
+`tests/ticket-fix/session-failure.test.mjs` (a stand-in CLI that stops at its budget: the
+reason, the run record, the log, the kept and redacted stderr after the run directory is
+gone), `tests/ticket-fix/session-signal.test.mjs` (SIGALRM to `run.mjs work` during a
+hanging stand-in session: its stderr and the run record) and the merge re-review record in
+`tests/ticket-fix/merge.test.mjs`.
