@@ -210,7 +210,38 @@ function checkShape(value, schema) {
   }
 }
 const questionKey = value => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-export function validateAssessment(result, context, { isolated = false } = {}) {
+// What the host knows about this run's code change (ticket-fix/run.mjs):
+// 'pending' while the gates have not run, then none | held | refused |
+// merged | released | release_failed. A change that is not released cannot
+// be the verified fix, complete a follow-up or make an acceptance criterion
+// "claimed_fixed" (stage 2 review, finding 5).
+export const CODE_OUTCOMES = Object.freeze(['pending', 'none', 'held', 'refused', 'merged', 'released', 'release_failed']);
+export const UNRELEASED_CHANGE = Object.freeze(['held', 'refused', 'merged', 'release_failed']);
+// verification.kind "verified_change" stands only on this run's release
+// record: released, verified, and verification.release names its fix commit.
+export function checkVerifiedChange(result, { codeOutcome, release = null } = {}) {
+  if (codeOutcome === undefined || codeOutcome === null || result?.assessment?.verification?.kind !== 'verified_change') return;
+  if (!CODE_OUTCOMES.includes(codeOutcome)) throw Error('Unknown code outcome');
+  const named = [...String(result.assessment.verification.release).matchAll(/\b[a-f0-9]{7,40}\b/gi)].map(m => m[0].toLowerCase());
+  const fix = typeof release?.fix_commit === 'string' ? release.fix_commit.toLowerCase() : null;
+  if (codeOutcome !== 'released' || release?.verified !== true || !fix || !named.some(h => fix.startsWith(h))) {
+    throw Error('Verified change needs this run\'s released fix: nothing this run changed is released and verified yet, so use verification.kind source_review and keep the work pending');
+  }
+}
+// The saved form of a result whose code change is not released: completed
+// follow-ups stay pending and "claimed_fixed" criteria stay open. The
+// model's own claims are kept aside, labelled, for the next run to read.
+export function demoteUnreleased(result, codeOutcome) {
+  if (!UNRELEASED_CHANGE.includes(codeOutcome)) return result;
+  const copy = JSON.parse(JSON.stringify(result));
+  const claimed = { completed_follow_up: copy.assessment.completed_follow_up, claimed_fixed: copy.assessment.acceptance_criteria.filter(a => a.state === 'claimed_fixed').map(a => a.requirement) };
+  copy.assessment.completed_follow_up = [];
+  for (const a of copy.assessment.acceptance_criteria) if (a.state === 'claimed_fixed') a.state = 'open';
+  if (copy.assessment.verification.kind === 'verified_change') copy.assessment.verification.kind = 'source_review';
+  copy.unreleased_claims = { code_outcome: codeOutcome, ...claimed };
+  return copy;
+}
+export function validateAssessment(result, context, { isolated = false, codeOutcome = undefined, release = null } = {}) {
   checkShape(result, RESULT_SCHEMA);
   if (Buffer.byteLength(JSON.stringify(result)) > 64000) throw Error('Case review exceeds bound');
   const review = result.assessment;
@@ -269,6 +300,7 @@ export function validateAssessment(result, context, { isolated = false } = {}) {
   if (review.verification.kind === 'verified_change' &&
       (['reproduction', 'checks', 'release'].some(k => /not (?:run|tested|deployed|verified)|pending|unverified/i.test(review.verification[k])) ||
        !/\b[a-f0-9]{7,40}\b/i.test(review.verification.release))) throw Error('Verified change needs reproduction, checks and release revision');
+  checkVerifiedChange(result, { codeOutcome, release });
   return result;
 }
 export async function writePrivate(filename, content) {
@@ -374,8 +406,9 @@ export async function loadQueuedContext(query, item, directory, options = {}) {
 export function assertReplyMode(context) {
   if (context.run_mode !== 'reply') throw Error('Action-only continuation cannot publish a customer reply');
 }
-export async function saveReview(directory, context, result, sourceRevision, { now = Date.now() } = {}) {
-  validateAssessment(result, context);
+export async function saveReview(directory, context, given, sourceRevision, { now = Date.now(), codeOutcome = undefined, release = null } = {}) {
+  validateAssessment(given, context, { codeOutcome, release });
+  const result = demoteUnreleased(given, codeOutcome);
   await ensureState(directory);
   const filename = path.join(directory, `${id(context.target_id)}.json`);
   let previous;
@@ -418,19 +451,19 @@ export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // feeds a failure here back to the model (up to twice) before it counts.
 // {{FIX_COMMIT}} is taken only from the one commit this run made (committer
 // identity) that touches a file cited in verification.checks.
-export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild } = {}) {
-  validateAssessment(result, context);
+export async function prepareResult(context, result, { repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined } = {}) {
+  validateAssessment(result, context, { codeOutcome, release });
   if (context.run_mode === 'continuation') return null;
   return prepareAgentReply({ reply: result.reply, ticketId: context.target_id, git: gitRunner(repo), preHead, runStarted, runCommitter, runId, release,
     citedFiles: filesCitedIn(result.assessment.verification.checks), verificationKind: result.assessment.verification.kind,
     ...(fetchBuild ? { fetchBuild } : {}) });
 }
-export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild } = {}) {
-  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild });
+export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined } = {}) {
+  const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild, codeOutcome });
   if (context.run_mode === 'continuation') {
     const rows = await query(continuationSQL(context));
     if (rows.length !== 1 || rows[0].id !== context.target_id || rows[0].user_id !== context.owner_id || rows[0].updated_at !== context.target_version) throw Error('Continuation changed or approval withdrawn; no result applied');
-    const record = await saveReview(directory, context, result, sourceRevision);
+    const record = await saveReview(directory, context, result, sourceRevision, { codeOutcome, release });
     return { kind: 'continuation_saved', continuation_state: record.continuation.state };
   }
   assertReplyMode(context);
@@ -438,7 +471,7 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   // signed with the vault key, written in the same statement as the reply.
   const secret = await readVerificationKey(query);
   const verification = signPreparedReply(prepared, { ticketId: context.target_id, secret });
-  await saveReview(directory, context, result, sourceRevision);
+  await saveReview(directory, context, result, sourceRevision, { codeOutcome, release });
   const { replySQL } = await import('./ticket-agent-isolated.mjs');
   const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, prepared.text, { includeArchived, verification }));
   if (rows.length !== 1) return { kind: 'reply_withheld', verification_id: null };
@@ -459,7 +492,15 @@ const runFacts = () => ({
   runCommitter: RUN_COMMITTER.test(process.env.TICKET_RUN_COMMITTER || '') ? process.env.TICKET_RUN_COMMITTER : null,
   runId: /^[0-9a-f]{16}$/.test(process.env.TICKET_RUN_ID || '') ? process.env.TICKET_RUN_ID : null,
   release: releaseRecord(process.env.TICKET_RELEASE_FILE),
+  codeOutcome: readCodeOutcome(process.env.TICKET_CODE_OUTCOME),
 });
+// The run's code outcome from run.mjs (ticket-agent.sh passes it). Unset:
+// the caller is not the runner (stage 1 behaviour).
+function readCodeOutcome(value) {
+  if (value === undefined || value === '') return undefined;
+  if (!CODE_OUTCOMES.includes(value) || value === 'pending') throw Error('TICKET_CODE_OUTCOME is not a code outcome');
+  return value;
+}
 // The G7 release record for this run's merged fix (ticket-fix/release.mjs),
 // written by the host after the merge. No record: nothing may be called live.
 function releaseRecord(file) {
@@ -565,8 +606,9 @@ async function main(args) {
     const context = await readRunnerContext(ticketId, runKey());
     const output = JSON.parse(await fs.readFile(filename, 'utf8'));
     if (output.is_error) throw Error('Model run failed; no reply sent');
-    const result = validateAssessment(output.structured_output, context);
-    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, repo: repository(), ...runFacts() });
+    const facts = runFacts();
+    const result = validateAssessment(output.structured_output, context, { codeOutcome: facts.codeOutcome, release: facts.release });
+    const status = await finishRun(databaseQuery, stateDirectory, context, result, { includeArchived: true, repo: repository(), ...facts });
     console.log(JSON.stringify(status)); return;
   }
   throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');

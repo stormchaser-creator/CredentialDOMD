@@ -3,7 +3,8 @@
 // gates, review and the merge decision (held unless AUTO_MERGE).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, chmodSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { heldRunFor, readField, finish, EXIT } from '../../scripts/ticket-fix/run.mjs';
 import { readRun, mergeRun, autoMergeEnabled } from '../../scripts/ticket-fix/merge.mjs';
@@ -31,9 +32,12 @@ test('AUTO_MERGE off: the change is committed, gated, reviewed and HELD with one
     assert.equal(r.facts.code_outcome, 'held');
     assert.equal(p.originHead(), originHead, 'origin main is unchanged');
     assert.equal(sh(p.repo, ['rev-parse', 'HEAD']), ownerHead, 'the owner checkout is unchanged');
-    // Every session ran in the worktree, never the owner's checkout.
-    for (const call of r.calls) assert.equal(call.cwd, run.worktree);
+    // The reproduction and the worker ran in the run's worktree, the reviewer
+    // in a fresh worktree of the commit; never the owner's checkout.
+    for (const call of r.calls.filter(c => c.role !== 'review')) assert.equal(call.cwd, run.worktree);
+    for (const call of r.calls.filter(c => c.role === 'review')) assert.ok(call.cwd.startsWith(path.join(p.work, 'gates', 'review-')), call.cwd);
     assert.ok(run.worktree.startsWith(path.join(p.work, 'worktrees')));
+    assert.equal(existsSync(path.join(p.work, 'gates')) ? readdirSync(path.join(p.work, 'gates')).length : 0, 0, 'every gate and review worktree is removed');
     // The worker could not edit the frozen reproduction.
     const worker = r.calls.find(c => c.role === 'worker');
     assert.ok(worker.settings.permissions.deny.includes(`Edit(/${run.worktree}/tests/join.test.mjs)`));
@@ -47,6 +51,10 @@ test('AUTO_MERGE off: the change is committed, gated, reviewed and HELD with one
     // The held summary and the one command.
     const held = readFileSync(path.join(p.work, 'runs', NAME, 'HELD.txt'), 'utf8');
     assert.match(held, new RegExp(`node scripts/ticket-fix/merge\\.mjs ${NAME}`));
+    // The tree and gates digest merge.mjs prints before it pushes (finding 2).
+    assert.match(held, new RegExp(`Tree: ${sh(run.worktree, ['rev-parse', `${run.commit}^{tree}`])}`));
+    assert.match(held, new RegExp(`Gates digest: ${run.gates_sha256}`));
+    assert.match(held, /personal data and secrets \(G10\): none found/);
     assert.ok(r.logs.some(l => l.includes(`HELD — ticket ${TICKET.slice(0, 8)} run ${NAME}: AUTO_MERGE is off. Merge it with: node scripts/ticket-fix/merge.mjs ${NAME}`)));
     assert.equal(r.sent.length, 1);
     assert.match(r.sent[0], /held for you/);
@@ -76,8 +84,7 @@ test('AUTO_MERGE on: the runner merges a clean change, runs the release check an
   const p = project();
   let r;
   try {
-    writeFileSync(path.join(p.work, 'AUTO_MERGE'), '', { mode: 0o600 });
-    r = await runStub(p, standardScript(), { verify: passedRelease });
+    r = await runStub(p, standardScript(), { verify: passedRelease, autoMerge: true });
     assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
     const run = await readRun(p.work, NAME);
     assert.equal(run.status, 'released');
@@ -93,8 +100,7 @@ test('a protected path is held even with AUTO_MERGE on', async () => {
   const p = project({ 'src/utils/pricingConstants.js': 'export const CORE = 149;\n' });
   let r;
   try {
-    writeFileSync(path.join(p.work, 'AUTO_MERGE'), '', { mode: 0o600 });
-    r = await runStub(p, standardScript({ worker: opts => { p.write(opts.cwd, { ...FIX_FILES, 'src/utils/pricingConstants.js': 'export const CORE = 99;\n' }); return workerResult({ change: { subject: 'Price', tests: [] } }); } }));
+    r = await runStub(p, standardScript({ worker: opts => { p.write(opts.cwd, { ...FIX_FILES, 'src/utils/pricingConstants.js': 'export const CORE = 99;\n' }); return workerResult({ change: { subject: 'Price', tests: [] } }); } }), { autoMerge: true });
     const run = await readRun(p.work, NAME);
     assert.equal(run.status, 'held');
     assert.match(run.hold_reason, /protected paths: src\/utils\/pricingConstants\.js/);
@@ -218,4 +224,102 @@ test('while a change for the ticket is held, a new run may answer but not make a
     assert.match(s.calls[0].input, /already held for the owner/);
     assert.equal(s.facts.code_outcome, 'refused');
   } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); }
+});
+
+test('AUTO_MERGE is what the runner was told when the run started: a flag file created during the run merges nothing (finding 2)', async () => {
+  const p = project();
+  let r;
+  try {
+    // The worker's code creates the flag (the sandbox denies this in
+    // production; here the stub writes it directly).
+    r = await runStub(p, standardScript({ worker: opts => { writeFileSync(path.join(p.work, 'AUTO_MERGE'), '', { mode: 0o600 }); p.write(opts.cwd, FIX_FILES);
+      return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } }); } }), { verify: passedRelease });
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.status, 'held');
+    assert.equal(run.hold_reason, 'AUTO_MERGE is off');
+    assert.equal(p.originHead(), sh(p.repo, ['rev-parse', 'origin/main']), 'nothing pushed');
+    // The shell reads the flag for the NEXT run through run.mjs auto-merge.
+    const cli = path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'scripts', 'ticket-fix', 'run.mjs');
+    assert.equal(spawnSync(process.execPath, [cli, 'auto-merge', '--work', p.work], { encoding: 'utf8' }).stdout.trim(), 'on');
+    chmodSync(path.join(p.work, 'AUTO_MERGE'), 0o666);
+    assert.equal(autoMergeEnabled(p.work), false, 'a flag others can write is not the owner\'s');
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+test('agent work pushed to origin main during the run, a planted hook or a replaced worktree link holds every run (exit 6); an owner push only alerts (finding 12)', async () => {
+  // The escape a sandbox would stop: the worker's code pushes the host's
+  // commit. Here the stub pushes an agent-authored commit to origin directly.
+  const p = project();
+  let r, s, t, u;
+  try {
+    r = await runStub(p, standardScript({ worker: opts => {
+      p.write(opts.cwd, FIX_FILES);
+      const env = { GIT_AUTHOR_NAME: 'CredentialDOMD Ticket Agent', GIT_AUTHOR_EMAIL: 'ticket-agent@credentialdomd.invalid', GIT_COMMITTER_NAME: 'x', GIT_COMMITTER_EMAIL: 'x@example.invalid' };
+      sh(opts.cwd, ['commit', '-qam', 'Synthetic escape'], { env });
+      sh(opts.cwd, ['push', '-q', 'origin', 'HEAD:refs/heads/main']);
+      return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } });
+    } }));
+    assert.equal(r.code, EXIT.hostState, r.logs.join('\n'));
+    assert.ok(r.logs.some(l => /^HOST STATE — .*commit\(s\) made by the ticket agent/.test(l)), r.logs.join('\n'));
+    assert.equal((await readRun(p.work, NAME)).status, 'host_state_changed');
+    assert.ok(r.sent.some(m => /Every run is held/.test(m)));
+  } finally { r?.cleanup(); p.cleanup(); }
+  const q = project();
+  try {
+    s = await runStub(q, standardScript({ worker: opts => {
+      q.write(opts.cwd, FIX_FILES);
+      mkdirSync(path.join(q.repo, '.git', 'hooks'), { recursive: true });
+      writeFileSync(path.join(q.repo, '.git', 'hooks', 'pre-push'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } });
+    } }));
+    assert.equal(s.code, EXIT.hostState);
+    assert.ok(s.logs.some(l => /shared git hooks or config changed \(after the worker session\)/.test(l)), s.logs.join('\n'));
+  } finally { s?.cleanup(); q.cleanup(); }
+  const w = project();
+  try {
+    t = await runStub(w, standardScript({ worker: opts => {
+      w.write(opts.cwd, FIX_FILES);
+      writeFileSync(path.join(w.repo, '.git', 'config'), `${readFileSync(path.join(w.repo, '.git', 'config'), 'utf8')}[credential]\n\thelper = !/bin/echo\n`);
+      return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } });
+    } }));
+    assert.equal(t.code, EXIT.hostState, 'a planted credential helper in the shared config is a change too (finding 8)');
+  } finally { t?.cleanup(); w.cleanup(); }
+  const v = project();
+  try {
+    u = await runStub(v, standardScript({ worker: opts => {
+      v.write(opts.cwd, FIX_FILES);
+      const fake = path.join(opts.cwd, 'tests', 'fakegit');
+      mkdirSync(fake, { recursive: true });
+      writeFileSync(path.join(opts.cwd, '.git'), `gitdir: ${fake}\n`);
+      return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } });
+    } }));
+    assert.equal(u.code, EXIT.hostState);
+    assert.ok(u.logs.some(l => /worktree \.git link was changed/.test(l)), u.logs.join('\n'));
+  } finally { u?.cleanup(); v.cleanup(); }
+  // Someone else moving main during the run is not the agent: an alert, and
+  // the run goes on (and is held, so the merge rebases).
+  const o = project();
+  let x;
+  try {
+    x = await runStub(o, standardScript({ worker: opts => { o.moveMain({ 'src/other.js': 'export const other = 1;\n' }); o.write(opts.cwd, FIX_FILES);
+      return workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } }); } }));
+    assert.equal(x.code, EXIT.ok, x.logs.join('\n'));
+    assert.ok(x.logs.some(l => /^ORIGIN MOVED — /.test(l)));
+    assert.ok(x.sent.some(m => /origin main moved while run/.test(m)));
+    assert.equal((await readRun(o.work, NAME)).status, 'held');
+  } finally { x?.cleanup(); o.cleanup(); }
+});
+
+test('a verified_change is refused while nothing this run did is released: the worker is told and repairs it (finding 5)', async () => {
+  const p = project();
+  let r;
+  try {
+    const verified = () => { const out = workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } });
+      out.assessment.verification = { kind: 'verified_change', reproduction: 'Synthetic reproduction ran.', checks: 'Synthetic checks ran.', release: 'Released in abcdef1.' }; return out; };
+    r = await runStub(p, standardScript({ worker: (opts, n) => { p.write(opts.cwd, FIX_FILES); return n === 1 ? verified() : workerResult({ change: { subject: 'Join summary lines with line breaks', tests: [] } }); } }));
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    const repair = r.calls.filter(c => c.role === 'worker' && c.resume);
+    assert.equal(repair.length, 1);
+    assert.match(repair[0].input, /Verified change needs this run's released fix/);
+  } finally { r?.cleanup(); p.cleanup(); }
 });

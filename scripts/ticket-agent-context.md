@@ -281,57 +281,111 @@ database migration for this support-context change.
 ## Stage 2: branch-only work, runner-owned gates, held merges (2026-09-28)
 
 `ticket-agent.sh` still owns the lock, the queue, the circuit breaker and the reply
-recording. For each loaded ticket it runs `scripts/ticket-fix/run.mjs work`:
+recording. Before any model runs it reads `ticket-work/AUTO_MERGE` once
+(`run.mjs auto-merge`), alerts the owner when that value changed since the last run, and
+passes it on. For each loaded ticket it runs `scripts/ticket-fix/run.mjs work`:
 
 1. **Worktree.** `git fetch origin main` in the owner's checkout (refs only), then a
    worktree on a new branch `agent/<id8>-<runid>` under
    `~/Library/Application Support/CredentialDOMD/ticket-work/worktrees/`. The owner's
-   checkout and branch are never touched. `node_modules` is linked when the lockfiles
-   match, otherwise `npm ci` runs in the worktree.
+   checkout and branch are never touched. `node_modules` is an APFS clone (`cp -c`) of
+   the owner's when the lockfiles match, otherwise of `ticket-work/modules/<lock sha>`,
+   installed once with `npm ci --ignore-scripts`. It is never a link into the owner's.
 2. **Reproduction.** A separate session (`repro-prompt.md`) sees the ticket and the base
-   code and may write only under `tests/`. The host runs its tests on base; each must fail
-   with `ERR_ASSERTION` (a TypeError, a missing module or a pass is refused; one resume
-   with the verdicts). The files are hash-frozen.
+   code and may write only under `tests/`. The host snapshots those tests onto base and
+   runs them in a fresh worktree of the snapshot; each must fail with `ERR_ASSERTION`
+   (a TypeError, a missing module or a pass is refused; one resume with the verdicts).
+   The files are hash-frozen.
 3. **Worker.** The fixer runs contained (`worker.mjs`): `--permission-mode dontAsk`,
    `--setting-sources ""`, explicit allow and deny rules, `--strict-mcp-config`, a fresh
    `CLAUDE_CONFIG_DIR` per session, an allowlisted environment (no database or GitHub
-   token; git cannot push; hooks off). It may edit `src/`, `tests/` (not
-   `tests/ticket-fix/`, not the frozen files), `public/` and `landing/`, and run exactly
-   `npm test`, `node --test tests/<file>` and `npm run build:site`; it reads with Read,
-   Grep and Glob. The reply checks and their two repairs run as before.
+   token; git cannot push; hooks off) and the model credential on a pipe
+   (`CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR`), not in the environment. It may edit
+   `src/`, `tests/` (not `tests/ticket-fix/`, not the frozen files), `public/` and
+   `landing/`, and run exactly `npm test`, `node --test tests/<file>` and
+   `npm run build:site`; it reads with Read, Grep and Glob, which only the worktree's
+   Read rule allows. The reply checks and their two repairs run as before; a
+   `verified_change` is refused while nothing the run changed is released.
 4. **G0 and commit.** A change to the runner's own code holds every later run (exit 4);
-   anything else outside the editable paths refuses the run (exit 5). The host makes one
-   commit (hooks off, author "CredentialDOMD Ticket Agent", committer the run identity,
-   trailers `Ticket:`, `Ticket-Agent-Run:`, and `Gates:` once the gates pass).
-5. **G2.** `gates/tests.mjs` records `gates.json`: the reproduction frozen and green, the
-   declared tests in the diff and green, every test failing when one product hunk is
-   reverted, `npm test` passing no fewer tests than base (less removed, plus added
-   declarations), `npm run build:site`, eslint errors per changed file not rising and
-   `npm run lint:hooks`, and the save-and-reload rule for TABLE_MAP, defaults, sync code
-   and storage keys. One resume of the worker with the failing check names.
+   anything else outside the editable paths, a `.gitattributes`, `.gitignore` or
+   `.gitmodules`, a symbolic link, a nested repository or a NUL byte in a source file
+   refuses the run (exit 5). The host makes one commit (hooks off, author "CredentialDOMD
+   Ticket Agent", committer the run identity, trailers `Ticket:`, `Ticket-Agent-Run:`,
+   and `Gates:` once the gates pass).
+5. **G2 and G10.** `gates/tests.mjs` records `gates.json`, running every step in a fresh
+   detached worktree of the commit: the reproduction frozen and green, the declared tests
+   in the diff and green, every test failing when one product hunk is reverted, no
+   product line that reads the test runner or patches a global, `npm test` passing no
+   fewer tests than base (less removed, plus added declarations) and no untouched test
+   file passing fewer, counted from the gates reporter on the runner's own stdout (a
+   test's printed "pass" line counts for nothing), `npm run build:site`, eslint errors
+   per changed file not rising and `npm run lint:hooks`, the save-and-reload rule, no
+   git-ignored file left behind, and G10 (`gates/personal-data.mjs`: addresses, phone
+   numbers, NPI, DEA, SSN, images and base64 in tests, copied ticket text, the runner's
+   credential and token shapes; rule and file names only). Every host diff reads
+   attributes from base and forces text. Every existing test file the diff modifies or
+   deletes is listed for the reviewer. One resume of the worker with the failing check
+   names.
 6. **G11.** `protected-paths.json` (database, scripts, CI, dependencies, legal pages,
    auth, admin and pricing code, and numeric literals in money modules) holds the merge
-   for the owner. `gates/owner-rules.mjs` builds the blast radius from `git grep` and
-   `sibling-paths.json`.
+   for the owner. `gates/owner-rules.mjs` builds the blast radius from `git grep` at the
+   commit and `sibling-paths.json`.
 7. **G4.** `review.mjs`: a fresh `claude-opus-5-5` session at effort high with Read, Grep
-   and Glob only, given the thread, the diff, `gates.json`, the protected report and the
-   blast radius, never the worker's reply or summary. Citations are checked against the
-   files (one fresh rerun for an invented one). Billing, pay, invoice and sync diffs get
-   two reviews that must agree. A "revise" resumes the worker once.
+   and Glob only, in a fresh worktree of the commit, given the thread, the diff,
+   `gates.json`, the protected report and the blast radius, never the worker's reply or
+   summary. Citations are checked against the commit (one fresh rerun for an invented
+   one); every met or partial item needs one into the change; any missed path, or a
+   member both excluded and missed, is not an approval. Billing, pay, invoice and sync
+   diffs get two reviews that must agree. A "revise" or a missed path resumes the worker
+   once.
 8. **G3.** With every gate passed and the review approving, the change merges only if
-   `ticket-work/AUTO_MERGE` exists (off by default). Otherwise the run is HELD:
-   `ticket-work/runs/<id8>-<runid>/HELD.txt`, an owner alert and one command,
-   `node scripts/ticket-fix/merge.mjs <run-id>`. The merge is fast-forward only; if main
-   moved it rebases, re-runs the gates, and re-runs the review when `git patch-id
-   --stable` changed; a conflict or a changed `.git/hooks` holds it.
+   AUTO_MERGE was on when the scheduled run started (off by default). Otherwise the run is
+   HELD: `ticket-work/runs/<id8>-<runid>/HELD.txt` (with the commit's tree and the gates
+   digest), an owner alert and one command, `node scripts/ticket-fix/merge.mjs <run-id>`,
+   which prints the same tree and digest before it pushes. The merge is fast-forward
+   only; if main moved it rebases, re-runs the gates, and re-runs the review when
+   `git patch-id --stable` changed; it re-runs G10; a conflict, or a changed `.git/hooks`,
+   repository git config, `info/attributes` or global git config, holds it. It acts only
+   on `ticket-work/worktrees/<run id>` and the configured repository.
 9. **G7.** After a merge, `release.mjs` waits for `version.json` to name a build that
-   descends from the fix and checks the strings the diff added (present) and removed
-   (absent) in the live bundle. `{{FIX_COMMIT}}` in an agent reply needs that record.
+   descends from the fix and checks, in the live bundle, the strings the gates found in
+   the head build (added, present) and the removed ones the head build no longer has.
+   `{{FIX_COMMIT}}` in an agent reply needs that record.
 
 A refused change still records the reply (it claims nothing) but counts toward the
-breaker. A continuation for a ticket with a held change waits without a model run. One
-code change per scheduled run.
+breaker, and the record step (`TICKET_CODE_OUTCOME`) keeps its follow-up pending: a
+change that is refused, held, merged but not verified, or failed its release completes
+no follow-up and marks no criterion `claimed_fixed`. A continuation for a ticket with a
+held change waits without a model run. One code change per scheduled run.
 
-**Not contained (critique B1):** a test the worker writes runs as the owner's user in
-the session and in the gates, and could read the keychain or call `gh`. The permission
-rules bind the model's own tool calls. The container runner is the owner's decision.
+**Containment (stage 2 review, 2026-09-28).** The permission rules bind only the
+model's own tool calls; a test file the worker writes runs whenever `npm test` or
+`node --test` runs it. So every session and every gate step runs under
+`/usr/bin/sandbox-exec` (`scripts/ticket-fix/sandbox.mjs`):
+
+- no read of the keychains, `~/.ssh`, `~/.config` (gh), `~/.gitconfig`, `~/.netrc`,
+  `~/.npmrc`, `~/.claude`, `.env` files, iCloud, Mail or Messages, the runner's state
+  (case records, ledgers, run records, the base-count cache, the run directory) or the
+  AUTO_MERGE flag;
+- no exec of `security`, `osascript`, `gh` or any git credential helper, and no lookup
+  of the security daemon;
+- writes only to the worktree, the session's own directory and its temporary directory
+  (so never the owner's checkout, its `.git`, its `node_modules`, `ticket-work` or the
+  global git config);
+- sessions keep outbound network for the API (not the launchd sockets that serve
+  ssh-agent); gates get loopback only and no DNS resolver.
+
+After every session and gate run the host also checks the shared git hooks and config,
+the worktree's `.git` link and origin main: a change, or an agent commit on main, holds
+every later run (exit 6, `HOLD-host-code-changed`); main moving for another reason alerts
+the owner. `tests/ticket-fix/containment-live.test.mjs` (`LIVE_CLI=1`) runs the installed
+CLI through the runner's own launcher, with no outer sandbox, and includes the two-step
+escape (write a test, run it with `node --test`).
+
+**What this still does not contain:** the macOS sandbox is the whole boundary. A session
+can still send what it can read (the worktree, the public code, anything the profile does
+not name) to any host, since it needs the network for the API; a test that forges the
+Node test runner's serialized events from inside a test file is not detected; and
+`sandbox-exec` is deprecated by Apple, though present on macOS 26. The container runner
+(`scripts/ticket-agent-isolated.mjs`) remains the stronger option and the owner's
+decision.

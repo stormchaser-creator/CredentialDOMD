@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { protectedReport, blastRadius, globRegExp, numericLiterals, loadJSON, PROTECTED_CONFIG, SIBLING_CONFIG } from '../../scripts/ticket-fix/gates/owner-rules.mjs';
 import { createWorktree, commitWork } from '../../scripts/ticket-fix/worktree.mjs';
-import { project, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mjs';
+import { project, sh, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 async function changed(extra, change) {
@@ -82,4 +82,21 @@ test('blast radius: untouched callers of a changed export and of a removed strin
     assert.deepEqual(removed.untouched.map(s => `${s.file}:${s.line}`), ['src/components/features/ShareModal.jsx:3']);
     assert.deepEqual(blast.sibling_groups, [{ name: 'send channels', touched: ['src/utils/shareText.js'], untouched: ['src/utils/invoiceEmailSend.js', 'src/components/features/ShareModal.jsx'] }]);
   } finally { r.p.cleanup(); }
+});
+
+test('finding 3: a "-diff" attribute committed with a money change does not hide it from the protected-path report or the blast radius', async () => {
+  const p = project({ 'src/utils/memberPlans.js': 'export const fee = 149;\nexport const planLabel = "Synthetic core plan";\n' });
+  try {
+    const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
+    p.write(wt.dir, { 'src/utils/memberPlans.js': 'export const fee = 249;\nexport const planLabel = "Synthetic premium plan";\n', 'src/utils/.gitattributes': 'memberPlans.js -diff\n' });
+    // The host never commits a .gitattributes (G0); a test commits it anyway.
+    sh(wt.dir, ['add', '-A']); sh(wt.dir, ['commit', '-q', '-m', 'Synthetic']);
+    const head = sh(wt.dir, ['rev-parse', 'HEAD']);
+    const files = ['src/utils/.gitattributes', 'src/utils/memberPlans.js'];
+    const report = protectedReport({ dir: wt.dir, base: wt.base, head, files, config: { paths: [], money_literal_paths: ['src/utils/memberPlans.js'], money_line: '\\bfee\\b' } });
+    assert.equal(report.protected, true, JSON.stringify(report));
+    assert.deepEqual(report.money_literals.map(l => [l.path, l.removed, l.added]), [['src/utils/memberPlans.js', ['149'], ['249']]]);
+    const blast = blastRadius({ dir: wt.dir, base: wt.base, head, files, siblings: { groups: [] } });
+    assert.ok(blast.terms.some(t => t.term === 'Synthetic core plan' && t.kind === 'removed_string'), JSON.stringify(blast.terms));
+  } finally { p.cleanup(); }
 });

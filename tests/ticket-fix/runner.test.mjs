@@ -165,7 +165,20 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
   assert.match(sh, /WORK_STATE="\$HOME\/Library\/Application Support\/CredentialDOMD\/ticket-work"/);
   assert.equal((sh.match(/WORKER_SECONDS=1500/g) || []).length, 1);
   // Exit codes: every failure counts toward the breaker; runner code holds.
-  assert.match(sh, /if host_code_changed \|\| \[ "\$WORK_RC" -eq 4 \]; then hold_run; RC=1; break; fi/);
+  assert.match(sh, /if host_code_changed \|\| \[ "\$WORK_RC" -eq 4 \]; then hold_run runner_code; RC=1; break; fi/);
+  // Exit 6: git state outside the worktree changed (stage 2 review, finding 12).
+  assert.match(sh, /if \[ "\$WORK_RC" -eq 6 \]; then hold_run host_state; RC=1; break; fi/);
+  assert.match(sh, /node "\$ALERT" hold --state "\$CASE_STATE" --ticket "\$TICKET_ID" --why "\$1"/);
+  // AUTO_MERGE is read once, before any model runs, and passed (finding 2).
+  const flag = sh.indexOf('AUTO_MERGE=$(node "$HOST/ticket-fix/run.mjs" auto-merge --work "$WORK_STATE"');
+  assert.ok(flag > 0 && flag < sh.indexOf('ticket-fix/run.mjs" work'), 'the flag is read before the first model session');
+  assert.equal((sh.match(/AUTO_MERGE=\$\(/g) || []).length, 1, 'read once');
+  assert.match(sh, /case "\$AUTO_MERGE" in on\|off\) ;; \*\) AUTO_MERGE=off ;; esac/);
+  assert.match(sh, /node "\$ALERT" auto-merge --state "\$CASE_STATE" --value "\$AUTO_MERGE" --notify "\$NOTIFY"/);
+  assert.match(sh, /--auto-merge "\$AUTO_MERGE" >> "\$LOG" 2>&1\n\s+WORK_RC=\$\?/);
+  // The record step knows the code outcome (finding 5) and finish the repository (finding 2).
+  assert.match(sh, /TICKET_CODE_OUTCOME="\$CODE"[^\n]*node "\$HOST\/ticket-agent-context.mjs" \\\n\s+--record-and-reply/);
+  assert.match(sh, /run.mjs" finish --run-file "\$RUN_FILE" --work "\$WORK_STATE" --repo "\$REPO"/);
   assert.match(sh, /2\) reject "review not recorded"; RC=1; break ;;/);
   assert.match(sh, /3\) reject "model run failed or timed out"; RC=1; break ;;/);
   assert.match(sh, /5\) reject "changed files outside its scope"; RC=1; break ;;/);
@@ -242,6 +255,30 @@ test('--load and --record-and-reply run only inside the runner: a hand-made cont
     writeFileSync(`${ctx}.mac`, contextMac(key, context));
     assert.match(node(['--record-and-reply', ctx, out, state.dir], { TICKET_RUN_KEY: key }).stderr, /Existing runner database credential|unverified_claim|Invalid/, 'past the key check');
     assert.equal(logSafe(new ReplyRuleError([{ rule: 'device_not_tested', excerpt: 'Works on your iPhone.' }])), 'Reply breaks fixed reply rules: device_not_tested');
+  } finally { state.cleanup(); }
+});
+
+test('the AUTO_MERGE flag: its first reading of off is quiet, every change alerts the owner (stage 2 review, finding 2)', async () => {
+  const state = privateDir('ticket-auto-merge-');
+  const sent = [];
+  const send = async m => { sent.push(m); return true; };
+  try {
+    await alert(['auto-merge', '--state', state.dir, '--value', 'off'], { send });
+    assert.equal(sent.length, 0);
+    await alert(['auto-merge', '--state', state.dir, '--value', 'off'], { send });
+    await alert(['auto-merge', '--state', state.dir, '--value', 'on'], { send });
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /unattended merges are now ON/);
+    assert.match(sent[0], /If you did not change ticket-work\/AUTO_MERGE, look now/);
+    assert.ok(!sent[0].includes('\u2014'));
+    await alert(['auto-merge', '--state', state.dir, '--value', 'on'], { send });
+    await alert(['auto-merge', '--state', state.dir, '--value', 'off'], { send });
+    assert.equal(sent.length, 2);
+    assert.match(sent[1], /now OFF/);
+    await assert.rejects(alert(['auto-merge', '--state', state.dir, '--value', 'maybe'], { send }), /on\|off/);
+    await alert(['hold', '--state', state.dir, '--ticket', T, '--why', 'host_state'], { send });
+    assert.match(sent.at(-1), /changed git state outside its worktree/);
+    await assert.rejects(alert(['hold', '--state', state.dir, '--ticket', T, '--why', 'other'], { send }), /runner_code or host_state/);
   } finally { state.cleanup(); }
 });
 

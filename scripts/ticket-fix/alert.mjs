@@ -12,14 +12,21 @@
 // No ticket text is ever written or sent: ids and counts only.
 //
 //   alert.mjs park   --state DIR --ticket UUID --count N [--notify PATH]
-//   alert.mjs hold   --state DIR --ticket UUID [--notify PATH]
+//   alert.mjs hold   --state DIR --ticket UUID [--why runner_code|host_state] [--notify PATH]
 //   alert.mjs lock   --state DIR --lock DIR [--notify PATH] [--max-hours 4]
 //   alert.mjs status --state DIR --rc N [--lock DIR]
+//   alert.mjs auto-merge --state DIR --value on|off [--notify PATH]
 //
 // "hold": a model run changed the runner's own code (the reply checks, the
-// runner, the notifier, the support reply migrations or send-ticket-reply).
-// The runner records nothing for it and writes HOLD_FILE; no run starts
-// until the owner reviews the change and removes that file.
+// runner, the notifier, the support reply migrations or send-ticket-reply),
+// or (--why host_state) git state outside its worktree: the shared hooks or
+// config, the worktree's git link, or agent commits on origin main. The
+// runner records nothing for it and writes HOLD_FILE; no run starts until the
+// owner reviews the change and removes that file.
+//
+// "auto-merge": the runner reads the AUTO_MERGE flag once per scheduled run
+// and reports it here; the owner is alerted whenever it changes (stage 2
+// review, finding 2).
 import { promises as fs, constants } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -120,7 +127,7 @@ function parse(argv) {
   const options = {};
   for (let i = 0; i < rest.length; i += 2) {
     const key = rest[i];
-    if (!/^--(state|ticket|count|notify|lock|rc|max-hours)$/.test(key) || rest[i + 1] === undefined || key.slice(2) in options) throw Error(`Unexpected argument ${key}`);
+    if (!/^--(state|ticket|count|notify|lock|rc|max-hours|why|value)$/.test(key) || rest[i + 1] === undefined || key.slice(2) in options) throw Error(`Unexpected argument ${key}`);
     options[key.slice(2)] = rest[i + 1];
   }
   if (!options.state || !path.isAbsolute(options.state)) throw Error('--state must be an absolute path');
@@ -142,11 +149,31 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
   }
   if (command === 'hold') {
     if (!UUID.test(options.ticket || '')) throw Error('hold needs --ticket UUID');
+    const why = options.why ?? 'runner_code';
+    if (!['runner_code', 'host_state'].includes(why)) throw Error('hold --why is runner_code or host_state');
     const id8 = options.ticket.slice(0, 8);
-    await raise(options.state, 'host_code_changed', `ticket=${id8}`,
-      `CredentialDOMD ticket agent: the run for ticket ${id8} changed the runner's own code (reply checks, runner, notifier, support reply migrations or send-ticket-reply). Nothing was recorded. Every run is held until ticket-context/${HOLD_FILE} is removed after review.`,
+    const what = why === 'host_state' ? 'changed git state outside its worktree (the shared git hooks or config, its worktree\'s git link, or agent commits on origin main)'
+      : 'changed the runner\'s own code (reply checks, runner, notifier, support reply migrations or send-ticket-reply)';
+    await raise(options.state, why === 'host_state' ? 'host_state_changed' : 'host_code_changed', `ticket=${id8}`,
+      `CredentialDOMD ticket agent: the run for ticket ${id8} ${what}. Nothing was recorded. Every run is held until ticket-context/${HOLD_FILE} is removed after review.`,
       { notify, now, send });
     await writeStatus(options.state, { now });
+    return;
+  }
+  if (command === 'auto-merge') {
+    if (!['on', 'off'].includes(options.value)) throw Error('auto-merge needs --value on|off');
+    const file = path.join(options.state, 'auto-merge.state');
+    let previous = null;
+    try { previous = (await fs.readFile(file, 'utf8')).trim(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (previous !== options.value) {
+      await writePrivate(file, `${options.value}\n`);
+      // The first reading of "off" is the default, not a change.
+      if (!(previous === null && options.value === 'off')) {
+        await raise(options.state, 'auto_merge_changed', `from=${previous ?? 'unset'} to=${options.value}`,
+          `CredentialDOMD ticket agent: unattended merges are now ${options.value === 'on' ? 'ON: a change that passes every gate and the review is pushed to main without you' : 'OFF: every change is held for you'} (AUTO_MERGE was ${previous ?? 'unset'}). If you did not change ticket-work/AUTO_MERGE, look now.`,
+          { notify, now, send });
+      }
+    }
     return;
   }
   if (command === 'lock') {
@@ -175,7 +202,7 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
     await writeStatus(options.state, { lock: options.lock ?? null, rc: Number(options.rc), now });
     return;
   }
-  throw Error('Usage: alert.mjs park|hold|lock|status --state DIR ...');
+  throw Error('Usage: alert.mjs park|hold|lock|status|auto-merge --state DIR ...');
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

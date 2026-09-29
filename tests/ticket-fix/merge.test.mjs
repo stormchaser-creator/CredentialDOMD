@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, chmodSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { mergeRun, mergeBlockers, pushArgs, readRun, writeRun, discardRun, autoMergeEnabled } from '../../scripts/ticket-fix/merge.mjs';
+import { mergeRun, mergeBlockers, pushArgs, readRun, writeRun, discardRun, autoMergeEnabled, checkRunPaths } from '../../scripts/ticket-fix/merge.mjs';
+import { finish, mergeSupport, CASE_STATE, FIX_STATE } from '../../scripts/ticket-fix/run.mjs';
 import { trailers } from '../../scripts/ticket-fix/worktree.mjs';
 import { project, sh, runStub, standardScript, TICKET, RUN_ID } from './stage2-helpers.mjs';
 
@@ -113,7 +114,7 @@ test('a hook planted since the run blocks the push until the owner says it was r
     writeFileSync(path.join(hooks, 'pre-push'), '#!/bin/sh\nexit 1\n'); chmodSync(path.join(hooks, 'pre-push'), 0o755);
     const refused = await mergeRun({ work: p.work, runId: NAME, manual: true, verify: noRelease });
     assert.equal(refused.status, 'refused');
-    assert.match(refused.reason, /\.git\/hooks changed/);
+    assert.match(refused.reason, /\.git\/hooks or the git config changed/);
     const merged = await mergeRun({ work: p.work, runId: NAME, manual: true, hooksReviewed: true, verify: noRelease });
     assert.equal(merged.status, 'released', 'and the planted pre-push hook never ran');
   } finally { p.cleanup(); }
@@ -139,14 +140,90 @@ test('the owner\'s one command: node scripts/ticket-fix/merge.mjs <run-id> fast-
   const { p, run } = await held();
   try {
     const cli = path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'scripts', 'ticket-fix', 'merge.mjs');
-    const r = spawnSync(process.execPath, [cli, NAME, '--work', p.work, '--no-release-wait'], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR } });
+    // A minimal environment (inside the gates' sandbox git may not read the
+    // global config, so its override is kept).
+    const cliEnv = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, ...(process.env.GIT_CONFIG_GLOBAL ? { GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL } : {}) };
+    const other = spawnSync(process.execPath, [cli, NAME, '--work', p.work, '--no-release-wait'], { encoding: 'utf8', env: cliEnv });
+    assert.equal(other.status, 1, 'the default repository is not this run\'s');
+    assert.match(other.stderr, /names another repository/);
+    const r = spawnSync(process.execPath, [cli, NAME, '--work', p.work, '--repo', p.repo, '--no-release-wait'], { encoding: 'utf8', env: cliEnv });
     assert.equal(r.status, 0, r.stderr + r.stdout);
+    assert.match(r.stdout, new RegExp(`PUSHING — run ${NAME}: commit ${run.commit} tree ${sh(run.worktree, ['rev-parse', `${run.commit}^{tree}`])} gates ${run.gates_sha256}`));
     assert.match(r.stdout, new RegExp(`MERGED — run ${NAME}`));
     assert.equal(p.originHead(), run.commit);
     assert.equal((await readRun(p.work, NAME)).status, 'merged');
-    const again = spawnSync(process.execPath, [cli, NAME, '--work', p.work, '--no-release-wait'], { encoding: 'utf8' });
+    const again = spawnSync(process.execPath, [cli, NAME, '--work', p.work, '--repo', p.repo, '--no-release-wait'], { encoding: 'utf8' });
     assert.equal(again.status, 0, 'a merged run is reported, not pushed twice');
     const bad = spawnSync(process.execPath, [cli, 'not-a-run'], { encoding: 'utf8' });
     assert.equal(bad.status, 1);
+  } finally { p.cleanup(); }
+});
+
+test('finding 2: a run record naming another worktree or repository is refused before anything is removed or pushed', async () => {
+  const { p, run } = await held();
+  const victim = path.join(p.root, 'victim');
+  mkdirSync(victim);
+  writeFileSync(path.join(victim, 'keep.txt'), 'synthetic\n');
+  try {
+    assert.equal(checkRunPaths(p.work, run, { repo: p.repo }), path.join(p.work, 'worktrees', NAME));
+    const forged = { ...run, worktree: victim };
+    await writeRun(p.work, forged);
+    await assert.rejects(discardRun({ work: p.work, runId: NAME, repo: p.repo }), /worktree is not/);
+    assert.equal(existsSync(path.join(victim, 'keep.txt')), true, 'nothing outside <work>/worktrees/<run id> is removed');
+    const merged = await mergeRun({ work: p.work, runId: NAME, repo: p.repo, manual: true, verify: noRelease }).catch(error => ({ status: 'error', reason: error.message }));
+    assert.match(merged.reason, /worktree is not/);
+    // run.mjs finish refuses the same record.
+    const runFile = path.join(p.root, 'facts.json');
+    writeFileSync(runFile, JSON.stringify({ run: NAME }));
+    await writeRun(p.work, { ...forged, status: 'refused' });
+    await assert.rejects(finish({ runFile, work: p.work, repo: p.repo }), /worktree is not/);
+    assert.equal(existsSync(path.join(victim, 'keep.txt')), true);
+    await writeRun(p.work, { ...run, repo: victim });
+    await assert.rejects(discardRun({ work: p.work, runId: NAME, repo: p.repo }), /another repository/);
+  } finally { p.cleanup(); }
+});
+
+test('finding 7: the merge scans the commit for personal data and secrets again, and names rules, not values', async () => {
+  const { p, run } = await held();
+  try {
+    const gatesText = readFileSync(path.join(p.work, 'runs', NAME, 'gates.json'), 'utf8');
+    assert.deepEqual(mergeBlockers(run, { gatesText, manual: true }), []);
+    const secret = 'synthetic-credential-value-0123456789';
+    const blockers = mergeBlockers(run, { gatesText, manual: true, secrets: [secret], context: { tickets: [{ subject: 'x', body: 'Synthetic body: the summary joins lines with spaces.', messages: [] }] } });
+    assert.deepEqual(blockers, [], 'nothing personal in the synthetic change');
+    // A commit that carries the runner's own credential is refused.
+    const leaked = { ...run };
+    writeFileSync(path.join(run.worktree, 'src', 'leak.js'), `export const k = '${secret}';\n`);
+    sh(run.worktree, ['add', 'src/leak.js']);
+    leaked.commit = sh(run.worktree, ['commit-tree', sh(run.worktree, ['write-tree']), '-p', run.base, '-m', 'x']);
+    const refused = mergeBlockers(leaked, { gatesText, manual: true, secrets: [secret] });
+    assert.ok(refused.some(r => /personal data or a secret in the commit \(credential in src\/leak\.js\)/.test(r)), refused.join('; '));
+    assert.ok(!refused.join().includes(secret));
+  } finally { p.cleanup(); }
+});
+
+test('finding 6: the owner\'s merge command reviews in a fresh worktree of the commit, denied the case records and ledgers like the runner\'s reviewer', async () => {
+  const { p, run } = await held();
+  try {
+    const seen = path.join(p.root, 'review-settings.json');
+    const fake = path.join(p.root, 'fake-claude.mjs');
+    writeFileSync(fake, `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from 'node:fs';
+const argv = process.argv.slice(2);
+writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ settings: JSON.parse(readFileSync(argv[argv.indexOf('--settings') + 1], 'utf8')), cwd: process.cwd() }));
+for await (const _ of process.stdin) { /* drain */ }
+console.log(JSON.stringify({ type: 'result', is_error: false, session_id: '00000000-0000-4000-8000-0000000000cd', structured_output: {
+  items: [{ requirement: 'Summary lines are separated by line breaks', verdict: 'met', citations: [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\\\n');" }] }],
+  regressions: [], missed_paths: [], test_changes: [], sibling_exclusions: [], verdict: 'approve', summary: 'Synthetic.' } }));
+`, { mode: 0o755 });
+    const support = await mergeSupport({ run, work: p.work, claude: fake, sandbox: null });
+    try {
+      const review = await support.reviewAgain({ base: run.base, head: run.commit });
+      assert.equal(review.pass, true, JSON.stringify(review.reasons));
+    } finally { await support.cleanup(); }
+    const { settings, cwd } = JSON.parse(readFileSync(seen, 'utf8'));
+    for (const dir of [CASE_STATE, FIX_STATE]) assert.ok(settings.permissions.deny.includes(`Read(/${dir}/**)`), dir);
+    assert.ok(!settings.permissions.allow.includes('Grep') && !settings.permissions.allow.includes('Glob'));
+    assert.ok(cwd.startsWith(path.join(p.work, 'gates', 'review-')), cwd);
   } finally { p.cleanup(); }
 });

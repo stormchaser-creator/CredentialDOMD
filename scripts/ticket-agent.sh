@@ -2,9 +2,11 @@
 # Hourly CredentialDOMD ticket agent — launchd runs this. It keeps the lock,
 # the queue, the circuit breaker and the reply recording, and hands each
 # ticket to scripts/ticket-fix/run.mjs (stage 2): the model works only in a
-# worktree on its own branch, the host commits, runs the gates and an
-# independent review, and holds every merge for the owner unless
-# $WORK_STATE/AUTO_MERGE exists. One instance at a time.
+# worktree on its own branch, inside the macOS sandbox, the host commits,
+# runs the gates (sandboxed, no network) and an independent review, and holds
+# every merge for the owner unless $WORK_STATE/AUTO_MERGE existed when this
+# scheduled run started (read once, before any model runs). One instance at a
+# time.
 set -u
 umask 077
 
@@ -82,6 +84,12 @@ RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/credentialdomd-ticket-context.XXXXXX") || {
 trap 'EXIT_RC=$?; node "$ALERT" status --state "$CASE_STATE" --rc "$EXIT_RC" >> "$LOG" 2>&1; /bin/rm -rf "$RUN_DIR" "$HOST_DIR"; /bin/rm -f "$LOCK/owner"; rmdir "$LOCK" 2>/dev/null' EXIT
 HOST_FINGERPRINT=$(host_fingerprint)
 case "$HOST_FINGERPRINT" in *FAILED*) echo "$(date '+%F %T') ERROR — cannot read the state of the runner's own code" >> "$LOG"; exit 1 ;; esac
+# Unattended merges: read ONCE, here, before any model session, and passed to
+# run.mjs. Code a session runs cannot switch them on for this run (and the
+# sandbox denies it the flag file). A change of the flag alerts the owner.
+AUTO_MERGE=$(node "$HOST/ticket-fix/run.mjs" auto-merge --work "$WORK_STATE" 2>> "$LOG") || AUTO_MERGE=off
+case "$AUTO_MERGE" in on|off) ;; *) AUTO_MERGE=off ;; esac
+node "$ALERT" auto-merge --state "$CASE_STATE" --value "$AUTO_MERGE" --notify "$NOTIFY" >> "$LOG" 2>&1
 
 # This run's identity. RUN_KEY signs the context --load writes and is checked
 # by --record-and-reply; it is passed to those two steps only, never exported,
@@ -167,10 +175,13 @@ reject() {
   fi
 }
 host_code_changed() { [ "$(host_fingerprint)" != "$HOST_FINGERPRINT" ]; }
+# $1: runner_code (the runner's own code changed) or host_state (run.mjs exit
+# 6: the shared git hooks or config, the worktree's git link or origin main
+# changed outside the worktree).
 hold_run() {
-  printf 'trusted=%s\nticket=%s\nat=%s\n' "$HOST_HEAD" "$TICKET_ID" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$HOLD"
-  echo "$(date '+%F %T') PROTECTED — $TICKET_ID run changed the runner's own code; nothing recorded; runs held until $HOLD is removed" >> "$LOG"
-  node "$ALERT" hold --state "$CASE_STATE" --ticket "$TICKET_ID" --notify "$NOTIFY" >> "$LOG" 2>&1
+  printf 'trusted=%s\nticket=%s\nat=%s\nwhy=%s\n' "$HOST_HEAD" "$TICKET_ID" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" > "$HOLD"
+  echo "$(date '+%F %T') PROTECTED — $TICKET_ID run changed $([ "$1" = host_state ] && echo 'git state outside its worktree' || echo "the runner's own code"); nothing recorded; runs held until $HOLD is removed" >> "$LOG"
+  node "$ALERT" hold --state "$CASE_STATE" --ticket "$TICKET_ID" --why "$1" --notify "$NOTIFY" >> "$LOG" 2>&1
   reject "changed protected host code"
 }
 run_field() { node "$HOST/ticket-fix/run.mjs" get --run-file "$RUN_FILE" --field "$1" 2>> "$LOG"; }
@@ -207,15 +218,18 @@ for TARGET in ${(f)TARGETS}; do
   # checks and repair loop, the host commit, the gates, the independent review
   # and the merge decision. Customer evidence reaches the model through stdin
   # only. Its exit: 0 ready to record, 2 reply refused after two repairs, 3
-  # model failed or timed out, 4 runner code changed, 5 files outside scope.
+  # model failed or timed out, 4 runner code changed, 5 files outside scope, 6
+  # git state outside the worktree changed.
   # The 3-hour alarm is a backstop; every session and gate has its own limit
   # and run.mjs kills whole process groups when it is signalled.
   RUN_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
   /usr/bin/perl -e 'alarm 10800; exec @ARGV' -- node "$HOST/ticket-fix/run.mjs" work --ticket "$TICKET_ID" --context "$CONTEXT" --output "$OUTPUT" --run-file "$RUN_FILE" \
     --run-id "$RUN_ID" --run-dir "$RUN_DIR" --repo "$REPO" --work "$WORK_STATE" --state "$CASE_STATE" --fix-state "$FIX_STATE" \
-    --claude "$CLAUDE" --committer "$RUN_COMMITTER" --notify "$NOTIFY" --worker-seconds "$WORKER_SECONDS" --run-started "$RUN_STARTED" >> "$LOG" 2>&1
+    --claude "$CLAUDE" --committer "$RUN_COMMITTER" --notify "$NOTIFY" --worker-seconds "$WORKER_SECONDS" --run-started "$RUN_STARTED" \
+    --auto-merge "$AUTO_MERGE" >> "$LOG" 2>&1
   WORK_RC=$?
-  if host_code_changed || [ "$WORK_RC" -eq 4 ]; then hold_run; RC=1; break; fi
+  if host_code_changed || [ "$WORK_RC" -eq 4 ]; then hold_run runner_code; RC=1; break; fi
+  if [ "$WORK_RC" -eq 6 ]; then hold_run host_state; RC=1; break; fi
   case "$WORK_RC" in
     0) ;;
     2) reject "review not recorded"; RC=1; break ;;
@@ -226,9 +240,10 @@ for TARGET in ${(f)TARGETS}; do
   RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) || {
     reject "unreadable run record"; RC=1; break; }
   # Rechecks target approval, freshness and actionability inside the write
-  # transaction. No model-selected target/recipient/SQL is accepted.
+  # transaction. No model-selected target/recipient/SQL is accepted. The code
+  # outcome binds the record: an unreleased change completes no follow-up.
   if TICKET_RUN_KEY="$RUN_KEY" TICKET_REPO="$RECORD_REPO" TICKET_PRE_HEAD="$BASE" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" \
-    TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
+    TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_CODE_OUTCOME="$CODE" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1; then
     if [ "$CODE" = refused ]; then
       # The reply is recorded (it claims nothing), but a change the gates or
@@ -245,7 +260,7 @@ for TARGET in ${(f)TARGETS}; do
     reject "review not recorded"
     RC=1; break
   fi
-  node "$HOST/ticket-fix/run.mjs" finish --run-file "$RUN_FILE" --work "$WORK_STATE" >> "$LOG" 2>&1
+  node "$HOST/ticket-fix/run.mjs" finish --run-file "$RUN_FILE" --work "$WORK_STATE" --repo "$REPO" >> "$LOG" 2>&1
   # One code change per scheduled run: the gates and review take long enough.
   case "$CODE" in none) ;; *) break ;; esac
 done

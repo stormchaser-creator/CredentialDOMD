@@ -146,6 +146,10 @@ A prior completion claim or a resolved related ticket is not itself task verific
    commands allowed are `npm test`, `node --test tests/<file>` and `npm run build:site`.
 2. Edit only `src/`, `tests/` (not `tests/ticket-fix/`), `public/` and `landing/`. Anything
    else in your diff refuses the run; a change to the runner's own code holds every later run.
+   So does a `.gitattributes`, `.gitignore` or `.gitmodules` file, a symbolic link, or a NUL
+   byte in a source file. A file git ignores (for example under a `logs/` directory) is never
+   committed, and the gates, which run in a fresh checkout of the commit, fail on it. Your
+   session and the gates run in a sandbox with no access to credentials or other projects.
 3. A reproduction may already exist: the host facts above list tests a separate session wrote
    BEFORE you and the host recorded FAILING on this base. Those files are frozen (you cannot
    edit them). Your fix is done when they pass. A product change with no reproduction recorded
@@ -162,7 +166,9 @@ A prior completion claim or a resolved related ticket is not itself task verific
    save-and-reload check when you touch TABLE_MAP, defaults, sync code or any
    localStorage/sessionStorage key, the protected-path rules and a blast-radius search. An
    independent reviewer then reads the diff against the ticket. If a gate fails or the
-   reviewer asks for changes, you are resumed once with the findings.
+   reviewer asks for changes or names a path you missed, you are resumed once with the
+   findings. Product code may not look at the test runner (`process.env`, `node:test`,
+   `node:assert`, `NODE_TEST_CONTEXT`) or patch a global; the gates refuse it.
 7. When you changed files, fill `change` in the structured result: `subject` (one line, no
    customer names, emails or numbers from the ticket; the repository is public) and `tests`,
    the `{file, name}` of each test you added or changed that pins the fix. Leave `change` out

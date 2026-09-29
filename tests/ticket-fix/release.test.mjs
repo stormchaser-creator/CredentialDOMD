@@ -82,3 +82,48 @@ test('a missing added string, or a removed string still in the bundle, fails', a
     assert.match(text, /Old synthetic notice text/);
   } finally { await s.close(); p.cleanup(); }
 });
+
+// Finding 17: probes come from string literals and JSX text on code lines,
+// never comments, import paths or code fragments, and the gates keep only
+// what the head build contains.
+import { probeCandidates, releaseCandidates, decodeEntities } from '../../scripts/ticket-fix/release.mjs';
+
+test('probe candidates skip comments, import specifiers, paths and code fragments, and decode HTML entities', () => {
+  const lines = [
+    '// Coverage times can be stated in. A block of text in a comment',
+    '  /* Another synthetic comment with enough words */',
+    "import { coverageBlocks } from '../../utils/coverageBlocks';",
+    "export { thing } from './synthetic/thing.js';",
+    "  <div style={{ gap: 4, paddingTop: i ? 10 : 0 }}>The member&apos;s Home cards</div>",
+    "  const late = items.filter(a => a.b < c ? 'yes' : 'no');",
+    "const notice = 'New synthetic notice text'; // it's the new notice",
+    "const zone = 'America/Chicago';",
+    'const t = `Hello ${name}, welcome`;',
+  ];
+  assert.deepEqual([...probeCandidates(lines)], ["The member's Home cards", 'New synthetic notice text']);
+  assert.equal(decodeEntities('A &amp; B &quot;C&quot; &#39;D&#39; &lt;E&gt;'), 'A & B "C" \'D\' <E>');
+});
+
+test('the gates keep an added probe only if the head build has it, and a removed one only if it does not', () => {
+  const p = project({ 'src/notice.js': "export const notice = 'Old synthetic notice text';\nexport const other = 'Unchanged synthetic text';\n" });
+  try {
+    const base = sh(p.repo, ['rev-parse', 'HEAD']);
+    p.write(p.repo, { 'src/notice.js': "// A comment the minifier drops entirely\nexport const notice = 'New synthetic notice text';\nexport const hidden = 'Dead code the bundler drops';\nexport const other = 'Unchanged synthetic text';\n" });
+    sh(p.repo, ['commit', '-qam', 'Synthetic fix']);
+    const fix = sh(p.repo, ['rev-parse', 'HEAD']);
+    const built = 'const a="New synthetic notice text",b="Unchanged synthetic text";';
+    assert.deepEqual(releaseCandidates({ dir: p.repo, base, fix, builtText: built }), { present: ['New synthetic notice text'], absent: ['Old synthetic notice text'] });
+    assert.deepEqual(releaseCandidates({ dir: p.repo, base, fix, builtText: `${built}"Old synthetic notice text"` }).absent, [], 'a removed string the build still has from elsewhere is no probe');
+    assert.deepEqual(releaseCandidates({ dir: p.repo, base, fix, builtText: null }), { present: [], absent: [], note: 'no head build to choose probes from' });
+  } finally { p.cleanup(); }
+});
+
+test('the release check uses the probes the gates chose', async () => {
+  const { p, base, fix, later } = fixture();
+  const s = await server({ '/app/version.json': build(later), '/app/': INDEX, '/app/assets/index-abc.js': 'const a="Chosen synthetic probe";', '/app/assets/chunk-def.js': '' });
+  try {
+    const r = await verifyRelease({ dir: p.repo, fix, base, versionUrl: `${s.url}/app/version.json`, appUrl: `${s.url}/app/`, ...fast, probes: { present: ['Chosen synthetic probe'], absent: [] } });
+    assert.equal(r.verified, true, r.reason);
+    assert.deepEqual(r.probes.present, [{ text: 'Chosen synthetic probe', found: true }]);
+  } finally { await s.close(); p.cleanup(); }
+});

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { createWorktree, commitWork, changedPaths } from '../../scripts/ticket-fix/worktree.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, redVerdict, suiteCounts, productHunks, gateFailures } from '../../scripts/ticket-fix/gates/tests.mjs';
 import { gatesEnv } from '../../scripts/ticket-fix/worker.mjs';
-import { project, COMMANDS, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mjs';
+import { project, gatesSandbox, COMMANDS, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mjs';
 
 const env = gatesEnv(process.env);
 const REPRO = { 'tests/join.test.mjs': "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { joinLines } from '../src/format.js';\n\ntest('lines are joined with a line break', () => {\n  assert.equal(joinLines(['first', 'second']), 'first\\nsecond');\n});\n" };
@@ -16,14 +16,16 @@ const reproTest = { file: 'tests/join.test.mjs', name: 'lines are joined with a 
 // Worktree at base, reproduction recorded, then the fix committed.
 async function setup(p, { repro = REPRO, tests = [reproTest], fix = FIX } = {}) {
   const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
-  const baseline = await suiteBaseline({ work: p.work, base: wt.base, dir: wt.dir, env, commands: COMMANDS });
+  const sandbox = gatesSandbox(p);
+  const baseline = await suiteBaseline({ work: p.work, base: wt.base, dir: wt.dir, env, commands: COMMANDS, sandbox });
   p.write(wt.dir, repro);
-  const recorded = await recordReproduction({ dir: wt.dir, base: wt.base, tests, changed: changedPaths(wt.dir, wt.base), env });
+  const recorded = await recordReproduction({ dir: wt.dir, work: p.work, base: wt.base, tests, changed: changedPaths(wt.dir, wt.base), env, sandbox });
   p.write(wt.dir, fix);
   const head = commitWork({ dir: wt.dir, base: wt.base, subject: 'Join summary lines with line breaks', ticketId: TICKET, runId: RUN_ID, committer: COMMITTER });
   return { wt, baseline, repro: { kind: 'bug', ...recorded }, head };
 }
-const gatesFor = (p, s, extra = {}) => runTestGates({ dir: s.wt.dir, base: s.wt.base, head: s.head, repro: s.repro, env, work: p.work, commands: COMMANDS, baseline: s.baseline, ...extra });
+const gatesFor = (p, s, extra = {}) => runTestGates({ dir: s.wt.dir, base: s.wt.base, head: s.head, repro: s.repro, env, work: p.work, commands: COMMANDS, baseline: s.baseline,
+  sandbox: gatesSandbox(p), ...extra });
 const failed = gates => gates.checks.filter(c => !c.pass).map(c => c.name);
 
 test('a real reproduction goes red on base with ERR_ASSERTION, then every gate passes at head', async () => {
@@ -57,7 +59,7 @@ test('a reproduction that already passes on base, throws a TypeError or cannot i
     const tests = [{ file: 'tests/weak.test.mjs', name: 'already true' }, { file: 'tests/weak.test.mjs', name: 'throws' },
       { file: 'tests/import.test.mjs', name: 'named import of a missing export' }, { file: 'tests/weak.test.mjs', name: 'new behaviour through the namespace' },
       { file: 'tests/weak.test.mjs', name: 'no such test' }, { file: 'tests/ticket-fix/x.test.mjs', name: 'runner test' }];
-    const r = await recordReproduction({ dir: wt.dir, base: wt.base, tests, changed: changedPaths(wt.dir, wt.base), env });
+    const r = await recordReproduction({ dir: wt.dir, work: p.work, base: wt.base, tests, changed: changedPaths(wt.dir, wt.base), env, sandbox: gatesSandbox(p) });
     assert.deepEqual(r.tests.map(t => t.on_base), ['passed_on_base', 'not_an_assertion', 'did_not_run', 'red', 'did_not_run', 'invalid_reference']);
     assert.equal(r.recorded, false, 'one weak test is enough to refuse the reproduction');
     assert.equal(redVerdict({ tests: [{ file: 'a.test.mjs', name: 'x', status: 'skip' }] }, { file: 'a.test.mjs', name: 'x' }), 'did_not_run');
@@ -98,13 +100,14 @@ test('a skipped or deleted test is listed for the reviewer, and a test that stop
     const gates = await gatesFor(p, s);
     assert.deepEqual(gates.diff.test_changes.map(t => t.file), ['tests/format.test.mjs']);
     assert.match(gates.diff.test_changes[0].removed[0], /^test\('the title is set'/);
+    assert.equal(gates.diff.test_changes[0].removed_assertions, 1);
     assert.equal(gates.diff.deleted_tests, 1, 'a test turned into test.skip counts as removed');
     assert.equal(gates.diff.added_tests, 1, 'the reproduction');
     // Nothing else changed in how many tests run, so the count holds; the
     // reviewer must justify the skipped assertion (review.test.mjs).
     assert.ok(!failed(gates).includes('test_count'));
     // A base that ran more tests than head explains: something stopped loading.
-    const short = await gatesFor(p, s, { baseline: { base: s.wt.base, pass: 4 } });
+    const short = await gatesFor(p, s, { baseline: { base: s.wt.base, pass: 4, files: {} } });
     assert.ok(failed(short).includes('test_count'));
     assert.match(short.checks.find(c => c.name === 'test_count').detail, /1 passed at head; base 4, 1 removed, 1 added/);
   } finally { p.cleanup(); }
@@ -162,8 +165,135 @@ test('save and reload: a new localStorage key needs a declared test that saves a
   } finally { p.cleanup(); }
 });
 
-test('suite counts parse the spec and TAP summaries', () => {
+test('suite counts parse the spec and TAP summaries, taking the last block', () => {
   assert.deepEqual(suiteCounts('\u2139 tests 12\n\u2139 pass 11\n\u2139 fail 1\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 cancelled 0\n'), { tests: 12, pass: 11, fail: 1, skipped: 0, todo: 0, cancelled: 0 });
   assert.equal(suiteCounts('# tests 3\n# pass 3\n').pass, 3);
   assert.equal(suiteCounts('nothing').pass, null);
+  assert.equal(suiteCounts('\u2139 pass 99999\n\u2139 tests 2\n\u2139 pass 2\n').pass, 2);
+});
+
+// Stage 2 review fixes.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { sh, SANDBOX, npiFrom } from './stage2-helpers.mjs';
+import { diffFacts } from '../../scripts/ticket-fix/gates/tests.mjs';
+
+// Commits the worktree as it is, around the host's G0 rules (the test plays a
+// worker whose files reached a commit anyway).
+const forceCommit = (s, message = 'Synthetic forced commit') => { sh(s.wt.dir, ['add', '-A', '-f', '--', 'src', 'tests']); sh(s.wt.dir, ['commit', '-q', '-m', message]); return sh(s.wt.dir, ['rev-parse', 'HEAD']); };
+
+test('finding 3: a .gitattributes "-diff" line cannot hide a product change from the hunks or a test change from the reviewer', async () => {
+  const p = project();
+  try {
+    const s = await setup(p);
+    p.write(s.wt.dir, { 'src/.gitattributes': 'format.js -diff\n', 'tests/.gitattributes': '*.test.mjs -diff\n',
+      'tests/format.test.mjs': "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { title } from '../src/format.js';\n\ntest('the title is set', () => assert.ok(title));\n" });
+    const head = forceCommit(s);
+    const hunks = productHunks(s.wt.dir, s.wt.base, head);
+    assert.ok(hunks.length >= 1 && hunks.every(h => !h.binary && h.patch), JSON.stringify(hunks.map(h => [h.file, h.binary])));
+    const facts = diffFacts(s.wt.dir, s.wt.base, head);
+    const changed = facts.test_changes.find(t => t.file === 'tests/format.test.mjs');
+    assert.ok(changed && changed.removed_assertions === 1, JSON.stringify(facts.test_changes));
+  } finally { p.cleanup(); }
+});
+
+test('finding 4: a test that prints a fake "pass" summary and a disabled test cannot forge the suite count', async () => {
+  const two = "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { title } from '../src/format.js';\n\ntest('the title is set', () => assert.equal(title, 'Synthetic summary line'));\ntest('the title is a string', () => assert.equal(typeof title, 'string'));\n";
+  const p = project({ 'tests/format.test.mjs': two });
+  try {
+    const s = await setup(p, { fix: { ...FIX, 'tests/format.test.mjs': two.replace("test('the title is a string'", "console.log('\\u2139 tests 99999');\nconsole.log('\\u2139 pass 99999');\nif (false)\ntest('the title is a string'") } });
+    assert.equal(s.baseline.pass, 2);
+    const gates = await gatesFor(p, s);
+    assert.equal(gates.diff.deleted_tests, 0, 'no declaration line was removed');
+    assert.ok(failed(gates).includes('test_count'), JSON.stringify(gates.checks));
+    assert.ok(gates.suite.pass < 99999 && gates.suite.pass === 2, `counted from the reporter: ${gates.suite.pass}`);
+    // A file the diff did not touch that passes fewer tests than at base.
+    const dropped = await gatesFor(p, s, { baseline: { ...s.baseline, files: { ...s.baseline.files, 'tests/untouched.test.mjs': { pass: 3, fail: 0, skip: 0, todo: 0 } } } });
+    assert.match(dropped.checks.find(c => c.name === 'test_count').detail, /files the diff did not touch pass fewer tests: tests\/untouched\.test\.mjs \(3 -> 0\)/);
+  } finally { p.cleanup(); }
+});
+
+test('finding 9: product code that reads the test runner or patches a global fails, whatever the hunk-revert check says', async () => {
+  const p = project();
+  try {
+    const aware = { 'src/format.js': "// Synthetic module for the gate tests.\nexport const title = 'Synthetic summary line';\n\nexport function joinLines(lines) {\n  if (globalThis.process?.env?.NODE_TEST_CONTEXT) return lines.join('\\n');\n  return lines.join(' ');\n}\n" };
+    const s = await setup(p, { fix: aware });
+    const gates = await gatesFor(p, s);
+    assert.equal(gates.green[0].status, 'green', 'the reproduction passes: the product "detects" the runner');
+    assert.equal(gates.mutation.status, 'passed', 'and the hunk-revert check is satisfied');
+    assert.ok(failed(gates).includes('test_aware_product'), JSON.stringify(gates.checks));
+    assert.match(gates.checks.find(c => c.name === 'test_aware_product').detail, /src\/format\.js: reads NODE_TEST_CONTEXT/);
+  } finally { p.cleanup(); }
+});
+
+test('findings 10 and 11: a git-ignored file the fix imports is not in the commit, so the gates, run in a fresh worktree, fail and name it', async () => {
+  const p = project({ '.gitignore': 'node_modules\nlogs\n' });
+  try {
+    const importing = { 'src/format.js': "// Synthetic module for the gate tests.\nimport { join } from './logs/join.js';\nexport const title = 'Synthetic summary line';\n\nexport function joinLines(lines) {\n  return join(lines);\n}\n",
+      'src/logs/join.js': "export const join = lines => lines.join('\\n');\n" };
+    const s = await setup(p, { fix: importing });
+    assert.equal(sh(s.wt.dir, ['ls-tree', '-r', '--name-only', s.head, 'src']).split('\n').includes('src/logs/join.js'), false, 'the commit leaves the ignored file out');
+    const gates = await gatesFor(p, s);
+    assert.ok(failed(gates).includes('ignored_files'), JSON.stringify(gates.checks));
+    assert.match(gates.checks.find(c => c.name === 'ignored_files').detail, /src\/logs\/join\.js/);
+    assert.ok(failed(gates).includes('green_on_head'), 'the reproduction cannot find the ignored module in a fresh worktree');
+    assert.ok(failed(gates).includes('suite'));
+    assert.equal(gates.tree, sh(s.wt.dir, ['rev-parse', `${s.head}^{tree}`]));
+  } finally { p.cleanup(); }
+});
+
+test('finding 14: an existing test disabled by an inserted return or a try/catch, with no line removed, is listed for the reviewer', async () => {
+  const multi = "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { title } from '../src/format.js';\n\ntest('the title is set', () => {\n  assert.equal(title, 'Synthetic summary line');\n});\n";
+  const neutered = [multi.replace("() => {\n", "() => {\n  return;\n"),
+    multi.replace("  assert.equal(title, 'Synthetic summary line');\n", "  try {\n  assert.equal(title, 'Synthetic summary line');\n  } catch { /* synthetic */ }\n")];
+  for (const body of neutered) {
+    const p = project({ 'tests/format.test.mjs': multi });
+    try {
+      const s = await setup(p, { fix: { ...FIX, 'tests/format.test.mjs': body } });
+      const gates = await gatesFor(p, s);
+      const change = gates.diff.test_changes.find(t => t.file === 'tests/format.test.mjs');
+      assert.ok(change, JSON.stringify(gates.diff.test_changes));
+      assert.equal(change.status, 'M');
+      assert.equal(change.removed_count, 0, 'no line was removed');
+      assert.equal(change.removed_assertions, 0);
+      assert.ok(change.added.some(l => /return;|try \{/.test(l)), JSON.stringify(change));
+      assert.ok(!failed(gates).includes('test_count'), 'the count does not move: only the reviewer can catch this');
+    } finally { p.cleanup(); }
+  }
+});
+
+test('finding 7 (G10): personal data, copied ticket text or a credential in the commit fails the gates by rule name, never by value', async () => {
+  const p = project();
+  try {
+    // Made-up values (see personal-data.test.mjs): none can be a real person's.
+    const npi = npiFrom('100000042');
+    const leaky = { ...FIX, 'tests/fixture.test.mjs': `import test from 'node:test';\nimport assert from 'node:assert/strict';\n// the summary joins lines with spaces and the customer wants line breaks\nconst member = { email: 'no-such-person-7f3a@gmail.com', npi: '${npi}', phone: '099-555-4477' };\ntest('synthetic fixture', () => assert.ok(member));\n` };
+    const s = await setup(p, { fix: leaky });
+    const context = { tickets: [{ subject: 'Synthetic subject', body: 'Synthetic body: the summary joins lines with spaces and the customer wants line breaks', messages: [] }] };
+    const gates = await gatesFor(p, s, { context, secrets: ['synthetic-runner-credential-0123'] });
+    assert.ok(failed(gates).includes('personal_data'), JSON.stringify(gates.checks));
+    const detail = gates.checks.find(c => c.name === 'personal_data').detail;
+    for (const rule of ['email in tests/fixture.test.mjs', 'npi in tests/fixture.test.mjs', 'phone in tests/fixture.test.mjs', 'ticket_text in tests/fixture.test.mjs']) assert.ok(detail.includes(rule), `${rule}: ${detail}`);
+    assert.ok(!new RegExp(`gmail|${npi}|4477`).test(JSON.stringify(gates)), 'no matched value is recorded');
+  } finally { p.cleanup(); }
+});
+
+test('finding 12 / 1: a declared test that pushes, writes outside its worktree or reads runner state gets nowhere when the gates run it', { skip: SANDBOX ? false : 'needs sandbox-exec' }, async () => {
+  const p = project();
+  try {
+    const marker = path.join(p.state, 'escape-marker');
+    writeFileSync(path.join(p.state, 'case.json'), '{"synthetic":"case record"}\n', { mode: 0o600 });
+    const escape = `import test from 'node:test';\nimport { spawnSync } from 'node:child_process';\nimport { writeFileSync, readFileSync } from 'node:fs';\n` +
+      `test('escape probe', () => {\n  spawnSync('git', ['push', '-q', 'origin', 'HEAD:refs/heads/main'], { env: { PATH: process.env.PATH, HOME: process.env.HOME } });\n` +
+      `  try { writeFileSync(${JSON.stringify(marker)}, 'x'); } catch {}\n  try { writeFileSync(${JSON.stringify(path.join(p.repo, '.git', 'hooks', 'pre-push'))}, '#!/bin/sh\\n'); } catch {}\n` +
+      `  let read = 'denied'; try { readFileSync(${JSON.stringify(path.join(p.state, 'case.json'))}); read = 'read'; } catch {}\n  console.log('READ-' + read);\n});\n`;
+    const s = await setup(p, { fix: { ...FIX, 'tests/escape.test.mjs': escape } });
+    const origin = p.originHead();
+    const gates = await gatesFor(p, s, { declared: [{ file: 'tests/escape.test.mjs', name: 'escape probe' }] });
+    assert.equal(gates.sandboxed, true);
+    assert.equal(p.originHead(), origin, 'origin main unchanged');
+    assert.equal(existsSync(marker), false, 'nothing written outside the gate worktree');
+    assert.equal(existsSync(path.join(p.repo, '.git', 'hooks', 'pre-push')), false, 'no hook planted');
+    assert.ok(!readFileSync(path.join(p.repo, '.git', 'config'), 'utf8').includes('helper'));
+  } finally { p.cleanup(); }
 });

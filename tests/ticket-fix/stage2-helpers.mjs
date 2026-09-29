@@ -6,6 +6,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, chmodSync,
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sandboxAvailable } from '../../scripts/ticket-fix/sandbox.mjs';
+import { luhnNpi } from '../../scripts/ticket-fix/gates/personal-data.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const FAKE_ESLINT = path.join(HERE, 'fixtures', 'fake-eslint.mjs');
@@ -14,6 +16,17 @@ export const COMMITTER = 'ticket-agent+0123456789abcdef@credentialdomd.invalid';
 export const RUN_ID = '0123456789abcdef';
 export const TICKET = '00000000-0000-4000-8000-000000004242';
 export const OWNER = '00000000-0000-4000-8000-000000009001';
+// The gates run under sandbox-exec wherever it exists (macOS); elsewhere
+// (CI on Linux) the same code runs without it.
+export const SANDBOX = sandboxAvailable();
+// The sandbox policy the runner would use for a synthetic project (null
+// where sandbox-exec does not exist).
+export function gatesSandbox(p) {
+  if (!SANDBOX) return null;
+  const profileDir = path.join(p.root, 'profiles');
+  mkdirSync(profileDir, { recursive: true, mode: 0o700 });
+  return { home: os.homedir(), denyRead: [p.state, path.join(p.work, 'runs'), path.join(p.work, 'baseline')], denyFiles: [path.join(p.work, 'AUTO_MERGE')], profileDir };
+}
 
 export function sh(dir, args, { env = {}, allowFail = false, input } = {}) {
   const r = spawnSync('git', ['-C', dir, '-c', 'user.name=Synthetic Tester', '-c', 'user.email=tester@example.invalid', '-c', 'commit.gpgsign=false',
@@ -124,8 +137,16 @@ export async function runStub(p, script, options = {}) {
   const runId = options.runId ?? RUN_ID;
   const code = await runTicket({ ticket: ctx.target_id, contextFile, outputFile: path.join(runDir, `${ctx.target_id}-output.json`), runFile: path.join(runDir, `${ctx.target_id}-run.json`),
     runId, runDir, repo: p.repo, work: p.work, state: p.state, committer: `ticket-agent+${runId}@credentialdomd.invalid`, launchSession: model.launch,
-    commands: COMMANDS, log: line => logs.push(line), send: async m => { sent.push(m); return true; }, verify: options.verify, ...options.extra });
+    commands: COMMANDS, log: line => logs.push(line), send: async m => { sent.push(m); return true; }, verify: options.verify, autoMerge: options.autoMerge ?? false,
+    sandbox: options.sandbox ?? SANDBOX, ...options.extra });
   const read = name => JSON.parse(readFileSync(path.join(runDir, `${ctx.target_id}-${name}.json`), 'utf8'));
   let facts = null; try { facts = read('run'); } catch { facts = null; }
   return { code, facts, logs, sent, calls: model.calls, runDir, output: () => read('output'), cleanup: () => rmSync(runDir, { recursive: true, force: true }) };
+}
+
+// A 10-digit number that passes the NPI check, built from a synthetic prefix
+// at run time, so no full NPI is ever written in the repository.
+export function npiFrom(prefix) {
+  for (let d = 0; d <= 9; d++) if (luhnNpi(`${prefix}${d}`)) return `${prefix}${d}`;
+  throw Error('no check digit');
 }

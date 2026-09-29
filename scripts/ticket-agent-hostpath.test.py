@@ -14,8 +14,11 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 PG = Path(os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
@@ -63,12 +66,66 @@ def quoted(value):
 with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp') as tmp:
     folder = Path(tmp)
     folder.chmod(0o700)
+
+    # The model stand-in runs inside the session sandbox, which lets it write
+    # only its worktree and session directory. It hands its records to this
+    # loopback recorder, which writes them under the test folder only.
+    class Recorder(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _target(self, key):
+            value = parse_qs(urlparse(self.path).query).get(key, [''])[0]
+            target = Path(value).resolve()
+            if not value.startswith('/') or not str(target).startswith(str(folder.resolve()) + '/'):
+                raise ValueError('outside the fixture folder')
+            return target
+
+        def _reply(self, code, body=b''):
+            self.send_response(code)
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            try:
+                self._reply(200, self._target('file').read_bytes())
+            except Exception:
+                self._reply(404)
+
+        def do_POST(self):
+            try:
+                body = self.rfile.read(int(self.headers.get('Content-Length') or 0))
+                action = urlparse(self.path).path
+                if action == '/append':
+                    with open(self._target('file'), 'ab') as handle:
+                        handle.write(body)
+                elif action == '/write':
+                    self._target('file').write_bytes(body)
+                elif action == '/sql':
+                    sql(body.decode())
+                elif action == '/tamper':
+                    repo = self._target('repo')
+                    with open(repo / 'scripts' / 'ticket-fix' / 'claims.mjs', 'a') as handle:
+                        handle.write('\nexport const weakened = true;\n')
+                    done = subprocess.run(GIT + ['-C', str(repo), 'commit', '-qam', 'Synthetic weakening'], text=True, capture_output=True, env=env, timeout=30)
+                    if done.returncode:
+                        raise RuntimeError(done.stderr)
+                else:
+                    raise ValueError('unknown action')
+                self._reply(200)
+            except Exception:
+                self._reply(500)
+
+    recorder = ThreadingHTTPServer(('127.0.0.1', 0), Recorder)
+    threading.Thread(target=recorder.serve_forever, daemon=True).start()
     sock = folder / 'sock'
     sock.mkdir(mode=0o700)
     # An allowlist prevents inherited provider, database and Node preload settings.
     env = {'PATH': '/usr/bin:/bin:/opt/homebrew/bin', 'TMPDIR': str(folder), 'LC_ALL': 'C',
            'SUPPORT_FIXTURE_ROOT': str(ROOT), 'SUPPORT_FIXTURE_NODE': str(NODE),
-           'SUPPORT_FIXTURE_PSQL': str(PG / 'psql'), 'SUPPORT_FIXTURE_SOCKET': str(sock)}
+           'SUPPORT_FIXTURE_PSQL': str(PG / 'psql'), 'SUPPORT_FIXTURE_SOCKET': str(sock),
+           'SUPPORT_FIXTURE_RECORDER': f'http://127.0.0.1:{recorder.server_address[1]}'}
 
     def command(*args, **kwargs):
         return subprocess.run([str(a) for a in args], text=True, capture_output=True,
@@ -243,6 +300,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         check('each ticket gets a reproduction session before its worker', roles[:2] == ['repro', 'worker'] and roles.count('repro') == 2 and roles.count('worker') == 2, roles)
         check('every session ran in a worktree under the work directory, never the owner checkout', all(v['cwd'].startswith(str(run / 'work' / 'worktrees')) for v in sessions(run)))
         check('the worker has Read, Grep and Glob but no git or rg', all(v['tools'] == 'Read,Grep,Glob,Edit,Write,Bash' for v in sessions(run)))
+        check('every session ran inside the sandbox, with its credential on a pipe', len(sessions(run)) == 4 and all(v['sandboxed'] for v in sessions(run)), sessions(run))
         check('the owner checkout and origin main are untouched', git_out(repo, 'rev-parse', 'HEAD') == owner_head and git_out(repo, 'status', '--porcelain') == '' and git_out(run / 'origin.git', 'rev-parse', 'main') == origin_head)
         check('a run with no change leaves no worktree and no branch', not any((run / 'work' / 'worktrees').iterdir()) and git_out(repo, 'branch', '--list', 'agent/*') == '')
 
@@ -284,6 +342,9 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         for name in ['tamper', 'tamper_uncommitted']:
             run, state, script, repo = scenario(name)
             result = execute(script)
+            if name == 'tamper':
+                escape = [json.loads(line) for line in (run / 'escape.jsonl').read_text().splitlines()]
+                check('tamper: the sandbox refused the write to the owner checkout and its git', escape == [{'write_refused': True, 'commit_status': escape[0]['commit_status']}] and escape[0]['commit_status'] != 0, escape)
             check(name + ': a run that changes the reply checks records nothing', result.returncode != 0 and count() == 0 and 'PROTECTED' in log(run))
             check(name + ': the owner is alerted and every later run is held', len(notified(run)) == 1 and "changed the runner's own code" in notified(run)[0] and (state / 'HOLD-host-code-changed').exists())
             check(name + ': the held run counts toward the breaker', (state / 'failed' / f'{T}.count').read_text().strip() == '1')
@@ -366,6 +427,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', dir='/private/tmp')
         for name in checks:
             print('  ok ' + name)
     finally:
+        recorder.shutdown()
         stopped = command(PG / 'pg_ctl', '-D', folder / 'data', '-m', 'immediate', '-w', 'stop')
         if stopped.returncode:
             raise RuntimeError('Temporary PostgreSQL failed to stop')

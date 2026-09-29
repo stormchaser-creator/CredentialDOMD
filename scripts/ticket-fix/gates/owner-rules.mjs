@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git } from '../worktree.mjs';
+import { git, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES } from '../worktree.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PROTECTED_CONFIG = path.join(HERE, '..', 'protected-paths.json');
@@ -38,11 +38,13 @@ export function numericLiterals(line) {
 }
 const multiset = values => values.slice().sort().join('|');
 
-// Changed lines per file of base..head.
+// Changed lines per file of base..head. Attributes come from base and the
+// diff is forced to text, so a "-diff" line or a NUL byte cannot turn a
+// changed source file into "Binary files differ" (stage 2 review, finding 3).
 export function changedLines(dir, base, head, files, { binary = 'git' } = {}) {
   const out = {};
   if (!files.length) return out;
-  const diff = git(dir, ['diff', '-U0', '--no-color', '--no-renames', base, head, '--', ...files], { binary, allowFail: true }) || '';
+  const diff = git(dir, [...attrFrom(base), 'diff', '-U0', ...DIFF_TEXT, '--no-renames', base, head, '--', ...files, ...MEDIA_EXCLUDES], { binary, allowFail: true }) || '';
   let file = null;
   for (const line of diff.split('\n')) {
     if (line.startsWith('+++ ')) { if (line !== '+++ /dev/null') file = line.slice(6); continue; }
@@ -100,10 +102,13 @@ export function stringsIn(lines) {
 }
 const keysIn = lines => new Set(lines.flatMap(l => [...l.replace(STRING, '""').matchAll(KEY)].map(m => m[1])));
 
-function grepSites(dir, term, { word, binary }) {
-  const out = git(dir, ['grep', '-n', '-I', '-F', ...(word ? ['-w'] : []), '-e', term, '--', 'src', 'public', 'landing', 'tests', 'scripts', 'supabase'],
+// Sites of a term in the committed head (not the worktree, whatever it now
+// holds), with base's attributes.
+function grepSites(dir, term, { word, binary, base, head }) {
+  const out = git(dir, [...attrFrom(base), 'grep', '-n', '-I', '-F', ...(word ? ['-w'] : []), '-e', term, head, '--', 'src', 'public', 'landing', 'tests', 'scripts', 'supabase'],
     { binary, allowFail: true }) || '';
-  return out.split('\n').filter(Boolean).map(line => { const m = /^([^:]+):(\d+):(.*)$/.exec(line); return m ? { file: m[1], line: Number(m[2]), text: m[3].trim().slice(0, 160) } : null; }).filter(Boolean);
+  const prefix = `${head}:`;
+  return out.split('\n').filter(Boolean).map(line => { const m = /^([^:]+):(\d+):(.*)$/.exec(line.startsWith(prefix) ? line.slice(prefix.length) : line); return m ? { file: m[1], line: Number(m[2]), text: m[3].trim().slice(0, 160) } : null; }).filter(Boolean);
 }
 
 export function blastRadius({ dir, base, head, files, siblings = loadJSON(SIBLING_CONFIG), binary = 'git', maxTerms = 25, maxSites = 40 }) {
@@ -125,7 +130,7 @@ export function blastRadius({ dir, base, head, files, siblings = loadJSON(SIBLIN
   }
   const report = [];
   for (const t of terms) {
-    const sites = grepSites(dir, t.term, { word: t.word, binary });
+    const sites = grepSites(dir, t.term, { word: t.word, binary, base, head });
     const untouched = sites.filter(s => !(lines[s.file]?.head_lines.has(s.line)));
     report.push({ term: t.term, kind: t.kind, sites: sites.length, untouched: untouched.slice(0, maxSites), untouched_count: untouched.length });
   }

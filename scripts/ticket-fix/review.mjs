@@ -11,12 +11,16 @@
 //
 // The host then checks the verdict: every citation's snippet must be found
 // within 2 lines of file:line at head (an invented citation gets one fresh
-// rerun, then fails), and the pass rule below. A diff touching billing, pay
-// or invoice math, or sync code, gets two separate reviews and both must pass.
+// rerun, then fails), and the pass rule below: every met or partial item
+// needs a verified citation into the change (a file the diff touched or a
+// test gates.json lists), and a missed path the reviewer names is not an
+// approval, whatever its verdict says (stage 2 review, findings 15 and 16).
+// A diff touching billing, pay or invoice math, or sync code, gets two
+// separate reviews and both must pass.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git } from './worktree.mjs';
+import { git, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES } from './worktree.mjs';
 import { globRegExp, loadJSON, PROTECTED_CONFIG } from './gates/owner-rules.mjs';
 import { PERSISTENCE_FILES } from './gates/tests.mjs';
 
@@ -78,16 +82,39 @@ export function verifyCitations(review, readFile) {
   return invented;
 }
 
+// The files a citation may point into: what the diff touched and the tests
+// gates.json lists (reproduction, declared, green). null: not known (no
+// gates), so only the citation count is checked.
+export function citableFiles(gates) {
+  if (!gates?.diff?.files) return null;
+  return new Set([...gates.diff.files, ...(gates.repro?.tests ?? []).map(t => t.file), ...(gates.declared ?? []).map(t => t.file), ...(gates.green ?? []).map(t => t.file)].filter(Boolean));
+}
+
 // The pass rule for one review, given what the host knows.
 export function reviewVerdict(review, { invented = [], gates = null, blast = null } = {}) {
   const reasons = [];
   if (invented.length) reasons.push(`${invented.length} citation(s) not found at head`);
   if (review.verdict !== 'approve') reasons.push(`verdict ${review.verdict}`);
   if (review.items.some(i => i.verdict === 'not_met')) reasons.push('an item is not met');
+  // Finding 16: a met or partial item stands on at least one citation the
+  // host verified, into the change itself.
+  const bad = new Set(invented.map(x => `${x.where}|${x.file}|${x.line}`));
+  const citable = citableFiles(gates);
+  review.items.forEach((item, i) => {
+    if (!['met', 'partial'].includes(item.verdict)) return;
+    const good = item.citations.filter(c => !bad.has(`items[${i}]|${c.file}|${c.line}`) && (!citable || citable.has(c.file)));
+    if (!good.length) reasons.push(`item ${i + 1} is ${item.verdict} without a verified citation into the change`);
+  });
   if (review.regressions.some(r => r.severity === 'high')) reasons.push('a high-severity regression');
+  // Finding 15: a path the reviewer says was missed means the change is
+  // incomplete, whatever the verdict.
+  for (const m of review.missed_paths) reasons.push(`missed path ${m.file}:${m.line}`);
+  for (const e of review.sibling_exclusions) {
+    if (review.missed_paths.some(m => m.file === e.member)) reasons.push(`sibling ${e.member} is both excluded and named as missed`);
+  }
   if (review.test_changes.some(t => t.verdict === 'unjustified')) reasons.push('an unjustified test change');
   for (const change of gates?.diff?.test_changes ?? []) {
-    if (!review.test_changes.some(t => t.file === change.file)) reasons.push(`the changed assertions in ${change.file} were not reviewed`);
+    if (!review.test_changes.some(t => t.file === change.file)) reasons.push(`the changed test file ${change.file} was not reviewed`);
   }
   for (const group of blast?.sibling_groups ?? []) {
     for (const member of group.untouched) {
@@ -134,7 +161,7 @@ export function reviseInput(reviews) {
 // { ok, output: { structured_output } , reason }. Each review whose citations
 // do not check out gets ONE fresh rerun.
 export async function reviewDiff({ dir, base, head, context, gates, protectedReport, blast, launch, prompt = readFileSync(REVIEW_PROMPT, 'utf8'), binary = 'git', risky = null }) {
-  const diff = git(dir, ['diff', '--no-color', '--no-ext-diff', base, head], { binary });
+  const diff = git(dir, [...attrFrom(base), 'diff', ...DIFF_TEXT, base, head, '--', '.', ...MEDIA_EXCLUDES], { binary });
   const input = reviewInput({ prompt, context, diff, gates, protectedReport, blast, base, head });
   const count = (risky ?? isRisky(gates?.diff?.files ?? [], { persistence: gates?.persistence })) ? 2 : 1;
   const readFile = file => readFileSync(path.join(dir, file), 'utf8');
@@ -157,6 +184,9 @@ export async function reviewDiff({ dir, base, head, context, gates, protectedRep
   const reasons = reviews.flatMap((r, i) => (r.ok ? r.reasons : [`review ${i + 1}: ${r.reason}`]).map(x => (count > 1 ? `review ${i + 1}: ${x}` : x)));
   if (count > 1 && new Set(verdicts).size > 1) reasons.push(`the two reviews disagree (${verdicts.join(' vs ')})`);
   const pass = reviews.every(r => r.ok && r.pass) && reasons.length === 0;
-  const revise = !pass && reviews.every(r => r.ok && !r.invented.length) && verdicts.includes('revise') && !verdicts.includes('block');
+  // A review that names a missed path sends the worker round once, even when
+  // its verdict said approve: the revise prompt carries the missed paths.
+  const revise = !pass && reviews.every(r => r.ok && !r.invented.length) && !verdicts.includes('block') &&
+    (verdicts.includes('revise') || reviews.some(r => r.ok && r.review.missed_paths.length > 0));
   return { pass, revise, count, reviews: reviews.map(r => (r.ok ? { verdict: r.review.verdict, pass: r.pass, reasons: r.reasons, invented: r.invented, attempts: r.attempt, review: r.review, cost_usd: r.cost_usd } : { verdict: 'failed', pass: false, reasons: [r.reason], attempts: r.attempt })), reasons };
 }

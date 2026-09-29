@@ -68,13 +68,47 @@ test('the pass rule: approve with a not_met item, a high regression, an unjustif
     [good({ verdict: 'revise' }), /verdict revise/],
   ];
   for (const [review, reason] of cases) assert.match(reviewVerdict(review).reasons.join(), reason);
-  const withTests = reviewVerdict(good(), { gates: { diff: { test_changes: [{ file: 'tests/a.test.mjs', removed: ['assert.equal(1, 1)'] }] } } });
-  assert.match(withTests.reasons.join(), /changed assertions in tests\/a\.test\.mjs were not reviewed/);
+  const withTests = reviewVerdict(good(), { gates: { diff: { files: ['src/format.js', 'tests/a.test.mjs'], test_changes: [{ file: 'tests/a.test.mjs', removed: ['assert.equal(1, 1)'] }] } } });
+  assert.match(withTests.reasons.join(), /changed test file tests\/a\.test\.mjs was not reviewed/);
   const blast = { sibling_groups: [{ name: 'send channels', touched: ['src/a.js'], untouched: ['src/b.js', 'src/c.js'] }] };
   assert.match(reviewVerdict(good(), { blast }).reasons.join(), /untouched sibling src\/b\.js/);
   const excluded = good({ sibling_exclusions: [{ group: 'send channels', member: 'src/b.js', reason: 'does not format line breaks at all' }, { group: 'send channels', member: 'src/c.js', reason: 'shares composeText, fixed with it' }] });
   assert.equal(reviewVerdict(excluded, { blast }).pass, true);
-  assert.equal(reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'partial', citations: [] }] })).pass, true, 'partial is honest, not a refusal');
+  const cited = [{ file: 'src/format.js', line: 5, snippet: "return lines.join('\\n');" }];
+  assert.equal(reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'partial', citations: cited }] })).pass, true, 'partial is honest, not a refusal');
+});
+
+test('finding 16: a met or partial item needs a verified citation into the change; an approve that cites nothing fails', () => {
+  const gates = { diff: { files: ['src/format.js'], test_changes: [] }, repro: { tests: [{ file: 'tests/join.test.mjs', name: 't' }] }, declared: [], green: [] };
+  const none = reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'met', citations: [] }] }), { gates });
+  assert.equal(none.pass, false);
+  assert.match(none.reasons.join(), /item 1 is met without a verified citation into the change/);
+  const elsewhere = reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'met', citations: [{ file: 'src/other.js', line: 1, snippet: 'something else entirely' }] }] }), { gates });
+  assert.match(elsewhere.reasons.join(), /item 1 is met without a verified citation/, 'a file the diff did not touch is not evidence of the change');
+  const invented = [{ where: 'items[0]', file: 'src/format.js', line: 5, why: 'snippet not within 2 lines of the cited line' }];
+  assert.match(reviewVerdict(good(), { gates, invented }).reasons.join(), /item 1 is met without a verified citation/);
+  assert.equal(reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'met', citations: [{ file: 'tests/join.test.mjs', line: 5, snippet: 'assert.equal(joinLines' }] }] }), { gates }).pass, true, 'a reproduction test counts');
+  assert.equal(reviewVerdict(good({ items: [{ requirement: 'a', verdict: 'cannot_verify', citations: [] }] }), { gates }).pass, true, 'cannot_verify needs no citation');
+  assert.equal(reviewVerdict(good(), { gates }).pass, true);
+});
+
+test('finding 15: a missed path is not an approval, and a member both excluded and missed is a contradiction; the worker gets one revision', async () => {
+  const missed = good({ missed_paths: [{ file: 'src/utils/outgoingText.js', line: 1, snippet: 'export const outgoing = 1;', why: 'same join, not fixed' }],
+    sibling_exclusions: [{ group: 'send channels', member: 'src/utils/outgoingText.js', reason: 'does not join summary lines at all' }] });
+  const verdict = reviewVerdict(missed);
+  assert.equal(verdict.pass, false);
+  assert.match(verdict.reasons.join(), /missed path src\/utils\/outgoingText\.js:1/);
+  assert.match(verdict.reasons.join(), /sibling src\/utils\/outgoingText\.js is both excluded and named as missed/);
+  const { p, wt, head } = await fixed();
+  try {
+    p.write(wt.dir, {});
+    const approveWithMissed = good({ missed_paths: [{ file: 'src/format.js', line: 2, snippet: "export const title = 'Synthetic summary line';", why: 'synthetic sibling' }] });
+    const s = stub([approveWithMissed]);
+    const result = await reviewDiff({ dir: wt.dir, base: wt.base, head, context: context(), gates: gates(), protectedReport: {}, blast: { terms: [], sibling_groups: [] }, launch: s.launch, prompt: 'Review.' });
+    assert.equal(result.pass, false, 'approve with a missed path does not pass');
+    assert.equal(result.revise, true, 'the worker is sent round once with the missed path');
+    assert.match(reviseInput(result.reviews.map(r => r.review)), /missed path src\/format\.js:2: synthetic sibling/);
+  } finally { p.cleanup(); }
 });
 
 test('a money or sync diff gets two reviews, and they must agree', async () => {

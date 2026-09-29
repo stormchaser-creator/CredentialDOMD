@@ -3,12 +3,13 @@
 // and works only in a worktree on its own branch; the host commits.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, chmodSync, readlinkSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, chmodSync, realpathSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { sessionArgs, sessionSettings, reviewSettings, sessionEnv, gatesEnv, launch, WORKER_COMMANDS, REVIEW_MODEL, WORKER_MODEL } from '../../scripts/ticket-fix/worker.mjs';
-import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, trailers, hooksDigest, sanitizeSubject, branchName,
+import { sessionArgs, sessionSettings, reviewSettings, sessionEnv, gatesEnv, launch, sessionLaunch, WORKER_COMMANDS, REVIEW_MODEL, WORKER_MODEL } from '../../scripts/ticket-fix/worker.mjs';
+import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, trailers, hooksDigest, sanitizeSubject, branchName, isEditable, git, HOST_GIT_CONFIG,
   AGENT_NAME, AGENT_EMAIL } from '../../scripts/ticket-fix/worktree.mjs';
+import { sandboxAvailable, sandboxProfile } from '../../scripts/ticket-fix/sandbox.mjs';
 import { project, sh, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mjs';
 
 const HOME = '/Users/synthetic';
@@ -65,8 +66,12 @@ test('the worker may edit only src, tests, public and landing, run exact command
   const repro = sessionSettings({ role: 'repro', worktree: '/w/wt', home: HOME, work: '/w' }).permissions.allow;
   assert.ok(repro.includes('Edit(//w/wt/tests/**)') && !repro.some(r => r.startsWith('Edit(//w/wt/src')), 'the reproduction writes tests only');
   assert.ok(!repro.includes('Bash(npm test)'));
+  // Finding 6: no bare Grep or Glob allow rule; the Read rule binds them to
+  // the worktree (checked live in containment-live.test.mjs).
+  assert.deepEqual(allow.filter(r => !/^(?:Edit|Write|Bash)\(/.test(r)), ['Read(//w/wt/**)']);
   const review = reviewSettings({ worktree: '/w/wt', home: HOME, work: '/w', state: ['/state/case'] }).permissions;
-  assert.deepEqual(review.allow, ['Read(//w/wt/**)', 'Grep', 'Glob']);
+  assert.deepEqual(review.allow, ['Read(//w/wt/**)']);
+  assert.ok(review.deny.includes('Read(//state/case/**)'));
   for (const tool of ['Edit', 'Write', 'Bash']) assert.ok(review.deny.includes(tool), tool);
 });
 
@@ -127,12 +132,17 @@ test('the worktree: a new branch from origin/main under the work directory; the 
     const moved = p.moveMain({ 'src/other.js': 'export const other = 1;\n' });
     const installs = [];
     const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID, installNodeModules: async dir => { installs.push(dir); } });
-    assert.deepEqual(installs, [wt.dir]);
+    assert.equal(installs.length, 1);
+    assert.ok(installs[0].startsWith(path.join(p.work, 'modules')), 'installed once into the host-owned module cache, then copied');
     assert.equal(wt.base, moved, 'the base is origin/main as fetched, not the owner\'s HEAD');
     assert.equal(wt.branch, `agent/${TICKET.slice(0, 8)}-${RUN_ID}`);
     assert.equal(wt.dir, path.join(p.work, 'worktrees', `${TICKET.slice(0, 8)}-${RUN_ID}`));
     assert.equal(sh(wt.dir, ['rev-parse', '--abbrev-ref', 'HEAD']), wt.branch);
     assert.equal(wt.node_modules, 'installed', 'the lockfile differs from base, so modules are installed, not linked');
+    assert.ok(lstatSync(path.join(wt.dir, 'node_modules')).isDirectory() && !lstatSync(path.join(wt.dir, 'node_modules')).isSymbolicLink());
+    const again = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: 'fedcba9876543210', installNodeModules: async dir => { installs.push(dir); } });
+    assert.equal(installs.length, 1, 'the cache is reused for the same lockfile');
+    removeWorktree({ repo: p.repo, dir: again.dir, branch: again.branch, deleteBranch: true });
     assert.match(wt.hooks_sha256, /^[0-9a-f]{64}$/);
     // The owner's checkout: same branch, same HEAD, same work in progress.
     assert.equal(sh(p.repo, ['rev-parse', 'HEAD']), ownerHead);
@@ -145,14 +155,19 @@ test('the worktree: a new branch from origin/main under the work directory; the 
   } finally { p.cleanup(); }
 });
 
-test('node_modules is linked from the owner checkout when the lockfiles match', async () => {
+test('node_modules is a copy of the owner checkout\'s when the lockfiles match, never a link into it (finding 1)', async () => {
   const p = project();
   try {
-    mkdirSync(path.join(p.repo, 'node_modules'));
+    mkdirSync(path.join(p.repo, 'node_modules', 'synthetic-pkg'), { recursive: true });
+    writeFileSync(path.join(p.repo, 'node_modules', 'synthetic-pkg', 'index.js'), 'export default 1;\n');
     const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
-    assert.equal(wt.node_modules, 'linked');
-    assert.equal(readlinkSync(path.join(wt.dir, 'node_modules')), path.join(p.repo, 'node_modules'));
-    assert.deepEqual(changedPaths(wt.dir, wt.base), [], 'the link is the host\'s own, not a change');
+    assert.equal(wt.node_modules, 'cloned');
+    const modules = path.join(wt.dir, 'node_modules');
+    assert.ok(!lstatSync(modules).isSymbolicLink(), 'not a link');
+    writeFileSync(path.join(modules, 'synthetic-pkg', 'index.js'), 'export default 2;\n');
+    assert.equal(readFileSync(path.join(p.repo, 'node_modules', 'synthetic-pkg', 'index.js'), 'utf8'), 'export default 1;\n', 'a write in the worktree never reaches the owner\'s modules');
+    assert.deepEqual(changedPaths(wt.dir, wt.base), [], 'the copy is the host\'s own, not a change');
+    assert.equal(wt.gitdir, realpathSync(path.join(p.repo, '.git', 'worktrees', path.basename(wt.dir))));
   } finally { p.cleanup(); }
 });
 
@@ -199,4 +214,91 @@ test('commit subjects are public: no addresses, numbers or ids survive', () => {
   const s = sanitizeSubject('Fix for jane.doe@example.com at (555) 012-3456, NPI 1234567893, see deadbeef1234 — now', TICKET);
   assert.ok(!/@|555|1234567893|deadbeef|—/.test(s), s);
   assert.ok(s.length <= 72);
+});
+
+test('G0 refuses git metadata, links, nested repositories and NUL bytes in source; the host never stages them (finding 3)', async () => {
+  const p = project();
+  try {
+    const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
+    p.write(wt.dir, { 'src/.gitattributes': 'format.js -diff\n', 'tests/.gitignore': 'helper.mjs\n', 'src/.gitmodules': '[submodule "x"]\n', 'src/format.js': 'export const title = "x";\n',
+      'src/nul.js': 'export const a = 1; // \u0000\n', 'public/ok.png': '\u0000binary is fine for media\n' });
+    symlinkSync('/etc/hosts', path.join(wt.dir, 'src', 'hosts.js'));
+    mkdirSync(path.join(wt.dir, 'src', 'nested'));
+    sh(path.join(wt.dir, 'src', 'nested'), ['init', '-q']);
+    const scope = classifyChanges(changedPaths(wt.dir, wt.base), { dir: wt.dir });
+    assert.deepEqual(scope.outside, ['src/.gitattributes', 'src/.gitmodules', 'src/hosts.js', 'src/nested/', 'src/nul.js', 'tests/.gitignore']);
+    assert.ok(!isEditable('src/.gitattributes') && !isEditable('tests/sub/.gitignore') && isEditable('src/format.js'));
+    const head = commitWork({ dir: wt.dir, base: wt.base, subject: 'Synthetic', ticketId: TICKET, runId: RUN_ID, committer: COMMITTER });
+    const files = sh(wt.dir, ['diff', '--name-only', wt.base, head]).split('\n');
+    assert.ok(!files.some(f => /\.git(?:attributes|ignore|modules)$/.test(f)), files.join());
+  } finally { p.cleanup(); }
+});
+
+test('host git ignores a planted fsmonitor, and the pre-push digest covers the shared git config, attributes and the global config (finding 8)', async () => {
+  const p = project();
+  try {
+    const marker = path.join(p.root, 'fsmonitor-ran');
+    const hook = path.join(p.root, 'fsmonitor.sh');
+    writeFileSync(hook, `#!/bin/sh\ntouch '${marker}'\n`, { mode: 0o755 });
+    const before = hooksDigest(p.repo, { home: p.root });
+    sh(p.repo, ['config', 'core.fsmonitor', hook]);
+    git(p.repo, ['status', '--porcelain']);
+    assert.equal(existsSync(marker), false, 'the host\'s git never runs a configured fsmonitor');
+    assert.notEqual(hooksDigest(p.repo, { home: p.root }), before, 'a config change is a digest change');
+    const config = hooksDigest(p.repo, { home: p.root });
+    mkdirSync(path.join(p.repo, '.git', 'info'), { recursive: true });
+    writeFileSync(path.join(p.repo, '.git', 'info', 'attributes'), '*.js -diff\n');
+    assert.notEqual(hooksDigest(p.repo, { home: p.root }), config, 'info/attributes');
+    const attributes = hooksDigest(p.repo, { home: p.root });
+    writeFileSync(path.join(p.root, '.gitconfig'), '[credential]\n\thelper = !/bin/echo\n');
+    assert.notEqual(hooksDigest(p.repo, { home: p.root }), attributes, 'the owner\'s global config');
+    // Adding or removing a worktree does not change it.
+    const settled = hooksDigest(p.repo, { home: p.root });
+    const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
+    assert.equal(hooksDigest(p.repo, { home: p.root }), settled);
+    removeWorktree({ repo: p.repo, dir: wt.dir, branch: wt.branch, deleteBranch: true });
+    // The host's git passes no credential helper except when asked to push.
+    assert.ok(HOST_GIT_CONFIG.includes('core.fsmonitor=false') && HOST_GIT_CONFIG.includes('protocol.ext.allow=never'));
+  } finally { p.cleanup(); }
+});
+
+test('sessions launch under the sandbox with the credential on a pipe, never in the environment (finding 1)', { skip: sandboxAvailable() ? false : 'needs sandbox-exec' }, async () => {
+  const p = project();
+  try {
+    const sessionDir = path.join(p.root, 'run', 'sessions', 'worker');
+    mkdirSync(sessionDir, { recursive: true });
+    const profileDir = path.join(p.root, 'profiles');
+    mkdirSync(profileDir);
+    const how = await sessionLaunch({ claude: '/bin/echo', args: ['-p'], cwd: p.repo, sessionDir, baseEnv: { PATH: '/bin', HOME, CLAUDE_CODE_OAUTH_TOKEN: 'synthetic-oauth-value' },
+      sandbox: { home: HOME, denyRead: [p.state, path.join(p.root, 'run')], denyFiles: [path.join(p.work, 'AUTO_MERGE')], profileDir } });
+    assert.equal(how.command, '/usr/bin/sandbox-exec');
+    assert.equal(how.args[0], '-f');
+    assert.equal(how.args[2], '/bin/echo');
+    assert.equal(how.secret, 'synthetic-oauth-value');
+    assert.equal(how.env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+    assert.equal(how.env.CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR, '3');
+    const profile = readFileSync(how.args[1], 'utf8');
+    for (const text of ['(deny process-exec (literal "/usr/bin/security")', 'Library/Keychains', `(subpath "${realpathSync(p.state)}")`, '.gitconfig', 'AUTO_MERGE"', 'git-credential-',
+      `(deny file-write* (require-not (require-any (subpath "${realpathSync(p.repo)}") (subpath "${realpathSync(sessionDir)}")`]) assert.ok(profile.includes(text), text);
+    // The profile really holds: a process under it cannot write the state or read it.
+    const r = spawnSync('/usr/bin/sandbox-exec', ['-f', how.args[1], '/bin/sh', '-c', `echo x > '${path.join(p.state, 'marker')}' ; cat '${path.join(p.state, 'marker')}'`], { encoding: 'utf8' });
+    assert.notEqual(r.status, 0);
+    assert.equal(existsSync(path.join(p.state, 'marker')), false);
+    assert.throws(() => sandboxProfile({ kind: 'gates', home: HOME, writable: ['/tmp/a"b'] }), /absolute and plain/);
+    const gates = sandboxProfile({ kind: 'gates', home: HOME, writable: [p.repo] });
+    assert.ok(gates.includes('(deny network*)') && !gates.includes('(allow network* (remote unix-socket))') && !gates.includes('(allow network* (local ip'), 'gates: loopback only');
+    // Under the gates profile no name resolves (no DNS resolver socket) and
+    // the owner's local database port is closed; its own loopback server works.
+    const gatesFile = path.join(profileDir, 'gates.sb');
+    writeFileSync(gatesFile, gates);
+    const probe = spawnSync('/usr/bin/sandbox-exec', ['-f', gatesFile, process.execPath, '-e', `
+      const dns = require('node:dns'), net = require('node:net'), http = require('node:http');
+      const out = {};
+      dns.lookup('example.com', e => { out.dns = e ? e.code : 'resolved';
+        const c = net.connect(5432, '127.0.0.1'); c.on('error', e2 => { out.pg = e2.code; c.destroy();
+          const s = http.createServer((q, r) => r.end('ok')).listen(0, '127.0.0.1', () => http.get('http://127.0.0.1:' + s.address().port, r => { out.own = r.statusCode; s.close(); console.log(JSON.stringify(out)); })); });
+        c.on('connect', () => { out.pg = 'connected'; c.destroy(); console.log(JSON.stringify(out)); }); });`], { encoding: 'utf8', cwd: p.repo, timeout: 20000 });
+    const seen = JSON.parse(probe.stdout.trim() || '{}');
+    assert.ok(seen.dns !== 'resolved' && seen.pg !== 'connected' && seen.own === 200, JSON.stringify(seen) + probe.stderr);
+  } finally { p.cleanup(); }
 });
