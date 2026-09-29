@@ -6,8 +6,11 @@ const view = publicLaunchPresentation();
 export const MEMBERSHIP_COPY = Object.freeze({
   foundingHeadline: view.publicRateHeadline,
   credentialPrices: `${view.foundingRate} ${view.rateComparison}`,
-  rateLock: "The founding and early-bird annual rates stay the same while membership remains continuously active.",
+  rateLock: "The founding and early bird annual rates stay the same while membership remains continuously active.",
   fullPackage: view.fullPackage,
+  // The $245 offer on the membership screen, which shows it only once this
+  // account's own offer is no longer founding: no founding sentence here.
+  bundleOffer: view.bundleOffer,
   practiceTrial: view.practiceTrial,
   foundingOffer: view.foundingOffer,
   // Shown in place of the $245 offer while this account's offer is founding.

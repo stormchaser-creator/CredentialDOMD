@@ -116,8 +116,8 @@ test('while a new buyer\'s offer is founding, the $245 bundle is not offered and
   assert.doesNotMatch(html, /\$245\/year total/);
   assert.equal(canReviewBillingOffer(buyer, 'core_locum'), false);
   assert.equal(canReviewBillingOffer(buyer, 'core'), true);
-  // A historical beta holder, a reviewed invitation, or anyone after founding: both offers.
-  const both = renderWith({ ...buyer, bundleAvailable: true });
+  // Anyone whose offer is past founding (sold out, ended, or a returning buyer): both offers.
+  const both = renderWith({ ...buyer, pricePhase: 'earlybird', bundleAvailable: true });
   assert.match(both, /Review Credential \+ Practice offer/);
   assert.match(both, /\$245\/year total at first purchase/);
   assert.equal(canReviewBillingOffer({ ...buyer, bundleAvailable: true }, 'core_locum'), true);
@@ -127,7 +127,29 @@ test('while a new buyer\'s offer is founding, the $245 bundle is not offered and
 });
 
 test('the membership copy has no hyphen or dash in the new founding and Practice sentences', () => {
-  for (const text of [MEMBERSHIP_COPY.foundingOffer, MEMBERSHIP_COPY.bundleDuringFounding, MEMBERSHIP_COPY.foundingPracticeIncluded, MEMBERSHIP_COPY.practiceTrial, MEMBERSHIP_COPY.fullPackage]) {
+  for (const text of [MEMBERSHIP_COPY.foundingOffer, MEMBERSHIP_COPY.bundleDuringFounding, MEMBERSHIP_COPY.foundingPracticeIncluded, MEMBERSHIP_COPY.practiceTrial, MEMBERSHIP_COPY.fullPackage, MEMBERSHIP_COPY.bundleOffer]) {
     assert.doesNotMatch(text, /[-–—]/, text);
   }
+});
+
+test('a beta holder opting in during founding sees the one $99 offer and why there is no $245 package', () => {
+  const beta = snapshot({ purchasedOfferId: null, practiceIncluded: false, checkoutEligible: true, pricePhase: 'founding', bundleAvailable: false,
+    freeBeta: { state: 'active', startsAt: '2026-10-20T12:00:00Z', endsAt: '2026-11-19T12:00:00Z', autoCharges: false } });
+  const html = renderWith(beta);
+  assert.match(html, />Review Credential offer</);
+  assert.doesNotMatch(html, /Review Credential \+ Practice offer|\$245/, 'no package beside a $99 that already includes Practice');
+  assert.ok(html.includes(MEMBERSHIP_COPY.bundleDuringFounding));
+  assert.equal(canReviewBillingOffer(beta, 'core_locum'), false);
+});
+
+test('an early bird buyer reads the $245 offer with no founding sentence beside it', () => {
+  const buyer = snapshot({ accessStatus: 'pending', purchasedOfferId: null, practiceIncluded: false, checkoutEligible: true, pricePhase: 'earlybird', bundleAvailable: true,
+    capabilities: { credential: capability(false), practice: capability(false) } });
+  const html = renderWith(buyer);
+  assert.match(html, /Review Credential \+ Practice offer/);
+  assert.ok(html.includes(MEMBERSHIP_COPY.bundleOffer));
+  assert.doesNotMatch(html, /founding (?:places|buyers|Credential)|Practice included|includes Practice/, 'a $149 buyer is not told Practice is included');
+  // Not eligible for an offer at all: no package sentence either way.
+  const none = renderWith({ ...buyer, checkoutEligible: false, pricePhase: null, bundleAvailable: false });
+  assert.doesNotMatch(none, /\$245|founding places remain/);
 });

@@ -67,14 +67,18 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
       ? 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member. That annual rate stays locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay.'
       : 'The planned founding Credential offer is $99/year for eligible founding members, with that annual rate locked for life while membership remains active.',
     rateComparison: enabled
-      ? 'After the 100 paid founding memberships, early-bird Credential is $149/year, followed by standard Credential at $199/year.'
+      ? 'After the 100 paid founding memberships, early bird Credential is $149/year, followed by standard Credential at $199/year.'
       : 'Planned early-bird Credential is $149/year; planned standard Credential is $199/year. These are launch prices, not claims about a previous selling price.',
-    earlyBirdRateLock: 'The early-bird annual rate also stays the same while membership remains active.',
+    earlyBirdRateLock: 'The early bird annual rate also stays the same while membership remains active.',
     signupHeading: 'Create your account',
     publicRateHeadline: 'First 100 paid founding memberships: $99/year',
     publicPrice: '$99',
     publicPriceLabel: ' / year, founding rate for the first 100 paid members',
-    fullPackage: 'Credential + Practice is $245/year total at first purchase, with no founding or early bird discount. While founding places remain it is not offered at public signup, because founding Credential already includes Practice.',
+    // The $245 package as sold once a buyer's offer is no longer founding.
+    bundleOffer: 'Credential + Practice is $245/year total at first purchase, with no early bird discount.',
+    // Every buyer whose offer is founding gets Practice in the $99 Credential,
+    // so the package is not sold to them (20260928190000, all origins).
+    fullPackage: 'Credential + Practice is $245/year total at first purchase, with no early bird discount. It is not offered to founding buyers, because founding Credential at $99/year already includes Practice while you are a member.',
     refundGuarantee: 'No-hassle 100% money-back guarantee: request a full refund of your most recent annual membership payment, including a renewal payment, at any time. There is no request deadline or prorating. This covers your most recent annual payment, not all payments from past years. Request through Get help in the app or support@credentialdomd.com. You do not need to delete your account, saved records or reports to request a refund.',
     promisedBeta: enabled
       ? 'Eligible people who signed up under the earlier free-beta wording receive 30 days free with no card, starting when they first activate their account with a verified email address. The app shows the exact end date; signing in again does not restart those 30 days. You may opt in to $99/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription. Your first charge is scheduled for your original beta end date, when your paid year starts. Choosing early does not charge you early or start a new trial. You keep the same account and saved records. If you never opt in, there is no automatic charge and nothing to cancel. Paid membership renews annually unless canceled.'

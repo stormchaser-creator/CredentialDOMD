@@ -65,7 +65,8 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     assert.match(output, /less polished/);
     assert.match(output, /support tickets/);
     assert.match(output, /locked for life while membership remains continuously active/);
-    assert.match(output, /no founding or early bird discount/);
+    assert.match(output, /Credential \+ Practice is \$245\/year total at first purchase, with no early bird discount\. It is not offered to founding buyers/);
+    assert.doesNotMatch(output, /no founding (?:or early.bird )?discount/);
     assert.match(output, /earlier free-beta wording/);
     assert.match(output, /30 days free with no card/);
     assert.match(output, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
@@ -311,8 +312,13 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
       assert.match(section.blocks[3], /\$99.*\$149.*\$199/);
       assert.match(section.blocks[3], /for life while their membership remains continuously active/);
-      assert.equal(section.blocks[4], publicLaunchPresentation(paid).fullPackage.replace('$245/year', '$245 per year'));
+      assert.equal(section.blocks[4], publicLaunchPresentation(paid).fullPackage.replaceAll('/year', ' per year'));
       assert.match(section.blocks[4], /at first purchase/);
+      // One price style per block: no "$99/year" beside "$245 per year".
+      assert.doesNotMatch(section.blocks[4], /\/year/);
+      // Founding Credential includes Practice, so the terms never also say the
+      // package has "no founding discount".
+      assert.doesNotMatch(section.blocks[4], /no founding/);
       assert.equal(section.blocks[5], publicLaunchPresentation(paid).practiceTrial);
       assert.match(section.blocks[5], /first annual payment is confirmed/);
       assert.match(section.blocks[5], /Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options/);

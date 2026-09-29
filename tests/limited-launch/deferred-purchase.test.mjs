@@ -179,6 +179,22 @@ test('an early-bird deferred quote still names its one 30-day Practice trial', a
   assert.doesNotMatch(f.html(), /Practice is included for as long as/);
 });
 
+test('in the deploy window a founding quote from an older billing-quote still says Practice is included, as its consent does', async () => {
+  // The migration ships first, so the consent text is v3 ("Includes Practice for
+  // as long as this membership remains active."), while a function deployed
+  // before 20260928190000 still sends no practiceIncluded and 30 trial days.
+  const older = offerId => { const q = { ...quoteFor(offerId), practiceTrialDays: offerId === 'core' ? 30 : 0 }; delete q.practiceIncluded; return q; };
+  const f = fixture(); f.client.quote = async () => ({ ...older('core'), consentText: 'Synthetic v3 terms. Includes Practice for as long as this membership remains active.' });
+  await button(f, 'Review Credential offer').props.onClick();
+  assert.match(f.html(), /Practice is included for as long as this membership stays active\. Practice does not add a charge\./);
+  assert.doesNotMatch(f.html(), /30 days of Practice access/);
+  // An older early-bird quote keeps its trial line.
+  const later = fixture(); later.client.quote = async () => ({ ...older('core'), ...getPublicBillingOffer('core', 'earlybird'), offerId: 'core', practiceIncluded: undefined, practiceTrialDays: 30 });
+  await button(later, 'Review Credential offer').props.onClick();
+  assert.match(later.html(), /30 days of Practice access begin when the first annual payment is confirmed/);
+  assert.doesNotMatch(later.html(), /Practice is included for as long as/);
+});
+
 test('a wrong original beta end or immediate-charge quote never presents deferred consent', async () => {
   for (const patch of [{ betaEndsAt: '2030-10-21T12:00:00Z' }, { betaEndsAt: '2030-10-20T12:00:00.000124Z' }, { paymentTiming: 'now', paymentAtCheckout: true }]) {
     const f = fixture(); f.client.quote = async () => ({ ...quoteFor(), ...patch });

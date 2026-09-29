@@ -10,7 +10,7 @@ const offer = (phase = 'founding', availability = 'available') => ({schemaVersio
 const deferred = () => { let resolve; return {promise:new Promise(done => {resolve=done;}),resolve}; };
 const root = () => {
   const actions = [{textContent:'Membership signup'}], statuses = [{textContent:'Your offer is confirmed before payment. Creating an account does not reserve a founding place.'}];
-  const nodes = Object.fromEntries(['headline','price','price-label','heading','phase','review-action','hero-headline','hero-note'].map(key=>[key,[{textContent:''}]]));
+  const nodes = Object.fromEntries(['headline','price','price-label','heading','phase','review-action','hero-headline','hero-note','rate','bundle-label'].map(key=>[key,[{textContent:''}]]));
   return {actions,statuses,nodes,querySelectorAll:selector=>selector === '[data-membership-action]' ? actions
     : selector === '[data-membership-status]' ? statuses : nodes[selector.slice(17,-1)] || []};
 };
@@ -20,13 +20,16 @@ test('each current-offer element follows all phases and later failures retain th
   const refresh=createOfferUpdater(dom,endpoint,{fetchImpl:async()=>Response.json(current)});
   for (const phase of ['founding','earlybird','standard']) {
     current=offer(phase);await refresh();
-    const label=phase==='founding'?'Founding':phase==='earlybird'?'Early-bird':'Standard';
+    const label=phase==='founding'?'Founding':phase==='earlybird'?'Early bird':'Standard';
     assert.equal(dom.nodes.price[0].textContent,`$${current.annualCents/100}`);
     assert.match(dom.nodes.headline[0].textContent,new RegExp(label));
     assert.equal(dom.nodes.heading[0].textContent,'Create your account');
     assert.equal(dom.nodes.phase[0].textContent,`${label} membership`);
     assert.equal(dom.nodes['price-label'][0].textContent,` / year, ${label.toLowerCase()} Credential`);
-    if(phase!=='founding') assert.doesNotMatch(JSON.stringify(dom.nodes),/\$99|first 100/);
+    // The Credential card's rate paragraph and the package price follow the phase too.
+    assert.match(dom.nodes.rate[0].textContent,new RegExp(`^${label} Credential: \\$${current.annualCents/100}/year`));
+    assert.equal(dom.nodes['bundle-label'][0].textContent,phase==='founding'?' / year, after founding':' / year total');
+    if(phase!=='founding') assert.doesNotMatch(JSON.stringify(dom.nodes),/\$99|first 100|Practice included/);
   }
   current={};await refresh();
   assert.equal(dom.nodes.price[0].textContent,'$199');

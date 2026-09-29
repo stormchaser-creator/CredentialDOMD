@@ -78,8 +78,10 @@ test('both views retain the active-membership rate condition and distinct earlie
     assert.match(view.foundingRate, /\$99\/year/);
     assert.match(view.foundingRate, /while (?:their )?membership remains (?:continuously )?active/);
     assert.match(view.fullPackage, /\$245\/year/);
-    assert.match(view.fullPackage, /no founding or early bird discount/);
-    assert.match(view.fullPackage, /While founding places remain it is not offered at public signup, because founding Credential already includes Practice\./);
+    // No "no founding discount": founding Credential at $99 already includes Practice.
+    assert.equal(view.fullPackage, `${view.bundleOffer} It is not offered to founding buyers, because founding Credential at $99/year already includes Practice while you are a member.`);
+    assert.equal(view.bundleOffer, 'Credential + Practice is $245/year total at first purchase, with no early bird discount.');
+    assert.doesNotMatch(view.fullPackage, /no founding/);
     assert.match(view.promisedBeta, /earlier free-beta wording/);
     assert.match(view.promisedBeta, /30 days free with no card/);
     assert.match(view.promisedBeta, /no automatic charge/);

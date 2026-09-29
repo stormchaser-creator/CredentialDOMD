@@ -173,6 +173,11 @@ function MembershipForAccount({ accountId, onActivated }) {
   const foundingPractice = access?.purchasedOfferId === "core" && access.practiceIncluded === true;
   // While this account's offer is founding, the $245 bundle is not offered.
   const bundleOffered = shown?.bundleAvailable !== false;
+  // The package sentence follows the same answer as its button: the $245
+  // offer once this account's offer is past founding, and why there is none
+  // while it is founding.
+  const bundleSentence = bundleOffered ? MEMBERSHIP_COPY.bundleOffer
+    : access?.pricePhase === "founding" ? MEMBERSHIP_COPY.bundleDuringFounding : "";
   const beta = access?.freeBeta?.state === "active";
   const scheduled = access?.scheduledMembership;
   // Offers are judged on the last answer even when it is stale: a tap asks
@@ -186,6 +191,11 @@ function MembershipForAccount({ accountId, onActivated }) {
   const permittedQuote = !!quote && !returning && canReviewBillingOffer(shown, quote.offerId) && quoteMatchesBetaWindow(quote, shown);
   const panelShown = permittedQuote && !lifetime && !scheduled;
   const deferredResumeAfterBeta = quote?.paymentTiming === "after_beta" && access?.freeBeta?.state === "expired";
+  // A billing-quote deployed before 20260928190000 sends no practiceIncluded.
+  // The migration ships first and the entitlement follows the price phase, so
+  // a founding Credential quote includes Practice; the consent text beside it
+  // says the same.
+  const quotePracticeIncluded = quote?.practiceIncluded ?? (quote?.offerId === "core" && quote?.pricePhase === "founding");
   return <section style={{ color: T.text, lineHeight: 1.6 }} aria-label="Membership">
     <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Your membership</h2>
     {message && !panelShown && <p ref={messageLine} role="status">{message}</p>}
@@ -222,7 +232,9 @@ function MembershipForAccount({ accountId, onActivated }) {
               <button style={offerButton(reviewable(resumeOffer))} disabled={busy || !reviewable(resumeOffer)} onClick={() => review(resumeOffer)}>Resume checkout</button>
             </> : <>
               <p>Choose whether to purchase a membership. {access?.billingEnabled && access?.checkoutEligible ? "Review the exact offer before choosing to pay." : "An eligible membership offer is not available for this account right now."}</p>
-              {!beta && <p>{access?.pricePhase === "founding" ? `${MEMBERSHIP_COPY.credentialPrices} Creating an account or viewing an offer does not reserve a founding place.` : "Your available Credential offer is checked securely before you choose to pay."} {bundleOffered ? MEMBERSHIP_COPY.fullPackage : MEMBERSHIP_COPY.bundleDuringFounding}</p>}
+              {!beta && <p>{access?.pricePhase === "founding" ? `${MEMBERSHIP_COPY.credentialPrices} Creating an account or viewing an offer does not reserve a founding place.` : "Your available Credential offer is checked securely before you choose to pay."} {bundleSentence}</p>}
+              {/* A beta holder opting in at founding reads why there is one offer. */}
+              {beta && !bundleOffered && bundleSentence && <p>{bundleSentence}</p>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <button style={offerButton(reviewable("core"))} disabled={busy || !reviewable("core")} onClick={() => review("core")}>Review Credential offer</button>
                 {bundleOffered && <button style={offerButton(reviewable("core_locum"))} disabled={busy || !reviewable("core_locum")} onClick={() => review("core_locum")}>Review Credential + Practice offer</button>}
@@ -238,7 +250,7 @@ function MembershipForAccount({ accountId, onActivated }) {
           ? <p><strong>Your original beta has ended.</strong> Completing this saved Checkout collects {membershipPrice(quote.annualCents)} for the paid year starting on <time dateTime={quote.firstChargeAt}>{membershipDate(quote.firstChargeAt)}</time>. This resumes your existing checkout; it does not start a second purchase. If you already completed it, check your membership again instead.</p>
           : <p><strong>$0 due before <time dateTime={quote.firstChargeAt}>{membershipDate(quote.firstChargeAt)}</time>.</strong> A card is required only if you complete this optional purchase. Your first annual charge is {membershipPrice(quote.annualCents)} on that date, or when Checkout completes if later. Your paid year starts at that original beta end date.</p>}
         <p>This keeps your current account and saved records. It does not restart or shorten your beta. {!deferredResumeAfterBeta && "Cancel the scheduled purchase in the billing portal before that date to avoid the first charge."}</p>
-        {quote.offerId === "core" && (quote.practiceIncluded === true
+        {quote.offerId === "core" && (quotePracticeIncluded
           ? <p>{MEMBERSHIP_COPY.foundingPracticeIncluded} Practice does not add a charge.</p>
           : <p>Your included 30 days of Practice access begin when the first annual payment is confirmed. Practice does not upgrade or add a charge automatically.</p>)}
       </div>}
