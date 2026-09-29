@@ -1,0 +1,17 @@
+// Values read from supabase/config.toml (the local stack's configuration).
+import { readFileSync } from 'node:fs';
+import { SUPABASE_CONFIG } from './paths.mjs';
+
+export function projectId() {
+  const m = /^project_id\s*=\s*"([^"]+)"/m.exec(readFileSync(SUPABASE_CONFIG, 'utf8'));
+  if (!m) throw new Error('project_id missing from supabase/config.toml');
+  return m[1];
+}
+
+/**
+ * How the LOCAL database reaches the LOCAL API gateway (Kong) over the stack's
+ * Docker network. Production URLs inside function bodies are rewritten to this,
+ * so pg_net calls made by a local trigger or cron job can only land locally.
+ */
+export const localGatewayOrigin = () => `http://supabase_kong_${projectId()}:8000`;
+export const localDbContainer = () => `supabase_db_${projectId()}`;

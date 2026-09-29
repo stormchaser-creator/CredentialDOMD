@@ -22,7 +22,7 @@ function* sources(dir) {
 }
 test('no test or script builds a file path from import.meta.url with .pathname', () => {
   const hits = [];
-  for (const top of ['tests', 'scripts', 'src', 'supabase/functions']) {
+  for (const top of ['tests', 'scripts', 'src', 'supabase/functions', 'qa-lab']) {
     for (const file of sources(path.join(ROOT, top))) {
       readFileSync(file, 'utf8').split('\n').forEach((line, i) => { if (PATTERN.test(line) && !file.endsWith('path-with-space-guard.test.mjs')) hits.push(`${path.relative(ROOT, file)}:${i + 1}`); });
     }

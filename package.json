@@ -14,7 +14,12 @@
     "test": "node --experimental-vm-modules --test \"tests/**/*.test.mjs\" \"scripts/*.test.mjs\"",
     "lint:hooks": "node --test tests/hooks-rules.test.mjs",
     "pretest": "node scripts/build-credential-portal.mjs",
-    "test:admin-db": "python3 tests/admin-operations/postgres-operations.py"
+    "test:admin-db": "python3 tests/admin-operations/postgres-operations.py",
+    "qa:up": "bash qa-lab/up.sh",
+    "qa:down": "bash qa-lab/down.sh",
+    "qa:extract": "node qa-lab/extract-schema.mjs",
+    "qa:apply": "node qa-lab/apply-schema.mjs",
+    "qa:parity": "node qa-lab/parity.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

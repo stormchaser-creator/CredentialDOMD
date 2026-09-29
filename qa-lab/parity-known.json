@@ -1,0 +1,107 @@
+{
+  "about": "Differences between the local QA lab and production that are expected. qa-lab/parity.mjs reports these as explained; any other difference fails the check. Each reason is repeated in qa-lab/README.md.",
+  "differences": [
+    {
+      "category": "cron job active",
+      "key": "*",
+      "kind": "differs",
+      "reason": "Cron jobs are created INACTIVE on purpose; production's definitions (name, schedule, command, user) match exactly. Enable one locally with cron.alter_job(<id>, active := true)."
+    },
+    {
+      "category": "extensions",
+      "key": "pg_net",
+      "kind": "differs",
+      "reason": "The local image ships only pg_net 0.20.3 (production 0.19.5); its objects live in schema net either way, and its extension row is recorded under schema extensions locally, public in production."
+    },
+    {
+      "category": "roles",
+      "key": "cli_login_postgres",
+      "kind": "missing locally",
+      "reason": "Production-only login role the Supabase CLI uses; it holds no application privileges."
+    },
+    {
+      "category": "schemas",
+      "key": "_realtime",
+      "kind": "only local",
+      "reason": "Local Realtime container's own bookkeeping schema."
+    },
+    {
+      "category": "schemas",
+      "key": "supabase_functions",
+      "kind": "only local",
+      "reason": "Local stack's database-webhook schema; production has no database webhooks."
+    },
+    {
+      "category": "schemas",
+      "key": "qa_lab",
+      "kind": "only local",
+      "reason": "QA-lab marker schema (qa_lab.applied records when and from which catalog the schema was built)."
+    },
+    {
+      "category": "schema grants",
+      "key": "_realtime",
+      "kind": "only local",
+      "reason": "Local-only schema (see schemas)."
+    },
+    {
+      "category": "schema grants",
+      "key": "supabase_functions",
+      "kind": "only local",
+      "reason": "Local-only schema (see schemas)."
+    },
+    {
+      "category": "schema grants",
+      "key": "qa_lab",
+      "kind": "only local",
+      "reason": "Local-only schema (see schemas)."
+    },
+    {
+      "category": "default privileges",
+      "key": "supabase_admin in supabase_functions on f",
+      "kind": "only local",
+      "reason": "Default privileges of the local-only supabase_functions schema."
+    },
+    {
+      "category": "default privileges",
+      "key": "supabase_admin in supabase_functions on r",
+      "kind": "only local",
+      "reason": "Default privileges of the local-only supabase_functions schema."
+    },
+    {
+      "category": "default privileges",
+      "key": "supabase_admin in supabase_functions on S",
+      "kind": "only local",
+      "reason": "Default privileges of the local-only supabase_functions schema."
+    },
+    {
+      "category": "config rows",
+      "key": "app_secrets names",
+      "kind": "differs",
+      "reason": "app_secrets holds production AI provider keys; the lab never copies them, and leaves the table empty."
+    },
+    {
+      "category": "platform privileges",
+      "key": "*",
+      "kind": "missing locally",
+      "reason": "Supabase platform object that production's (newer) auth or storage-api version has and the local image (CLI 2.109.1: storage-api v1.62.5, gotrue v2.192.0) does not: auth MFA recovery codes and SCIM tables, new storage.search*/list* signatures, and the storage bucket-control guards (storage.protect_bucket_control_columns, storage.enforce_bucket_lifecycle_service_role) behind production's protect_bucket_control_* triggers on storage.buckets."
+    },
+    {
+      "category": "platform privileges",
+      "key": "*",
+      "kind": "only local",
+      "reason": "Supabase platform object that only the local image has: older storage.search*/list* signatures, storage.iceberg_* tables, and Realtime's daily realtime.messages_* partitions."
+    },
+    {
+      "category": "platform privileges",
+      "key": "table cron.job_run_details",
+      "kind": "differs",
+      "reason": "The local pg_cron setup leaves postgres with TRIGGER on cron.job_run_details; production does not. No application object creates a trigger there."
+    },
+    {
+      "category": "platform privileges",
+      "key": "table realtime.schema_migrations",
+      "kind": "differs",
+      "reason": "Realtime's own migration bookkeeping table: the local Realtime container grants it differently. The application never reads it."
+    }
+  ]
+}

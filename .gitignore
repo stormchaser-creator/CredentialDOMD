@@ -55,3 +55,6 @@ AI-APP-BUILDING-INSTRUCTIONS.md
 
 # Local Supabase CLI connection metadata
 /supabase/.temp/
+
+# QA lab: generated from the production catalog (holds function bodies); never commit
+/qa-lab/.generated/
