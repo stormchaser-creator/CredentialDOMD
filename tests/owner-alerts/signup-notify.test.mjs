@@ -10,8 +10,13 @@
 //       active with no recorded payment, a lifetime gift claimed and an
 //       invitation sent, each reported once even when it settles late;
 //   a table that does not exist yet (invite_to_join_sends before its
-//   migration) is skipped instead of failing every notification;
-//   (a) the ticket runner's queued alerts go out through this job.
+//   migration) is skipped instead of failing every notification, and so is
+//   one whose columns changed: the probe checks every column each part reads
+//   (before, one renamed column failed the whole query, silently);
+//   (a) the ticket runner's queued alerts go out through this job, sent by
+//       the job's own zsh (never from python3, which macOS would refuse);
+//   a notifier that keeps failing, or keeps skipping a part, tells the owner
+//   after 3 runs, once, and again when it works.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,7 +30,12 @@ import { raise, QUEUE_FILE, SENT_FILE } from '../../scripts/ticket-fix/alert.mjs
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const PY = path.join(root, 'scripts/signup-notify.py');
-const python = spawnSync('python3', ['--version']).status === 0 ? 'python3' : null;
+// The python3 binary itself, not a version manager's shim (a shell script that
+// costs a fraction of a second on every call, and these tests make hundreds).
+const python = (() => {
+  const r = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() || 'python3' : null;
+})();
 const PORT = '58763'; // own port: node --test runs files in parallel
 const exec = promisify(execFile);
 
@@ -133,6 +143,11 @@ const iso = (offsetSeconds = 0) => new Date(Date.now() + offsetSeconds * 1000).t
 const activity = async (pg, since = EARLIER, now = iso(60)) => pg.rows(py(['query', '--since', since, '--now', now, '--present', await present(pg)]));
 const lines = (rows, kind) => rows.filter(r => r.kind === kind);
 
+// The job finds python3 on PATH: the directory of the one these tests use.
+function pythonBinDir() {
+  return path.isAbsolute(python) && fs.existsSync(path.join(path.dirname(python), 'python3')) ? path.dirname(python)
+    : path.dirname(spawnSync('/bin/sh', ['-c', 'command -v python3'], { encoding: 'utf8' }).stdout.trim());
+}
 const skip = () => pgSkip() || (python ? false : 'python3 not found');
 test('signup notifier SQL on PostgreSQL: member replies only, money events, missing tables skipped', { skip: skip(), timeout: 300000 }, async t => {
   const pg = await startPostgres();
@@ -230,6 +245,70 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     assert.deepEqual(runs.map(r => lines(r, 'FAILED ATTEMPT').map(a => a.email)), [[], ['attempt@example.test'], []], 'the attempt, once, after 3 minutes');
   });
 
+  await t.test('an optional table whose column was renamed is skipped and named; signups, tickets and replies still go out', async () => {
+    // Before this change the probe checked only that the table existed, so the
+    // query named the old column and the Management API refused it: every
+    // notification stopped at once.
+    await pg.sql(`create database drift`);
+    await pg.sql(BASE + OPTIONAL + CORE_ROWS + MONEY_ROWS + `
+      insert into early_access_leads(email, name, source, waitlist) values ('lead@example.test', 'Synthetic Lead', 'texas-guide', true);
+      insert into support_tickets(id, user_id, subject) values ('${id(103)}', '${MEMBER}', 'Synthetic new ticket');
+      alter table invite_to_join_sends rename column offer_annual_cents to offer_cents;`, 'drift');
+    const probe = JSON.stringify(await pg.rows(py(['probe']), 'drift'));
+    const presentRun = spawnSync(python, [PY, 'present'], { input: probe, encoding: 'utf8' });
+    assert.equal(presentRun.status, 0, presentRun.stderr);
+    assert.equal(presentRun.stdout.trim(), 'feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations');
+    assert.equal(presentRun.stderr.trim(), 'signup-notify: invite_to_join_sends is not reported until the notifier matches its columns (missing invite_to_join_sends.offer_annual_cents)');
+    assert.equal(py(['drifted'], probe).trim(), 'invite_to_join_sends');
+    const rows = await pg.rows(py(['query', '--since', EARLIER, '--now', iso(60), '--present', presentRun.stdout.trim()]), 'drift');
+    assert.deepEqual(lines(rows, 'waitlist').map(r => r.email), ['lead@example.test']);
+    assert.deepEqual(lines(rows, 'TICKET').map(r => r.extra), ['Synthetic new ticket']);
+    assert.deepEqual(lines(rows, 'TICKET REPLY').map(r => r.email), ['member@example.test']);
+    assert.equal(lines(rows, 'PAID').length, 2, 'the other money parts still run');
+    assert.deepEqual(lines(rows, 'INVITE SENT').map(r => r.email), ['beta@example.test'], 'only the skipped part is missing');
+  });
+
+  await t.test('no renamed column fails the query: each one drops its optional part or names the core part that needs it', async () => {
+    // Every column of every table the notifier reads, renamed in turn. A
+    // column the requirements list left out would fail the query here.
+    await pg.sql(`create database renames`);
+    await pg.sql(BASE + OPTIONAL + CORE_ROWS + MONEY_ROWS, 'renames');
+    const columns = await pg.rows(`select table_name, column_name from information_schema.columns
+      where table_schema = 'public' and table_name <> 'app_admins' order by 1, 2`, 'renames');
+    assert.ok(columns.length > 80, `${columns.length} columns`);
+    const outcomes = { dropped: [], core: [], unread: [] };
+    for (const { table_name: table, column_name: column } of columns) {
+      await pg.sql(`alter table ${table} rename column ${column} to ${column}_renamed`, 'renames');
+      try {
+        const probe = JSON.stringify(await pg.rows(py(['probe']), 'renames'));
+        const present = spawnSync(python, [PY, 'present'], { input: probe, encoding: 'utf8' });
+        if (present.status !== 0) {
+          assert.match(present.stderr, new RegExp(`the activity query cannot run, columns or functions missing: .*${table}\\.${column}\\b`), `${table}.${column}`);
+          outcomes.core.push(`${table}.${column}`);
+          continue;
+        }
+        const drifted = py(['drifted'], probe).trim();
+        await pg.rows(py(['query', '--since', EARLIER, '--now', iso(60), '--present', present.stdout.trim()]), 'renames');
+        (drifted ? outcomes.dropped : outcomes.unread).push(`${table}.${column}`);
+        if (drifted) assert.equal(drifted, table, `${table}.${column} drops its own part only`);
+      } finally {
+        await pg.sql(`alter table ${table} rename column ${column}_renamed to ${column}`, 'renames');
+      }
+    }
+    assert.ok(outcomes.dropped.includes('invite_to_join_sends.offer_annual_cents'));
+    assert.ok(outcomes.dropped.includes('limited_paid_purchase_history.first_verified_paid_at'));
+    assert.ok(outcomes.core.includes('support_messages.author_id'));
+    assert.ok(outcomes.core.includes('profiles.email'), 'every money part reads the buyer\'s name and email');
+    assert.ok(outcomes.unread.includes('support_messages.verification_id'), 'read through to_jsonb, so optional');
+    // The admin check is a function: missing, it names itself.
+    await pg.sql('alter function public.is_admin(uuid) rename to is_admin_renamed', 'renames');
+    try {
+      const present = spawnSync(python, [PY, 'present'], { input: JSON.stringify(await pg.rows(py(['probe']), 'renames')), encoding: 'utf8' });
+      assert.equal(present.status, 1);
+      assert.match(present.stderr, /support_tickets \(public\.is_admin\(uuid\)\)/);
+    } finally { await pg.sql('alter function public.is_admin_renamed(uuid) rename to is_admin', 'renames'); }
+  });
+
   await t.test('a database without the optional tables still gets its signups, tickets and replies', async () => {
     await pg.sql('create database bare');
     await pg.sql(BASE + CORE_ROWS, 'bare');
@@ -262,7 +341,8 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     for (const f of ['signup-notify.sh', 'signup-notify.py']) fs.copyFileSync(path.join(root, 'scripts', f), path.join(job, f));
     const sentLog = path.join(pg.base, 'imessages.jsonl');
     const failFlag = path.join(pg.base, 'messages refuses');
-    fs.writeFileSync(path.join(job, 'notify-owner.sh'), `#!/bin/sh\n[ -e "${failFlag}" ] && exit 1\nprintf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' >> "${sentLog}"\n`, { mode: 0o755 });
+    // The stand-in for Messages records each message and who started it.
+    fs.writeFileSync(path.join(job, 'notify-owner.sh'), `#!/bin/sh\n[ -e "${failFlag}" ] && exit 1\nparent=$(ps -o command= -p $PPID)\npython3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1], "parent": sys.argv[2]}))' "$1" "$parent" >> "${sentLog}"\n`, { mode: 0o755 });
     fs.writeFileSync(path.join(bin, 'security'), '#!/bin/sh\necho synthetic-management-token\n', { mode: 0o755 });
     const curlLog = path.join(pg.base, 'curl.log');
     fs.writeFileSync(path.join(bin, 'curl'), `#!/usr/bin/env python3
@@ -275,13 +355,15 @@ open(${JSON.stringify(curlLog)}, 'a').write(query.split('\\n')[0][:60] + '\\n')
 r = subprocess.run([${JSON.stringify(pg.psql)}, ${pg.psqlArgs('postgres').map(a => JSON.stringify(a)).join(', ')}, '-c',
     "select coalesce(json_agg(t), '[]'::json) from (" + query + ") t"], capture_output=True, text=True)
 if r.returncode:
-    sys.stderr.write(r.stderr); sys.exit(22)
+    # As curl --fail-with-body: the API's error body on stdout, exit 22.
+    sys.stdout.write(json.dumps({'message': 'Failed to run sql query: ' + r.stderr.strip()})); sys.exit(22)
 sys.stdout.write(r.stdout.strip())
 `, { mode: 0o755 });
-    const pythonDir = path.dirname(spawnSync('/bin/sh', ['-c', 'command -v python3'], { encoding: 'utf8' }).stdout.trim());
+    const pythonDir = pythonBinDir();
     const env = { HOME: home, PATH: [bin, pythonDir, '/usr/bin', '/bin'].join(':'), LC_ALL: 'C' };
     const runJob = () => spawnSync('/bin/zsh', [path.join(job, 'signup-notify.sh')], { encoding: 'utf8', env, timeout: 120000 });
-    const sent = () => (fs.existsSync(sentLog) ? fs.readFileSync(sentLog, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
+    const records = () => (fs.existsSync(sentLog) ? fs.readFileSync(sentLog, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
+    const sent = () => records().map(r => r.message);
     const log = () => fs.readFileSync(path.join(home, '.credentialdomd-signup-notify.log'), 'utf8');
 
     // The runner's state directory where launchd's job looks for it.
@@ -309,7 +391,9 @@ sys.stdout.write(r.stdout.strip())
     assert.doesNotMatch(activityMsg, /CredentialDOMD Support|verified reply|legacy support reply/);
     assert.doesNotMatch(alerts + activityMsg, /\u2014/);
     assert.match(log(), /owner alerts: sent 2 \(change_refused [0-9a-f]{8}, parked [0-9a-f]{8}\)/);
-    assert.ok(fs.readFileSync(curlLog, 'utf8').startsWith('select to_regclass('), 'the probe runs first');
+    assert.ok(fs.readFileSync(curlLog, 'utf8').startsWith('select part, coalesce('), 'the probe runs first');
+    // Both sends came from the job's own zsh: the queued alerts as well.
+    assert.deepEqual(records().map(r => r.parent), [`/bin/zsh ${path.join(job, 'signup-notify.sh')}`, `/bin/zsh ${path.join(job, 'signup-notify.sh')}`]);
     const since = fs.readFileSync(path.join(home, '.credentialdomd-signup-notify'), 'utf8').trim();
     assert.notEqual(since, EARLIER, 'the window moved on');
 
@@ -340,5 +424,46 @@ sys.stdout.write(r.stdout.strip())
     assert.equal(sent()[3], 'CredentialDOMD activity\n• [TICKET REPLY] Synthetic Member (member@example.test): Synthetic export question: One more member reply.');
     assert.equal(fs.readFileSync(path.join(alertState, QUEUE_FILE), 'utf8').split('\n').filter(Boolean).length, 3);
     assert.equal(fs.readFileSync(path.join(alertState, SENT_FILE), 'utf8').split('\n').filter(Boolean).length, 3);
+
+    // A broken notifier says so. A column type changed under the query (the
+    // probe checks names, not types): the API refuses it, its message is
+    // logged, the window stays, and after 3 runs in a row the owner is told,
+    // once. Before this change the only trace was a curl error in /tmp.
+    const windowFile = path.join(home, '.credentialdomd-signup-notify');
+    const windowBefore = fs.readFileSync(windowFile, 'utf8').trim();
+    await pg.sql('alter table invite_to_join_sends alter column explicit_resend type text using explicit_resend::text');
+    const failing = [runJob(), runJob(), runJob(), runJob()];
+    assert.deepEqual(failing.map(r => r.status), [1, 1, 1, 1]);
+    assert.equal(sent().length, 5, 'told once, on the third run');
+    assert.match(sent()[4], /^CredentialDOMD notifier: since \d\d:\d\d \(3 runs in a row\), the activity query fails\. Signups, tickets and payments are held until it works\. Details in ~\/\.credentialdomd-signup-notify\.log$/);
+    assert.match(log(), /activity: the activity query failed: \{"message": "Failed to run sql query: .*argument of CASE\/WHEN must be type boolean/);
+    assert.equal(fs.readFileSync(windowFile, 'utf8').trim(), windowBefore, 'the window did not move');
+    await pg.sql(`insert into support_messages(id, ticket_id, author_id, body) values ('${id(210)}', '${TICKET}', '${MEMBER}', 'A reply while the notifier was down.')`);
+    await pg.sql('alter table invite_to_join_sends alter column explicit_resend type boolean using explicit_resend::boolean');
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    const fixed = runJob();
+    assert.equal(fixed.status, 0, fixed.stderr);
+    assert.equal(sent().length, 7);
+    assert.equal(sent()[5], 'CredentialDOMD activity\n• [TICKET REPLY] Synthetic Member (member@example.test): Synthetic export question: A reply while the notifier was down.', 'held, not lost');
+    assert.match(sent()[6], /^CredentialDOMD notifier: working again \(a problem since \d\d:\d\d\)\.$/);
+    assert.equal(runJob().status, 0);
+    assert.equal(sent().length, 7, 'nothing more once it works');
+
+    // An optional table's columns changed: the rest still reports, the part
+    // is named in the log every run, and the owner is told after 3.
+    await pg.sql('alter table invite_to_join_sends rename column offer_phase to phase');
+    const drifting = [runJob(), runJob(), runJob()];
+    assert.deepEqual(drifting.map(r => r.status), [0, 0, 0]);
+    assert.equal(sent().length, 8);
+    assert.match(sent()[7], /^CredentialDOMD notifier: since \d\d:\d\d \(3 runs in a row\), invite_to_join_sends not reported: columns changed\. Everything else still reports\. Details in ~\/\.credentialdomd-signup-notify\.log$/);
+    assert.equal(log().split('\n').filter(l => l.includes('invite_to_join_sends is not reported until the notifier matches its columns (missing invite_to_join_sends.offer_phase)')).length, 3);
+    assert.notEqual(fs.readFileSync(windowFile, 'utf8').trim(), windowBefore, 'the window moves: everything else was reported');
+    await pg.sql('alter table invite_to_join_sends rename column phase to offer_phase');
+    assert.equal(runJob().status, 0);
+    assert.equal(sent().length, 9);
+    assert.match(sent()[8], /^CredentialDOMD notifier: working again/);
+    assert.equal(fs.existsSync(path.join(home, '.credentialdomd-signup-notify.health')), false);
+    assert.ok(records().every(r => r.parent === `/bin/zsh ${path.join(job, 'signup-notify.sh')}`), 'every send from the job\'s zsh');
+    assert.doesNotMatch(sent().join('\n'), /\u2014/);
   });
 });

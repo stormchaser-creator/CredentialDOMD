@@ -5,16 +5,36 @@ signup-notify.sh runs from gui-domain launchd every 10 minutes (the only
 place that may read the keychain and drive Messages) and calls this file for
 everything that is not a network call or the iMessage itself:
 
-  signup-notify.py drain --state DIR --notify PATH [--max N]
-      Sends the ticket runner's queued owner alerts in one iMessage and marks
-      each one sent. scripts/ticket-fix/alert.mjs appends them to
+  signup-notify.py drain-lock --state DIR
+      Before the drain: checks that DIR is owner-only and that a queue exists,
+      creates DIR/owner-alerts.lock (private, never through a symlink) and
+      prints its path, or prints nothing when there is no queue.
+  signup-notify.py drain-prepare --state DIR [--max N]
+      Run while the job holds that lock: prints one iMessage for the ticket
+      runner's queued owner alerts (or nothing) and writes their ids to
+      DIR/owner-alerts.batch. scripts/ticket-fix/alert.mjs appends them to
       DIR/owner-alerts.jsonl (macOS refuses node's request to drive Messages,
-      so the runner cannot send them itself); a delivered id is appended to
-      DIR/owner-alerts.sent and never sent again.
+      so the runner cannot send them itself).
+  signup-notify.py drain-mark --state DIR
+      After the job's shell delivered that message: appends the batch ids to
+      DIR/owner-alerts.sent (never sent again) and removes the batch.
+      The iMessage itself is sent by signup-notify.sh, never from here. The
+      Studio's TCC record (kTCCServiceAppleEvents, Messages) allows /bin/zsh
+      and denies node; the send known to work is launchd, then the job's zsh,
+      then osascript, all system binaries. python3 under launchd is the
+      Command Line Tools' python3.9, which is not a system binary (no platform
+      identifier), so it is kept out of the chain above the send.
   signup-notify.py probe
-      Prints the SQL that says which optional tables exist.
+      Prints the SQL that says, for every part of the activity query, which of
+      the columns and functions it reads are missing, and whether its table
+      exists.
   signup-notify.py present           (the probe's rows as JSON on stdin)
-      Prints the optional tables that exist, comma separated.
+      Prints the optional parts that can run, comma separated. Fails, naming
+      the columns, when a core part cannot run. An optional part whose columns
+      changed is named on stderr (for the log).
+  signup-notify.py drifted           (the same rows on stdin)
+      Prints the optional parts whose table exists but whose columns changed,
+      comma separated: the job tells the owner when that lasts 3 runs.
   signup-notify.py query --since ISO --now ISO --present LIST
       Prints the activity SQL: one row per event, oldest first. Timed rows
       are those in (since, now]: consecutive runs tile time with no gap and
@@ -38,29 +58,67 @@ The key file remembers what was reported, so each one is reported once.
 """
 import datetime as dt
 import errno
-import fcntl
 import json
 import os
 import re
 import stat
-import subprocess
 import sys
 
-QUEUE, SENT, LOCK = 'owner-alerts.jsonl', 'owner-alerts.sent', 'owner-alerts.lock'
+QUEUE, SENT, LOCK, BATCH = 'owner-alerts.jsonl', 'owner-alerts.sent', 'owner-alerts.lock', 'owner-alerts.batch'
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 KIND = re.compile(r'^[a-z_]{1,40}$')
 AT = re.compile(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$')
 SINCE = re.compile(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$')
 PREFIX = 'CredentialDOMD ticket agent: '
 DRAIN_MAX = 10
-SEND_SECONDS = 60
 LOOKBACK_DAYS = 7
 REMEMBER_DAYS = 30
 
-# Tables the notifier reads only when they exist: a table that is not there
-# yet (a migration not applied) drops its rows, not the whole message.
-OPTIONAL = ('feedback', 'limited_billing_quotes', 'billing_checkout_attempts', 'limited_paid_purchase_history',
-            'access_purchase_receipts', 'billing_subscriptions', 'lifetime_gift_reservations', 'invite_to_join_sends')
+# Every part of the activity query and what it reads: {table: columns} and
+# the functions it calls. The probe checks each one, so a part runs only when
+# everything it reads is there. Before 2026-09-29 the probe checked only that
+# the optional tables existed, and one renamed or dropped column in any of
+# them failed the whole query: no signup, ticket, reply or payment alert, and
+# no sign of it outside a curl error in /tmp.
+#   A core part that cannot run fails the run, naming the columns. The window
+#   does not move, so nothing is lost, and signup-notify.sh tells the owner
+#   when that lasts 3 runs.
+#   An optional part whose table does not exist yet (a migration not applied)
+#   is skipped quietly. One whose table exists but whose columns changed is
+#   skipped, named in the log, and reported to the owner after 3 runs.
+# Names are checked, not types: an expression a type change breaks still fails
+# the query, which is reported the same way.
+PROFILE = ('id', 'name', 'email')
+IS_ADMIN = 'public.is_admin(uuid)'
+CORE = {
+    'early_access_leads': ({'early_access_leads': ('waitlist', 'name', 'email', 'source', 'created_at')}, ()),
+    'founding_signups': ({'founding_signups': ('name', 'email', 'created_at')}, ()),
+    'profiles': ({'profiles': ('name', 'email', 'created_at')}, ()),
+    'waitlist_attempts': ({'waitlist_attempts': ('name', 'email', 'stage', 'created_at'), 'early_access_leads': ('email', 'created_at')}, ()),
+    'support_tickets': ({'support_tickets': ('user_id', 'subject', 'created_at'), 'profiles': PROFILE}, (IS_ADMIN,)),
+    'support_messages': ({'support_messages': ('ticket_id', 'author_id', 'body', 'created_at'), 'support_tickets': ('id', 'subject'),
+                          'profiles': PROFILE}, (IS_ADMIN,)),
+    'client_errors': ({'client_errors': ('auth_user_id', 'kind', 'message', 'created_at'), 'profiles': ('auth_user_id', 'name', 'email')}, ()),
+    'beta_access': ({'beta_access': ('id', 'name', 'email', 'activated_at', 'invite_sent_at')}, ()),
+}
+# Read only when they can be. Each is named for its table.
+OPTIONAL_PARTS = {
+    'feedback': ({'feedback': ('user_id', 'rating', 'message', 'context_page', 'created_at'), 'profiles': PROFILE}, (IS_ADMIN,)),
+    'limited_billing_quotes': ({'limited_billing_quotes': ('attempt_id', 'profile_id', 'livemode', 'offer_id', 'price_phase', 'annual_cents', 'created_at'),
+                                'profiles': PROFILE}, ()),
+    'billing_checkout_attempts': ({'billing_checkout_attempts': ('attempt_id', 'profile_id', 'livemode', 'offer_id', 'created_at'), 'profiles': PROFILE}, ()),
+    'limited_paid_purchase_history': ({'limited_paid_purchase_history': ('subscription_id', 'livemode', 'profile_id', 'first_verified_paid_at', 'offer_id',
+                                                                         'price_phase', 'annual_cents'), 'profiles': PROFILE}, ()),
+    'access_purchase_receipts': ({'access_purchase_receipts': ('subscription_id', 'livemode', 'profile_id', 'price_phase', 'annual_cents', 'paid_at'),
+                                  'profiles': PROFILE}, ()),
+    'billing_subscriptions': ({'billing_subscriptions': ('subscription_id', 'livemode', 'profile_id', 'offer_id', 'status', 'updated_at'),
+                               'profiles': PROFILE}, ()),
+    'lifetime_gift_reservations': ({'lifetime_gift_reservations': ('id', 'email', 'livemode', 'claimed_profile_id', 'claimed_at'), 'profiles': PROFILE}, ()),
+    'invite_to_join_sends': ({'invite_to_join_sends': ('id', 'email', 'name', 'status', 'explicit_resend', 'offer_phase', 'offer_annual_cents',
+                                                       'created_at', 'sent_at', 'updated_at')}, ()),
+}
+OPTIONAL = tuple(OPTIONAL_PARTS)
+PARTS = {**CORE, **OPTIONAL_PARTS}
 
 SIGNUP_KINDS = ('waitlist', 'founding', 'app profile', 'FAILED ATTEMPT')
 ACTIVITY_PREFIXES = ('TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK')
@@ -175,61 +233,121 @@ def alert_message(batch, remaining):
     return '\n'.join(lines)
 
 
-def drain(state, notify, limit=DRAIN_MAX, send=None):
-    """Returns (sent, pending_after, skipped)."""
+# The drain is three steps because the send between them is the job's own
+# (see drain-mark in the module notes): signup-notify.sh takes the lock this
+# returns, runs drain-prepare, sends the message itself, then runs drain-mark,
+# and holds the lock across all three so two drains never send one batch.
+
+def drain_lock(state):
+    """The lock file's path, or None when there is nothing to drain."""
     try:
         owner_only_dir(state)
     except FileNotFoundError:
-        return 0, 0, 0
-    text = read_private(os.path.join(state, QUEUE))
-    if text is None:
-        return 0, 0, 0
-    lock = open_private(os.path.join(state, LOCK), os.O_RDWR, create=True)
-    try:
+        return None
+    if read_private(os.path.join(state, QUEUE)) is None:
+        return None
+    os.close(open_private(os.path.join(state, LOCK), os.O_RDWR, create=True))
+    return os.path.join(state, LOCK)
+
+
+def prepare_drain(state, limit=DRAIN_MAX):
+    """Under the job's lock: the message for the pending alerts ('' for none),
+    with their ids and kinds written to BATCH for drain-mark."""
+    owner_only_dir(state)
+    batch_file = os.path.join(state, BATCH)
+    text = read_private(os.path.join(state, QUEUE)) or ''
+    sent_ids = set((read_private(os.path.join(state, SENT)) or '').split())
+    entries, skipped = queued_alerts(text)
+    pending = [e for e in entries if e['id'] not in sent_ids]
+    if skipped:
+        print(f'owner alerts: {skipped} unreadable queue line(s) skipped', file=sys.stderr)
+    if not pending:
+        # A batch left by a run whose send failed is not this run's.
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            print('owner alerts: another drain is running')
-            return 0, 0, 0
-        # Read again under the lock: nothing appended since is missed.
-        text = read_private(os.path.join(state, QUEUE)) or ''
-        sent_ids = set((read_private(os.path.join(state, SENT)) or '').split())
-        entries, skipped = queued_alerts(text)
-        pending = [e for e in entries if e['id'] not in sent_ids]
-        if skipped:
-            print(f'owner alerts: {skipped} unreadable queue line(s) skipped')
-        if not pending:
-            return 0, 0, skipped
-        batch, remaining = pending[:limit], len(pending) - min(len(pending), limit)
-        message = alert_message(batch, remaining)
-        if send is not None:
-            delivered = send(message)
-        else:
-            try:
-                delivered = subprocess.run([notify, message], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                           stderr=subprocess.DEVNULL, timeout=SEND_SECONDS).returncode == 0
-            except (OSError, subprocess.TimeoutExpired):
-                delivered = False
-        if not delivered:
-            raise RuntimeError(f'the notifier did not deliver {len(batch)} queued alert(s); they stay queued')
-        append_private(os.path.join(state, SENT), ''.join(f"{e['id']}\n" for e in batch))
-        print(f"owner alerts: sent {len(batch)} ({', '.join(e['kind'] + ' ' + e['id'][:8] for e in batch)})"
-              + (f', {remaining} still queued' if remaining else ''))
-        return len(batch), remaining, skipped
-    finally:
-        os.close(lock)
+            os.unlink(batch_file)
+        except FileNotFoundError:
+            pass
+        return ''
+    batch, remaining = pending[:limit], len(pending) - min(len(pending), limit)
+    write_private(batch_file, json.dumps({'v': 1, 'ids': [e['id'] for e in batch], 'kinds': [e['kind'] for e in batch],
+                                          'remaining': remaining}) + '\n')
+    return alert_message(batch, remaining)
+
+
+def mark_drained(state):
+    """After the job delivered drain-prepare's message: its ids are sent."""
+    owner_only_dir(state)
+    batch_file = os.path.join(state, BATCH)
+    text = read_private(batch_file)
+    if text is None:
+        raise RuntimeError('no prepared batch to mark sent')
+    batch = json.loads(text)
+    ids, kinds, remaining = batch.get('ids'), batch.get('kinds'), batch.get('remaining')
+    if (batch.get('v') != 1 or not isinstance(ids, list) or not ids or not isinstance(kinds, list) or len(kinds) != len(ids)
+            or not all(isinstance(i, str) and UUID.match(i) for i in ids)
+            or not all(isinstance(k, str) and KIND.match(k) for k in kinds)
+            or not isinstance(remaining, int) or remaining < 0):
+        raise Refused(f'{BATCH} is not a batch drain-prepare wrote')
+    append_private(os.path.join(state, SENT), ''.join(f'{i}\n' for i in ids))
+    os.unlink(batch_file)
+    print(f"owner alerts: sent {len(ids)} ({', '.join(k + ' ' + i[:8] for k, i in zip(kinds, ids))})"
+          + (f', {remaining} still queued' if remaining else ''))
+    return ids
 
 
 # ─── The activity query ────────────────────────────────────────────────────
 
 def probe_sql():
-    return 'select ' + ', '.join(f"to_regclass('public.{t}') is not null as {t}" for t in OPTIONAL)
+    """One row per part: the columns and functions it reads that are missing,
+    and whether its own table exists."""
+    needs = []
+    for part, (tables, functions) in PARTS.items():
+        needs += [(part, t, c) for t, columns in tables.items() for c in columns] + [(part, f, None) for f in functions]
+    values = ',\n    '.join(f"({n}, '{part}', '{obj}', " + (f"'{col}')" if col else 'null)') for n, (part, obj, col) in enumerate(needs))
+    return f"""select part, coalesce(array_agg(need order by n) filter (where not ok), '{{}}') as missing,
+  to_regclass('public.' || part) is not null as table_exists
+from (select n, part, case when col is null then obj else obj || '.' || col end as need,
+    case when col is null then to_regprocedure(obj) is not null
+      else exists (select 1 from pg_attribute a where a.attrelid = to_regclass('public.' || obj) and a.attname = col
+                   and a.attnum > 0 and not a.attisdropped) end as ok
+  from (values
+    {values}) as v(n, part, obj, col)) r
+group by part order by min(n)"""
+
+
+def probe_result(rows):
+    """{part: (missing, table_exists)} for every part, from the probe's rows."""
+    if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+        raise ValueError('unusable probe result')
+    result = {}
+    for row in rows:
+        part, missing, exists = row.get('part'), row.get('missing'), row.get('table_exists')
+        if (part not in PARTS or part in result or not isinstance(missing, list)
+                or not all(isinstance(m, str) for m in missing) or not isinstance(exists, bool)):
+            raise ValueError('unusable probe result')
+        result[part] = (missing, exists)
+    if set(result) != set(PARTS):
+        raise ValueError('unusable probe result: parts missing')
+    return result
 
 
 def present_tables(rows):
-    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
-        raise ValueError('unusable probe result')
-    return [t for t in OPTIONAL if rows[0].get(t) is True]
+    """The optional parts that can run. A core part that cannot fails the run;
+    an optional part whose columns changed is named on stderr."""
+    result = probe_result(rows)
+    broken = [f"{part} ({', '.join(result[part][0])})" for part in CORE if result[part][0]]
+    if broken:
+        raise ValueError(f"the activity query cannot run, columns or functions missing: {'; '.join(broken)}")
+    for part in drifted_tables(rows):
+        print(f"signup-notify: {part} is not reported until the notifier matches its columns"
+              f" (missing {', '.join(result[part][0])})", file=sys.stderr)
+    return [part for part in OPTIONAL if not result[part][0]]
+
+
+def drifted_tables(rows):
+    """Optional parts whose table exists but which cannot run."""
+    result = probe_result(rows)
+    return [part for part in OPTIONAL if result[part][1] and result[part][0]]
 
 
 def offer(column):
@@ -437,15 +555,28 @@ def main(argv):
         if not key.startswith('--') or i + 1 >= len(args):
             raise ValueError(f'unexpected argument {key}')
         options[key[2:]] = args[i + 1]
-    if command == 'drain':
-        state, notify = options.get('state', ''), options.get('notify', '')
-        if not os.path.isabs(state) or not os.path.isabs(notify):
-            raise ValueError('drain needs an absolute --state and --notify')
-        drain(state, notify, int(options.get('max', DRAIN_MAX)))
+    if command.startswith('drain-'):
+        state = options.get('state', '')
+        if not os.path.isabs(state):
+            raise ValueError(f'{command} needs an absolute --state')
+        if command == 'drain-lock':
+            lock = drain_lock(state)
+            if lock:
+                print(lock)
+        elif command == 'drain-prepare':
+            text = prepare_drain(state, int(options.get('max', DRAIN_MAX)))
+            if text:
+                print(text)
+        elif command == 'drain-mark':
+            mark_drained(state)
+        else:
+            raise ValueError(f'unknown command {command}')
     elif command == 'probe':
         print(probe_sql())
     elif command == 'present':
         print(','.join(present_tables(json.loads(sys.stdin.read()))))
+    elif command == 'drifted':
+        print(','.join(drifted_tables(json.loads(sys.stdin.read()))))
     elif command == 'query':
         present = [t for t in options.get('present', '').split(',') if t]
         print(query_sql(options.get('since', ''), present, options.get('now')))
@@ -456,7 +587,7 @@ def main(argv):
     elif command == 'remember':
         remember(read_rows(), options['seen'])
     else:
-        raise ValueError('usage: signup-notify.py drain|probe|present|query|format|remember ...')
+        raise ValueError('usage: signup-notify.py drain-lock|drain-prepare|drain-mark|probe|present|drifted|query|format|remember ...')
     return 0
 
 

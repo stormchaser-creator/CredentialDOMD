@@ -2,12 +2,18 @@
 // Messages, so the ticket runner's alerts were logged and never delivered.
 // alert.mjs now queues every alert in its state directory before it tries the
 // (bounded) direct send, and the signup notifier's launchd job, which may send
-// iMessages, drains the queue: scripts/signup-notify.py drain. These tests run
-// the real alert.mjs and the real drain against synthetic alerts: append,
-// drain, idempotence, a failed send, partial lines, the lock and permissions.
+// iMessages, drains the queue. These tests run the real alert.mjs and the real
+// drain against synthetic alerts: append, drain, idempotence, a failed send,
+// partial lines, the lock and permissions.
+//
+// The drain's bookkeeping is signup-notify.py drain-lock, drain-prepare and
+// drain-mark; the send between them is the job's own zsh (scripts/
+// signup-notify.sh). The first version sent from python3, which macOS would
+// have refused as it refused node: the job tests below check that the
+// notifier's parent is the job's zsh, and hold the lock across the send.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, chmodSync, symlinkSync, rmSync, existsSync, realpathSync, lstatSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, chmodSync, symlinkSync, rmSync, existsSync, realpathSync, lstatSync, copyFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -16,7 +22,13 @@ import { raise, enqueue, markSent, queueSafe, QUEUE_FILE, SENT_FILE, DIRECT_SEND
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const DRAIN = path.join(root, 'scripts/signup-notify.py');
-const python = spawnSync('python3', ['--version']).status === 0 ? 'python3' : null;
+// The python3 binary itself, not a version manager's shim (a shell script that
+// costs a fraction of a second on every call, and these tests make hundreds).
+const python = (() => {
+  const r = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() || 'python3' : null;
+})();
+const zsh = existsSync('/bin/zsh') ? '/bin/zsh' : null;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const T8 = 'a1b2c3d4';
 
@@ -41,7 +53,6 @@ function fakeNotifier(base) {
   writeFileSync(notify, `#!/bin/sh\n[ -e "${path.join(base, 'fail')}" ] && exit 1\nprintf '%s' "$1" | /usr/bin/python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' >> "${record}"\n`, { mode: 0o700 });
   return { notify, messages: () => lines(record).map(line => JSON.parse(line)), fail: on => (on ? writeFileSync(path.join(base, 'fail'), '') : rmSync(path.join(base, 'fail'), { force: true })) };
 }
-const drain = (dir, notify, extra = []) => spawnSync(python, [DRAIN, 'drain', '--state', dir, '--notify', notify, ...extra], { encoding: 'utf8', timeout: 60000 });
 
 test('every alert is queued, owner-only, with ids and counts only', async () => {
   const state = stateDir();
@@ -139,127 +150,269 @@ test('queue permissions: a loose file is tightened, a symlink is refused and the
   } finally { state.cleanup(); }
 });
 
-test('drain: one iMessage for everything pending, each marked sent, and a second drain sends nothing', { skip: python ? false : 'python3 not found' }, async () => {
+// The job finds python3 on PATH: the directory of the one these tests use.
+function pythonBinDir() {
+  return path.isAbsolute(python) && existsSync(path.join(path.dirname(python), 'python3')) ? path.dirname(python)
+    : path.dirname(spawnSync('/bin/sh', ['-c', 'command -v python3'], { encoding: 'utf8' }).stdout.trim());
+}
+
+// The bookkeeping steps, as the job runs them.
+const step = (command, dir, extra = []) => spawnSync(python, [DRAIN, command, '--state', dir, ...extra], { encoding: 'utf8', timeout: 60000 });
+
+// A copy of the launchd job, in folders with spaces, next to a stand-in for
+// notify-owner.sh that records each message and the command of the process
+// that started it. The keychain has no token here, so the job stops after the
+// drain. Flag files make the stand-in fail, wait, or hang.
+function jobCopy(base) {
+  const scripts = path.join(base, 'job copy', 'scripts');
+  const bin = path.join(base, 'shim bin');
+  const home = path.join(base, 'home dir');
+  for (const d of [scripts, bin, home]) mkdirSync(d, { recursive: true });
+  for (const f of ['signup-notify.sh', 'signup-notify.py']) copyFileSync(path.join(root, 'scripts', f), path.join(scripts, f));
+  const flag = name => path.join(base, `${name} flag`);
+  const record = path.join(base, 'imessages.jsonl');
+  writeFileSync(path.join(scripts, 'notify-owner.sh'), `#!/bin/sh
+[ -e "${flag('fail')}" ] && exit 1
+: > "${flag('started')}"
+while [ -e "${flag('hold')}" ]; do sleep 0.1; done
+[ -e "${flag('hang')}" ] && exec sleep 60
+parent=$(ps -o command= -p $PPID)
+python3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1], "parent": sys.argv[2]}))' "$1" "$parent" >> "${record}"
+`, { mode: 0o755 });
+  writeFileSync(path.join(bin, 'security'), '#!/bin/sh\nexit 44\n', { mode: 0o755 });
+  const pythonDir = pythonBinDir();
+  const env = extra => ({ HOME: home, PATH: [bin, pythonDir, '/usr/bin', '/bin'].join(':'), LC_ALL: 'C', ...extra });
+  const job = path.join(scripts, 'signup-notify.sh');
+  const logFile = path.join(home, '.credentialdomd-signup-notify.log');
+  return {
+    job,
+    run: (state, extra = {}) => spawnSync(zsh, [job], { env: env({ OWNER_ALERT_STATE: state, ...extra }), encoding: 'utf8', timeout: 60000 }),
+    start: state => spawn(zsh, [job], { env: env({ OWNER_ALERT_STATE: state }), stdio: 'ignore' }),
+    sent: () => lines(record).map(line => JSON.parse(line)),
+    log: () => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : ''),
+    flag: (name, on) => (on ? writeFileSync(flag(name), '') : rmSync(flag(name), { force: true })),
+    flagged: name => existsSync(flag(name)),
+  };
+}
+async function until(check, ms = 20000) {
+  const end = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > end) throw Error('timed out');
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
+
+const pySkip = python ? false : 'python3 not found';
+const jobSkip = !python ? 'python3 not found' : zsh ? false : 'the job runs under /bin/zsh, which is not installed here';
+
+test('drain bookkeeping: prepare names the batch, mark records it, and a second prepare has nothing', { skip: pySkip }, async () => {
   const state = stateDir();
   try {
-    const fake = fakeNotifier(state.base);
     await quietly(async () => {
       await raise(state.dir, 'parked', `ticket=${T8} rejected_runs=3`, `CredentialDOMD ticket agent: ticket ${T8} is parked after 3 rejected runs.`, { now: Date.parse('2026-09-29T12:00:00Z') });
       await raise(state.dir, 'change_refused', `ticket=${T8}`, `CredentialDOMD ticket agent: the change for ticket ${T8} was not merged.`, { now: Date.parse('2026-09-29T12:05:00Z') });
       // Delivered directly: already marked, never sent again.
       await raise(state.dir, 'merge_held', `ticket=${T8}`, 'CredentialDOMD ticket agent: held for you.', { send: async () => true });
     });
-    const first = drain(state.dir, fake.notify);
-    assert.equal(first.status, 0, first.stderr);
-    assert.match(first.stdout, /owner alerts: sent 2 \(parked [0-9a-f]{8}, change_refused [0-9a-f]{8}\)/);
-    const [msg] = fake.messages();
-    assert.equal(fake.messages().length, 1);
-    assert.match(msg, /^CredentialDOMD ticket agent: 2 alerts\n• .+: ticket a1b2c3d4 is parked after 3 rejected runs\.\n• .+: the change for ticket a1b2c3d4 was not merged\.$/);
-    assert.doesNotMatch(msg, /held for you/);
-    assert.doesNotMatch(msg, /\u2014/);
-    assert.equal(sentIds(state.dir).length, 3);
+    const lock = step('drain-lock', state.dir);
+    assert.equal(lock.status, 0, lock.stderr);
+    assert.equal(lock.stdout.trim(), path.join(state.dir, 'owner-alerts.lock'));
+    assert.equal(mode(path.join(state.dir, 'owner-alerts.lock')), 0o600);
+
+    const prepared = step('drain-prepare', state.dir);
+    assert.equal(prepared.status, 0, prepared.stderr);
+    assert.match(prepared.stdout.trim(), /^CredentialDOMD ticket agent: 2 alerts\n• .+: ticket a1b2c3d4 is parked after 3 rejected runs\.\n• .+: the change for ticket a1b2c3d4 was not merged\.$/);
+    assert.doesNotMatch(prepared.stdout, /held for you/);
+    assert.doesNotMatch(prepared.stdout, /\u2014/);
+    const batch = path.join(state.dir, 'owner-alerts.batch');
+    assert.equal(mode(batch), 0o600);
+    assert.equal(sentIds(state.dir).length, 1, 'preparing marks nothing');
+
+    const marked = step('drain-mark', state.dir);
+    assert.equal(marked.status, 0, marked.stderr);
+    assert.match(marked.stdout, /^owner alerts: sent 2 \(parked [0-9a-f]{8}, change_refused [0-9a-f]{8}\)$/m);
+    assert.equal(existsSync(batch), false);
     assert.deepEqual(new Set(sentIds(state.dir)), new Set(queue(state.dir).map(e => e.id)));
     assert.equal(mode(path.join(state.dir, SENT_FILE)), 0o600);
 
-    const again = drain(state.dir, fake.notify);
+    const again = step('drain-prepare', state.dir);
     assert.equal(again.status, 0, again.stderr);
-    assert.equal(again.stdout, '');
-    assert.equal(fake.messages().length, 1, 'idempotent: nothing is sent twice');
+    assert.equal(again.stdout, '', 'idempotent: nothing is prepared twice');
+    const unmarked = step('drain-mark', state.dir);
+    assert.equal(unmarked.status, 1);
+    assert.match(unmarked.stderr, /no prepared batch to mark sent/);
 
-    // One new alert: sent alone, with the time it was raised.
+    // One new alert: alone, with the time it was raised.
     await quietly(() => raise(state.dir, 'stale_lock', 'age_hours=5', 'CredentialDOMD ticket agent: the run lock has been held 5 h.'));
-    assert.equal(drain(state.dir, fake.notify).status, 0);
-    assert.match(fake.messages()[1], /^CredentialDOMD ticket agent: the run lock has been held 5 h\. \(raised [A-Z][a-z]{2} \d{1,2} \d{1,2}:\d\d\)$/);
+    assert.match(step('drain-prepare', state.dir).stdout.trim(), /^CredentialDOMD ticket agent: the run lock has been held 5 h\. \(raised [A-Z][a-z]{2} \d{1,2} \d{1,2}:\d\d\)$/);
   } finally { state.cleanup(); }
 });
 
-test('drain: a failed send keeps every alert queued for the next run', { skip: python ? false : 'python3 not found' }, async () => {
+test('drain bookkeeping: an unsent batch is not marked by a later run, and a batch that is not ids is refused', { skip: pySkip }, async () => {
   const state = stateDir();
   try {
-    const fake = fakeNotifier(state.base);
     await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
-    fake.fail(true);
-    const refused = drain(state.dir, fake.notify);
-    assert.equal(refused.status, 1);
-    assert.match(refused.stderr, /did not deliver 1 queued alert\(s\); they stay queued/);
-    assert.deepEqual(sentIds(state.dir), []);
-    fake.fail(false);
-    assert.equal(drain(state.dir, fake.notify).status, 0);
-    assert.equal(fake.messages().length, 1);
-    assert.equal(sentIds(state.dir).length, 1);
+    const batch = path.join(state.dir, 'owner-alerts.batch');
+    assert.equal(step('drain-prepare', state.dir).status, 0);
+    assert.ok(existsSync(batch));
+    // The send failed, and the alert went out directly before the next run.
+    await markSent(state.dir, queue(state.dir).map(e => e.id));
+    assert.equal(step('drain-prepare', state.dir).stdout, '');
+    assert.equal(existsSync(batch), false, 'the stale batch is gone');
+
+    await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked again.'));
+    assert.equal(step('drain-prepare', state.dir).status, 0);
+    writeFileSync(batch, JSON.stringify({ v: 1, ids: ['../../etc/passwd'], kinds: ['parked'], remaining: 0 }), { mode: 0o600 });
+    const tampered = step('drain-mark', state.dir);
+    assert.equal(tampered.status, 3);
+    assert.match(tampered.stderr, /refused: owner-alerts\.batch is not a batch drain-prepare wrote/);
+    assert.equal(sentIds(state.dir).length, 1, 'nothing appended');
   } finally { state.cleanup(); }
 });
 
-test('drain: a line still being appended waits, a malformed line is skipped, and at most --max go per message', { skip: python ? false : 'python3 not found' }, async () => {
+test('drain bookkeeping: a line still being appended waits, a malformed line is skipped, and at most 10 go per message', { skip: pySkip }, async () => {
   const state = stateDir();
   try {
-    const fake = fakeNotifier(state.base);
     for (let i = 0; i < 12; i++) await enqueue(state.dir, { kind: 'parked', detail: `ticket=${T8}`, message: `CredentialDOMD ticket agent: alert ${i}.`, now: Date.parse('2026-09-29T12:00:00Z') + i * 60000 });
     const file = path.join(state.dir, QUEUE_FILE);
     const partial = JSON.stringify({ v: 1, id: '00000000-0000-4000-8000-000000000077', at: '2026-09-29T13:00:00.000Z', kind: 'parked', detail: '', message: 'CredentialDOMD ticket agent: late.' });
     writeFileSync(file, `${readFileSync(file, 'utf8')}not json\n${partial.slice(0, 40)}`, { mode: 0o600 });
-    const first = drain(state.dir, fake.notify);
+    const first = step('drain-prepare', state.dir);
     assert.equal(first.status, 0, first.stderr);
-    assert.match(first.stdout, /1 unreadable queue line\(s\) skipped/);
-    assert.match(first.stdout, /sent 10 .*, 2 still queued/);
-    assert.match(fake.messages()[0], /^CredentialDOMD ticket agent: 12 alerts\n/);
-    assert.match(fake.messages()[0], /\n2 more on the next run\.$/);
+    assert.match(first.stderr, /1 unreadable queue line\(s\) skipped/);
+    assert.match(first.stdout, /^CredentialDOMD ticket agent: 12 alerts\n/);
+    assert.match(first.stdout.trim(), /\n2 more on the next run\.$/);
+    assert.match(step('drain-mark', state.dir).stdout, /sent 10 .*, 2 still queued/);
     // The append completes.
     writeFileSync(file, `${readFileSync(file, 'utf8')}${partial.slice(40)}\n`, { mode: 0o600 });
-    assert.equal(drain(state.dir, fake.notify).status, 0);
-    assert.match(fake.messages()[1], /^CredentialDOMD ticket agent: 3 alerts\n/);
-    assert.match(fake.messages()[1], /alert 10\.\n.*alert 11\.\n.*late\.$/);
+    const second = step('drain-prepare', state.dir);
+    assert.match(second.stdout, /^CredentialDOMD ticket agent: 3 alerts\n/);
+    assert.match(second.stdout.trim(), /alert 10\.\n.*alert 11\.\n.*late\.$/);
+    assert.equal(step('drain-mark', state.dir).status, 0);
     assert.equal(sentIds(state.dir).length, 13);
   } finally { state.cleanup(); }
 });
 
-test('drain: refuses a queue other users could reach, and does nothing without a state directory', { skip: python ? false : 'python3 not found' }, async () => {
+test('drain bookkeeping: refuses a queue other users could reach, and does nothing without a state directory or a queue', { skip: pySkip }, async () => {
   const state = stateDir();
   try {
-    const fake = fakeNotifier(state.base);
+    assert.equal(step('drain-lock', state.dir).stdout, '', 'no queue yet: nothing to lock');
+    assert.equal(existsSync(path.join(state.dir, 'owner-alerts.lock')), false);
     await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
     chmodSync(path.join(state.dir, QUEUE_FILE), 0o644);
-    const loose = drain(state.dir, fake.notify);
-    assert.equal(loose.status, 3);
-    assert.match(loose.stderr, /refused: owner-alerts\.jsonl must be a regular file only its owner can read/);
+    for (const command of ['drain-lock', 'drain-prepare']) {
+      const loose = step(command, state.dir);
+      assert.equal(loose.status, 3, command);
+      assert.match(loose.stderr, /refused: owner-alerts\.jsonl must be a regular file only its owner can read/);
+    }
     chmodSync(path.join(state.dir, QUEUE_FILE), 0o600);
     chmodSync(state.dir, 0o755);
-    const openDir = drain(state.dir, fake.notify);
-    assert.equal(openDir.status, 3);
-    assert.match(openDir.stderr, /must be an owner-only directory/);
+    for (const command of ['drain-lock', 'drain-prepare', 'drain-mark']) {
+      const openDir = step(command, state.dir);
+      assert.equal(openDir.status, 3, command);
+      assert.match(openDir.stderr, /must be an owner-only directory/);
+    }
     chmodSync(state.dir, 0o700);
     // A symlinked queue (or sent file) is refused, never followed.
     const real = path.join(state.base, 'real queue.jsonl');
     writeFileSync(real, readFileSync(path.join(state.dir, QUEUE_FILE)), { mode: 0o600 });
     rmSync(path.join(state.dir, QUEUE_FILE));
     symlinkSync(real, path.join(state.dir, QUEUE_FILE));
-    const linked = drain(state.dir, fake.notify);
+    const linked = step('drain-prepare', state.dir);
     assert.equal(linked.status, 3, linked.stderr);
     assert.match(linked.stderr, /symlink/);
-    assert.equal(fake.messages().length, 0, 'nothing sent from a refused queue');
-    const missing = drain(path.join(state.base, 'no such dir'), fake.notify);
+    assert.equal(linked.stdout, '', 'nothing to send from a refused queue');
+    assert.ok(lstatSync(path.join(state.dir, QUEUE_FILE)).isSymbolicLink());
+    const missing = step('drain-lock', path.join(state.base, 'no such dir'));
     assert.equal(missing.status, 0, missing.stderr);
     assert.equal(missing.stdout, '');
-    assert.ok(lstatSync(path.join(state.dir, QUEUE_FILE)).isSymbolicLink());
+    assert.equal(step('drain-lock', 'relative dir').status, 1, 'an absolute --state only');
   } finally { state.cleanup(); }
 });
 
-test('drain: a second drain while one holds the lock sends nothing', { skip: python ? false : 'python3 not found' }, async () => {
+test('the job drains: its own zsh starts the notifier (python3 never does), one message, marked sent, never twice', { skip: jobSkip }, async () => {
   const state = stateDir();
   try {
-    const fake = fakeNotifier(state.base);
+    const copy = jobCopy(state.base);
+    await quietly(async () => {
+      await raise(state.dir, 'parked', `ticket=${T8} rejected_runs=3`, `CredentialDOMD ticket agent: ticket ${T8} is parked after 3 rejected runs.`);
+      await raise(state.dir, 'change_refused', `ticket=${T8}`, `CredentialDOMD ticket agent: the change for ticket ${T8} was not merged.`);
+    });
+    const first = copy.run(state.dir);
+    assert.equal(first.status, 0, first.stderr + copy.log());
+    const [sent] = copy.sent();
+    assert.equal(copy.sent().length, 1);
+    assert.match(sent.message, /^CredentialDOMD ticket agent: 2 alerts\n/);
+    // macOS allows the job's /bin/zsh to drive Messages and refused node; the
+    // Command Line Tools' python3 is no more a system binary than node is.
+    assert.equal(sent.parent, `/bin/zsh ${copy.job}`, 'the notifier is a direct child of the job\'s zsh');
+    assert.match(copy.log(), /owner alerts: sent 2 \(parked [0-9a-f]{8}, change_refused [0-9a-f]{8}\)/);
+    assert.deepEqual(new Set(sentIds(state.dir)), new Set(queue(state.dir).map(e => e.id)));
+    assert.equal(copy.run(state.dir).status, 0);
+    assert.equal(copy.sent().length, 1, 'nothing is sent twice');
+  } finally { state.cleanup(); }
+});
+
+test('the job drains: a refused or hung send keeps every alert queued for the next run', { skip: jobSkip }, async () => {
+  const state = stateDir();
+  try {
+    const copy = jobCopy(state.base);
     await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
-    const lock = path.join(state.dir, 'owner-alerts.lock');
-    writeFileSync(lock, '', { mode: 0o600 });
-    const holder = spawn(python, ['-c', 'import fcntl,os,sys,time\nfd=os.open(sys.argv[1],os.O_RDWR)\nfcntl.flock(fd,fcntl.LOCK_EX)\nprint("locked",flush=True)\ntime.sleep(30)', lock], { stdio: ['ignore', 'pipe', 'inherit'] });
+    copy.flag('fail', true);
+    assert.equal(copy.run(state.dir).status, 0);
+    assert.match(copy.log(), /owner alerts: the notifier did not deliver them \(exit 1\); they stay queued\n.*owner alerts: not drained this run; they stay queued/);
+    assert.deepEqual(sentIds(state.dir), []);
+    copy.flag('fail', false);
+
+    // A permission prompt nobody answers: killed after the limit.
+    copy.flag('hang', true);
+    const started = Date.now();
+    assert.equal(copy.run(state.dir, { OWNER_ALERT_SEND_SECONDS: '1' }).status, 0);
+    assert.ok(Date.now() - started < 15000, `returned in ${Date.now() - started} ms`);
+    assert.match(copy.log(), /did not deliver them \(exit 137\)/);
+    assert.deepEqual(sentIds(state.dir), []);
+    copy.flag('hang', false);
+
+    assert.equal(copy.run(state.dir).status, 0);
+    assert.equal(copy.sent().length, 1);
+    assert.equal(sentIds(state.dir).length, 1);
+  } finally { state.cleanup(); }
+});
+
+test('the job drains: a second run while one is sending sends nothing, and the lock outlives the send', { skip: jobSkip }, async () => {
+  const state = stateDir();
+  try {
+    const copy = jobCopy(state.base);
+    await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
+    copy.flag('hold', true);
+    const slow = copy.start(state.dir);
+    const exited = new Promise(resolve => slow.on('exit', resolve));
     try {
-      await new Promise((resolve, reject) => { holder.stdout.on('data', d => { if (String(d).includes('locked')) resolve(); }); holder.on('exit', () => reject(Error('lock holder exited'))); });
-      const busy = drain(state.dir, fake.notify);
+      await until(() => copy.flagged('started'));
+      const busy = copy.run(state.dir);
       assert.equal(busy.status, 0, busy.stderr);
-      assert.match(busy.stdout, /another drain is running/);
-      assert.equal(fake.messages().length, 0);
-    } finally { holder.kill('SIGKILL'); }
-    assert.equal(drain(state.dir, fake.notify).status, 0);
-    assert.equal(fake.messages().length, 1);
+      assert.match(copy.log(), /owner alerts: another drain is running/);
+      assert.equal(copy.sent().length, 0);
+    } finally { copy.flag('hold', false); }
+    assert.equal(await exited, 0);
+    assert.equal(copy.sent().length, 1);
+    assert.equal(sentIds(state.dir).length, 1);
+    assert.equal(copy.run(state.dir).status, 0);
+    assert.equal(copy.sent().length, 1, 'the second run did not send the same batch');
+  } finally { state.cleanup(); }
+});
+
+test('the job drains: a queue other users could reach is refused and nothing is sent', { skip: jobSkip }, async () => {
+  const state = stateDir();
+  try {
+    const copy = jobCopy(state.base);
+    await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
+    chmodSync(path.join(state.dir, QUEUE_FILE), 0o644);
+    assert.equal(copy.run(state.dir).status, 0);
+    assert.match(copy.log(), /refused: owner-alerts\.jsonl must be a regular file only its owner can read\n.*not drained this run/);
+    assert.equal(copy.sent().length, 0);
+    const before = copy.log();
+    assert.equal(copy.run(path.join(state.base, 'no such dir')).status, 0);
+    assert.equal(copy.log(), before, 'no state directory: nothing to do, nothing logged');
   } finally { state.cleanup(); }
 });

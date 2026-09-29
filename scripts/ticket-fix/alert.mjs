@@ -19,9 +19,10 @@
 // change_refused was logged but not delivered") and the owner heard nothing.
 // The signup notifier's launchd job (com.credentialdomd.signup-notify) IS
 // allowed to send iMessages, so it drains owner-alerts.jsonl every 10 minutes
-// (scripts/signup-notify.py drain) and appends each id it delivered to
-// owner-alerts.sent. Every alert is queued BEFORE the direct send is tried,
-// so a send that fails, is refused or is killed loses nothing. The direct
+// (scripts/signup-notify.sh, whose own zsh sends; signup-notify.py keeps the
+// books) and appends each id it delivered to owner-alerts.sent. Every alert
+// is queued BEFORE the direct send is tried, so a send that fails, is
+// refused or is killed loses nothing. The direct
 // send stays as a first attempt only because it cannot hang: it is killed
 // (SIGKILL) after DIRECT_SEND_SECONDS. When it does go out, its id is marked
 // sent at once and the drain skips it. Neither file is ever rewritten (an

@@ -42,6 +42,8 @@ make was removed on 2026-09-29: its secrets were never set, so it never ran).
 The signup notifier on the owner's Mac, `scripts/signup-notify.sh` under the
 launchd job `com.credentialdomd.signup-notify`, reads new feedback, tickets
 and member replies from the database every 10 minutes and sends one iMessage.
+When its query fails, or a table's columns stop matching what it reads, 3 runs
+in a row, it sends one short message saying so, and one when it works again.
 
 ---
 
