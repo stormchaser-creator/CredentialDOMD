@@ -20,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { readOnly, managementQuery, databaseToken, stateDirectory, ensurePrivateDir, writePrivate, queryRecordPath, sha256Hex, ticketSQL } from './reply.mjs';
+import { isMain } from './is-main.mjs';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -64,6 +65,6 @@ async function main(argv = process.argv.slice(2)) {
     query: managementQuery(databaseToken()), state: stateDirectory() });
   console.log(`recorded ${record.row_count} rows for ${record.id} at ${record.ran_at}: ${file}`);
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main().catch(error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });
 }

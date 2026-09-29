@@ -10,9 +10,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { main as postReply } from './post-reply.mjs';
+import { isMain } from './is-main.mjs';
 
 export const main = (argv = process.argv.slice(2), deps = {}) => postReply(argv, { ...deps, dryRunOnly: true });
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main().then(code => { process.exitCode = code; }, error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });
 }

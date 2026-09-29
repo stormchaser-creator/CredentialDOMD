@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { git, hooksDigest, patchId, trailers, addGatesTrailer, removeWorktree, checkWorktreeLink } from './worktree.mjs';
 import { verifyRelease } from './release.mjs';
 import { personalDataReport, personalDataSummary } from './gates/personal-data.mjs';
+import { isMain } from './is-main.mjs';
 
 export const DEFAULT_WORK = path.join(os.homedir(), 'Library', 'Application Support', 'CredentialDOMD', 'ticket-work');
 export const DEFAULT_REPO = path.join(os.homedir(), 'Projects', 'CredentialDOMD');
@@ -278,6 +279,6 @@ async function main(argv) {
   console.log(`Run ${runId}: ${result.status}${result.fix_commit ? ` (${result.fix_commit.slice(0, 12)})` : ''}`);
   return result.status === 'release_failed' ? 3 : 0;
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main(process.argv.slice(2)).then(code => { process.exitCode = code; }, error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });
 }

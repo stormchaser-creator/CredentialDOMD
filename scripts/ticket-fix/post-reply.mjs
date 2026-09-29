@@ -37,6 +37,7 @@ import { prepareStructuredReply, gitRunner, loadGates, readQueryRecord, stateDir
   readVerificationKey, signPreparedReply, postReplySQL, ticketSQL, duplicateReplySQL, managementQuery, databaseToken, fetchLiveBuild, EMAIL_NOT_SENT } from './reply.mjs';
 import { checkSelect, MAX_ROWS } from './record-query.mjs';
 import { runTestsNow } from './run-tests.mjs';
+import { isMain } from './is-main.mjs';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -154,6 +155,6 @@ function report(prepared, args, log) {
   else printHuman(prepared, log);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main().then(code => { process.exitCode = code; }, error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });
 }

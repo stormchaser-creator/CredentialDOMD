@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readOnly, managementQuery, databaseToken, readPrivateJSON, ensurePrivateDir } from './reply.mjs';
 import { raise, writeStatus } from './alert.mjs';
+import { isMain } from './is-main.mjs';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 export const RECONCILE_DAYS = 14;
@@ -106,7 +107,7 @@ function parse(argv) {
   if (!options.state || !path.isAbsolute(options.state)) throw Error('--state must be an absolute path');
   return options;
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   (async () => {
     const options = parse(process.argv.slice(2));
     const result = await reconcile({ query: managementQuery(databaseToken()), state: options.state, ledgers: options.ledger, runsLog: options.runs ?? null, notify: options.notify ?? null });

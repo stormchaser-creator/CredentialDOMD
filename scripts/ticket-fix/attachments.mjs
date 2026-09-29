@@ -35,6 +35,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SANDBOX_EXEC, sandboxAvailable, sandboxProfile, literal } from './sandbox.mjs';
+import { isMain } from './is-main.mjs';
 
 export const PROJECT = 'hkpnnsjcwprrwobmpqyy';
 export const BUCKET = 'documents';
@@ -368,7 +369,7 @@ export async function main(argv, { env = process.env, fetchImpl = globalThis.fet
   await fs.rename(temporary, o.manifest);
   return 0;
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main(process.argv.slice(2)).then(code => { process.exitCode = code; }, error => {
     console.log(`${stamp()} ERROR — attachments: ${String(error?.message ?? error).split('\n')[0].slice(0, 200)}`);
     process.exitCode = 1;

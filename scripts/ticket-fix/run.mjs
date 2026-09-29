@@ -88,6 +88,7 @@ import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEM
 import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirectory, checkRunPaths, credentialValues, RUN_NAME, AUTO_MERGE_FLAG } from './merge.mjs';
 import { raise } from './alert.mjs';
 import { sandboxAvailable } from './sandbox.mjs';
+import { isMain } from './is-main.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const WORKER_PROMPT = path.join(HERE, '..', 'ticket-agent-prompt.md');
@@ -776,6 +777,6 @@ async function main([command, ...rest]) {
   }
   throw Error('Usage: run.mjs work|held-for|get|finish|auto-merge ...');
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main(process.argv.slice(2)).then(code => { process.exitCode = code; }, error => { console.log(`${stamp()} ERROR — run: ${String(error.message).split('\n')[0].slice(0, 300)}`); process.exitCode = 1; });
 }

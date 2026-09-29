@@ -32,6 +32,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { isMain } from './is-main.mjs';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export const PARK_AFTER = 3;
@@ -210,6 +211,6 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
   throw Error('Usage: alert.mjs park|hold|lock|status|auto-merge --state DIR ...');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main().catch(error => { console.error(`ERROR: alert: ${error.message}`); process.exitCode = 1; });
 }

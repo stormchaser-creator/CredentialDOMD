@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitRunner, writePrivate } from './reply.mjs';
 import { safeRepoPath } from './claims.mjs';
+import { isMain } from './is-main.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PRODUCER = 'scripts/ticket-fix/run-tests.mjs';
@@ -71,6 +72,6 @@ async function main(argv = process.argv.slice(2)) {
   console.log(`gates: ${count('pass')} passed, ${count('fail')} failed, ${count('skip') + count('todo')} skipped at ${gates.head.slice(0, 12)}${gates.dirty ? ' (uncommitted or untracked changes: no claim can cite this run)' : ''}; wrote ${out}`);
   return gates.exit_code;
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main().then(code => { process.exitCode = code; }, error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });
 }

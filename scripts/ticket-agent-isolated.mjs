@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { collectQueue, loadQueuedContext, queueSQL, approvalSQL, ensureState, saveReview, finishRun, validateAssessment, LEGACY_RESULT_SCHEMA, assertReplyVerificationInstalled } from './ticket-agent-context.mjs';
 import { customerReplyText } from './ticket-fix/claims.mjs';
 import { checkVerification, verificationInsertSQL } from './ticket-fix/reply.mjs';
+import { isMain } from './ticket-fix/is-main.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT = 'hkpnnsjcwprrwobmpqyy';
@@ -258,6 +259,6 @@ export async function main(argv = process.argv.slice(2)) {
     await fs.rmdir(lock);
   }
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (isMain(import.meta.url)) {
   main().catch(error => { console.error(`ERROR: ${error.message}`); process.exitCode = 1; });
 }

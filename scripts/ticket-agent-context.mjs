@@ -8,6 +8,7 @@ import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentence
 import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
   MIGRATION, EMAIL_NOT_SENT, RUN_COMMITTER } from './ticket-fix/reply.mjs';
 import { checklistErrors, isSupportReply, hostItemWork, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
+import { isMain } from './ticket-fix/is-main.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 export const AWAITING = `t.status IN ('open', 'in_progress', 'resolved')
@@ -760,4 +761,4 @@ async function main(args) {
   }
   throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });
+if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });
