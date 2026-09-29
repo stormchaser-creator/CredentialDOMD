@@ -320,6 +320,7 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const lease = await deps.store.claimReconcile(account.profile_id, live, account.stripe_customer_id, event.id);
     if (lease.state === 'duplicate') return reply(200, { received: true });
     if (lease.state !== 'claimed') refuse(503, 'billing_reconciliation_pending');
+    let welcomeSubscription = null;
     try {
       trace.phase = 'verify_subscription';
       sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
@@ -338,7 +339,21 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       }
       trace.phase = 'settle';
       await deps.store.settleLimited({ p_profile_id: profile.id, p_livemode: live, p_customer_id: account.stripe_customer_id, p_subscription_id: sub.id, p_offer_id: offer.id, p_status: sub.status, p_period_end: new Date(end * 1000).toISOString(), p_event_id: event.id, p_event_created: event.created, p_reconcile_token: lease.token, p_cancel_at_period_end: sub.cancel_at_period_end === true, p_billing_anchor: billingAnchor }, q.attempt_id, proof);
+      // Settled with the verified payment for the first paid period: the
+      // purchase's welcome email may follow. A renewal, or a first payment
+      // only observed at renewal, never asks.
+      if (proof?.initial === true) welcomeSubscription = sub.id;
     } finally { await deps.store.releaseReconcile(account.profile_id, live, lease.token); }
+    // After the lease is released, so a slow mailbox never holds up the next
+    // event for this account. The database decides whether it is sent
+    // (welcomeEmailSender.mjs): off until the owner approves the exact email,
+    // once per purchase. Settlement is already committed, so nothing here can
+    // change the answer Stripe receives.
+    if (welcomeSubscription && deps.welcome) {
+      trace.phase = 'welcome';
+      try { await deps.welcome({ subscriptionId: welcomeSubscription, livemode: live }); }
+      catch (e) { try { log({ ...failureLog('webhook', trace, 200, 'welcome_email_unavailable', e), event: 'welcome_email_failure' }); } catch { /* A log must never change the answer. */ } }
+    }
     return reply(200, { received: true });
   }, 'webhook', true);
   // Cancellation remains available to a revoked member who owns the billing account.

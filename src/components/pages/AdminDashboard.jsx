@@ -22,6 +22,7 @@ import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
 import AdminMailboxRepair from "./AdminMailboxRepair";
 import AdminMemberView from "./AdminMemberView";
+import AdminWelcomeEmail from "./AdminWelcomeEmail";
 import { readActiveGrants, memberViewAvailability } from "../../utils/memberViewClient.js";
 
 /**
@@ -373,6 +374,7 @@ function AdminDashboardContent() {
     attention?.error ? { id: "fields", ...countFailed("Fields", "Pending field count") }
       : { id: "fields", label: counts?.fields_pending > 0 ? `Fields (${counts.fields_pending} pending)` : "Fields" },
     { id: "ai", label: "AI" },
+    { id: "emails", label: "Emails" },
     { id: "audit", label: "Control history" },
     { id: "preview", label: "Preview as" },
   ];
@@ -406,6 +408,7 @@ function AdminDashboardContent() {
 
       {tab === "reports" && <AdminOperationsReport T={T} onNavigate={navigateReport} />}
       {tab === "audit" && <AdminControlHistory T={T} />}
+      {tab === "emails" && <AdminWelcomeEmail T={T} />}
       {tab === "preview" && <AdminPreviewPicker T={T} />}
       {loading && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
       {error && (

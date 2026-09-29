@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { billingDependencies } from './billingDependencies.ts';
 import { LIMITED_LAUNCH } from './limitedLaunchCatalog.mjs';
+import { createWelcomeEmailSender } from './welcomeEmailSender.mjs';
 
 /** IDs are configuration, never inferred from names or shared with historical v1. */
 export function limitedLaunchConfig() {
@@ -18,21 +19,60 @@ export function limitedLaunchDependencies() {
     if (error) throw Error('Limited billing database operation failed');
     return data;
   };
-  return { ...base,
-    verifiedEmails: async (subject: string) => {
-      if (!/^user_[A-Za-z0-9]+$/.test(subject)) throw Error('Invalid Clerk subject');
-      const key = Deno.env.get('CLERK_SECRET_KEY') || '';
-      if (!/^sk_(test|live)_/.test(key)) throw Error('Clerk backend verification is not configured');
-      const response = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
-        headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000), redirect: 'error',
+  const clerkUser = async (subject: string, timeoutMs = 15000) => {
+    if (!/^user_[A-Za-z0-9]+$/.test(subject)) throw Error('Invalid Clerk subject');
+    const key = Deno.env.get('CLERK_SECRET_KEY') || '';
+    if (!/^sk_(test|live)_/.test(key)) throw Error('Clerk backend verification is not configured');
+    const response = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+      headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(timeoutMs), redirect: 'error',
+    });
+    if (!response.ok) throw Error('Clerk mailbox verification unavailable');
+    const user = await response.json();
+    if (user.id !== subject || user.banned || user.locked) throw Error('Clerk identity unavailable');
+    return user;
+  };
+  const store = { ...base.store,
+    // The welcome email ledger (20260929130000_welcome_email.sql): the claim
+    // decides and records the attempt, the finish records the outcome.
+    claimWelcome: (subscription: string, live: boolean, fingerprint: string) => checked(db().rpc('welcome_email_claim', { p_subscription_id: subscription, p_livemode: live, p_fingerprint: fingerprint })),
+    finishWelcome: (subscription: string, live: boolean, attempt: number, status: string, providerId: string | null, code: string | null) => checked(db().rpc('welcome_email_finish', { p_subscription_id: subscription, p_livemode: live, p_attempt: attempt, p_status: status, p_provider_id: providerId, p_error_code: code })),
+  };
+  const resendKey = () => Deno.env.get('RESEND_API_KEY') || '';
+  const welcome = createWelcomeEmailSender({
+    store,
+    configured: () => resendKey().length > 0,
+    // The address the identity provider verified: profiles.verified_email
+    // (written only by clerk-webhook), else Clerk's verified primary. Never
+    // the editable profiles.email. Short timeouts here and below: Stripe is
+    // still waiting for this webhook's answer (settlement is already saved).
+    recipient: async (claim: { verified_email?: string | null; clerk_subject: string }) => {
+      if (claim.verified_email) return claim.verified_email;
+      const user = await clerkUser(claim.clerk_subject, 5000);
+      const primary = (user.email_addresses || []).find((a: { id?: string }) => a.id === user.primary_email_address_id);
+      return primary?.verification?.status === 'verified' && typeof primary.email_address === 'string' ? primary.email_address : null;
+    },
+    deliver: async ({ from, replyTo, to, subject, text, idempotencyKey }: { from: string; replyTo: string; to: string; subject: string; text: string; idempotencyKey: string }) => {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+        headers: { Authorization: `Bearer ${resendKey()}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ from, to: [to], reply_to: replyTo, subject, text }),
       });
-      if (!response.ok) throw Error('Clerk mailbox verification unavailable');
-      const user = await response.json();
-      if (user.id !== subject || user.banned || user.locked) throw Error('Clerk identity unavailable');
+      const body = await response.json().catch(() => ({}));
+      if (response.ok && typeof body?.id === 'string') return { status: 'sent', providerId: body.id };
+      // A server error, a rate limit or an idempotency conflict may still have
+      // delivered: unknown, and the same key covers the retry. Anything else
+      // was refused.
+      return { status: response.status >= 500 || [409, 429].includes(response.status) ? 'unknown' : 'failed', code: `provider_${response.status}` };
+    },
+    log: (entry: unknown) => console.error(JSON.stringify(entry)),
+  });
+  return { ...base, welcome,
+    verifiedEmails: async (subject: string) => {
+      const user = await clerkUser(subject);
       return (user.email_addresses || []).filter((a: { verification?: { status?: string }; email_address?: string }) => a.verification?.status === 'verified' && typeof a.email_address === 'string')
         .map((a: { email_address: string }) => a.email_address.trim().toLowerCase());
     },
-    store: { ...base.store,
+    store: { ...store,
       profile: (id: string) => checked(db().from('profiles').select('id,auth_user_id,access_status,founding_number,deleted_at').eq('id', id).maybeSingle()),
       eligibility: (id: string, subject: string, live: boolean) => checked(db().rpc('limited_billing_eligibility', { p_profile_id: id, p_clerk_subject: subject, p_livemode: live })),
       bindInvitation: (id: string, subject: string, live: boolean, hash: string, emails: string[]) => checked(db().rpc('bind_limited_billing_invitation', { p_profile_id: id, p_clerk_subject: subject, p_livemode: live, p_token_hash: hash, p_verified_emails: emails })),

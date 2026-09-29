@@ -50,6 +50,9 @@ export const ROOTS = Object.freeze([
   // email-inbound enters the facts an informational email states as the
   // same records the app adds when the physician taps Add (intakeFacts.mjs).
   "utils/intakeRecords.js",
+  // limited-stripe-webhook sends the welcome email Admin > Emails previews,
+  // and presents the fingerprint of that same content to the database.
+  "utils/welcomeEmail.js",
 ]);
 
 export const banner = (rel) =>
