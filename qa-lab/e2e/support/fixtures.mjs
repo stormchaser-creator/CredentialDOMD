@@ -90,8 +90,11 @@ export const test = base.extend({
     const record = (type, value) => testInfo.annotations.push({ type, description: JSON.stringify(value) });
     let current = null;
     const qa = {
-      /** Runs one checklist feature's stretch of the journey. A throw marks it failed and stops the journey. */
-      async feature(id, title, fn) {
+      /**
+       * Runs one checklist feature's stretch of the journey. A throw marks it failed and stops
+       * the journey; with { soft: true } the journey goes on to its next stretch (and still fails).
+       */
+      async feature(id, title, fn, { soft = false } = {}) {
         const prev = current;
         current = { id, checks: [], shots: [] };
         const started = Date.now();
@@ -103,7 +106,9 @@ export const test = base.extend({
           const s = await takeShot(page, `${testInfo.titlePath.slice(1).join(' ')} ${id} error`.slice(0, 120), testInfo).catch(() => null);
           if (s) current.shots.push(s);
           record('qa-feature', { id, title, status: 'fail', checks: current.checks, shots: current.shots, error: String(e.message || e).split('\n').slice(0, 6).join('\n'), ms: Date.now() - started });
-          throw e;
+          if (!soft) throw e;
+          expect.soft(String(e.message || e).split('\n')[0], `${id} ${title} stopped`).toBe('');
+          await page.keyboard.press('Escape').catch(() => {});
         } finally { current = prev; }
       },
       /** A soft check inside the current feature: recorded, and the journey goes on. */
