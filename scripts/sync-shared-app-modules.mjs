@@ -53,6 +53,9 @@ export const ROOTS = Object.freeze([
   // send-reminders and the member view read a blank reminder setting the way
   // the member's Settings screen shows it (blank email reminders mean on).
   "utils/reminderPreferences.js",
+  // limited-stripe-webhook sends the welcome email Admin > Emails previews,
+  // and presents the fingerprint of that same content to the database.
+  "utils/welcomeEmail.js",
 ]);
 
 export const banner = (rel) =>

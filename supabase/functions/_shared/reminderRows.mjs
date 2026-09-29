@@ -13,6 +13,24 @@
 //
 // Plain JavaScript so the Deno function and the node tests share one copy.
 
+// The physician's reminder settings as the app shows them. The profile
+// columns (notify_email, reminder_lead_days, notify_freq_days) have no default
+// and stay null until the physician changes one, while the app shows
+// DEFAULT_SETTINGS for a null (src/constants/defaults.js: Email reminders on,
+// lead time 90 days, weekly). Reading null as off sent nothing to every
+// member who never touched the switch, while Settings and the setup board
+// told them reminders were on (found 2026-09-29). A test holds these to the
+// app's defaults.
+export const REMINDER_DEFAULTS = Object.freeze({ notifyEmail: true, leadDays: 90, freqDays: 7 });
+const whole = (value) => { const n = Number.parseInt(value, 10); return Number.isFinite(n) && n > 0 ? n : null; };
+export function reminderPreferences(profile) {
+  return {
+    emailOn: profile?.notify_email !== false,
+    leadDays: Math.min(Math.max(whole(profile?.reminder_lead_days) ?? REMINDER_DEFAULTS.leadDays, 7), 365),
+    freqDays: Math.min(Math.max(whole(profile?.notify_freq_days) ?? REMINDER_DEFAULTS.freqDays, 1), 60),
+  };
+}
+
 const LIFECYCLES = new Set(["active", "provisional", "pending_confirmation", "superseded", "historical"]);
 
 /** The row's lifecycle status; missing or unrecognised reads as active. */
