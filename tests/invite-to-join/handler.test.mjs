@@ -187,7 +187,7 @@ test('the invitation must say who it is from: a profile with no name or no mailb
   assert.equal(inviteSender({ ...INVITER, verified_email: null }).replyTo, 'typed@example.invalid');
   assert.equal(inviteSender({ ...INVITER, name: 'Synthetic Owner DO' }).displayName, 'Synthetic Owner DO');
   assert.equal(inviteSender({ ...INVITER, degree_type: null }).displayName, 'Synthetic Owner');
-  assert.equal(inviteSender({ ...INVITER, name: 'Synthetic "Quote" Owner' }).from, '"Synthetic Quote Owner, DO" <whit@credentialdomd.com>');
+  assert.equal(inviteSender({ ...INVITER, name: 'Synthetic "Quote" Owner' }).from, '"Synthetic Owner, DO" <whit@credentialdomd.com>');
 });
 
 test('the composer and the paragraph builder agree with the handler', () => {
@@ -366,4 +366,17 @@ test('invite-to-join is discovered as a Clerk-authenticated function for deploym
   const { listClerkFunctions } = await import('../../scripts/list-clerk-functions.mjs');
   const { fileURLToPath } = await import('node:url');
   assert.ok(listClerkFunctions(fileURLToPath(new URL('../../supabase/functions', import.meta.url))).includes('invite-to-join'));
+});
+
+test('the invitation is signed with first and last name, like every other product email', async () => {
+  const { inviteSender, signingName } = await import('../../supabase/functions/_shared/inviteToJoin.mjs');
+  assert.equal(signingName('Alex Quinn Example'), 'Alex Example');
+  assert.equal(signingName('Alex Example'), 'Alex Example');
+  assert.match(inviteSender({ name: 'Alex Quinn Example', degree_type: 'DO', verified_email: 'owner@example.com' }).from, /^"Alex Example, DO" </);
+});
+
+test('a degree written into the name is kept after shortening', async () => {
+  const { signingName } = await import('../../supabase/functions/_shared/inviteToJoin.mjs');
+  assert.equal(signingName('Synthetic Owner DO'), 'Synthetic Owner DO');
+  assert.equal(signingName('Alex Quinn Example MD'), 'Alex Example MD');
 });

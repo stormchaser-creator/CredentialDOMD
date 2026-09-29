@@ -110,12 +110,22 @@ export function offerParagraph({ phase, annualCents, availability }) {
  * verified sender, and reply-to their own mailbox (the provider-verified one
  * when set, else the Settings email). null when the profile cannot sign it.
  */
+export function signingName(name) {
+  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+  const degrees = [];
+  while (words.length > 1 && /^[A-Z][A-Z.]{1,5},?$/.test(words[words.length - 1])) degrees.unshift(words.pop());
+  const person = words.length > 2 ? [words[0], words[words.length - 1]] : words;
+  return [...person, ...degrees].join(' ');
+}
+
 export function inviteSender(profile) {
   const name = clean(profile?.name).replace(/["<>\\]/g, '');
   const degree = clean(profile?.degree_type);
   if (!name || name.length > 80 || !NAME.test(name)) return null;
   const suffix = DEGREE.test(degree) && !new RegExp(`(?:,|\\s)${degree.replace(/\./g, '\\.')}$`, 'i').test(name) ? `, ${degree}` : '';
-  const displayName = `${name}${suffix}`;
+  // Sign with first and last name only ("Eric Edwin Whitney" -> "Eric
+  // Whitney"), the way every other CredentialDOMD email is signed.
+  const displayName = `${signingName(name)}${suffix}`;
   const verified = normalizeInviteEmail(profile?.verified_email || '');
   const typed = normalizeInviteEmail(profile?.email || '');
   const replyTo = verified || typed;
