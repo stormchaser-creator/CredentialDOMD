@@ -26,17 +26,25 @@
 --     byte for byte unchanged. A new founding claim must carry v3, so a v2
 --     founding preview made before this migration answers quote_expired and
 --     the buyer reviews the new text.
---   * While a new self-service buyer's own offer is founding, the $245
---     bundle would cost more for the same thing, so it is not offered:
---     eligibility carries bundle_available, the snapshot bundleAvailable,
---     the public offer bundleAvailable, a bundle preview raises and a bundle
---     claim answers bundle_unavailable. It is offered again once founding is
---     sold out (paid_out already turns the phase to earlybird) or ended (the
---     owner moves limited_self_service_price_phase on). Reviewed invitations
---     and historical no-card beta holders keep both offers.
+--   * While a buyer's own Credential offer is founding, the $245 bundle
+--     would cost more for the same access, so it is not offered: eligibility
+--     carries bundle_available, the snapshot bundleAvailable, the public
+--     offer bundleAvailable, a bundle preview raises and a bundle claim
+--     answers bundle_unavailable. This holds for every origin: public
+--     signup, reviewed invitations and historical no-card beta holders. It is
+--     offered again once founding is sold out (paid_out already turns the
+--     phase to earlybird) or ended (the owner moves
+--     limited_self_service_price_phase on), and to a returning buyer, whose
+--     offer is standard.
 --
--- Production had zero purchases, receipts, quotes and trial grants when this
--- was written, so no existing member's access changes.
+-- Production had zero purchases, receipts, quotes, checkout attempts and
+-- trial grants when this was written, so no existing member's access changes.
+--
+-- Deploy order: this migration first, then in one step the billing-quote,
+-- limited-checkout, public-membership-offer and billing-entitlements
+-- functions (and the other functions built from the changed _shared
+-- modules, listed in the rollback header) together with the site and app.
+-- The rollback runs in the reverse order; see its header.
 --
 -- Reviewed bodies are kept: three are wrapped behind a private name, as the
 -- founding capacity and checkout switch migrations did, and six are edited in
@@ -110,15 +118,16 @@ do $$ begin
 end $$;
 create or replace function public.limited_billing_eligibility(p_profile_id uuid,p_clerk_subject text,p_livemode boolean)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare e jsonb; i public.limited_billing_invitations%rowtype;
+declare e jsonb;
 begin
  e:=public.limited_billing_eligibility_before_practice(p_profile_id,p_clerk_subject,p_livemode);
  if e->>'state' is distinct from 'eligible' then return e; end if;
- select * into i from public.limited_billing_invitations where id=(e->>'invitation_id')::uuid;
- -- While a new self-service buyer's offer is founding, $99 Credential already
- -- includes Practice: $245 would cost more for the same thing. Reviewed
- -- invitations and historical no-card beta holders keep both offers.
- return e||jsonb_build_object('bundle_available',not coalesce(e->>'price_phase'='founding' and i.origin='self_service' and i.free_beta_cohort_id is null,false));
+ -- While this buyer's own Credential offer is founding, $99 Credential already
+ -- includes Practice with a rate locked for life: $245 would cost more for the
+ -- same access. Every origin alike: public signup, reviewed invitations and
+ -- historical no-card beta holders. A returning buyer's offer is standard, so
+ -- they keep the bundle.
+ return e||jsonb_build_object('bundle_available',e->>'price_phase' is distinct from 'founding');
 end $$;
 
 -- 5. A new founding Credential consent states that Practice is included (v3).

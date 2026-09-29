@@ -8,8 +8,8 @@
 // member." Before it, a $99 founding Credential purchase started one 30-day
 // Practice trial and Practice then went read-only. Early-bird and standard
 // keep that trial; the $245 bundle, lifetime and the no-card beta are
-// unchanged; the bundle is not offered to a new self-service buyer while
-// their own offer is founding.
+// unchanged; the bundle is not offered to any buyer (public signup, reviewed
+// invitation or no-card beta holder) while their own offer is founding.
 //
 // Synthetic identities, customers, invoices and sessions only; no provider
 // request, network listener, credential or production row. The
@@ -375,14 +375,24 @@ test('founding Credential includes Practice while the membership is active; earl
       } finally { await phase('founding'); }
     });
 
-    await t.test('reviewed invitations keep the bundle; Credential + Practice is unchanged', async () => {
+    await t.test('a reviewed invitation at founding is not offered the bundle either; at a later phase Credential + Practice is unchanged', async () => {
       await sql(`insert into profiles(id,auth_user_id,access_status) values('${pid(7)}','${subject(7)}','pending');
         insert into limited_billing_invitations(batch_id,email,token_hash,livemode,price_phase,expires_at,profile_id,clerk_subject,claimed_at,review_reason,origin)
           values('synthetic_reviewed','reviewed7@example.invalid','${sha256('reviewed7')}',true,'founding',now()+interval '10 days','${pid(7)}','${subject(7)}',now(),'Synthetic reviewed invitation','reviewed_invitation')`);
       await as('service_role', `insert into billing_accounts(profile_id,livemode,stripe_customer_id) values('${pid(7)}',true,'cus_Practice7')`);
+      // $99 founding Credential already includes Practice with a rate locked for
+      // life; $245 would cost $146 more a year for the same access.
       const e = await value(`limited_billing_eligibility('${pid(7)}','${subject(7)}',true)`);
-      assert.deepEqual([e.price_phase, e.bundle_available], ['founding', true]);
+      assert.deepEqual([e.price_phase, e.bundle_available], ['founding', false]);
+      const refused = await as('service_role', `select create_limited_billing_preview('${pid(7)}','${subject(7)}',true,'core_locum')`);
+      assert.match(refused.stderr, /bundle unavailable during founding/);
       const old = await oldPreview(7, 'core_locum');
+      assert.deepEqual(await claim(7, old), { state: 'bundle_unavailable' });
+      assert.equal((await preview(7, 'core')).consent_version, V3, 'the $99 offer, with Practice included');
+      // An invitation reviewed at the standard phase: the bundle is offered, unchanged.
+      await sql(`update limited_billing_invitations set price_phase='standard' where profile_id='${pid(7)}'`);
+      const later = await value(`limited_billing_eligibility('${pid(7)}','${subject(7)}',true)`);
+      assert.deepEqual([later.price_phase, later.bundle_available], ['standard', true]);
       const { v } = await buy(7, 'core_locum', { paidDaysAgo: 40 });
       assert.deepEqual([v.consent_text, v.consent_version], [old.consent_text, old.consent_version], 'bundle consent unchanged');
       assert.equal(v.consent_text, 'Credential + Practice: USD 245 due now, then USD 245 each year while this subscription remains active. Cancel before a scheduled charge to avoid it.');
@@ -391,7 +401,7 @@ test('founding Credential includes Practice while the membership is active; earl
       assert.deepEqual(await writeRule(7), { enforcementEnabled: true, credential: true, practice: true });
     });
 
-    await t.test('lifetime and the no-card beta are unchanged; a beta holder opting in at $99 gets the v3 consent and can resume it', async () => {
+    await t.test('lifetime and the no-card beta are unchanged; a beta holder opting in at $99 gets the v3 consent, is not offered the bundle, and can resume it', async () => {
       await sql(`insert into profiles(id,auth_user_id,access_status) values('${pid(8)}','${subject(8)}','active');
         insert into access_grants(profile_id,clerk_subject,livemode,scope,kind,source_key,starts_at) select '${pid(8)}','${subject(8)}',true,s,'lifetime','synthetic_gift',now()-interval '1 day' from unnest(array['credential','practice']) s`);
       const lifetime = await snapshot(8);
@@ -403,7 +413,8 @@ test('founding Credential includes Practice while the membership is active; earl
       assert.equal(enrolled.kind, 'grandfathered_beta');
       const beta = await snapshot(9);
       assert.equal(beta.freeBeta.state, 'active');
-      assert.deepEqual([beta.purchasedOfferId, beta.practiceIncluded, beta.bundleAvailable, beta.capabilities.practice.write], [null, false, true, true]);
+      assert.deepEqual([beta.purchasedOfferId, beta.practiceIncluded, beta.bundleAvailable, beta.capabilities.practice.write], [null, false, false, true],
+        'a beta holder opting in at founding is offered $99 with Practice included, not the $245 bundle');
       const old = await oldPreview(9, 'core');
       const v = await preview(9, 'core');
       assert.ok(v.billing_start_at, 'deferred to the original beta end');
@@ -412,8 +423,9 @@ test('founding Credential includes Practice while the membership is active; earl
       assert.equal(v.consent_text, old.consent_text.slice(0, -TRIAL.length) + INCLUDED, 'only the Practice sentences change');
       assert.match(v.consent_text, /^Credential: A card is required to opt in\. USD 0 due before /);
       assert.equal(v.consent_hash, sha256(v.consent_text));
-      const bundle = await preview(9, 'core_locum');
-      assert.equal(bundle.consent_version, V2, 'a beta holder keeps the bundle, unchanged');
+      const bundle = await as('service_role', `select create_limited_billing_preview('${pid(9)}','${subject(9)}',true,'core_locum')`);
+      assert.match(bundle.stderr, /bundle unavailable during founding/, 'no deferred $245 bundle beside a $99 that includes Practice');
+      assert.deepEqual(await claim(9, await oldPreview(9, 'core_locum')), { state: 'bundle_unavailable' });
       assert.equal((await claim(9, old)).state, 'quote_expired');
       const c = await claim(9, v);
       assert.equal(c.state, 'claimed');
@@ -453,9 +465,41 @@ test('founding Credential includes Practice while the membership is active; earl
       assert.deepEqual([kept.purchasedOfferId, kept.practiceIncluded, kept.capabilities.practice.write], ['core', true, true]);
     });
 
+    await t.test('the rollback also refuses while a v3 founding buyer has not paid yet: in Checkout, completing, or scheduled after the beta', async () => {
+      // Each case runs in one transaction that is always rolled back. The base
+      // removes what the first guard looked at (paid first payments), expires
+      // every Checkout and ends every subscription; each case then restores
+      // one unpaid purchase made under "Includes Practice for as long as this
+      // membership remains active.", which Stripe could still collect $99 for.
+      const base = "delete from limited_paid_purchase_history;update billing_checkout_attempts set state='expired';update billing_subscriptions set status='canceled',membership_active=false;";
+      const guard = setup => sql(`begin;${base}${setup};${ROLLBACK};rollback;`).then(() => 'rolled back', error => error.message);
+      const REFUSED = /a founding buyer agreed that Practice is included/;
+      const attempt = (n, state) => `update billing_checkout_attempts set state='${state}' where profile_id='${pid(n)}'`;
+      // Member 10: an immediate $99 founding Checkout, never paid.
+      assert.equal(await sql(`select q.price_phase||':'||v.consent_version from limited_billing_quotes q join limited_billing_previews v on v.id=q.consent_preview_id join billing_checkout_attempts a on a.attempt_id=q.attempt_id where q.profile_id='${pid(10)}'`), `founding:${V3}`);
+      assert.match(await guard(attempt(10, 'open')), REFUSED, 'an open Checkout, payable for up to 24 hours');
+      assert.match(await guard(attempt(10, 'creating')), REFUSED, 'a Checkout being created');
+      assert.match(await guard(attempt(10, 'complete')), REFUSED, 'a completed Checkout whose subscription is not recorded yet');
+      // Member 9: a beta holder's deferred $99 opt-in. Checkout completes and
+      // the subscription is scheduled (trialing) until the original beta end.
+      const scheduled = status => `${attempt(9, 'complete')};
+        select settle_limited_billing_subscription(jsonb_build_object('p_profile_id',q.profile_id,'p_livemode',true,'p_customer_id','cus_Practice9',
+          'p_subscription_id','sub_Practice9','p_offer_id','core','p_status','${status}','p_period_end',q.billing_start_at,'p_event_id','evt_Scheduled9',
+          'p_event_created',9000,'p_reconcile_token',claim_billing_reconcile(q.profile_id,true,'cus_Practice9','evt_Scheduled9')->>'token',
+          'p_cancel_at_period_end',false,'p_billing_anchor',extract(epoch from q.billing_start_at)::bigint),q.attempt_id,null)
+        from limited_billing_quotes q where q.profile_id='${pid(9)}' and q.billing_start_at is not null`;
+      assert.match(await guard(scheduled('trialing')), REFUSED, 'a scheduled first charge at the original beta end');
+      assert.match(await guard(`${scheduled('trialing')};update billing_subscriptions set status='incomplete' where profile_id='${pid(9)}'`), REFUSED, 'a first charge still being collected');
+      // Must pass: every v3 purchase has ended, so nothing can still be charged.
+      assert.equal(await guard(`${scheduled('trialing')};update billing_subscriptions set status='canceled' where profile_id='${pid(9)}'`), 'rolled back', 'a canceled scheduled purchase');
+      assert.equal(await guard(`${scheduled('trialing')};update billing_subscriptions set status='incomplete_expired' where profile_id='${pid(9)}'`), 'rolled back');
+      assert.equal(await guard('select 1'), 'rolled back', 'expired Checkouts and ended subscriptions');
+      assert.equal(await exists('credentialdo_founding_practice(uuid,text,boolean)'), true, 'each case was rolled back');
+    });
+
     await t.test('the rollback refuses while a founding member holds Practice, then restores every reviewed body and grant', async () => {
       const refused = await sql(`begin;${ROLLBACK};commit;`).then(() => null, error => error.message);
-      assert.match(refused, /a founding member paid with Practice included/);
+      assert.match(refused, /a founding buyer agreed that Practice is included/);
       assert.equal(await exists('credentialdo_founding_practice(uuid,text,boolean)'), true, 'nothing was rolled back');
       const confirmed = `begin;set local credentialdomd.rollback_founding_practice='confirmed';${ROLLBACK};commit;`;
       await sql(confirmed);

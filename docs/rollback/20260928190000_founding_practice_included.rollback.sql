@@ -8,24 +8,47 @@
 -- 20260928180000_checkout_offer_switch, whose rollback replaces the claim
 -- wrapper by name. Idempotent.
 --
--- It refuses to run once a founding member has paid under the v3 consent
--- ("Includes Practice for as long as this membership remains active."):
--- rolling back would take Practice away from that paid member, and no trial
--- was recorded for them to fall back on. That needs an owner decision; to
--- proceed anyway, run
+-- Order: revert the application first, then run this file. Redeploy the
+-- previous billing-quote, limited-checkout, public-membership-offer and
+-- billing-entitlements functions (and every other function built from the
+-- changed _shared modules: activate-billing-invitation, admin-lifetime-access,
+-- admin-lifetime-gift, bootstrap-launch-access, create-checkout-session,
+-- customer-portal, limited-customer-portal, limited-stripe-webhook,
+-- stripe-webhook), the previous site (/, /locums, /help, /terms and
+-- membership-offer.js) and the previous app, and only then run this SQL. The
+-- forward deploy shipped the migration first; rolling back the database
+-- alone would leave the new functions sending practiceIncluded:true for a
+-- founding quote, and the site and app saying Practice is included, beside the
+-- restored consent text that promises a 30-day trial.
+--
+-- It refuses to run while any founding buyer holds the v3 consent ("Includes
+-- Practice for as long as this membership remains active.") and it can still
+-- become, or already is, a charge: a paid first payment; a Checkout that is
+-- being created, is open, or has completed without its subscription recorded
+-- yet (an immediate founding Checkout stays open for up to 24 hours); or a
+-- subscription that is not canceled or incomplete_expired (a beta holder's
+-- deferred founding opt-in is scheduled until the original beta end, up to
+-- about 30 days away). Rolling back would take Practice away from that
+-- member, or have Stripe collect $99 under that consent and record only a
+-- 30-day trial. That needs an owner decision; to proceed anyway, run
 --   set local credentialdomd.rollback_founding_practice = 'confirmed';
 -- in the same transaction first.
 --
--- Left in place, and harmless under the restored code: v3 previews (they
--- expire within 30 minutes and a restored claim answers quote_expired for
--- them) and founding receipts without a trial grant.
+-- Left in place, and harmless under the restored code: v3 previews that no
+-- quote accepted (they expire within 30 minutes and a restored claim answers
+-- quote_expired for them), v3 quotes whose Checkout expired or whose
+-- subscription ended, and founding receipts without a trial grant.
 do $$ begin
- if exists(select 1 from public.limited_paid_purchase_history h
-   join public.limited_billing_quotes q on q.attempt_id=h.quote_id
+ if exists(select 1 from public.limited_billing_quotes q
    join public.limited_billing_previews v on v.id=q.consent_preview_id
-   where h.offer_id='core' and h.price_phase='founding' and v.consent_version='2026-09-28-explicit-annual-opt-in-v3')
+   where q.offer_id='core' and q.price_phase='founding' and v.consent_version='2026-09-28-explicit-annual-opt-in-v3'
+    and (exists(select 1 from public.limited_paid_purchase_history h where h.quote_id=q.attempt_id)
+     or exists(select 1 from public.billing_checkout_attempts a where a.attempt_id=q.attempt_id
+       and (a.state in ('creating','open') or (a.state='complete' and q.subscription_id is null)))
+     or exists(select 1 from public.billing_subscriptions s where s.subscription_id=q.subscription_id and s.livemode=q.livemode
+       and s.status not in ('canceled','incomplete_expired'))))
   and current_setting('credentialdomd.rollback_founding_practice',true) is distinct from 'confirmed' then
-  raise exception 'a founding member paid with Practice included; rolling back would take it away (owner decision required)';
+  raise exception 'a founding buyer agreed that Practice is included and is paid, in Checkout or scheduled to pay; rolling back would break that (owner decision required)';
  end if;
 end $$;
 
