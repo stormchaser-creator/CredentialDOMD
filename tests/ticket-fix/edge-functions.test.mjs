@@ -103,7 +103,7 @@ test('send-ticket-reply checks the stored author, and still sends (with a warnin
   assert.equal(member.emails.length, 0);
   const early = sender({ claimColumn: false });
   assert.deepEqual((await early.call({ id: MESSAGE })).body, { sent: true });
-  assert.match(early.warnings.join(' '), /emailed_at is missing; apply 20260928160000/);
+  assert.match(early.warnings.join(' '), /emailed_at is missing; apply 20260928161000/);
 });
 
 function replier({ isAdmin }) {

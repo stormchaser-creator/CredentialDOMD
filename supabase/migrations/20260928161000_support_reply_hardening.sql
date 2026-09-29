@@ -41,7 +41,7 @@
 -- recorded, and about one text verified for several tickets. Making the key
 -- unreachable needs a signer the owner's shell cannot read (owner decision).
 --
--- Order (see docs/rollback/20260928160000_support_reply_hardening.rollback.sql
+-- Order (see docs/rollback/20260928161000_support_reply_hardening.rollback.sql
 -- for the rollback):
 --   1. Deploy reply-ticket (admin replies written as the caller) and
 --      send-ticket-reply (stored row, once) first. Both work before this
@@ -54,7 +54,7 @@ begin;
 
 alter table public.support_messages add column if not exists emailed_at timestamptz;
 comment on column public.support_messages.emailed_at is
-  'When send-ticket-reply claimed this message for its one email (20260928160000). Null: not emailed.';
+  'When send-ticket-reply claimed this message for its one email (20260928161000). Null: not emailed.';
 
 create or replace function public.require_verified_support_reply()
 returns trigger
@@ -131,7 +131,7 @@ $$;
 
 revoke all on function public.require_verified_support_reply() from public, anon, authenticated;
 comment on function public.require_verified_support_reply() is
-  'Refuses a support reply without a valid, unused verification unless an admin writes it in the app under their own token, and refuses any rewrite of a support reply (20260928160000).';
+  'Refuses a support reply without a valid, unused verification unless an admin writes it in the app under their own token, and refuses any rewrite of a support reply (20260928161000).';
 
 drop trigger if exists trg_require_verified_support_reply on public.support_messages;
 create trigger trg_require_verified_support_reply

@@ -8,7 +8,7 @@ BIN = Path(os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 # LC_ALL: on macOS the postmaster aborts at startup without a valid locale.
 ENV = {**{k: v for k, v in os.environ.items() if not k.startswith('PG')}, 'LC_ALL': 'C'}
 MIGRATION = (ROOT / 'supabase/migrations/20260928150000_support_reply_verifications.sql').read_text()
-HARDENING = (ROOT / 'supabase/migrations/20260928160000_support_reply_hardening.sql').read_text()
+HARDENING = (ROOT / 'supabase/migrations/20260928161000_support_reply_hardening.sql').read_text()
 # Supabase's Vault and pgcrypto, reduced to what the migration and trigger use.
 PLATFORM = '''
 create role anon nologin; create role authenticated nologin; create role service_role nologin;

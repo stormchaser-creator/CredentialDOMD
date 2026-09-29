@@ -1,4 +1,4 @@
-// Migrations 20260928150000 and 20260928160000 on a disposable PostgreSQL,
+// Migrations 20260928150000 and 20260928161000 on a disposable PostgreSQL,
 // driven the way production is: operator SQL as session user postgres (the
 // management API) or a CLI login role, edge functions as service_role and the
 // app as authenticated with a token, both behind authenticator (PostgREST).
@@ -22,9 +22,9 @@ import { tempRepo, privateDir, noBuild, liveBuild, uuid, signForTest as buildVer
 const PORT = '58311';
 const read = rel => fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
 const MIGRATION = read('supabase/migrations/20260928150000_support_reply_verifications.sql');
-const HARDENING = read('supabase/migrations/20260928160000_support_reply_hardening.sql');
+const HARDENING = read('supabase/migrations/20260928161000_support_reply_hardening.sql');
 const ROLLBACK = read('docs/rollback/20260928150000_support_reply_verifications.rollback.sql');
-const HARDENING_ROLLBACK = read('docs/rollback/20260928160000_support_reply_hardening.rollback.sql');
+const HARDENING_ROLLBACK = read('docs/rollback/20260928161000_support_reply_hardening.rollback.sql');
 const DRYRUN = read('scripts/sql/ticket-admission-dryrun.sql');
 
 function startPostgres() {

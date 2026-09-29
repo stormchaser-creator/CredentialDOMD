@@ -28,7 +28,7 @@
  *
  * An ADMIN's reply is inserted as the admin: through PostgREST with the
  * caller's own token, not the service role. trg_require_verified_support_reply
- * (20260928160000) accepts an unverified support reply only that way, with
+ * (20260928161000) accepts an unverified support reply only that way, with
  * author_id equal to the token's profile, because the service-role key can be
  * fetched by anyone holding the management token and would otherwise be a way
  * around the verified reply path. messages_thread_insert already lets an

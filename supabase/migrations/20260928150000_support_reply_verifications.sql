@@ -25,7 +25,7 @@
 --         It is then marked used.
 --       - an operator UPDATE may not rewrite the body, ticket, author, flag or
 --         verification of a support reply.
---     20260928160000 replaces this function: it treats every session except
+--     20260928161000 replaces this function: it treats every session except
 --     PostgREST as an operator (the CLI's cli_login_* roles were missed here),
 --     no longer exempts service_role, and refuses a rewrite from every role.
 --   * The vault secret is created here from 32 random bytes if it is absent.
@@ -45,7 +45,7 @@
 -- sends nothing. Applied before the merge, the old runner on main keeps
 -- inserting replies with no verification_id, every one is refused after the
 -- model has already run, and each ticket parks after three runs. Or unload
--- the launchd job across both steps. Then apply 20260928160000.
+-- the launchd job across both steps. Then apply 20260928161000.
 -- Rollback: docs/rollback/20260928150000_support_reply_verifications.rollback.sql
 begin;
 

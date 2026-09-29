@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Post ONE verified support reply to ONE ticket. Every support reply written
 // outside the app (interactive Claude, Codex, the owner at a terminal) goes
-// through here; after migrations 20260928150000 and 20260928160000 the
+// through here; after migrations 20260928150000 and 20260928161000 the
 // database refuses a support reply that did not (critique amendment A1).
 //
 //   node scripts/ticket-fix/post-reply.mjs --ticket <uuid> --reply <file.json|->

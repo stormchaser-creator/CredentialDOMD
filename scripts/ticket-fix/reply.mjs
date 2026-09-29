@@ -7,7 +7,7 @@
 // sha256(stored body) and an HMAC-SHA256 over "<id>:<ticket_id>:<body_sha256>"
 // keyed with the vault secret support_reply_hmac_key, read through the
 // management API at run time and held only in memory. The database trigger
-// (20260928150000, tightened by 20260928160000) refuses a support reply that
+// (20260928150000, tightened by 20260928161000) refuses a support reply that
 // has no matching, unused verification, unless the admin wrote it in the app.
 //
 // What the signature is, and is not. The vault key is readable by the same

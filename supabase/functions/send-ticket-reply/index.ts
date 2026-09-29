@@ -15,7 +15,7 @@
 // names no stored message sends nothing.
 //
 // EACH MESSAGE IS EMAILED ONCE. The message is claimed first
-// (support_messages.emailed_at, 20260928160000: update ... where emailed_at is
+// (support_messages.emailed_at, 20260928161000: update ... where emailed_at is
 // null). A replayed or repeated call finds it claimed and sends nothing. If
 // Resend refuses the send, the claim is released so a retry can go out.
 //
@@ -40,7 +40,7 @@ const MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-// Deployed before 20260928160000 added emailed_at: send without the claim,
+// Deployed before 20260928161000 added emailed_at: send without the claim,
 // as before, rather than stop every reply email.
 function missingClaimColumn(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
     console.error(`reply ${messageId}: could not claim it for email (${claimError.code || "error"}); not emailed`);
     return json({ sent: false, reason: "claim failed" }, 500);
   }
-  if (!claimable) console.warn("send-ticket-reply: support_messages.emailed_at is missing; apply 20260928160000. Sending without the once-only claim.");
+  if (!claimable) console.warn("send-ticket-reply: support_messages.emailed_at is missing; apply 20260928161000. Sending without the once-only claim.");
   else if (!Array.isArray(claimed) || claimed.length !== 1) return json({ sent: false, reason: "already emailed" });
 
   const hasAttachment = !!message.attachment_path || (Array.isArray(message.attachment_paths) && message.attachment_paths.length > 0);

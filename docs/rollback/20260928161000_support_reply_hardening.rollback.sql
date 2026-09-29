@@ -1,4 +1,4 @@
--- Rollback for 20260928160000_support_reply_hardening.sql.
+-- Rollback for 20260928161000_support_reply_hardening.sql.
 --
 -- Restores the 20260928150000 trigger function: operator sessions are
 -- session_user postgres or supabase_admin, service_role writes are exempt,

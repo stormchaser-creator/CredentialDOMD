@@ -343,7 +343,7 @@ test('reconcile: a stored reply no checked path recorded, or one text sent to se
 
 test('the migrations state the rollout order that keeps the live runner working, and do not overclaim the HMAC (review)', () => {
   const first = read('supabase/migrations/20260928150000_support_reply_verifications.sql');
-  const second = read('supabase/migrations/20260928160000_support_reply_hardening.sql');
+  const second = read('supabase/migrations/20260928161000_support_reply_hardening.sql');
   assert.doesNotMatch(first, /apply this BEFORE merging/i);
   assert.match(first, /Order: merge the runner change FIRST/);
   assert.doesNotMatch(first, /Bypassing it takes ALTER TABLE/);

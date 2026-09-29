@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parents[1]
 PG = Path(os.environ.get('PG_BIN') or '/opt/homebrew/opt/postgresql@17/bin')
 MIGRATION = (ROOT / 'supabase' / 'migrations' / '20260928150000_support_reply_verifications.sql').read_text()
-HARDENING = (ROOT / 'supabase' / 'migrations' / '20260928160000_support_reply_hardening.sql').read_text()
+HARDENING = (ROOT / 'supabase' / 'migrations' / '20260928161000_support_reply_hardening.sql').read_text()
 # Supabase's Vault and pgcrypto, reduced to what the verification migration uses.
 PLATFORM = '''
 create role anon nologin; create role authenticated nologin; create role service_role nologin;
