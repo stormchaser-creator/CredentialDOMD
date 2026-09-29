@@ -130,7 +130,9 @@ for (const b of bodies) eq(`parseAsks agrees on ${String(JSON.stringify(b)).slic
     eq("review reasons agree on every rules proposal", server.reviewReason(server.buildProposal(r, serverCat, PHYSICIAN, NOW)), client.reviewReason(a));
     ok("and no rules proposal is ever one tap", !client.oneTapReady(a) && !server.oneTapReady(a));
   }
-  for (const sentence of ["Please send your DEA.", "The policy covers emergency care.", "Nothing is missing.", "Return the form", "Proof of coverage is required.", "", null]) {
+  for (const sentence of ["Please send your DEA.", "The policy covers emergency care.", "Nothing is missing.", "Return the form", "Proof of coverage is required.", "", null,
+    "This means that if you are required to provide urgent surgical care, that care is treated as insured work.", "Required: current CV and two references",
+    "Even if you sent it last year, please send your current BLS card.", "Whether or not you are credentialed, emergency care you provide is covered."]) {
     eq(`hasAskForm agrees on ${JSON.stringify(sentence)}`, server.hasAskForm(sentence), client.hasAskForm(sentence));
   }
 }

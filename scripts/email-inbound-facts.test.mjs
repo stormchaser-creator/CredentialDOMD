@@ -351,7 +351,7 @@ test("a value the email does not state is dropped, and the rest of the fact stil
     ["coveragePerClaim", "1000000", LIMITS],
     ["coverageAggregate", "5000000", LIMITS],                                  // not in the words quoted
     ["expirationDate", "2027-03-01", LIMITS],                                  // no date in the words quoted
-    ["effectiveDate", "2026-03-01", "the limits are the same for every provider on the panel"],  // words the email does not hold
+    ["effectiveDate", "2026-04-01", "the limits are the same for every provider on the panel"],  // words the email does not hold
     ["notes", "Covers everything, including the Brightline umbrella policy.", LIMITS],
   ]) }]) });
   assert.deepEqual(r.body.facts, { written: 1, proposed: 0, onFile: 0 });
@@ -360,8 +360,11 @@ test("a value the email does not state is dropped, and the rest of the fact stil
   assert.equal(ins.coverage_aggregate, undefined);
   assert.equal(ins.provider, undefined);
   assert.equal(ins.expiration_date, undefined);
-  assert.equal(ins.effective_date, undefined);
-  assert.ok(!/Brightline|5000000|2027/.test(JSON.stringify(rows("insurance")) + JSON.stringify(rows("intake_proposals"))));
+  // The start the reading gave rests on words the email does not hold, and
+  // goes; the start the coverage has is the attached agreement's own
+  // ("effective March 1, 2026"), which the host reads for itself.
+  assert.equal(ins.effective_date, "2026-03-01");
+  assert.ok(!/Brightline|5000000|2027|2026-04-01/.test(JSON.stringify(rows("insurance")) + JSON.stringify(rows("intake_proposals"))));
 });
 
 test("the per-incident and aggregate limits cannot be swapped", async () => {

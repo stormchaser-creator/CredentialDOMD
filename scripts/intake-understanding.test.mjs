@@ -15,7 +15,7 @@ import {
   plainSummary, decodeEntities, nearlyContains, ackWarranted, asksToSign, DROP,
   UNDERSTANDING_SCHEMA, UNDERSTANDING_MODEL, INTENTS, ROLES, MAX_CORRECTIONS,
 } from "../supabase/functions/_shared/intakeUnderstanding.mjs";
-import { KINDS } from "../supabase/functions/_shared/requestPacket.ts";
+import { KINDS, classifyAsk } from "../supabase/functions/_shared/requestPacket.ts";
 import { planFiling, roleTarget, masterAgreement, fileableFromMixed } from "../supabase/functions/_shared/intakeFiling.mjs";
 import {
   loadCases, runEval, readerFor, formatReport, corpusAllowed, scoreCase, composeForward, requestFor, SYNTHETIC_DIR, DEFAULT_CORPUS,
@@ -276,24 +276,53 @@ test("roles narrow the scanner's answer and never invent a credential", () => {
 
 test("the synthetic corpus: recorded replies read right, and the rules alone never invent an ask or make a letter a request", async () => {
   const cases = loadCases(SYNTHETIC_DIR);
-  assert.deepEqual(cases.map((c) => c.id), ["delivery-approval", "informational-agreement", "informational-malpractice-limits", "mixed-approval-and-form", "request-no-attachment", "request-with-form"]);
+  assert.deepEqual(cases.map((c) => c.id), [
+    "delivery-approval", "informational-agreement", "informational-call-followup-conditional", "informational-coverage-required-explained",
+    "informational-even-if-not-credentialed", "informational-malpractice-limits", "informational-should-you-need-to", "mixed-approval-and-form",
+    "request-no-attachment", "request-require-dea", "request-required-coi", "request-required-label", "request-with-form",
+  ]);
   const stub = await runEval(cases, readerFor("stub"));
-  assert.deepEqual([stub.totals.intent, stub.totals.request, stub.totals.invented, stub.totals.asksHit, stub.totals.asksWanted, stub.totals.byModel], [6, 6, 0, 6, 6, 6]);
-  assert.match(formatReport(stub, "stub"), /intent: 6\/6 \(100%\)\nrequest or not: 6\/6 \(100%\)/);
-  // The owner's case: every expected fact read, through the host's check, and none from an email that states none.
-  assert.deepEqual([stub.totals.factsHit, stub.totals.factsWanted, stub.totals.factsInvented], [5, 5, 0]);
-  assert.match(formatReport(stub, "stub"), /facts to enter: 5\/5 expected fields read right \(100%\)/);
+  assert.deepEqual([stub.totals.intent, stub.totals.request, stub.totals.invented, stub.totals.asksHit, stub.totals.asksWanted, stub.totals.byModel], [13, 13, 0, 10, 10, 13]);
+  assert.match(formatReport(stub, "stub"), /intent: 13\/13 \(100%\)\nrequest or not: 13\/13 \(100%\)/);
+  // The owner's case and its stand-ins: every expected fact read, through the host's check, and none from an email that states none.
+  assert.deepEqual([stub.totals.factsHit, stub.totals.factsWanted, stub.totals.factsInvented], [25, 25, 0]);
+  assert.match(formatReport(stub, "stub"), /facts to enter: 25\/25 expected fields read right \(100%\)/);
   const rules = await runEval(cases, readerFor("rules"));
-  assert.equal(rules.totals.request, 6, "request or not is right even without the model");
+  assert.equal(rules.totals.request, 13, "request or not is right even without the model");
   assert.equal(rules.totals.invented, 0, "no ask on an email that asked for nothing");
   assert.equal(rules.totals.factsInvented, 0, "no fact from an email that states none to enter");
   const info = rules.rows.find((r) => r.id === "informational-agreement");
   assert.notEqual(info.reading.intent, "request");
   assert.deepEqual(info.reading.asks, []);
-  // The rules alone read the limits; the agreement's effective date waits for the model.
+  // The rules alone read the limits, and the host gives the record the
+  // attached agreement's own effective date (the email states none).
   const limits = rules.rows.find((r) => r.id === "informational-malpractice-limits");
   assert.equal(limits.reading.intent, "informational");
-  assert.deepEqual([limits.score.factsHit, limits.score.factsWanted], [4, 5]);
+  assert.deepEqual([limits.score.factsHit, limits.score.factsWanted], [5, 5]);
+  assert.equal(limits.reading.records[0].sources.effectiveDate, "Master professional services agreement effective March 1, 2026");
+  // The stand-ins that keep the real letter's constructions (a conditional
+  // "if you are required to provide ...", "Even if you are NOT ...", "should
+  // you need to", "this means that", "required" about coverage): no ask, and
+  // informational with every expected fact, from the rules alone. On the
+  // rules before 2026-09-29 every one of them read as a request or mixed, and
+  // the first invented the same kind of ask the real letter did.
+  for (const id of ["informational-call-followup-conditional", "informational-coverage-required-explained", "informational-even-if-not-credentialed", "informational-should-you-need-to"]) {
+    const row = rules.rows.find((r) => r.id === id);
+    assert.deepEqual([row.reading.intent, row.reading.asks, row.reading.askForm, row.score.factsHit, row.score.factsWanted], ["informational", [], false, 5, 5], id);
+  }
+  // Genuine requests that say "required" still ask, by the rules and by the reading.
+  for (const [id, kinds] of [["request-required-coi", ["coi_malpractice"]], ["request-require-dea", ["dea"]], ["request-required-label", ["cv", "references"]]]) {
+    for (const run of [rules, stub]) {
+      const row = run.rows.find((r) => r.id === id);
+      assert.equal(row.reading.intent, "request", id);
+      assert.deepEqual(row.reading.asks.map((a) => a.kind || classifyAsk(a.quote).kind), kinds, id);
+    }
+  }
+});
+
+test("the prompt: an insurance record's start may be the attached agreement's own 'effective as of' date, quoted from it", () => {
+  const r = buildUnderstandingRequest({ subject: "Coverage", message: "Your coverage is under the attached agreement." });
+  assert.match(r.system[0].text, /when the email states no such date and the coverage is provided under an attached agreement, the agreement's own effective date, "effective as of <date>", with the attachment's words that state it as the quote/);
 });
 
 test("the harness sends the request production sends, and scores only labelled cases", async () => {

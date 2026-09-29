@@ -39,7 +39,10 @@
  *                               asked, so only a reading sure that they did
  *   rulesUnderstanding          the fallback, from the rules as they were,
  *                               except that a sentence with no asking form is
- *                               never an ask (requestPacket.ts hasAskForm),
+ *                               never an ask (requestPacket.ts hasAskForm; a
+ *                               clause inside a condition or an explanation,
+ *                               of the form "this means that if you are
+ *                               required to ...", has none: askingPart),
  *                               and an email they took for a request with no
  *                               ask in it is unclear, not informational
  *   records (in the reply)      the facts an informational email states

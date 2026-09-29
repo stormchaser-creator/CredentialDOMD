@@ -99,6 +99,51 @@ for (const [name, m] of COPIES) {
     assert.equal(m.isListItem("Board certificate"), false);
   });
 
+  // The owner's real letter of 2026-09-28, with the model out of the picture,
+  // became a request with one ask the rules could not name: a clause of the
+  // form "This means that if you are required to ..., that care is treated as
+  // covered". These keep its constructions in other words; the genuine
+  // requests beside them must still ask.
+  test(`${name}: a clause in a condition or an explanation asks for nothing; a main clause beside it still asks`, () => {
+    for (const s of [
+      "This means that if you are required to provide urgent surgical care, that care is treated as insured work.",
+      "This means that if you are required to provide urgent care\u2014say, a procedure the facility has not granted you\u2014while you are practicing within your licence, that care is covered.",
+      "Even if you are NOT credentialed at the hospital for pediatric trauma, if an emergency circumstance comes up, those services fall within the policy.",
+      "Should you need to provide emergency care outside that list, the policy still applies.",
+      "In the event you are asked to provide urgent treatment outside your usual case mix, that treatment is covered too.",
+      "Whether or not you are credentialed for that procedure, emergency care you provide is covered.",
+      "This means that the urgent care you provide within your licence is treated as covered.",
+      "When on call you are required to render emergency care, which means those cases are insured.",
+      "The agency carries malpractice insurance at $2,000,000 per claim and $4,000,000 aggregate, raised where required by state law.",
+      "The coverage required by the hospital is already in place under your agreement.",
+      "Riley and I are taking this up with the hospital, and it should not come up again.",
+    ]) assert.equal(m.hasAskForm(s), false, s);
+    for (const s of [
+      "You are required to submit your updated COI by Friday.",
+      "Please note we require a copy of your DEA before your start date.",
+      "Required: current CV and two references",
+      "Even if you sent it last year, please send your current BLS card.",
+      "If you are required to carry your own policy, send your COI by Friday.",
+      "Whether or not you are prescribing there, we need your DEA.",
+      "We need your DEA even if you are not prescribing.",
+      "Please send your COI if required by your facility.",
+      "In the event your licence is renewed, please forward the new copy.",
+      "This means we still need your updated COI before your start date.",
+      "This means that you will need to submit a new application.",
+      "This means that your COI is required before your start date.",
+      "You are required to provide proof of coverage by Friday.",
+      "Please provide proof of coverage.",
+      "Should you need to reschedule, send your new dates and the updated COI.",
+      // A condition with no comma before the main clause that asks.
+      "If required we need a copy of your DEA.",
+      "Even if you already sent it we need your updated COI.",
+      "If required send your COI to the medical staff office.",
+      "In the event your licence is renewed can you forward the new copy",
+    ]) assert.equal(m.hasAskForm(s), true, s);
+    assert.equal(m.hasAskForm("This means that if you are required to provide urgent care that care is insured work."), false, "no comma: the condition runs to the stop");
+    assert.equal(m.askingPart("Even if you sent it already, please resend your BLS card."), ", please resend your BLS card.");
+  });
+
   test(`${name}: kindName reads every kind`, () => {
     for (const k of m.KINDS) assert.ok(m.kindName(k) && !m.kindName(k).includes("_"), k);
   });

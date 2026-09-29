@@ -2090,9 +2090,15 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
   };
   // What a fact may rest on: everything the model is shown, attachments'
   // words included (intakeFacts.mjs corpusIndex), and the refs it may name.
+  // The email and the attachments are also kept apart: a coverage start
+  // taken from an attached agreement must be that agreement's own words, and
+  // only when the email states none (intakeFacts.mjs agreementCoverageStart).
   const onFile = existingForModel(input.rows);
+  const words = input.files.map((f) => attachmentText(scanOf(f)));
   const facts = {
-    corpus: corpusIndex([input.subject, parts.note, parts.message, parts.history, ...input.files.map((f) => attachmentText(scanOf(f)))]),
+    corpus: corpusIndex([input.subject, parts.note, parts.message, parts.history, ...words]),
+    email: [input.subject, parts.note, parts.message, parts.history].filter(Boolean).join("\n\n"),
+    attachments: words.filter(Boolean),
     refs: onFile.refs,
     physicianName: ctx.physicianName,
   };

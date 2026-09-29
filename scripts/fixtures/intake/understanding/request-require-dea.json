@@ -1,0 +1,33 @@
+{
+  "id": "request-require-dea",
+  "about": "A genuine request behind 'please note': 'Please note we require a copy of your DEA before your start date'. Synthetic.",
+  "subject": "Welcome to Alderbrook",
+  "from": {
+    "name": "Casey Morrow",
+    "address": "cmorrow@alderbrook-clinic.example"
+  },
+  "body": "Hello Dr. Testa,\n\nWe are glad to have you for the December block at Alderbrook Example Clinic. Please note we require a copy of your DEA before your start date. Everything else in your file is complete.\n\nBest,\nCasey Morrow\nOnboarding Coordinator\nAlderbrook Example Clinic\nOffice: 208.555.0155",
+  "attachments": [],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "dea"
+      }
+    ],
+    "roles": []
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "Please note we require a copy of your DEA before your start date",
+        "kind": "dea",
+        "who": "physician"
+      }
+    ],
+    "attachments": [],
+    "summary": "a copy of your DEA before your December start",
+    "confidence": "high"
+  }
+}

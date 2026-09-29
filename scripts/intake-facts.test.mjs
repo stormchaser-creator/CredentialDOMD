@@ -10,6 +10,7 @@ import {
 } from "../src/utils/intakeRecords.js";
 import {
   verifyRecords, corpusIndex, rulesRecords, planRecords, existingForModel, attachmentText, fitItems, itemsBytes, withSource, sourceLine, DROP, RECORDS_SCHEMA,
+  RECORDS_PROMPT, withoutConditions, agreementEffective, agreementCoverageStart,
 } from "../supabase/functions/_shared/intakeFacts.mjs";
 import { SECTION_FIELDS } from "../src/utils/sectionFields.js";
 import { INSURANCE_TYPES } from "../src/constants/credentialTypes.js";
@@ -363,6 +364,35 @@ test("rules: a limit that is a requirement, a limit about another clinician, or 
   assert.equal(rulesRecords({ message: LETTER, agencies }).length, 1);
 });
 
+// The owner's real letter of 2026-09-28 followed its limits with a condition
+// that says "required", named the agency without the "Inc." its contract
+// carries, and put the agency before "provides". Each of the three kept the
+// rules from reading the one fact they can, and so from reading the letter
+// as informational.
+test("rules: a requirement inside a condition is not one, the agency is read as the email writes it, and a limit only inside a condition is not coverage", () => {
+  const limits = "In *Section 4.1 (Professional Liability Coverage)* of your agreement, Brightwater Locum Partners provides professional liability insurance for work on each Assignment at $2,000,000 per claim and a $4,000,000 annual aggregate, or more if a state statute requires it.";
+  assert.equal(withoutConditions("limits of $2,000,000 per claim and $4,000,000 aggregate, raised if required under the state's law."), "limits of $2,000,000 per claim and $4,000,000 aggregate, raised .");
+  const [rec] = rulesRecords({ message: `Dr. Testa,\n\n${limits}` });
+  const f = fieldMap(rec);
+  assert.deepEqual([f.provider, f.name, f.coveragePerClaim, f.coverageAggregate], ["Brightwater Locum Partners (through its insurer)", "Brightwater Locum Partners assignment malpractice coverage", "$2,000,000", "$4,000,000"]);
+  const checked = verifyRecords([rec], ctx([limits]));
+  assert.deepEqual([checked.records[0].fields.coveragePerClaim, checked.records[0].fields.coverageAggregate], ["2000000", "4000000"]);
+  // An agency on file as "Copperline Physician Staffing, Inc." is the one the letter calls "Copperline Physician Staffing".
+  const copper = "Your malpractice coverage for these cases is in place under Section 5.4 of your agreement. Copperline Physician Staffing arranges that coverage through its carrier at $2,000,000 per claim and $6,000,000 aggregate (higher if required under state law).";
+  assert.equal(fieldMap(rulesRecords({ message: copper, agencies: ["Copperline Physician Staffing, Inc."] })[0]).provider, "Copperline Physician Staffing (through its insurer)");
+  assert.deepEqual(rulesRecords({ message: copper, agencies: ["Staffing, Inc."] }), [], "a suffix-less name must still name someone");
+  // "The Agency provides ..." names nobody.
+  assert.deepEqual(rulesRecords({ message: "The Agency provides malpractice insurance with limits of $2,000,000 per claim and $4,000,000 aggregate." }), []);
+  // Still requirements: outside the condition, or with the limits only inside it.
+  assert.deepEqual(rulesRecords({ message: "Physicians must carry malpractice limits of $2,000,000 per claim and $4,000,000 aggregate as required by the bylaws; Brightwater Locum Partners provides a group policy.", agencies: ["Brightwater Locum Partners"] }), []);
+  const inside = "If you are required to carry limits of $2,000,000 per claim and $4,000,000 aggregate, the Brightwater Locum Partners malpractice policy covers you.";
+  // "As the bylaws require" says the requirement is there: still a requirement.
+  assert.deepEqual(rulesRecords({ message: "Limits of $2,000,000 per claim and $4,000,000 aggregate, as the medical staff bylaws require. The Brightwater Locum Partners malpractice policy covers you.", agencies: ["Brightwater Locum Partners"] }), []);
+  const v = verifyRecords(one([["provider", "Brightwater Locum Partners", inside], ["coveragePerClaim", "2000000", inside], ["coverageAggregate", "4000000", inside]]), ctx([inside]));
+  assert.deepEqual(v.records, []);
+  assert.deepEqual(v.dropped.filter((d) => d.field.startsWith("coverage")).map((d) => d.why), [DROP.requirement, DROP.requirement]);
+});
+
 test("rules: the insurer the limits sentence names is the provider, over any agency on file named elsewhere", () => {
   const letter = "This confirms that your assignment through Quillfeather Staffing is on our schedule. Your malpractice coverage through Examplecare Mutual Insurance of $1,000,000 per claim and $3,000,000 aggregate is on file with the medical staff office.";
   const f = fieldMap(rulesRecords({ message: letter, agencies: ["Quillfeather Staffing"] })[0]);
@@ -378,6 +408,65 @@ test("rules: an effective date only when a sentence says the policy took effect 
   assert.equal(eff("Your credentialing file is effective through 12/31/2026."), undefined);
   assert.equal(eff("Tail coverage is in effect for claims after 12/31/2026."), undefined);
   assert.equal(eff("The policy took effect on 03/01/2026."), "2026-03-01");
+});
+
+// The owner entered the attached agreement's "effective as of" date as the
+// coverage's start; the model left it out. The host takes it from the
+// agreement's own words when the email states no start, and checks any the
+// reading gives against that agreement.
+const AGREEMENT_WORDS = "agency: Brightwater Locum Partners, LLC\nnotes: Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of January 12, 2026, for twelve months. Section 4.1: Brightwater carries malpractice insurance for the physician on every Assignment.";
+const COVER_LETTER = "Following up on our call. In Section 4.1 of your agreement, Brightwater Locum Partners provides professional liability insurance on each Assignment at $2,000,000 per claim and a $4,000,000 annual aggregate.";
+const agreementCtx = (email = COVER_LETTER, attachments = [AGREEMENT_WORDS], physicianName = "Rowan Testa") => ({ corpus: corpusIndex([email, ...attachments]), email, attachments, physicianName });
+const BW = "Brightwater Locum Partners provides professional liability insurance";
+const BW_LIMITS = "$2,000,000 per claim and a $4,000,000 annual aggregate";
+const bwRecord = (extra = []) => one([["type", "Medical Professional Liability Coverage", BW], ["provider", "Brightwater Locum Partners (through its insurer)", BW], ["coveragePerClaim", "2000000", BW_LIMITS], ["coverageAggregate", "4000000", BW_LIMITS], ...extra]);
+
+test("an attached agreement's effective date: read from its words, one date, and only the agreement's", () => {
+  const a = agreementEffective([AGREEMENT_WORDS]);
+  assert.equal(a.iso, "2026-01-12");
+  assert.deepEqual(a.quotes, ["Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of January 12, 2026", "effective as of January 12, 2026"]);
+  assert.equal(agreementEffective(["notes: Physician staffing agreement with Example Staffing, effective on 07/06/2026 and continuing until either party ends it."]).iso, "2026-07-06");
+  assert.equal(agreementEffective(["notes: Agreement, Example Staffing and the physician; effective as of May 18, 2026; one-year term."]).iso, "2026-05-18", "the agreement named earlier in the sentence");
+  assert.equal(agreementEffective(["notes: The certificate is effective as of May 18, 2026."]), null, "not an agreement");
+  assert.equal(agreementEffective(["notes: Agreement signed May 18, 2026, terminating December 31, 2026."]), null, "no effective date");
+  assert.equal(agreementEffective([AGREEMENT_WORDS, "notes: Master agreement effective as of March 2, 2026."]), null, "two agreements that differ");
+  // The email states its own start: the agreement's is not used.
+  assert.equal(agreementCoverageStart("Your malpractice policy took effect on 02/01/2026 under the agreement.", [AGREEMENT_WORDS]), null);
+  // Nothing ties malpractice cover to the agreement: not used.
+  assert.equal(agreementCoverageStart("Your badge is ready.", ["notes: Locum services agreement effective as of January 12, 2026."]), null);
+  assert.equal(agreementCoverageStart(COVER_LETTER, [AGREEMENT_WORDS]).iso, "2026-01-12");
+  assert.match(RECORDS_PROMPT, /effectiveDate \(when the coverage began[^)]*"effective as of <date>"/);
+});
+
+test("verifyRecords: an insurance record takes the attached agreement's start, with the agreement's words as its source", () => {
+  // The reading gave no start: the host fills it.
+  const filled = verifyRecords(bwRecord(), agreementCtx());
+  assert.equal(filled.records[0].fields.effectiveDate, "2026-01-12");
+  assert.equal(filled.records[0].sources.effectiveDate, "Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of January 12, 2026");
+  // Without the physician's name, the sentence that names a doctor is not quoted; the date's own words are.
+  assert.equal(verifyRecords(bwRecord(), agreementCtx(COVER_LETTER, [AGREEMENT_WORDS], "")).records[0].sources.effectiveDate, "effective as of January 12, 2026");
+  // The reading gave the agreement's start, from the agreement's words: kept.
+  const given = verifyRecords(bwRecord([["effectiveDate", "2026-01-12", "effective as of January 12, 2026"]]), agreementCtx());
+  assert.deepEqual([given.records[0].fields.effectiveDate, given.records[0].sources.effectiveDate], ["2026-01-12", "effective as of January 12, 2026"]);
+  // Another date from an attachment is not the agreement's start: dropped, and the agreement's is used.
+  const other = "notes: Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of January 12, 2026, for twelve months. Signed February 3, 2026. Section 4.1: Brightwater carries malpractice insurance for the physician on every Assignment.";
+  const wrong = verifyRecords(bwRecord([["effectiveDate", "2026-02-03", "Signed February 3, 2026"]]), agreementCtx(COVER_LETTER, [other]));
+  assert.equal(wrong.records[0].fields.effectiveDate, "2026-01-12");
+  assert.ok(wrong.dropped.some((d) => d.field === "effectiveDate" && d.why === DROP.agreementDate));
+  // The email states its own start: that one, never the agreement's.
+  const own = `${COVER_LETTER} The policy took effect on 02/01/2026.`;
+  const stated = verifyRecords(bwRecord([["effectiveDate", "2026-01-12", "effective as of January 12, 2026"]]), agreementCtx(own));
+  assert.equal(stated.records[0].fields.effectiveDate, undefined);
+  assert.ok(stated.dropped.some((d) => d.why === DROP.agreementDate));
+  assert.equal(verifyRecords(bwRecord([["effectiveDate", "2026-02-01", "The policy took effect on 02/01/2026"]]), agreementCtx(own)).records[0].fields.effectiveDate, "2026-02-01");
+  // Another carrier's policy is not the agreement's party's coverage.
+  const mutual = "Your Lanternfield Mutual malpractice policy has limits of $2,000,000 per claim and $4,000,000 aggregate under your agreement.";
+  const lf = verifyRecords(one([["provider", "Lanternfield Mutual", mutual], ["coveragePerClaim", "2000000", mutual]]), agreementCtx(mutual));
+  assert.equal(lf.records[0].fields.effectiveDate, undefined);
+  // A start alone never makes a record worth entering.
+  assert.deepEqual(verifyRecords(one([["provider", "Brightwater Locum Partners (through its insurer)", BW]]), agreementCtx()).records, []);
+  // Without the email apart from the attachments, the corpus alone is the check, as before.
+  assert.equal(verifyRecords(bwRecord(), { corpus: corpusIndex([COVER_LETTER, AGREEMENT_WORDS]), physicianName: "Rowan Testa" }).records[0].fields.effectiveDate, undefined);
 });
 
 test("an insurance expiration is when the coverage ends, never an agreement's term, a renewal or tail wording", () => {

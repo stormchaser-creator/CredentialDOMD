@@ -1,0 +1,41 @@
+{
+  "id": "request-required-label",
+  "about": "A genuine request written as a label: 'Required: current CV and two references', in a message long enough that it is not read as a short list. Synthetic.",
+  "subject": "March dates at Wrenfield",
+  "from": {
+    "name": "Jordan Vale",
+    "address": "jvale@wrenfield-regional.example"
+  },
+  "body": "Hi Dr. Testa,\n\nThanks for confirming the March dates at Wrenfield Example Regional. The medical staff office is assembling your application and the committee meets on the 20th.\n\nRequired: current CV and two references\n\nOnce those are in, your file goes straight to the committee.\n\nThanks,\nJordan Vale\nMedical Staff Coordinator\nWrenfield Example Regional\n(701) 555-0133",
+  "attachments": [],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "cv"
+      },
+      {
+        "kind": "references"
+      }
+    ],
+    "roles": []
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "current CV",
+        "kind": "cv",
+        "who": "physician"
+      },
+      {
+        "quote": "two references",
+        "kind": "references",
+        "who": "physician"
+      }
+    ],
+    "attachments": [],
+    "summary": "your CV and two references for the March committee",
+    "confidence": "high"
+  }
+}

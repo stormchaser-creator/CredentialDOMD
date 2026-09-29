@@ -1,0 +1,113 @@
+{
+  "id": "informational-coverage-required-explained",
+  "about": "Synthetic, with the real letter's structures in other words: a circling-back opener, 'required' in statements about coverage ('The coverage required by <the hospital> is already in place', 'raised where required by the state'), an asterisked section and an asterisked role with a section number, 'In other words, if you are ever called on to provide urgent care (an em-dash aside) while ..., the insurer treats that care as covered', 'Whether or not ...', a closing that the sender and a colleague are raising it with the facility, and a Gmail signature: a name with a degree, a title, the agency in asterisks, Work and Mobile numbers in link form. It asks for nothing.",
+  "subject": "Coverage at Juniper Ridge",
+  "from": {
+    "name": "Sam Pelletier",
+    "address": "sam.pelletier@lindenfield-locums.example"
+  },
+  "body": "Dr. Testa,\n\nCircling back after our call about the question the hospital raised. The coverage required by Juniper Ridge Example Medical Center is already in place under your agreement, and our office forwards the certificate to them directly. No separate policy is required from you.\n\nPer *Section 8.3 (Insurance)*, Lindenfield Locums provides malpractice insurance for the work you do on each assignment, at $2,000,000 per occurrence and $4,000,000 aggregate, raised where required by the state you work in.\n\nAs a *self-employed physician (Section 2.1)*, your cover reaches care within your specialty, your licence and your privileges, emergencies included. In other words, if you are ever called on to provide urgent care—say, a procedure the facility has not formally granted you—while practicing within your licence, the insurer treats that care as covered. Whether or not the facility lists that procedure for you, the policy responds the same way.\n\nAlex and I are raising this with the facility, and you should not see this again.\n\nSam Pelletier, MS\n\nAccount Manager, Anesthesia and Surgery Division\n\n\n\n*Lindenfield Locums*\n\nWork: 415.555.0138 <(415)%20555-0138> (text friendly)\n\nMobile: 628.555.0191 <(628)%20555-0191>",
+  "attachments": [
+    {
+      "name": "Lindenfield_Independent_Contractor_Agreement.pdf",
+      "scan": {
+        "documentType": "agreement",
+        "confidence": "high",
+        "extracted": {
+          "agency": "Lindenfield Locums, Inc.",
+          "notes": "Independent contractor agreement, Lindenfield Locums, Inc. and Rowan Testa, MD; effective as of May 18, 2026; one-year term, renewing unless either side gives notice. Section 8.3: Lindenfield provides malpractice insurance for each assignment at $2,000,000 per occurrence and $4,000,000 aggregate, claims-made, with tail cover bought by Lindenfield; administrative tasks are not insured."
+        }
+      }
+    }
+  ],
+  "onFile": {
+    "locumContracts": [
+      {
+        "id": "contract-lindenfield",
+        "agency": "Lindenfield Locums, Inc.",
+        "facility": "Juniper Ridge Example Medical Center"
+      }
+    ]
+  },
+  "physicianName": "Rowan Testa",
+  "expected": {
+    "intent": "informational",
+    "asks": [],
+    "roles": [
+      "agreement_or_contract"
+    ],
+    "records": [
+      {
+        "section": "insurance",
+        "fields": {
+          "type": "Medical Professional Liability Coverage",
+          "provider": "Lindenfield Locums (through its insurer)",
+          "coveragePerClaim": "2000000",
+          "coverageAggregate": "4000000",
+          "effectiveDate": "2026-05-18"
+        }
+      }
+    ]
+  },
+  "modelReply": {
+    "intent": "informational",
+    "asks": [],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "agreement_or_contract",
+        "filing": "Contracts, with the Lindenfield Locums contract"
+      }
+    ],
+    "summary": "how Lindenfield Locums' malpractice insurance covers urgent care the facility has not formally granted you",
+    "confidence": "high",
+    "records": [
+      {
+        "section": "insurance",
+        "match_existing": "",
+        "fields": [
+          {
+            "field": "type",
+            "value": "Medical Professional Liability Coverage",
+            "quote": "Lindenfield Locums provides malpractice insurance for the work you do on each assignment"
+          },
+          {
+            "field": "name",
+            "value": "Lindenfield Locums assignment malpractice coverage",
+            "quote": "Lindenfield Locums provides malpractice insurance for the work you do on each assignment"
+          },
+          {
+            "field": "provider",
+            "value": "Lindenfield Locums (through its insurer)",
+            "quote": "Lindenfield Locums provides malpractice insurance"
+          },
+          {
+            "field": "coveragePerClaim",
+            "value": "2000000",
+            "quote": "at $2,000,000 per occurrence and $4,000,000 aggregate"
+          },
+          {
+            "field": "coverageAggregate",
+            "value": "4000000",
+            "quote": "at $2,000,000 per occurrence and $4,000,000 aggregate"
+          },
+          {
+            "field": "effectiveDate",
+            "value": "2026-05-18",
+            "quote": "effective as of May 18, 2026"
+          },
+          {
+            "field": "notes",
+            "value": "Claims-made, with tail cover bought by Lindenfield Locums.",
+            "quote": "claims-made, with tail cover bought by Lindenfield"
+          },
+          {
+            "field": "notes",
+            "value": "Administrative tasks are not insured.",
+            "quote": "administrative tasks are not insured"
+          }
+        ]
+      }
+    ]
+  }
+}

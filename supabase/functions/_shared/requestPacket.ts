@@ -383,6 +383,52 @@ function requirementForm(t: string): boolean {
   if (EVERYONE_RE.test(t)) return false;
   return REQUIRES_OBJECT_RE.test(t) || HELD_UP_RE.test(t) || (REQUIRED_PRED_RE.test(t) && (YOURS_RE.test(t) || DEADLINE_RE.test(t)));
 }
+// A clause inside a condition or an explanation asks for nothing, whatever
+// asking words it holds. On 2026-09-28 the owner's real agency letter read as
+// a request once the model was out of the picture, because of one clause of
+// an explanation of when the policy applies, of the form "This means that if
+// you are required to <give some care> ..., that care is covered". Its
+// "provide" and its "are required" are asking words above, and the clause
+// became an ask the rules could not name. So before the forms are
+// looked for, three things come out of the sentence:
+//   a condition, from its opening words to the end of its clause (a comma, a
+//   semicolon, a stop, "then", or a main clause that asks without a comma
+//   before it: "please", "we need", "can you", "send your"; a comma or a
+//   stop inside a number, "$2,000,000", does not end it): "even if",
+//   "whether or not", "in the event", "in case", "should you", "if you are
+//   required (asked, called on, expected) to", "if you ever need to", "if
+//   required", "where (when) required", "if an emergency";
+//   care as a duty: "you are required to render urgent care", "the
+//   urgent care you provide" (care, treatment and services are not
+//   documents; "provide proof of coverage" and "provide a copy" stay);
+//   an explanation ("this means that", "which means", "in other words") to
+//   the end of its clause, unless it asks in so many words (please, a
+//   question, "need", "can you", "missing", "we require", or a requirement
+//   on the reader's own file).
+// The main clause is still read, so "Even if you sent it last year, please
+// send your current BLS card" and "If you are required to carry your own
+// policy, send your COI by Friday" still ask.
+const CONDITION_RE = /\b(?:even\s+(?:if|when|though)|whether\s+or\s+not|in\s+the\s+event\b|in\s+case\s+(?:of|you|an?|the|there)\b|should\s+you\b|if\s+(?:you\s+(?:are|were|get|become)\s+(?:ever\s+|also\s+)?(?:required|asked|called\s+(?:up)?on|needed|expected|obligated)\b|you\s+(?:ever\s+)?(?:need|have)\s+to\b|(?:it\s+is\s+|so\s+)?required\b|(?:an?|the|any)\s+(?:emergen\w*|urgent)\b)|(?:where|when|wherever|whenever)\s+(?:so\s+)?required\b)(?:[^,;.!?]|[,.](?=\d))*?(?=,(?!\d)|[;!?]|\.(?!\d)|\s+then\b|\s+(?:please|kindly)\b|\s+(?:we|i)\s+(?:(?:still|also|will|would|do)\s+)*(?:need|require|request)\b|\s+(?:can|could|would|will)\s+you\b|(?<!\bto)\s+(?:send|resend|submit|provide|upload|return|forward|fax|attach|complete|sign|email|e-mail)\s+(?:us|me|your|the|a|an|it|them|over|back|in|along|copies|a\s+copy)\b|$)/gi;
+const CARE_DUTY_RE = /\b(?:(?:is|are|were|be|been|being)\s+(?:(?:ever|also|still|then)\s+)?(?:required|asked|expected|called\s+(?:up)?on|needed|obligated)\s+to\s+)?(?:provides?|provided|providing|render(?:s|ed|ing)?|give|giving|deliver(?:s|ed|ing)?|perform(?:s|ed|ing)?)\s+(?:(?:urgent|emergency|emergent|medical|clinical|patient|professional|any|the|that|this|such|appropriate|immediate|life-?saving|stabili[sz]ing|acute|bedside|direct|hands-on|in-person|on-site|call|trauma|inpatient|outpatient|malpractice|liability|insurance|[a-z]+(?:al|ic|ive|ary|ent|ant))\s+){0,3}(?:care|treatment|services?|surgery|surgeries|procedures?|consults?|consultations?|coverage)\b(?!\s+(?:proof|cop(?:y|ies)|certificates?|documentation|documents?|verification|letters?|declarations?|face\s*sheets?|forms?|details|information|info|records?|evidence|summary)\b)|\b(?:care|treatment|services?|surgery|surgeries|procedures?|consults?|consultations?)\s+(?:that\s+|which\s+)?(?:you|we|they)\s+(?:(?:may|might|will|would|could|also|then|ever)\s+)?(?:provide|render|give|deliver|perform)\b/gi;
+const EXPLAIN_RE = /\b(?:(?:this|that|which|it)\s+means(?:\s+that)?|in\s+other\s+words)\b([^;!?]*?)(?=[;!?]|\.(?:\s|$)|$)/gi;
+// The asking forms an explanation must use to ask: ASK_FORM_RE without the
+// bare verbs ("send", "provide", "submit"), which an explanation uses to say
+// what is covered.
+const PLAIN_ASK_RE = /\?|\b(?:please|pls|kindly)\b|\bneed(?:s|ed)?\b(?!\s+not\b)|\b(?:can|could|would|will)\s+you\b|\b(?:missing|outstanding|awaiting)\b|\bwaiting\s+(?:on|for)\b|\b(?:we|i)\s+(?:are\s+|am\s+|will\s+|would\s+|do\s+|shall\s+)?(?:still\s+|also\s+)?(?:request|requesting|require)\b/i;
+
+/** The sentence with its conditions, its care duties and any explanation that does not ask taken out (see CONDITION_RE). */
+export function askingPart(s: unknown): string {
+  const t = String(s ?? "").replace(/\s+/g, " ").trim()
+    .replace(CONDITION_RE, " ")
+    .replace(CARE_DUTY_RE, " ");
+  return t.replace(EXPLAIN_RE, (whole: string, clause: string) => {
+    const asking = clause.replace(NON_ASK_PLEASE_RE, " ");
+    return PLAIN_ASK_RE.test(asking) || requirementForm(clause) ? whole : " ";
+  }).replace(/\s+/g, " ").trim();
+}
+// A label that asks: "Required: current CV and two references". ("Needed:",
+// "Missing:" and "Outstanding:" ask already, by their words.)
+const REQUIRED_LABEL_RE = /^\W*(?:(?:still|items?|documents?|documentation)\s+)?required\s*:\s*\S/i;
 // The imperative: the sentence opens on the verb ("Return the signed form",
 // "Attach your COI"), after nothing but a greeting word or two.
 const IMPERATIVE_RE = /^\W*(?:(?:also|and|then|just|kindly|please|now)\s+)*(?:send|resend|provide|submit|upload|forward|return|fax|attach|complete|sign|fill|email|e-mail|mail|bring|include|get|obtain|update|renew)\b/i;
@@ -398,14 +444,19 @@ const STATEMENT_VERB_RE = /\b(?:is|are|was|were|be|been|being|has|have|had|will|
 
 /**
  * True when a sentence is in an asking form: ASK_FORM_RE once the "please"
- * that asks for nothing is taken out, the imperative, or a requirement on the
- * reader's own file; never when the asking words are negated.
+ * that asks for nothing is taken out, the imperative, a requirement on the
+ * reader's own file, or a "Required:" label; never when the asking words are
+ * negated, and never in a clause that states a condition or explains
+ * (askingPart).
  */
 export function hasAskForm(s: unknown): boolean {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();
   if (!t || NEGATED_ASK_RE.test(t)) return false;
-  const asking = t.replace(NON_ASK_PLEASE_RE, " ").replace(DONT_SEND_RE, " ");
-  return ASK_FORM_RE.test(asking) || IMPERATIVE_RE.test(t) || requirementForm(t);
+  if (REQUIRED_LABEL_RE.test(t)) return true;
+  const part = askingPart(t);
+  if (!part) return false;
+  const asking = part.replace(NON_ASK_PLEASE_RE, " ").replace(DONT_SEND_RE, " ");
+  return ASK_FORM_RE.test(asking) || IMPERATIVE_RE.test(t) || IMPERATIVE_RE.test(part) || requirementForm(part);
 }
 
 /** Does a subject line ask on its own ("Documents needed", "Request: DEA", "Action required")? */

@@ -1,0 +1,108 @@
+{
+  "id": "informational-should-you-need-to",
+  "about": "Synthetic, with the real letter's structures in other words: a per-our-conversation opener, an asterisked section, a capitalised *NOT*, 'Should you need to provide emergency care ..., the policy still applies', 'This means that the urgent care you provide ... counts as covered care', limits '(higher if required under state law)', the agency written without the 'Inc.' its contract carries, a closing that the sender is raising it with the facility, and a signature with a credential, a title and two phone numbers on one line. It asks for nothing.",
+  "subject": "Your malpractice coverage",
+  "from": {
+    "name": "Jamie Okafor",
+    "address": "jokafor@copperline-staffing.example"
+  },
+  "body": "Good afternoon Dr. Testa,\n\nPer our conversation on the phone yesterday, I went through the agreement with our risk manager. Your malpractice coverage for these cases is in place under *Section 5.4* of your agreement. Copperline Physician Staffing arranges that coverage through its carrier at $2,000,000 per claim and $6,000,000 aggregate (higher if required under state law).\n\nThe policy does *NOT* depend on which procedures are on your delineation at Sorrel Bay Example Hospital. Should you need to provide emergency care outside that list, the policy still applies. This means that the urgent care you provide within your licence counts as covered care, subject to the ordinary terms of the policy.\n\nI am raising this with the facility's credentialing office this week.\n\nWarm regards,\n\nJamie Okafor, CPCS\nCredentialing Lead, Surgical Services\nCopperline Physician Staffing\nT: 615.555.0119 | C: 615.555.0172",
+  "attachments": [
+    {
+      "name": "Copperline_Physician_Agreement.pdf",
+      "scan": {
+        "documentType": "agreement",
+        "confidence": "high",
+        "extracted": {
+          "agency": "Copperline Physician Staffing, Inc.",
+          "notes": "Physician staffing agreement, effective as of 07/06/2026, between Copperline Physician Staffing, Inc. and the physician, continuing until either party ends it. Section 5.4: Copperline insures the physician for professional liability on each placement at $2,000,000 per claim and $6,000,000 aggregate."
+        }
+      }
+    }
+  ],
+  "onFile": {
+    "locumContracts": [
+      {
+        "id": "contract-copperline",
+        "agency": "Copperline Physician Staffing, Inc.",
+        "facility": "Sorrel Bay Example Hospital"
+      }
+    ]
+  },
+  "physicianName": "Rowan Testa",
+  "expected": {
+    "intent": "informational",
+    "asks": [],
+    "roles": [
+      "agreement_or_contract"
+    ],
+    "records": [
+      {
+        "section": "insurance",
+        "fields": {
+          "type": "Medical Professional Liability Coverage",
+          "provider": "Copperline Physician Staffing (through its insurer)",
+          "coveragePerClaim": "2000000",
+          "coverageAggregate": "6000000",
+          "effectiveDate": "2026-07-06"
+        }
+      }
+    ]
+  },
+  "modelReply": {
+    "intent": "informational",
+    "asks": [],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "agreement_or_contract",
+        "filing": "Contracts, with the Copperline Physician Staffing contract"
+      }
+    ],
+    "summary": "how Copperline Physician Staffing's malpractice coverage applies to emergency care outside your delineation",
+    "confidence": "high",
+    "records": [
+      {
+        "section": "insurance",
+        "match_existing": "",
+        "fields": [
+          {
+            "field": "type",
+            "value": "Medical Professional Liability Coverage",
+            "quote": "Your malpractice coverage for these cases is in place"
+          },
+          {
+            "field": "name",
+            "value": "Copperline Physician Staffing malpractice coverage",
+            "quote": "Copperline Physician Staffing arranges that coverage through its carrier"
+          },
+          {
+            "field": "provider",
+            "value": "Copperline Physician Staffing (through its insurer)",
+            "quote": "Copperline Physician Staffing arranges that coverage through its carrier"
+          },
+          {
+            "field": "coveragePerClaim",
+            "value": "2000000",
+            "quote": "$2,000,000 per claim and $6,000,000 aggregate"
+          },
+          {
+            "field": "coverageAggregate",
+            "value": "6000000",
+            "quote": "$2,000,000 per claim and $6,000,000 aggregate"
+          },
+          {
+            "field": "effectiveDate",
+            "value": "2026-07-06",
+            "quote": "Physician staffing agreement, effective as of 07/06/2026"
+          },
+          {
+            "field": "notes",
+            "value": "Applies to emergency care outside the procedures on your delineation.",
+            "quote": "Should you need to provide emergency care outside that list, the policy still applies"
+          }
+        ]
+      }
+    ]
+  }
+}

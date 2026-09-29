@@ -1,0 +1,33 @@
+{
+  "id": "request-required-coi",
+  "about": "A genuine request phrased as a requirement on the physician: 'You are required to submit your updated COI by Friday'. Synthetic.",
+  "subject": "COI for your November assignment",
+  "from": {
+    "name": "Taylor Brennick",
+    "address": "taylor.brennick@saltmarsh-staffing.example"
+  },
+  "body": "Hi Dr. Testa,\n\nWe are getting your file ready for the November assignment at Pinecrest Example Hospital. You are required to submit your updated COI by Friday. The hospital will not issue your temporary privileges without it.\n\nThank you,\nTaylor Brennick\nCredentialing Specialist\nSaltmarsh Staffing\n(503) 555-0110",
+  "attachments": [],
+  "expected": {
+    "intent": "request",
+    "asks": [
+      {
+        "kind": "coi_malpractice"
+      }
+    ],
+    "roles": []
+  },
+  "modelReply": {
+    "intent": "request",
+    "asks": [
+      {
+        "quote": "You are required to submit your updated COI by Friday",
+        "kind": "coi_malpractice",
+        "who": "physician"
+      }
+    ],
+    "attachments": [],
+    "summary": "your updated malpractice certificate before the November assignment",
+    "confidence": "high"
+  }
+}

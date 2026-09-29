@@ -1,0 +1,123 @@
+{
+  "id": "informational-call-followup-conditional",
+  "about": "Synthetic, built to keep the sentence structures of the owner's real agency letter of 2026-09-28 with none of its names or numbers and in other words: a follow-up to a phone call, a limits sentence citing an asterisked section of the agreement with a conditional 'requires', a capitalised NOT, 'Even though you are NOT privileged ...', 'This means that if you are required to provide urgent surgical care (an em-dash aside) ..., that care is treated as ...', a closing that the sender is taking it up with the hospital, and a signature with a degree, a title and phone numbers in Gmail's link form. Hard-wrapped as mail is. On the rules before 2026-09-29 it failed as the real letter did: read as asking (mixed here, for its attachment), with one invented ask of kind unknown quoting the conditional clause. It asks for nothing. Target: one insurance record, the start taken from the attached agreement's 'effective as of' date.",
+  "subject": "Liability coverage question",
+  "from": {
+    "name": "Devon Marsh",
+    "address": "devon.marsh@brightwater-locums.example"
+  },
+  "body": "Dr. Testa,\n\nFollowing up on our call this afternoon about your liability coverage.\nUnder your Locum Services Agreement, the professional liability policy follows the work you do\nwithin the bounds of your assignment and the privileges the hospital granted you. Your agreement does NOT\ncarve out obstetric emergencies or limit which patients you may treat in one. In *Section 4.1\n(Professional Liability Coverage)* of your agreement, Brightwater Locum Partners provides professional\nliability insurance for work on each Assignment at $2,000,000 per claim and a $4,000,000 annual\naggregate, or more if a state statute requires it.\n\n\n\nNothing in the agreement puts *a limit on emergency care* that sits inside your clinical\nprivileges. As an *independent contractor using your own clinical judgment (Section 3.2),* your cover\nreaches work within your training (here, General Surgery), your licensure, and emergencies. Even though\nyou are NOT privileged by the hospital to perform cesarean deliveries, an urgent situation there\nstill counts as insured work. This means that if you are required to provide urgent surgical care—an\noperation you would not normally do there—while working inside your licence, that care is treated as\n*insured clinical work*, on the usual terms of the policy.\n\n\nRiley and I are taking this up with the hospital's medical staff office, and it should not come up\nagain.\n\nDevon Marsh, MHA\n\nSenior Recruiter, General Surgery and Trauma Team\n\n\n\n*Brightwater Locum Partners*\n\nOffice: 212.555.0147 <(212)%20555-0147> (texts OK)\n\nCell: 646.555.0183 <(646)%20555-0183>",
+  "attachments": [
+    {
+      "name": "Brightwater_Locum_Services_Agreement_signed.pdf",
+      "scan": {
+        "documentType": "agreement",
+        "confidence": "high",
+        "extracted": {
+          "agency": "Brightwater Locum Partners, LLC",
+          "notes": "Locum services agreement between Brightwater Locum Partners, LLC and Rowan Testa, MD, effective as of January 12, 2026, for twelve months, then month to month. Section 4.1 Professional Liability: Brightwater carries malpractice insurance for the physician on every Assignment, $2,000,000 per claim with a $4,000,000 annual aggregate, and buys extended reporting (tail) cover when the policy is written on a claims-made basis. Non-clinical administrative work sits outside that insurance."
+        }
+      }
+    }
+  ],
+  "onFile": {
+    "locumContracts": [
+      {
+        "id": "contract-brightwater",
+        "agency": "Brightwater Locum Partners, LLC",
+        "facility": "Harborview Example Medical Center"
+      }
+    ]
+  },
+  "physicianName": "Rowan Testa",
+  "expected": {
+    "intent": "informational",
+    "asks": [],
+    "roles": [
+      "agreement_or_contract"
+    ],
+    "records": [
+      {
+        "section": "insurance",
+        "fields": {
+          "type": "Medical Professional Liability Coverage",
+          "provider": "Brightwater Locum Partners (through its insurer)",
+          "coveragePerClaim": "2000000",
+          "coverageAggregate": "4000000",
+          "effectiveDate": "2026-01-12"
+        }
+      }
+    ]
+  },
+  "modelReply": {
+    "intent": "informational",
+    "asks": [],
+    "attachments": [
+      {
+        "index": 1,
+        "role": "agreement_or_contract",
+        "filing": "Contracts, with the Brightwater Locum Partners contract"
+      }
+    ],
+    "summary": "how Brightwater Locum Partners' liability insurance covers emergency care outside your usual privileges",
+    "confidence": "high",
+    "records": [
+      {
+        "section": "insurance",
+        "match_existing": "",
+        "fields": [
+          {
+            "field": "type",
+            "value": "Medical Professional Liability Coverage",
+            "quote": "Brightwater Locum Partners provides professional liability insurance"
+          },
+          {
+            "field": "name",
+            "value": "Brightwater Locum Partners assignment malpractice coverage",
+            "quote": "Brightwater carries malpractice insurance for the physician on every Assignment"
+          },
+          {
+            "field": "provider",
+            "value": "Brightwater Locum Partners (through its insurer)",
+            "quote": "Brightwater Locum Partners provides professional liability insurance for work on each Assignment"
+          },
+          {
+            "field": "coveragePerClaim",
+            "value": "2000000",
+            "quote": "$2,000,000 per claim and a $4,000,000 annual aggregate"
+          },
+          {
+            "field": "coverageAggregate",
+            "value": "4000000",
+            "quote": "$2,000,000 per claim and a $4,000,000 annual aggregate"
+          },
+          {
+            "field": "effectiveDate",
+            "value": "2026-01-12",
+            "quote": "effective as of January 12, 2026"
+          },
+          {
+            "field": "notes",
+            "value": "Covers work within your training, your licensure and emergencies, including urgent care outside your usual privileges.",
+            "quote": "your cover reaches work within your training (here, General Surgery), your licensure, and emergencies"
+          },
+          {
+            "field": "notes",
+            "value": "Limits $2,000,000 per claim and a $4,000,000 annual aggregate (Section 4.1 of the agreement).",
+            "quote": "$2,000,000 per claim and a $4,000,000 annual aggregate"
+          },
+          {
+            "field": "notes",
+            "value": "Tail cover when the policy is written on a claims-made basis.",
+            "quote": "buys extended reporting (tail) cover when the policy is written on a claims-made basis"
+          },
+          {
+            "field": "notes",
+            "value": "Non-clinical administrative work is not insured.",
+            "quote": "Non-clinical administrative work sits outside that insurance"
+          }
+        ]
+      }
+    ]
+  }
+}

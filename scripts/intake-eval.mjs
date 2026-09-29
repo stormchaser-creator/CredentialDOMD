@@ -118,17 +118,22 @@ export function caseInput(c) {
 
 /**
  * What a fact in this case may rest on, as email-inbound builds it: the
- * subject, the note, the message, the history and each attachment's words;
- * the records on file the model may name by ref; the physician's name.
+ * subject, the note, the message, the history and each attachment's words
+ * (together, and the email and the attachments apart, so a start taken from
+ * an attached agreement is checked against that agreement); the records on
+ * file the model may name by ref; the physician's name.
  */
 export function factsFor(c) {
   const input = caseInput(c);
   const parts = splitForward(input.rawText, input.forwardedBody);
+  const words = input.attachments.map((a) => attachmentText(a.scan));
   return {
     parts,
     onFile: existingForModel(c.onFile || {}),
     facts: {
-      corpus: corpusIndex([input.subject, parts.note, parts.message, parts.history, ...input.attachments.map((a) => attachmentText(a.scan))]),
+      corpus: corpusIndex([input.subject, parts.note, parts.message, parts.history, ...words]),
+      email: [input.subject, parts.note, parts.message, parts.history].filter(Boolean).join("\n\n"),
+      attachments: words.filter(Boolean),
       refs: existingForModel(c.onFile || {}).refs,
       physicianName: String(c.physicianName || ""),
     },

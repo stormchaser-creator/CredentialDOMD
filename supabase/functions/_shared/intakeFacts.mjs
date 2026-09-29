@@ -42,8 +42,16 @@
  *                  key, over the day's allowance, a failed call): one narrow
  *                  pattern, a malpractice limit "$X per incident ... $Y
  *                  aggregate" that the email says a named policy gives the
- *                  physician (never a requirement). Everything else waits
- *                  for the model.
+ *                  physician (never a requirement; a requirement inside a
+ *                  condition, "raised where state law requires it", is not
+ *                  one). Everything else waits for the model.
+ *   agreementCoverageStart
+ *                  an insurance record's start, when the email states none
+ *                  and the coverage is provided under an attached agreement:
+ *                  that agreement's own "effective as of" date, from its
+ *                  words (verifyRecords checks a start the reading takes from
+ *                  an attachment against it, and gives a record the email
+ *                  gives no start this one)
  *   planRecords    each checked record against what is on file
  *                  (src/utils/intakeRecords.js matchRecord; a record the
  *                  reading named only while the fields do not contradict
@@ -108,7 +116,7 @@ export const RECORDS_PROMPT = `records: facts the email (or an attachment) state
 - match_existing: the ref of the physician's record on file that the fact is about (from <records>), or "" for a new one.
 - fields: each {field, value, quote}. value is exactly what the email states: an amount as plain digits (1000000), a date as YYYY-MM-DD, a state as its two-letter code, a type exactly as one of the types listed below. quote is the words of the email or attachment that state it, copied exactly as one unbroken span.
 Fields by section:
-- insurance: type (one of: ${typeList("insurance")}), name (a short label, such as "<carrier or agency> malpractice coverage"), provider (the carrier; when an agency's own policy covers the physician, "<agency> (through its insurer)"), coveragePerClaim, coverageAggregate, effectiveDate, expirationDate (only when the email says when the coverage itself ends: an agreement's term, a renewal date or tail wording is not the policy's expiration), notes
+- insurance: type (one of: ${typeList("insurance")}), name (a short label, such as "<carrier or agency> malpractice coverage"), provider (the carrier; when an agency's own policy covers the physician, "<agency> (through its insurer)"), coveragePerClaim, coverageAggregate, effectiveDate (when the coverage began, as the email states it; when the email states no such date and the coverage is provided under an attached agreement, the agreement's own effective date, "effective as of <date>", with the attachment's words that state it as the quote), expirationDate (only when the email says when the coverage itself ends: an agreement's term, a renewal date or tail wording is not the policy's expiration), notes
 - privileges: type (one of: ${typeList("privileges")}), name, facility, city, state, appointmentDate, expirationDate, notes
 - licenses: type (one of: ${typeList("licenses")}), name, state, issuedDate, expirationDate, notes
 - cme: title, category (one of: ${typeList("cme")}), hours, date, provider, notes
@@ -236,6 +244,7 @@ export const DROP = Object.freeze({
   section: "not a section an email may add to",
   ref: "names no record on file",
   notAbout: "not about the record it names",
+  agreementDate: "not the attached agreement's effective date, or the email states its own",
 });
 
 // An instruction to whoever reads the email, or to the app: "add a licence",
@@ -312,6 +321,22 @@ const PERSONAL_SECTIONS = new Set(["licenses", "privileges", "cme"]);
 // ("The policy we carry for you" and "your own policy covers you" are
 // coverage, so carry and "your own" count only after a word that requires.)
 const REQUIRED_RE = /\b(?:must|required|requires?|requiring|requirement|minimum|at\s+least|bylaws?|call(?:s|ed)?\s+for|their\s+own|(?:need(?:s)?|ha(?:ve|s)|are|is|expected)\s+to\s+(?:carry|maintain|obtain|have|hold|purchase|buy)|should\s+(?:carry|maintain|obtain|have|hold|purchase|buy))\b/i;
+// A requirement inside a condition is not one put on the physician: "limits
+// of $2,000,000 per claim and $4,000,000 aggregate, raised if the state's law
+// requires it" states the coverage, and the condition says only when it would
+// be more. The condition runs from "if" ("where", "when", "unless") to the
+// end of its clause. ("As the bylaws require" is no condition: it says the
+// requirement is there.) A limit that stands only inside
+// the condition ("if you are required to carry $1,000,000 per claim, ...")
+// is not coverage the email states, and the host drops it.
+// (A comma or a stop inside a number, "$2,000,000" or "7.2", does not end the clause.)
+const CONDITIONAL_REQUIREMENT_RE = /\b(?:if|where|wherever|when|whenever|unless)\b(?:[^,;.!?]|[,.](?=\d))*?\b(?:requir\w*|mandat\w*|call(?:s|ed)?\s+for)\b(?:[^,;.!?]|[,.](?=\d))*?(?=,(?!\d)|[;!?]|\.(?!\d)|$)/gi;
+/** The words with every conditional requirement taken out. */
+export const withoutConditions = (s) => String(s ?? "").replace(CONDITIONAL_REQUIREMENT_RE, " ").replace(/\s+/g, " ").trim();
+/** A requirement put on the physician, outside any condition. */
+const requirement = (s) => REQUIRED_RE.test(withoutConditions(s));
+/** The amount is in the words only inside a conditional requirement. */
+const onlyInCondition = (s, value) => !!value && amountsIn(s).some((a) => a.value === value) && !amountsIn(withoutConditions(s)).some((a) => a.value === value);
 
 // A number that identifies someone, as a value carries it: a DEA number, an
 // NPI (ten digits), or a number named as a policy, licence, certificate,
@@ -533,11 +558,23 @@ const MAX_NOTE_PARTS = 4;
  * rest on (what a record written without the physician's say carries).
  * review is true when the email names another clinician anywhere: its facts
  * are then offered, never written, however the forward was proven.
+ *
+ * With ctx.email (the subject, note, message and history as one text) and
+ * ctx.attachments (each attachment's words, attachmentText), an insurance
+ * record's effectiveDate may come from an attached agreement (see
+ * agreementCoverageStart): an effectiveDate whose words are only an
+ * attachment's is kept when it is that agreement's own "effective as of"
+ * date, found in that attachment's words, and the email states no start of
+ * its own; and a new insurance record the email gives no start is given the
+ * agreement's, with the agreement's words as its source. Without ctx.email
+ * the corpus alone is the check, as before.
  */
-export function verifyRecords(raw, { corpus, refs = new Map(), physicianName = "" } = {}) {
+export function verifyRecords(raw, { corpus, refs = new Map(), physicianName = "", email = null, attachments = [] } = {}) {
   const records = [];
   const dropped = [];
   const c = corpus || corpusIndex([]);
+  const emailNorm = typeof email === "string" ? normalizeForQuote(email) : null;
+  const agreement = emailNorm === null ? null : agreementCoverageStart(email, attachments);
   for (const r of (Array.isArray(raw) ? raw : []).slice(0, MAX_RECORDS)) {
     if (!r || typeof r !== "object") continue;
     let section = String(r.section ?? "");
@@ -559,6 +596,7 @@ export function verifyRecords(raw, { corpus, refs = new Map(), physicianName = "
     const fields = {};
     const sources = {};
     const notes = [];
+    let startFromAttachment = null;
     for (const f of (Array.isArray(r.fields) ? r.fields : []).slice(0, MAX_FIELDS)) {
       const field = String(f?.field ?? "");
       const drop = (why) => dropped.push({ section, field, why });
@@ -570,7 +608,7 @@ export function verifyRecords(raw, { corpus, refs = new Map(), physicianName = "
       if (instruction(quote)) { drop(DROP.instruction); continue; }
       if (aboutSomeoneElse(quote, physicianName, { holders: PERSONAL_SECTIONS.has(section) })) { drop(DROP.someoneElse); continue; }
       if (PERSONAL_SECTIONS.has(section) && !aboutThePhysician(quote, physicianName)) { drop(DROP.notMine); continue; }
-      if ((field === "coveragePerClaim" || field === "coverageAggregate") && REQUIRED_RE.test(quote)) { drop(DROP.requirement); continue; }
+      if ((field === "coveragePerClaim" || field === "coverageAggregate") && (requirement(quote) || onlyInCondition(quote, amountValue(f?.value)))) { drop(DROP.requirement); continue; }
       // A note added to a record on file must be about that record.
       if (notesOnly && match && !(match.keys || []).some((k) => ` ${nameKey(quote)} `.includes(` ${k} `))) { drop(DROP.notAbout); continue; }
       const checked = checkValue(kind, section, field, f?.value, quote, c);
@@ -579,8 +617,33 @@ export function verifyRecords(raw, { corpus, refs = new Map(), physicianName = "
       // are stored as its source), and the field is not kept at all.
       if (carriesIdentifier(field, checked.value, { words: kind === "text" || kind === "notes" }) || carriesIdentifier(field, quote)) { drop(DROP.identifier); continue; }
       if (field === "notes") { notes.push({ value: checked.value, quote }); continue; }
+      // A start the email's own words do not give: only the attached
+      // agreement's, decided once the rest of the record is read.
+      if (section === "insurance" && field === "effectiveDate" && emailNorm !== null && !quoteOccurs(quote, emailNorm)) {
+        startFromAttachment = { value: checked.value, quote };
+        continue;
+      }
       fields[field] = checked.value;
       sources[field] = sourceQuote(quote);
+    }
+    if (section === "insurance" && emailNorm !== null && !fields.effectiveDate) {
+      const tied = !!agreement && tiedTo(fields, agreement.text);
+      if (startFromAttachment) {
+        if (tied && startFromAttachment.value === agreement.iso && quoteOccurs(startFromAttachment.quote, normalizeForQuote(agreement.text))) {
+          fields.effectiveDate = agreement.iso;
+          sources.effectiveDate = sourceQuote(startFromAttachment.quote);
+        } else {
+          dropped.push({ section, field: "effectiveDate", why: DROP.agreementDate });
+        }
+      }
+      // Only a record worth entering without it: a start alone never makes one.
+      if (!fields.effectiveDate && tied && !match && enough(section, fields, false)) {
+        const quote = agreement.quotes.find((q) => quoteOccurs(q, c.norm) && !instruction(q) && !aboutSomeoneElse(q, physicianName) && !carriesIdentifier("effectiveDate", q));
+        if (quote) {
+          fields.effectiveDate = agreement.iso;
+          sources.effectiveDate = sourceQuote(quote);
+        }
+      }
     }
     let notesVerbatim = "";
     if (notes.length) {
@@ -642,7 +705,14 @@ const POSSESSIVE_RE = new RegExp(`${NAME}(?:'s|\\u2019s)\\s+(?:group\\s+|own\\s+
 const THROUGH_RE = new RegExp(`\\bthrough\\s+${NAME}`, "g");
 // "the Quillfeather Staffing malpractice policy", "our Example Group liability coverage".
 const NAMED_POLICY_RE = new RegExp(`\\b(?:the|our)\\s+${NAME}\\s+(?:group\\s+)?(?:malpractice|professional\\s+liability|liability)\\s+(?:insurance\\s+)?(?:policy|insurance|coverage|plan)\\b`, "g");
+// "Brightwater Locum Partners provides professional liability insurance":
+// the agency that gives the cover, named as the subject of the verb.
+const PROVIDER_RE = new RegExp(`${NAME}\\s+(?:will\\s+|also\\s+|shall\\s+)?(?:provides?|maintains?|carries|furnishes|extends)\\s+(?:[\\w-]+\\s+){0,3}?(?:malpractice|professional\\s+liability|liability)\\b`, "g");
 const INSURER_WORD = /\b(?:insurance|mutual|assurance|indemnity|underwriters|casualty|risk\s+retention)\b/i;
+// "Brightwater Locum Partners, LLC" on the contract is "Brightwater Locum Partners" in a letter.
+const CORPORATE_SUFFIX_RE = /[\s,]+(?:inc|incorporated|llc|l\.l\.c|llp|lp|ltd|limited|corp|corporation|co|company|pc|p\.c|pllc|plc)\.?$/i;
+/** A name with a word of its own: "The Agency" and "Our Group" name nobody. */
+const distinctive = (name) => wordsOf(name).some((w) => w.length > 1 && !GENERIC.has(w) && !INSTITUTION.has(w) && !MONTHS_AND_DAYS.has(w) && !STOP.has(w) && !/^\d+$/.test(w));
 // Words that say a policy covers the physician: "covers", "your coverage".
 const COVERS_RE = /\b(?:covers?|covered|covering|provides?|provided|insures?|insured)\b|\byour\s+(?:[\w-]+\s+){0,3}(?:coverage|policy|insurance)\b/i;
 const EFFECTIVE_RE = /\b(?:effective|took\s+effect|in\s+effect|commenc\w+|began)\b/i;
@@ -656,12 +726,13 @@ const sentencesOf = (text) => String(text ?? "").replace(/\r\n?/g, "\n").split(/
 /** The first name one of the patterns finds in `s`, never a month, a weekday or a date. */
 function nameIn(s) {
   const dates = datesIn(s);
-  for (const re of [POSSESSIVE_RE, NAMED_POLICY_RE, THROUGH_RE]) {
+  for (const re of [POSSESSIVE_RE, NAMED_POLICY_RE, THROUGH_RE, PROVIDER_RE]) {
     for (const m of s.matchAll(re)) {
       const at = m.index + m[0].indexOf(m[1]);
-      const name = m[1].trim().replace(/[.,;:]+$/, "").replace(/^(?:The|Our)\s+/, "");
+      const name = m[1].trim().replace(/[.,;:]+$/, "").replace(/^(?:(?:The|Our|In|Under|Per|As|And|Also|At|For|With|By|From)\s+)+/, "");
       const first = name.split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, "");
       if (!name || MONTHS_AND_DAYS.has(first) || dates.some((d) => d.index === at)) continue;
+      if (re === PROVIDER_RE && !distinctive(name)) continue;
       return name;
     }
   }
@@ -690,26 +761,31 @@ export function rulesRecords({ message = "", subject = "", agencies = [], physic
   // A limit is a malpractice limit when the email says what it is a limit of.
   const paragraph = text.replace(/\s+/g, " ");
   if (!MALPRACTICE_RE.test(`${subject} ${paragraph}`)) return [];
-  const claim = (s) => !!s && COVERS_RE.test(s) && !REQUIRED_RE.test(s) && !aboutSomeoneElse(s, physicianName);
+  const claim = (s) => !!s && COVERS_RE.test(s) && !requirement(s) && !aboutSomeoneElse(s, physicianName);
+  // An agency on the physician's contracts, as the email writes it: with its
+  // "Inc." or "LLC", or without it when what is left still names it.
   const agencyIn = (s) => {
     const norm = normalizeForQuote(s);
     for (const a of agencies) {
-      const name = sanitizeText(a, 80);
-      if (name && norm.includes(normalizeForQuote(name))) return name;
+      const full = sanitizeText(a, 80);
+      const bare = full.replace(CORPORATE_SUFFIX_RE, "").trim();
+      for (const name of [full, bare !== full && distinctive(bare) ? bare : ""]) {
+        if (name && norm.includes(normalizeForQuote(name))) return name;
+      }
     }
     return "";
   };
   for (let i = 0; i < sentences.length; i++) {
     const limits = sentences[i];
-    const m = limits.match(LIMITS_RE);
+    const m = withoutConditions(limits).match(LIMITS_RE);
     if (!m) continue;
-    if (REQUIRED_RE.test(limits) || aboutSomeoneElse(limits, physicianName)) continue;
+    if (requirement(limits) || aboutSomeoneElse(limits, physicianName)) continue;
     const near = [sentences[i - 1], sentences[i + 1]].filter(Boolean);
     if (!claim(limits) && !near.some(claim)) continue;
     // Who: the limits sentence first, then the sentences beside it.
     let agency = "";
     let agencySentence = "";
-    for (const s of [limits, ...near.filter((x) => !REQUIRED_RE.test(x))]) {
+    for (const s of [limits, ...near.filter((x) => !requirement(x))]) {
       agency = nameIn(s) || agencyIn(s);
       if (agency) { agencySentence = s; break; }
     }
@@ -752,6 +828,68 @@ function effectiveDateIn(sentences) {
     return { iso: d.iso, sentence: s };
   }
   return null;
+}
+
+// ─── The start of coverage given under an attached agreement ─────────────────
+
+const AGREEMENT_WORD_RE = /\b(?:agreement|contract)\b/i;
+// "effective as of April 20, 2026", "effective April 20, 2026", "effective on 04/20/2026": the date straight after.
+const EFFECTIVE_FROM_RE = /\beffective(?:\s+(?:as\s+of|on|from|beginning|starting))?[\s,]+$/i;
+// A scanner field's label at the head of a line of attachmentText ("notes: ").
+const FIELD_LABEL_RE = /^[A-Za-z][\w ]{0,30}:\s+/;
+
+/**
+ * The date an agreement in the attachments says it takes effect, with the
+ * words that say so: a sentence that names the agreement (or contract) and
+ * says "effective as of <date>" (or "effective <date>", "effective on
+ * <date>"), the date straight after. One date across every attachment, or
+ * null: two agreements that differ leave it to the physician. Returns { iso,
+ * text: that attachment's words, quotes: the sentence up to the date, then
+ * the "effective as of <date>" words alone }.
+ */
+export function agreementEffective(attachments) {
+  const found = [];
+  for (const text of (Array.isArray(attachments) ? attachments : []).map((t) => decodeEntities(String(t ?? "")))) {
+    for (const line of text.split("\n")) {
+      for (const sentence of sentencesOf(line.replace(FIELD_LABEL_RE, ""))) {
+        if (!AGREEMENT_WORD_RE.test(sentence)) continue;
+        for (const d of datesIn(sentence)) {
+          const before = sentence.slice(0, d.index);
+          if (!EFFECTIVE_FROM_RE.test(before)) continue;
+          const at = before.toLowerCase().lastIndexOf("effective");
+          found.push({ iso: d.iso, text, quotes: [sentence.slice(0, d.end).trim(), sentence.slice(at, d.end).trim()] });
+        }
+      }
+    }
+  }
+  return found.length && found.every((f) => f.iso === found[0].iso) ? found[0] : null;
+}
+
+/**
+ * The start an insurance record may take from an attached agreement, or
+ * null: the email itself states no start of the coverage (effectiveDateIn),
+ * one agreement in the attachments says when it takes effect
+ * (agreementEffective), and the coverage is provided under it (the
+ * agreement's own words give malpractice cover, or the email ties the
+ * malpractice cover it describes to an agreement). The owner's case of
+ * 2026-09-28: the letter gave the limits and the section of the agreement,
+ * the attached agreement was "effective as of" a date, and he entered that
+ * date as the coverage's start.
+ */
+export function agreementCoverageStart(email, attachments) {
+  if (effectiveDateIn(sentencesOf(email))) return null;
+  const a = agreementEffective(attachments);
+  if (!a) return null;
+  const under = (MALPRACTICE_RE.test(a.text) && COVERS_RE.test(a.text)) || (MALPRACTICE_RE.test(String(email ?? "")) && AGREEMENT_WORD_RE.test(String(email ?? "")));
+  return under ? a : null;
+}
+
+const distinctWords = (s) => wordsOf(s).filter((w) => w.length > 2 && !GENERIC.has(w) && !INSTITUTION.has(w) && !MONTHS_AND_DAYS.has(w) && !/^\d+$/.test(w));
+
+/** The record's carrier or name shares a proper word with the agreement: the coverage is the agreement's party's. */
+function tiedTo(fields, text) {
+  const mine = new Set(distinctWords(`${fields.provider || ""} ${fields.name || ""}`));
+  return mine.size > 0 && distinctWords(text).some((w) => mine.has(w));
 }
 
 // ─── Against the file ────────────────────────────────────────────────────────
